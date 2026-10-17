@@ -17,6 +17,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..config import Config
 from ..core import outcome as O
 from ..core.records import Item, State
@@ -25,7 +27,6 @@ from ..services import items as IT
 from ..services import leases as L
 from ..services import plan_apply as PA
 from ..services import plancheck as PC
-from . import _dedupe as DD
 from ._base import _load
 from ._globwarn import missing_globs
 
@@ -119,7 +120,7 @@ def _queue(repo: Path, agent: str = ""):
 
 
 def _live(st: State | None) -> list[str]:
-    return sorted(i for i, it in st.items.items() if not it.removed) if st else []
+    return PA.live_ids(st) if st else []
 
 
 def _report(repo: Path, plan: dict[str, Any], queue) -> tuple[PC.Report, Config]:
@@ -165,7 +166,8 @@ def _clashes(st: State, plan: dict[str, Any], plan_id: str) -> list[str]:
     """Plan ids already in the queue that are NOT this plan's earlier filing: filing over
     them would overwrite an item, so the plan is refused."""
     mine = set(PA.filed_by(st, plan_id))
-    return sorted(i for i in plan if i in st.items and not st.items[i].removed and i not in mine)
+    live = set(PA.live_ids(st))
+    return sorted(i for i in plan if i in live and i not in mine)
 
 
 def _missing_parents(st: State, plan: dict[str, Any]) -> list[str]:
@@ -184,8 +186,9 @@ def _file(log, st: State, cfg: Config, plan: dict[str, Any], plan_id: str) -> tu
     (there is no window in which it exists ready).
     """
     written: list[str] = []
+    live = set(PA.live_ids(st))
     for iid in PA.order(plan):
-        if iid in st.items and not st.items[iid].removed:
+        if iid in live:
             continue
         item = plan[iid]
         if PA.kind_of(item) == "phase":
@@ -241,35 +244,16 @@ def plan_apply(
     log, cfg, st = _load(repo, agent)
     base: dict[str, Any] = {"source": source, "plan": pid, "hash": digest, "items": len(plan)}
     report, _cfg = _report(repo, plan, (log, cfg, st))
-    if report.findings:
-        kinds = ", ".join(sorted({f.kind for f in report.findings}))
-        return O.failed(
-            "plan.apply",
-            f"{len(report.findings)} finding(s) in {source}: {kinds}; fix the plan "
-            f"(`ddflow plan check {source}`)",
-            findings=[f.as_dict() for f in report.findings],
-            **base,
-        )
-    clash = _clashes(st, plan, pid)
-    if clash:
-        return O.refused(
-            "plan.apply",
-            f"{', '.join(clash)} already in the queue: filing would overwrite an item",
-            clashes=clash,
-            **base,
-        )
-    orphans = _missing_parents(st, plan)
-    if orphans:
-        return O.failed(
-            "plan.apply", f"parent not in the plan or the queue: {', '.join(orphans)}", **base
-        )
-    todo = [i for i in PA.order(plan) if i not in st.items or st.items[i].removed]
+    no = _refusal(source, plan, pid, st, report, base)
+    if no is not None:
+        return no
+    live = set(PA.live_ids(st))
     waves = dict(sorted(report.waves.items(), key=lambda kv: (kv[1], kv[0])))
     if not apply:
         return O.ok(
             "plan.apply",
             dry_run=True,
-            would_file=todo,
+            would_file=[i for i in PA.order(plan) if i not in live],
             waves=waves,
             hint=f"ddflow plan apply {source} --apply --hash {digest}",
             **base,
@@ -281,20 +265,45 @@ def plan_apply(
             f"Read the dry run again, then `ddflow plan apply {source} --apply --hash {digest}`",
             **base,
         )
+    return _commit(log, cfg, plan, pid, waves, base)
+
+
+def _refusal(source, plan, pid, st, report, base) -> O.Outcome | None:
+    """Why the plan cannot be filed into ``st`` (nothing is written), or None."""
+    if report.findings:
+        kinds = ", ".join(sorted({f.kind for f in report.findings}))
+        return O.failed(
+            "plan.apply",
+            f"{len(report.findings)} finding(s) in {source}: {kinds}; fix the plan "
+            f"(`ddflow plan check {source}`)",
+            findings=[f.as_dict() for f in report.findings],
+            **base,
+        )
+    if clash := _clashes(st, plan, pid):
+        return O.refused(
+            "plan.apply",
+            f"{', '.join(clash)} already in the queue: filing would overwrite an item",
+            clashes=clash,
+            **base,
+        )
+    if orphans := _missing_parents(st, plan):
+        return O.failed(
+            "plan.apply", f"parent not in the plan or the queue: {', '.join(orphans)}", **base
+        )
+    return None
+
+
+def _commit(log, cfg, plan, pid, waves, base) -> O.Outcome:
+    """Decide again under the log lock, from the log as it is NOW, and write."""
     with log.transaction():
-        st = L._fold(log)  # the state NOW, under the lock
-        again = _clashes(st, plan, pid)
-        unknown = [
-            d
-            for i in plan
-            for d in PA._list(plan[i], "needs")
-            if d not in plan and d not in st.items
+        st = L._fold(log)
+        live = set(PA.live_ids(st))
+        changed = _clashes(st, plan, pid) + [
+            d for i in plan for d in PA._list(plan[i], "needs") if d not in plan and d not in live
         ]
-        if again or unknown:
+        if changed:
             return O.refused(
-                "plan.apply",
-                f"the queue changed while applying: {', '.join(again + unknown)}",
-                **base,
+                "plan.apply", f"the queue changed while applying: {', '.join(changed)}", **base
             )
         written, problem = _file(log, st, cfg, plan, pid)
     if problem:
