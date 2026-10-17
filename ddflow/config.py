@@ -84,9 +84,7 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
 from .config_sections.gates import (
     GatesConfig,
 )
-from .config_sections.hooks import (
-    HooksConfig,
-)
+from .config_sections.hooks import HooksConfig
 from .config_sections.ids import (  # noqa: F401
     ID_KINDS,
     ID_PREFIXES,

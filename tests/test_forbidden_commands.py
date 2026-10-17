@@ -36,6 +36,14 @@ def _check(cmd: str, env: dict | None = None, **kw):
         "FOO=1 bash -c 'pkill foo'",
         "true; git stash pop",
         "echo hi | xargs pkill",
+        "sudo -u root pkill foo",
+        "nice -n 5 pkill foo",
+        "env -u HOME pkill foo",
+        "xargs -n 1 pkill",
+        'python -c "print(1<<3)"\npkill -f myserver',
+        'git commit -m "a<<b"\npkill foo',
+        'grep x <<< "$y"\npkill foo',
+        "ddflow review X --force",
     ],
 )
 def test_refused(cmd):
@@ -54,6 +62,7 @@ def test_refused(cmd):
         "grep -r pkill docs",
         "echo pkill",
         'ddflow review X --force --reason "an extra round"',
+        'ddflow review X --reason "an extra round" --force',
         "rm -rf build",
         "kill 1234",
         "cat <<'EOF'\npkill x\nEOF",
@@ -68,6 +77,7 @@ def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
     assert _check("git reset --soft HEAD~1", cwd=tmp_path) is None
+    assert _check("git -C /elsewhere reset --hard", cwd=tmp_path / "nope") is not None
     subprocess.run(
         [
             "git",
@@ -88,11 +98,15 @@ def test_reset_hard_only_on_primary(tmp_path):
     wt = tmp_path / "wt"
     subprocess.run(["git", "-C", str(tmp_path), "worktree", "add", "-q", str(wt)], check=True)
     assert _check("git reset --hard HEAD", cwd=wt) is None
+    # from a worktree, a command that names another checkout is still judged as the primary
+    assert _check(f"git -C {tmp_path} reset --hard", cwd=wt) is not None
+    assert _check(f"cd {tmp_path} && git reset --hard", cwd=wt) is not None
 
 
 def test_operator_lifts_per_session_and_config():
     assert _check("pkill x", {FB.ENV_ALLOW: "pkill"}) is None
     assert _check("pkill x", {FB.ENV_ALLOW: "git stash"}) is not None
+    assert _check("git reset --hard", {FB.ENV_ALLOW: "git reset --hard @primary"}) is None
     assert _check("git push", {FB.ENV_ALLOW: "all"}) is None
     cfg = Config()
     cfg.hooks.forbidden_commands = []
@@ -106,7 +120,11 @@ def _hook(repo: Path, payload: dict) -> str:
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env={**__import__("os").environ, "DDFLOW_HOOKS_ALLOW": ""},
+        env={
+            **__import__("os").environ,
+            "DDFLOW_HOOKS_ALLOW": "",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+        },
     )
     assert p.returncode == 0, p.stderr
     return p.stdout

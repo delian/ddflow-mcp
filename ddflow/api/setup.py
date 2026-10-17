@@ -956,13 +956,14 @@ def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
     refusal = FB.check(command, cfg, cwd=p.cwd or Path.cwd())
     if refusal is None:
         return _HookResult(result="allowed")
-    try:
-        log, _who = ID.open_log(
-            repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
-        )
-        FB.record(log, cfg, refusal, p.session_id, p.harness)
-    except Exception:  # an unrecorded refusal is still a refusal
-        pass
+    if HI.emit_deny(plan, "pre_tool", "") is not None:  # only a refusal that holds is recorded
+        try:
+            log, _who = ID.open_log(
+                repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
+            )
+            FB.record(log, cfg, refusal, p.session_id, p.harness)
+        except Exception:  # an unrecorded refusal is still a refusal
+            pass
     msg = refusal.message()
     return _HookResult(result="denied", deny=msg, note=msg)
 
