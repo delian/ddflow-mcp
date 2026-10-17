@@ -305,7 +305,7 @@ def test_a_mixed_kind_request_lists_a_declared_record_once_and_a_legacy_kind_as_
         "rule",
         "add",
         "--id",
-        "r1",
+        "r-torque",
         "--title",
         "Torque wrench rule",
         "--content",
@@ -322,4 +322,4 @@ def test_a_mixed_kind_request_lists_a_declared_record_once_and_a_legacy_kind_as_
     rows = json.loads(run_cli(proj, "--json", "search", "--kind", "rule", "torque wrench")[1])[
         "rows"
     ]
-    assert [r["id"] for r in rows if r["kind"] == "rule"].count("r1") == 1
+    assert [r["id"] for r in rows if r["kind"] == "rule"].count("r-torque") == 1
