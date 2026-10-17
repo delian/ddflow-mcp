@@ -460,11 +460,9 @@ def _create_tree(
                 _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
                 return O.refused(
                     "item.claimed",
-                    f"{wt.path} already exists with {there} checked out, which "
-                    f"does not carry {wt.branch}. It is not {item}'s tree. Inspect it "
-                    f"first: `git -C {wt.path} status`. If it is yours to discard, "
-                    f"`git worktree remove {wt.path}`, then `ddflow claim {item}` again; "
-                    f"otherwise claim from a tree of your own.",
+                    f"{wt.path} already exists with {there} checked out, not {wt.branch}: it is not "
+                    f"{item}'s tree. Inspect it first: `git -C {wt.path} status`. If it is yours to "
+                    f"discard, `git worktree remove {wt.path}` then `ddflow claim {item}`; else claim from a tree of your own.",
                     id=item,
                     path=str(wt.path),
                 )
