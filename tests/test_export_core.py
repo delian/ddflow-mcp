@@ -291,11 +291,12 @@ def test_discover_failure_is_not_remembered(monkeypatch):
             raise RuntimeError("bad kind module")
         return types.SimpleNamespace(__path__=["x"])
 
-    monkeypatch.setattr(registry, "_discovered", [False])
-    monkeypatch.setattr(registry.importlib, "import_module", fake_import)
-    monkeypatch.setattr(
-        registry.pkgutil, "iter_modules", lambda p: [types.SimpleNamespace(name="kind_bad")]
-    )
+    import importlib
+    import pkgutil
+
+    monkeypatch.setattr(registry._REG, "_ready", False)
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    monkeypatch.setattr(pkgutil, "iter_modules", lambda p: [types.SimpleNamespace(name="kind_bad")])
     for _ in range(2):  # the second call must fail again, not return a partial registry
         with pytest.raises(RuntimeError):
             registry.names()

@@ -452,6 +452,10 @@ def _hold_unreadable(it, gate: str, lost, ev: dict[str, Any], say) -> int:
     return 1
 
 
+def _digests(found: list[dict]) -> list[str]:
+    return [str(f["digest"]) for f in found if f.get("digest")]
+
+
 def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
@@ -476,6 +480,9 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     kept = list(prior.get("chunk_findings") or [])
     mine = list(ev.get("chunk_findings") or [])
     ev["delta_findings"] = len(mine)
+    # Which findings THIS round raised (digests): the merged list below cannot tell, and
+    # `complete` needs it to know an earlier finding was not raised again (B85841c0846).
+    ev["delta_raised"] = _digests(mine)
     if prior.get("full_coverage") or prior.get("review_kind") in ("full", "full_unavailable"):
         ev["full_coverage"] = prior.get("full_coverage") or prior.get("coverage", "")
     if not kept:
