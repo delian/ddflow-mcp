@@ -334,7 +334,7 @@ def apply(
 
     run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
     results += _execute(
-        repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
+        repo, log, cfg, todo, agent, late_backup, _stepper(repo, log, run, watch, before)
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
     ok |= earlier  # settled by the interrupted run this one finishes
@@ -489,16 +489,39 @@ def _note(log: Any, run: str, status: str, **fields: Any) -> None:
     log.append(UPGRADE_APPLIED_KIND, "upgrade", {"run": run, "status": status, **fields})
 
 
+def _stepper(
+    repo: Path, log: Any, run: str, watch: Watch, before: dict[str, str | None]
+) -> Callable[[dict[str, Any]], None]:
+    """The callback `_execute` calls as each item ends: it records the step together with
+    everything the run has written so far, so a run that is interrupted (and never reaches its
+    closing event) still leaves the digests of the files it changed."""
+
+    def on_step(rec: dict[str, Any]) -> None:
+        _step(log, run, rec, watch.progress, UW.written(repo, before))
+
+    return on_step
+
+
 def _step(
-    log: Any, run: str, rec: dict[str, Any], progress: Callable[[str], None] | None = None
+    log: Any,
+    run: str,
+    rec: dict[str, Any],
+    progress: Callable[[str], None] | None = None,
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """One item's outcome, recorded the moment it is known: what an interruption leaves."""
-    if progress:
-        progress(f"[{rec['status']}] {rec['id']}")
     if run:
         _note(
-            log, run, "step", step=rec["id"], step_status=rec["status"], detail=rec["detail"][:300]
+            log,
+            run,
+            "step",
+            step=rec["id"],
+            step_status=rec["status"],
+            detail=rec["detail"][:300],
+            written=wrote or {},
         )
+    if progress:
+        progress(f"[{rec['status']}] {rec['id']}")
 
 
 def _summarise(
