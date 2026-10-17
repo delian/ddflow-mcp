@@ -91,3 +91,23 @@ def test_two_re_recordings_never_overlap_in_one_tree(tree):
         rep = PN.regenerate(tree, Config.load(tree), recipes=[_recipe("quick", "pass")])
     assert [p.name for p in rep.unavailable] == ["quick"], rep
     assert "another pins regeneration" in rep.unavailable[0].unavailable
+
+
+def test_a_regeneration_that_times_out_is_not_reported_as_current(tree):
+    """The check finds the pin stale, the re-recording does not finish: the outcome says it
+    could not (exit 2, the pin's name and why), never an ok that prints the pin as current."""
+    from ddflow.api import pin_files as PF
+
+    cfg = Config.load(tree)
+    cfg.pins.timeout_s = 1
+    stuck = PN.Recipe(
+        "stuck",
+        ("stuck.txt",),
+        (PY, "-c", "raise SystemExit(1)"),
+        (PY, "-c", "import time; time.sleep(60)"),
+    )
+    rep = PN.regenerate(tree, cfg, recipes=[stuck])
+    out = PF._regenerate_outcome(rep, check=False)
+    assert out.exit == 2, out  # NOTHING: could not finish
+    assert "stuck" in out.reason and "timed out" in out.reason, out.reason
+    assert out.data["pins"][0]["unavailable"] and not out.data["pins"][0]["regenerated"]

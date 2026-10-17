@@ -87,7 +87,9 @@ def test_parallel_one_runs_them_in_turn(tmp_path):
     a, b = str(tmp_path / "a.go"), str(tmp_path / "b.go")
     repo = _recipes(tmp_path, ("a", "fa", _meet(a, b)), ("b", "fb", _meet(b, a)))
     rep = PN.regenerate(repo, _cfg(parallel=1, timeout_s=3), check=True)
-    assert [p.name for p in rep.stale] == ["a"]  # a waited for a partner that had not started
+    # a waited for a partner that had not started until its time ran out: it could not be
+    # checked in time, which is unavailable (neither current nor stale)
+    assert [p.name for p in rep.unavailable] == ["a"] and rep.stale == []
 
 
 def test_re_recording_is_one_recipe_after_another(tmp_path):
