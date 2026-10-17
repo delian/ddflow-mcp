@@ -826,6 +826,19 @@
   
   '''
 # ---
+# name: test_help[ddflow health]
+  '''
+  usage: ddflow health [-h] [--run] [--mode {off,propose,apply}]
+  
+  options:
+    -h, --help            show this help message and exit
+    --run                 the periodic pass: correct per mode and record it for `cadence`
+    --mode {off,propose,apply}
+                          override every health mode (mode and mode_<kind>) for this call: off,
+                          propose or apply
+  
+  '''
+# ---
 # name: test_help[ddflow heartbeat]
   '''
   usage: ddflow heartbeat [-h] [id]
@@ -2674,13 +2687,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2754,6 +2767,8 @@
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
       lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
+                          the periodic watchdog pass
       decide              close a decide task: write its decision document from the record, land,
                           complete
       docs                the mechanical documentation check: `docs check [--diff BASE]`
@@ -2848,6 +2863,7 @@
     'ddflow gate skip',
     'ddflow gate status',
     'ddflow gate verify',
+    'ddflow health',
     'ddflow heartbeat',
     'ddflow help',
     'ddflow history',

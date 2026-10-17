@@ -241,8 +241,8 @@ def test_one_predicate_decides_what_a_period_in_days_is():
 # -- the evaluator registry (B-uni-triggers.3-evaluator-registry) ---------------------------
 
 
-def test_the_registry_runs_the_four_builtins_in_the_order_cadence_always_listed_them():
-    assert list(CA.evaluators()) == ["count", "lessons", "export", "calendar"]
+def test_the_registry_runs_the_builtins_in_the_order_cadence_always_listed_them():
+    assert list(CA.evaluators()) == ["count", "lessons", "export", "calendar", "health"]
 
 
 def test_due_all_matches_the_old_hand_written_composition_over_the_grid(tmp_path):

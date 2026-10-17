@@ -31,7 +31,7 @@ from .argtypes import glob_list_hint
 
 #: The per-CALL identity override every tool but `ddflow_identify` accepts (see mcp.py).
 AS_AGENT = "as_agent"
-AS_AGENT_SPEC: tuple[str, str, bool] = ("string", "A subagent's own name, this call only.", False)
+AS_AGENT_SPEC: tuple[str, str, bool] = ("string", "Subagent name, this call only.", False)
 
 #: JSON types a parameter may declare.
 TYPES = ("string", "boolean", "integer", "number", "array")
