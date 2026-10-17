@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import globs as GL
+from ..core.autoorder import DECIDE_TAGS
 from ..core.digest import content_digest
 from ..core.model import Item, State
 from . import approval as AP
@@ -76,7 +77,9 @@ def exemption(
 ) -> tuple[Exemption | None, str]:
     """(the exemption, "") when ``it`` is a chore the pipeline excuses from a reviewer, else
     (None, why not) -- "" when it never claimed to be one."""
-    if it.kind != "task" or TAG not in [t.strip().lower() for t in it.tags]:
+    tags = {t.strip().lower() for t in it.tags}
+    # A decide task writes the decision document, a file the chore list already holds.
+    if it.kind != "task" or not ({TAG} | DECIDE_TAGS) & tags:
         return None, ""
     if not paths:
         return None, "its changed files could not be read, so it is not judged a chore"
