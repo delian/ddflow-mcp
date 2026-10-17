@@ -196,3 +196,27 @@ def test_a_hook_item_may_start_with_any_key(tmp_path):
         "default_stages: [pre-push]\n"
     )
     assert CI.tripwire_ids(tmp_path) == ["guard", "other-guard"]
+
+
+def test_comments_and_blank_lines_inside_a_stage_list_do_not_end_it(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "default_stages:\n# tripwires run on push\n\n- pre-push\n" + CONFIG
+    )
+    assert CI.tripwire_ids(tmp_path) == ["frozen-workflow-files"]
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        CONFIG.replace(
+            "language: fail\n",
+            "language: fail\n        stages:\n          # commit time only\n          - pre-commit\n",
+            1,
+        )
+    )
+    assert CI.tripwire_ids(tmp_path) == []
+
+
+def test_the_commands_own_skip_applies_to_the_tripwire_runs_too(tmp_path, repo):
+    default = _project(repo)
+    cmd = CI.with_tripwires_on_the_diff(
+        "SKIP=frozen-workflow-files " + CI.DEFAULT_COMMAND, repo, default
+    )
+    named = cmd.split("|| rc=1; ", 1)[1]  # the run on the diff, after the all-files one
+    assert named.startswith("SKIP=frozen-workflow-files pre-commit run"), cmd
