@@ -156,7 +156,7 @@ def run(sc: Scenario) -> None:
     # still a refusal by the live (grace) lease, which is what is asserted.
     sc.check(
         "another agent is refused while the lease is still live",
-        code == 3 and ("is held by delta" in err or "delta's lease ran out" in err),
+        code == 3 and ("is held by delta" in err or ("delta's lease ran out" in err and "3600s grace period" in err)),
         err,
     )
     code = _while_live(sc, lambda: sc.ddflow("recover", expect=None))[0]
