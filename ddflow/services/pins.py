@@ -247,18 +247,15 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report, limit: int = 900, 
     a conflict in hand-written prose that the generators do not decide the same either way."""
     files = sorted({f.rstrip("/") for r in chosen for f in r.files})
     found = settle_files(repo, files)
-    if any(s.stray for s in found):
-        stuck = [s for s in found if s.stray]
-    else:
-        stuck = []
-        for s in found:
-            if s.refused and _decided_by_generators(repo, s, chosen, limit, tick):
-                rep.resolved.append(
-                    f"{s.path}: {s.hunks} conflict(s) in generated content or in text the "
-                    "generators write, re-recorded"
-                )
-            elif s.refused:
-                stuck.append(s)
+    stuck = []
+    for s in found:
+        if s.refused and not s.stray and _decided_by_generators(repo, s, chosen, limit, tick):
+            rep.resolved.append(
+                f"{s.path}: {s.hunks} conflict(s) in generated content or in text the "
+                "generators write, re-recorded"
+            )
+        elif s.refused:
+            stuck.append(s)
     if stuck:
         rep.problem = "; ".join(
             f"{s.path}: "
