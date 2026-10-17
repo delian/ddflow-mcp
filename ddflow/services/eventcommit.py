@@ -93,32 +93,42 @@ def commit_shards(
     repo = Path(repo)
     hold = hold or contextlib.nullcontext
     git_dir = W.git(repo, "rev-parse", "--absolute-git-dir")
-    gate = (
-        file_lock(Path(git_dir.out.strip()) / "ddflow-eventcommit.lock", COMMIT_WAIT_S)
-        if git_dir.ok and git_dir.out.strip()
-        else contextlib.nullcontext()
-    )
-    try:
-        with gate:
-            with hold():
-                prepared = _stage(repo, reason, template)
-            early, message, shards, skipped = prepared
-            if early is not None:
-                return early
-            done = W.git(repo, "commit", "-q", "-m", message, "--", *shards)
-            if not done.ok:
-                return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
-            torn = [s for s in shards if s.endswith(".jsonl") and not _committed_whole(repo, s)]
-            if torn:
-                skipped = "; ".join(
-                    filter(None, [skipped, f"committed with a half-written last line: {torn}"])
-                )
-            return W.rev(repo, "HEAD"), skipped
-    except LockTimeout:
-        return (
-            "",
-            f"event log not committed: another event-log commit ran for over {COMMIT_WAIT_S}s",
-        )
+    held = contextlib.ExitStack()
+    if git_dir.ok and git_dir.out.strip():
+        try:  # only the wait for another door's commit is this note's; the append lock's is not
+            held.enter_context(
+                file_lock(Path(git_dir.out.strip()) / "ddflow-eventcommit.lock", COMMIT_WAIT_S)
+            )
+        except LockTimeout:
+            return (
+                "",
+                f"event log not committed: another event-log commit ran for over {COMMIT_WAIT_S}s",
+            )
+    with held:
+        with hold():
+            early, message, shards, skipped = _stage(repo, reason, template)
+        if early is not None:
+            return early
+        done = W.git(repo, "commit", "-q", "-m", message, "--", *shards)
+        if not done.ok and not _taken_by_another(repo, shards):
+            return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
+        torn = [s for s in shards if s.endswith(".jsonl") and not _committed_whole(repo, s)]
+        if torn:
+            skipped = "; ".join(
+                filter(None, [skipped, f"committed with a half-written last line: {torn}"])
+            )
+        return W.rev(repo, "HEAD"), skipped
+
+
+def _taken_by_another(repo: Path, shards: list[str]) -> bool:
+    """Whether the shards this door staged are already committed: a commit that began while
+    this door was between its append and its own commit read the working tree and took
+    these lines too (`git commit -- <paths>` commits the files as they are), so there is
+    nothing left to commit and nothing lost."""
+    left = uncommitted_shards(repo)
+    if left is None:  # git cannot say: not "taken"
+        return False
+    return not set(shards) & {*left, *uncommitted_blobs(repo)}
 
 
 def _committed_whole(repo: Path, rel: str) -> bool:

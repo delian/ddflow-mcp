@@ -71,3 +71,32 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
         assert "nothing to commit" not in note and "index.lock" not in note, (name, note)
     EC.commit_shards(repo, "last")  # whatever a door left for the next one
     assert EC.uncommitted_shards(repo) == []
+    # Every line both doors wrote is in a commit, none is only in the working tree.
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl")).relative_to(repo)
+    committed = _git(repo, "show", f"HEAD:{shard}")
+    assert committed == (repo / shard).read_text().strip()
+    assert '"s1"' in committed and '"s2"' in committed, committed
+
+
+def test_a_door_whose_lines_another_door_committed_is_not_a_failure(repo, monkeypatch):
+    """B stages, A's slow commit (started before B's append) reads the working tree and takes
+    B's line too; B's own commit then has nothing to commit, which is success, not an error."""
+    from ddflow.services import eventcommit as EC
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "adopt", "--no-verify")
+    K.session_end(repo, "s1")  # leaves committed lines behind
+    real = EC.W.git
+
+    def someone_commits_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            real(root, "commit", "-q", "-m", "other door", "--", ".ddflow/events")
+        return real(root, *args, **kw)
+
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:  # a new, whole line that this door has to commit
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    monkeypatch.setattr(EC.W, "git", someone_commits_first)
+    sha, note = EC.commit_shards(repo, "mine")
+    assert sha and "nothing to commit" not in note and "not committed" not in note, (sha, note)
