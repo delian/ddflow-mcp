@@ -80,10 +80,11 @@ def _enclosing(source: str, lines: set[int]) -> set[str]:
 
 
 def _diff(tree: Path, *args: str) -> str:
-    # `quotepath=false`: a non-ASCII file name stays that name in the headers.
-    r = W.git(
-        tree, "-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-renames", *args
-    )
+    # `quotepath=false`: a non-ASCII file name stays that name in the headers; the prefixes
+    # are named, so `diff.mnemonicPrefix` and `diff.noprefix` of the user's config do not
+    # change what `_added_removed` reads.
+    flags = ("-U0", "--no-color", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/")
+    r = W.git(tree, "-c", "core.quotepath=false", "diff", *flags, *args)
     return r.out if r.code == 0 else ""
 
 

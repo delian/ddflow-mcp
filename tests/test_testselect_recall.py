@@ -138,6 +138,7 @@ def _one(sha: str) -> tuple[int, int, list[str], list[str]] | None:
 
 def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source():
     shas = _merges()
+    assert len(shas) <= SCAN, f"{len(shas)} merges replayed, the bound is {SCAN}"
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
         results = [r for r in pool.map(_one, shas) if r is not None]
     total = sum(r[0] for r in results)

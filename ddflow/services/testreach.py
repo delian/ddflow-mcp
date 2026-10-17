@@ -20,7 +20,6 @@ A hub is a module imported by at least ``hub_importers`` distinct files of the r
 from __future__ import annotations
 
 import ast
-import sys
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -98,10 +97,10 @@ def _bare_homes(py: list[str]) -> dict[tuple[str, str], str]:
 
 def _bare(name: str, importer: str, homes: dict[tuple[str, str], str]) -> str:
     """The module a bare ``name`` imported by ``importer`` is: a file of its own directory, or
-    of one above it that is not a package."""
+    of one above it that is not a package. It comes BEFORE the repository's top-level modules:
+    pytest puts the test's directory first on ``sys.path``, so ``tests/conftest.py`` wins over
+    a root ``conftest.py`` and ``tests/queue.py`` over the library's."""
     head = name.split(".", maxsplit=1)[0]
-    if head in sys.stdlib_module_names:  # `import queue` is the library's, whatever tests/ holds
-        return ""
     for d in PurePosixPath(importer).parents:
         if mod := homes.get((str(d), head)):
             return mod
@@ -138,7 +137,7 @@ def build(tree: Path, py: list[str], changed: list[str]) -> Graph:
             g.unparsed.append(p)
             continue
         for n in found:
-            mod = resolve(n, g.names) or _bare(n, p, homes)
+            mod = _bare(n, p, homes) or resolve(n, g.names)
             if mod and known.get(mod) != p:
                 g.importers.setdefault(mod, set()).add(p)
     return g

@@ -151,10 +151,34 @@ def test_a_one_word_change_is_no_phrase():
     assert TI._phrases(['    f.read_text(encoding="UTF-8")\n']) == set()
 
 
-def test_a_stdlib_name_is_not_a_tests_directory_helper():
-    homes = TR._bare_homes(["tests/queue.py", "tests/test_a.py"])
-    assert TR._bare("queue", "tests/test_a.py", homes) == ""
+def test_a_tests_directory_file_shadows_the_library_and_the_root_as_pytest_does():
+    homes = TR._bare_homes(
+        ["tests/queue.py", "tests/conftest.py", "conftest.py", "tests/test_a.py"]
+    )
+    assert TR._bare("queue", "tests/test_a.py", homes) == "tests.queue"
+    assert TR._bare("conftest", "tests/test_a.py", homes) == "tests.conftest"
+    assert TR._bare("queue", "other/test_b.py", homes) == "", "a directory off the import path"
     assert TR._bare("test_a", "tests/test_a.py", homes) == "tests.test_a"
+
+
+def test_a_root_conftest_does_not_take_the_import_a_tests_conftest_answers(repo):
+    _write(
+        repo,
+        {
+            "conftest.py": "",
+            "tests/conftest.py": "def make_client():\n    return 1\n",
+            "tests/test_x.py": "from conftest import make_client\n\ndef test_x():\n    assert make_client()\n",
+        },
+    )
+    g = TR.build(repo, ["conftest.py", "tests/conftest.py", "tests/test_x.py"], [])
+    assert g.importers.get("tests.conftest") == {"tests/test_x.py"}, g.importers
+
+
+def test_the_diff_headers_do_not_depend_on_the_users_git_prefix_settings(messaged):
+    _git(messaged, "config", "diff.mnemonicPrefix", "true")
+    _write(messaged, {"pkg/m.py": 'MSG = "a message that was said before"\n'})
+    (messaged / "pkg/m.py").write_text('MSG = "reworded text that holds new words"\n')
+    assert "pkg/m.py" in TI.changed_phrases(messaged, "main", ["pkg/m.py"]).values()
 
 
 def test_a_non_ascii_file_name_keeps_its_own_phrases(messaged):
