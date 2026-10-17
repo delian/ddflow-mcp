@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import clock
+from ...core import outcome as O
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
 from ...core.tier import tier_of
@@ -381,7 +382,43 @@ MERGE_PAYLOAD = (
     "merge_gate_human",
     "worktree",
     "worktree_removed",
+    # `--queue`: the entry `queue add` made, instead of a landing.
+    "queued",
+    "state",
+    "position",
+    "eta_s",
 )
+
+#: What a landing flag means nothing for once the item is only being enqueued.
+_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch")
+
+
+def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=None):
+    """`merge`: land the item, or with `queue` line it up for the integrator (`queue add`)."""
+    api = _api()
+    if a.get("queue"):
+        if clash := [f for f in _NOT_WITH_QUEUE if a.get(f)]:
+            return O.refused(
+                "queue.add",
+                f"merge --queue only enqueues; {', '.join(c.replace('_', '-') for c in clash)} apply to landing. "
+                f"Drop them, or merge without --queue.",
+                id=a["id"],
+            )
+        return api.queue_add(repo, a["id"], agent=agent)
+    return api.merge_item(
+        repo,
+        a["id"],
+        message=a.get("message", "") or "",
+        allow_dirty=bool(a.get("allow_dirty")),
+        allow_empty=bool(a.get("allow_empty")),
+        keep=bool(a.get("keep")),
+        model=a.get("model", "") or "",
+        branch=a.get("branch", "") or "",
+        called_from=called_from,
+        shell_cwd=shell_cwd,
+        agent=agent,
+        on_progress=on_progress,
+    )
 
 
 def merge_kwargs(ctx) -> dict[str, Any]:
@@ -410,7 +447,7 @@ def merge_reason(out) -> str:
     """What a merge refused over uncommitted files says: the NAMES, truncated here rather
     than in the api (how many to show is a presentation decision; a caller reading JSON
     wants all of them)."""
-    if out.exit != REFUSED or not out.data.get("dirty"):
+    if out.exit != REFUSED or not out.data.get("dirty") or "queued" in out.data:
         return out.reason
     dirty = out.data["dirty"]
     lines = [
@@ -428,6 +465,8 @@ def merge_reason(out) -> str:
 
 
 def merge_body(out, a) -> Any:
+    if "queued" in out.data:
+        return out.body(MERGE_PAYLOAD)
     local = (
         () if out.data.get("pr") else tuple(k for k in ("export_refresh", "ci") if k in out.data)
     )
@@ -435,7 +474,7 @@ def merge_body(out, a) -> Any:
 
 
 def merge_notes(out, a, ctx) -> Iterator[str]:
-    if out.exit != OK:
+    if out.exit != OK or "queued" in out.data:
         return
     d = out.data
     if d.get("pr"):
@@ -480,6 +519,8 @@ def merge_notes(out, a, ctx) -> Iterator[str]:
 
 def merge_text(out, a) -> str:
     d = out.data
+    if "queued" in d:
+        return d["text"]
     if d.get("pr"):
         stacked = f", stacked on {d['stacked_on']}" if d["stacked_on"] else ""
         return (
