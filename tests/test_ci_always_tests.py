@@ -47,14 +47,28 @@ def test_a_change_in_a_constants_bearing_file_also_runs_the_ratchet_test(project
     assert len(json.dumps(res.scope)) < 800
 
 
-def test_the_always_set_runs_when_the_closure_is_empty(project, stubs):  # noqa: F811
+def test_an_empty_closure_still_runs_the_whole_suite_which_holds_the_always_set(project, stubs):  # noqa: F811
     _write(project, {"tests/test_readme_table.py": PASSING})
     _branch(project, {"notes/memo.md": "hi\n"})
     res = _run(project)
     assert res.ok, res.reason
-    assert res.scope["scope"] == "selected" and res.scope["selected"] == 0
-    (call,) = _calls(stubs, "pytest")
-    assert "tests/test_readme_table.py" in call and "test_mod" not in call
+    assert res.scope["scope"] == "full" and "no test reaches" in res.scope["why"]
+    assert not _calls(stubs, "pytest")  # the unmodified hook ran every test, guards included
+
+
+def test_the_rest_of_the_set_follows_a_selected_guard_file(
+    project,  # noqa: F811
+    stubs,  # noqa: F811
+):
+    """A change inside a guard test file selects that file; the rest of the set follows it."""
+    _write(
+        project, {"tests/test_readme_table.py": PASSING, "tests/test_mcp_tool_budget.py": PASSING}
+    )
+    _branch(project, {"tests/test_readme_table.py": PASSING + "\n"})
+    res = _run(project)
+    assert res.ok, res.reason
+    assert res.scope["tests"] == ["tests/test_readme_table.py"]
+    assert res.scope["always_tests"] == ["tests/test_mcp_tool_budget.py"]
 
 
 def test_a_test_declaring_always_runs_without_a_glob(project, stubs):  # noqa: F811

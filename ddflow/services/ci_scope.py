@@ -168,13 +168,13 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     if sel.full:
         return Plan("full", f"{sel.full}: only the whole suite keeps recall")
     paths = [t.path for t in sel.tests]
+    if not paths:  # the whole suite holds the always-run guards too
+        return Plan("full", "no test reaches the change (running none would pass vacuously)")
     held = set(paths)
     always = [t for t in always_tests(cfg, tree) if t not in held]
-    if not paths and not always:
-        return Plan("full", "no test reaches the change (running none would pass vacuously)")
-    cmd = run_command(entry, paths, tree) if paths else ""
+    cmd = run_command(entry, paths, tree)
     always_cmd = run_command(entry, always, tree) if always else ""
-    if not (cmd or always_cmd):
+    if not cmd:
         return Plan("full", "the `tests` hook does not run pytest")
     cut = [t.path for t in sel.cut]
     why = f"{len(paths)} test file(s) its change reaches" + (
