@@ -19,6 +19,7 @@ from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.cadence import COMMANDS as _CADENCE
 from .declared.chore import COMMANDS as _CHORE
+from .declared.decide import COMMANDS as _DECIDE
 from .declared.docs import COMMANDS as _DOCS
 from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
@@ -98,6 +99,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_HOOKS,
     *_LANES,
     *_HEALTH,
+    *_DECIDE,
     *_DOCS,
     *_METRICS,
     *_lists.COMMANDS,

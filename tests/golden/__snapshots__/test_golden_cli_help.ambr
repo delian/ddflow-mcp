@@ -443,6 +443,22 @@
   
   '''
 # ---
+# name: test_help[ddflow decide]
+  '''
+  usage: ddflow decide [-h] --decision-id DECISION_ID [--path PATH] [--model MODEL] id
+  
+  positional arguments:
+    id                    the decide task
+  
+  options:
+    -h, --help            show this help message and exit
+    --decision-id DECISION_ID
+                          the recorded decision (D-x) whose document is written
+    --path PATH           the document (default docs/ddflow/decisions/<slug>.md)
+    --model MODEL         the author's model family
+  
+  '''
+# ---
 # name: test_help[ddflow decision add]
   '''
   usage: ddflow decision add [-h] [--id ID] --title TITLE --decision DECISION [--context CONTEXT] [--consequences CONSEQUENCES] [--alternatives ALTERNATIVES] [--globs GLOBS] [--tags TAGS] [--sources SOURCES] [--item ITEM] [--by BY] [--status {proposed,accepted,superseded}] [--supersedes SUPERSEDES] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
@@ -2820,6 +2836,7 @@
     'ddflow companions list',
     'ddflow complete',
     'ddflow config',
+    'ddflow decide',
     'ddflow decision',
     'ddflow decision add',
     'ddflow decision applicable',
