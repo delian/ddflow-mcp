@@ -413,7 +413,7 @@ def _superseded_run(
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
     recorded = rec.evidence.get("tree_sha", "") if rec and rec.outcome else ""
-    if recorded and rec.at > started_at and G.head_of(recorded) != G.head_of(started_on):
+    if recorded and rec.at > started_at and G.moved_past(started_on, recorded, cwd):
         # Recorded since this run began, on another commit (an amend or a rebase has no
         # ancestry to compare): newer work by construction.
         return (

@@ -61,6 +61,7 @@ from .evidence import (  # noqa: F401
     digest,
     head_of,
     is_tree,
+    moved_past,
     normal_fingerprint,
     recorded_content,
     source_tree,

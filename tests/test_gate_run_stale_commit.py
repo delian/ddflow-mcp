@@ -94,3 +94,26 @@ def test_a_late_finishing_run_on_an_older_commit_does_not_overwrite_a_newer_pass
     gates = json.loads(shown)["gates"]
     assert gates["unit_tests"]["outcome"] == "passed", shown
     assert first.returncode != OK  # said so: it recorded nothing
+
+
+def test_a_recorded_outcome_on_an_ancestor_does_not_supersede_the_newer_run(tmp_path):
+    """The run on the NEWER commit finishing after one on an older commit has recorded must
+    still record: direction matters (the review of the first cut)."""
+    from ddflow.services import gates as G
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@t")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / "f").write_text("1")
+    _git(tmp_path, "add", "f")
+    _git(tmp_path, "commit", "-qm", "one")
+    old = G.tree_identity(tmp_path)
+    (tmp_path / "f").write_text("2")
+    _git(tmp_path, "commit", "-qam", "two")
+    new = G.tree_identity(tmp_path)
+    assert not G.moved_past(new, old, tmp_path)  # recorded is an ancestor of the run's
+    assert G.moved_past(old, new, tmp_path)  # recorded is a descendant: the run is stale
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "two again")
+    amended = G.tree_identity(tmp_path)
+    assert G.moved_past(new, amended, tmp_path)  # no ancestry either way: recorded wins
+    assert not G.moved_past(new, new, tmp_path)
