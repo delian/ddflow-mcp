@@ -124,12 +124,29 @@ def _stage(repo: Path, wt: W.Worktree, todo: list[str], message: str) -> O.Outco
     made = W.commit(wt, message.strip(), todo)
     if not made.ok:
         return O.failed(KIND, (made.err or made.out).strip())
+    return None
+
+
+def _clear_primary(repo: Path, todo: list[str]) -> None:
+    """Let the primary's copies of ``todo`` go: the branch holds them now, and left behind
+    they make the merge refuse over an untracked file or fight a modified one. A path in
+    HEAD is restored to it; one that is not (new, perhaps staged) is dropped from the index
+    and the tree."""
     for rel in todo:
-        if W.git(repo, "ls-files", "--error-unmatch", "--", rel).ok:
+        if W.git(repo, "cat-file", "-e", f"HEAD:{rel}").ok:
             W.git(repo, "checkout", "HEAD", "--", rel)
         else:
+            W.git(repo, "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", rel)
             (repo / rel).unlink(missing_ok=True)
-    return None
+
+
+def _bring_back(repo: Path, wt: W.Worktree, todo: list[str]) -> None:
+    """After a failed merge, put the files back in the primary, so a failure costs no work."""
+    for rel in todo:
+        src = wt.path / rel
+        if src.exists():
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, repo / rel)
 
 
 def _skip_gates(repo: Path, cfg, st, item: str, todo: list[str], note: str, agent: str):
@@ -194,8 +211,10 @@ def chore_commit(
     skipped, gate = _skip_gates(repo, cfg, st, item, todo, note, agent)
     if isinstance(skipped, O.Outcome):
         return _failure(f"skip {gate}", item, skipped)
+    _clear_primary(repo, todo)
     out = merge_item(repo, item, model=model, called_from=called_from, agent=agent)
     if not out.ok:
+        _bring_back(repo, wt, todo)
         return _failure("merge", item, out)
     sha = out.data.get("sha", "")
     done = complete(repo, item, model=model, agent=agent, called_from=called_from)

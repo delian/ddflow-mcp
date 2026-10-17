@@ -128,3 +128,29 @@ def test_the_chore_tag_alone_does_not_excuse_a_reviewer(proj):
     run_cli(proj, "merge", "T1", "--model", "claude-x")
     code, _out, err = run_cli(proj, "complete", "T1", "--model", "claude-x")
     assert code != 0 and "reviewer independence" in err
+
+
+def test_a_staged_new_chore_file_is_cleared_from_the_primary(proj):
+    """A new file already `git add`-ed is in the index but not in HEAD: it must still go,
+    or the merge refuses over the local copy."""
+    _approve(proj)
+    (proj / ".mailmap").write_text("A <a@x> <b@x>\n")
+    _git(proj, "add", ".mailmap")
+    code, out, err = run_cli(proj, "chore", "commit", ".mailmap", "-m", "staged")
+    assert code == 0, (out, err)
+    assert _git(proj, "show", "HEAD:.mailmap") == "A <a@x> <b@x>\n"
+    assert _git(proj, "status", "--porcelain", "--", ".mailmap") == ""
+
+
+def test_only_a_task_can_be_a_chore(proj):
+    from ddflow.config import Config
+    from ddflow.services import chore as CO
+
+    _approve(proj)
+    st = _state(proj)
+    run_cli(proj, "task", "add", "T1", "--title", "t", "--globs", ".mailmap", "--tags", "chore")
+    it = _state(proj).items["T1"]
+    cfg = Config.load(proj)
+    assert CO.exemption(_state(proj), cfg, it, [".mailmap"])[0] is not None
+    it.kind = "phase"
+    assert CO.exemption(st, cfg, it, [".mailmap"]) == (None, "")
