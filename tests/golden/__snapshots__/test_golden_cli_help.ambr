@@ -256,47 +256,6 @@
   
   '''
 # ---
-# name: test_help[ddflow chore approve]
-  '''
-  usage: ddflow chore approve [-h] [--note NOTE]
-  
-  options:
-    -h, --help   show this help message and exit
-    --note NOTE  why, recorded with the approval
-  
-  '''
-# ---
-# name: test_help[ddflow chore commit]
-  '''
-  usage: ddflow chore commit [-h] -m MESSAGE [--model MODEL] [files ...]
-  
-  positional arguments:
-    files                 the files (or directories) of this checkout to land; each must match
-                          [chore].globs
-  
-  options:
-    -h, --help            show this help message and exit
-    -m, --message MESSAGE
-                          the commit message, and the chore's title
-    --model MODEL         the author's model family, recorded on the completion
-  
-  '''
-# ---
-# name: test_help[ddflow chore]
-  '''
-  usage: ddflow chore [-h] {commit,approve} ...
-  
-  positional arguments:
-    {commit,approve}
-      commit          commit, merge and complete files in [chore].globs in one step, with no
-                      reviewer
-      approve         a person approves the current [chore].globs (refused under an agent identity)
-  
-  options:
-    -h, --help        show this help message and exit
-  
-  '''
-# ---
 # name: test_help[ddflow ci]
   '''
   usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
@@ -1292,7 +1251,7 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
@@ -1300,6 +1259,8 @@
   options:
     -h, --help         show this help message and exit
     --message MESSAGE
+    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
+                       add`)
     --keep
     --allow-dirty
     --allow-empty      land a branch with no commits ahead of its target (refused by default: it
@@ -2268,7 +2229,7 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
@@ -2281,6 +2242,9 @@
                           to add more -- every value is kept
     --tags TAGS
     --body BODY
+    --kind KIND           what kind of work: task (default), doc, research or job. A kind runs the
+                          gate pipeline [gates].kind_pipelines gives it (doc ships without the code
+                          gates), so docs-only work completes without unit_tests
     --resources RESOURCES
                           physical resources the work RUNS on, as `ddflow update --resources` takes
                           them: 'gpu:4,vllm-fleet'
@@ -2620,13 +2584,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2634,7 +2598,6 @@
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
       update              change an item's fields
-      chore               commit or approve chore files (no reviewer)
       plan                check a plan before filing it
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
@@ -2757,9 +2720,6 @@
     'ddflow bug list',
     'ddflow bug reopen',
     'ddflow cadence',
-    'ddflow chore',
-    'ddflow chore approve',
-    'ddflow chore commit',
     'ddflow ci',
     'ddflow claim',
     'ddflow cleanup',

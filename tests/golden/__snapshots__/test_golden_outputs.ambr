@@ -738,6 +738,11 @@
       gates.task_pipeline = ['research', 'rules', 'implement', 'rubber_duck', 'critic', 'standards', 'unit_tests', 'bug_hunt', 'dedupe', 'merge']   [default]
           Ordered gate ids every TASK passes through. Reorder or trim per project; ids
           must exist in [gate.*] definitions.
+      gates.doc_pipeline = ['rules', 'implement', 'standards', 'dedupe', 'merge']   [default]
+          Ordered gate ids a DOC item passes through (`task add --kind doc`):
+          documents and generated output, so no unit_tests, critic or bug hunt.
+          `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when
+          they appear here.
       gates.phase_pipeline = ['research', 'tasks', 'unit_tests', 'bug_hunt', 'dedupe', 'live_test', 'corrections', 'docs', 'merge']   [default]
           Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point
           where member tasks run (in parallel where dependencies allow). 'docs'
@@ -748,9 +753,9 @@
           item kind (task, phase, bug, doc, research, job) to its ordered gate ids,
           e.g. { doc = ["implement", "merge"] }. A kind not named here runs
           `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps
-          `promotion_pipeline`. Empty by default, so every kind runs as before.
-          `ddflow workflow` lists each kind that differs, and `--json` every kind's
-          effective pipeline.
+          `promotion_pipeline`. Empty by default; a `doc` item (`task add --kind doc`)
+          runs `doc_pipeline` unless this names it. `ddflow workflow` lists each kind
+          that differs, and `--json` every kind's effective pipeline.
       gates.required = ['implement', 'unit_tests', 'merge']   [default]
           Gates whose failure BLOCKS completion. Everything else records its outcome
           and lets the pipeline continue — advisory vs blocking is an explicit field,
@@ -2011,19 +2016,6 @@
       merge_queue.keep_history = 50   [default]
           How many finished (merged or parked) entries the queue keeps for `ddflow
           queue status` and the ETA; older ones are deleted when an entry is added.
-      chore.globs = ['.ddflow/rules/**', '.mailmap', 'DDFLOW.md', 'docs/ddflow/decisions/**', 'docs/ddflow/QUEUE.md', 'docs/ddflow/LESSONS.md', 'docs/ddflow/LESSONS-SUMMARY.md']   [default]
-          The chore class: files `ddflow chore commit FILES -m MSG` may commit, merge
-          and COMPLETE with no reviewer (rules, .mailmap, DDFLOW.md, decision records,
-          generated views). A change to any file outside the list is refused and takes
-          the normal pipeline. The list is approved by a person: `ddflow chore
-          approve` records the approval of THIS list (an agent identity cannot), so a
-          changed list needs approving again before a chore may use it, whoever edited
-          it.
-      chore.skip_gates = ['research', 'rules', 'implement', 'rubber_duck', 'critic', 'verify', 'standards', 'ci', 'unit_tests', 'bug_hunt', 'dedupe']   [default]
-          The gates a chore skips, each recorded with its reason (the chore, the
-          matched globs and the approval). A gate of the item's pipeline that is
-          neither listed here nor `merge` (which the merge itself records) is left for
-          you to run, and the chore does not complete until it carries an outcome.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest
@@ -2147,6 +2139,21 @@
           (every item's ci run takes the whole suite); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      ci.always_tests = ['tests/test_constants_ratchet.py', 'tests/test_layering*.py', 'tests/golden/**', 'tests/test_uc_surf_setup_ops_transcript.py', 'tests/test_uc_surf_loop_transcript.py', 'tests/test_readme_*.py', 'tests/test_mcp_tool_budget.py']   [default]
+          Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for
+          EVERY item in addition to the tests its change reaches, plus any test file
+          declaring `ALWAYS = True` at module level. They are the repo-wide guards and
+          pins (the constants ratchet, the layering guard, golden snapshots, the
+          setup-ops and loop transcripts, the README table pins, the tool budget: the
+          ones that have broken main past a selection; measured about 30 s plus the
+          loop transcript's one long test). Left out of the default for their cost,
+          add them when they bite: `tests/test_architecture_guards.py` (18 s),
+          `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py`
+          (37 s): their input is the whole code base, so no import closure can know a
+          change affects them. Recorded in the gate evidence as `always` (count,
+          files) and `always_s` (the seconds they cost); an empty closure still runs
+          the whole suite (which holds them). Empty list: only the selection (and any
+          `ALWAYS = True` file) runs.
       prompts.review_system = ''   [default]
           Path to the reviewer's system prompt template, replacing the shipped one.
           `ddflow prompts eject` writes an editable copy into .ddflow/prompts/ to
