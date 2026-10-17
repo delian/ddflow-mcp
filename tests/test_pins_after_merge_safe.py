@@ -203,3 +203,14 @@ def test_a_symlinked_pin_file_stays_a_symlink_when_it_is_put_back(tree):
     rep = PN.regenerate(tree, Config.load(tree), recipes=[recipe])
     assert [p.name for p in rep.failed] == ["lnk"]
     assert (tree / "link.txt").is_symlink() and (tree / "real.txt").read_text() == "a\nb\n"
+
+
+def test_a_symlinked_binary_pin_file_stays_a_symlink_when_it_is_put_back(tree):
+    (tree / "real.bin").write_bytes(b"\xff\xfe\x00bin")
+    (tree / "link.bin").symlink_to("real.bin")
+    code = "import pathlib\npathlib.Path('link.bin').write_bytes(b'junk')\nraise SystemExit(2)\n"
+    recipe = PN.Recipe("bin", ("link.bin",), (PY, "-c", "raise SystemExit(1)"), (PY, "-c", code))
+    rep = PN.regenerate(tree, Config.load(tree), recipes=[recipe])
+    assert [p.name for p in rep.failed] == ["bin"]
+    assert (tree / "link.bin").is_symlink()
+    assert (tree / "real.bin").read_bytes() == b"\xff\xfe\x00bin"
