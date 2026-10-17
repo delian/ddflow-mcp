@@ -51,6 +51,9 @@ def test_an_occupied_tree_path_names_the_removal_command(repo):
     text = out + err
     assert code == 3, text
     assert "git worktree remove" in text and "ddflow claim T1" in text, text
+    # the tree may be dirty, so removal can fail: say how to look first and the alternative
+    assert f"git -C {path} status" in text, text
+    assert "tree of your own" in text, text
 
 
 def test_another_agents_expired_lease_names_the_one_line_takeover(repo, monkeypatch):
