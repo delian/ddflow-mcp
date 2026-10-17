@@ -225,9 +225,7 @@ def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[s
     them. Not lifted by `--force`: the operator's `gate skip --reason` is the recorded way past."""
     if umbrella:
         return []
-    found = GO.failed_review_blockers(
-        st, cfg, item, G.load_gates(repo, cfg), skip=_na_map(v.na_evidence)
-    )
+    found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
     v.blockers += found
     return found
 

@@ -5,7 +5,7 @@ confirmed finding is followed by a later delta round that did not raise it again
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from ...config import Config
@@ -92,19 +92,16 @@ def failed_review_blockers(
     cfg: Config,
     item_id: str,
     defs: Mapping[str, GateDef] | None,
-    skip: Iterable[str] = (),
 ) -> list[str]:
     """One blocker for the review gates (any gate with a `reviewer`) of ``item_id``'s
-    pipeline that are FAILED and unanswered (`unresolved_review_failure`). ``skip`` are the
-    gates the actual diff excused. The operator's way past is `gate skip --reason`."""
+    pipeline that are FAILED and unanswered (`unresolved_review_failure`). The operator's way past is `gate skip --reason`."""
     it = state.items.get(item_id)
     if it is None:
         return []
-    excused = set(skip)
     rows = []
     for g in pipeline_for(it, cfg):
         gd = (defs or {}).get(g) or DEFAULT_GATES.get(g)
-        if g in excused or gd is None or not gd.reviewer:
+        if gd is None or not gd.reviewer:
             continue
         if why := unresolved_review_failure(it, g):
             rows.append(f"{g} ({why})")
