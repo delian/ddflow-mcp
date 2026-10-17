@@ -46,8 +46,9 @@ def merge_log(root: Path) -> list[str]:
     """The ``merge <item>: ...`` commits ddflow wrote, newest first, reachable by ANY path.
     Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
     parent, so a first-parent walk saw an older window than main does and the replay failed
-    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161)."""
-    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H")
+    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161). Only ``merge <id>:``
+    subjects: a hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    log = git_proc(root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H")
     return log.stdout.split() if log.returncode == 0 else []
 
 
@@ -150,3 +151,28 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
     assert not lost, f"the precise selection lost tests the earlier selector held: {lost}; {report}"
     assert held / total >= ABSOLUTE_FLOOR, report
+
+
+def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
+    """B2d1ecadd87: `git merge main -m 'merge main'` is not a ddflow merge."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    for branch, subject in (("a", "merge T1: real"), ("b", "merge main")):
+        g("commit", "-q", "--allow-empty", "-m", "base" + branch)
+        g("checkout", "-q", "-b", "side" + branch)
+        g("commit", "-q", "--allow-empty", "-m", "side" + branch)
+        g("checkout", "-q", "main")
+        g("commit", "-q", "--allow-empty", "-m", "main" + branch)
+        g("merge", "-q", "--no-ff", "-m", subject, "side" + branch)
+    out = git_proc(tmp_path, "log", "--format=%s").stdout.splitlines()
+    assert "merge main" in out
+    subjects = [
+        git_proc(tmp_path, "show", "-s", "--format=%s", sha).stdout.strip()
+        for sha in merge_log(tmp_path)
+    ]
+    assert subjects == ["merge T1: real"]
