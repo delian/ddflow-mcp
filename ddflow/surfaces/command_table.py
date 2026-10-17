@@ -12,12 +12,11 @@ import argparse
 import re
 import sys
 
+from ..api.readme_tools import SUMMARY_MAX  # one cut for both of the README's generated tables
 from ..views.readme_region import Region
 from . import cli
 
 REGION = "README/commands"
-#: A summary longer than this is cut at a word and ends in an ellipsis.
-SUMMARY_MAX = 110
 
 
 def commands() -> list[tuple[str, str]]:
