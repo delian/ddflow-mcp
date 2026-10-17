@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..core.registry import Registry
-
 
 @dataclass(frozen=True)
 class KindSpec:
@@ -26,16 +24,17 @@ class KindSpec:
     doc: str
 
 
-KINDS: Registry[KindSpec] = Registry("item kind", key=lambda s: s.name, order="registered")
-for _spec in (
-    KindSpec("task", "task_pipeline", "a unit of work with its own worktree"),
-    KindSpec("phase", "phase_pipeline", "a group of tasks, closed as a whole"),
-    KindSpec("bug", "task_pipeline", "a recorded defect and its fix"),
-    KindSpec("doc", "doc_pipeline", "a project document"),
-    KindSpec("research", "task_pipeline", "a recorded question and its verdict"),
-    KindSpec("job", "task_pipeline", "a scheduled or manual job"),
-):
-    KINDS.register(_spec)
+KINDS: dict[str, KindSpec] = {
+    spec.name: spec
+    for spec in (
+        KindSpec("task", "task_pipeline", "a unit of work with its own worktree"),
+        KindSpec("phase", "phase_pipeline", "a group of tasks, closed as a whole"),
+        KindSpec("bug", "task_pipeline", "a recorded defect and its fix"),
+        KindSpec("doc", "doc_pipeline", "a project document"),
+        KindSpec("research", "task_pipeline", "a recorded question and its verdict"),
+        KindSpec("job", "task_pipeline", "a scheduled or manual job"),
+    )
+}
 
 
 def kind_pipelines_problem(value: object) -> str:

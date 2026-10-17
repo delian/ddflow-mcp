@@ -191,10 +191,12 @@ def test_the_search_sources_list_the_same_names_in_the_same_order():
     assert isinstance(hit.SOURCES, Registry) and hit._REGISTRY is hit.SOURCES.table
 
 
-def test_the_item_kinds_and_the_harnesses_list_the_same_names():
+def test_the_item_kinds_stay_a_plain_table_and_the_harnesses_list_the_same_names():
     from ddflow.config_sections._kinds import KINDS
     from ddflow.services import harnessreg
 
+    # `config` may import nothing (tests/test_layering.py), so the item-kind table cannot be a
+    # `core.registry.Registry`; it keeps its names and order.
     assert list(KINDS) == ITEM_KINDS and KINDS["doc"].base == "doc_pipeline"
     assert KINDS.get("nope") is None
     assert harnessreg.ids() == HARNESSES and harnessreg.get("claude").id == "claude"
