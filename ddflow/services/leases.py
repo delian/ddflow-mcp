@@ -260,7 +260,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             raise LeaseError(f"no such item {item_id!r}", item=item_id)
         if it.removed:
             raise LeaseError(f"{item_id} was removed", item=item_id)
-        bad = GS.problem(globs or [])
+        bad = GS.problem(globs or []) or (schedule.problem(resources) if resources else "")
         if bad:
             raise LeaseError(f"{item_id}: {bad}", item=item_id)
         if it.state == DONE and not force:

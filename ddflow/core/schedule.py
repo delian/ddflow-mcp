@@ -570,6 +570,24 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
     return out
 
 
+def problem(specs: list[str]) -> str:
+    """Why ``specs`` cannot be an item's resources, or ""."""
+    # Only NEW input: a stored `gpu=1` (from before this check) must still parse, as a name.
+    for spec in specs:
+        if "=" in spec:
+            name, _, cap = spec.partition("=")
+            return (
+                f"resource {spec!r}: an item names its resources as name:count "
+                f"(`{name.strip()}:{cap.strip() or 1}`); name=count is the "
+                "[schedule] resources capacity form"
+            )
+    try:
+        parse_resources(specs)
+    except ValueError as exc:
+        return str(exc)
+    return ""
+
+
 def capacities(cfg: Config) -> dict[str, int]:
     """`[schedule] resources` as a dict. Undeclared resources are exclusive (capacity 1).
 

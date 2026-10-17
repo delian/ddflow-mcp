@@ -32,6 +32,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, get_type_hints
 
+from ..core.registry import Registry
 from .mcpconfig import (
     SHAPE_COPILOT,
     SHAPE_MCP_DOT_SERVERS,
@@ -328,10 +329,16 @@ def load(directory: Path | None = None) -> tuple[Harness, ...]:
     return _cache[root]
 
 
+#: The shipped descriptors by id, in rank order, loaded on first use (`load`).
+HARNESSES: Registry[Harness] = Registry(
+    "harness", key=lambda h: h.id, order="registered", loader=load
+)
+
+
 def get(agent: str) -> Harness | None:
     """The descriptor for ``agent``, or ``None`` when ddflow has none."""
-    return next((h for h in load() if h.id == agent), None)
+    return HARNESSES.get(agent)
 
 
 def ids() -> list[str]:
-    return [h.id for h in load()]
+    return HARNESSES.names()
