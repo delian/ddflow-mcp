@@ -17,6 +17,7 @@ no lease to carry.
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -34,15 +35,33 @@ def _rel(repo: Path, path: Path) -> str | None:
         return None  # outside the repository: not a path a commit of it can carry
 
 
+def _stored_id(repo: Path, rel: str) -> str | None:
+    """The blob id git would store for ``rel`` (clean filters and eol conversion applied), or
+    None when git cannot say."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(repo), "hash-object", "--path", rel, "--", rel],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = r.stdout.strip()
+    return out if r.returncode == 0 and out else None
+
+
 def digests(repo: Path, paths: Iterable[Path]) -> dict[str, str | None]:
-    """``{repo-relative path: digest of its bytes, or None when it is absent}``."""
+    """``{repo-relative path: digest, or None when it is absent}``. The digest is the blob id git
+    would store for the file (so a clean filter or autocrlf, which change the bytes on `git add`,
+    do not make the output look edited); the SHA-256 of the bytes when git cannot say."""
     out: dict[str, str | None] = {}
     for p in paths:
         rel = _rel(repo, p)
         if rel is None:
             continue
         try:
-            out[rel] = digest(p.read_bytes()) if p.is_file() else None
+            out[rel] = (_stored_id(repo, rel) or digest(p.read_bytes())) if p.is_file() else None
         except OSError:
             out[rel] = None
     return out
