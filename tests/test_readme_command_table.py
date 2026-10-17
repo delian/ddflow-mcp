@@ -42,3 +42,21 @@ def test_a_command_registered_without_help_is_still_listed():
     parser = cli.build_parser()
     (sub,) = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
     assert len(CT.commands()) == len(sub.choices)
+
+
+def test_an_alias_is_not_a_second_row_and_a_multi_sentence_help_is_not_cut_at_the_first(
+    monkeypatch,
+):
+    import argparse
+
+    from ddflow.surfaces import cli
+
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers()
+    sub.add_parser("pin", help="Manage pins (e.g. one). Pass --check to verify.", aliases=["pins"])
+    sub.add_parser("sweep", description="Sweep up.")
+    monkeypatch.setattr(cli, "build_parser", lambda: parser)
+    assert CT.commands() == [
+        ("pin", "Manage pins (e.g. one). Pass --check to verify."),
+        ("sweep", "Sweep up."),
+    ]
