@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from ..core import outcome as O
 from ..services import ci as CI
+from ..services import leasekeep as LK
 from ._base import _load
 from ._dedupe import Answer
 from .knowledge import bug_found
@@ -23,6 +25,17 @@ def _record(log, stage: str, res: CI.Result, subject: str = "ci") -> None:
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail[:300]} for c in res.checks],
         },
     )
+
+
+def lease_tick(log, cfg, st, item: str) -> tuple[Callable[[], None], float] | None:
+    """``tick`` for `CI.run`: renews the caller's own lease on ``item`` every
+    `[lease].heartbeat_s` while the command runs (DX-long-op-renew). None when it holds none."""
+    keep = LK.keeper(log, cfg, st.items.get(item)) if item else None
+    if keep is None:
+        return None
+    every = float(max(1, cfg.lease.heartbeat_s))
+    renewed = st.items[item].lease.renewed_at
+    return LK.throttled(keep, renewed, cfg.lease.heartbeat_s, every), every
 
 
 def file_failures(
@@ -67,7 +80,7 @@ def check_after_merge(
     result and file the failures. Never raises into the merge: it already landed.
     Returns what to say about it ({} when nothing ran). ``since`` is the base the merge started
     from: the tripwire hooks run on that range, not over every file."""
-    log, cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     mode = cfg.ci.on_merge
     if mode == "off":
         return {}
@@ -77,7 +90,10 @@ def check_after_merge(
     cmd, _why = CI.main_command(repo, cfg)
     if not cmd:
         return {}  # no CI command in this project: nothing to check, nothing to claim
-    res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd, changed_from=since)
+    res = CI.run(
+        repo, cfg, ref=sha or "HEAD", command=cmd, changed_from=since,
+        tick=lease_tick(log, cfg, st, item),
+    )  # fmt: skip
     _record(log, "merge", res, item or "ci")
     filed, fixes = (
         ([], {}) if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)
