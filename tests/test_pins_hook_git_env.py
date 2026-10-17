@@ -24,6 +24,8 @@ def test_after_merge_hook_skips_a_linked_worktree(tmp_path: Path, monkeypatch) -
     _git(main, "commit", "-q", "--allow-empty", "-m", "i")
     wt = tmp_path / "wt"
     _git(main, "worktree", "add", "-q", str(wt), "-b", "b")
+    monkeypatch.setenv("GIT_DIR", str(main / ".git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(main / ".git" / "index"))
     ran: list[Path] = []
     monkeypatch.setattr(PM, "after_merge", lambda repo, cfg: ran.append(repo) or "ran")
     head = subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"])
