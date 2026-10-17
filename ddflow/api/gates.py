@@ -20,6 +20,7 @@ Two rules here are worth reading before changing anything:
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shlex
 from collections.abc import Callable
@@ -43,6 +44,7 @@ from ..services import testselect as TS
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import measured as R
+from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
 from ..views.markdown import new_reports_line
@@ -57,6 +59,45 @@ from .lifecycle.complete import _session_model
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
 
 
+def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
+    """Record `unavailable` for every gate run whose process died before it recorded
+    (B58842554a7): a killed shell, a tool timeout, a SIGKILL. The run's started-marker
+    outlives it; a later call finds the marker with no live process and writes down what
+    happened, so a started run always ends in an outcome. A gate that has an outcome since
+    the run began (a newer run, a hand record) is left as it is. Returns what it swept."""
+    dead = RUN.dead_runs(repo, item)
+    if not dead:
+        return []
+    log, cfg, st = _load(repo, agent)
+    known = G.load_gates(repo, cfg)
+    swept = []
+    for m in dead:
+        it = st.items.get(m.item)
+        rec = it.gates.get(m.gate) if it else None
+        newer = bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(m.at))
+        if it is not None and not it.removed and m.gate in known and not newer:
+            reason = (
+                f"the run of {m.gate} started {m.at} (pid {m.pid}) was killed before it "
+                f"recorded an outcome: its process is gone. Not a pass and not a failure; "
+                f"run `ddflow gate run {m.item} {m.gate}` again."
+            )
+            with contextlib.suppress(ValueError):
+                R.record_measured(
+                    log,
+                    cfg,
+                    repo,
+                    it,
+                    m.gate,
+                    "unavailable",
+                    reason=reason,
+                    evidence={"run_killed": True, "run_pid": m.pid, "run_started_at": m.at},
+                    gates=known,
+                )
+                swept.append(f"{m.item}.{m.gate}")
+        RUN.clear(m)
+    return swept
+
+
 def _resolve(repo: Path, item: str, gate: str, agent: str):
     """(log, cfg, state, item, gatedef) or an Outcome explaining why not.
 
@@ -64,6 +105,7 @@ def _resolve(repo: Path, item: str, gate: str, agent: str):
     skipped the item check and a typo'd id MATERIALISED an item carrying a human
     approval, because the fold creates an item for an unknown subject.
     """
+    sweep_dead_runs(repo, agent)
     log, cfg, st = _load(repo, agent)
     known = G.load_gates(repo, cfg)
     if gate and gate not in known:
@@ -84,6 +126,7 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     and how to record it — which is why this tool's body is prose on both surfaces.
     """
 
+    sweep_dead_runs(repo, agent)
     _log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
     try:
@@ -523,6 +566,77 @@ def run(
     started_on = G.tree_identity(cwd)
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+    marker = RUN.mark(repo, item, gate)
+    try:
+        with RUN.terminating():
+            done = _execute(
+                log,
+                cfg,
+                repo,
+                agent,
+                it,
+                item,
+                gate,
+                gdef=gdef,
+                gates=gates,
+                cwd=cwd,
+                scope=scope,
+                forced=forced,
+                rerun_failed=rerun_failed,
+                started_on=started_on,
+                started_at=started_at,
+            )
+    except RUN.RunTerminated as stop:
+        reason = f"the run was terminated by {stop.signame} before its command finished"
+        R.record_measured(
+            log,
+            cfg,
+            repo,
+            it,
+            gate,
+            "unavailable",
+            reason=reason,
+            evidence={"started_tree_sha": started_on, "terminated_by": stop.signame},
+            gates=gates,
+            forced=forced,
+        )
+        return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
+    finally:
+        RUN.clear(marker)
+    if isinstance(done, O.Outcome):
+        return done
+    result, ev, reason = done
+    data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
+    if failing := FK.failure_text(ev):
+        data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
+    exit_code = OUTCOME_EXIT[result]
+    if exit_code == O.OK:
+        return O.ok("gate.run", **data)
+    if exit_code == O.FAIL:
+        return O.failed("gate.run", reason or f"{gate} failed", **data)
+    return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
+    log,
+    cfg,
+    repo,
+    agent,
+    it,
+    item,
+    gate,
+    *,
+    gdef,
+    gates,
+    cwd,
+    scope,
+    forced,
+    rerun_failed,
+    started_on,
+    started_at,
+):
+    """The started run: the command, its flake accounting and its recorded outcome.
+    ``(outcome, evidence, reason)``, or the refusal when the run was superseded."""
     keeper = _lease_keeper(log, cfg, it)
     result, ev = run_watching_git(
         gdef,
@@ -552,17 +666,18 @@ def run(
     reason = _failure_reason(gdef, result, ev)
     # Unmeasured here: `run_command_gate` measured the tree the command ran on.
     R.record_measured(
-        log, cfg, repo, it, gate, result, reason=reason, evidence=ev, gates=gates, forced=forced
+        log,
+        cfg,
+        repo,
+        it,
+        gate,
+        result,
+        reason=reason,
+        evidence=ev,
+        gates=gates,
+        forced=forced,
     )
-    data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
-    if failing := FK.failure_text(ev):
-        data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
-    exit_code = OUTCOME_EXIT[result]
-    if exit_code == O.OK:
-        return O.ok("gate.run", **data)
-    if exit_code == O.FAIL:
-        return O.failed("gate.run", reason or f"{gate} failed", **data)
-    return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+    return result, ev, reason
 
 
 def _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced):
