@@ -122,7 +122,7 @@ def new_reports(st, rid: str, since: float) -> dict[str, Any]:
 
 
 def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
-    """One item, with its gate status -- or one bug, by its id. The wire body is the item
+    """One item, with its gate status -- or one bug or research note, by its id. The wire body is the item
     (or the bug's record) itself.
 
     Worktree paths are absolutised on the way out: the log stores them RELATIVE to the
