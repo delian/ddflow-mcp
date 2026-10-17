@@ -1251,7 +1251,7 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
@@ -1259,6 +1259,8 @@
   options:
     -h, --help         show this help message and exit
     --message MESSAGE
+    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
+                       add`)
     --keep
     --allow-dirty
     --allow-empty      land a branch with no commits ahead of its target (refused by default: it
