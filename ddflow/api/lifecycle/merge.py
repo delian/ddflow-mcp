@@ -148,7 +148,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
-    landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, r)
+    landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
     if not r.ok and not landed_note:
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
@@ -247,7 +247,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     )
 
 
-def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, r) -> str:
+def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
     """A note when git reported failure but the merge commit is on the base; else "".
 
     git can be killed at its timeout AFTER it committed: the post-merge hook, which runs
@@ -259,7 +259,11 @@ def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, r) -> str:
     if not r.attempted:
         return ""
     now = W.rev(repo, wt.base)
-    if not now or now == landed_before or not W.is_merged(repo, wt.branch, wt.base):
+    # The head this run tried to land, not the branch ref: an item's tree can be ahead of it.
+    contained = (
+        bool(branch_head) and W.git(repo, "merge-base", "--is-ancestor", branch_head, wt.base).ok
+    )
+    if not now or now == landed_before or not contained:
         return ""
     how = "timed out" if r.timed_out else f"exited {r.code}"
     return (
