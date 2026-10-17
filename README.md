@@ -5837,8 +5837,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=0cdb7afc62f6 -->
-<details><summary>All 312 knobs across 35 sections</summary>
+<!-- ddflow:begin README/knobs sha=0a132dd62bce -->
+<details><summary>All 313 knobs across 35 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5901,7 +5901,7 @@ long default is left to `ddflow config --explain`.
 | `flow.version_files` | `{}` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
-| `gates.kind_pipelines` | `{}` |  |
+| `gates.kind_pipelines` | (long: see `ddflow config --explain`) |  |
 | `gates.required` | `["implement", "unit_tests", "merge"]` |  |
 | `gates.unavailable_is_failure` | `false` |  |
 | `gates.allow_skip_with_reason` | `true` |  |
@@ -6078,6 +6078,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
+| `pins.after_merge_timeout_s` | `120` |  |
 | `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
 | `pins.parallel` | `4` |  |
 | `pins.progress_s` | `30` |  |

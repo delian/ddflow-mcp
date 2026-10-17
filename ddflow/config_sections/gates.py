@@ -45,8 +45,8 @@ class GatesConfig:
         doc="Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow). 'docs' reviews and updates the documentation for everything the phase changed, before it merges.",
     )
     kind_pipelines: dict[str, list[str]] = knob(
-        factory=dict,
-        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default, so every kind runs as before. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
+        factory=lambda: {"doc": ["rules", "implement", "standards", "dedupe", "merge"]},
+        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Ships with `doc` (made by `task add --kind doc`): no unit_tests, tests or code review, so docs-only and generated-output work can complete. Setting this table replaces it whole. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
         check=kind_pipelines_problem,
     )
     required: list[str] = knob(
