@@ -1,13 +1,15 @@
 """B4067086b6b / D-test-economy-r2: a precise selection must keep recall.
 
-Replays the last few merges of THIS repository from git history. For each, the tests the
+Replays the last SCAN merges of THIS repository from git history (Bb5b8b17161: four were too
+few, a merge's miss left the window before anyone saw it, and the test failed on main two
+merges later). For each, the tests the
 merge changed alongside its source are the ones its author had to touch -- a regression
 test, or a test the change broke -- and the selection computed from the SOURCE change alone
 (over the tree as it was at the merge) must hold them, bounded by the project's defaults.
 Two floors: nothing the earlier, unbounded selector found is lost, and the absolute recall
 stays high. A merge whose answer is the whole suite (a hub changed) has perfect recall.
 
-Bounded (`MERGES` replays, no network) and skipped when git history is not there: a
+Bounded (`SCAN` merges, a few processes, no network) and skipped when git history is not there: a
 shallow clone, a tarball, or `DDFLOW_SKIP_HISTORY_REPLAY=1`.
 """
 
@@ -21,6 +23,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -34,9 +37,9 @@ from ddflow.services import testscope as TSC
 from ddflow.services import testselect as T
 
 ROOT = Path(__file__).resolve().parents[1]
-MERGES = 4  #: replays; each parses the tree of its commit, about ten seconds
-SCAN = 40  #: merges looked at to find that many with both source and tests in them
-ABSOLUTE_FLOOR = 0.7  #: share of co-changed tests the selection holds, over all replays
+SCAN = 40  #: the newest merges looked at (`git log -n`: the bound); those with source and tests in them are replayed, about seven seconds each
+WORKERS = 4  #: processes replaying at once
+ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over all replays
 
 
 def merge_log(root: Path) -> list[str]:
@@ -83,12 +86,15 @@ def _checkout(sha: str):
         shutil.rmtree(raw, ignore_errors=True)
 
 
-def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[str]]:
+def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[str], list[str]]:
     """(co-changed tests that still exist, how many the selection holds, the ones it lost
-    that the earlier selector -- no hubs, no budget, no identifiers -- had held)."""
+    that the earlier selector -- no hubs, no budget, no identifiers -- had held, every miss
+    with its cause: cut at the budget, or no route reached it)."""
     with _checkout(sha) as (raw, listed):
         py = [f for f in src if f.endswith(".py")]
         idents = TI.changed_identifiers(ROOT, f"{sha}^1", py, tip=sha, source=raw)
+
+        phrases = TI.changed_phrases(ROOT, f"{sha}^1", py, tip=sha, source=raw)
         added = git_raw(
             ROOT, "diff", "--name-only", "--no-renames", "--diff-filter=AD", f"{sha}^1", sha
         ).splitlines()
@@ -99,38 +105,48 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
             listed=listed,
             idents=idents,
             membership=added,
+            phrases=phrases,
             **TSC.limits(Config()),
         )
         co = [c for c in co if (raw / c).exists()]
         assert new is not None
         if new.full:
-            return len(co), len(co), []
+            return len(co), len(co), [], []
         got = {t.path for t in new.tests}
         budget = TSC.limits(Config())["max_files"]
         floor = sum(1 for t in new.tests if t.rank == T.RANK_CHANGED)
         assert len(got) <= max(budget, floor), f"{sha[:8]}: {len(got)} tests, budget {budget}"
         missed = [c for c in co if c not in got]
         if not missed:
-            return len(co), len(co), []
-        old = T.select(raw, "x", changed=src, listed=listed, idents={}, membership=[])
+            return len(co), len(co), [], []
+        cut = {t.path for t in new.cut}
+        causes = [
+            f"{sha[:8]} {c} ({'cut at the budget' if c in cut else 'no route reaches it'})"
+            for c in missed
+        ]
+        old = T.select(raw, "x", changed=src, listed=listed, idents={}, membership=[], phrases={})
         assert old is not None
         before = {t.path for t in old.tests}
-        return len(co), len(co) - len(missed), [f"{sha[:8]} {c}" for c in missed if c in before]
+        lost = [f"{sha[:8]} {c}" for c in missed if c in before]
+        return len(co), len(co) - len(missed), lost, causes
+
+
+def _one(sha: str) -> tuple[int, int, list[str], list[str]] | None:
+    rows = _replay(sha)
+    return None if rows is None else _replayed(sha, *rows)
 
 
 def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source():
-    held = total = replayed = 0
-    lost: list[str] = []
-    for sha in _merges():
-        rows = _replay(sha)
-        if rows is None:
-            continue
-        n, kept, gone = _replayed(sha, *rows)
-        total, held, replayed = total + n, held + kept, replayed + 1
-        lost += gone
-        if replayed >= MERGES:
-            break
-    if replayed < 2 or total == 0:
+    shas = _merges()
+    assert len(shas) <= SCAN, f"{len(shas)} merges replayed, the bound is {SCAN}"
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        results = [r for r in pool.map(_one, shas) if r is not None]
+    total = sum(r[0] for r in results)
+    held = sum(r[1] for r in results)
+    lost = [x for r in results for x in r[2]]
+    residual = [x for r in results for x in r[3]]
+    if len(results) < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
-    assert not lost, f"the precise selection lost tests the earlier selector held: {lost}"
-    assert held / total >= ABSOLUTE_FLOOR, f"recall {held}/{total} over {replayed} merges"
+    report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
+    assert not lost, f"the precise selection lost tests the earlier selector held: {lost}; {report}"
+    assert held / total >= ABSOLUTE_FLOOR, report
