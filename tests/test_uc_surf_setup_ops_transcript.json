@@ -539,7 +539,7 @@
    "review"
   ],
   2,
-  "",
+  "→ no item named: reviewing the working tree, and recording nothing for critic. Name the item (`ddflow review <id>`) to record the outcome.\n",
   "No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
  ],
  [
@@ -548,7 +548,7 @@
    "T1"
   ],
   2,
-  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n",
+  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n→ note: T1 has no live lease: this review is recorded against it all the same.\n",
   "No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
  ],
  [
@@ -558,7 +558,7 @@
    "T1"
   ],
   2,
-  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n",
+  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n→ note: T1 has no live lease: this review is recorded against it all the same.\n",
   "No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
  ],
  [
@@ -622,7 +622,7 @@
    "nosuch"
   ],
   2,
-  "",
+  "→ note: T1 has no live lease: this review is recorded against it all the same.\n",
   "No reviewer is configured for gate 'nosuch'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
  ],
  [
