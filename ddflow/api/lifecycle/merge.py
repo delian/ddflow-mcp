@@ -260,15 +260,16 @@ def _ci_notice(repo: Path, cfg) -> str:
     """The line said before the post-merge check starts: what runs and which knobs bound it."""
     try:
         command, why = CI.main_command(repo, cfg)
+        notice = (
+            f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+            f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never "
+            f"as a failure"
+        )
     except Exception:  # a line of progress never stops a merge that has landed
-        command, why = "?", ""
+        return "post-merge check starting"
     if not command:
         return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
-    return (
-        f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
-        f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never as "
-        f"a failure"
-    )
+    return notice
 
 
 def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
