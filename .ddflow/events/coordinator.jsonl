@@ -2604,3 +2604,5 @@
 {"agent":"coordinator","data":{"needs":["CE-confd-loader"]},"id":"ead1bfc1b324c43b2b99b8f30","kind":"task.updated","lamport":74912,"schema":1,"subject":"B-org-bundle","ts":"2026-10-17T11:26:39.210177Z"}
 {"agent":"coordinator","data":{"needs":["SE-event-registry","CE-managed-dropin"]},"id":"ed3cbe56bdb87d82c0e949025","kind":"task.updated","lamport":74913,"schema":1,"subject":"P-configurable.event","ts":"2026-10-17T11:26:39.268431Z"}
 {"agent":"coordinator","data":{"needs":["P-governor.core","B-org-layers","SE-event-registry","P-governor.actions","CE-confd-loader"]},"id":"ed7139e90425e543a54238c57","kind":"task.updated","lamport":74914,"schema":1,"subject":"GV-preset","ts":"2026-10-17T11:26:39.460475Z"}
+{"agent":"coordinator","data":{"needs":["CE-defaults-file"]},"id":"eb80d3b3912c8f441c2468b12","kind":"task.updated","lamport":74918,"schema":1,"subject":"CE-layer-stack","ts":"2026-10-17T11:27:04.271892Z"}
+{"agent":"coordinator","data":{"needs":["CE-layer-stack"]},"id":"eecea9e0afab7df9b95716145","kind":"task.updated","lamport":74919,"schema":1,"subject":"B-org-layers","ts":"2026-10-17T11:27:04.341426Z"}
