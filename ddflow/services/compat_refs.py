@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -347,8 +347,27 @@ def _read(path: Path) -> str | None:
         return None
 
 
+_YAML_KEY = re.compile(r"^\s*(?:-\s+)*([A-Za-z_][\w-]*)\s*:")
+#: the pre-commit keys whose value is a command; every other key is prose or config
+_COMMAND_KEYS = frozenset({"entry", "args"})
+
+
+def _is_prose_key(line: str) -> bool:
+    """A pre-commit config line that opens a key other than the ones that run a command
+    (a hook's ``name:`` is a sentence that may begin ``ddflow lease ...``)."""
+    m = _YAML_KEY.match(line)
+    return m is not None and m.group(1) not in _COMMAND_KEYS
+
+
 def _text_findings(
-    rel: str, text: str, artifact: str, vocab: Vocabulary, *, code: bool, whole: bool = False
+    rel: str,
+    text: str,
+    artifact: str,
+    vocab: Vocabulary,
+    *,
+    code: bool,
+    whole: bool = False,
+    skip: Callable[[str], bool] | None = None,
 ) -> list[Finding]:
     lines = text.splitlines()
     owned = _owned_spans(text)
@@ -357,6 +376,8 @@ def _text_findings(
     for i, line in enumerate(lines):
         if not code and _FENCE.match(line):
             fenced = not fenced
+            continue
+        if skip is not None and skip(line):
             continue
         managed = whole or any(sp.first <= i < sp.last for sp in owned)
         for ref in refs_in(line, vocab, code=code or fenced):
@@ -436,7 +457,12 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
             if text is None:
                 continue
             out += _text_findings(
-                path.relative_to(repo).as_posix(), text, artifact, vocab, code=code
+                path.relative_to(repo).as_posix(),
+                text,
+                artifact,
+                vocab,
+                code=code,
+                skip=_is_prose_key if pattern == ".pre-commit-config.yaml" else None,
             )
     return sorted(out, key=lambda f: (f.path, f.line, f.ref.start))
 
