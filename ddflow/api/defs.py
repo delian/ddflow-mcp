@@ -58,7 +58,9 @@ def _fields_problem(fields: Any, *, nulls: bool = False) -> str:
 
 #: Provenance keys the writer stamps itself on every write (RC3): not part of what a caller
 #: asks to keep, and never carried over from an earlier revision.
-STAMPED = ("by", "session", "prompt")
+#: ... of which `session` and `prompt` are never the caller's to name (`by` may be, by an import).
+SELF_STAMPED = ("session", "prompt")
+STAMPED = ("by", *SELF_STAMPED)
 
 
 def evidence(log) -> dict[str, str]:
@@ -84,7 +86,7 @@ def _envelope(
         data["source"] = source
     # session and prompt are THIS write's: a carried-over provenance never brings an older
     # revision's along (a caller that names `by` keeps it: an import says who authored the file)
-    carried = {k: v for k, v in (provenance or {}).items() if k not in STAMPED[1:]}
+    carried = {k: v for k, v in (provenance or {}).items() if k not in SELF_STAMPED}
     stamp = evidence(log) if log is not None else {}
     data["provenance"] = {"by": cfg.agent.id, **carried, **stamp}
     return data
@@ -232,8 +234,8 @@ def _update_data(
     prov = _core(rec.provenance) if provenance is None else provenance
     # Unnamed, it is no change of its own: an update that changes nothing else is exit 2
     # whoever asks. Written, `by` is the author of this revision.
-    unstamped = {k: v for k, v in rec.provenance.items() if k not in STAMPED[1:]}
-    named = {k: v for k, v in prov.items() if k not in STAMPED[1:]}
+    unstamped = {k: v for k, v in rec.provenance.items() if k not in SELF_STAMPED}
+    named = {k: v for k, v in prov.items() if k not in SELF_STAMPED}
     same_prov = provenance is None or {"by": cfg.agent.id, **named} == unstamped
     if D.same(merged, rec.digest) and (source is None or source == rec.source) and same_prov:
         return None
