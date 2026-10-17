@@ -260,6 +260,21 @@ def tree_identity(cwd: Path) -> str:
     return f"{head}+{manifest or _dirt(parts)}"
 
 
+def _head_of(tree_sha: str) -> str:
+    return tree_sha.split("+", 1)[0] if "+" in tree_sha else ""
+
+
+def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
+    """Is a run that began on tree ``started_on`` older than ``newer`` (a recorded or current
+    `tree_identity`)? True when the commits differ and the run's commit is an ancestor of the
+    other: its outcome describes source that has since moved on (B27a236a534). Unknown
+    commits, or ones neither of which descends from the other, are not superseded."""
+    a, b = _head_of(started_on), _head_of(newer)
+    if not a or not b or a == b:
+        return False
+    return W.git(cwd, "merge-base", "--is-ancestor", a, b).ok
+
+
 def is_tree(tree_sha: str, cwd: Path) -> bool:
     """Does the recorded ``tree_sha`` name the tree ``cwd`` holds now? Either spelling: a
     `tree_identity`, or the fingerprint (clean or the pre-fix clean) an earlier ddflow

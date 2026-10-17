@@ -402,6 +402,30 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+def _superseded_run(
+    repo: Path, agent: str, item: str, gate: str, started_on: str, cwd: Path
+) -> str:
+    """Why a finished run must not be recorded ("" when it may): it began on a commit that
+    HEAD, or the gate's recorded outcome, has since moved past (B27a236a534). Recording it
+    would put a verdict about old source over one about the new -- a stale FAILED over a
+    newer PASSED, which `complete` then refuses."""
+    _log, _cfg, st = _load(repo, agent)
+    it = st.items.get(item)
+    rec = it.gates.get(gate) if it else None
+    recorded = rec.evidence.get("tree_sha", "") if rec and rec.outcome else ""
+    for newer, what in (
+        (G.tree_identity(cwd), "the tree is now at"),
+        (recorded, "a newer outcome is recorded on"),
+    ):
+        if newer and G.superseded_by(started_on, newer, cwd):
+            return (
+                f"{gate} ran on {started_on.split('+', maxsplit=1)[0]}, but {what} {newer.split('+')[0]}: "
+                f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
+                f"{item} {gate}` on the current commit."
+            )
+    return ""
+
+
 def run(
     repo: Path,
     item: str,
@@ -484,6 +508,7 @@ def run(
     scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
     if covered is not None:
         return covered
+    started_on = G.tree_identity(cwd)
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = run_watching_git(
@@ -500,6 +525,10 @@ def run(
     )
     if scope is not None:
         ev.update(scope.evidence())
+    ev["started_tree_sha"] = started_on
+    stale = _superseded_run(repo, agent, item, gate, started_on, cwd)
+    if stale:
+        return O.refused("gate.run", stale, id=item, gate=gate, outcome="", evidence=ev)
 
     def rerun(g):
         return G.run_command_gate(
