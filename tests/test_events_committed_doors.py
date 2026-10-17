@@ -394,6 +394,9 @@ def test_a_post_commit_hook_printing_a_bracketed_hex_is_not_taken_for_our_commit
     from ddflow.services import eventcommit
 
     _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
     hook = repo / ".git" / "hooks" / "post-commit"
     hook.write_text('#!/bin/sh\necho "[$(git rev-parse --short HEAD~1)] previous"\n')
     hook.chmod(0o755)
