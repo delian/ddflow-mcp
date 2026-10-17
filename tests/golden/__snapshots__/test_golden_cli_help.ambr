@@ -1729,6 +1729,19 @@
   
   '''
 # ---
+# name: test_help[ddflow report]
+  '''
+  usage: ddflow report [-h] [--agent AGENT] item
+  
+  positional arguments:
+    item           the item to report on
+  
+  options:
+    -h, --help     show this help message and exit
+    --agent AGENT  count as filed by this agent only (default: the agent that completed it)
+  
+  '''
+# ---
 # name: test_help[ddflow research]
   '''
   usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--all] [{add,list}]
@@ -2556,13 +2569,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2616,6 +2629,8 @@
       doctor              integrity + health check
       rebuild             re-derive the index from the log
       render              regenerate the human-readable views
+      report              the completion report of an item, from the log (shas, tests, gates,
+                          overrides)
       config              print every knob, its value and its source
       upgrade             what upgrading this project to the running ddflow would change (the plan;
                           writes nothing; exit 0 up to date, 1 pending), or --apply it
@@ -2789,6 +2804,7 @@
     'ddflow remove',
     'ddflow render',
     'ddflow replay',
+    'ddflow report',
     'ddflow research',
     'ddflow resolve',
     'ddflow review',

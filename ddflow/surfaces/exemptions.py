@@ -31,6 +31,7 @@ from .declared.metrics import COMMANDS as _METRICS
 from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
+from .declared.report import COMMANDS as _REPORT
 from .declared.reporting import COMMANDS as _REPORTING
 from .declared.review import COMMANDS as _REVIEW
 from .declared.rules import COMMANDS as _RULES
@@ -79,6 +80,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_REPORT,
     *_EXPORT,
     *_CADENCE,
     *_MERGEQUEUE,

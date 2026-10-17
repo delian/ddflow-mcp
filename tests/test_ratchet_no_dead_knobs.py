@@ -37,6 +37,7 @@ KNOWN_UNREAD: dict[str, str] = {
     "prompts.gate_instruction": "read dynamically via dataclasses.fields in _prompt_overrides",
     "prompts.session_brief_header": "read dynamically via dataclasses.fields in _prompt_overrides",
     "prompts.agent_brief": "read dynamically via dataclasses.fields in overrides_from",
+    "prompts.agent_report": "read dynamically via dataclasses.fields in overrides_from",
 }
 
 
