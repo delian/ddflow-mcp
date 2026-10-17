@@ -16,6 +16,19 @@ from pathlib import Path
 from ..infra import fsio
 from ..infra import git as G
 
+# One conflict hunk of `git merge-file -L ours -L base -L theirs` (no diff3 base section).
+_HUNK = re.compile(r"<<<<<<< ours\n(.*?)=======\n(.*?)>>>>>>> theirs\n", re.S)
+_DIGITS = re.compile(r"\d+")
+
+
+def _counts_only(m: "re.Match[str]") -> str:
+    """A hunk whose two sides differ only in numbers is a generated count ("320 knobs" against
+    "323 knobs"): our side, which the recipe re-records after the merge (Be71986b1d3)."""
+    ours, theirs = m.group(1), m.group(2)
+    same = _DIGITS.sub("#", ours) == _DIGITS.sub("#", theirs)
+    return ours if same else m.group(0)
+
+
 _BLOCK = re.compile(r"<!-- ddflow:begin (\S+)[^\n]*?-->.*?<!-- ddflow:end \1 -->", re.S)
 
 
@@ -63,6 +76,9 @@ def merge_pin_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, bool
     if code < 0:
         return ours, False
     text = out.decode("utf-8", errors="replace")
+    if code > 0:
+        text = _HUNK.sub(_counts_only, text)
+        code = text.count("<<<<<<< ours\n")
     kept = {**_blocks(b), **_blocks(t), **_blocks(o)}
     for name, block in kept.items():
         text = text.replace(_hole(name), block)
