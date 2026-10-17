@@ -96,8 +96,8 @@ project's committed files except the event log (`schema`, `v`) and the `ddflow.s
 Additive payload keys change none of the numbers above. `decision.recorded` gained `data["saw"]`
 (B0dcccd8594): the ids of the live decisions whose globs overlapped the new one when its author
 wrote it. An older reader ignores the key and keeps it when it rewrites the file; no event kind
-and no required key is new, and `infra.store.SCHEMA` stays 10 because the index does not store
-it. A decision without the key (every log written before) never forms an unreconciled pair, so
+and no required key is new, and it needed no `infra.store.SCHEMA` bump because the index does not
+store it. A decision without the key (every log written before) never forms an unreconciled pair, so
 an old log folds exactly as before. The fold marks two live decisions on overlapping globs that
 do not name each other as unreconciled; `doctor`, `brief` and `decision applicable` show it.
 
