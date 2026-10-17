@@ -512,9 +512,7 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report, limit: int = 900, 
     stuck = []
     torn: list[str] = []
     for s in found:
-        if s.refused and not s.stray and _decided_by_generators(
-            repo, s, chosen, limit, tick, torn
-        ):
+        if s.refused and not s.stray and _decided_by_generators(repo, s, chosen, limit, tick, torn):
             rep.resolved.append(
                 f"{s.path}: {s.hunks} conflict(s) in generated content or in text the "
                 "generators write, re-recorded"
