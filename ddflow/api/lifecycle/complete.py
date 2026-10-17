@@ -16,6 +16,7 @@ from ...services import completion as CM
 from ...services import gates as G
 from ...services import leases as L
 from ...services import ledger as LG
+from ...services import phase_suite as PS
 from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
@@ -112,6 +113,9 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
+    if it.kind == "phase" and cfg.schedule.phase_full_suite != "off":
+        if why := _phase_suite(repo, cfg, log, st, item, agent):
+            v.blockers.append(why)
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
@@ -222,6 +226,20 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _phase_suite(repo: Path, cfg, log, st: State, phase: str, agent: str) -> str:
+    """"" when the full suite has passed on the phase's merged tree (D-gate-economy-r3),
+    else the blocker. [schedule].phase_full_suite = run runs `ci run --full` first."""
+    why = PS.missing(log.read_all(), st, phase)
+    if not why or cfg.schedule.phase_full_suite != "run":
+        return why
+    from ..cirun import run as ci_run  # cirun imports api.gates, which imports this package
+
+    out = ci_run(repo, ref="HEAD", agent=agent, full=True)
+    if out.exit == O.OK:
+        return ""
+    return f"the full test suite run for {phase} did not pass: {out.reason}"
 
 
 def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[str]:
