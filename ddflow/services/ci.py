@@ -14,7 +14,7 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -325,6 +325,7 @@ def run(
     for_item: bool = False,
     full: bool = False,
     changed_from: str = "",
+    tick: tuple[Callable[[], None], float] | None = None,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
@@ -334,7 +335,10 @@ def run(
     (`ci run --full`, the merge queue's batch) always runs the whole suite.
 
     ``changed_from`` is the commit the change being checked began at, for the tripwire hooks of
-    the default command (they run on that diff, not over every file): default ``base``."""
+    the default command (they run on that diff, not over every file): default ``base``.
+
+    ``tick`` is (a callback, seconds): called that often while the command runs, on this thread:
+    the caller renews its lease there (DX-long-op-renew)."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -362,7 +366,7 @@ def run(
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
             scope = CS.plan(cfg, tree, base, requested=asked)
-        p, out_prefix = _execute(cfg, tree, cmd, scope, budget)
+        p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick)
         if p.kind == TIMEOUT:
             return Result(
                 "unavailable",
@@ -396,11 +400,12 @@ def _default_with_tripwires(
     return with_tripwires_on_the_diff(cmd, tree, since)
 
 
-def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
+def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     """(the run that decided the verdict, the output of the run before it): the command as
     written, or -- for a selected scope -- the hooks without the suite, then the selected
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
+    on_tick, tick_s = tick or (None, 0)
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
@@ -409,6 +414,8 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
         env={**child_env(cfg, ci=True), **({"SKIP": scope.skip} if selected else {})},
         timeout_s=budget,
         check_installed=False,  # checked before the scratch worktree was made
+        on_tick=on_tick,
+        tick_s=tick_s,
     )
     if not (selected and p.ran and p.code == 0):
         return p, ""
@@ -423,6 +430,8 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
             env=child_env(cfg, ci=True),
             timeout_s=max(min(budget, 60), budget - int(spent)),  # what is left, 60 s at least
             check_installed=True,  # a missing runner is unavailable, not a failed test
+            on_tick=on_tick,
+            tick_s=tick_s,
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0

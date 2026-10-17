@@ -13,7 +13,7 @@ from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
 from ._base import _load
-from .ci import status
+from .ci import lease_tick, status
 from .gates import Evidence, record
 
 #: Set by `gate run` in the environment of the command it runs: the gate that will record
@@ -86,7 +86,7 @@ def run(
     output of the command (the integrator keeps it for a parked entry). An item's run takes
     only the tests its change reaches (`[ci].tests_scope`, D-test-economy-r2); ``full`` (the
     integrator's batch, `--full`) takes the whole suite, and so does a ref that is no item."""
-    _log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
@@ -94,7 +94,7 @@ def run(
         ref = st.items[ref].branch
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
-        for_item=bool(item), full=full,
+        for_item=bool(item), full=full, tick=lease_tick(log, cfg, st, item),
     )  # fmt: skip
     data = res.as_data()
     if res.scope:

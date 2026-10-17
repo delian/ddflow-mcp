@@ -41,7 +41,7 @@ from ..services.guidance import inject as GI
 from ..views import human
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
-from .gates import _lease_keeper, item_tree
+from .gates import item_tree
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
 from .review_supersede import carry, round_evidence, superseded_digests
@@ -217,10 +217,7 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     a 0.9 x heartbeat threshold let a 60 s tick land a renewal up to a tick late).
     """
 
-    renew = _lease_keeper(log, cfg, it) if it else None
-    if renew is None:
-        return None
-    return LK.throttled(renew, it.lease.renewed_at, cfg.lease.heartbeat_s, tick_s)
+    return LK.ticker(log, cfg, it, tick_s)
 
 
 def _say_result(say: Callable[[str], None], res) -> None:
