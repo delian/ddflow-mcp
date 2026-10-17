@@ -377,10 +377,6 @@ def _run_all(
     return [states[r.name] for r in chosen]
 
 
-#: The most a snapshot of one recipe's files holds in memory.
-_SNAPSHOT_MAX = 64 * 1024 * 1024
-
-
 def _owned(repo: Path, r: Recipe) -> list[Path]:
     """Every file the recipe owns: a directory in ``files`` is every file under it."""
     found: list[Path] = []
@@ -393,9 +389,11 @@ def _owned(repo: Path, r: Recipe) -> list[Path]:
     return found
 
 
-def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes | None] | None:
+def _snapshot(
+    repo: Path, r: Recipe, most: int = 64 * 1024 * 1024
+) -> dict[Path, bytes | None] | None:
     """The recipe's files before it re-records them (a directory is a key with ``None``); None
-    when they cannot be held (unreadable, or more than `_SNAPSHOT_MAX`): then nothing is
+    when they cannot be held (unreadable, or more than ``most`` bytes in all): then nothing is
     promised about putting them back."""
     kept: dict[Path, bytes | None] = {}
     total = 0
@@ -408,7 +406,7 @@ def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes | None] | None:
         for p in _owned(repo, r):
             data = p.read_bytes()
             total += len(data)
-            if total > _SNAPSHOT_MAX:
+            if total > most:
                 return None
             kept[p] = data
     except OSError:
