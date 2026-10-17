@@ -39,6 +39,13 @@ from ddflow.services import testselect as T
 ROOT = Path(__file__).resolve().parents[1]
 SCAN = 40  #: the newest merges looked at (`git log -n`: the bound); those with source and tests in them are replayed, about seven seconds each
 WORKERS = 4  #: processes replaying at once
+#: Merges whose co-changed test only the hub cut loses, and nothing a test spells reaches: the
+#: earlier selector held it through ``ddflow.config`` (a hub of 100+ importers), by luck of an
+#: unrelated knob file changing alongside (B81e0e941df). Pinned by sha and path; not a recall
+#: miss to fix, a route the bound gave up on purpose.
+UNROUTABLE = {
+    "af8410da tests/test_tallies.py": "drives `task add` through the CLI, imports no changed module"
+}
 ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over all replays
 
 
@@ -47,8 +54,13 @@ def merge_log(root: Path) -> list[str]:
     Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
     parent, so a first-parent walk saw an older window than main does and the replay failed
     on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161)."""
-    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H")
-    return log.stdout.split() if log.returncode == 0 else []
+    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H %s")
+    if log.returncode != 0:
+        return []
+    # `merge main` brings main's merges INTO a branch: its first-parent diff is other agents'
+    # work, replayed a second time, and not a change its author made with its tests.
+    rows = [ln.split(" ", 1) for ln in log.stdout.splitlines() if ln.strip()]
+    return [r[0] for r in rows if len(r) < 2 or r[1].strip() != "merge main"]
 
 
 def _merges() -> list[str]:
@@ -148,5 +160,13 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     if len(results) < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
     report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
-    assert not lost, f"the precise selection lost tests the earlier selector held: {lost}; {report}"
+    # Exactly the pinned losses: a new one fails, and so does a pinned one the selector now
+    # routes (drop its entry then), so the pin cannot go stale or hide a fresh miss.
+    unexpected = [x for x in lost if x not in UNROUTABLE]
+    assert not unexpected, (
+        f"the precise selection lost tests the earlier selector held: {unexpected}; {report}"
+    )
+    in_window = {sha[:8] for sha in shas if _replay(sha) is not None}  # scored, not just asked for
+    stale = [k for k in UNROUTABLE if k.split()[0] in in_window and k not in lost]
+    assert not stale, f"pinned as unroutable, but the selection holds them now: {stale}"
     assert held / total >= ABSOLUTE_FLOOR, report
