@@ -4,8 +4,8 @@
 (median 52), because agents filed them without `--priority`. The operator's rule is that fixes
 and immediate corrections are prioritized, so a task whose kind says so is filed into a band:
 
-* a DX task -- tagged one of `[schedule].dx_tags`, or with an id starting `DX-` -- at
-  `[schedule].dx_priority`;
+* a DX task -- tagged one of `[schedule].dx_tags`, or with an id starting `[schedule].dx_id_prefix` -- at
+  `[schedule].dx_priority` (it wins over the bug band when a task is both);
 * a bug-fix task -- tagged one of `[flow].bugfix_tags` / `hotfix_tags` -- at
   `[schedule].bug_priority`.
 
@@ -22,13 +22,12 @@ from ..core.defaults import DEFAULT_PRIORITY
 if TYPE_CHECKING:
     from ..config import Config
 
-DX_ID_PREFIX = "DX-"
-
 
 def kind_of(cfg: Config, item_id: str, tags: Iterable[str]) -> str:
     """ "dx", "bug" or "" for a task's id and tags."""
     have = set(tags)
-    if item_id.startswith(DX_ID_PREFIX) or have & set(cfg.schedule.dx_tags):
+    prefix = cfg.schedule.dx_id_prefix
+    if (prefix and item_id.startswith(prefix)) or have & set(cfg.schedule.dx_tags):
         return "dx"
     if have & {*cfg.flow.bugfix_tags, *cfg.flow.hotfix_tags}:
         return "bug"
@@ -51,6 +50,8 @@ def left_generic(cfg: Config, item_id: str, tags: Iterable[str], priority: int) 
     if not kind or priority != DEFAULT_PRIORITY:
         return ""
     want = cfg.schedule.dx_priority if kind == "dx" else cfg.schedule.bug_priority
+    if want == DEFAULT_PRIORITY:
+        return ""  # the band IS the generic default: nothing to move to
     label = "a DX task" if kind == "dx" else "a bug-fix task"
     return (
         f"{item_id} is {label} at the generic priority {DEFAULT_PRIORITY}, behind every feature: "
