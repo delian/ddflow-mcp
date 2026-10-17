@@ -44,7 +44,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         wants_progress=True,
         call=lambda repo, a, agent, on_progress=None: (
-            _api().pins_regenerate(
+            _api().operations.pins_regenerate(
                 repo,
                 on_progress=on_progress,
                 only=a.get("only") or "",
@@ -53,6 +53,7 @@ COMMANDS: tuple[Command, ...] = (
                 after_merge=bool(a.get("after_merge")),
                 verb=a["document"],
                 target=a.get("target") or "",
+                agent=agent,
             )
             if a["document"] in ("regenerate", "merge-driver")
             else _api().pins(
