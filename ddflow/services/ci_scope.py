@@ -11,13 +11,13 @@ in the run's output, from which the `ci` gate's evidence takes it (`ci_marker`).
 
 from __future__ import annotations
 
-import fnmatch
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
 from ..core.bookkeeping import is_state
+from ..core.globs import match as globs_match
 from .testscope import limits
 from .testselect import changed_files, is_test_file, run_command, select
 
@@ -118,7 +118,7 @@ def always_tests(cfg: Config, tree: Path) -> list[str]:
         rel = f.relative_to(tree).as_posix()
         if not is_test_file(rel):
             continue
-        if any(fnmatch.fnmatchcase(rel, g) for g in globs):
+        if any(globs_match(rel, g) for g in globs):
             found.append(rel)
             continue
         try:
