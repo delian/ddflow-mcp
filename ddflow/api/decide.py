@@ -109,6 +109,14 @@ def decide(
             f'"{",".join([*it.globs, rel])}"` first, or pass --path',
             item=item,
         )
+    if CO.outside(cfg, [rel]):
+        return O.refused(
+            KIND,
+            f"{rel} matches no [chore].globs ({', '.join(cfg.chore.globs)}): a decision "
+            f"document lands under the chore class; widen the list (a person approves it) "
+            f"or use the normal pipeline",
+            item=item,
+        )
     approved = CO.standing(st, cfg)
     if not approved.ok:
         return O.refused(

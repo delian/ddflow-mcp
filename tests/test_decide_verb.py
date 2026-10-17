@@ -13,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.core.autoorder import is_decide
 from ddflow.core.model import fold
 from ddflow.core.schedule import inherited_deps
 from ddflow.infra.log import EventLog
@@ -113,3 +114,28 @@ def test_an_unapproved_chore_list_commits_nothing(proj):
     wt = Path(_state(proj).items["X-decide"].worktree)
     wt = wt if wt.is_absolute() else (proj / wt).resolve()
     assert not (wt / "docs/ddflow/decisions/x.md").exists()
+
+
+def test_is_decide_strips_padding_and_case():
+    assert is_decide(["task", "decide "]) and is_decide([" Decision"]) and not is_decide(["docs"])
+
+
+def test_decide_outside_the_chore_globs_is_refused(proj):
+    _queue(proj, "decide")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    run_cli(proj, "update", "X-decide", "--globs", "notes/x.md")
+    code, _out, err = run_cli(
+        proj, "decide", "X-decide", "--decision-id", "D-x", "--path", "notes/x.md"
+    )
+    assert code == 3 and "[chore].globs" in err
+
+
+def test_decide_prints_what_landed(proj):
+    _queue(proj, "decide")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert "X-decide decided by D-x" in out
