@@ -455,3 +455,9 @@ def test_a_named_slow_test_is_not_deselected_by_the_projects_marker_filter(tmp_p
     cmd = T.run_command(f"{sys.executable} -m pytest -q", ["test_s.py::test_slow"], tmp_path)
     ran = subprocess.run(shlex.split(cmd), cwd=tmp_path, capture_output=True, text=True)
     assert ran.returncode == 0, ran.stdout
+
+
+def test_a_file_among_the_selection_keeps_the_marker_filter(tmp_path):
+    (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest"]\n')
+    got = T.run_command("pytest -q", ["a.py", "b.py::test_x"], tmp_path)
+    assert "-m" not in got.split()
