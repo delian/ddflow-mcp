@@ -19,6 +19,7 @@ from ...services import ledger as LG
 from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
+from ...services.gates import outcomes as GO
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
@@ -111,6 +112,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
+    hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
@@ -128,6 +130,14 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         "blockers": v.blockers,
         "bugs_closed": closed,
     }
+    if hard and force:
+        return O.refused(
+            "item.completed",
+            f"cannot complete {item}, and --force does not lift this:\n"
+            + "\n".join(f"  - {b}" for b in hard),
+            forced=False,
+            **base,
+        )
     if not v.may_complete and not force:
         return O.refused(
             "item.completed",
@@ -208,6 +218,18 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[str]:
+    """Add the failed-review blockers (D-failed-review-gate, B85841c0846) to ``v`` and return
+    them. Not lifted by `--force`: the operator's `gate skip --reason` is the recorded way past."""
+    if umbrella:
+        return []
+    found = GO.failed_review_blockers(
+        st, cfg, item, G.load_gates(repo, cfg), skip=_na_map(v.na_evidence)
+    )
+    v.blockers += found
+    return found
 
 
 def _na_map(evidence: list[str]) -> dict[str, str]:
