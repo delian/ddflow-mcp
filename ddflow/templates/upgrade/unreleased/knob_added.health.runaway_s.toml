@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.runaway_s"
+new = '14400'
+why = "Seconds a running job may last before the watchdog reports it as a runaway (0 = off)."
+impact = "additive"

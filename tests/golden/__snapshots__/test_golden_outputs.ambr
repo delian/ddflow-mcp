@@ -1625,6 +1625,107 @@
       lanes.brief_text_chars = 1200   [default]
           Characters kept of each text a lane brief quotes (the objective, the last
           session summary, a note), cut at a line boundary.
+      health.mode = 'propose'   [default]
+          What the watchdog does about a lane it finds unhealthy: 'off' inspects
+          nothing in the periodic pass; 'propose' (default) reports each finding with
+          the exact command that corrects it; 'apply' also performs the corrections
+          that lose nothing -- it nudges an idle lane, asks a stalled lane to stop
+          and, once that request has gone unanswered for reply_s, PARKS the holder (a
+          logged park record: worktree, branch and the lane it waits for) and only
+          then breaks its lease for the agent waiting (the same logged break as `claim
+          --break`, the holder's branch and worktree kept), adds the auto-order
+          `needs` edges that end a lease deadlock (this mode decides for the pass,
+          whatever [schedule].auto_order says), and records a crashed lane's lease as
+          expired so `ddflow recover` and any claim can pick its work up. It never
+          kills a process and never deletes a worktree, a branch or a commit. This is
+          the default for every finding kind; mode_idle, mode_stalled,
+          mode_unresponsive, mode_locked, mode_crashed and mode_runaway override it
+          for one kind. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'propose', the strictest (a finding
+          is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      health.stall_s = 3600   [default]
+          A lane whose lease is current but which has shown no progress (an event on
+          its item other than lease bookkeeping, a commit, a test job in flight, or
+          the newest change in its worktree) for this many seconds is STALLED. Only
+          the NEWEST change counts: a file written once, long ago, is not progress
+          now. 0 turns the stalled check off. A heartbeat is not progress.
+      health.runaway_s = 14400   [default]
+          A job started for an item whose process is still running after this many
+          seconds is a RUNAWAY. It is only reported: the watchdog never signals a
+          process. 0 turns the check off.
+      health.interval_s = 900   [default]
+          How often the periodic watchdog pass falls due, in seconds: `ddflow cadence`
+          lists 'health_watch' as due when `ddflow health --run` has not been recorded
+          within this long, and `--run` is the pass a scheduler, loop or hook invokes.
+          0 never falls due.
+      health.shown = 10   [default]
+          How many findings `doctor` and `status` print in full; the rest are counted.
+          0 prints none.
+      health.idle_s = 900   [default]
+          A lane whose lease keeps being renewed but which has shown no progress for
+          this many seconds is IDLE (earlier than STALLED, which is stall_s): the
+          correction is a nudge, nothing is taken. 0 turns the check off.
+      health.reply_s = 600   [default]
+          How long a nudge or stop request to a lane may go unanswered (no progress,
+          no release) before the lane is UNRESPONSIVE, which is what lets the watchdog
+          park it and break its lease. 0 turns the check off and the park-and-break
+          follows the stop request at once.
+      health.crash_s = 300   [default]
+          A lane whose holder's process is gone (the harness that declared its
+          identity has exited; `ddflow_identify` records it) and whose lease has not
+          been renewed for this many seconds is CRASHED, minutes before the lease TTL
+          lapses. Only a holder that declared its identity can be seen to die; others
+          fall back to the lease TTL. 0 turns the check off.
+      health.mode_idle = 'inherit'   [default]
+          The mode for an idle lane (nudge): 'inherit' (default) takes [health].mode;
+          otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind
+          alone. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'propose', the strictest (a finding is reported,
+          never acted on, by a typo); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
+      health.mode_stalled = 'inherit'   [default]
+          The mode for a stalled lane (stop request): 'inherit' (default) takes
+          [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for this
+          finding kind alone. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'propose', the strictest (a finding
+          is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      health.mode_unresponsive = 'inherit'   [default]
+          The mode for an unresponsive lane (park, then break): 'inherit' (default)
+          takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for
+          this finding kind alone. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'propose', the strictest (a
+          finding is reported, never acted on, by a typo); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      health.mode_locked = 'inherit'   [default]
+          The mode for a lease deadlock (the auto-order edges): 'inherit' (default)
+          takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for
+          this finding kind alone. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'propose', the strictest (a
+          finding is reported, never acted on, by a typo); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      health.mode_crashed = 'inherit'   [default]
+          The mode for a crashed lane (record its lease expired): 'inherit' (default)
+          takes [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for
+          this finding kind alone. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'propose', the strictest (a
+          finding is reported, never acted on, by a typo); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      health.mode_runaway = 'inherit'   [default]
+          The mode for a runaway job (report only): 'inherit' (default) takes
+          [health].mode; otherwise 'off', 'propose' or 'apply' as for mode, for this
+          finding kind alone. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'propose', the strictest (a finding
+          is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       metrics.min_samples = 10   [default]
           Fewest samples a metrics figure may rest on. Under it the figure is reported
           unavailable (n/a, with its sample count), never as a number, and a view with

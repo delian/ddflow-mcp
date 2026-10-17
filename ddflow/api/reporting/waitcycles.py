@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import time
 
+from ...core import health as H
 from ...core import leasewait as LW
 from ...services import autoorder as AOS
+from ...services import healthwatch as HW
 from ...services import waiting as WT
 
 
@@ -35,9 +37,33 @@ def wait_findings(cycles: list[LW.Cycle], cfg) -> list[str]:
     return out
 
 
-def wait_order(log, st, cfg, cycles: list[LW.Cycle], notes: list[str]) -> dict:
+def wait_order(log, st, cfg, cycles: list[LW.Cycle], notes: list[str], repo=None) -> dict:
     """What `[schedule].auto_order` does about ``cycles`` (DX-conflict-autoorder): its
-    lines join ``notes``; the result is the `doctor` data, with the edges standing now."""
+    lines join ``notes``, with the watchdog's (``repo``); the result is the `doctor` data, with
+    the edges standing now."""
     ordered = AOS.run(log, st, cfg, [c.as_dict() for c in cycles])
     notes += AOS.lines(ordered)
+    if repo is not None:
+        notes += health_lines(log, st, cfg, repo, cycles)
     return {**ordered, "standing": AOS.auto_edges(log.read_all(), st)}
+
+
+def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=None) -> list[str]:
+    """Finding lines not already shown elsewhere, at most `[health].shown` in full."""
+    if not HW.enabled(HW.modes(cfg)):
+        return []
+    at = time.time() if now is None else now
+    by_kind = HW.modes(cfg)
+    found = [
+        f
+        for f in HW.inspect(log, st, cfg, repo, at, cycles, activity=activity)
+        # a lapsed lease is shown by `recover`'s notes; a live lease whose process is gone is not
+        if by_kind[f.kind] != "off"
+        and (f.kind != H.CRASHED or f.evidence.get("pids"))
+        and f.evidence.get("via") != "cycle"
+    ]
+    shown = cfg.health.shown
+    out = [f"health: {f.render()}" for f in found[:shown]]
+    if shown and len(found) > shown:
+        out.append(f"health: {len(found) - shown} more finding(s) (`ddflow health`)")
+    return out

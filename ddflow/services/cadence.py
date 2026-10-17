@@ -20,6 +20,7 @@ from typing import Any
 
 from ..config import Config
 from ..core.model import State
+from . import healthwatch
 from .export import ops
 from .schedule import (
     calendar,
@@ -206,3 +207,4 @@ register_due("count", lambda c: count_due(c.st, c.cfg, replaced=set(c.calendar))
 register_due("lessons", lambda c: lessons_cadence(c.st, c.cfg))
 register_due("export", lambda c: export_cadence(c.repo, c.cfg))
 register_due("calendar", lambda c: calendar_due(c.st, c.calendar, c.now))
+register_due("health", healthwatch.due)

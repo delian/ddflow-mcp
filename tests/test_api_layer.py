@@ -301,6 +301,7 @@ def test_the_reason_is_its_OWN_content_block_never_a_prefix():
 #: comparing anything — a shape test that never reached the shape.
 MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_loops": (["loops"], {}),
+    "ddflow_health": (["health"], {}),
     "ddflow_docs": (["docs", "check"], {"verb": "check"}),
     "ddflow_progress": (["progress"], {}),
     "ddflow_decision_list": (["decision", "list"], {}),
