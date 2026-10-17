@@ -123,7 +123,8 @@ class Registry(Mapping[str, T], Generic[T]):
 
     def unregister(self, name: str) -> None:
         """Remove ``name`` (a test's throwaway); an unknown name is ignored. A discovered or
-        loaded registry is filled first, so what is removed does not come back on the next read."""
+        loaded registry is filled first, so what is removed does not come back on the next read
+        (and a failure of that fill is raised here, as it would be by any read)."""
         if not self._filling:
             self._fill()
         self.table.pop(name, None)
