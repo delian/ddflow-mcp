@@ -17,7 +17,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from ..infra.fsio import atomic_write
+from ..infra.fsio import atomic_write, file_lock
 from . import upgrade_written as UW
 
 FILE = Path(".ddflow") / "local" / "pins-written.json"
@@ -68,9 +68,11 @@ def record(repo: Path, wrote: dict[str, str]) -> None:
     if not wrote:
         return
     path = Path(repo) / FILE
-    raw = _read(repo)
-    for rel, digest in wrote.items():
-        had = [d for d in raw.get(rel, []) if d != digest]
-        raw[rel] = [*had[-(KEEP - 1) :], digest]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(path, json.dumps(raw, indent=1, sort_keys=True) + "\n")
+    # Read-modify-write under a lock: regenerations in several trees all record into the
+    # primary checkout, and two interleaved ones would lose each other's digests.
+    with file_lock(path.with_suffix(".lock"), 30):
+        raw = _read(repo)
+        for rel, digest in wrote.items():
+            had = [d for d in raw.get(rel, []) if d != digest]
+            raw[rel] = [*had[-(KEEP - 1) :], digest]
+        atomic_write(path, json.dumps(raw, indent=1, sort_keys=True) + "\n")

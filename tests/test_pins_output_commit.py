@@ -86,3 +86,17 @@ def test_a_pin_regenerated_in_a_linked_worktree_commits_there(
     git(tree, "add", "pin.txt")
     monkeypatch.chdir(tree)
     assert _verdict(repo).exit == OK
+
+
+def test_two_recorders_do_not_lose_each_others_digests(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ddflow.services import pins_written as PW
+
+    def run(tag: str) -> None:
+        for n in range(40):
+            PW.record(tmp_path, {f"{tag}{n}.txt": f"d{n}"})
+
+    with ThreadPoolExecutor(4) as pool:
+        list(pool.map(run, "abcd"))
+    assert len(PW.load(tmp_path)) == 4 * 40
