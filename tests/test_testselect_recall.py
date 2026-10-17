@@ -161,7 +161,7 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     assert not unexpected, (
         f"the precise selection lost tests the earlier selector held: {unexpected}; {report}"
     )
-    in_window = {sha[:8] for sha in shas}
+    in_window = {sha[:8] for sha in shas if _replay(sha) is not None}  # scored, not just asked for
     stale = [k for k in UNROUTABLE if k.split()[0] in in_window and k not in lost]
     assert not stale, f"pinned as unroutable, but the selection holds them now: {stale}"
     assert held / total >= ABSOLUTE_FLOOR, report
