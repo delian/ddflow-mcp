@@ -34,8 +34,11 @@ SUBJECT = "chore:class"
 
 
 def approval_digest(cfg: Config) -> str:
-    """What a person approves: the chore globs, order and duplicates aside."""
-    return content_digest("\n".join(sorted(set(cfg.chore.globs))))
+    """What a person approves: the chore globs and the gates a chore may skip, order and
+    duplicates aside -- the skips widen what the approval excuses as much as the globs do."""
+    listed = sorted(set(cfg.chore.globs))
+    skipped = sorted(set(cfg.chore.skip_gates))
+    return content_digest("\n".join([*listed, "--skip--", *skipped]))
 
 
 def outside(cfg: Config, paths: list[str]) -> list[str]:
@@ -100,7 +103,8 @@ def relative(repo: Path, name: str) -> str | None:
 def judge(
     state: State, cfg: Config, it: Item, paths: list[str] | None
 ) -> tuple[Exemption | None, str, list[str]]:
-    """(the exemption, its note for the completion event, the blockers it adds) for ``it``."""
+    """(the exemption, its note for the completion event, the warnings it adds) for ``it``.
+    A tag that earns no exemption is a note, never a blocker: the item is an ordinary task."""
     excused, why = exemption(state, cfg, it, paths)
     return excused, excused.note() if excused else "", [why] if why else []
 
