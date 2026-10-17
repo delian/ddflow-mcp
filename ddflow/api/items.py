@@ -310,7 +310,9 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         fields=fields,
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, globs),
-        needs_dropped=[n for n in it.needs if n not in fields["needs"]] if "needs" in fields else [],
+        needs_dropped=[n for n in it.needs if n not in fields["needs"]]
+        if "needs" in fields
+        else [],
         tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
 
