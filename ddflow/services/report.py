@@ -109,6 +109,24 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
     }
 
 
+def _refusals(events, item_id: str, who: str) -> list[str]:
+    """The commands the PreToolUse guard (`[hooks].forbidden_commands`) refused while the item
+    was worked: ``who``'s, between the claim and the completion."""
+    from . import forbidden as FB
+
+    start, end = _window(events, item_id, who)
+    return [
+        f"refused by the forbidden-commands hook: {ev.data.get('text', '')}"
+        for ev in events
+        if ev.kind == "session.note"
+        and str(ev.data.get("source", "")).startswith(FB.SOURCE)
+        and start
+        and ev.ts >= start
+        and (not end or ev.ts <= end)
+        and (not who or ev.agent == who)
+    ]
+
+
 def _landing(repo, cfg, it, led: dict[str, Any], gates: list[dict[str, Any]]) -> dict[str, Any]:
     merge = next((g for g in gates if g["gate"] == "merge"), {})
     head = merge.get("branch_head", "")
@@ -143,7 +161,7 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
         r["earlier_tree"] = stale.get(r["gate"], "")
     filed = _filed(events, st, item_id, who)
     tests = _bug_tests(events, st, item_id)
-    overrides = RG.overrides(it, led, tests, rows)
+    overrides = RG.overrides(it, led, tests, rows) + _refusals(events, item_id, who)
     pipeline = G.pipeline_for(it, cfg)
     not_done = RG.not_done(it, led, rows, pipeline, tests)
     follow = [f"{b['id']} (bug, open)" for b in filed["bugs"] if b["open"]]
