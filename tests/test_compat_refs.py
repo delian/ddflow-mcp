@@ -176,6 +176,15 @@ def test_a_block_scalar_pre_commit_entry_and_an_args_list_are_still_read(tmp_pat
     ]
 
 
+def test_a_hook_name_that_quotes_its_own_command_is_not_scanned(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n  - id: a\n"
+        "    name: scripts/hook.sh hooks check-commit (ddflow lease)\n"
+        "    entry: scripts/hook.sh hooks check-commit (ddflow lease)\n"
+    )
+    assert [f.line for f in C.scan(tmp_path, VOCAB)] == [6]
+
+
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
     (tmp_path / "AGENTS.md").write_text(
         _managed_md("rules/work-queue", "Run `ddflow nosuch` and `ddflow doc show`.\n")
