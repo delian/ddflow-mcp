@@ -10,6 +10,7 @@ Pure: no I/O. The api writes what this decides.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -48,7 +49,7 @@ def body_of(item: Mapping[str, Any]) -> str:
     gates and the checks read."""
     body = str(item.get("body", ""))
     acc = str(item.get("acceptance", "")).strip()
-    if acc and "acceptance" not in body.lower():
+    if acc and not re.search(r"(?im)^\s*acceptance\b", body):
         body = f"{body}\n\nACCEPTANCE: {acc}".strip()
     return body
 
@@ -106,4 +107,18 @@ def order(plan: Mapping[str, Any]) -> list[str]:
 
     for iid in sorted(plan, key=lambda i: (kind_of(plan[i]) != "phase", i)):
         visit(iid)
+    return out
+
+
+def problems(plan: Mapping[str, Any], plan_id: str) -> list[str]:
+    """Why an item of the plan could not be recorded (a bad id or glob), decided BEFORE
+    anything is written so that the write cannot fail half-way for these."""
+    out = []
+    for iid, item in sorted(plan.items()):
+        if kind_of(item) == "phase":
+            bad = IT.bad_id(iid)
+        else:
+            bad = IT.problem_of(draft_of(iid, item, plan_id))
+        if bad:
+            out.append(f"{iid}: {bad}")
     return out

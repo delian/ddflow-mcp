@@ -166,3 +166,34 @@ def test_an_id_already_in_the_queue_is_refused_not_overwritten(repo, tmp_path):
 
     assert code == 3, out + err
     assert _state(repo, "a")["title"] == "mine"
+
+
+def test_an_acceptance_field_is_carried_even_when_the_body_mentions_the_word(repo, tmp_path):
+    plan = _write(
+        tmp_path,
+        '[a]\ntitle = "t"\nglobs = ["src/a.py"]\nbody = "wires up the acceptance check"\n'
+        'acceptance = "zero findings"\n',
+    )
+    run_cli(repo, "plan", "apply", plan, "--apply", "--hash", _hash(repo, plan), "--plan-id", "p1")
+
+    assert "ACCEPTANCE: zero findings" in _state(repo, "a")["body"]
+
+
+def test_a_removed_id_is_refused_up_front_so_nothing_is_half_filed(repo, tmp_path):
+    run_cli(repo, "task", "add", "b", "--title", "gone", "--new")
+    run_cli(repo, "remove", "b")
+    plan = _write(tmp_path)
+
+    code, out, err = run_cli(repo, "plan", "apply", plan)
+
+    assert code == 3, out + err
+    assert run_cli(repo, "show", "a")[0] != 0
+
+
+def test_a_refused_apply_carries_its_findings_as_data(repo, tmp_path):
+    plan = _write(tmp_path, PLAN.replace('acceptance = "b works"', ""))
+
+    code, out, _err = run_cli(repo, "--json", "plan", "apply", plan)
+
+    assert code == 1
+    assert json.loads(out)["findings"][0]["kind"] == "no_acceptance"

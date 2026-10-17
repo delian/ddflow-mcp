@@ -97,7 +97,8 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
     plan_id = d.get("proposed")
-    if plan_id and kind == "task" and it.state == OPEN:
+    again = it.state == BLOCKED and it.blocked_reason.startswith(PROPOSED_PREFIX)
+    if plan_id and kind == "task" and (it.state == OPEN or again):
         it.state = BLOCKED
         it.blocked_reason = proposed_reason(str(plan_id))
 

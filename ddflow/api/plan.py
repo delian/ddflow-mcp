@@ -166,8 +166,8 @@ def _clashes(st: State, plan: dict[str, Any], plan_id: str) -> list[str]:
     """Plan ids already in the queue that are NOT this plan's earlier filing: filing over
     them would overwrite an item, so the plan is refused."""
     mine = set(PA.filed_by(st, plan_id))
-    live = set(PA.live_ids(st))
-    return sorted(i for i in plan if i in live and i not in mine)
+    # Removed ids too: re-filing one needs `readd`, which a plan does not say.
+    return sorted(i for i in plan if i in st.items and i not in mine)
 
 
 def _missing_parents(st: State, plan: dict[str, Any]) -> list[str]:
@@ -286,6 +286,8 @@ def _refusal(source, plan, pid, st, report, base) -> O.Outcome | None:
             clashes=clash,
             **base,
         )
+    if broken := PA.problems(plan, pid):
+        return O.failed("plan.apply", "; ".join(broken), **base)
     if orphans := _missing_parents(st, plan):
         return O.failed(
             "plan.apply", f"parent not in the plan or the queue: {', '.join(orphans)}", **base
