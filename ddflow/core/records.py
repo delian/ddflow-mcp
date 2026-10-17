@@ -368,6 +368,13 @@ class Item:
     displaced: list[dict[str, Any]] = field(default_factory=list)
 
     @property
+    def family(self) -> str:
+        """The event family this item's definition events are written under: `phase`, or
+        `task` for every work kind (`task.added` / `task.updated` carry the kind in their
+        payload, so a doc needs no `doc.*` events of its own)."""
+        return "phase" if self.kind == "phase" else "task"
+
+    @property
     def is_work(self) -> bool:
         """A unit of work with its own claim, worktree and gates: a task, or an item of a
         kind that runs like one (`WORK_KINDS`). A phase is a container."""
