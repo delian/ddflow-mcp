@@ -18,6 +18,7 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
@@ -232,6 +233,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
     )
+    pins = PM.merge_report(repo, cfg)
+    for line in PM.merge_lines(pins):
+        say(line)
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(

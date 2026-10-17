@@ -17,7 +17,7 @@ from ..infra import git as G
 from ..infra.fsio import atomic_write, replace_text
 from . import shared_files as SF
 from .enforce import command_line, hooks_dir
-from .pins import pin_files, regenerate
+from .pins import load_recipes, pin_files, regenerate
 from .pins_text import merge_into
 
 #: The merge driver's name in `.gitattributes` and `git config merge.<name>.driver`.
@@ -107,6 +107,48 @@ def after_merge(repo: Path, cfg: Config) -> str:
     return "; ".join(
         filter(None, [f"pins regenerated, not committed: {', '.join(done)}; commit them", cannot])
     )
+
+
+def merge_report(repo: Path, cfg: Config) -> dict[str, list[str]]:
+    """What `ddflow merge` says about the pins once a merge has landed (bug Bd92e5da53c): the
+    pins the hook may run are CHECKED now (read-only, each bounded by
+    `[pins].after_merge_timeout_s`), whether or not the hook is installed or ran, and the pins
+    it never runs (a recipe that runs a suite) are named as unchecked, so a stale golden
+    pin is never silent. Keys: ``stale``, ``unknown`` (the check did not finish),
+    ``unchecked``; empty lists are omitted, ``{}`` when there is nothing to say."""
+    try:
+        rep = regenerate(repo, cfg, check=True, after_merge=True)
+        recipes = load_recipes(repo, cfg)
+    except Exception:  # a line of advice never stops a merge that has landed
+        return {}
+    out = {
+        "stale": [p.name for p in rep.stale],
+        "unknown": [p.name for p in rep.unavailable],
+        "unchecked": [r.name for r in recipes if not r.after_merge],
+    }
+    return {k: v for k, v in out.items() if v}
+
+
+def merge_lines(report: dict[str, list[str]]) -> list[str]:
+    """``merge_report`` as the lines `ddflow merge` prints, each with its command."""
+    names = {k: ", ".join(v) for k, v in report.items()}
+    lines = []
+    if "stale" in report:
+        lines.append(
+            f"pins STALE after this merge: {names['stale']} -- `ddflow pins regenerate` "
+            "re-records them (then commit them)"
+        )
+    if "unknown" in report:
+        lines.append(
+            f"pins not checked after this merge (the check did not finish): {names['unknown']}"
+            " -- `ddflow pins regenerate --check`"
+        )
+    if "unchecked" in report:
+        lines.append(
+            f"pins the post-merge hook never re-records (they run a suite): {names['unchecked']}"
+            " -- `ddflow pins regenerate --check` says whether this merge made them stale"
+        )
+    return lines
 
 
 def _set_driver_config(repo: Path, line=None) -> list[str]:
