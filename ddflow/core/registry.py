@@ -93,6 +93,7 @@ class Registry(Mapping[str, T], Generic[T]):
         self._prefix = prefix
         self._loader = loader
         self._ready = not (package or loader)
+        self._filling = False
         #: name -> item (or a `Lazy`), in registration order. Tests that save and restore
         #: a registry hold this dict; the same object lives as long as the registry.
         self.table: dict[str, Any] = {}
@@ -121,22 +122,32 @@ class Registry(Mapping[str, T], Generic[T]):
         self.table[name] = Lazy(target)
 
     def unregister(self, name: str) -> None:
-        """Remove ``name`` (a test's throwaway); an unknown name is ignored."""
+        """Remove ``name`` (a test's throwaway); an unknown name is ignored. A discovered or
+        loaded registry is filled first, so what is removed does not come back on the next read."""
+        if not self._filling:
+            self._fill()
         self.table.pop(name, None)
 
     # -- reading ------------------------------------------------------------------------
     def _fill(self) -> None:
         """Import the discovery package and run the loader, once; a failure raises again on
         the next call (nothing is half-marked as done)."""
-        if self._ready:
+        if self._ready or self._filling:
             return
+        self._filling = True
+        try:
+            self._fill_now()
+        finally:
+            self._filling = False
+
+    def _fill_now(self) -> None:
         if self._package:
             pkg = importlib.import_module(self._package)
             for m in sorted(pkgutil.iter_modules(pkg.__path__), key=lambda m: m.name):
                 if m.name.startswith(self._prefix):
                     importlib.import_module(f"{self._package}.{m.name}")
         if self._loader is not None:
-            for item in self._loader():
+            for item in list(self._loader()):  # all of them first: a failure registers none
                 self.register(item)
         self._ready = True
 

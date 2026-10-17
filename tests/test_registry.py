@@ -106,6 +106,32 @@ def test_a_loader_fills_the_registry_once_and_a_failure_is_not_remembered():
     assert r.names() == ["b", "a"] and r.names() == ["b", "a"] and len(calls) == 2
 
 
+def test_a_loader_that_fails_midway_registers_nothing_and_the_error_is_the_real_one():
+    calls = []
+
+    def load():
+        calls.append(1)
+        yield "a:1"
+        if len(calls) == 1:
+            raise RuntimeError("bad descriptor")
+        yield "b:1"
+
+    r = _reg(loader=load, order="registered")
+    for _ in range(1):
+        with pytest.raises(RuntimeError, match="bad descriptor"):
+            r.names()
+    assert r.table == {}
+    assert r.names() == ["a", "b"]
+
+
+def test_removing_a_name_from_a_loaded_registry_sticks():
+    r = _reg(loader=lambda: ["a:1", "b:1"])
+    r.unregister("a")  # before the first read: the registry is filled first
+    assert r.names() == ["b"]
+    with pytest.raises(UnknownName):
+        r.get_or_raise("a")
+
+
 def test_discovery_imports_every_prefixed_module_once(tmp_path, monkeypatch):
     pkg = tmp_path / "seam_pkg"
     pkg.mkdir()
@@ -181,6 +207,21 @@ def test_the_ticks_list_the_same_names_and_keep_their_duplicate_rule():
     other = T.Tick("flow.sample", tick.every_s + 1, tick.budget_s, tick.target)
     with pytest.raises(ValueError, match="already registered with another definition"):
         T.register(other)
+
+
+def test_the_ticks_are_listed_sorted_by_name_whatever_the_registration_order():
+    from ddflow.services import ticks as T
+
+    noop = "os.path:join"
+    names = ["zz.b-test", "zz.a-test", "zz.c-test"]
+    try:
+        for n in names:
+            T.register(T.Tick(n, 60, 1, noop))
+        listed = [t.name for t in T.registered() if t.name.startswith("zz.")]
+        assert listed == sorted(names)
+    finally:
+        for n in names:
+            T.unregister(n)
 
 
 def test_the_search_sources_list_the_same_names_in_the_same_order():
