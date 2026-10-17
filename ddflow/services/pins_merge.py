@@ -9,6 +9,7 @@ regenerates the stale pins and folds them into the merge commit.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -270,6 +271,17 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     return actions
 
 
+def _hook_runs_pins(hook: Path) -> bool:
+    """Would git run ``hook`` and would it re-record the pins: an executable file that is ddflow's
+    own (`HOOK_MARK`) or a hand-written one that calls `pins regenerate --after-merge`."""
+    try:
+        text = hook.read_text("utf-8", errors="replace") if hook.is_file() else ""
+        runs = os.access(hook, os.X_OK)
+    except OSError:
+        return False
+    return runs and (HOOK_MARK in text or "pins regenerate --after-merge" in text)
+
+
 def hook_notes(repo: Path, cfg: Config) -> list[str]:
     """`doctor`'s notes when a plain `git merge` would leave a pin stale with nothing to
     re-record it (bug B09da3e0b13): the hook is off or not installed, or a recipe is one the
@@ -284,8 +296,8 @@ def hook_notes(repo: Path, cfg: Config) -> list[str]:
     hook = hooks_dir(repo) / "post-merge"
     if cfg.pins.after_merge == "off":
         why = "[pins].after_merge is off"
-    elif not hook.is_file() or HOOK_MARK not in hook.read_text("utf-8", errors="replace"):
-        why = "the post-merge hook is not installed"
+    elif not _hook_runs_pins(hook):
+        why = "the post-merge hook is not installed (or is not executable)"
     else:
         why = ""
     if why:
