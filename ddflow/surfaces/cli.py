@@ -59,6 +59,8 @@ from .render import (
     set_command,
 )
 from .tools import TOOLS
+from .update_message import csv_or_none as _csv_or_none
+from .update_message import update_message
 from .vocabulary import provide
 
 
@@ -74,6 +76,10 @@ def cmd_item_update(a, c: Ctx) -> int:
             needs=None if a.needs is None else _csv(a.needs),
             # The raw values: the api reads them once. Parsed here as well, a JSON
             # array's element holding a comma was split by the second read (roborev).
+            add_needs=_csv_or_none(getattr(a, "add_needs", None)),
+            remove_needs=_csv_or_none(getattr(a, "remove_needs", None)),
+            add_tags=_csv_or_none(getattr(a, "add_tags", None)),
+            remove_tags=_csv_or_none(getattr(a, "remove_tags", None)),
             globs=a.globs,
             add_globs=getattr(a, "add_globs", None),
             remove_globs=getattr(a, "remove_globs", None),
@@ -91,20 +97,8 @@ def cmd_item_update(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    msg = f"{a.id} updated: {', '.join(out.data['changed'])}"
-    if out.data.get("branch"):
-        msg += f"\n  now bound to {out.data['worktree']} on {out.data['branch']}"
-    if "globs" in out.data["fields"]:
-        # `--globs` REPLACES the list. Say what that took away: an agent widening its
-        # claim with only the new paths otherwise drops the old ones from every
-        # conflict check without a word (Bd8038b08a1).
-        msg += f"\n  globs now: {', '.join(out.data['fields']['globs']) or '(none)'}"
-        if out.data["globs_dropped"]:
-            msg += (
-                f"\n  dropped:   {', '.join(out.data['globs_dropped'])}  (--globs replaces "
-                f"the list; pass every glob, old and new, to keep them)"
-            )
-    c.out(msg, out.body(("id", "changed", "globs_dropped")))
+    msg = update_message(a.id, out.data)
+    c.out(msg, out.body(("id", "changed", "globs_dropped", "needs_dropped")))
     return OK
 
 
