@@ -54,7 +54,7 @@ def _dir(repo: Path, item: str) -> Path:
     return Path(repo) / ".ddflow" / RUNS_DIR / item
 
 
-def mark(repo: Path, item: str, gate: str) -> Marker | None:
+def mark_started(repo: Path, item: str, gate: str) -> Marker | None:
     """Write this process's started-marker. None where it cannot be written: advisory, the
     run goes on (the sweeper then has nothing to find, as before)."""
     pid = os.getpid()
@@ -74,7 +74,7 @@ def mark(repo: Path, item: str, gate: str) -> Marker | None:
     return m
 
 
-def clear(m: Marker | None) -> None:
+def clear_started(m: Marker | None) -> None:
     if m is not None and m.path:
         Path(m.path).unlink(missing_ok=True)
 
