@@ -64,9 +64,14 @@ def pins_regenerate(
 
 
 def _linked_worktree(repo: Path) -> bool:
-    """True when ``repo`` is a linked worktree: its ``.git`` is a file, not a directory. Read
+    """True when ``repo`` is a linked worktree: its ``.git`` is a gitfile that points into ``<common>/.git/worktrees/`` (a separate-git-dir
+    checkout or a submodule is not one). Read
     from the path, not from git, so a stray GIT_DIR in the environment cannot change the answer."""
-    return (repo / ".git").is_file()
+    try:
+        text = (repo / ".git").read_text()
+    except OSError:  # a directory, or no .git
+        return False
+    return text.startswith("gitdir:") and "/.git/worktrees/" in text.replace("\\", "/")
 
 
 def _record_written(primary: Path, repo: Path, before, files) -> None:
