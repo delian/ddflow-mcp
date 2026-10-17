@@ -207,3 +207,28 @@ def test_an_agent_cannot_skip_through_gate_record_either(repo, tmp_path):
     )
     assert code == 3 and "operator" in out + err, out + err
     assert BLOCKER in _complete(repo)[1]
+
+
+@pytest.mark.parametrize("outcome", ["unavailable", "partial", "passed"])
+def test_an_agent_cannot_replace_the_failure_by_a_hand_record_either(repo, tmp_path, outcome):
+    """roborev, three times over: any other outcome recorded over a failed review gate whose
+    confirmed findings no delta re-checked would clear the blocker."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    extra = ["--evidence", "reviewed by hand"] if outcome == "passed" else []
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--outcome",
+        outcome,
+        "--reason",
+        "x",
+        *extra,
+        agent="coder",
+    )
+    assert code == 3 and "operator" in out + err, out + err
+    assert BLOCKER in _complete(repo)[1]
+    assert "--force does not lift" in _complete(repo)[1]

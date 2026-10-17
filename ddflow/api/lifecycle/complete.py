@@ -143,8 +143,12 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
-            + f"\n\n`ddflow gate status {item}` shows the pipeline. --force overrides, "
-            f"and the override is recorded.",
+            + f"\n\n`ddflow gate status {item}` shows the pipeline. "
+            + (
+                "--force does not lift the review-gate blocker above."
+                if hard
+                else "--force overrides, and the override is recorded."
+            ),
             forced=False,
             **base,
         )
