@@ -43,6 +43,10 @@ class Review:
         return self.model or self.agent
 
 
+#: Job states that will still become a review; failed/canceled never will.
+_UNFINISHED = ("queued", "running")
+
+
 def _covers(git_ref: str, sha: str) -> bool:
     """A job of ``sha`` itself, or of a range ending at it (`roborev review --since`).
     roborev records full shas; an abbreviated one (7+ hex) is matched as a prefix."""
@@ -84,7 +88,7 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     if not done:
         pending = [
             j for j in jobs
-            if isinstance(j, dict) and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
+            if isinstance(j, dict) and j.get("status") in _UNFINISHED and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
         ]  # fmt: skip
         if pending:
             # `roborev show --job N` of an unfinished job says "no review found", which
