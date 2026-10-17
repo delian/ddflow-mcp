@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -52,23 +52,75 @@ def _statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
 
 def imports(path: str, source: str) -> set[str]:
     """Absolute dotted names ``path`` imports, relative imports resolved."""
-    tree = ast.parse(source, filename=path)
-    here = module_name(path).split(".")
-    package = here if path.endswith("__init__.py") else here[:-1]
+    return _imports(path, ast.parse(source, filename=path))
+
+
+def _imports(path: str, tree: ast.Module) -> set[str]:
     out: set[str] = set()
     for node in _statements(tree.body):
         if isinstance(node, ast.Import):
             out.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                anchor = package[: len(package) - (node.level - 1)] if node.level > 1 else package
-                target = ".".join([*anchor, *([node.module] if node.module else [])])
-            else:
-                target = node.module or ""
+            target = _from_target(path, node)
             if target:
                 out.add(target)
             # `from pkg import mod` imports the MODULE when `mod` is one.
             out.update(f"{target}.{a.name}" if target else a.name for a in node.names)
+    return out
+
+
+def _from_target(path: str, node: ast.ImportFrom) -> str:
+    """The absolute module a ``from ... import`` statement of ``path`` names."""
+    here = module_name(path).split(".")
+    package = here if path.endswith("__init__.py") else here[:-1]
+    if not node.level:
+        return node.module or ""
+    anchor = package[: len(package) - (node.level - 1)] if node.level > 1 else package
+    return ".".join([*anchor, *([node.module] if node.module else [])])
+
+
+def reexports(path: str, tree: ast.Module, resolve_: Callable[[str], str]) -> dict[str, set[str]]:
+    """For a package ``__init__``: module -> the public names it re-exports from that module
+    (``from .wait import wait, LIMIT as WAIT_LIMIT`` -> ``{wait: {wait, WAIT_LIMIT}}``)."""
+    out: dict[str, set[str]] = {}
+    for node in _statements(tree.body):
+        if isinstance(node, ast.ImportFrom):
+            mod = resolve_(_from_target(path, node))
+            if mod:
+                out.setdefault(mod, set()).update(a.asname or a.name for a in node.names)
+    return out
+
+
+def _dotted(node: ast.expr) -> str:
+    """``a.b.c`` for a chain of names and attributes; "" for anything else."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    return ".".join([node.id, *reversed(parts)]) if isinstance(node, ast.Name) else ""
+
+
+def facade_uses(path: str, tree: ast.Module, facades: set[str]) -> dict[str, set[str]]:
+    """facade -> the names ``path`` takes from it: ``from facade import n``, and ``F.n`` where
+    ``F`` is the facade imported whole (``import a.b``, ``from a import b as F``)."""
+    spelled: dict[str, str] = {}  # how the file spells a facade -> the facade
+    out: dict[str, set[str]] = {}
+    for node in _statements(tree.body):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name in facades:
+                    spelled[a.asname or a.name] = a.name
+        elif isinstance(node, ast.ImportFrom):
+            target = _from_target(path, node)
+            for a in node.names:
+                if f"{target}.{a.name}" in facades:
+                    spelled[a.asname or a.name] = f"{target}.{a.name}"
+                elif target in facades:
+                    out.setdefault(target, set()).add(a.name)
+    if spelled:
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Attribute) and (fac := spelled.get(_dotted(n.value))):
+                out.setdefault(fac, set()).add(n.attr)
     return out
 
 
@@ -116,6 +168,10 @@ class Graph:
     importers: dict[str, set[str]] = field(default_factory=dict)
     names: set[str] = field(default_factory=set)
     unparsed: list[str] = field(default_factory=list)  #: .py files that could not be read
+    #: package `__init__` module -> {module behind it -> the names it re-exports from it}
+    exports: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    #: file -> {package `__init__` module it imports -> the names it takes from it}
+    uses: dict[str, dict[str, set[str]]] = field(default_factory=dict)
 
     def hubs(self, threshold: int) -> dict[str, int]:
         """Module -> its importer count, for each imported by ``threshold`` files or more."""
@@ -132,16 +188,23 @@ def build(tree: Path, py: list[str], changed: list[str]) -> Graph:
     gone = {module_name(c) for c in changed if c.endswith(".py") and c not in py}
     g = Graph(names=set(known) | gone)
     homes = _bare_homes(py)
+    facades = {m for m, p in known.items() if p.endswith("__init__.py")}
+    parsed: dict[str, ast.Module] = {}
     for p in py:
         try:
-            found = imports(p, (tree / p).read_text(encoding="utf-8", errors="replace"))
+            parsed[p] = ast.parse((tree / p).read_text(encoding="utf-8", errors="replace"))
         except (OSError, SyntaxError, ValueError):
             g.unparsed.append(p)
             continue
-        for n in found:
+        for n in _imports(p, parsed[p]):
             mod = _bare(n, p, homes) or resolve(n, g.names)
             if mod and known.get(mod) != p:
                 g.importers.setdefault(mod, set()).add(p)
+    for p, mod_ast in parsed.items():
+        if p.endswith("__init__.py"):
+            g.exports[module_name(p)] = reexports(p, mod_ast, lambda n: resolve(n, g.names))
+        elif used := facade_uses(p, mod_ast, facades):
+            g.uses[p] = used
     return g
 
 
@@ -170,6 +233,8 @@ def reach(g: Graph, changed: list[str], hubs: dict[str, int], max_hops: int = 2)
             fm = module_name(f)
             if f not in out.files:
                 out.files[f] = (why, hops)
+            if f.endswith("__init__.py") and hops < max_hops:
+                _through_facade(g, fm, mod, hops, out)
             if hops >= max_hops or fm in seen:
                 continue
             if fm in hubs:
@@ -180,6 +245,20 @@ def reach(g: Graph, changed: list[str], hubs: dict[str, int], max_hops: int = 2)
             seen.add(fm)
             queue.append((fm, origin, f"imports {fm}, which imports {origin}", hops + 1))
     return out
+
+
+def _through_facade(g: Graph, facade: str, mod: str, hops: int, out: Reach) -> None:
+    """The files importing the package ``facade`` AND spelling a name it re-exports from
+    ``mod``: that is evidence they use ``mod`` (the walk through the whole facade is not --
+    it raised a selection by 50 tests, Beb27076db4). They sit one hop further."""
+    names = g.exports.get(facade, {}).get(mod, set())
+    for t in sorted(g.importers.get(facade, ())):
+        if t not in out.files and names & g.uses.get(t, {}).get(facade, set()):
+            out.files[t] = (
+                f"uses {', '.join(sorted(names & g.uses[t][facade]))} of {facade}, "
+                f"which re-exports from {mod}",
+                hops + 1,
+            )
 
 
 def hubs_touched(changed: list[str], hubs: dict[str, int]) -> list[str]:
