@@ -49,3 +49,15 @@ class CiConfig:
         choices=CI_TESTS_SCOPES,
         strictest=("full", "every item's ci run takes the whole suite"),
     )
+    always_tests: list[str] = knob(
+        factory=lambda: [
+            "tests/test_constants_ratchet.py",
+            "tests/test_layering*.py",
+            "tests/golden/**",
+            "tests/test_uc_surf_setup_ops_transcript.py",
+            "tests/test_uc_surf_loop_transcript.py",
+            "tests/test_readme_*.py",
+            "tests/test_mcp_tool_budget.py",
+        ],
+        doc="Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for EVERY item in addition to the tests its change reaches, plus any test file declaring `ALWAYS = True` at module level. They are the repo-wide guards and pins (the constants ratchet, the layering guard, golden snapshots, the setup-ops and loop transcripts, the README table pins, the tool budget: the ones that have broken main past a selection; measured about 30 s plus the loop transcript's one long test). Left out of the default for their cost, add them when they bite: `tests/test_architecture_guards.py` (18 s), `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py` (37 s): their input is the whole code base, so no import closure can know a change affects them. Recorded in the gate evidence as `always` (count, files) and `always_s` (the seconds they cost); an empty closure still runs the whole suite (which holds them). Empty list: only the selection (and any `ALWAYS = True` file) runs.",
+    )
