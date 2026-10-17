@@ -55,21 +55,35 @@ _PYTEST_LINE = re.compile(
 _UNITTEST_LINE = re.compile(r"^(?:FAIL|ERROR):\s+(?P<name>\w+)\s+\((?P<where>[\w.]+)\)\s*$")
 # pytest failure section header: `____ test_y ____` / `____ TestC.test_y[a-b] ____`.
 _SECTION = re.compile(r"^_{3,}\s+(?P<name>.+?)\s+_{3,}$")
+# A long test name leaves room for one underscore a side: `_ ERROR at setup of test_x _`.
+# Read only inside the ERRORS / FAILURES block, and only unindented (Bb9ce40cfcc).
+_SHORT_SECTION = re.compile(r"^_{1,2}\s+(?P<name>\S.*?)\s+_{1,2}$")
 _BANNER = re.compile(r"^={3,}")
+_BLOCK = re.compile(r"^={3,}\s+(?:ERRORS|FAILURES)\s+={3,}$")
+_ERROR_AT = re.compile(r"^ERROR at (?P<phase>setup|teardown) of (?P<name>.+)$")
+_FIXTURE_MISSING = re.compile(r"fixture '(?P<f>[\w.-]+)' not found")
+_FIXTURE_DEF = re.compile(r"^\s*(?:async\s+)?def\s+(?P<f>\w+)\s*\(")
 
 
 def failed_tests(text: str) -> list[dict[str, str]]:
-    """``[{"id", "why"}]`` for every failing test the output names, once each, in order."""
+    """``[{"id", "why", "kind"}]`` for every failing test the output names, once each, in order;
+    ``kind`` is ERROR for pytest's `ERROR` lines (a fixture or teardown error: the test body
+    may never have run) and FAILED for the rest."""
     seen: dict[str, str] = {}
+    errored: set[str] = set()
     for raw in text.splitlines():
         line = raw.strip()
         if m := _PYTEST_LINE.match(line):
             seen.setdefault(m["id"], (m["why"] or "")[:LINE_CHARS])
+            if line.startswith("ERROR"):
+                errored.add(m["id"])
         elif m := _UNITTEST_LINE.match(line):
             where = m["where"]
             tid = where if where.endswith(m["name"]) else f"{where}.{m['name']}"
             seen.setdefault(tid, "")
-    return [{"id": k, "why": v} for k, v in seen.items()]
+    return [
+        {"id": k, "why": v, "kind": "ERROR" if k in errored else "FAILED"} for k, v in seen.items()
+    ]
 
 
 def failure_tails(text: str) -> list[dict[str, str]]:
@@ -83,14 +97,19 @@ def failure_tails(text: str) -> list[dict[str, str]]:
             lines = [ln[:LINE_CHARS] for ln in body if ln.strip()][-TAIL_LINES:]
             tails.append({"test": name, "tail": "\n".join(lines)[-TAIL_CHARS:]})
 
+    in_block = False
     for raw in text.splitlines():
         line = raw.rstrip()
         if m := _SECTION.match(line.strip()):
             close()
             name, body = m["name"], []
+        elif in_block and line == raw.strip() and (m := _SHORT_SECTION.match(line)):
+            close()
+            name, body = m["name"], []
         elif _BANNER.match(line.strip()):
             close()
             name, body = None, []
+            in_block = bool(_BLOCK.match(line.strip()))
         elif name is not None:
             body.append(line)
     close()
@@ -108,23 +127,99 @@ def failure_evidence(text: str) -> dict[str, Any]:
     }
     if len(found) > MAX_FAILED_TESTS:
         ev["failed_tests_more"] = len(found) - MAX_FAILED_TESTS
-    if tails := failure_tails(text):
+    tails = failure_tails(text)
+    if tails:
         ev["failure_tails"] = tails
+    errors = [f["id"] for f in found if f["kind"] == "ERROR"]
+    if errors:
+        ev["errored_tests"] = errors[:MAX_FAILED_TESTS]
+    where: dict[str, dict[str, str]] = {}
+    for f in found[:MAX_FAILED_TESTS]:
+        section = _section_of(f["id"], tails)
+        if section is None:
+            continue
+        header, tail = section
+        if not f["why"] and (last := _last_error_line(tail)):
+            ev.setdefault("failed_reasons", {})[f["id"]] = last
+        if f["kind"] == "ERROR":
+            at = _ERROR_AT.match(header)
+            info = {"phase": at["phase"] if at else "setup"}
+            if fixture := _fixture_of(tail):
+                info["fixture"] = fixture
+            where[f["id"]] = info
+    if where:
+        ev["errored_where"] = where
     if not ev["failed_reasons"]:
         del ev["failed_reasons"]
     return ev
 
 
+def _section_of(test: str, tails: list[dict[str, str]]) -> tuple[str, str] | None:
+    """(header, tail) of the failure section that names pytest id ``test``, else None. An
+    error's header reads `ERROR at setup of <name>`."""
+    for t in tails:
+        at = _ERROR_AT.match(t["test"])
+        if _names(at["name"] if at else t["test"], test):
+            return t["test"], t["tail"]
+    return None
+
+
+def _last_error_line(tail: str) -> str:
+    """The last `E   message` line of a failure section, without its marker."""
+    lines = [ln[1:].strip() for ln in tail.splitlines() if ln.startswith("E ")]
+    return lines[-1][:LINE_CHARS] if lines else ""
+
+
+def _fixture_of(tail: str) -> str:
+    """The fixture a setup error came from: named by pytest ("fixture 'x' not found"), or
+    the function under an `@pytest.fixture` decorator in the traceback; "" when unknown."""
+    if m := _FIXTURE_MISSING.search(tail):
+        return m["f"]
+    decorated = False
+    for ln in tail.splitlines():
+        if re.match(r"^\s*@(?:pytest\.)?fixture\b", ln):
+            decorated = True
+        elif decorated and (
+            m := _FIXTURE_DEF.match(ln.replace(">", " ", 1) if ln.startswith(">") else ln)
+        ):
+            return m["f"]
+    return ""
+
+
 def failure_text(ev: dict[str, Any]) -> str:
-    """The failing tests of a gate's evidence, as lines for a person ("" when none)."""
+    """The failing tests of a gate's evidence, as lines for a person ("" when none).
+    Failures and errors (a fixture that raised, a teardown that did) are listed apart: an
+    error says WHERE (setup or teardown, which fixture) and what it said."""
     ids = ev.get("failed_tests") or []
     if not ids:
         return ""
     why = ev.get("failed_reasons") or {}
-    lines = [f"{len(ids) + int(ev.get('failed_tests_more') or 0)} failing test(s):"]
-    lines += [f"  FAILED {i}" + (f" - {why[i]}" if i in why else "") for i in ids]
-    if ev.get("failed_tests_more"):
-        lines.append(f"  ... and {ev['failed_tests_more']} more")
+    errored = set(ev.get("errored_tests") or [])
+    where = ev.get("errored_where") or {}
+    failed = [i for i in ids if i not in errored]
+    erred = [i for i in ids if i in errored]
+    more = int(ev.get("failed_tests_more") or 0)
+    lines = []
+    if failed or not erred:
+        lines.append(f"{len(failed) + (0 if erred else more)} failing test(s):")
+        lines += [f"  FAILED {i}" + (f" - {why[i]}" if i in why else "") for i in failed]
+    if erred:
+        lines.append(f"{len(erred)} error(s) (the test did not get to pass or fail):")
+        for i in erred:
+            w = where.get(i) or {}
+            place = (
+                f" [{w['phase']}"
+                + (f" of fixture {w['fixture']}" if w.get("fixture") else "")
+                + "]"
+                if w
+                else ""
+            )
+            lines.append(
+                f"  ERROR {i}{place}"
+                + (f" - {why[i]}" if i in why else " - no message in the output")
+            )
+    if more:
+        lines.append(f"  ... and {more} more")
     for t in ev.get("failure_tails") or []:
         lines.append(f"--- {t['test']} ---")
         lines.append(t["tail"])
