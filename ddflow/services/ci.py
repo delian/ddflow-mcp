@@ -373,21 +373,23 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
     )
     if not (selected and p.ran and p.code == 0):
         return p, ""
-    before = p.output
-    for cmd_ in scope.commands():
+    before, spent = p.output, p.elapsed_s
+    stages = ((scope.command, "selected"), (scope.always_command, "always"))
+    todo = [(c, label) for c, label in stages if c]
+    for at, (cmd_, label) in enumerate(todo):
         before += f"\n$ {cmd_}\n"
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
             cwd=tree,
             env=child_env(cfg, ci=True),
-            timeout_s=max(
-                min(budget, 60), budget - int(p.elapsed_s)
-            ),  # what is left, 60 s at least
+            timeout_s=max(min(budget, 60), budget - int(spent)),  # what is left, 60 s at least
             check_installed=True,  # a missing runner is unavailable, not a failed test
         )
-        if cmd_ == scope.always_command:
+        spent += p.elapsed_s
+        scope.ok[label] = p.ran and p.code == 0
+        if label == "always":
             scope.always_s = p.elapsed_s
-        if not (p.ran and p.code == 0) or cmd_ == scope.commands()[-1]:
+        if not scope.ok[label] or at == len(todo) - 1:
             break
         before += p.output
     return p, before
@@ -397,9 +399,10 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
     out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
     checks = parse_checks(out)
     if out_prefix:  # the hooks passed and the selected tests ran after them
-        checks.append(
-            Check(f"selected tests ({len(scope.tests)} + {len(scope.always)} always)", p.code == 0)
-        )
+        for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
+            if label in scope.ok:
+                name = f"{label} tests ({count} files)"
+                checks.append(Check(name, scope.ok[label]))
     if p.code != 0 and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
