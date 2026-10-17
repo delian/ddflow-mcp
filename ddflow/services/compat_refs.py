@@ -32,7 +32,7 @@ from pathlib import Path
 
 from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from .backups import make_backup
-from .enforce import HOOK_MARKER, hooks_dir
+from .enforce import HOOK_MARKER, UnreadableYaml, hooks_dir, read_precommit_yaml
 
 OK, DEPRECATED, UNKNOWN, UNCHECKED = "ok", "deprecated", "unknown", "unchecked"
 #: The longest command path: `group command`.
@@ -347,29 +347,52 @@ def _read(path: Path) -> str | None:
         return None
 
 
-_YAML_KEY = re.compile(r"^(\s*(?:-\s+)*)([A-Za-z_][\w-]*)\s*:")
+_ENTRY_KEY = re.compile(r"^\s*(?:-\s+)*(?:entry|args)\s*:")
 #: the pre-commit keys whose value is a command; every other key is prose or config
 _COMMAND_KEYS = frozenset({"entry", "args"})
 
 
-def _prose_lines(lines: list[str]) -> set[int]:
-    """The 0-based lines of a pre-commit config that are not command lines: a key other than
-    ``entry``/``args`` (a hook's ``name:`` is a sentence that may begin ``ddflow lease ...``)
-    and the lines folded under it."""
+def _command_values(node: object) -> Iterator[str]:
+    """Every ``entry``/``args`` value in a parsed pre-commit config, in document order."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in _COMMAND_KEYS:
+                yield from _strings(value)
+            else:
+                yield from _command_values(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _command_values(item)
+
+
+def _strings(value: object) -> Iterator[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, list):
+        for v in value:
+            yield from _strings(v)
+
+
+def _command_lines(lines: list[str]) -> set[int]:
+    """The 0-based lines of a pre-commit config that carry a hook's command: what its
+    ``entry:`` and ``args:`` say, nothing else (a hook's ``name:`` is a sentence that may
+    begin ``ddflow lease ...``). The config is parsed, so a folded or block-scalar prose
+    value cannot be taken for a command; a file the reader cannot parse falls back to the
+    lines that open an ``entry:`` or ``args:`` key."""
+    try:
+        values = list(_command_values(read_precommit_yaml("\n".join(lines))))
+    except UnreadableYaml:
+        return {i for i, line in enumerate(lines) if _ENTRY_KEY.match(line)}
     out: set[int] = set()
-    under: int | None = None  # the column of the prose key whose value we are inside
-    for i, line in enumerate(lines):
-        if not line.strip():
-            continue
-        m = _YAML_KEY.match(line)
-        if m:
-            under = len(m.group(1)) if m.group(2) not in _COMMAND_KEYS else None
-            if under is not None:
-                out.add(i)
-        elif under is not None and len(line) - len(line.lstrip()) > under:
-            out.add(i)
-        else:
-            under = None
+    at = 0
+    for value in values:
+        for piece in (v.strip() for v in value.splitlines()):
+            if not piece:
+                continue
+            hit = next((i for i in range(at, len(lines)) if piece in lines[i]), None)
+            if hit is not None:
+                out.add(hit)
+                at = hit
     return out
 
 
@@ -381,18 +404,18 @@ def _text_findings(
     *,
     code: bool,
     whole: bool = False,
-    skip: Callable[[list[str]], set[int]] | None = None,
+    only: Callable[[list[str]], set[int]] | None = None,
 ) -> list[Finding]:
     lines = text.splitlines()
     owned = _owned_spans(text)
     fenced = False
     out: list[Finding] = []
-    skipped = skip(lines) if skip is not None else set()
+    scanned = only(lines) if only is not None else None
     for i, line in enumerate(lines):
         if not code and _FENCE.match(line):
             fenced = not fenced
             continue
-        if i in skipped:
+        if scanned is not None and i not in scanned:
             continue
         managed = whole or any(sp.first <= i < sp.last for sp in owned)
         for ref in refs_in(line, vocab, code=code or fenced):
@@ -477,7 +500,7 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
                 artifact,
                 vocab,
                 code=code,
-                skip=_prose_lines if pattern == ".pre-commit-config.yaml" else None,
+                only=_command_lines if pattern == ".pre-commit-config.yaml" else None,
             )
     return sorted(out, key=lambda f: (f.path, f.line, f.ref.start))
 

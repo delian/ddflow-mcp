@@ -153,6 +153,7 @@ def test_a_pre_commit_hook_name_is_prose_only_its_entry_is_a_command(tmp_path):
         "        name: ddflow lease covers the staged paths\n"
         "        description: ddflow item trailer (Phase / Phase-ships)\n"
         "        name: >-\n"
+        "          https://example.com/x\n"
         "          ddflow lease folded onto a continuation line\n"
         "        entry: scripts/ddflow_hook.sh hooks check-commit\n"
         "      - id: bad\n"
@@ -160,7 +161,19 @@ def test_a_pre_commit_hook_name_is_prose_only_its_entry_is_a_command(tmp_path):
         "        entry: ddflow gate bogus\n"
     )
     found = C.scan(tmp_path, VOCAB)
-    assert [(f.line, f.ref.text) for f in found] == [(12, "gate bogus")]
+    assert [(f.line, f.ref.text) for f in found] == [(13, "gate bogus")]
+
+
+def test_a_block_scalar_pre_commit_entry_and_an_args_list_are_still_read(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n  - id: a\n    name: ddflow lease\n"
+        "    entry: >-\n      ddflow gate bogus\n"
+        "  - id: c\n    name: x\n    entry: sh\n    args:\n    - ddflow gate bogus2\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [
+        (7, "gate bogus"),
+        (12, "gate bogus2"),
+    ]
 
 
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
