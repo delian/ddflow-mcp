@@ -42,6 +42,8 @@ class ItemEdit:
     #: Ids added to / taken from the item's current needs (or from ``needs`` when given too).
     add_needs: list[str] | None = None
     remove_needs: list[str] | None = None
+    add_tags: list[str] | None = None
+    remove_tags: list[str] | None = None
     globs: list[str] | None = None
     #: Globs added to / taken from the item's current ones (or from ``globs`` when that is
     #: given too), so widening a lease never repeats the whole list (`--add-globs`).
@@ -79,7 +81,11 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
-    unchanged = _adjust_needs(it, edit, fields) or _adjust_globs(it, edit, fields)
+    unchanged = (
+        _adjust_list(it, edit, fields, "needs")
+        or _adjust_list(it, edit, fields, "tags")
+        or _adjust_globs(it, edit, fields)
+    )
     if unchanged:
         return O.nothing("item.updated", unchanged, id=item)
     bad = GS.problem(fields.get("globs", []))
@@ -102,21 +108,22 @@ def _held_globs(it) -> list[str]:
     return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
 
 
-def _adjust_needs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
-    """Fold ``--add-needs`` / ``--remove-needs`` into ``fields["needs"]``: onto ``--needs``
-    when given, else onto the item's current ones. Returns why there is nothing to change
-    when that is all the edit was, else ""."""
-    if edit.add_needs is None and edit.remove_needs is None:
+def _adjust_list(it, edit: ItemEdit, fields: dict[str, Any], name: str) -> str:
+    """Fold ``--add-<name>`` / ``--remove-<name>`` (needs, tags) into ``fields[name]``: onto
+    ``--<name>`` when given, else onto the item's current list. Returns why there is nothing
+    to change when that is all the edit was, else ""."""
+    add, rem = getattr(edit, f"add_{name}"), getattr(edit, f"remove_{name}")
+    if add is None and rem is None:
         return ""
-    held = fields.get("needs")
+    held = fields.get(name)
     if held is None:
-        held = list(it.needs)
-    gone = set(edit.remove_needs or [])
-    fields["needs"] = [n for n in dict.fromkeys([*held, *(edit.add_needs or [])]) if n not in gone]
-    if fields["needs"] == list(it.needs) and len(fields) == 1:
+        held = list(getattr(it, name))
+    gone = set(rem or [])
+    fields[name] = [n for n in dict.fromkeys([*held, *(add or [])]) if n not in gone]
+    if fields[name] == list(getattr(it, name)) and len(fields) == 1:
         return (
-            f"nothing to change: --add-needs are all held already and --remove-needs name "
-            f"none of {', '.join(held) or '(no needs)'}."
+            f"nothing to change: --add-{name} are all held already and --remove-{name} name "
+            f"none of {', '.join(held) or f'(no {name})'}."
         )
     return ""
 
@@ -295,6 +302,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, globs),
         needs_dropped=[n for n in it.needs if n not in fields["needs"]] if "needs" in fields else [],
+        tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
 
 

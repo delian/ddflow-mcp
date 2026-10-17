@@ -44,3 +44,13 @@ def test_needs_replacing_names_what_it_dropped(repo):
     code, out, err = run_cli(repo, "update", "T", "--needs", "C")
     assert code == 0, err
     assert "dropped" in out and "A" in out and "B" in out
+
+
+def test_add_and_remove_tags_and_tags_replace_names_the_dropped(repo):
+    _tasks(repo)
+    assert run_cli(repo, "update", "T", "--tags", "x,y")[0] == 0
+    assert run_cli(repo, "update", "T", "--add-tags", "z", "--remove-tags", "x")[0] == 0
+    assert _items(repo)["T"].tags == ["y", "z"]
+    code, out, err = run_cli(repo, "update", "T", "--tags", "q")
+    assert code == 0, err
+    assert "dropped" in out and "y" in out and "z" in out
