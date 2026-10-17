@@ -1645,6 +1645,10 @@ def _name_the_item(
     it = st.items.get(item)
     lease = it.lease if it else None
     if lease is None or not lease.live(time.time(), cfg.lease.grace_s):
+        if it is not None and it.state not in ("done", "abandoned"):
+            say(
+                f"→ note: {item} has no live lease: this review is recorded against it all the same."
+            )
         return extra
     me = ID.resolve(repo, cfg, agent).id
     if me == lease.holder:
