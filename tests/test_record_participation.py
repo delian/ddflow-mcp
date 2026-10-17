@@ -323,3 +323,14 @@ def test_a_mixed_kind_request_lists_a_declared_record_once_and_a_legacy_kind_as_
         "rows"
     ]
     assert [r["id"] for r in rows if r["kind"] == "rule"].count("r-torque") == 1
+
+
+def test_a_definition_kind_with_its_own_source_is_listed_by_it_alone(proj, run_cli):
+    out = R.record_add(
+        proj, R.RULE, "r-torque2", {"title": "Torque wrench rule", "content": WORDS}, answer=None
+    )
+    assert out.exit == O.OK, out.reason
+    rows = json.loads(run_cli(proj, "--json", "search", "--kind", "rule", "torque wrench")[1])[
+        "rows"
+    ]
+    assert [r["id"] for r in rows if r["kind"] == "rule"] == ["r-torque2"]
