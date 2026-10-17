@@ -34,18 +34,23 @@ a `RecordKind`.
 
 from __future__ import annotations
 
+import string
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+import ddflow.api.defs as DEFS
+
 from ..core import defs as D
 from ..core import outcome as O
+from ..core import participation as PA
+from ..core import provenance as PV
 from ..core import rank, textsim
 from ..core.textcut import clip
+from ..services.export.safe import redact_text
 from ..services.searchcore import SearchError, check_regex
-from . import _dedupe as DD
-from . import defs as DEFS
 from ._base import _load
 
 #: The verbs, in the order a surface lists them: the seven of a record's everyday use, then
@@ -104,6 +109,30 @@ class FieldSpec:
 
 
 @dataclass(frozen=True)
+class ExportSpec:
+    """How a kind's records are exported as chunks (B-rc-rag-export): the fields that are the
+    chunk's text, the fields kept as its metadata, and a title template (``{title} ({scope})``;
+    ``{id}`` and ``{status}`` are always there)."""
+
+    text: tuple[str, ...] = ()
+    meta: tuple[str, ...] = ()
+    title: str = "{title}"
+
+
+@dataclass(frozen=True)
+class FeedSpec:
+    """How a kind's changes enter the change feed (B-rc-changes): ``binding`` ones must be
+    acknowledged, the others inform; ``summary`` is the one-line template."""
+
+    binding: bool = False
+    summary: str = "{title}"
+
+
+def _placeholders(template: str) -> list[str]:
+    return [name for _lit, name, _spec, _conv in string.Formatter().parse(template) if name]
+
+
+@dataclass(frozen=True)
 class RecordKind:
     """What one family of records is, declared once.
 
@@ -130,6 +159,25 @@ class RecordKind:
     #: A verb the kind does not offer, with WHY (a proposal is never removed: reject and
     #: expire are its tombstones). B-rc-conformance requires one for every verb not offered.
     declined: Mapping[str, str] = field(default_factory=dict)
+    # -- participation, DECLARED here and derived elsewhere: a kind that says so is found
+    # by `ddflow search --kind <name>`, recalled under its label and read as an MCP resource
+    # with no code of its own (RC1, RC4, RC7). The defaults are the ones a new kind wants.
+    #: Searchable by `ddflow search` (a definition kind with a hand-written source is not
+    #: searched twice).
+    search: bool = True
+    #: Recallable: `recall` shows at most ``recall_cap`` of its ACTIVE records under the label
+    #: ``NAME``, with ``recall_hint`` as the line telling the reader what to do with one.
+    recall: bool = True
+    recall_hint: str = ""
+    recall_cap: int = PA.DEFAULT_RECALL_CAP
+    #: An MCP resource pair: ``ddflow://records/<name>`` and ``ddflow://records/<name>/<id>``.
+    resource: bool = True
+    #: The fields that say where a record applies (globs, categories, gates, tags, an
+    #: ``always`` flag): consumed by B-rc-context. Inert here.
+    applies: tuple[str, ...] = ()
+    #: Export (B-rc-rag-export) and change-feed (B-rc-changes) declarations. Inert here.
+    export: ExportSpec | None = None
+    feed: FeedSpec | None = None
     #: ``weakening(before, after)``: why ``after`` is weaker than ``before`` (lower
     #: enforcement, a widened override, a guard removed), or "". A merge refuses to weaken
     #: without ``--allow-weaken``.
@@ -144,12 +192,50 @@ class RecordKind:
             raise ValueError(f"record kind {self.name!r}: no such field(s) {', '.join(missing)}")
         if bad := [v for v in (*self.verbs, *self.ops, *self.declined) if v not in VERBS]:
             raise ValueError(f"record kind {self.name!r}: unknown verb {bad[0]!r}")
+        self._check_declarations(set(names))
         if self.ops and not self.ops.keys() <= set(self.verbs):
             raise ValueError(f"record kind {self.name!r}: ops for a verb that is not offered")
         if bad := [v for v, why in self.declined.items() if not str(why).strip()]:
             raise ValueError(f"record kind {self.name!r}: declining {bad[0]!r} needs a reason")
         if not self.ops and self.def_kind not in D.DEF_KINDS:
             raise ValueError(f"record kind {self.name!r}: {self.def_kind!r} is not a def kind")
+
+    def _check_declarations(self, names: set[str]) -> None:
+        """A name in ``applies``, ``export`` or ``feed`` that is not a field (or ``id`` /
+        ``status`` in a template) is refused at declaration, like a bad column."""
+        named = {"applies": set(self.applies)}
+        known = names | {"id", "status"}
+        if self.export is not None:
+            named["export"] = {*self.export.text, *self.export.meta}
+            templates = {"export title": self.export.title}
+        else:
+            templates = {}
+        if self.feed is not None:
+            templates["feed summary"] = self.feed.summary
+        for what, used in named.items():
+            if missing := sorted(used - names):
+                raise ValueError(
+                    f"record kind {self.name!r}: {what} names no such field(s) {', '.join(missing)}"
+                )
+        for what, template in templates.items():
+            try:
+                bad = sorted(set(_placeholders(template)) - known)
+            except ValueError as exc:
+                raise ValueError(
+                    f"record kind {self.name!r}: {what} is not a template: {exc}"
+                ) from None
+            if bad:
+                raise ValueError(
+                    f"record kind {self.name!r}: {what} names no such field(s) {', '.join(bad)}"
+                )
+        if self.recall_cap < 1:
+            raise ValueError(f"record kind {self.name!r}: recall_cap must be at least 1")
+
+    @property
+    def stored_kind(self) -> bool:
+        """Whether its records are definitions (`core.defs`), so search, recall and resources
+        can read them; a family whose records live elsewhere supplies its own."""
+        return self.def_kind in D.DEF_KINDS
 
     def field(self, name: str) -> FieldSpec | None:
         return next((f for f in self.fields if f.name == name), None)
@@ -177,7 +263,26 @@ def declare(kind: RecordKind) -> RecordKind:
     if held is not None and held != kind:
         raise ValueError(f"record kind {kind.name!r} is already declared")
     KINDS[kind.name] = kind
+    if kind.stored_kind:
+        PA.declare(
+            PA.Declared(
+                name=kind.name,
+                def_kind=kind.def_kind,
+                title=kind.title,
+                text=lambda fields, _k=kind: _text(_k, fields),
+                search=kind.search,
+                recall=kind.recall,
+                recall_hint=kind.recall_hint,
+                recall_cap=kind.recall_cap,
+            )
+        )
     return kind
+
+
+def forget(name: str) -> None:
+    """Undeclare ``name`` (a throwaway kind of a test)."""
+    KINDS.pop(name, None)
+    PA.forget(name)
 
 
 RULE = declare(
@@ -201,6 +306,10 @@ RULE = declare(
         aliases=("rules",),
         verbs=_EVERYDAY,
         declined={v: _UNWIRED for v in VERBS if v not in _EVERYDAY},
+        # rules keep their own search source, and are not yet recalled or served as resources
+        # (their output is pinned); B-rules-onto-record-surface turns these on
+        recall=False,
+        resource=False,
     )
 )
 
@@ -619,3 +728,82 @@ def record_search(
         {**_row(kind, r), "score": round(sc, 4) if mode == "ranked" else None} for sc, r in hits
     ]
     return _page(ev, kind, rows, n, query=query, mode=mode, filters=filters, searched=len(pool))
+
+
+# -- MCP resources, derived from the descriptor (RC4) --------------------------------
+
+#: A resource URI is ``ddflow://records/<kind>`` (the list) or ``.../<kind>/<id>`` (one).
+RESOURCE_PREFIX = "ddflow://records/"
+#: Rows the list resource shows (newest first), and characters of one field in either.
+RESOURCE_ROWS = 50
+RESOURCE_TEXT = 600
+
+
+def _resource_kinds() -> dict[str, RecordKind]:
+    return {k.name: k for k in KINDS.values() if k.resource and k.stored_kind}
+
+
+def record_resource_listing() -> list[dict[str, str]]:
+    """What ``resources/list`` says of each kind that is served as a resource: the list URI,
+    with the pattern of the per-record one in its description."""
+    return [
+        {
+            "uri": f"{RESOURCE_PREFIX}{k.name}",
+            "name": f"{k.name.capitalize()} records",
+            "description": f"{k.summary[:1].upper()}{k.summary[1:]}. "
+            f"Newest first; {RESOURCE_PREFIX}{k.name}/{{id}} reads one with its history.",
+            "mimeType": "text/markdown",
+        }
+        for k in _resource_kinds().values()
+    ]
+
+
+def _resource_text(kind: RecordKind, rec: Any, full: bool) -> str:
+    """One record as a line (``full`` False) or whole: its fields as DATA inside the fence,
+    each cut to `RESOURCE_TEXT`, then its status, successor chain and history digest."""
+    head = f"{rec.id}  [{rec.status}] {str(rec.fields.get(kind.title, ''))[:120]}".rstrip()
+    if not full:
+        return f"- {' '.join(head.split())}"
+    body = "; ".join(
+        f"{n}: {clip(' '.join(str(v).split()), RESOURCE_TEXT)}" for n, v in rec.fields.items()
+    )
+    origin = PV.Origin(PV.IMPORTED if rec.source else PV.AGENT, rec.by, rec.source)
+    out = [f"# {kind.name} {rec.id}", f"status: {rec.status}"]
+    if rec.successor:
+        out.append(f"{rec.status} by: {rec.successor}")
+    if rec.merged_from:
+        out.append(f"absorbed: {', '.join(rec.merged_from)}")
+    out.append(PV.fence(kind.name, rec.id, body, origin))
+    events = [h["event"] for h in rec.history]
+    out.append(
+        f"history: {len(events)} entries, first {rec.at[:10]}, last {(rec.updated_at or rec.at)[:10]} "
+        f"({', '.join(events[-5:])}); `ddflow {kind.name} history {rec.id} --diff` has them all"
+    )
+    return "\n".join(out)
+
+
+def record_resource_read(repo: Path, uri: str, *, agent: str = "") -> str | None:
+    """The text of a record resource, redacted, or None when ``uri`` names no served kind or
+    record. The list is bounded (`RESOURCE_ROWS`, newest first) and says how many it holds."""
+    kinds = _resource_kinds()
+    if not uri.startswith(RESOURCE_PREFIX):
+        return None
+    name, _sep, rid = uri[len(RESOURCE_PREFIX) :].partition("/")
+    kind = kinds.get(name)
+    if kind is None:
+        return None
+    _log, cfg, st = _load(repo, agent)
+    if rid:
+        rec = _exists(st, kind, rid)
+        return None if rec is None else redact_text(_resource_text(kind, rec, True), cfg).text
+    recs = sorted(
+        _records(st, kind, everything=True),
+        key=lambda r: (r.updated_at or r.at, r.id),
+        reverse=True,
+    )
+    lines = [
+        f"# {kind.name} records",
+        f"{len(recs)} in all; newest {min(len(recs), RESOURCE_ROWS)}:",
+    ]
+    lines += [_resource_text(kind, r, False) for r in recs[:RESOURCE_ROWS]]
+    return redact_text("\n".join(lines), cfg).text
