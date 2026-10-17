@@ -19,10 +19,12 @@ from ..infra import git as G
 # One conflict hunk of `git merge-file -L ours -L base -L theirs` (no diff3 base section).
 _HUNK = re.compile(r"<<<<<<< ours\n(.*?)=======\n(.*?)>>>>>>> theirs\n", re.S)
 # A number the README states as a count of generated things ("320 knobs", "5 of the 320").
-_DIGITS = re.compile(r"\d+(?= (?:knobs|tools|commands|sections|flags)\b)|(?<=of the )\d+(?=\)| knobs\b)")
+_DIGITS = re.compile(
+    r"\d+(?= (?:knobs|tools|commands|sections|flags)\b)|(?<=of the )\d+(?=\)| knobs\b)"
+)
 
 
-def _counts_only(m: "re.Match[str]") -> str:
+def _counts_only(m: re.Match[str]) -> str:
     """A hunk whose two sides differ only in a stated count of generated things ("320 knobs" against
     "323 knobs"): our side, which the recipe re-records after the merge (Be71986b1d3)."""
     ours, theirs = m.group(1), m.group(2)
