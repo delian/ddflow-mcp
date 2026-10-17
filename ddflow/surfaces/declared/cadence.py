@@ -11,7 +11,6 @@ from ...api import pin_files as PF  # not re-exported by `api`: `_api().pins_reg
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
-
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("cadence",),
