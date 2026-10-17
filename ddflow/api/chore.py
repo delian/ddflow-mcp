@@ -155,6 +155,8 @@ def _bring_back(repo: Path, wt: W.Worktree, todo: list[str]) -> None:
         if src.exists():
             (repo / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, repo / rel)
+        else:  # the chore was a deletion
+            (repo / rel).unlink(missing_ok=True)
 
 
 def _skip_gates(repo: Path, cfg, st, item: str, todo: list[str], note: str, agent: str):
