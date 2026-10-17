@@ -20,3 +20,22 @@ def test_task_add_without_resources_leaves_none(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "task", "add", "G1", "--globs", "g.py")[0] == 0
     assert _items(repo)["G1"].resources == []
+
+
+def test_ddflow_task_add_takes_resources_over_mcp(repo):
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    res = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_task_add",
+                "arguments": {"id": "G2", "globs": "g.py", "resources": "gpu:1"},
+            },
+        }
+    )["result"]
+    assert not res.get("isError"), res
+    assert _items(repo)["G2"].resources == ["gpu:1"]

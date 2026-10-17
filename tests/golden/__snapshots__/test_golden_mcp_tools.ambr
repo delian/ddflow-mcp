@@ -3352,7 +3352,7 @@
          },
          "parent": {
           "type": "string",
-          "description": "Owning phase id, OR another TASK's id, which makes this a SUB-TASK with its own globs and dependencies, run in parallel with its siblings. Same field as `phase` (the CLI has both names)."
+          "description": "Owning phase id, or a TASK id (makes this a SUB-TASK with its own globs and needs, run parallel to its siblings). Same field as `phase`."
          },
          "title": {
           "type": "string",
@@ -3374,13 +3374,17 @@
           "type": "string",
           "description": "Comma-separated tags."
          },
+         "resources": {
+          "type": "string",
+          "description": "Resources it runs on: gpu:4,vllm."
+         },
          "priority": {
           "type": "integer",
           "description": "Lower is offered first (default 100)."
          },
          "line": {
           "type": "string",
-          "description": "Release line this lands on (a name from [flow.lines], or the current line). Omit for the current line; tasks inherit a phase's line."
+          "description": "Release line (a [flow.lines] name). Omit for the current one; tasks inherit a phase's."
          },
          "lines": {
           "type": "string",
