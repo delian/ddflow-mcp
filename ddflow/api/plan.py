@@ -111,8 +111,8 @@ def _hunt(repo: Path, log, cfg: Config, st: State, own: set[str]):
 
 
 def _queue(repo: Path, agent: str = ""):
-    """(log, cfg, state), or None when the queue cannot be read: the checks that need it
-    are then left out rather than the plan refused."""
+    """(log, cfg, state), or None when the queue cannot be read: the caller refuses then
+    ("could not tell" is never a clean plan)."""
     try:
         return _load(repo, agent)
     except (OSError, ValueError, LookupError):
@@ -330,14 +330,6 @@ def plan_confirm(
     when nothing of the plan is waiting."""
     log, _cfg, st = _load(repo, agent)
     waiting = PA.proposed_by(st, plan_id)
-    if waiting and yes and reason.strip():
-        with log.transaction():
-            st = L._fold(log)  # decided under the lock: a second confirm finds nothing
-            waiting = PA.proposed_by(st, plan_id)
-            for iid in waiting:
-                log.append("item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {reason}"})
-        if waiting:
-            return O.ok("plan.confirm", plan=plan_id, released=waiting)
     if not waiting:
         return O.nothing(
             "plan.confirm", f"nothing proposed by plan {plan_id} is waiting", plan=plan_id
@@ -350,4 +342,11 @@ def plan_confirm(
             plan=plan_id,
             waiting=waiting,
         )
-    return O.refused("plan.confirm", "needs --yes and --reason", plan=plan_id)
+    with log.transaction():
+        st = L._fold(log)  # decided under the lock: a second confirm finds nothing
+        waiting = PA.proposed_by(st, plan_id)
+        for iid in waiting:
+            log.append("item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {reason}"})
+    if not waiting:
+        return O.nothing("plan.confirm", f"plan {plan_id} was confirmed meanwhile", plan=plan_id)
+    return O.ok("plan.confirm", plan=plan_id, released=waiting)
