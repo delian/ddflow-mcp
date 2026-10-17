@@ -37,6 +37,7 @@ def _check(cmd: str, env: dict | None = None, **kw):
         "true; git stash pop",
         "echo hi | xargs pkill",
         "sudo -u root pkill foo",
+        "pkill -f worker # ddflow review --force --reason",
         "nice -n 5 pkill foo",
         "env -u HOME pkill foo",
         "xargs -n 1 pkill",
