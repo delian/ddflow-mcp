@@ -153,3 +153,73 @@ def test_a_lone_closing_marker_is_reported_and_not_called_prose(tmp_path):
     repo = _repo(tmp_path, "intro\nours\n=======\ntheirs\n>>>>>>> main\n")
     problem = PN.regenerate(repo, Config()).problem
     assert "line 5" in problem and "do not pair up" in problem and "prose" not in problem
+
+
+#: A recipe that owns a count in the prose: `check` wants "9 knobs", `regen` writes it.
+COUNT = (
+    '[[pin]]\nname = "count"\nfiles = ["README.md"]\n'
+    f'check = ["{sys.executable}", "-c", "import sys; t = open(\'README.md\').read(); '
+    f"sys.exit(0 if '<<<<' not in t and '308' not in t and '310' not in t else 1)\"]\n"
+    f'regen = ["{sys.executable}", "-c", "import re; t = open(\'README.md\').read(); '
+    "open('README.md', 'w').write(re.sub(r'3[01][08]', '9', t))\"]\n"
+)
+
+
+def _count_repo(tmp_path: Path, readme: str) -> Path:
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(COUNT)
+    (tmp_path / "README.md").write_text(readme)
+    return tmp_path
+
+
+def test_a_prose_count_the_generators_write_is_decided_by_them(tmp_path):
+    readme = (
+        "intro\n"
+        + _block("good")
+        + _conflict("the rest of the 308 knobs\n", "the rest of the 310 knobs\n")
+        + "outro\n"
+    )
+    repo = _count_repo(tmp_path, readme)
+    rep = PN.regenerate(repo, Config())
+    assert not rep.problem and not rep.failed and rep.resolved
+    assert (repo / "README.md").read_text() == "intro\n" + _block(
+        "good"
+    ) + "the rest of the 9 knobs\noutro\n"
+
+
+def test_prose_that_quotes_the_markers_does_not_open_a_region(tmp_path):
+    """A line that merely mentions `<!-- ddflow:begin x -->` is not a region: the conflict
+    after it is prose, and is refused unless the generators decide it."""
+    quoted = "Use `<!-- ddflow:begin doc=<kind> -->` and `<!-- ddflow:end doc=<kind> -->` here.\n"
+    res = PC.settle("README.md", _block("a") + quoted + _conflict("mine\n", "theirs\n"))
+    assert res.refused == [5]
+
+
+def test_a_differing_number_the_generators_do_not_own_is_still_refused(tmp_path):
+    readme = (
+        "intro\n"
+        + _block("good")
+        + _conflict("timeout 30 seconds\n", "timeout 60 seconds\n")
+        + "outro\n"
+    )
+    repo = _count_repo(tmp_path, readme)
+    rep = PN.regenerate(repo, Config())
+    assert "prose" in rep.problem and "line 5" in rep.problem
+    assert (repo / "README.md").read_text() == readme  # put back as it was
+
+
+def test_a_malformed_file_does_not_hide_a_decidable_conflict_elsewhere(tmp_path):
+    readme = (
+        "intro\n"
+        + _block("good")
+        + _conflict("the rest of the 308 knobs\n", "the rest of the 310 knobs\n")
+    )
+    repo = _count_repo(tmp_path, readme)
+    (repo / "guide.md").write_text("<<<<<<< HEAD\nnever closed\n")
+    toml = (repo / ".ddflow" / "pins.toml").read_text()
+    (repo / ".ddflow" / "pins.toml").write_text(
+        toml + toml.replace('name = "count"', 'name = "guide"').replace("README.md", "guide.md")
+    )
+    rep = PN.regenerate(repo, Config())
+    assert "guide.md" in rep.problem and "do not pair up" in rep.problem
+    assert "9 knobs" in (repo / "README.md").read_text()  # the count was still decided
