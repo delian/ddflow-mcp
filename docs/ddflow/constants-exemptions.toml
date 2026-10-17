@@ -135,6 +135,8 @@
 "ddflow/core/flowsignals.py:MERGE_WINDOW_S" = "flowsignals.merge_window_s"
 "ddflow/services/docscheck_extract.py:MAX_SOURCE_BYTES" = "docs.max_source_bytes"
 "ddflow/services/flowstate.py:KEEP_S" = "flowstate.keep_s"
+"ddflow/services/testidents.py:_PHRASE_MIN" = "testidents.phrase_min"
+"ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
 "ddflow/config_sections/bugs.py:_MIN_BUNDLE" = "the floor [bugs] repro_max_bytes accepts: below it not even the bundle's skeleton fits"
