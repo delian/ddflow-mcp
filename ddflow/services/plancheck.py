@@ -122,7 +122,9 @@ def wide_globs(plan: Mapping[str, Any]) -> list[Finding]:
     ]
 
 
-def unknown_deps(plan: Mapping[str, Any]) -> list[Finding]:
+def unknown_deps(plan: Mapping[str, Any], known: Iterable[str] = ()) -> list[Finding]:
+    """A `needs` that is neither in the plan nor in ``known`` (the queue's own ids)."""
+    outside = set(known)
     return [
         Finding(
             "unknown_dep",
@@ -132,7 +134,7 @@ def unknown_deps(plan: Mapping[str, Any]) -> list[Finding]:
         )
         for iid in sorted(plan)
         for dep in _needs(plan[iid])
-        if dep not in plan
+        if dep not in plan and dep not in outside
     ]
 
 
@@ -256,18 +258,21 @@ def check(
     *,
     tracked: Iterable[str] | None = None,
     similar: Callable[[str, str], list[str]] | None = None,
+    known: Iterable[str] = (),
     cap: int | None = None,
     max_dirs: int = 3,
 ) -> Report:
     """Every check above, plus the waves the plan would run in.
 
     The waves are computed even when there are findings: a plan with one wide glob is still
-    worth seeing laid out, and the two answers are read together.
+    worth seeing laid out, and the two answers are read together. ``known`` is the ids a
+    `needs` may name besides the plan's own: a plan filed into a queue depends on what is
+    already there.
     """
     report = Report(
         findings=[
             *wide_globs(plan),
-            *unknown_deps(plan),
+            *unknown_deps(plan, known),
             *cycles(plan),
             *overlaps(plan, tracked=tracked),
             *missing_acceptance(plan),
