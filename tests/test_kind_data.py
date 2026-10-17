@@ -124,3 +124,12 @@ def test_every_packaged_descriptor_loads():
 def test_register_kind_never_redefines_a_builtin():
     D.register_kind("rule", "something else")
     assert D.DEF_KINDS["rule"].startswith("a project rule")
+
+
+@pytest.mark.parametrize("first", ["ddflow.api.record_kind_data", "ddflow.api.records"])
+def test_either_module_imports_first(first):
+    import subprocess
+    import sys
+
+    done = subprocess.run([sys.executable, "-c", f"import {first}"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr

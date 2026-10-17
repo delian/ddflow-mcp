@@ -12,17 +12,21 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..core import defs as D
 from ..core import kinddata as KD
-from . import records as R
+
+if TYPE_CHECKING:
+    from . import records as R
 
 KINDS_DIR = Path(__file__).resolve().parent.parent / "templates" / "kinds"
 
 
 def kind_from_data(desc: dict[str, Any]) -> R.RecordKind:
     """Build the `RecordKind` for a parsed descriptor (`core.kinddata.parse`)."""
+    from . import records as R  # late: records loads its own data kinds at import
+
     args = dict(desc)
     args["fields"] = tuple(R.FieldSpec(**f) for f in args["fields"])
     rest = args.pop("declined_other", "")
@@ -53,4 +57,6 @@ def packaged() -> Iterator[tuple[str, str]]:
 def load_packaged(name: str) -> R.RecordKind:
     """Declare the packaged kind ``name`` and return it."""
     text = (KINDS_DIR / f"{name}.toml").read_text(encoding="utf-8")
+    from . import records as R
+
     return R.declare(parse_kind(text, source=f"{name}.toml"))
