@@ -75,17 +75,20 @@ def whole(repo: Path, rel: str) -> bool:
 def commit_shards(
     repo: Path, reason: str, template: str = "events: {reason}", *, hold=None
 ) -> tuple[str, str]:
-    """(commit sha, note): the sha when shards were committed; the note says why not, or
-    which shards were left out as half-written ("" when there was nothing to say).
+    """(commit sha, note): the sha when shards were committed; the note says why not, or which
+    shards were left out as half-written, or that HEAD moved ("" when there was nothing to say).
 
     ``hold`` is a context manager factory (the log's `transaction`). Under it the shards are
-    read ONCE, each checked to hold whole lines, and written into a private index; the
-    `git commit` of that index -- and the project's hooks it runs, which can take minutes
-    (a pre-commit suite) -- happens outside it. The commit is therefore of exactly the bytes
+    read ONCE, each checked to hold whole lines. Then, outside it, a private index is built on
+    HEAD as it is at that moment with exactly those bytes, and committed -- with the project's
+    hooks, which can take minutes (a pre-commit suite). The commit is therefore of the bytes
     that were checked, whatever a writer appends meanwhile (that line waits for the next
     door), and no other ddflow command waits for the hooks: holding the append lock that long
     made every one of them time out with a "wedged agent" message
-    (merge-holds-event-lock-during-ci).
+    (merge-holds-event-lock-during-ci). A commit that lands while the hooks run cannot be
+    reverted by this one: git takes the parent when the commit begins and refuses to move HEAD
+    if it is no longer there ("cannot lock ref"), which is reported as a refusal; the few
+    milliseconds before the commit begins are checked afterwards (the note says so).
 
     Two doors would still move HEAD together, so the commit and the resetting of the shared
     index sit under a lock of their own (in the git directory) that only event-log commits
