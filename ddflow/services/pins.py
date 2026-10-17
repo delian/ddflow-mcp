@@ -195,7 +195,8 @@ def regenerate(
 
     ``after_merge`` is the post-merge hook's run: only the recipes that allow it, each command
     bounded by `[pins].after_merge_timeout_s`; one that cannot finish in time is
-    ``unavailable``, never failed. Two runs never overlap in one tree: the second is
+    ``unavailable``, never failed (a run asked for on the command line keeps `timeout_s` and
+    reports it failed, as it always has). Two runs never overlap in one tree: the second is
     ``unavailable`` too, because a recipe re-records files the other is reading or writing
     (README.md left with thousands of duplicated lines, snapshots deleted: Bf965d87b66)."""
     rep = Report()
@@ -224,6 +225,7 @@ def regenerate(
     limit = cfg.pins.timeout_s
     if after_merge:
         limit = min(limit, cfg.pins.after_merge_timeout_s)
+    soft = after_merge  # only the hook reports a timeout as unavailable; a run asked for fails
     held = contextlib.ExitStack()
     try:
         held.enter_context(_exclusive(repo, write=not check))
@@ -232,7 +234,7 @@ def regenerate(
         rep.pins.extend(PinState(r.name, r.files, unavailable=why) for r in chosen)
         return rep
     with held:
-        return _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit)
+        return _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit, soft)
 
 
 def _exclusive(repo: Path, *, write: bool):
@@ -243,7 +245,9 @@ def _exclusive(repo: Path, *, write: bool):
     return file_lock(Path(git_dir.out.strip()) / "ddflow-pins.lock", 0)
 
 
-def _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit) -> Report:
+def _regenerate_locked(
+    repo, cfg, chosen, rep, check, tick, on_progress, limit, soft=False
+) -> Report:
     if not check and _unsettled(repo, chosen, rep, limit, tick):
         return rep
     shown = threading.Lock()  # the checks run on threads: one line is written at a time
@@ -262,7 +266,7 @@ def _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit) 
                 fn()
 
         tick = (locked, every)
-    states = _run_all(repo, cfg, chosen, check, tick, say, limit)
+    states = _run_all(repo, cfg, chosen, check, tick, say, limit, soft)
     rep.pins.extend(states)
     return rep
 
@@ -297,7 +301,9 @@ def _pmap(fn, recipes: list[Recipe], workers: int, say, every: int, what: str) -
     return [out[i] for i in range(len(recipes))]
 
 
-def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> list[PinState]:
+def _run_all(
+    repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit, soft=False
+) -> list[PinState]:
     """The checks at once (``[pins].parallel``: they only read), the re-recordings one after
     another (a suite refuses to run while another recipe changes the working tree), and the
     checks of what was re-recorded at once again."""
@@ -312,7 +318,7 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         st = states[r.name]
         st.stale, st.output = not ok, ("" if ok else _tail(c))
         st.seconds = time.monotonic() - began
-        if c.timed_out:  # not answered: neither current nor stale
+        if c.timed_out and soft:  # not answered: neither current nor stale
             st.stale, st.output = False, ""
             st.unavailable = f"the check did not finish in {limit}s (timed out)"
             say(f"pins: {r.name}: unavailable, {st.unavailable}")
@@ -342,7 +348,7 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         say(f"pins: {r.name}: re-recording")
         began = time.monotonic()
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        if done.timed_out:
+        if done.timed_out and soft:
             states[r.name].unavailable = (
                 f"the regeneration did not finish in {limit}s (timed out): its files may be "
                 f"half written, check `git status` for {', '.join(r.files)}"
