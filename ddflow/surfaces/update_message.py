@@ -19,7 +19,7 @@ def update_message(item: str, data: dict) -> str:
         # claim with only the new paths otherwise drops the old ones from every
         # conflict check without a word (Bd8038b08a1).
         msg += f"\n  globs now: {', '.join(data['fields']['globs']) or '(none)'}"
-        if data["globs_dropped"]:
+        if data.get("globs_dropped"):
             msg += (
                 f"\n  dropped:   {', '.join(data['globs_dropped'])}  (--globs replaces "
                 f"the list; pass every glob, old and new, to keep them)"
