@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.after_merge_timeout_s"
+new = "120"
+why = "The post-merge pins hook bounds each recipe command by this many seconds and reports one that does not finish as unavailable, so a merge never waits for a test suite."
+impact = "additive"

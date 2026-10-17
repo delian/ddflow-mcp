@@ -9,6 +9,7 @@ regenerates the stale pins and folds them into the merge commit.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from ..config import Config
@@ -69,27 +70,43 @@ def _fold_into_merge(repo: Path, files: list[str], done: list[str]) -> str:
     return f"pins regenerated, not committed ({new.err}): {', '.join(done)}"
 
 
+def _say(line: str) -> None:
+    """Progress from the hook goes to stderr, where git shows a hook's output."""
+    print(line, file=sys.stderr, flush=True)
+
+
 def after_merge(repo: Path, cfg: Config) -> str:
     """Post-merge: regenerate; fold the result into the merge commit when only pin files
     changed. Returns one line saying what happened."""
     mode = cfg.pins.after_merge
     if mode == "off":
         return ""
-    rep = regenerate(repo, cfg)
-    if rep.problem or not rep.pins:
-        return ""
+    rep = regenerate(repo, cfg, after_merge=True, on_progress=_say)
+    cannot = (
+        "pins unavailable (not checked, nothing recorded as stale or failed): "
+        + "; ".join(f"{p.name}: {p.unavailable}" for p in rep.unavailable)
+        if rep.unavailable
+        else ""
+    )
+    if rep.problem:  # a run that could not start says so; silence reads as "all current"
+        return "; ".join(filter(None, [f"pins: {rep.problem}", cannot]))
+    if not rep.pins:
+        return ""  # nothing the hook may run
     if rep.failed:
-        return "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
+        failed = "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
+        return "; ".join(filter(None, [failed, cannot]))
     done = [p.name for p in rep.pins if p.regenerated]
     if not done:
-        return ""
+        return cannot
     files = pin_files(repo, cfg)
     paths = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths() or []
     own = tuple(f.rstrip("/") for f in files)
     merge = G.run(repo, "rev-parse", "-q", "--verify", "HEAD^2").ok
     if mode == "amend" and merge and paths and all(p.startswith(own) for p in paths):
-        return _fold_into_merge(repo, files, done)
-    return f"pins regenerated, not committed: {', '.join(done)}; commit them"
+        return "; ".join(filter(None, [_fold_into_merge(repo, files, done), cannot]))
+    return "; ".join(
+        filter(None, [f"pins regenerated, not committed: {', '.join(done)}; commit them", cannot])
+    )
 
 
 def _set_driver_config(repo: Path, line=None) -> list[str]:
