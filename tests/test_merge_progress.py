@@ -56,3 +56,42 @@ def test_the_progress_names_the_check_and_the_knob_that_bounds_it(repo, monkeypa
     assert code == OK, out + err
     assert "post-merge check starting" in err and "[ci].timeout_s" in err, err
     assert "post-merge check finished (passed)" in err, err
+
+
+def test_the_progress_arrives_while_the_post_merge_check_is_still_running(repo, monkeypatch):
+    """Not buffered to the end: the line naming the check is read from the live process
+    while its check (a 4 s command) has not finished."""
+    import os
+    import time
+
+    _landing(repo, monkeypatch)
+    run_cli(repo, "config", "--set", "ci.command", "sleep 4; echo ok")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ci command", "--no-verify")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    p = subprocess.Popen(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", "alpha", "merge", "T1"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    try:
+        seen = ""
+        deadline = time.monotonic() + 60
+        while "post-merge check starting" not in seen and time.monotonic() < deadline:
+            seen += p.stderr.readline()
+        assert "post-merge check starting" in seen, seen
+        assert p.poll() is None, "the check had already finished: the line was buffered to the end"
+    finally:
+        out, err = p.communicate(timeout=120)
+    assert p.returncode == OK, out + err
+    assert "post-merge check finished (passed)" in seen + err
+
+
+def test_json_output_is_unchanged_and_progress_stays_on_stderr(repo, monkeypatch):
+    _landing(repo, monkeypatch)
+    code, out, err = run_cli(repo, "--json", "merge", "T1", agent="alpha")
+    assert code == OK, out + err
+    assert json.loads(out)["id"] == "T1"  # stdout is still exactly the JSON document
+    assert "merged T1 into main" in err and "merged T1 into main" not in out
