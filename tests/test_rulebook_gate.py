@@ -165,6 +165,18 @@ def test_a_merge_of_an_earlier_base_tip_may_conclude_after_the_base_moved(forked
     assert r.returncode == 0, f"the staged merge was refused: {r.stderr}"
 
 
+def test_a_side_branch_the_base_already_merged_is_not_the_base(forked):
+    repo, wt = forked
+    _git(repo, "checkout", "-q", "-b", "side")
+    _land(repo, "src/side.py", "s = 1\n")
+    _git(repo, "checkout", "-q", "main")
+    assert _git(repo, "merge", "--no-ff", "-qm", "take side", "side").returncode == 0
+    _land(repo, "AGENTS.md", "# rules v2\n")
+    merge = _git(wt, "merge", "--no-commit", "--no-ff", "side")
+    assert merge.returncode == 0, merge.stderr
+    assert E.check_drift(repo, _cfg(), here=wt)[0] == 1
+
+
 def test_merging_something_other_than_the_base_is_not_exempt(forked):
     repo, wt = forked
     _git(repo, "checkout", "-q", "-b", "side")
