@@ -87,8 +87,8 @@ def commit_shards(
     made every one of them time out with a "wedged agent" message
     (merge-holds-event-lock-during-ci). A commit that lands while the hooks run cannot be
     reverted by this one: git takes the parent when the commit begins and refuses to move HEAD
-    if it is no longer there ("cannot lock ref"), which is reported as a refusal; the few
-    milliseconds before the commit begins are checked afterwards (the note says so).
+    if it is no longer there ("cannot lock ref"), which is reported as a refusal; the short span
+    before the commit begins (a `read-tree` and an `update-index`) is checked afterwards.
 
     Two doors would still move HEAD together, so the commit and the resetting of the shared
     index sit under a lock of their own (in the git directory) that only event-log commits
@@ -183,19 +183,25 @@ def _read_plan(repo: Path, reason: str, template: str):
 
 def _private_index(repo: Path, taken: dict[str, bytes], index: Path) -> tuple[str, str]:
     """(the commit it is built on, why not): ``taken`` written into the private ``index`` on top
-    of the commit HEAD names at this moment ("" for an unborn branch)."""
+    of the commit HEAD names at this moment ("" for an unborn branch).
+
+    The blobs are stored FIRST, one process each, and HEAD is read after them, so the span in
+    which a commit made by someone else can be missed is the `read-tree`, one `update-index`
+    and the start of the commit -- not a process per shard."""
+    entries = []
+    for rel, data in taken.items():
+        blob = W.git(repo, "hash-object", "-w", "--stdin", input=data)
+        if not blob.ok:
+            return "", f"git could not store {rel}"
+        entries.append(f"100644 {blob.out.strip()}\t{rel}\n")
     env = {"GIT_INDEX_FILE": str(index)}
     base = W.rev(repo, "HEAD")
     loaded = W.git(repo, "read-tree", *([base] if base else ["--empty"]), env=env)
     if not loaded.ok:
         return base, f"git read-tree failed: {loaded.err[-200:]}"
-    for rel, data in taken.items():
-        blob = W.git(repo, "hash-object", "-w", "--stdin", input=data)
-        if not blob.ok:
-            return base, f"git could not store {rel}"
-        spec = f"100644,{blob.out.strip()},{rel}"
-        if not W.git(repo, "update-index", "--add", "--cacheinfo", spec, env=env).ok:
-            return base, f"git could not stage {rel}"
+    staged = W.git(repo, "update-index", "--add", "--index-info", input="".join(entries), env=env)
+    if not staged.ok:
+        return base, f"git could not stage the shards: {staged.err[-200:]}"
     return base, ""
 
 

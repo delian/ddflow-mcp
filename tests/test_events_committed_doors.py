@@ -208,3 +208,29 @@ def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monke
     assert _git(repo, "log", "-1", "--format=%s") == "events: merge T1"
     assert "ci.result" in _git(repo, "show", "HEAD")
     assert EC.uncommitted_shards(repo) == []
+
+
+def test_a_commit_that_lands_just_before_ours_begins_is_reported(repo, monkeypatch):
+    """The one span the commit cannot protect (between the index being built and git beginning
+    the commit): HEAD moved, so the note says so instead of staying silent."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "HEAD moved" in note, (sha, note)
