@@ -73,7 +73,7 @@ def exemption(
 ) -> tuple[Exemption | None, str]:
     """(the exemption, "") when ``it`` is a chore the pipeline excuses from a reviewer, else
     (None, why not) -- "" when it never claimed to be one."""
-    if TAG not in [t.strip().lower() for t in it.tags]:
+    if it.kind != "task" or TAG not in [t.strip().lower() for t in it.tags]:
         return None, ""
     if not paths:
         return None, "its changed files could not be read, so it is not judged a chore"
@@ -100,10 +100,7 @@ def relative(repo: Path, name: str) -> str | None:
 def judge(
     state: State, cfg: Config, it: Item, paths: list[str] | None
 ) -> tuple[Exemption | None, str, list[str]]:
-    """(the exemption, its note for the completion event, the blockers it adds) for ``it``:
-    nothing for any kind but a task."""
-    if it.kind != "task":
-        return None, "", []
+    """(the exemption, its note for the completion event, the blockers it adds) for ``it``."""
     excused, why = exemption(state, cfg, it, paths)
     return excused, excused.note() if excused else "", [why] if why else []
 
