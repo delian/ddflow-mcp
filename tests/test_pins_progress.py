@@ -141,3 +141,21 @@ def test_a_re_recorded_pin_keeps_the_reason_it_was_stale(tmp_path):
     )
     (rep,) = PN.regenerate(tmp_path, _cfg()).pins
     assert rep.regenerated and rep.stale  # it WAS stale, and now is current
+
+
+def test_progress_lines_are_never_written_by_two_threads_at_once(tmp_path):
+    repo = _recipes(tmp_path, *[(f"p{i}", f"f{i}", "pass") for i in range(6)])
+    inside = []
+    overlaps = []
+
+    def slow_say(line: str) -> None:
+        import time
+
+        inside.append(line)
+        if len(inside) > 1:
+            overlaps.append(line)
+        time.sleep(0.01)
+        inside.pop()
+
+    PN.regenerate(repo, _cfg(parallel=6), on_progress=slow_say)
+    assert overlaps == []

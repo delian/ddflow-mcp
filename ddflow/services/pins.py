@@ -194,7 +194,13 @@ def regenerate(
     if not check and _unsettled(repo, chosen, rep):
         return rep
     limit = cfg.pins.timeout_s
-    say = on_progress or (lambda _line: None)
+    shown = threading.Lock()  # the checks run on threads: one line is written at a time
+
+    def say(line: str) -> None:
+        if on_progress:
+            with shown:
+                on_progress(line)
+
     if tick is not None:  # the recipes' threads renew the caller's lease one at a time
         lock = threading.Lock()
         fn, every = tick
