@@ -144,6 +144,23 @@ def test_scan_reads_the_pre_commit_config_slash_commands_and_driver_docs(tmp_pat
     }
 
 
+def test_a_pre_commit_hook_name_is_prose_only_its_entry_is_a_command(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n"
+        "  - repo: local\n"
+        "    hooks:\n"
+        "      - id: lease\n"
+        "        name: ddflow lease covers the staged paths\n"
+        "        description: ddflow item trailer (Phase / Phase-ships)\n"
+        "        entry: scripts/ddflow_hook.sh hooks check-commit\n"
+        "      - id: bad\n"
+        "        name: ddflow lease\n"
+        "        entry: ddflow gate bogus\n"
+    )
+    found = C.scan(tmp_path, VOCAB)
+    assert [(f.line, f.ref.text) for f in found] == [(10, "gate bogus")]
+
+
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
     (tmp_path / "AGENTS.md").write_text(
         _managed_md("rules/work-queue", "Run `ddflow nosuch` and `ddflow doc show`.\n")
