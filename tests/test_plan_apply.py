@@ -184,9 +184,10 @@ def test_a_removed_id_is_refused_up_front_so_nothing_is_half_filed(repo, tmp_pat
     run_cli(repo, "remove", "b")
     plan = _write(tmp_path)
 
-    code, out, err = run_cli(repo, "plan", "apply", plan)
+    code, out, err = run_cli(repo, "plan", "apply", plan, "--apply", "--hash", "any")
 
     assert code == 3, out + err
+    assert "already in the queue" in out + err
     assert run_cli(repo, "show", "a")[0] != 0
 
 
