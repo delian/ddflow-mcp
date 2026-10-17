@@ -136,6 +136,8 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     it = st.items.get(item)
     if it is None and item in st.bugs:
         return _show_bug(st, st.bugs[item], repo)
+    if it is None and item in st.research:
+        return _show_research(st, st.research[item])
     if it is None or it.removed:
         if it is not None:
             return O.failed(
@@ -162,6 +164,13 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             "addenda": addenda(st, item),
         },
     )
+
+
+def _show_research(st, note) -> O.Outcome:
+    """A research note id handed to `show`: the note, its verdict, and what was filed to
+    extend it (the `addenda`). The wire body (`item`) is the record itself."""
+    record = {**plain(note), "kind": "research", "state": note.verdict, **addenda(st, note.id)}
+    return O.ok("show", id=note.id, item=record, _render={"research": record})
 
 
 def _show_bug(st, bug, repo=None) -> O.Outcome:
