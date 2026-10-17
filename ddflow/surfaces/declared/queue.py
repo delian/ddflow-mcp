@@ -134,7 +134,10 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("task", "add"),
         tool="ddflow_task_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
+        flag_exempt={
+            **ANSWER_FLAG_EXEMPT,
+            "--resources": "CLI only: over MCP `ddflow_update` sets them (tools/list byte budget)",
+        },
         description="Add a task to a phase. ALWAYS set globs to the paths this task will write: "
         "they are what lets two agents work in parallel safely, and an unset glob "
         "means the conflict detector cannot protect you.",
@@ -151,6 +154,7 @@ COMMANDS: tuple[Command, ...] = (
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
             port_of=a.get("port_of", "") or "",
+            resources=a.get("resources", "") or "",
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
@@ -168,6 +172,13 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param("body", help="Detail and acceptance criteria.", cli_help=""),
+            Param(
+                "resources",
+                help="",
+                cli_help="physical resources the work RUNS on, as `ddflow update --resources` "
+                "takes them: 'gpu:4,vllm-fleet'",
+                cli_only=True,
+            ),
             Param(
                 "priority",
                 type="integer",
