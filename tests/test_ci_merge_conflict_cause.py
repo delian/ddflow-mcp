@@ -48,3 +48,13 @@ def test_a_mixed_conflict_separates_pin_files_from_the_rest(repo, passing_precom
     default = _conflict(repo, {"README.md": "", "notes.txt": ""}, pins=PIN)
     res = CI.run(repo, Config.load(repo), base=default)
     assert "README.md is a pin file" in res.reason and "resolve notes.txt" in res.reason
+    assert "notes.txt is a pin file" not in res.reason and "notes.txt are pin" not in res.reason
+
+
+def test_a_path_with_a_space_is_one_file_and_still_a_pin(repo, passing_precommit):  # noqa: F811
+    spaced = "docs/setup transcript.json"
+    pin = f'[[pin]]\nname = "t"\nfiles = ["{spaced}"]\ncheck = ["true"]\nregen = ["true"]\n'
+    default = _conflict(repo, {spaced: ""}, pins=pin)
+    res = CI.run(repo, Config.load(repo), base=default)
+    assert f"conflicting files: {spaced};" in res.reason, res.reason
+    assert f"{spaced} is a pin file" in res.reason

@@ -11,8 +11,8 @@ from ..infra import worktree as W
 
 def conflicting_files(tree: Path) -> list[str]:
     """The paths left unmerged in ``tree`` after a conflicted `git merge`."""
-    r = W.git(tree, "diff", "--name-only", "--diff-filter=U")
-    return sorted(set(r.out.split())) if r.ok else []
+    r = W.git(tree, "diff", "--name-only", "-z", "--diff-filter=U")
+    return sorted({f for f in r.out.split("\0") if f}) if r.ok else []
 
 
 def cause(tree: Path, base: str, pins: Callable[[], Iterable[str]] | None = None) -> str:
