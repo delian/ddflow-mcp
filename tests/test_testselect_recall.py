@@ -177,7 +177,11 @@ def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
     g("init", "-q", "-b", "main")
     g("config", "user.email", "t@t")
     g("config", "user.name", "t")
-    for branch, subject in (("a", "merge T1: real"), ("b", "merge main")):
+    for branch, subject in (
+        ("a", "merge T1: real"),
+        ("b", "merge main"),
+        ("c", "merge main from origin"),
+    ):
         g("commit", "-q", "--allow-empty", "-m", "base" + branch)
         g("checkout", "-q", "-b", "side" + branch)
         g("commit", "-q", "--allow-empty", "-m", "side" + branch)
