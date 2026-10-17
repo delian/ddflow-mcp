@@ -88,3 +88,14 @@ def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:  # 
     _git(old, "add", SETTINGS)
     verdict = _verdict(old)
     assert verdict.exit == FAIL and SETTINGS in verdict.message
+
+
+def test_a_clean_filter_does_not_make_the_output_look_edited(old: Path) -> None:  # noqa: F811
+    """The record digests what git would store, so a clean filter (or autocrlf) that rewrites
+    the bytes on `git add` does not turn the upgrade's own output into an uncovered edit."""
+    (old / ".gitattributes").write_text(f"{SETTINGS} filter=shout\n")
+    _git(old, "config", "filter.shout.clean", "tr a-z A-Z")
+    go(old, "hooks")
+    _git(old, "add", SETTINGS)
+    verdict = _verdict(old)
+    assert verdict.exit == OK, verdict.message

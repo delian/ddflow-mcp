@@ -323,7 +323,7 @@ def test_when_git_cannot_say_whether_head_is_ours_the_note_says_so(repo, monkeyp
     real = eventcommit.W.git
 
     def cannot_log(root, *args, **kw):
-        if args and args[0] == "log" and "--format=%T%n%P%n%B" in args:
+        if args and args[0] == "log" and "--format=%H%n%T%n%P" in args:
             return eventcommit.G.GitResult(1, "", "boom")
         return real(root, *args, **kw)
 
@@ -355,3 +355,80 @@ def test_a_message_git_folds_is_still_recognised_as_ours(repo, monkeypatch):
     _, note = eventcommit.commit_shards(repo, "mine  \n", "events: {reason}   \n\n")
     assert "made again" in note, note
     assert _git(repo, "show", "HEAD:other.txt") == "v2"
+
+
+def test_a_commit_msg_hook_that_rewrites_the_subject_still_leaves_our_commit_known(
+    repo, monkeypatch
+):
+    """The commit is identified by the sha git prints, not by its message: a hook that prefixes
+    the subject must not make the remake after a just-landed commit silently not happen."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    hook = repo / ".git" / "hooks" / "commit-msg"
+    hook.write_text("#!/bin/sh\nsed -i '1s/^/JIRA-1: /' \"$1\"\n")
+    hook.chmod(0o755)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was undone"
+    assert _git(repo, "log", "-1", "--format=%s").startswith("JIRA-1: events:"), "hook did not run"
+
+
+def test_a_post_commit_hook_printing_a_bracketed_hex_is_not_taken_for_our_commit(repo):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    hook = repo / ".git" / "hooks" / "post-commit"
+    hook.write_text('#!/bin/sh\necho "[$(git rev-parse --short HEAD~1)] previous"\n')
+    hook.chmod(0o755)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" not in note and "could not check" not in note, (sha, note)
+
+
+def test_a_post_commit_hook_that_stages_does_not_hide_our_commit(repo, monkeypatch):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    hook = repo / ".git" / "hooks" / "post-commit"
+    hook.write_text("#!/bin/sh\necho x >> staged.txt\ngit add staged.txt\n")
+    hook.chmod(0o755)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" in note, (sha, note)

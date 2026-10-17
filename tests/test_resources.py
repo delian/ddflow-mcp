@@ -125,3 +125,24 @@ def test_a_malformed_capacity_is_named_as_a_config_error_not_a_conflict(repo):
     assert code == REFUSED
     assert "[schedule] resources entry 'gpu:8'" in err
     assert "Wait for one to be released" not in err
+
+
+def test_a_capacity_style_spec_is_refused_not_stored_as_a_name(tmp_path):
+    """`gpu=1` is the `[schedule] resources` capacity form; the item form is `gpu:1`. Stored
+    as typed it became a resource literally named "gpu=1" that never matched `gpu`."""
+    from ddflow.core.schedule import problem
+
+    assert "gpu:1" in problem(["gpu=1"]) and problem(["gpu:1"]) == ""
+    # a record stored before the check still reads, as the name it always was
+    assert parse_resources(["gpu=1"]) == {"gpu=1": 1}
+    run_cli(tmp_path, "init")
+    code, out, err = run_cli(
+        tmp_path, "task", "add", "T1", "--globs", "a.py", "--resources", "gpu=1"
+    )
+    assert code != 0 and "gpu:1" in out + err, (code, out, err)
+    run_cli(tmp_path, "task", "add", "T2", "--globs", "b.py")
+    code, out, err = run_cli(tmp_path, "update", "T2", "--resources", "gpu=1")
+    assert code != 0 and "gpu:1" in out + err, (code, out, err)
+    run_cli(tmp_path, "task", "add", "T3", "--globs", "c.py")
+    code, out, err = run_cli(tmp_path, "claim", "T3", "--no-worktree", "--resources", "gpu=1")
+    assert code != 0 and "gpu:1" in out + err, (code, out, err)

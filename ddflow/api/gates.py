@@ -42,10 +42,12 @@ from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
+from ..services.gates import failed_review as GO
 from ..services.gates import measured as R
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
+from ..services.identity import agent_marker
 from ..views.markdown import new_reports_line
 from ._base import _load
 from .gate_guard import guard_record
@@ -467,10 +469,14 @@ def _superseded_run(
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
     recorded = rec.evidence.get("tree_sha", "") if rec and rec.outcome else ""
+    # `merge` removes the item's worktree under a run still going; the commits live on in the
+    # repository, so ancestry is asked there (git cannot answer from a missing directory, and
+    # "could not tell" keeps the record: Bcf22c7f7c8).
+    asked = cwd if cwd.is_dir() else repo
     if (
         recorded
         and clock.epoch(rec.at) > clock.epoch(started_at)
-        and G.moved_past(started_on, recorded, cwd)
+        and G.moved_past(started_on, recorded, asked)
     ):
         # Recorded since this run began, on another commit (an amend or a rebase has no
         # ancestry to compare): newer work by construction.
@@ -483,7 +489,7 @@ def _superseded_run(
         (G.tree_identity(cwd), "the tree is now at"),
         (recorded, "a newer outcome is recorded on"),
     ):
-        if newer and G.superseded_by(started_on, newer, cwd):
+        if newer and G.superseded_by(started_on, newer, asked):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
                 f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
@@ -676,6 +682,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
             tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
             keep_output=G.run_log_writer(repo, item, gate),
             log_host=log.agent_id,
+            cfg=cfg,
         ),
     )
     if scope is not None:
@@ -687,7 +694,11 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
 
     def rerun(g):
         return G.run_command_gate(
-            g, cwd, on_tick=keeper, tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0
+            g,
+            cwd,
+            on_tick=keeper,
+            tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
+            cfg=cfg,
         )
 
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
@@ -951,6 +962,32 @@ def _evidence_fields(
     return ev, None
 
 
+def _agent_skip_refusal(
+    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool
+) -> O.Outcome | None:
+    """D-failed-review-gate (B85841c0846): replacing the FAILED outcome of a review gate whose
+    confirmed findings were never re-reviewed -- by a skip, or a hand-recorded pass,
+    unavailable or partial -- is the operator's override. An agent (`--agent`, DDFLOW_AGENT,
+    a harness's shell) is refused; the person records the reason. A review that really runs
+    (`ddflow review`, a triage) does not come through here."""
+    if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
+        return None
+    why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
+    marker = agent_marker(agent) if why else ""
+    if not marker:
+        return None
+    return O.refused(
+        "gate.record",
+        f"{gate} failed ({why}); setting it aside past those findings is the operator's "
+        f"override, and this call is an agent's ({marker}). Fix and re-run "
+        f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
+        f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
+        id=item,
+        gate=gate,
+        outcome="",
+    )
+
+
 def record(
     repo: Path,
     item: str,
@@ -978,6 +1015,18 @@ def record(
     if isinstance(resolved, O.Outcome):
         return resolved
     log, cfg, st, it, gdef, gates = resolved
+
+    refused = _agent_skip_refusal(
+        it,
+        gdef,
+        gate,
+        item,
+        agent,
+        skip or outcome == "skipped",
+        outcome != "failed",
+    )
+    if refused is not None:
+        return refused
 
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).

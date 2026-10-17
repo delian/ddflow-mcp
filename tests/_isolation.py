@@ -180,7 +180,7 @@ def _updating(session: pytest.Session) -> bool:
     changing tracked files is its job (`ddflow pins regenerate` runs it)."""
     config = getattr(session, "config", None)
     return bool(os.environ.get("DDFLOW_UPDATE_GOLDEN")) or bool(
-        config is not None and config.getoption("snapshot_update", False)
+        config is not None and config.getoption("update_snapshots", False)
     )
 
 
