@@ -324,7 +324,9 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
     assert piped["isError"] is False, piped
     assert _json.loads(piped["content"][0]["text"])["gates"] == current
 
-    # And an edit that would leave the workflow incoherent is REFUSED, before writing.
+    # And an edit that would leave the workflow incoherent is REFUSED, before writing. (`tasks`
+    # is a phase-only gate: in the task pipeline it breaks `applies_to`. The doc pipeline also
+    # runs implement and merge, so dropping them from the task pipeline is no longer incoherent.)
     # `exit` 1 with a reason is the answer here, not a crash and not a silent success.
     broken = call("ddflow_workflow_pipeline", {"which": "task", "gates": "tasks", "dry_run": True})
     assert broken["isError"] is True, broken
