@@ -90,8 +90,8 @@ def test_a_sigterm_run_records_unavailable_before_it_exits(repo, tmp_path):
 
 
 def test_a_dead_marker_for_a_gate_that_is_gone_is_dropped_without_a_record(repo, tmp_path):
-    tree, _began = _setup(repo, tmp_path)
-    d = next(tmp_path.rglob(".ddflow")) / "runs" / "T1"
+    tree, _began = _setup(repo, tmp_path)  # `repo` stays the primary
+    d = repo / ".ddflow" / "runs" / "T1"
     d.mkdir(parents=True, exist_ok=True)
     stale = d / "no_such_gate.running.1.json"
     stale.write_text(
