@@ -457,7 +457,13 @@ def _close(
     if ok or stamp_only:
         _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run, wrote)
     elif run:
-        _note(log, run, "failed", summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled")
+        _note(
+            log,
+            run,
+            "failed",
+            summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled",
+            written=wrote or {},
+        )
 
 
 def _ids(items: list[dict[str, Any]]) -> list[str]:

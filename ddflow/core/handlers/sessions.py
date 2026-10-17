@@ -176,6 +176,12 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
     else:
         run["closed"] = "failed" if status == "failed" else "done"
         run["summary"] = str(d.get("summary", ""))
+    # What the run wrote, by digest (the closing event, done or failed): the commit hook waves
+    # exactly these bytes through without a lease (services.upgrade_written).
+    if isinstance(d.get("written"), dict):
+        run.setdefault("written", {}).update(
+            {k: v for k, v in d["written"].items() if isinstance(k, str) and isinstance(v, str)}
+        )
     return run
 
 
@@ -198,11 +204,6 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
             "items": [i for i in d.get("items") or [] if isinstance(i, str)],
             "confirmed": dict(d["confirmed"]) if isinstance(d.get("confirmed"), dict) else {},
             "config_changes": [c for c in d.get("config_changes") or [] if isinstance(c, dict)],
-            "written": (
-                {k: v for k, v in d["written"].items() if isinstance(k, str) and isinstance(v, str)}
-                if isinstance(d.get("written"), dict)
-                else {}
-            ),
             "summary": str(d.get("summary", "")),
             "run": run_id,
             "agent": ev.agent,

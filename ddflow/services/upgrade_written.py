@@ -2,11 +2,17 @@
 
 The commit hook refuses a staged path no lease covers. An upgrade rewrites files the hook
 does not count as ddflow's own (`.claude/settings.json`, ...), and the agent that ran it holds
-no lease on them. The apply therefore records, in its closing `upgrade.applied` event, the
+no lease on them. The apply therefore records, in its closing `upgrade.applied` event (done or failed), the
 SHA-256 of every file whose bytes it changed or created (`written`, repo-relative path ->
 digest). The hook waves a staged path through when the bytes being committed are exactly
 those: the upgrade's own output, as written. Any later edit has another digest and needs a
 lease like any other change.
+
+The record is the agent's own word, not a signature: an agent that appends a forged event
+can exempt a file of its choosing. That is no new reach. The lease guard is a protection
+against honest collisions between agents, and anything that can append to the log can already
+set `[enforce].commit_without_lease` to "off" in `.ddflow/config.toml`, which a commit needs
+no lease to carry.
 """
 
 from __future__ import annotations

@@ -15,8 +15,11 @@ from pathlib import Path
 from test_upgrade_apply import go, old  # noqa: F401 -- the old-version project fixture
 
 from ddflow.config import Config
+from ddflow.core.model import fold
 from ddflow.core.outcome import FAIL, OK
+from ddflow.infra.log import EventLog
 from ddflow.services import enforce as E
+from ddflow.services import upgrade_apply as UA
 
 SETTINGS = ".claude/settings.json"
 
@@ -37,6 +40,29 @@ def test_the_output_of_an_upgrade_commits_without_a_lease(old: Path) -> None:  #
     _git(old, "add", SETTINGS)
     verdict = _verdict(old)
     assert verdict.exit == OK, verdict.message
+
+
+def test_a_whole_apply_commits_as_one_without_a_lease(old: Path) -> None:  # noqa: F811
+    out = go(old, None, config_changes="agent")
+    assert out["applied"] > 1, out["text"]
+    _git(old, "add", "-A")
+    staged = subprocess.run(
+        ["git", "-C", str(old), "diff", "--cached", "--name-only"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert SETTINGS in staged and "AGENTS.md" in staged, staged
+    verdict = _verdict(old)
+    assert verdict.exit == OK, verdict.message
+
+
+def test_the_digests_of_a_run_that_settled_nothing_are_kept_too(old: Path) -> None:  # noqa: F811
+    """A run that wrote files and then settled no item closes with a failure note: the files are
+    on disk all the same, and the note must name them."""
+    log = EventLog(old, "upgrader")
+    UA._close(log, "r1", [], set(), ("1", "1", "2"), [], "", {}, False, {SETTINGS: "abc"})
+    assert fold(log.read_all(), strict=False).upgrade_runs["r1"]["written"] == {SETTINGS: "abc"}
 
 
 def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:  # noqa: F811
