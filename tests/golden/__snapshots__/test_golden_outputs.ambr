@@ -220,8 +220,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -276,8 +274,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -333,8 +329,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -1089,6 +1083,20 @@
           no task fails doctor); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      schedule.phase_full_suite = 'require'   [default]
+          Whether a PHASE can complete before the FULL test suite has passed on its
+          merged tree (D-gate-economy-r3: items run only the tests they reach).
+          'require' (default): `complete <phase>` is refused unless the
+          `integration_tests` cadence (`ddflow cadence --ran integration_tests`,
+          recorded by every passing `ddflow ci run --full`, including the merge
+          queue's batch run) was recorded after the last merge of the phase's tasks.
+          'run': ddflow runs `ci run --full` itself when there is no such pass, and
+          records it. 'off': not checked. `--force` overrides a refusal and the
+          override is recorded. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'require', the strictest (a
+          phase closes only on a full-suite pass); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       schedule.auto_order = 'propose'   [default]
           What ddflow does about a lease deadlock (a cycle of agents waiting on each
           other's files) that nothing declared: 'propose' (default) reports the
