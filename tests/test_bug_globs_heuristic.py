@@ -50,5 +50,12 @@ def test_bug_found_does_not_copy_unrelated_globs(repo):
 
 
 def test_slash_words_in_prose_are_not_file_names():
-    for text in ("the read/write path races", "and/or 24/7 client/server", "w/o a lease"):
+    for text in (
+        "the read/write path races",
+        "and/or 24/7 client/server",
+        "w/o a lease",
+        "the split is 50/50.",
+        "runs 24/7.",
+        "either/or.",
+    ):
         assert inherit_globs(SRC, text) == SRC, text
