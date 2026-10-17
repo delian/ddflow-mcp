@@ -24,10 +24,11 @@ def update_message(item: str, data: dict) -> str:
                 f"\n  dropped:   {', '.join(data['globs_dropped'])}  (--globs replaces "
                 f"the list; pass every glob, old and new, to keep them)"
             )
-    if data.get("needs_dropped"):
-        msg += (
-            f"\n  needs now: {', '.join(data['fields']['needs']) or '(none)'}"
-            f"\n  dropped:   {', '.join(data['needs_dropped'])}  (--needs replaces the "
-            f"list; --add-needs / --remove-needs change it without repeating it)"
-        )
+    for name in ("needs", "tags"):
+        if data.get(f"{name}_dropped"):
+            msg += (
+                f"\n  {name} now: {', '.join(data['fields'][name]) or '(none)'}"
+                f"\n  dropped:   {', '.join(data[name + '_dropped'])}  (--{name} replaces the "
+                f"list; --add-{name} / --remove-{name} change it without repeating it)"
+            )
     return msg

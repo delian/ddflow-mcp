@@ -78,6 +78,8 @@ def cmd_item_update(a, c: Ctx) -> int:
             # array's element holding a comma was split by the second read (roborev).
             add_needs=_csv_or_none(getattr(a, "add_needs", None)),
             remove_needs=_csv_or_none(getattr(a, "remove_needs", None)),
+            add_tags=_csv_or_none(getattr(a, "add_tags", None)),
+            remove_tags=_csv_or_none(getattr(a, "remove_tags", None)),
             globs=a.globs,
             add_globs=getattr(a, "add_globs", None),
             remove_globs=getattr(a, "remove_globs", None),
