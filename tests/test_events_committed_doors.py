@@ -266,3 +266,47 @@ def test_a_commit_that_lands_right_after_ours_is_left_alone(repo, monkeypatch):
     assert sha and "made again" not in note and "HEAD moved" not in note, (sha, note)
     assert _git(repo, "log", "-1", "--format=%s") == "foreign work"
     assert _git(repo, "show", "HEAD:extra.txt") == "x"
+
+
+def test_a_merge_with_our_tree_landing_right_after_is_not_taken_for_ours(repo, monkeypatch):
+    """A foreign `-s ours` merge has the event-log commit's tree but two parents: it is not
+    remade as a single-parent commit (which would drop its second parent), and the sha
+    returned is HEAD, the commit that holds the shards."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    _git(repo, "branch", "side")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    _git(repo, "checkout", "-q", "side")
+    (repo / "side.txt").write_text("s\n")
+    _git(repo, "add", "side.txt")
+    _git(repo, "commit", "-qm", "side work", "--no-verify")
+    _git(repo, "checkout", "-q", "main")
+    real = eventcommit.W.git
+
+    def merge_after(root, *args, **kw):
+        out = real(root, *args, **kw)
+        if args and args[0] == "commit":
+            # what `merge -s ours side` makes: HEAD's own tree under two parents
+            merged = _git(
+                root,
+                "commit-tree",
+                "HEAD^{tree}",
+                "-p",
+                "HEAD",
+                "-p",
+                "side",
+                "-m",
+                "foreign merge",
+            )
+            _git(root, "update-ref", "HEAD", merged)
+        return out
+
+    monkeypatch.setattr(eventcommit.W, "git", merge_after)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert "made again" not in note, note
+    assert _git(repo, "log", "-1", "--format=%s") == "foreign merge"
+    assert len(_git(repo, "log", "-1", "--format=%P").split()) == 2  # its parents are intact
+    assert sha == _git(repo, "rev-parse", "HEAD")
