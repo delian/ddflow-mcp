@@ -128,6 +128,7 @@ def test_a_session_that_re_records_pins_may_change_tracked_files(monkeypatch) ->
         return {"config": [], "bare": [], **({"status": [" M snap.ambr"]} if status else {})}
 
     monkeypatch.setattr(ISO, "snapshot", snap)
+    monkeypatch.delenv("DDFLOW_UPDATE_GOLDEN", raising=False)
     plain = SimpleNamespace(exitstatus=0)
     ISO.pytest_sessionfinish(plain, 0)
     assert plain.exitstatus == 1  # a normal session still may not touch tracked files
@@ -139,6 +140,13 @@ def test_a_session_that_re_records_pins_may_change_tracked_files(monkeypatch) ->
     flag = SimpleNamespace(exitstatus=0, config=SimpleNamespace(getoption=lambda *_a: True))
     ISO.pytest_sessionfinish(flag, 0)
     assert flag.exitstatus == 0
+    # an updating session still may not change the repository's config
+    monkeypatch.setattr(ISO, "_BASELINE", {"config": [], "bare": [], "status": []})
+    monkeypatch.setattr(
+        ISO, "snapshot", lambda status=True: {"config": ["user.name=Test"], "bare": []}
+    )
+    ISO.pytest_sessionfinish(flag, 0)
+    assert flag.exitstatus == 1
 
 
 def test_a_gate_command_never_inherits_the_callers_git_repository_variables() -> None:
