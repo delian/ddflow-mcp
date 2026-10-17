@@ -1649,6 +1649,7 @@ def _name_the_item(
             say(
                 f"→ note: {item} has no live lease: this review is recorded against it all the same."
             )
+            return {**(extra or {}), "reviewed_unleased": True}
         return extra
     me = ID.resolve(repo, cfg, agent).id
     if me == lease.holder:

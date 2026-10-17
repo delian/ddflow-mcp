@@ -65,3 +65,15 @@ def test_an_item_with_no_live_lease_is_said_to_have_none(repo: Path):
     run_cli(repo, "phase", "add", "P1", "--title", "p")
     run_cli(repo, "task", "add", "T9", "--phase", "P1", "--title", "t", "--new")
     assert "T9 has no live lease" in _review(repo, "bob", "T9")
+
+
+def test_an_unleased_item_leaves_a_mark_in_the_evidence(repo: Path):
+    from ddflow.api import review as R
+    from ddflow.api._base import _load
+
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "p")
+    run_cli(repo, "task", "add", "T9", "--phase", "P1", "--title", "t", "--new")
+    _log, cfg, st = _load(repo, "bob")
+    ev = R._name_the_item(repo, cfg, st, "T9", "critic", "bob", lambda _l: None, None)
+    assert ev == {"reviewed_unleased": True}
