@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ...config import Config
+from ...core import blobref as B
 from ...core.model import State
 from .. import logblobs as LB
 from .defs import DEFAULT_GATES, GateDef, pipeline_for
@@ -74,6 +75,8 @@ def unresolved_review_failure(it, gate: str, *, confirmed_only: bool = False) ->
     seen: dict[str, str] = {}
     for run in runs:
         found = LB.full(run.evidence or {}).get("chunk_findings")
+        if isinstance(found, B.Unavailable):  # could not read back is not "no findings"
+            return f"findings that cannot be read back ({found})"
         for f in found if is_triageable(found) else []:
             seen.setdefault(f["digest"], str(f.get("title") or f.get("location") or "a finding"))
     left = [
