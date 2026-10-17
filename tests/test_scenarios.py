@@ -160,3 +160,16 @@ def test_crash_recovery_does_not_race_the_clock_for_its_live_window_checks(tmp_p
     except Fail as exc:
         pytest.fail(f"crash-recovery with late live-window checks: {exc}")
     assert sc.late == {"recover", "claim", "doctor"}, f"no delay was injected: {sc.late}"
+
+
+def test_live_lease_refusal_is_recognised_in_both_wordings():
+    """B022e3f0992: past the TTL the refusal reads "ran out ... grace period", not
+    "is held by"; the scenario's check must accept both and still reject a wrong one."""
+    import scenario_crash_recovery as S
+
+    assert S.refused_while_live(3, "P1.T1 is held by delta for another 1s")
+    assert S.refused_while_live(
+        3, "P1.T1: delta's lease ran out 10s ago and is in its 3600s grace period; x"
+    )
+    assert not S.refused_while_live(0, "P1.T1 is held by delta for another 1s")
+    assert not S.refused_while_live(3, "P1.T1 is held by someone else")
