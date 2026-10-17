@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import secrets
 import threading
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import identity as ID
 from ..services import leasekeep as LK
 from ..services import logblobs as LB
 from ..services import prompts as P
@@ -1623,6 +1625,38 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     return outcome
 
 
+def _name_the_item(
+    repo: Path, cfg, st, item: str, gate: str, agent: str, say, extra: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Say, loudly, WHICH item this review is recorded against and whose it is
+    (DX-review-item-from-cwd). A review launched from a backgrounded shell chain once
+    recorded a failed gate on another agent's item; nothing said whose it was.
+
+    No item named: the working tree is reviewed and NOTHING is recorded, said as such. An
+    item whose live lease another agent holds: a WARNING and a line in the gate's evidence
+    (not a refusal: agents of one clone may review each other's items, D-mu-bugfix-answers).
+    """
+    if not item:
+        say(
+            f"→ no item named: reviewing the working tree, and recording nothing for {gate}. "
+            "Name the item (`ddflow review <id>`) to record the outcome."
+        )
+        return extra
+    it = st.items.get(item)
+    lease = it.lease if it else None
+    if lease is None or not lease.live(time.time(), cfg.lease.grace_s):
+        return extra
+    me = ID.resolve(repo, cfg, agent).id
+    if me == lease.holder:
+        return extra
+    say(
+        f"→ WARNING: {item} is leased to {lease.holder}, and you are {me}: this review is "
+        f"recorded against {lease.holder}'s item. If that is not what you meant, it was the "
+        f"wrong item (or the wrong --agent): ask {lease.holder} to re-run the gate."
+    )
+    return {**(extra or {}), "reviewed_for_holder": f"{me} reviewed {lease.holder}'s {item}"}
+
+
 def _say_selection(selected, say) -> None:
     """What the pool and route stages decided, said: a skipped candidate is never silent."""
     for line in selected.notes:
@@ -1749,6 +1783,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if refused is not None:
         return refused
 
+    extra_evidence = _name_the_item(repo, cfg, st, item, gate, agent, say, extra_evidence)
     dispatch = RV.ReviewerDispatch()
     selected = dispatch.select(RV.load_reviewers(repo), gate, gates.get(gate))
     revs = selected.reviewers
