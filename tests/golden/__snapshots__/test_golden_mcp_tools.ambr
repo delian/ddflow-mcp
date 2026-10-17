@@ -1890,25 +1890,29 @@
           "type": "string",
           "description": "Merge commit message."
          },
+         "queue": {
+          "type": "boolean",
+          "description": "Enqueue (ddflow_queue add) instead of landing."
+         },
          "keep": {
           "type": "boolean",
           "description": "Keep the worktree after merging, for inspection."
          },
          "model": {
           "type": "string",
-          "description": "The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then."
+          "description": "The AUTHOR's model. In PR mode the item completes at `ddflow_pr_sync`, which needs it for reviewer independence."
          },
          "allow_dirty": {
           "type": "boolean",
-          "description": "Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output."
+          "description": "Merge although the worktree is dirty; uncommitted changes are NOT included. Only once you know it is build output."
          },
          "allow_empty": {
           "type": "boolean",
-          "description": "Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree)."
+          "description": "Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree)."
          },
          "branch": {
           "type": "string",
-          "description": "For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs."
+          "description": "no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs."
          },
          "as_agent": {
           "type": "string",
