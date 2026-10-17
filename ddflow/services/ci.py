@@ -97,26 +97,61 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
 _HOOK_START = re.compile(r"^\s*-\s+id:\s*[\"']?(?P<id>[^\s\"'#]+)")
 _REPO_START = re.compile(r"^\s*-\s+repo:")
 _FAIL_LANGUAGE = re.compile(r"^\s+language:\s*[\"']?fail[\"']?\s*(#.*)?$")
+_STAGES = re.compile(r"^\s+(?P<key>default_stages|stages):\s*(?P<inline>\[[^\]]*\])?")
+_LIST_ITEM = re.compile(r"^\s+-\s*[\"']?(?P<v>[\w-]+)")
+#: The names pre-commit gives the pre-push stage (the old and the new).
+_PUSH_STAGES = ("pre-push", "push")
+
+
+def _runs_at_pre_push(stages: list[str] | None) -> bool:
+    return stages is None or any(s in _PUSH_STAGES for s in stages)
 
 
 def tripwire_ids(tree: Path) -> list[str]:
-    """The hooks of the project's pre-commit config that are tripwires (`language: fail`): they
-    fire when a changed path matches their `files:`, which is a statement about a DIFF, and over
-    every tracked file they fail whenever the paths they guard exist at all."""
+    """The hooks of the project's pre-commit config that are tripwires (`language: fail`) and
+    run at the pre-push stage: they fire when a changed path matches their `files:`, which is a
+    statement about a DIFF, and over every tracked file they fail whenever the paths they guard
+    exist at all. A tripwire kept to another stage (`stages: [pre-commit]`) is not one the
+    pre-push run has, so it is not named."""
     try:
-        text = (Path(tree) / PRE_COMMIT_CONFIG).read_text("utf-8")
+        lines = (Path(tree) / PRE_COMMIT_CONFIG).read_text("utf-8").splitlines()
     except OSError:
         return []
-    found: list[str] = []
-    current = ""
-    for line in text.splitlines():
+    default_stages = _stage_list(lines, "default_stages", top=True)
+    blocks: list[tuple[str, list[str]]] = []
+    for line in lines:
         if _REPO_START.match(line):
-            current = ""
+            blocks.append(("", []))
         elif m := _HOOK_START.match(line):
-            current = m["id"]
-        elif current and _FAIL_LANGUAGE.match(line) and current not in found:
-            found.append(current)
+            blocks.append((m["id"], [line]))
+        elif blocks:
+            blocks[-1][1].append(line)
+    found: list[str] = []
+    for hook, body in blocks:
+        if not hook or hook in found or not any(_FAIL_LANGUAGE.match(ln) for ln in body):
+            continue
+        if _runs_at_pre_push(_stage_list(body, "stages", top=False) or default_stages):
+            found.append(hook)
     return found
+
+
+def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
+    """The stages a ``key:`` line (inline list or block list) names; None when it is absent."""
+    for i, line in enumerate(lines):
+        indent = "" if top else r"\s+"
+        m = re.match(rf"^{indent}{key}:\s*(?P<inline>\[[^\]]*\])?", line)
+        if not m:
+            continue
+        if m["inline"]:
+            return [x.strip(" \"'") for x in m["inline"].strip("[]").split(",") if x.strip()]
+        out = []
+        for nxt in lines[i + 1 :]:
+            item = _LIST_ITEM.match(nxt)
+            if not item:
+                break
+            out.append(item["v"])
+        return out
+    return None
 
 
 _LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")

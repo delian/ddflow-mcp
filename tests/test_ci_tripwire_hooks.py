@@ -131,3 +131,26 @@ def test_merge_passes_the_range_it_added_to_the_after_merge_check(repo, monkeypa
     assert out.exit == 0, out
     assert seen.get("since") == before, seen
     assert out.data["ci"]["status"] == "passed", out.data["ci"]
+
+
+@pytest.mark.parametrize(
+    "extra,expected",
+    [
+        ("        stages: [pre-commit]\n", []),
+        ("        stages: [pre-push]\n", ["frozen-workflow-files"]),
+        ("        stages:\n          - pre-commit\n          - push\n", ["frozen-workflow-files"]),
+        ("        stages:\n          - pre-commit\n", []),
+    ],
+)
+def test_a_tripwire_kept_to_another_stage_is_not_run_at_pre_push(tmp_path, extra, expected):
+    """`pre-commit run <id> --hook-stage pre-push` for a hook that has no such stage is an
+    error; the tripwire is named only when the pre-push run has it."""
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        CONFIG.replace("language: fail\n", "language: fail\n" + extra, 1)
+    )
+    assert CI.tripwire_ids(tmp_path) == expected
+
+
+def test_default_stages_without_pre_push_keep_an_unstaged_tripwire_out(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text("default_stages: [pre-commit]\n" + CONFIG)
+    assert CI.tripwire_ids(tmp_path) == []
