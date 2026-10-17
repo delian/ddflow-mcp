@@ -1573,9 +1573,15 @@ def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
     out = []
     for p in paths:
         data = staged_bytes(repo, p) if p in wrote else None
-        if data is None or UW.digest(data) not in wrote[p]:
+        if data is None or not ({UW.digest(data), _index_blob(repo, p)} & wrote[p]):
             out.append(p)
     return out
+
+
+def _index_blob(repo: Path, path: str) -> str | None:
+    """The blob id the index holds for ``path`` (what `upgrade_written.digests` records)."""
+    r = G.run(_index_tree(repo), "rev-parse", f":{path}", timeout=P.TIMEOUTS["git_listing"])
+    return r.out.strip() if r.ok and r.out.strip() else None
 
 
 def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | None:
