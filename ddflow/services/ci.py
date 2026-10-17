@@ -94,6 +94,52 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
+_HOOK_START = re.compile(r"^\s*-\s+id:\s*[\"']?(?P<id>[^\s\"'#]+)")
+_REPO_START = re.compile(r"^\s*-\s+repo:")
+_FAIL_LANGUAGE = re.compile(r"^\s+language:\s*[\"']?fail[\"']?\s*(#.*)?$")
+
+
+def tripwire_ids(tree: Path) -> list[str]:
+    """The hooks of the project's pre-commit config that are tripwires (`language: fail`): they
+    fire when a changed path matches their `files:`, which is a statement about a DIFF, and over
+    every tracked file they fail whenever the paths they guard exist at all."""
+    try:
+        text = (Path(tree) / PRE_COMMIT_CONFIG).read_text("utf-8")
+    except OSError:
+        return []
+    found: list[str] = []
+    current = ""
+    for line in text.splitlines():
+        if _REPO_START.match(line):
+            current = ""
+        elif m := _HOOK_START.match(line):
+            current = m["id"]
+        elif current and _FAIL_LANGUAGE.match(line) and current not in found:
+            found.append(current)
+    return found
+
+
+_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
+
+
+def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
+    """``command`` (the default pre-push command, maybe after `SKIP=...`) with the tripwire
+    hooks taken out of its all-files run and run once on the diff ``since``..HEAD instead; the
+    command as it is when the project has no tripwire or ``since`` is not a commit there."""
+    ids = tripwire_ids(tree)
+    if not ids or not since or not W.rev(tree, since):
+        return command
+    lead = _LEADING_SKIP.match(command)
+    rest = command[lead.end() :] if lead else command
+    skip = ",".join([*([lead["ids"]] if lead else []), *ids])
+    # The environment's own SKIP (the selected-tests plan sets one) stays in front.
+    first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
+    base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
+    ranged = [f"{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
+    steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
+    return "rc=0; " + "; ".join(steps) + "; exit $rc"
+
+
 def tool_missing(command: str) -> str:
     """The executable the command starts with, when it is not installed ("" when it is)."""
     return executable_missing(command)
@@ -182,13 +228,17 @@ def run(
     timeout_s: int = 0,
     for_item: bool = False,
     full: bool = False,
+    changed_from: str = "",
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
-    (`ci run --full`, the merge queue's batch) always runs the whole suite."""
+    (`ci run --full`, the merge queue's batch) always runs the whole suite.
+
+    ``changed_from`` is the commit the change being checked began at, for the tripwire hooks of
+    the default command (they run on that diff, not over every file): default ``base``."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -211,6 +261,8 @@ def run(
             status = "failed" if NOT_MERGEABLE in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
+        if not cfg.ci.command.strip() and DEFAULT_COMMAND in cmd:
+            cmd = with_tripwires_on_the_diff(cmd, tree, changed_from or base)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"

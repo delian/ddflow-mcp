@@ -60,10 +60,13 @@ def file_failures(
     return filed, fixes
 
 
-def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str = "") -> dict:
+def check_after_merge(
+    repo: Path, *, sha: str = "", item: str = "", agent: str = "", since: str = ""
+) -> dict:
     """`[ci].on_merge`: run the CI command on the base a merge just landed on, record the
     result and file the failures. Never raises into the merge: it already landed.
-    Returns what to say about it ({} when nothing ran)."""
+    Returns what to say about it ({} when nothing ran). ``since`` is the base the merge started
+    from: the tripwire hooks run on that range, not over every file."""
     log, cfg, _st = _load(repo, agent)
     mode = cfg.ci.on_merge
     if mode == "off":
@@ -74,7 +77,7 @@ def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str =
     cmd, _why = CI.main_command(repo, cfg)
     if not cmd:
         return {}  # no CI command in this project: nothing to check, nothing to claim
-    res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd)
+    res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd, changed_from=since)
     _record(log, "merge", res, item or "ci")
     filed, fixes = (
         ([], {}) if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)
