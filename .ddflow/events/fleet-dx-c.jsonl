@@ -96,3 +96,5 @@
 {"agent":"fleet-dx-c","data":{"at":1792264569.393447,"holder":"fleet-dx-c"},"id":"efa4ba089e232ddc10d46526d","kind":"lease.renewed","lamport":76521,"schema":1,"subject":"DX-ci-merge-conflict-cause","ts":"2026-10-17T19:16:09.414037Z"}
 {"agent":"fleet-dx-c","data":{"at":1792264721.5638518,"holder":"fleet-dx-c"},"id":"e6fad064673d256a0c33b0a28","kind":"lease.renewed","lamport":76522,"schema":1,"subject":"DX-ci-merge-conflict-cause","ts":"2026-10-17T19:18:41.587084Z"}
 {"agent":"fleet-dx-c","data":{"at":1792264870.7022297,"holder":"fleet-dx-c"},"id":"e9e73644f551d47e9dd46a2c9","kind":"lease.renewed","lamport":76530,"schema":1,"subject":"DX-ci-merge-conflict-cause","ts":"2026-10-17T19:21:10.732792Z"}
+{"agent":"fleet-dx-c","data":{"at":1792265022.7802274,"holder":"fleet-dx-c"},"id":"ef91a9780a3f32bd11cb21eb3","kind":"lease.renewed","lamport":76541,"schema":1,"subject":"DX-ci-merge-conflict-cause","ts":"2026-10-17T19:23:42.814425Z"}
+{"agent":"fleet-dx-c","data":{"at":1792265171.3419385,"holder":"fleet-dx-c"},"id":"e82556dffd18a3b5b435b5c9c","kind":"lease.renewed","lamport":76542,"schema":1,"subject":"DX-ci-merge-conflict-cause","ts":"2026-10-17T19:26:11.360666Z"}
