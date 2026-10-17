@@ -50,7 +50,9 @@ def heartbeat(
             globs_withheld="",
             yield_requested="",
         )
+    began = time.time()  # before the renewal: the lease is live at this instant once renewed
     renewed = L.renew(log, item)
+    holder = log.agent_id  # whose lease the catch-up may point at the item
     hint = ""
     if not renewed:
         it = st.items.get(item)
@@ -62,12 +64,13 @@ def heartbeat(
                 hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again as {lease.holder}"
             else:
                 renewed = L.renew(log, item, holder=lease.holder)
+                holder = lease.holder
     if not renewed:
         broken = [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
         if broken:  # the lease was taken from this agent: say so wherever it stands
             hint = "; " + LB.notice_text(broken[0])
     if renewed:
-        withheld = _catch_up_globs(log, cfg, item)
+        withheld = _catch_up_globs(log, cfg, item, began, holder)
         return O.ok(
             "lease.renewed",
             id=item,
@@ -99,7 +102,7 @@ def _yield_request(log, cfg, item: str) -> str:
     return ""
 
 
-def _catch_up_globs(log, cfg, item: str) -> str:
+def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
     """Point a just-renewed lease at the item's CURRENT globs and resources; "" or why
     it could not.
 
@@ -112,20 +115,29 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     Resources the same way, through the capacity check (B7f8060f2f5); each is caught up
     on its own, so a refusal of one does not hold back the other. A claim records its
     globs and resources on the item, so this never undoes the claim itself.
+
+    ``now`` is when the renewal began. The revived lease keeps the TTL it was claimed with,
+    so a process that took longer than that between renewing and catching up (a loaded
+    machine, a short TTL) judged it lapsed again and silently caught up nothing
+    (B8eb33fe297); the catch-up is judged at the renewal instead -- and only for the lease
+    ``holder`` renewed: one that changed hands in that window (a takeover, a break) is not
+    pointed at the item's values, which were never the new holder's.
     """
 
     why: list[str] = []
     for field in ("globs", "resources"):
         with log.transaction():
-            it = localize(fold(log.read_all(), strict=False), log, time.time()).items.get(item)
+            it = localize(fold(log.read_all(), strict=False), log, now).items.get(item)
             lease = it.lease if it else None
             # Cleared to none is caught up too: a revived lease left on the old values
             # would keep holding them against every other agent.
-            if lease is None or sorted(getattr(lease, field)) == sorted(getattr(it, field)):
+            if lease is None or lease.holder != holder:
+                continue
+            if sorted(getattr(lease, field)) == sorted(getattr(it, field)):
                 continue
             new = list(getattr(it, field))
             args = (new, None) if field == "globs" else (None, new)
-            live, refusal = L.plan_retarget(log, cfg, item, *args)
+            live, refusal = L.plan_retarget(log, cfg, item, *args, now=now)
             if refusal:
                 why.append(refusal)
             elif live is not None:
