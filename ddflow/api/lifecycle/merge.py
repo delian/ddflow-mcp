@@ -44,6 +44,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -222,7 +223,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     )
 
+    say = on_progress or (lambda _line: None)
+    say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    say(_ci_notice(repo, agent))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    say(
+        f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
+    )
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
@@ -244,6 +251,18 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         merge_gate_human=human_gate,
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
+    )
+
+
+def _ci_notice(repo: Path, agent: str) -> str:
+    """The line said before the post-merge check starts: what runs and which knobs bound it."""
+    cfg = _load(repo, agent)[1]
+    mode = cfg.ci.on_merge
+    if mode == "off":
+        return "post-merge check: off ([ci].on_merge)"
+    return (
+        f"post-merge check starting: [ci].on_merge={mode}, at most {cfg.ci.timeout_s}s "
+        f"([ci].timeout_s); a timeout is recorded unavailable, never as a failure"
     )
 
 
