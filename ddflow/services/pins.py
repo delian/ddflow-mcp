@@ -393,12 +393,18 @@ def _owned(repo: Path, r: Recipe) -> list[Path]:
     return found
 
 
-def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes] | None:
-    """The bytes of the recipe's files before it re-records them; None when they cannot be held
-    (unreadable, or more than `_SNAPSHOT_MAX`): then nothing is promised about putting them back."""
-    kept: dict[Path, bytes] = {}
+def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes | None] | None:
+    """The recipe's files before it re-records them (a directory is a key with ``None``); None
+    when they cannot be held (unreadable, or more than `_SNAPSHOT_MAX`): then nothing is
+    promised about putting them back."""
+    kept: dict[Path, bytes | None] = {}
     total = 0
     try:
+        for f in r.files:
+            top = Path(repo) / f.rstrip("/")
+            if top.is_dir():
+                kept[top] = None
+                kept.update({q: None for q in top.rglob("*") if q.is_dir()})
         for p in _owned(repo, r):
             data = p.read_bytes()
             total += len(data)
@@ -410,17 +416,35 @@ def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes] | None:
     return kept
 
 
-def _restore(repo: Path, r: Recipe, kept: dict[Path, bytes]) -> bool:
-    """Put the recipe's files back as ``kept`` has them: rewritten when changed, recreated when
-    deleted, deleted when the run created them in a directory it owns. False if it could not."""
+def _restore(repo: Path, r: Recipe, kept: dict[Path, bytes | None]) -> bool:
+    """Put the recipe's files back as ``kept`` has them: rewritten when changed (through a
+    symlink, which stays), recreated when deleted, removed when the run created them (a
+    directory too). False if it could not."""
     try:
         for p in _owned(repo, r):
             if p not in kept:
                 p.unlink()
+        for f in r.files:
+            top = Path(repo) / f.rstrip("/")
+            if top.is_dir():
+                for d in sorted((q for q in top.rglob("*") if q.is_dir()), reverse=True):
+                    if d not in kept and not any(d.iterdir()):
+                        d.rmdir()
         for p, data in kept.items():
-            if not p.is_file() or p.read_bytes() != data:
-                atomic_write(p, data)
+            if data is None:
+                p.mkdir(parents=True, exist_ok=True)
+            elif not p.is_file() or p.read_bytes() != data:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                replace_text(p, data.decode("utf-8")) if _is_text(data) else atomic_write(p, data)
     except OSError:
+        return False
+    return True
+
+
+def _is_text(data: bytes) -> bool:
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
         return False
     return True
 
@@ -438,19 +462,27 @@ def _decided_by_generators(repo: Path, s, chosen: list[Recipe], limit: int, tick
         return False
     original = s.file.read_text("utf-8")
     result: dict[str, str] = {}
+    snaps = [(r, _snapshot(repo, r)) for r in owners]
+
+    def put_back() -> None:  # the file as it was, and whatever else a killed regeneration touched
+        replace_text(s.file, original)
+        for r, kept in snaps:
+            if kept is not None:
+                _restore(repo, r, kept)
+
     for side in ("ours", "theirs"):
         replace_text(s.file, take_side(original, side))
         for r in owners:
             if _run(repo, r.check, r, limit, write=False, tick=tick).returncode == 0:
                 continue
             if _run(repo, r.regen, r, limit, write=True, tick=tick).returncode != 0:
-                replace_text(s.file, original)
+                put_back()
                 return False
         result[side] = s.file.read_text("utf-8")
     if result["ours"] == result["theirs"]:
         replace_text(s.file, result["ours"])
         return True
-    replace_text(s.file, original)
+    put_back()
     return False
 
 

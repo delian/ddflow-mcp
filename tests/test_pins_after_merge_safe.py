@@ -150,6 +150,7 @@ def _damaging(name: str, then: str) -> PN.Recipe:
         f"p = pathlib.Path('{name}.txt'); p.write_text(p.read_text() * 50)\n"
         f"pathlib.Path('{name}.d/gone.txt').unlink()\n"
         f"pathlib.Path('{name}.d/new.txt').write_text('stray')\n"
+        f"pathlib.Path('{name}.d/sub').mkdir()\n"
         f"{then}\n"
     )
     return PN.Recipe(
@@ -175,6 +176,7 @@ def test_a_killed_regeneration_puts_its_files_back(tree):
     assert (tree / "dmg.txt").read_text() == "a\nb\n"
     assert (tree / "dmg.d" / "gone.txt").read_text() == "keep me"
     assert not (tree / "dmg.d" / "new.txt").exists()
+    assert not (tree / "dmg.d" / "sub").exists()  # nor the directory the run made
 
 
 def test_a_failed_regeneration_puts_its_files_back_too(tree):
@@ -191,3 +193,13 @@ def test_the_hook_says_so_when_it_could_not_run_at_all(tree):
     (tree / ".ddflow" / "pins.toml").write_text("[[pin]\nbroken")
     line = PM.after_merge(tree, Config.load(tree))
     assert line.startswith("pins: "), line
+
+
+def test_a_symlinked_pin_file_stays_a_symlink_when_it_is_put_back(tree):
+    (tree / "real.txt").write_text("a\nb\n")
+    (tree / "link.txt").symlink_to("real.txt")
+    code = "import pathlib\npathlib.Path('link.txt').write_text('junk')\nraise SystemExit(2)\n"
+    recipe = PN.Recipe("lnk", ("link.txt",), (PY, "-c", "raise SystemExit(1)"), (PY, "-c", code))
+    rep = PN.regenerate(tree, Config.load(tree), recipes=[recipe])
+    assert [p.name for p in rep.failed] == ["lnk"]
+    assert (tree / "link.txt").is_symlink() and (tree / "real.txt").read_text() == "a\nb\n"
