@@ -42,8 +42,9 @@ def written(repo: Path, before: dict[str, str | None], files: Iterable[str]) -> 
     return {rel: d for rel, d in sorted(now.items()) if d is not None and before.get(rel) != d}
 
 
-def load(repo: Path) -> dict[str, set[str]]:
-    """``{path: digests}`` recorded so far; empty when there is no record or it is unreadable."""
+def _read(repo: Path) -> dict[str, list[str]]:
+    """The record as ``{path: [digests]}``; entries of another shape are dropped, so a record
+    somebody damaged degrades to less exemption, never to a crash or a garbage digest."""
     try:
         raw = json.loads((Path(repo) / FILE).read_text("utf-8"))
     except (OSError, ValueError):
@@ -51,10 +52,15 @@ def load(repo: Path) -> dict[str, set[str]]:
     if not isinstance(raw, dict):
         return {}
     return {
-        k: {d for d in v if isinstance(d, str)}
+        k: [d for d in v if isinstance(d, str)]
         for k, v in raw.items()
         if isinstance(k, str) and isinstance(v, list)
     }
+
+
+def load(repo: Path) -> dict[str, set[str]]:
+    """``{path: digests}`` recorded so far; empty when there is no record or it is unreadable."""
+    return {k: set(v) for k, v in _read(repo).items()}
 
 
 def record(repo: Path, wrote: dict[str, str]) -> None:
@@ -62,13 +68,9 @@ def record(repo: Path, wrote: dict[str, str]) -> None:
     if not wrote:
         return
     path = Path(repo) / FILE
-    try:
-        raw = json.loads(path.read_text("utf-8"))
-    except (OSError, ValueError):
-        raw = {}
-    raw = raw if isinstance(raw, dict) else {}
+    raw = _read(repo)
     for rel, digest in wrote.items():
-        had = [d for d in raw.get(rel, []) if isinstance(d, str) and d != digest]
+        had = [d for d in raw.get(rel, []) if d != digest]
         raw[rel] = [*had[-(KEEP - 1) :], digest]
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, json.dumps(raw, indent=1, sort_keys=True) + "\n")
