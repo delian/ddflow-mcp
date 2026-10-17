@@ -85,9 +85,13 @@ def reexports(path: str, tree: ast.Module, resolve_: Callable[[str], str]) -> di
     out: dict[str, set[str]] = {}
     for node in _statements(tree.body):
         if isinstance(node, ast.ImportFrom):
-            mod = resolve_(_from_target(path, node))
-            if mod:
-                out.setdefault(mod, set()).update(a.asname or a.name for a in node.names)
+            target = _from_target(path, node)
+            for a in node.names:
+                sub = f"{target}.{a.name}" if target else a.name
+                # `from . import wait` re-exports the MODULE `wait`, not a name of the package
+                mod = sub if resolve_(sub) == sub else resolve_(target)
+                if mod:
+                    out.setdefault(mod, set()).add(a.asname or a.name)
     return out
 
 
@@ -203,7 +207,7 @@ def build(tree: Path, py: list[str], changed: list[str]) -> Graph:
     for p, mod_ast in parsed.items():
         if p.endswith("__init__.py"):
             g.exports[module_name(p)] = reexports(p, mod_ast, lambda n: resolve(n, g.names))
-        elif used := facade_uses(p, mod_ast, facades):
+        if used := facade_uses(p, mod_ast, facades):
             g.uses[p] = used
     return g
 
