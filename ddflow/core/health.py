@@ -184,7 +184,8 @@ def _dead(ln: Lane, now: float) -> Finding:
         now - ln.renewed_at,
         f"holder's process is gone (pid {pids}) with {held} in {ln.worktree or 'its tree'}; "
         f"last renewed {_age(now - ln.renewed_at)} ago",
-        f"`ddflow recover` shows the work; `ddflow claim {ln.item}` resumes it",
+        f"`ddflow recover` shows the work; `ddflow health --run --mode apply` records the lease "
+        f"expired (the work is kept), then `ddflow claim {ln.item}` resumes it",
         {"worktree": ln.worktree, "recorded": ln.recorded, "work": ln.work, "pids": list(ln.pids)},
     )
 

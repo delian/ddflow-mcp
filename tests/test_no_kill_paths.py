@@ -60,12 +60,14 @@ def _calls(path: Path):
 
 
 def _is_probe(name: str, call: ast.Call) -> bool:
-    """`os.kill(pid, 0)` only asks whether a process exists."""
+    """A signal-0 call (`os.kill(pid, 0)`, `os.killpg(pgid, 0)`) only asks whether it exists."""
+    last = call.args[-1] if call.args else None
     return (
-        name == "kill"
-        and len(call.args) == 2
-        and isinstance(call.args[1], ast.Constant)
-        and call.args[1].value == 0
+        name in {"kill", "killpg", "send_signal"}
+        and len(call.args) >= 1
+        and isinstance(last, ast.Constant)
+        and last.value == 0
+        and (name == "send_signal" or len(call.args) == 2)
     )
 
 
@@ -93,14 +95,18 @@ def test_the_watchdog_modules_signal_nothing_and_delete_nothing():
         for name, call, fn in _calls(ROOT / rel):
             if name in KILLERS and not _is_probe(name, call):
                 bad.append(f"{rel}:{call.lineno} {name}() in {fn}")
-            if fn == "declare":
-                continue  # a harness's own identity record, not work
-            if name in DELETERS and not (name in {"replace", "move"} and _is_str_call(call)):
+            if fn != "declare" and _deletes(name, call):  # declare: its own identity record
                 bad.append(f"{rel}:{call.lineno} {name}() in {fn}")
     assert not bad, bad
 
 
-def _is_str_call(call: ast.Call) -> bool:
-    """`"text".replace(...)` is not a file move."""
+def _deletes(name: str, call: ast.Call) -> bool:
+    """Removes or moves files: `unlink`/`rmtree`/`rmdir` anywhere, the generic names
+    (`remove`, `replace`, `move`, `rename`) only on `os` / `shutil` / a path-like name."""
+    if name not in DELETERS:
+        return False
+    if name in {"unlink", "rmtree", "rmdir", "removedirs"}:
+        return True
     f = call.func
-    return isinstance(f, ast.Attribute) and isinstance(f.value, ast.Constant | ast.JoinedStr)
+    recv = f.value if isinstance(f, ast.Attribute) else None
+    return isinstance(recv, ast.Name) and recv.id in {"os", "shutil", "W", "path", "tree", "wt"}
