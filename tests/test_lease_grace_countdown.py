@@ -31,6 +31,7 @@ def test_plan_and_show_never_print_a_negative_countdown(repo):
     assert blocked is not None
     why = blocked.detail
     assert "another -" not in why and "grace period" in why
+    assert why.startswith("leased by a; ran out ")
 
     text = lease.left_text(late, cfg.lease.grace_s)
     assert "-" not in text and "grace period" in text
