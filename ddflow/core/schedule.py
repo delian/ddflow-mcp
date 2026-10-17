@@ -30,7 +30,7 @@ from ..config import Config
 from ..core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
 from . import flowcontrol as FC
 from .admission import Clash, conflicts, glob_conflict, is_shared, shared_globs  # noqa: F401
-from .autoorder import DECIDE_TAGS
+from .autoorder import is_decide
 from .flow import FEATURE, branch_kind, stack_base, unknown_line
 from .flowparams import params
 from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
@@ -285,7 +285,7 @@ def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
     ancestors = state.ancestors(it.id)
     # A decide task is the operator's first move and writes only a document, so a phase's
     # gates ("8 open tasks inherited from P-x") never hold it back; its own `needs` still do.
-    if not ancestors or DECIDE_TAGS & set(it.tags):
+    if not ancestors or is_decide(it.tags):
         return pairs
     mine = state.descendants(it.id) | {it.id} | {a.id for a in ancestors}
     for anc in ancestors:
