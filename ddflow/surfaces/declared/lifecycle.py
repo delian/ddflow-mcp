@@ -898,7 +898,16 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
         ),
-        tool_order=("id", "message", "queue", "keep", "model", "allow_dirty", "allow_empty", "branch"),
+        tool_order=(
+            "id",
+            "message",
+            "queue",
+            "keep",
+            "model",
+            "allow_dirty",
+            "allow_empty",
+            "branch",
+        ),
     ),
 )
 
