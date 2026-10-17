@@ -40,6 +40,7 @@ def proj(repo):
         "tests/test_b.py": "import pkg.b\n\ndef test_two():\n    assert pkg.b.two() == 2\n",
         "tests/test_c.py": "from pkg.c import three\n\ndef test_three():\n    assert three() == 3\n",
         "tests/test_facade.py": "from pkg.api import three\n\ndef test_f():\n    assert three()\n",
+        "tests/test_facade_idle.py": "import pkg.api\n\ndef test_i():\n    assert pkg.api\n",
         "tests/sub/test_deep.py": "def test_deep():\n    assert True\n",
         "tests/test_widget_misc.py": "def test_w():\n    assert True\n",
     }
@@ -68,12 +69,16 @@ def test_a_leaf_change_reaches_its_importers_within_two_hops(proj):
     assert "tests/test_facade.py" not in got, "the graph does not continue through a facade"
 
 
-def test_the_graph_does_not_continue_through_a_package_facade(proj):
-    """`pkg/api/__init__.py` imports pkg.c, and test_facade imports pkg.api: two hops, but
-    importing a re-exporting facade is not evidence a test exercises pkg.c."""
+def test_the_graph_continues_through_a_package_facade_only_for_a_name_it_re_exports(proj):
+    """`pkg/api/__init__.py` imports pkg.c, and both facade tests import pkg.api: importing a
+    re-exporting facade is not evidence a test exercises pkg.c, but spelling `three`, the name
+    it re-exports from pkg.c, is (Beb27076db4)."""
     (proj / "pkg/c.py").write_text("from pkg import b\n\ndef three():\n    return 3\n")
     got = _picked(proj)
-    assert got == {"tests/test_c.py": "imports pkg.c"}, got
+    assert got == {
+        "tests/test_c.py": "imports pkg.c",
+        "tests/test_facade.py": "uses three of pkg.api, which re-exports from pkg.c",
+    }, got
 
 
 def test_a_new_test_file_is_selected_before_it_is_committed(proj):
