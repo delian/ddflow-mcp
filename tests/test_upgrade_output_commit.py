@@ -12,6 +12,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from test_upgrade_apply import go, old  # noqa: F401 -- the old-version project fixture
 
 from ddflow.config import Config
@@ -63,6 +64,21 @@ def test_the_digests_of_a_run_that_settled_nothing_are_kept_too(old: Path) -> No
     log = EventLog(old, "upgrader")
     UA._close(log, "r1", [], set(), ("1", "1", "2"), [], "", {}, False, {SETTINGS: "abc"})
     assert fold(log.read_all(), strict=False).upgrade_runs["r1"]["written"] == {SETTINGS: "abc"}
+
+
+def test_the_output_of_an_interrupted_upgrade_commits_too(old: Path) -> None:  # noqa: F811
+    """A run killed after its first step never reaches the closing event: each step carries the
+    digests of what was written so far."""
+
+    def killed(_line: str) -> None:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        go(old, "hooks", watch=UA.Watch(progress=killed))
+    assert (old / SETTINGS).exists()
+    _git(old, "add", SETTINGS)
+    verdict = _verdict(old)
+    assert verdict.exit == OK, verdict.message
 
 
 def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:  # noqa: F811
