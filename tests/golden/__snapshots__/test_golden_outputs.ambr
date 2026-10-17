@@ -2141,13 +2141,14 @@
           pins (the constants ratchet, the layering guard, golden snapshots, the
           setup-ops and loop transcripts, the README table pins, the tool budget: the
           ones that have broken main past a selection; measured about 30 s plus the
-          loop transcript's one long test). Not in the default, add them when they
-          bite: `tests/test_architecture_guards.py` (18 s), `tests/test_compat*.py`,
-          `tests/test_uc_surf_*transcript*.py`: their input is the whole code base, so
-          no import closure can know a change affects them. Recorded in the gate
-          evidence as `always` (count, files) and `always_s` (the seconds they cost);
-          when the closure is empty they still run alone. Empty list: only the
-          selection runs.
+          loop transcript's one long test). Left out of the default for their cost,
+          add them when they bite: `tests/test_architecture_guards.py` (18 s),
+          `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py`
+          (37 s): their input is the whole code base, so no import closure can know a
+          change affects them. Recorded in the gate evidence as `always` (count,
+          files) and `always_s` (the seconds they cost); when the closure is empty
+          they run alone, in place of the whole-suite fallback (the guards are the
+          recall for such a change). Empty list: only the selection runs.
       prompts.review_system = ''   [default]
           Path to the reviewer's system prompt template, replacing the shipped one.
           `ddflow prompts eject` writes an editable copy into .ddflow/prompts/ to

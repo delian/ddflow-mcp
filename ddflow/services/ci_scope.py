@@ -52,6 +52,7 @@ class Plan:
     always: list[str] = field(default_factory=list)
     always_command: str = ""
     always_s: float = 0.0  #: what they cost; set once they ran
+    ok: dict[str, bool] = field(default_factory=dict)  #: stage ("selected"|"always") -> passed
 
     def commands(self) -> list[str]:
         """The pytest commands of a selected run, in order (the selection, then the guards)."""
