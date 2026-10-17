@@ -119,11 +119,15 @@ def failure_evidence(text: str) -> dict[str, Any]:
     if not found:
         return {}
     tails = failure_tails(text)
-    ids = list(dict.fromkeys(f["id"] for f in found))
-    kept = [f for f in found if f["id"] in set(ids[:MAX_FAILED_TESTS])]
-    ev: dict[str, Any] = {"failed_tests": ids[:MAX_FAILED_TESTS]}
-    if len(ids) > MAX_FAILED_TESTS:
-        ev["failed_tests_more"] = len(ids) - MAX_FAILED_TESTS
+    everyone = list(dict.fromkeys(f["id"] for f in found))
+    failing = list(dict.fromkeys(f["id"] for f in found if f["kind"] == "FAILED"))
+    erring = list(dict.fromkeys(f["id"] for f in found if f["kind"] == "ERROR"))
+    # Errors keep a budget of their own: a run with many failures must not lose its error.
+    ids = list(dict.fromkeys(failing[:MAX_FAILED_TESTS] + erring[:MAX_FAILED_TESTS]))
+    kept = [f for f in found if f["id"] in set(ids)]
+    ev: dict[str, Any] = {"failed_tests": ids}
+    if len(everyone) > len(ids):
+        ev["failed_tests_more"] = len(everyone) - len(ids)
     reasons: dict[str, str] = {}
     errors = _error_fields(kept, tails, reasons)
     if reasons:
