@@ -17,16 +17,16 @@ def _text(out, a) -> str:
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("health",),
-        summary="stalled, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass",
+        summary="idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass",
         tool="ddflow_health",
-        description="Watchdog: stalled, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode.",
+        description="Watchdog: idle, stalled, unresponsive, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode and the mode_<kind> overrides.",
         call=lambda repo, a, agent: _api().health(
             repo, run=bool(a.get("run")), mode=a.get("mode") or "", agent=agent
         ),
-        payload=("mode", "ran", "findings", "moves", "count", "text"),
+        payload=("mode", "modes", "ran", "findings", "moves", "count", "text"),
         render=_text,
         flag_exempt={
-            "--mode": "per-call override of [health].mode; over MCP set it with ddflow_configure"
+            "--mode": "per-call override of every health mode; over MCP set [health].mode / mode_<kind> with ddflow_configure"
         },
         params=(
             Param(
@@ -38,7 +38,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "mode",
                 help="",
-                cli_help="override [health].mode: off, propose or apply",
+                cli_help="override every health mode (mode and mode_<kind>) for this call: off, propose or apply",
                 choices=("off", "propose", "apply"),
                 default=None,
                 cli_only=True,

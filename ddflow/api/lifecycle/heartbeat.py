@@ -11,6 +11,7 @@ from typing import Any
 from ...core import outcome as O
 from ...core.model import fold
 from ...services import eventcommit as EC
+from ...services import healthwatch as HW
 from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import waits as WT
@@ -128,10 +129,13 @@ def _yield_request(log, cfg, item: str) -> str:
     files and it has shown no progress for `[lease].idle_max_s` (`services.leasebreak`)."""
     now = time.time()
     st = localize(fold(log.read_all(), strict=False), log, now)
-    for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root)):
-        if v.item == item:
-            return LB.yield_text(v)
-    return ""
+    asked = [
+        LB.yield_text(v)
+        for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root))
+        if v.item == item
+    ]
+    asked.append(HW.stop_notice(st, item))  # the watchdog's stop request (DX-health-watch)
+    return " ".join(t for t in asked if t)
 
 
 def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:

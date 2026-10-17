@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.mode_idle"
+new = '"inherit"'
+why = "The watchdog mode for idle findings alone; inherit takes health.mode."
+impact = "additive"

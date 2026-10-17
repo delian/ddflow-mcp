@@ -2524,6 +2524,7 @@
   "shape": "object",
   "payload": [
    "mode",
+   "modes",
    "ran",
    "findings",
    "moves",
@@ -2537,6 +2538,7 @@
      "const": "health@1"
     },
     "mode": {},
+    "modes": {},
     "ran": {},
     "findings": {},
     "moves": {},

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.reply_s"
+new = '600'
+why = "Seconds a nudge or stop request may go unanswered before the lane is unresponsive and may be parked (0 = off)."
+impact = "additive"
