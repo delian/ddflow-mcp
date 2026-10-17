@@ -95,7 +95,10 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
                 gates=known,
             )
         except ValueError:
-            continue  # refused: the marker stays, so a later call tries again
+            # Refused by a rule (a human gate), which no retry changes: forget the marker
+            # rather than refuse again at every call.
+            RUN.clear_started(m)
+            continue
         RUN.clear_started(m)
         swept.append(f"{m.item}.{m.gate}")
     return swept
