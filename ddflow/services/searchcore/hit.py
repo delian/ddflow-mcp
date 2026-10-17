@@ -11,6 +11,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from ...core.registry import Registry
+
 
 @dataclass
 class Hit:
@@ -51,18 +53,23 @@ class FuncSource:
         return self.fn(ctx, kinds) if kinds & set(self.kinds) else []
 
 
-_REGISTRY: dict[str, SearchSource] = {}
+#: The sources by name, in the order they were added; adding one again replaces it, so a
+#: reload is harmless.
+SOURCES: Registry[SearchSource] = Registry(
+    "search source", key=lambda s: s.name, order="registered", replace=True
+)
+#: The registry's table, for the tests that save and restore it.
+_REGISTRY = SOURCES.table
 
 
 def register(source: SearchSource) -> SearchSource:
     """Add `source` (replacing one of the same name, so a reload is harmless)."""
-    _REGISTRY[source.name] = source
-    return source
+    return SOURCES.register(source)
 
 
 def registered() -> list[SearchSource]:
     """Every source, in registration order."""
-    return list(_REGISTRY.values())
+    return SOURCES.values_list()
 
 
 def gather(ctx: Any, kinds: set[str]) -> list[Hit]:

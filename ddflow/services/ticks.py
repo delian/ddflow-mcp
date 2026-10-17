@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..core.registry import Registry
 from ..infra import fsio
 
 STATE = "ticks.json"
@@ -134,26 +135,22 @@ class TickResult:
         }
 
 
-REGISTRY: dict[str, Tick] = {}
+#: Registering the same definition again is a no-op; another definition under a taken name is
+#: an error (two owners of one name would share its last-run time and starve each other).
+REGISTRY: Registry[Tick] = Registry("tick", key=lambda t: t.name, same_ok=True)
 
 
 def register(tick: Tick) -> Tick:
-    """Add ``tick`` to the registry. Registering the same definition again is a no-op;
-    another definition under a taken name is an error (two owners of one name would share
-    its last-run time and starve each other)."""
-    have = REGISTRY.get(tick.name)
-    if have is not None and have != tick:
-        raise ValueError(f"tick {tick.name!r} is already registered with another definition")
-    REGISTRY[tick.name] = tick
-    return tick
+    """Add ``tick`` to the registry (see `REGISTRY`)."""
+    return REGISTRY.register(tick)
 
 
 def unregister(name: str) -> None:
-    REGISTRY.pop(name, None)
+    REGISTRY.unregister(name)
 
 
 def registered() -> list[Tick]:
-    return [REGISTRY[n] for n in sorted(REGISTRY)]
+    return REGISTRY.values_list()
 
 
 # -- state ----------------------------------------------------------------------------------
