@@ -1089,24 +1089,33 @@ def _with_previous_findings(
     fix: bool = False,
 ) -> str:
     """``context`` plus the gate's previous findings and the author's triage of each, for a
-    full re-review (decision D-gate-economy 3).
+    full re-review (decision D-gate-economy 3) and for a delta (B64ed3cae18: shown only the
+    follow-up, the reviewer contradicted the earlier fix it could not see).
 
     The reviewer sees the item's whole diff AND what was said about it last time: each
     finding with `confirmed` (the author says it is fixed: check the fix), `refuted` (the
     author's probe shows it false: check the probe) or `untriaged`. Without them a
     re-review either re-reports what was settled or, as a delta of only the follow-up
-    commit, reports the fix as absent. Nothing to add for a first review, a delta (it
-    merges into the record instead) or a `--chunk` re-run (``rerun``).
+    commit, reports the fix as absent. Nothing to add for a first review or a `--chunk`
+    re-run (``rerun``).
     """
-    if (kind != "full" and not fix) or rerun or it is None:
+    if (kind not in ("full", "delta") and not fix) or rerun or it is None:
         return context
     found = _last_review(it, gate).get("chunk_findings")
     if not found or isinstance(found, B.Unavailable):
         return context
     mine = it.triage.get(gate, {})
+    seen = (
+        "You are shown only the commits since the reviewed head, not the whole change: the "
+        "fix for a `confirmed` finding is in them or already in the code you do not see, so "
+        "do not report a finding as unfixed from this diff alone."
+        if kind == "delta" and not fix
+        else ""
+    )
     lines = [
         "## Previous findings on this change, and the author's triage",
         "",
+        *([seen, ""] if seen else []),
         "An earlier review of this item reported the findings below. For each: if the "
         "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
         "refuted by its probe), do not report it again; report it only if it still holds, "
