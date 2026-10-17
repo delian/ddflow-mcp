@@ -151,6 +151,7 @@ COMMANDS: tuple[Command, ...] = (
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
             port_of=a.get("port_of", "") or "",
+            resources=a.get("resources", "") or "",
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
@@ -169,6 +170,12 @@ COMMANDS: tuple[Command, ...] = (
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param("body", help="Detail and acceptance criteria.", cli_help=""),
             Param(
+                "resources",
+                help="Resources it runs on: gpu:4,vllm.",
+                cli_help="physical resources the work RUNS on, as `ddflow update --resources` "
+                "takes them: 'gpu:4,vllm-fleet'",
+            ),
+            Param(
                 "priority",
                 type="integer",
                 help="Lower is offered first (default 100).",
@@ -177,7 +184,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "line",
-                help="Release line this lands on (a name from [flow.lines], or the current line). Omit for the current line; tasks inherit a phase's line.",
+                help="Release line (a [flow.lines] name). Omit for the current one; tasks inherit a phase's.",
                 cli_help="release line (default: the current one)",
                 default="",
             ),
@@ -196,7 +203,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "parent",
-                help="Owning phase id, OR another TASK's id, which makes this a SUB-TASK with its own globs and dependencies, run in parallel with its siblings. Same field as `phase` (the CLI has both names).",
+                help="Owning phase id, or a TASK id (makes this a SUB-TASK with its own globs and needs, run parallel to its siblings). Same field as `phase`.",
                 cli_help="owning phase OR task — a task parent makes this a SUB-TASK, which carries its own globs and dependencies like any other task",
                 default="",
             ),
@@ -222,6 +229,7 @@ COMMANDS: tuple[Command, ...] = (
             "globs",
             "body",
             "tags",
+            "resources",
             "priority",
             "line",
             "lines",
