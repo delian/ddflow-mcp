@@ -80,7 +80,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
-    if failed := GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg)):
+    gdefs = G.load_gates(repo, cfg)
+    excused = G.status(st, cfg, item, gdefs).not_applicable
+    if failed := GO.failed_review_blockers(st, cfg, item, gdefs, skip=excused):
         # D-failed-review-gate (B85841c0846): landing work whose review failed and was
         # never re-reviewed ships it unreviewed. Before any git action.
         return O.refused(

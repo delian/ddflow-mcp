@@ -187,3 +187,23 @@ def test_any_gate_with_a_reviewer_counts_not_only_different_family_ones(repo, tm
     st = fold(EventLog(repo).read_all(), strict=False)
     own = {"critic": replace(DEFAULT_GATES["critic"], reviewer="same_family_ok")}
     assert failed_review_blockers(st, Config.load(repo), "T1", own)
+
+
+def test_an_agent_cannot_skip_through_gate_record_either(repo, tmp_path):
+    """roborev on this fix: `gate record --outcome skipped` was a second way past the guard."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--outcome",
+        "skipped",
+        "--reason",
+        "timed out",
+        agent="coder",
+    )
+    assert code == 3 and "operator" in out + err, out + err
+    assert BLOCKER in _complete(repo)[1]
