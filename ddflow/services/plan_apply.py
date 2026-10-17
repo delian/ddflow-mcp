@@ -10,7 +10,6 @@ Pure: no I/O. The api writes what this decides.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,6 +17,7 @@ from ..core import digest as DG
 from ..core.handlers.items import PROPOSED_PREFIX
 from ..core.records import BLOCKED, State
 from . import items as IT
+from . import plancheck as PC
 
 LABEL = "plan:"
 
@@ -49,7 +49,7 @@ def body_of(item: Mapping[str, Any]) -> str:
     gates and the checks read."""
     body = str(item.get("body", ""))
     acc = str(item.get("acceptance", "")).strip()
-    if acc and not re.search(r"(?im)^\s*acceptance\b", body):
+    if acc and not PC.says_acceptance({"body": body}):
         body = f"{body}\n\nACCEPTANCE: {acc}".strip()
     return body
 
