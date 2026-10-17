@@ -3229,13 +3229,13 @@
     'ddflow_show': '''
       {
        "name": "ddflow_show",
-       "description": "Everything known about one phase, task or bug: state, dependencies, globs, the lease holder, the worktree path, and every gate's outcome with evidence. Check your work with it before ddflow_complete.",
+       "description": "Everything known about one phase, task, bug or research note: state, dependencies, globs, the lease holder, the worktree path, and every gate's outcome with evidence. Check your work with it before ddflow_complete.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "id": {
           "type": "string",
-          "description": "Item id (phase, task) or bug id."
+          "description": "Item, bug or research-note id."
          },
          "report": {
           "type": "boolean",

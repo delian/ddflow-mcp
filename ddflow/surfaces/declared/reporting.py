@@ -188,14 +188,14 @@ COMMANDS: tuple[Command, ...] = (
         path=("show",),
         tool="ddflow_show",
         description=(
-            "Everything known about one phase, task or bug: state, dependencies, globs, "
+            "Everything known about one phase, task, bug or research note: state, dependencies, globs, "
             "the lease holder, the worktree path, and every gate's outcome with evidence. "
             "Check your work with it before ddflow_complete."
         ),
         params=(
             Param(
                 "id",
-                help="Item id (phase, task) or bug id.",
+                help="Item, bug or research-note id.",
                 positional=True,
                 required=True,
                 cli_help="",
