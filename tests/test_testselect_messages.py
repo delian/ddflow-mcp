@@ -200,9 +200,9 @@ def test_a_non_ascii_file_name_keeps_its_own_phrases(messaged):
     assert "reworded text that holds" in got
 
 
-def test_a_quoted_diff_header_is_not_the_file_before_it():
+def test_a_quoted_diff_header_is_its_own_file_not_the_one_before_it():
     diff = (
         "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
         'diff --git "a/q\\"x.py" "b/q\\"x.py"\n--- "a/q\\"x.py"\n+++ "b/q\\"x.py"\n@@ -1 +1 @@\n-y = 1\n+y = 2\n'
     )
-    assert TI._added_removed(diff) == {"a.py": ["x = 1", "x = 2"]}
+    assert TI._added_removed(diff) == {"a.py": ["x = 1", "x = 2"], 'q"x.py': ["y = 1", "y = 2"]}
