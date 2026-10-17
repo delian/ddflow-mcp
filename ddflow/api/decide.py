@@ -15,10 +15,10 @@ from ..core import outcome as O
 from ..core.autoorder import is_decide
 from ..core.globs import inside
 from ..infra import worktree as W
+from ..infra.fsio import replace_text
 from ..services import chore as CO
-from ..services import gates as G
 from ._base import _load
-from .gates import record as gate_record
+from .chore import _skip_gates as skip_chore_gates
 from .lifecycle import complete
 from .lifecycle import merge as merge_item
 
@@ -68,18 +68,8 @@ def _fail(stage: str, item: str, out: O.Outcome, **data) -> O.Outcome:
     )
 
 
-def decide(
-    repo: Path,
-    item: str,
-    *,
-    decision_id: str,
-    path: str = "",
-    model: str = "",
-    agent: str = "",
-    called_from: Path | None = None,
-) -> O.Outcome:
-    """Write the document for ``decision_id``, then land and complete decide task ``item``."""
-    _log, cfg, st = _load(repo, agent)
+def _check(repo, cfg, st, item: str, decision_id: str, path: str):
+    """(item, decision, doc path), or the refusal."""
     it = st.items.get(item)
     if it is None or it.removed:
         return O.failed(KIND, f"no such item {item!r}", item=item)
@@ -109,6 +99,12 @@ def decide(
             f'"{",".join([*it.globs, rel])}"` first, or pass --path',
             item=item,
         )
+    refusal = _chore_class(cfg, st, item, rel)
+    return (it, d, rel) if refusal is None else refusal
+
+
+def _chore_class(cfg, st, item: str, rel: str) -> O.Outcome | None:
+    """The refusal unless ``rel`` is in the approved chore class."""
     if CO.outside(cfg, [rel]):
         return O.refused(
             KIND,
@@ -125,10 +121,29 @@ def decide(
             f"([chore].globs); a person runs `ddflow chore approve`",
             item=item,
         )
+    return None
+
+
+def decide(
+    repo: Path,
+    item: str,
+    *,
+    decision_id: str,
+    path: str = "",
+    model: str = "",
+    agent: str = "",
+    called_from: Path | None = None,
+) -> O.Outcome:
+    """Write the document for ``decision_id``, then land and complete decide task ``item``."""
+    _log, cfg, st = _load(repo, agent)
+    got = _check(repo, cfg, st, item, decision_id, path)
+    if isinstance(got, O.Outcome):
+        return got
+    it, d, rel = got
     wt = W.Worktree(item=item, path=W.load_path(repo, it.worktree), branch=it.branch, base=it.base)
     target = wt.path / rel
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render(item, d), encoding="utf-8")
+    replace_text(target, render(item, d))
     made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
     if not made.ok and "nothing to commit" not in (made.out + made.err):
         return O.failed(KIND, (made.err or made.out).strip(), item=item)
@@ -136,15 +151,9 @@ def decide(
         f"chore: decide {decision_id}; {rel} restates the record; standing approval "
         f"{CO.SUBJECT}@{CO.approval_digest(cfg)[:12]}"
     )
-    pipeline = G.status(st, cfg, item, G.load_gates(repo, cfg), diff=lambda: [rel]).pipeline
-    skipped = []
-    for gate in pipeline:
-        if gate == "merge" or gate not in cfg.chore.skip_gates:
-            continue
-        out = gate_record(repo, item, gate, skip=True, reason=note, agent=agent)
-        if not out.ok:
-            return _fail(f"skip {gate}", item, out)
-        skipped.append(gate)
+    skipped, gate = skip_chore_gates(repo, cfg, st, item, [rel], note, agent)
+    if isinstance(skipped, O.Outcome):
+        return _fail(f"skip {gate}", item, skipped)
     out = merge_item(repo, item, model=model, called_from=called_from, agent=agent)
     if not out.ok:
         return _fail("merge", item, out)
