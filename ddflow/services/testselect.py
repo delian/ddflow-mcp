@@ -407,7 +407,7 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
     if G.runs_pytest_serially(shlex.join(cmd)) and G.declares_xdist(root):
         cmd += ["-n", "auto"]
     if all("::" in t for t in py_tests):
-        # A NAMED test is asked for by id: the suite's marker filter (`-m 'not slow'` in
+        # A run made only of NAMED tests (node ids): the suite's marker filter (`-m 'not slow'` in
         # addopts) must not deselect it, or a slow regression test runs nothing (Bc332daa185).
         cmd += ["-m", ""]
     return shlex.join([*cmd, *py_tests])
