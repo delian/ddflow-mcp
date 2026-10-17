@@ -150,7 +150,7 @@ COMMANDS: tuple[Command, ...] = (
             globs=a.get("globs", "") or "",
             body=a.get("body", "") or "",
             tags=a.get("tags", "") or "",
-            priority=int(DEFAULT_PRIORITY if a.get("priority") is None else a["priority"]),
+            priority=None if a.get("priority") is None else int(a["priority"]),
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
             port_of=a.get("port_of", "") or "",
@@ -190,9 +190,8 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "priority",
                 type="integer",
-                help="Lower is offered first (default 100).",
-                cli_help="",
-                default=DEFAULT_PRIORITY,
+                help="Lower is offered first (default 100; a DX or bug-fix task: its band).",
+                cli_help="lower is offered first (default 100; a task tagged dx or a bug fix gets its [schedule] band)",
             ),
             Param(
                 "line",
