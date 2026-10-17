@@ -260,6 +260,41 @@ def tree_identity(cwd: Path) -> str:
     return f"{head}+{manifest or _dirt(parts)}"
 
 
+def head_of(tree_sha: str) -> str:
+    return tree_sha.split("+", 1)[0] if "+" in tree_sha else ""
+
+
+def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
+    """Is a run that began on tree ``started_on`` older than ``newer`` (a recorded or current
+    `tree_identity`)? True when the commits differ and the run's commit is an ancestor of the
+    other: its outcome describes source that has since moved on (B27a236a534). Unknown
+    commits, or ones neither of which descends from the other, are not superseded."""
+    a, b = head_of(started_on), head_of(newer)
+    if not a or not b or a == b:
+        return False
+    return _is_ancestor(cwd, a, b) is True
+
+
+def _is_ancestor(cwd: Path, a: str, b: str) -> bool | None:
+    """Is commit ``a`` an ancestor of ``b``? None when git could not say (an unknown
+    commit, git missing or killed): exit 1 is "no", and only 0 is "yes"."""
+    r = W.git(cwd, "merge-base", "--is-ancestor", a, b)
+    if r.unavailable or r.code not in (0, 1):
+        return None
+    return r.code == 0
+
+
+def moved_past(started_on: str, recorded: str, cwd: Path) -> bool:
+    """Is ``recorded`` (a tree recorded since a run began on ``started_on``) on another
+    commit that is NOT an ancestor of the run's own? An amended or rebased commit has no
+    ancestry with the run's; a recorded ancestor means the run is the newer work, and it
+    must still record (B27a236a534)."""
+    a, b = head_of(started_on), head_of(recorded)
+    if not a or not b or a == b:
+        return False
+    return _is_ancestor(cwd, b, a) is False  # could not tell: the run keeps its record
+
+
 def is_tree(tree_sha: str, cwd: Path) -> bool:
     """Does the recorded ``tree_sha`` name the tree ``cwd`` holds now? Either spelling: a
     `tree_identity`, or the fingerprint (clean or the pre-fix clean) an earlier ddflow

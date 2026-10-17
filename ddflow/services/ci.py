@@ -31,6 +31,9 @@ from .gateenv import child_env
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
+#: What `merge_tree` says of a base that conflicts with the ref, and what `run` reads back to
+#: tell that FAILED from a merge git could not finish (UNAVAILABLE): one constant for both.
+NOT_MERGEABLE = "does not merge with"
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 
@@ -108,8 +111,13 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
             return
         tree = s.path
         if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
+            # No hook of the repository runs in the scratch merge (core.hooksPath): the
+            # post-merge hook regenerated pins by running the golden suite, which outlived
+            # the git timeout and was reported as a conflict (B36c484af97).
             m = W.git(
                 tree,
+                "-c",
+                "core.hooksPath=/dev/null",
                 "-c",
                 "user.name=ddflow",
                 "-c",
@@ -119,8 +127,16 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
                 "--no-ff",
                 base,
             )
+            said = m.out or m.err
+            # A conflict is git's own answer: exit 1, or histories with nothing in common.
+            # Anything else (killed at the timeout, a base it cannot resolve, a lock held:
+            # exit 128) is a merge it could not do, which the gate cannot call a conflict.
+            conflict = m.code == 1 or "unrelated histories" in said
+            if not m.ok and not conflict:
+                yield None, f"could not merge {base} into {ref}: {m.err or m.out}"[-400:]
+                return
             if not m.ok:
-                yield None, f"{ref} does not merge with {base}: {(m.out or m.err)[-400:]}"
+                yield None, f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
                 return
         yield tree, ""
 
@@ -192,7 +208,7 @@ def run(
         return refused
     with merge_tree(repo, sha, base) as (tree, failure):
         if tree is None:
-            status = "failed" if "does not merge" in failure else "unavailable"
+            status = "failed" if NOT_MERGEABLE in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         scope = None
