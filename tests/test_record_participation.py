@@ -270,16 +270,21 @@ def test_a_resource_shows_the_successor_chain_and_unknowns_are_invalid_params(pr
 def test_the_resource_list_is_bounded_newest_first_and_redacted(proj, run_cli):
     secret = "sk-" + "abcdefghijklmnop1234567890"
     for i in range(R.RESOURCE_ROWS + 5):
-        _add(proj, f"t{i:03d}", f"Record {i} {secret if i == 0 else ''}", f"body {i}")
+        _add(
+            proj,
+            f"t{i:03d}",
+            f"Record {i} {secret if i == R.RESOURCE_ROWS + 4 else ''}",
+            f"body {i}",
+        )
     text = _call(proj, "resources/read", uri="ddflow://records/toy")["result"]["contents"][0][
         "text"
     ]
     lines = [ln for ln in text.splitlines() if ln.startswith("- ")]
     assert len(lines) == R.RESOURCE_ROWS and f"{R.RESOURCE_ROWS + 5} in all" in text
     assert lines[0].startswith("- t0" + str(R.RESOURCE_ROWS + 4)) and secret not in text
-    whole = _call(proj, "resources/read", uri="ddflow://records/toy/t000")["result"]["contents"][0][
-        "text"
-    ]
+    whole = _call(proj, "resources/read", uri=f"ddflow://records/toy/t{R.RESOURCE_ROWS + 4:03d}")[
+        "result"
+    ]["contents"][0]["text"]
     assert secret not in whole
 
 
@@ -289,3 +294,32 @@ def test_a_kind_that_opts_out_of_resources_is_not_listed(proj, run_cli):
     uris = [r["uri"] for r in _call(proj, "resources/list")["result"]["resources"]]
     assert "ddflow://records/toy" not in uris
     assert "error" in _call(proj, "resources/read", uri="ddflow://records/toy")
+
+
+def test_a_mixed_kind_request_lists_a_declared_record_once_and_a_legacy_kind_as_before(
+    proj, run_cli
+):
+    _add(proj, "t1", "Gizmo calibration", WORDS)
+    code, out, err = run_cli(
+        proj,
+        "rule",
+        "add",
+        "--id",
+        "r1",
+        "--title",
+        "Torque wrench rule",
+        "--content",
+        WORDS,
+        "--new",
+    )
+    assert code == 0, (out, err)
+    for kinds in ("toy,rule", "toy,skill", "toy,session", "toy,log"):
+        rows = json.loads(run_cli(proj, "--json", "search", "--kind", kinds, "torque wrench")[1])[
+            "rows"
+        ]
+        assert [r["id"] for r in rows if r["kind"] == "toy"] == ["t1"], kinds
+        assert not [r for r in rows if r["kind"] == "log" and "toy" in r["id"]], kinds
+    rows = json.loads(run_cli(proj, "--json", "search", "--kind", "rule", "torque wrench")[1])[
+        "rows"
+    ]
+    assert [r["id"] for r in rows if r["kind"] == "rule"].count("r1") == 1

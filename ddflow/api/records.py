@@ -776,7 +776,7 @@ def _resource_text(kind: RecordKind, rec: Any, full: bool) -> str:
     out.append(PV.fence(kind.name, rec.id, body, origin))
     events = [h["event"] for h in rec.history]
     out.append(
-        f"history: {len(events)} entries, first {rec.at[:10]}, last {rec.updated_at[:10]} "
+        f"history: {len(events)} entries, first {rec.at[:10]}, last {(rec.updated_at or rec.at)[:10]} "
         f"({', '.join(events[-5:])}); `ddflow {kind.name} history {rec.id} --diff` has them all"
     )
     return "\n".join(out)
