@@ -10,6 +10,8 @@ from ._docs import declare, int_at_least, knob
 
 #: What `[pins].after_merge` accepts.
 PINS_AFTER_MERGE = ("amend", "leave", "off")
+#: What `[pins].merge_check` accepts.
+PINS_MERGE_CHECK = ("fast", "all", "off")
 
 
 @declare("pins")
@@ -49,4 +51,13 @@ class PinsConfig:
         30,
         doc="Seconds between the lines `ddflow pins regenerate` prints on stderr while recipes are still running, naming them, so a long regeneration can be told from a hang. 0 prints only a line when a recipe starts and finishes.",
         check=int_at_least(0),
+    )
+    merge_check: str = knob(
+        "fast",
+        doc="What `ddflow merge` says about the pin files once a merge has landed. 'fast' (default): it CHECKS the pins the post-merge hook may run (read-only, each bounded by after_merge_timeout_s), reports the stale ones, and NAMES the pins the hook never runs (a recipe with `after_merge = false` runs a test suite) so a stale golden pin is never silent. 'all': it also checks those suite recipes, which makes the merge wait for them (a check that times out reads as stale). 'off': it says nothing about pins.",
+        choices=PINS_MERGE_CHECK,
+        strictest=(
+            "all",
+            "checks every pin, the suite recipes included, so a stale one is never left unsaid",
+        ),
     )
