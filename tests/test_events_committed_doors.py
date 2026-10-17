@@ -402,3 +402,30 @@ def test_a_post_commit_hook_printing_a_bracketed_hex_is_not_taken_for_our_commit
         f.write(shard.read_text().splitlines()[-1] + "\n")
     sha, note = eventcommit.commit_shards(repo, "mine")
     assert sha and "made again" not in note and "could not check" not in note, (sha, note)
+
+
+def test_a_post_commit_hook_that_stages_does_not_hide_our_commit(repo, monkeypatch):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    hook = repo / ".git" / "hooks" / "post-commit"
+    hook.write_text("#!/bin/sh\necho x >> staged.txt\ngit add staged.txt\n")
+    hook.chmod(0o755)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" in note, (sha, note)
