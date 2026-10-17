@@ -14,6 +14,7 @@ from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
 from ...services import reprobundle as RB
+from ...services.bug_globs import inherit_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
@@ -293,7 +294,7 @@ def _file_fix_task(
         parent=parent,
         title=full_title,
         needs=[],
-        globs=GS.parse(globs) if globs else list(src.globs if src else []),
+        globs=GS.parse(globs) if globs else inherit_globs(src.globs if src else [], summary),
         body=body,
         tags=[tag],
         priority=src.priority if src else DEFAULT_PRIORITY,
