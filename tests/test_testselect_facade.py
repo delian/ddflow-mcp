@@ -42,3 +42,20 @@ def test_a_test_spelling_a_reexported_name_is_selected_through_the_facade(faced)
     assert sel is not None and sel.full == ""
     got = {t.path for t in sel.tests}
     assert got == {"tests/test_alias.py", "tests/test_from.py", "tests/test_dotted.py"}, got
+
+
+def test_a_submodule_reexported_by_from_dot_import_and_a_facade_of_a_facade(faced):
+    for path, text in {
+        "pkg/api/__init__.py": "from . import wait\nfrom .claim import claim\n",
+        "pkg/__init__.py": "from pkg.api import claim\n",
+        "tests/test_sub.py": "from pkg import api\n\ndef test_e():\n    assert api.wait.LIMIT\n",
+        "tests/test_outer.py": "import pkg\n\ndef test_f():\n    assert pkg.claim()\n",
+    }.items():
+        (faced / path).write_text(text)
+    _git(faced, "add", "-A")
+    _git(faced, "commit", "-qm", "facades")
+    (faced / "pkg/api/wait.py").write_text("LIMIT = 3\n")
+    (faced / "pkg/api/claim.py").write_text("def claim():\n    return 3\n")
+    sel = T.select(faced, "main", hub_importers=0, max_hops=3)
+    got = {t.path for t in sel.tests}
+    assert {"tests/test_sub.py", "tests/test_outer.py"} <= got, got
