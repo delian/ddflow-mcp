@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=fdf2d1073d3d -->
-<details><summary>All 79 commands</summary>
+<!-- ddflow:begin README/commands sha=84ca7f1901ac -->
+<details><summary>All 78 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -552,7 +552,6 @@ needs a line written by hand here.
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
 | `ddflow update` | change an item's fields |
-| `ddflow chore` | commit or approve chore files (no reviewer) |
 | `ddflow plan` | check a plan before filing it |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
@@ -5771,7 +5770,7 @@ declared once and persists — see
 
 ## Configuration
 
-315 knobs across 36 sections, every one documented in place and listed, with its default
+315 knobs across 35 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5838,8 +5837,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=4a529624d2c8 -->
-<details><summary>All 315 knobs across 36 sections</summary>
+<!-- ddflow:begin README/knobs sha=776db2940994 -->
+<details><summary>All 315 knobs across 35 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5901,6 +5900,7 @@ long default is left to `ddflow config --explain`.
 | `flow.auto_promote` | `[]` |  |
 | `flow.version_files` | `{}` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
+| `gates.doc_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.kind_pipelines` | `{}` |  |
 | `gates.required` | `["implement", "unit_tests", "merge"]` |  |
@@ -6090,8 +6090,6 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.eta_default_s` | `900` |  |
 | `merge_queue.eta_history` | `5` |  |
 | `merge_queue.keep_history` | `50` |  |
-| `chore.globs` | (long: see `ddflow config --explain`) |  |
-| `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
@@ -6103,6 +6101,7 @@ long default is left to `ddflow config --explain`.
 | `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
 | `ci.tests_scope` | `"selected"` | `selected` \| `full` |
+| `ci.always_tests` | (long: see `ddflow config --explain`) |  |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |
