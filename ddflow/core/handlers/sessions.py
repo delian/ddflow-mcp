@@ -176,6 +176,12 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
     else:
         run["closed"] = "failed" if status == "failed" else "done"
         run["summary"] = str(d.get("summary", ""))
+    # What the run wrote, by digest (the closing event, done or failed): the commit hook waves
+    # exactly these bytes through without a lease (services.upgrade_written).
+    if isinstance(d.get("written"), dict):
+        run.setdefault("written", {}).update(
+            {k: v for k, v in d["written"].items() if isinstance(k, str) and isinstance(v, str)}
+        )
     return run
 
 

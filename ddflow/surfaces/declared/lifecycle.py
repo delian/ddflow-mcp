@@ -218,7 +218,7 @@ COMMANDS: tuple[Command, ...] = (
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
         call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a["id"], agent=agent, called_from=called_from
+            repo, a.get("id", ""), agent=agent, called_from=called_from
         ),
         payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
@@ -230,7 +230,16 @@ COMMANDS: tuple[Command, ...] = (
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
         wants_called_from=True,
-        params=(Param("id", help="Item id.", cli_help="", positional=True),),
+        params=(
+            Param(
+                "id",
+                help="Item id.",
+                cli_help="",
+                positional=True,
+                nargs="?",
+                default="",
+            ),
+        ),
     ),
     Command(
         path=("release",),
