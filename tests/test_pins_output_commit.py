@@ -100,3 +100,14 @@ def test_two_recorders_do_not_lose_each_others_digests(tmp_path: Path) -> None:
     with ThreadPoolExecutor(4) as pool:
         list(pool.map(run, "abcd"))
     assert len(PW.load(tmp_path)) == 4 * 40
+
+
+def test_the_post_merge_regeneration_records_its_output_too(repo: Path) -> None:
+    """roborev on this fix: the `--after-merge` path (`[pins].after_merge = "leave"`) re-records
+    pins and says "commit them", which then needed a lease."""
+    (repo / "knobs.txt").write_text("a\nb\n")
+    done = ddflow_cli(repo, "pins", "regenerate", "--after-merge")
+    assert done.returncode == 0, done.stderr
+    assert "2 knobs" in (repo / "pin.txt").read_text()
+    git(repo, "add", "pin.txt")
+    assert _verdict(repo).exit == OK

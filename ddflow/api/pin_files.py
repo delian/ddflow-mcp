@@ -7,6 +7,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import outcome as O
 from ..infra import git as G
+from ..infra.fsio import LockTimeout
 from ..services import leasekeep as LK
 from ..services import pins as PN
 from ..services import pins_merge as PM
@@ -43,20 +44,29 @@ def pins_regenerate(
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
-    if after_merge:
-        note = PM.after_merge(repo, cfg)
-        return O.ok("pins", note=note)
-    tick = _lease_tick(primary, agent)
     files = PN.pin_files(repo, cfg)
     before = PW.snapshot(repo, files) if not check else {}
+    if after_merge:
+        note = PM.after_merge(repo, cfg)
+        _record_written(primary, repo, before, files)
+        return O.ok("pins", note=note)
+    tick = _lease_tick(primary, agent)
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
-        # The lease-free commit of what was just re-recorded (B1579b8a1a9). The record sits in
-        # the primary checkout, which is where the commit hook reads it from.
-        PW.record(primary, PW.written(repo, before, files))
+        _record_written(primary, repo, before, files)
     if rep.problem:
         return O.failed("pins", rep.problem)
     return _regenerate_outcome(rep, check)
+
+
+def _record_written(primary: Path, repo: Path, before, files) -> None:
+    """The lease-free commit of what was just re-recorded (B1579b8a1a9). The record sits in the
+    primary checkout, which is where the commit hook reads it from. Best effort: a record that
+    cannot be written costs the exemption, never the regeneration that succeeded."""
+    try:
+        PW.record(primary, PW.written(repo, before, files))
+    except (OSError, LockTimeout):
+        pass
 
 
 def _regenerate_outcome(rep, check: bool) -> O.Outcome:
