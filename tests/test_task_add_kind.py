@@ -84,3 +84,12 @@ def test_a_doc_item_owes_no_readme_with_code(repo):
     cfg = Config()
     cfg.enforce.readme_with_code = "block"
     assert readme_report(st, cfg, "D1", repo=repo) == ""
+
+
+def test_a_doc_item_can_be_updated_and_removed_and_keeps_its_kind(repo):
+    assert _doc(repo)[0] == 0
+    assert run_cli(repo, "update", "D1", "--title", "New title", "--add-tags", "x")[0] == 0
+    it = _items(repo)["D1"]
+    assert (it.kind, it.title, it.tags) == ("doc", "New title", ["x"])
+    assert run_cli(repo, "remove", "D1")[0] == 0
+    assert _items(repo)["D1"].removed
