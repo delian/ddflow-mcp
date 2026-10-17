@@ -113,6 +113,7 @@ def test_reset_hard_only_on_primary(tmp_path):
     assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
     assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
     assert _check("make -C build && git reset --hard", cwd=wt) is None
+    assert _check('echo GIT_DIR=x && git commit -m "GIT_DIR=y" && git reset --hard', cwd=wt) is None
 
 
 def test_operator_lifts_per_session_and_config():

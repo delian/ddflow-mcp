@@ -95,8 +95,8 @@ def _strip_heredocs(text: str) -> str:
     return "\n".join(out)
 
 
-def _commands(text: str, *, nested: bool = False) -> list[list[str]]:
-    """Each command of `text` as its words."""
+def _split(text: str) -> list[list[str]]:
+    """The commands of `text` as their words (no `sh -c` string looked into)."""
     cmds: list[list[str]] = []
     for line in _strip_heredocs(text).split("\n"):
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
@@ -114,6 +114,12 @@ def _commands(text: str, *, nested: bool = False) -> list[list[str]]:
                 cur = []
             else:
                 cur.append(w)
+    return cmds
+
+
+def _commands(text: str) -> list[list[str]]:
+    """Each command of `text` as its words, and of the strings given to `sh -c` (three levels)."""
+    cmds = _split(text)
     todo = cmds
     for _ in range(3):  # three nested `sh -c` levels are looked into
         found: list[list[str]] = []
@@ -122,7 +128,7 @@ def _commands(text: str, *, nested: bool = False) -> list[list[str]]:
             if body and body[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in body:
                 i = body.index("-c")
                 if i + 1 < len(body):
-                    found.extend(_commands(body[i + 1], nested=True))
+                    found.extend(_split(body[i + 1]))
         cmds.extend(found)
         todo = found
     return cmds
@@ -240,9 +246,10 @@ def _elsewhere(cmds: list[list[str]]) -> bool:
     for c in cmds:
         if c[0] in ("cd", "pushd"):
             return True
-        if any(w.startswith(("GIT_DIR=", "GIT_WORK_TREE=")) for w in c):
-            return True
         head = _head(c)
+        lead = c[: len(c) - len(head)]  # the assignments in front of the command word
+        if any(w.startswith(("GIT_DIR=", "GIT_WORK_TREE=")) for w in lead):
+            return True
         if head and head[0].rsplit("/", 1)[-1] == "git":
             for w in head[1:]:
                 if not w.startswith("-"):
