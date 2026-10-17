@@ -545,6 +545,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("approval.granted", "user"): "a user id",
     ("backmerge.recorded", "into"): "a branch name",
     ("bug.found", "key"): "a dedupe key",
+    ("bug.found", "repro"): "the link to a stored bundle: its blob reference, size and mode",
     ("bug.found", "scope"): "a scope word",
     ("bug.found", "severity"): "a severity word",
     ("ci.result", "status"): "a status word",

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.report_test_files"
+new = "12"
+why = "Limit in the ddflow report completion report."
+impact = "additive"

@@ -44,6 +44,8 @@ TEMPLATE_NAMES: tuple[str, ...] = (
     "review_user",  # the per-chunk user message
     "gate_instruction",  # what an agent is told to do for an agent gate
     "session_brief_header",
+    "agent_brief",  # the launch brief of a subagent (`ddflow brief --for-agent`)
+    "agent_report",  # the completion report of an item (`ddflow report`)
     # What the MCP client injects on connect: the workflow, the reporting duties and
     # the companion tools. Text, because it is the file you edit to change how this
     # project works rather than what the code does.

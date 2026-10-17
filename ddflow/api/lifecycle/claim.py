@@ -18,12 +18,14 @@ from ...infra import worktree as W
 from ...services import choices as CHO
 from ...services import flow as FS
 from ...services import leases as L
+from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import waiting as WG
 from ...services.bug_globs import bug_globs_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
+from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
@@ -269,6 +271,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
         return bound
     wt = bound.wt
     _bring_local_files(repo, cfg, wt)
+    if wt is not None:  # a pin file merges through its driver in the tree an agent works in
+        PM.ensure_driver(Path(wt.path), cfg)
     log.append("item.started", item, {})
     # The first branch made is where the branching model starts to matter. An unmade
     # choice is defaulted here, on the record, and followed from now on.
@@ -276,7 +280,10 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
-    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    if warned := missing_globs(repo, cfg, lz.globs):
+        out.data["glob_warnings"] = warned
+    return out
 
 
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:

@@ -13,6 +13,7 @@ from ...core.admission import new_file_globs
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
@@ -44,6 +45,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -147,8 +149,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
+    (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
-    if not r.ok:
+    landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+    if not r.ok and not landed_note:
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
         if r.attempted:  # a refused precondition says nothing about this branch
@@ -204,17 +208,30 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         "passed",
         gates=G.load_gates(repo, cfg),
         tree=None if borrowed else wt.path,
+        reason=landed_note,
         evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
     )
     removed_tree, kept_reason = _dispose_tree(
         repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
     )
-    if back_failed:
-        kept_reason = "; ".join(
-            filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
+    kept_reason = "; ".join(
+        filter(
+            None,
+            [
+                kept_reason,
+                landed_note,
+                ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else "",
+            ],
         )
+    )
 
+    say = on_progress or (lambda _line: None)
+    say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    say(_ci_notice(repo, cfg))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    say(
+        f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
+    )
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
@@ -236,6 +253,47 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         merge_gate_human=human_gate,
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
+    )
+
+
+def _ci_notice(repo: Path, cfg) -> str:
+    """The line said before the post-merge check starts: what runs and which knobs bound it."""
+    try:
+        command, why = CI.main_command(repo, cfg)
+        notice = (
+            f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+            f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never "
+            f"as a failure"
+        )
+    except Exception:  # a line of progress never stops a merge that has landed
+        return "post-merge check starting"
+    if not command:
+        return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
+    return notice
+
+
+def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
+    """A note when git reported failure but the merge commit is on the base; else "".
+
+    git can be killed at its timeout AFTER it committed: the post-merge hook, which runs
+    inside `git merge`, takes minutes under load. Reporting that as a refusal left the
+    merge gate failed for a branch the base already held, and the next `merge` said "no
+    commits ahead" (B04bab3d1b3). The base having moved to a head that contains the branch
+    is what happened, whatever git's exit status said.
+    """
+    if not r.attempted:
+        return ""
+    now = W.rev(repo, wt.base)
+    # The head this run tried to land, not the branch ref: an item's tree can be ahead of it.
+    contained = (
+        bool(branch_head) and W.git(repo, "merge-base", "--is-ancestor", branch_head, wt.base).ok
+    )
+    if not now or now == landed_before or not contained:
+        return ""
+    how = "timed out" if r.timed_out else f"exited {r.code}"
+    return (
+        f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
+        f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
     )
 
 

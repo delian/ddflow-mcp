@@ -90,6 +90,10 @@ def _regenerate_pins(repo: Path, cfg, wt: W.Worktree) -> str:
         return f"pins: {rep.problem}"
     if rep.failed:
         return "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
+    if rep.unavailable:  # not re-recorded, and not known to be current: not a merge to build on
+        return "pins unavailable: " + "; ".join(
+            f"{p.name}: {p.unavailable}" for p in rep.unavailable
+        )
     names = [p.name for p in rep.pins if p.regenerated]
     if not names:
         return ""
@@ -122,7 +126,7 @@ def _run_checks(
     asked. "" when they pass, else why the entry is parked (``detail`` then holds what failed)."""
     if "ci" in GS.pipeline_for(it, cfg):
         log = MQ.log_path(repo, e)
-        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log)
+        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log, full=True)
         if out.exit != O.OK:
             detail.update(_ci_detail(repo, e, out, log))
             return f"ci {out.data.get('status', 'did not pass')}: {out.reason}"

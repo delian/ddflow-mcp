@@ -24,6 +24,7 @@ def pins_regenerate(
     target: str = "",
     start: Path | None = None,
     agent: str = "",
+    on_progress=None,
 ) -> O.Outcome:
     """Re-record the stale pin files; with ``check`` list them (exit 1 when any)."""
     if verb == "merge-driver":
@@ -45,9 +46,15 @@ def pins_regenerate(
         note = PM.after_merge(repo, cfg)
         return O.ok("pins", note=note)
     tick = _lease_tick(primary, agent)
-    rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick)
+    rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if rep.problem:
         return O.failed("pins", rep.problem)
+    return _regenerate_outcome(rep, check)
+
+
+def _regenerate_outcome(rep, check: bool) -> O.Outcome:
+    """The outcome of a run: failed when a recipe failed (or, with ``check``, is stale); nothing
+    (exit 2, could not run) when a recipe could not finish; ok otherwise."""
     rows = [
         {
             "name": p.name,
@@ -55,11 +62,15 @@ def pins_regenerate(
             "stale": p.stale,
             "regenerated": p.regenerated,
             "error": p.error,
+            **({"unavailable": p.unavailable} if p.unavailable else {}),
         }
         for p in rep.pins
     ]
+    extra = {"resolved": rep.resolved} if rep.resolved else {}
     if rep.failed:
-        return O.failed("pins", "; ".join(f"{p.name}: {p.error}" for p in rep.failed), pins=rows)
+        return O.failed(
+            "pins", "; ".join(f"{p.name}: {p.error}" for p in rep.failed), pins=rows, **extra
+        )
     if check and rep.stale:
         return O.failed(
             "pins",
@@ -68,7 +79,10 @@ def pins_regenerate(
             + ". `ddflow pins regenerate` re-records them",
             pins=rows,
         )
-    return O.ok("pins", pins=rows)
+    if rep.unavailable:
+        why = "; ".join(f"{p.name}: {p.unavailable}" for p in rep.unavailable)
+        return O.nothing("pins", f"could not finish: {why}", pins=rows, **extra)
+    return O.ok("pins", pins=rows, **extra)
 
 
 def _lease_tick(repo: Path, agent: str):

@@ -41,6 +41,7 @@ from .config_sections.cadence import (
 )
 from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
     CI_ON_MERGE_MODES,
+    CI_TESTS_SCOPES,
     CiConfig,
 )
 from .config_sections.companions import (
@@ -121,6 +122,9 @@ from .config_sections.metrics import (
 )
 from .config_sections.pins import (
     PinsConfig,
+)
+from .config_sections.plan import (
+    PlanConfig,
 )
 from .config_sections.prompts import (
     PromptsConfig,
@@ -247,6 +251,7 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
+    plan: PlanConfig = field(default_factory=PlanConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
