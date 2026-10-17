@@ -98,7 +98,7 @@ _HOOK_START = re.compile(r"^\s*-\s+id:\s*[\"']?(?P<id>[^\s\"'#]+)")
 _REPO_START = re.compile(r"^\s*-\s+repo:")
 _FAIL_LANGUAGE = re.compile(r"^\s+language:\s*[\"']?fail[\"']?\s*(#.*)?$")
 _STAGES = re.compile(r"^\s+(?P<key>default_stages|stages):\s*(?P<inline>\[[^\]]*\])?")
-_LIST_ITEM = re.compile(r"^\s+-\s*[\"']?(?P<v>[\w-]+)")
+_LIST_ITEM = re.compile(r"^\s*-\s*[\"']?(?P<v>[\w-]+)[\"']?\s*(#.*)?$")
 #: The names pre-commit gives the pre-push stage (the old and the new).
 _PUSH_STAGES = ("pre-push", "push")
 
@@ -297,7 +297,10 @@ def run(
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         if not cfg.ci.command.strip() and DEFAULT_COMMAND in cmd:
-            cmd = with_tripwires_on_the_diff(cmd, tree, changed_from or base)
+            # The diff the check is about. On the base itself (the after-merge check) there is
+            # no branch to compare with: the commit that was just made, against its first parent.
+            since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
+            cmd = with_tripwires_on_the_diff(cmd, tree, since)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
