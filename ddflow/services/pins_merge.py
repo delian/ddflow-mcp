@@ -82,14 +82,16 @@ def after_merge(repo: Path, cfg: Config) -> str:
     if mode == "off":
         return ""
     rep = regenerate(repo, cfg, after_merge=True, on_progress=_say)
-    if rep.problem or not rep.pins:
-        return ""
     cannot = (
         "pins unavailable (not checked, nothing recorded as stale or failed): "
         + "; ".join(f"{p.name}: {p.unavailable}" for p in rep.unavailable)
         if rep.unavailable
         else ""
     )
+    if rep.problem:  # a run that could not start says so; silence reads as "all current"
+        return "; ".join(filter(None, [f"pins: {rep.problem}", cannot]))
+    if not rep.pins:
+        return ""  # nothing the hook may run
     if rep.failed:
         failed = "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
         return "; ".join(filter(None, [failed, cannot]))

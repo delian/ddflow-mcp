@@ -37,7 +37,7 @@ from pathlib import Path
 from ..config import Config
 from ..infra import git as G
 from ..infra import proc as P
-from ..infra.fsio import LockTimeout, file_lock, replace_text
+from ..infra.fsio import LockTimeout, atomic_write, file_lock, replace_text
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
 from .pins_conflict import apply as apply_settled
@@ -347,15 +347,27 @@ def _run_all(
     for r in (r for r in chosen if states[r.name].stale):
         say(f"pins: {r.name}: re-recording")
         began = time.monotonic()
+        kept = _snapshot(repo, r)
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        if done.timed_out and soft:
-            states[r.name].unavailable = (
-                f"the regeneration did not finish in {limit}s (timed out): its files may be "
-                f"half written, check `git status` for {', '.join(r.files)}"
+        broke = done.error is not None or done.returncode != 0
+        # A killed or failed regeneration leaves its files as it dropped them (README.md with
+        # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
+        back = (
+            " Its files were put back as they were."
+            if broke and kept is not None and _restore(repo, r, kept)
+            else (
+                f" Its files may be half written: check `git status` for {', '.join(r.files)}."
+                if broke
+                else ""
             )
+        )
+        if done.timed_out and soft:
+            states[
+                r.name
+            ].unavailable = f"the regeneration did not finish in {limit}s (timed out).{back}"
             say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
-        elif done.error is not None or done.returncode != 0:
-            states[r.name].error = f"regeneration failed: {_tail(done)}"
+        elif broke:
+            states[r.name].error = f"regeneration failed: {_tail(done)}{back}"
             states[r.name].unavailable = ""
             say(f"pins: {r.name}: FAILED ({time.monotonic() - began:.0f}s)")
         else:
@@ -363,6 +375,54 @@ def _run_all(
             redone.append(r)
     _pmap(again, redone, workers, say, every, "re-checks")
     return [states[r.name] for r in chosen]
+
+
+#: The most a snapshot of one recipe's files holds in memory.
+_SNAPSHOT_MAX = 64 * 1024 * 1024
+
+
+def _owned(repo: Path, r: Recipe) -> list[Path]:
+    """Every file the recipe owns: a directory in ``files`` is every file under it."""
+    found: list[Path] = []
+    for f in r.files:
+        p = Path(repo) / f.rstrip("/")
+        if p.is_file():
+            found.append(p)
+        elif p.is_dir():
+            found.extend(sorted(q for q in p.rglob("*") if q.is_file()))
+    return found
+
+
+def _snapshot(repo: Path, r: Recipe) -> dict[Path, bytes] | None:
+    """The bytes of the recipe's files before it re-records them; None when they cannot be held
+    (unreadable, or more than `_SNAPSHOT_MAX`): then nothing is promised about putting them back."""
+    kept: dict[Path, bytes] = {}
+    total = 0
+    try:
+        for p in _owned(repo, r):
+            data = p.read_bytes()
+            total += len(data)
+            if total > _SNAPSHOT_MAX:
+                return None
+            kept[p] = data
+    except OSError:
+        return None
+    return kept
+
+
+def _restore(repo: Path, r: Recipe, kept: dict[Path, bytes]) -> bool:
+    """Put the recipe's files back as ``kept`` has them: rewritten when changed, recreated when
+    deleted, deleted when the run created them in a directory it owns. False if it could not."""
+    try:
+        for p in _owned(repo, r):
+            if p not in kept:
+                p.unlink()
+        for p, data in kept.items():
+            if not p.is_file() or p.read_bytes() != data:
+                atomic_write(p, data)
+    except OSError:
+        return False
+    return True
 
 
 def _owns(r: Recipe, path: str) -> bool:

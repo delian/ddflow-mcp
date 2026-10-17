@@ -140,3 +140,54 @@ def test_a_run_asked_for_still_reports_a_recipe_that_outlives_timeout_s_as_faile
     slow = _recipe("slow", "import time; time.sleep(60)")
     rep = PN.regenerate(tree, cfg, recipes=[slow])
     assert [p.name for p in rep.failed] == ["slow"] and not rep.unavailable
+
+
+def _damaging(name: str, then: str) -> PN.Recipe:
+    """A stale pin whose re-recording duplicates the file's lines, deletes a sibling and then
+    ``then`` (the damage a regeneration killed under load left behind)."""
+    code = (
+        "import pathlib\n"
+        f"p = pathlib.Path('{name}.txt'); p.write_text(p.read_text() * 50)\n"
+        f"pathlib.Path('{name}.d/gone.txt').unlink()\n"
+        f"pathlib.Path('{name}.d/new.txt').write_text('stray')\n"
+        f"{then}\n"
+    )
+    return PN.Recipe(
+        name, (f"{name}.txt", f"{name}.d/"), (PY, "-c", "raise SystemExit(1)"), (PY, "-c", code)
+    )
+
+
+def _pin_files(tree: Path, name: str) -> None:
+    (tree / f"{name}.txt").write_text("a\nb\n")
+    (tree / f"{name}.d").mkdir()
+    (tree / f"{name}.d" / "gone.txt").write_text("keep me")
+
+
+def test_a_killed_regeneration_puts_its_files_back(tree):
+    _pin_files(tree, "dmg")
+    cfg = Config.load(tree)
+    cfg.pins.after_merge_timeout_s = 1
+    rep = PN.regenerate(
+        tree, cfg, recipes=[_damaging("dmg", "import time; time.sleep(60)")], after_merge=True
+    )
+    assert [p.name for p in rep.unavailable] == ["dmg"], rep
+    assert "put back" in rep.unavailable[0].unavailable
+    assert (tree / "dmg.txt").read_text() == "a\nb\n"
+    assert (tree / "dmg.d" / "gone.txt").read_text() == "keep me"
+    assert not (tree / "dmg.d" / "new.txt").exists()
+
+
+def test_a_failed_regeneration_puts_its_files_back_too(tree):
+    _pin_files(tree, "dmg")
+    rep = PN.regenerate(tree, Config.load(tree), recipes=[_damaging("dmg", "raise SystemExit(3)")])
+    assert [p.name for p in rep.failed] == ["dmg"]
+    assert "put back" in rep.failed[0].error
+    assert (tree / "dmg.txt").read_text() == "a\nb\n"
+    assert (tree / "dmg.d" / "gone.txt").read_text() == "keep me"
+
+
+def test_the_hook_says_so_when_it_could_not_run_at_all(tree):
+    (tree / ".ddflow").mkdir()
+    (tree / ".ddflow" / "pins.toml").write_text("[[pin]\nbroken")
+    line = PM.after_merge(tree, Config.load(tree))
+    assert line.startswith("pins: "), line
