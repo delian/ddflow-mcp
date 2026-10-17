@@ -78,6 +78,19 @@ def test_acquire_on_a_recorded_expiry_names_the_recorded_expiry(repo):
         L.acquire(log, cfg, "T1", holder="someone-else", globs=["a.py"])
 
 
+def test_acquire_inside_the_grace_window_says_so_not_a_negative_countdown(repo, monkeypatch):
+    """Bc99060b8ca: past the TTL but inside the grace the lease is live, and the refusal
+    said 'held by X for another -76s' -- a countdown below zero with no way forward."""
+    log, cfg, lease = _claimed(repo)
+    late = lease.renewed_at + lease.ttl_s + 30
+    monkeypatch.setattr(L.time, "time", lambda: late)
+    with pytest.raises(L.LeaseError) as exc:
+        L.acquire(log, cfg, "T1", holder="someone-else", globs=["a.py"])
+    msg = str(exc.value)
+    assert "for another -" not in msg
+    assert "grace period" in msg and "ddflow recover --item T1" in msg
+
+
 def test_release_claim_and_transfer_write_the_events(repo):
     log, _cfg, lease = _claimed(repo)
     with log.transaction():
