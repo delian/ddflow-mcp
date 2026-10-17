@@ -214,3 +214,12 @@ def test_a_symlinked_binary_pin_file_stays_a_symlink_when_it_is_put_back(tree):
     assert [p.name for p in rep.failed] == ["bin"]
     assert (tree / "link.bin").is_symlink()
     assert (tree / "real.bin").read_bytes() == b"\xff\xfe\x00bin"
+
+
+def test_a_recipe_with_more_files_than_a_snapshot_holds_is_not_promised_back(tree):
+    """Over the cap (the `most` parameter) `_snapshot` says it cannot hold the files, and a
+    failed regeneration then says its files may be half written instead of 'put back'."""
+    (tree / "big.txt").write_text("x" * 100)
+    recipe = _recipe("big", "raise SystemExit(1)")
+    assert PN._snapshot(tree, recipe, most=10) is None
+    assert PN._snapshot(tree, recipe, most=1000) is not None

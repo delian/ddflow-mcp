@@ -123,24 +123,65 @@ def test_pre_push_warn_mode_does_not_refuse_for_the_shards(repo, tmp_path):
     assert "not committed" in p.stderr and p.returncode == 0
 
 
-def test_the_commit_runs_under_the_log_lock(repo, monkeypatch):
-    """A ddflow writer cannot append between the whole-line check and the commit."""
+def test_the_shards_are_read_under_the_log_lock_and_the_commit_is_not(repo, monkeypatch):
+    """A ddflow writer cannot append between the whole-line check and the read of the shards;
+    the commit, whose hooks can run for minutes, does not hold the lock (the hooks of a
+    project must not make every other ddflow command time out)."""
     from ddflow.infra import log as L
     from ddflow.services import eventcommit
 
     _project(repo)
-    seen = []
-    real = eventcommit.commit_shards
+    held = {}
 
-    def spy(root, *a, **k):
-        seen.append(L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0))
-        return real(root, *a, **k)
+    def lock_depth(root):
+        return L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0)
 
-    monkeypatch.setattr(eventcommit, "commit_shards", spy)
+    real_read = eventcommit._read_whole
+    real_git = eventcommit.W.git
+
+    def read(root, rel):
+        held["read"] = lock_depth(root)
+        return real_read(root, rel)
+
+    def git(root, *args, **kw):
+        if args and args[0] == "commit":
+            held["commit"] = lock_depth(root)
+        return real_git(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit, "_read_whole", read)
+    monkeypatch.setattr(eventcommit.W, "git", git)
     from ddflow.api import knowledge as K
 
     K.session_end(repo, "s1")
-    assert seen and seen[0] > 0
+    assert "commit" in held, "the commit never ran, so it proves nothing"
+    assert held.get("read", 0) > 0 and held["commit"] == 0, held
+
+
+def test_a_commit_made_between_the_read_and_the_commit_is_not_reverted(repo, monkeypatch):
+    """The private index is built on HEAD as it is when the commit is made: another commit
+    that landed after the shards were read keeps its changes in the event-log commit."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit._private_index
+
+    def after_someone_commits(root, taken, index):
+        (root / "other.txt").write_text("v2\n")
+        _git(root, "add", "other.txt")
+        _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, taken, index)  # builds on HEAD as it is now
+
+    monkeypatch.setattr(eventcommit, "_private_index", after_someone_commits)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "HEAD moved" not in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the interleaved commit was reverted"
+    assert _git(repo, "diff", "--cached", "--name-only") == ""
 
 
 def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monkeypatch):
@@ -167,3 +208,150 @@ def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monke
     assert _git(repo, "log", "-1", "--format=%s") == "events: merge T1"
     assert "ci.result" in _git(repo, "show", "HEAD")
     assert EC.uncommitted_shards(repo) == []
+
+
+def test_a_commit_that_lands_just_before_ours_begins_is_kept(repo, monkeypatch):
+    """The one span git's own ref check cannot cover (between the index being built and git
+    beginning the commit): the commit that landed there would be undone, so the event-log
+    commit is remade on top of it, and the note says so."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was undone"
+    assert _git(repo, "log", "-1", "--format=%s").startswith("events:")
+    assert _git(repo, "log", "-2", "--format=%s").splitlines()[1] == "other v2"
+    assert eventcommit.uncommitted_shards(repo) == []
+    assert _git(repo, "diff", "--cached", "--name-only") == ""
+
+
+def test_a_commit_that_lands_right_after_ours_is_left_alone(repo, monkeypatch):
+    """The remaking is for the commit this door made only: a foreign commit that lands on top
+    of it stays, with its file and its subject, and the note says nothing about it."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_after(root, *args, **kw):
+        out = real(root, *args, **kw)
+        if args and args[0] == "commit":
+            (root / "extra.txt").write_text("x\n")
+            _git(root, "add", "extra.txt")
+            _git(root, "commit", "-qm", "foreign work", "--no-verify")
+        return out
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_after)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" not in note and "HEAD moved" not in note, (sha, note)
+    assert _git(repo, "log", "-1", "--format=%s") == "foreign work"
+    assert _git(repo, "show", "HEAD:extra.txt") == "x"
+
+
+def test_a_merge_with_our_tree_landing_right_after_is_not_taken_for_ours(repo, monkeypatch):
+    """A foreign `-s ours` merge has the event-log commit's tree but two parents: it is not
+    remade as a single-parent commit (which would drop its second parent), and the sha
+    returned is HEAD, the commit that holds the shards."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    _git(repo, "branch", "side")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    _git(repo, "checkout", "-q", "side")
+    (repo / "side.txt").write_text("s\n")
+    _git(repo, "add", "side.txt")
+    _git(repo, "commit", "-qm", "side work", "--no-verify")
+    _git(repo, "checkout", "-q", "main")
+    real = eventcommit.W.git
+
+    def merge_after(root, *args, **kw):
+        out = real(root, *args, **kw)
+        if args and args[0] == "commit":
+            # what `merge -s ours side` makes: HEAD's own tree under two parents
+            merged = _git(
+                root,
+                "commit-tree",
+                "HEAD^{tree}",
+                "-p",
+                "HEAD",
+                "-p",
+                "side",
+                "-m",
+                "foreign merge",
+            )
+            _git(root, "update-ref", "HEAD", merged)
+        return out
+
+    monkeypatch.setattr(eventcommit.W, "git", merge_after)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert "made again" not in note, note
+    assert _git(repo, "log", "-1", "--format=%s") == "foreign merge"
+    assert len(_git(repo, "log", "-1", "--format=%P").split()) == 2  # its parents are intact
+    assert sha == _git(repo, "rev-parse", "HEAD")
+
+
+def test_when_git_cannot_say_whether_head_is_ours_the_note_says_so(repo, monkeypatch):
+    """'Could not tell' is not 'not ours': it is said, and nothing is rebuilt."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def cannot_log(root, *args, **kw):
+        if args and args[0] == "log" and "--format=%T%n%P%n%B" in args:
+            return eventcommit.G.GitResult(1, "", "boom")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", cannot_log)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "could not check HEAD" in note, (sha, note)
+
+
+def test_a_message_git_folds_is_still_recognised_as_ours(repo, monkeypatch):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    _, note = eventcommit.commit_shards(repo, "mine  \n", "events: {reason}   \n\n")
+    assert "made again" in note, note
+    assert _git(repo, "show", "HEAD:other.txt") == "v2"
