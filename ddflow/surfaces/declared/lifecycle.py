@@ -211,7 +211,16 @@ COMMANDS: tuple[Command, ...] = (
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
         wants_called_from=True,
-        params=(Param("id", help="Item id.", cli_help="", positional=True),),
+        params=(
+            Param(
+                "id",
+                help="Item id.",
+                cli_help="",
+                positional=True,
+                nargs="?",
+                default="",
+            ),
+        ),
     ),
     Command(
         path=("release",),

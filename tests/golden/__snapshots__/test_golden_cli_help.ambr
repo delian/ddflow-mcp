@@ -757,7 +757,7 @@
 # ---
 # name: test_help[ddflow heartbeat]
   '''
-  usage: ddflow heartbeat [-h] id
+  usage: ddflow heartbeat [-h] [id]
   
   positional arguments:
     id
