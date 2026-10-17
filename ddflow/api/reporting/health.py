@@ -34,6 +34,7 @@ from ...services import logblobs as LB
 from ...services import pins_merge as PM
 from ...services import rates as RT
 from ...services import repairs as RP
+from ...services import repo_hygiene as RH
 from ...services import sessions as SS
 from ...services import shardmarks as SM
 from ...services import shared_files as SF
@@ -354,6 +355,7 @@ def doctor(
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
+    notes.extend(RH.doctor_notes(repo))  # a stray identity, core.bare, a stale primary
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
