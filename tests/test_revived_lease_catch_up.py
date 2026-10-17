@@ -10,6 +10,7 @@ longer decides it.
 
 from __future__ import annotations
 
+import importlib
 import sys
 import time
 from pathlib import Path
@@ -66,3 +67,28 @@ def test_a_revived_lease_is_caught_up_when_nothing_is_slow(repo, monkeypatch):
     beat = A.heartbeat(repo, "T1", agent=HOLDER)
     assert beat.exit == O.OK, beat.reason
     assert _items(repo)["T1"].lease.resources == ["gpu:3"], beat.data
+
+
+def test_the_catch_up_leaves_a_lease_that_changed_hands_alone(repo, monkeypatch):
+    """The window between the renewal and the catch-up now being judged at the renewal, a
+    lease another agent took over in it must not be pointed at the item's values."""
+    from ddflow.api._base import _load
+
+    HB = importlib.import_module("ddflow.api.lifecycle.heartbeat")  # the name is re-exported
+
+    _lapsed_claim(repo, monkeypatch)
+    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", str(TTL))
+    taken = A.claim(repo, "T1", no_worktree=True, force=True, agent="agent-other")
+    monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
+    assert taken.ok, taken.reason
+    lease = lambda: _items(repo)["T1"].lease  # noqa: E731
+    wait_until(lambda: not lease().live(time.time(), 0), 10, what="the other lease to lapse")
+    assert AI.update(repo, "T1", AI.ItemEdit(resources=["gpu:2"]), agent="agent-other").ok
+    held = lease().resources
+    assert held != ["gpu:2"] and lease().holder == "agent-other", (held, lease().holder)
+    log, cfg, _ = _load(repo, HOLDER)
+    at = lease().renewed_at
+    assert HB._catch_up_globs(log, cfg, "T1", at, HOLDER) == ""
+    assert lease().resources == held, "the heartbeat's holder is not this lease's"
+    assert HB._catch_up_globs(log, cfg, "T1", at, "agent-other") == ""
+    assert lease().resources == ["gpu:2"], "the holder's own lease is caught up"
