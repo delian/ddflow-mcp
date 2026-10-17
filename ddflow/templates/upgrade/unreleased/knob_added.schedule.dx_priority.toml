@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "schedule.dx_priority"
+new = '8'
+why = "The priority of a DX task filed with none."
+impact = "additive"

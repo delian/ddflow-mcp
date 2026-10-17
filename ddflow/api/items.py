@@ -552,7 +552,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     globs: str = "",
     body: str = "",
     tags: str = "",
-    priority: int = DEFAULT_PRIORITY,
+    priority: int | None = None,
     line: str = "",
     lines: str = "",
     port_of: str = "",
