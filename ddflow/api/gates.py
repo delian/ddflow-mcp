@@ -1013,7 +1013,7 @@ def record(
         gate,
         item,
         agent,
-        skip or outcome in ("skipped", "unavailable", "partial"),
+        skip or outcome == "skipped",
         outcome != "failed",
     )
     if refused is not None:
