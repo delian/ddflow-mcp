@@ -115,3 +115,30 @@ def test_the_commit_holds_exactly_the_bytes_that_were_checked(repo, monkeypatch)
     # the half line is still only in the working tree, and the shared index is not left staged
     assert shard.read_text() == snapshot + line[:20]
     assert _git(repo, "diff", "--cached", "--name-only") == ""
+
+
+def test_an_unreadable_blob_is_named_not_silently_dropped(repo):
+    import os
+
+    import pytest
+
+    from ddflow.services import eventcommit as EC
+
+    if os.geteuid() == 0:
+        pytest.skip("root reads everything")
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "adopt", "--no-verify")
+    K.session_end(repo, "s1")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    blob = repo / ".ddflow" / "blobs" / "x.json"
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_text("{}")
+    blob.chmod(0)
+    try:
+        sha, note = EC.commit_shards(repo, "mine")
+    finally:
+        blob.chmod(0o644)
+    assert sha and "x.json" in note and "unreadable" in note, (sha, note)

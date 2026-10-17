@@ -123,27 +123,64 @@ def test_pre_push_warn_mode_does_not_refuse_for_the_shards(repo, tmp_path):
     assert "not committed" in p.stderr and p.returncode == 0
 
 
-def test_the_snapshot_runs_under_the_log_lock_and_the_commit_does_not(repo, monkeypatch):
-    """A ddflow writer cannot append between the whole-line check and the snapshot; the
-    commit, whose hooks can run for minutes, does not hold the lock (the hooks of a project
-    must not make every other ddflow command time out)."""
+def test_the_shards_are_read_under_the_log_lock_and_the_commit_is_not(repo, monkeypatch):
+    """A ddflow writer cannot append between the whole-line check and the read of the shards;
+    the commit, whose hooks can run for minutes, does not hold the lock (the hooks of a
+    project must not make every other ddflow command time out)."""
     from ddflow.infra import log as L
     from ddflow.services import eventcommit
 
     _project(repo)
     held = {}
-    real = eventcommit.W.git
 
-    def spy(root, *args, **kw):
-        if args and args[0] in ("update-index", "commit"):
-            held[args[0]] = L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0)
-        return real(root, *args, **kw)
+    def lock_depth(root):
+        return L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0)
 
-    monkeypatch.setattr(eventcommit.W, "git", spy)
+    real_read = eventcommit._read_whole
+    real_git = eventcommit.W.git
+
+    def read(root, rel):
+        held["read"] = lock_depth(root)
+        return real_read(root, rel)
+
+    def git(root, *args, **kw):
+        if args and args[0] == "commit":
+            held["commit"] = lock_depth(root)
+        return real_git(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit, "_read_whole", read)
+    monkeypatch.setattr(eventcommit.W, "git", git)
     from ddflow.api import knowledge as K
 
     K.session_end(repo, "s1")
-    assert held.get("update-index", 0) > 0 and held.get("commit") == 0, held
+    assert held.get("read", 0) > 0 and held.get("commit") == 0, held
+
+
+def test_a_commit_made_between_the_read_and_the_commit_is_not_reverted(repo, monkeypatch):
+    """The private index is built on HEAD as it is when the commit is made: another commit
+    that landed after the shards were read keeps its changes in the event-log commit."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit._private_index
+
+    def after_someone_commits(root, taken, index):
+        (root / "other.txt").write_text("v2\n")
+        _git(root, "add", "other.txt")
+        _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, taken, index)  # builds on HEAD as it is now
+
+    monkeypatch.setattr(eventcommit, "_private_index", after_someone_commits)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "HEAD moved" not in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the interleaved commit was reverted"
+    assert _git(repo, "diff", "--cached", "--name-only") == ""
 
 
 def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monkeypatch):
