@@ -135,6 +135,67 @@ def spelling_tests(
     return {t: f"names {name}, changed in {idents[name]}" for t, name in found.items()}
 
 
+_LITERAL = re.compile(r"\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'")
+_PLACEHOLDER = re.compile(r"\{[^{}]*\}|\\[ntr]")
+_PHRASE_WORDS = 4  #: consecutive words that make a phrase
+_PHRASE_MIN = 16  #: characters a phrase has, so four short words are not one
+_PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is not a signal
+
+
+def _phrases(lines: Iterable[str]) -> set[str]:
+    """Runs of ``_PHRASE_WORDS`` words inside the string literals of ``lines``, split at an
+    interpolation (``{x}``) or a newline escape: the text a message is made of."""
+    out: set[str] = set()
+    for line in lines:
+        for m in _LITERAL.finditer(line):
+            for part in _PLACEHOLDER.split(m.group(1) or m.group(2) or ""):
+                words = part.split()
+                for i in range(len(words) - _PHRASE_WORDS + 1):
+                    phrase = " ".join(words[i : i + _PHRASE_WORDS])
+                    if len(phrase) >= _PHRASE_MIN:
+                        out.add(phrase)
+    return out
+
+
+def changed_phrases(
+    tree: Path, base: str, files: list[str], tip: str = "HEAD", source: Path | None = None
+) -> dict[str, str]:
+    """Phrase -> a changed .py file whose string literals gained or lost it: the message a
+    test asserts on, which the import graph cannot see (B-selectrecall: a CLI message reworded
+    in ``claim_text`` broke ``test_asagent_tree.py``, reached only through a hub). From the
+    committed change (``base...tip``) and the working tree against HEAD (when ``tip`` is
+    HEAD); every phrase of an untracked file. {} when git cannot say."""
+    root = source or tree
+    out: dict[str, str] = {}
+    for f in (f for f in files if f.endswith(".py")):
+        diffs = [_diff(tree, f"{base}...{tip}", "--", f)] if base else []
+        if tip == "HEAD":
+            diffs.append(_diff(tree, "HEAD", "--", f))
+        lines = [
+            ln[1:]
+            for d in diffs
+            for ln in d.splitlines()
+            if ln[:1] in "+-" and ln[:3] not in ("---", "+++")
+        ]
+        if W.git(tree, "ls-files", "--error-unmatch", "--", f).code != 0:
+            try:
+                lines += (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                pass
+        for phrase in sorted(_phrases(lines)):
+            if len(out) < _PHRASE_CAP:
+                out.setdefault(phrase, f)
+    return out
+
+
+def phrase_tests(
+    phrases: dict[str, str], sources: dict[str, str], max_tests: int = 30
+) -> dict[str, str]:
+    """Test path -> why, for each test whose text holds a changed phrase."""
+    found = _spellers(phrases, "{}", sources, max_tests)
+    return {t: f"says '{p}', changed in {phrases[p]}" for t, p in found.items()}
+
+
 def listed_packages(files: list[str]) -> dict[str, str]:
     """Package -> an added or removed module of it, for each .py file of ``files`` (the
     dotted name and the path of its directory, both keys). A module added to or removed from a

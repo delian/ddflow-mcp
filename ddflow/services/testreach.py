@@ -83,6 +83,28 @@ def resolve(name: str, known: set[str]) -> str:
     return ""
 
 
+def _bare_homes(py: list[str]) -> dict[tuple[str, str], str]:
+    """(directory, stem) -> the module, for each .py file in a directory that is not a package:
+    pytest puts such a directory on ``sys.path``, so a test says ``from _wait import x`` and
+    ``import conftest`` and means ``tests/_wait.py`` and ``tests/conftest.py``."""
+    packages = {str(PurePosixPath(p).parent) for p in py if PurePosixPath(p).name == "__init__.py"}
+    return {
+        (str(PurePosixPath(p).parent), PurePosixPath(p).stem): module_name(p)
+        for p in py
+        if str(PurePosixPath(p).parent) not in packages
+    }
+
+
+def _bare(name: str, importer: str, homes: dict[tuple[str, str], str]) -> str:
+    """The module a bare ``name`` imported by ``importer`` is: a file of its own directory, or
+    of one above it that is not a package."""
+    head = name.split(".", maxsplit=1)[0]
+    for d in PurePosixPath(importer).parents:
+        if mod := homes.get((str(d), head)):
+            return mod
+    return ""
+
+
 @dataclass
 class Graph:
     """Module -> the files importing it, over the repository's own modules."""
@@ -105,6 +127,7 @@ def build(tree: Path, py: list[str], changed: list[str]) -> Graph:
     known = {module_name(p): p for p in py}
     gone = {module_name(c) for c in changed if c.endswith(".py") and c not in py}
     g = Graph(names=set(known) | gone)
+    homes = _bare_homes(py)
     for p in py:
         try:
             found = imports(p, (tree / p).read_text(encoding="utf-8", errors="replace"))
@@ -112,7 +135,7 @@ def build(tree: Path, py: list[str], changed: list[str]) -> Graph:
             g.unparsed.append(p)
             continue
         for n in found:
-            mod = resolve(n, g.names)
+            mod = resolve(n, g.names) or _bare(n, p, homes)
             if mod and known.get(mod) != p:
                 g.importers.setdefault(mod, set()).add(p)
     return g
