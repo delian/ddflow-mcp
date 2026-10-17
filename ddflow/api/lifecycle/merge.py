@@ -228,7 +228,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
     say(_ci_notice(repo, cfg))
-    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=landed_before)
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
     )
