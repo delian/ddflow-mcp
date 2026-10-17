@@ -10,9 +10,10 @@ import ddflow.api._dedupe as DD
 
 from ...config import csv_list
 from ...core import outcome as O
+from ...core import participation as PA
 from ...core import provenance as PV
 from ...core.budget import RECALL_MAX_CHARS, Budget
-from ...infra.store import RECALL_SOURCES
+from ...infra.store import recall_sources
 from ...services import contextpack as CP
 from ...services import searchcore as SC
 from ...services import similar as sim
@@ -29,6 +30,10 @@ def _origin(st, table: str, ident):
         return PV.lesson_origin(st.lessons[ident])
     if table == "memories" and ident in st.memories:
         return PV.memory_origin(st.memories[ident])
+    declared = PA.DECLARED.get(table)
+    rec = st.defs.get(f"{declared.def_kind}:{ident}") if declared else None
+    if rec is not None:  # a declared kind: somebody's words, said by an agent or an import
+        return PV.Origin(PV.IMPORTED if rec.source else PV.AGENT, rec.by, rec.source)
     return None
 
 
@@ -57,8 +62,9 @@ def recall(
     obvious in the log.
     """
     log, cfg, _st = _load(repo, agent)
+    sources_now = recall_sources()
     results = SC.search_sources(_store(repo, log, cfg), query, sources, limit)
-    labels = {table: label for table, label, _ in RECALL_SOURCES}
+    labels = {table: label for table, label, _ in sources_now}
     # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
     # somebody's words, and a hit shown without its author reads as the tool's own.
     # Looked up in the folded state by id -- the index holds no author column.
@@ -80,7 +86,7 @@ def recall(
     data: dict[str, Any] = {
         "results": {t: [c.hit for c in cs] for t, cs in cut.kept.items()},
         "query": query,
-        "searched": [t for t, _, _ in RECALL_SOURCES],
+        "searched": [t for t, _, _ in sources_now],
         "max_chars": max_chars,
         "pack": {
             "shown": cut.shown,
@@ -92,13 +98,13 @@ def recall(
             "fold_note": cut.fold_note(),
             "cited": list(cut.cited),
         },
-        "_render": {"results": results, "sources": RECALL_SOURCES},
+        "_render": {"results": results, "sources": sources_now},
     }
     if not results:
         return O.nothing(
             "recall",
             f"Nothing recalled for {query!r}.\n"
-            f"Searched: {', '.join(t for t, _, _ in RECALL_SOURCES)}.",
+            f"Searched: {', '.join(t for t, _, _ in sources_now)}.",
             **data,
         )
     # What the budget or the duplicate check left out is said where a caller reads it: the

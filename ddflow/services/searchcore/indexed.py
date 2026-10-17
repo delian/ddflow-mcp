@@ -12,18 +12,25 @@ from __future__ import annotations
 from typing import Any
 
 from ...config import csv_list
-from ...infra.store import RECALL_SOURCES, Store
+from ...core import participation as PA
+from ...infra.store import Store, recall_sources
 from ..similar import open_store
 
 
 def tables() -> tuple[str, ...]:
     """The index tables a recall reads, in the order a reader should weigh them."""
-    return tuple(t for t, _, _ in RECALL_SOURCES)
+    return tuple(t for t, _, _ in recall_sources())
 
 
 def search_table(store: Store, table: str, query: str, limit: int) -> list[dict[str, Any]]:
-    """The best ``limit`` rows of one index table for ``query``, best first."""
-    return store.search(table, query, limit)
+    """The best ``limit`` rows of one index table for ``query``, best first. A declared kind
+    is read from the shared ``records`` table, ranked on its own, at most its ``recall_cap``
+    rows, and its rows are named by the record's own id."""
+    declared = PA.DECLARED.get(table)
+    if declared is None:
+        return store.search(table, query, limit)
+    rows = store.search("records", query, min(limit, declared.recall_cap), prefix=f"{table}:")
+    return [{**r, "id": r["rid"]} for r in rows]
 
 
 def search_sources(
@@ -38,7 +45,7 @@ def search_sources(
     want = csv_list(sources) or list(tables())
     lowered = [w.lower() for w in want]
     results: dict[str, list[dict[str, Any]]] = {}
-    for table, label, _why in RECALL_SOURCES:
+    for table, label, _why in recall_sources():
         if table not in lowered and label.lower() not in lowered:
             continue
         try:
