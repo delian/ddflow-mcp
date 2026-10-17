@@ -84,3 +84,13 @@ def test_a_hook_that_is_not_executable_is_not_a_hook(repo):
     PM.install(repo, cfg)
     (PM.hooks_dir(repo) / "post-merge").chmod(0o644)
     assert "not installed" in "\n".join(PM.hook_notes(repo, cfg))
+
+
+def test_the_command_in_a_comment_is_not_a_hook(repo):
+    """critic on this fix: a disabled line (`# ddflow pins regenerate --after-merge`) re-records nothing."""
+    cfg = _project(repo)
+    hook = PM.hooks_dir(repo) / "post-merge"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(f"#!/bin/sh\n{PM.HOOK_MARK}\n# ddflow pins regenerate --after-merge\n")
+    hook.chmod(0o755)
+    assert "not installed" in "\n".join(PM.hook_notes(repo, cfg))

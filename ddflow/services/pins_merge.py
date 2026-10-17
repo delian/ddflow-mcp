@@ -272,14 +272,18 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
 
 
 def _hook_runs_pins(hook: Path) -> bool:
-    """Would git run ``hook`` and would it re-record the pins: an executable file that is ddflow's
-    own (`HOOK_MARK`) or a hand-written one that calls `pins regenerate --after-merge`."""
+    """Would git run ``hook`` and would it re-record the pins: an executable file with a line
+    that is not a comment and runs `pins regenerate --after-merge` (ddflow's own hook is one;
+    so is a hand-written one the doctor told the user to write)."""
     try:
         text = hook.read_text("utf-8", errors="replace") if hook.is_file() else ""
         runs = os.access(hook, os.X_OK)
     except OSError:
         return False
-    return runs and (HOOK_MARK in text or "pins regenerate --after-merge" in text)
+    lines = (ln.strip() for ln in text.splitlines())
+    return runs and any(
+        ln and not ln.startswith("#") and "pins regenerate --after-merge" in ln for ln in lines
+    )
 
 
 def hook_notes(repo: Path, cfg: Config) -> list[str]:
