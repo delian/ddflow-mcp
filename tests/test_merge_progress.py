@@ -61,6 +61,7 @@ def test_the_progress_names_the_check_and_the_knob_that_bounds_it(repo, monkeypa
 def test_the_progress_arrives_while_the_post_merge_check_is_still_running(repo, monkeypatch):
     """Not buffered to the end: the line naming the check is read from the live process
     while its check (a 4 s command) has not finished."""
+    import contextlib
     import os
     import time
 
@@ -76,17 +77,34 @@ def test_the_progress_arrives_while_the_post_merge_check_is_still_running(repo, 
         text=True,
         env=env,
     )
+    import queue
+    import threading
+
+    lines: queue.Queue[str] = queue.Queue()
+
+    def pump() -> None:  # a reader that cannot hang the test: the deadline is on the queue
+        for ln in p.stderr:
+            lines.put(ln)
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    seen = ""
     try:
-        seen = ""
         deadline = time.monotonic() + 60
         while "post-merge check starting" not in seen and time.monotonic() < deadline:
-            seen += p.stderr.readline()
+            with contextlib.suppress(queue.Empty):
+                seen += lines.get(timeout=1)
         assert "post-merge check starting" in seen, seen
         assert p.poll() is None, "the check had already finished: the line was buffered to the end"
     finally:
+        if p.poll() is None and "post-merge check starting" not in seen:
+            p.kill()
         out, err = p.communicate(timeout=120)
+    reader.join(timeout=30)
+    while not lines.empty():
+        seen += lines.get_nowait()
     assert p.returncode == OK, out + err
-    assert "post-merge check finished (passed)" in seen + err
+    assert "post-merge check finished (passed)" in seen, seen
 
 
 def test_json_output_is_unchanged_and_progress_stays_on_stderr(repo, monkeypatch):
@@ -95,3 +113,15 @@ def test_json_output_is_unchanged_and_progress_stays_on_stderr(repo, monkeypatch
     assert code == OK, out + err
     assert json.loads(out)["id"] == "T1"  # stdout is still exactly the JSON document
     assert "merged T1 into main" in err and "merged T1 into main" not in out
+
+
+def test_a_failing_progress_line_never_stops_a_landed_merge(repo, monkeypatch):
+    import importlib
+
+    M = importlib.import_module("ddflow.api.lifecycle.merge")
+
+    def broken(*_a, **_k):
+        raise RuntimeError("config unreadable")
+
+    monkeypatch.setattr(M.CI, "main_command", broken)
+    assert M._ci_notice(repo, object()) == "post-merge check starting"
