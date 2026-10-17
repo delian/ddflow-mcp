@@ -51,7 +51,7 @@ def health(
     if bad:
         return O.failed("health", f"unknown mode {bad[0]!r}: one of {', '.join(HW.MODES)}")
     mode = mode or cfg.health.mode
-    active = any(m != "off" for m in by_kind.values())
+    active = HW.enabled(by_kind)
     at = time.time() if now is None else now
     found, cycles = findings_for(log, st, cfg, repo, at, activity, alive)
     moves: list[dict[str, Any]] = []
