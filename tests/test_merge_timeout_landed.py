@@ -53,7 +53,7 @@ def test_a_timeout_after_the_commit_landed_is_recorded_as_merged(repo, monkeypat
     monkeypatch.setattr(W, "merge", landed_then_killed)
     out = api.merge_item(repo, "T1", agent="alpha")
     assert out.exit == OK, out
-    assert "timed out" in out.data["note"], out.data
+    assert "timed out" in out.data["kept_reason"], out.data
     assert _git(repo, "show", "main:c.txt") == "branch\n"
     monkeypatch.undo()
     code, shown, err = run_cli(repo, "--json", "gate", "status", "T1")
