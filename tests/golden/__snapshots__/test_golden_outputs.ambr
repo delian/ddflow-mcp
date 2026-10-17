@@ -968,6 +968,15 @@
       session.agent_brief_decisions = 6   [default]
           How many of the decisions that govern the item's files the launch brief
           quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.
+      session.report_commits = 20   [default]
+          How many commit shas `ddflow report ITEM` lists for the landing before it
+          says how many more there were.
+      session.report_note_chars = 200   [default]
+          Characters `ddflow report ITEM` keeps of a gate's reason, of the evidence
+          text of a gate recorded by hand and of an earlier-tree note.
+      session.report_test_files = 12   [default]
+          How many changed test files `ddflow report ITEM` names before it says how
+          many more there were.
       session.agent_brief_lessons = 3   [default]
           How many task-relevant lessons the launch brief carries.
       session.agent_brief_extra = ''   [default]
@@ -2133,6 +2142,12 @@
           agent, item, title, body, globs, needs, base, lease_s, heartbeat_s,
           decisions_text, lessons_text, note, extra. `ddflow prompts eject
           agent_brief` writes an editable copy.
+      prompts.agent_report = ''   [default]
+          Path to the completion-report template `ddflow report ITEM` renders:
+          sections split by `<!-- section: NAME -->` lines. Variables: item, title,
+          agent, state, landing, tests, gates, by_hand, overrides, filed, follow_ups,
+          not_done (each already text). `ddflow prompts eject agent_report` writes an
+          editable copy.
       export.documents = []   [default]
           The documents `ddflow export --all` writes and keeps (roadmap, bugs, status,
           worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing
