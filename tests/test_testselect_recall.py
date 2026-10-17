@@ -53,14 +53,16 @@ def merge_log(root: Path) -> list[str]:
     """The ``merge <item>: ...`` commits ddflow wrote, newest first, reachable by ANY path.
     Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
     parent, so a first-parent walk saw an older window than main does and the replay failed
-    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161)."""
-    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H %s")
+    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161). Only ``merge <id>:``
+    subjects: a hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    log = git_proc(
+        root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+    )
     if log.returncode != 0:
         return []
-    # `merge main` brings main's merges INTO a branch: its first-parent diff is other agents'
-    # work, replayed a second time, and not a change its author made with its tests.
     rows = [ln.split(" ", 1) for ln in log.stdout.splitlines() if ln.strip()]
-    return [r[0] for r in rows if len(r) < 2 or r[1].strip() != "merge main"]
+    # `merge main: ...` still reads like an item id to the grep, and is a sync merge
+    return [r[0] for r in rows if len(r) < 2 or not r[1].startswith("merge main:")]
 
 
 def _merges() -> list[str]:
@@ -170,3 +172,33 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     stale = [k for k in UNROUTABLE if k.split()[0] in in_window and k not in lost]
     assert not stale, f"pinned as unroutable, but the selection holds them now: {stale}"
     assert held / total >= ABSOLUTE_FLOOR, report
+
+
+def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
+    """B2d1ecadd87: `git merge main -m 'merge main'` is not a ddflow merge."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    for branch, subject in (
+        ("a", "merge T1: real"),
+        ("b", "merge main"),
+        ("c", "merge main from origin"),
+        ("d", "merge main: sync with main"),
+    ):
+        g("commit", "-q", "--allow-empty", "-m", "base" + branch)
+        g("checkout", "-q", "-b", "side" + branch)
+        g("commit", "-q", "--allow-empty", "-m", "side" + branch)
+        g("checkout", "-q", "main")
+        g("commit", "-q", "--allow-empty", "-m", "main" + branch)
+        g("merge", "-q", "--no-ff", "-m", subject, "side" + branch)
+    out = git_proc(tmp_path, "log", "--format=%s").stdout.splitlines()
+    assert "merge main" in out
+    subjects = [
+        git_proc(tmp_path, "show", "-s", "--format=%s", sha).stdout.strip()
+        for sha in merge_log(tmp_path)
+    ]
+    assert subjects == ["merge T1: real"]

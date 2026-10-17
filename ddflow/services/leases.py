@@ -284,9 +284,14 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 return _renew_in_place(
                     log, existing, item_id, holder, now, worktree, branch, globs, note, resources
                 )
+            left = existing.remaining_s(now)
             raise LeaseError(
-                f"{item_id} is held by {existing.holder} for another "
-                f"{existing.remaining_s(now):.0f}s",
+                f"{item_id} is held by {existing.holder} for another {left:.0f}s"
+                if left >= 0
+                else f"{item_id}: {existing.holder}'s lease ran out {-left:.0f}s ago and is in "
+                f"its {cfg.lease.grace_s}s grace period; it can be taken over "
+                f"(`ddflow recover --item {item_id}`, then `ddflow claim {item_id} --force`) "
+                f"in {cfg.lease.grace_s + left:.0f}s",
                 holder=existing.holder,
                 item=item_id,
                 alternatives=_alts(offer, state, cfg, item_id, holder, now),
