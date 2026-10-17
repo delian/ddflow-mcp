@@ -110,29 +110,33 @@ def after_merge(repo: Path, cfg: Config) -> str:
 
 
 def merge_report(repo: Path, cfg: Config) -> dict[str, list[str]]:
-    """What `ddflow merge` says about the pins once a merge has landed (bug Bd92e5da53c): the
-    pins the hook may run are CHECKED now (read-only, each bounded by
-    `[pins].after_merge_timeout_s`), whether or not the hook is installed or ran, and the pins
-    it never runs (a recipe that runs a suite) are named as unchecked, so a stale golden
-    pin is never silent. Keys: ``stale``, ``unknown`` (the check did not finish),
-    ``unchecked``; empty lists are omitted, ``{}`` when there is nothing to say."""
+    """What `ddflow merge` says about the pins once a merge has landed (bug Bd92e5da53c; the
+    `[pins].merge_check` knob). ``fast``: the pins the hook may run are CHECKED now (read-only,
+    each bounded by `[pins].after_merge_timeout_s`), whether or not the hook is installed or ran,
+    and the pins it never runs (a recipe that runs a suite) are named as unchecked, so a stale
+    golden pin is never silent. ``all`` also checks those (the merge waits for them). Keys:
+    ``stale``, ``unknown`` (the check did not finish, or could not start), ``unchecked``; empty
+    lists are omitted, ``{}`` when there is nothing to say."""
+    mode = cfg.pins.merge_check
+    if mode == "off":
+        return {}
     try:
         recipes = load_recipes(repo, cfg)
     except ValueError as exc:  # an unreadable recipes file is not "nothing to say"
         return {"unknown": [str(exc)]}
     if not recipes:
         return {}
+    everything = mode == "all"
     try:
-        rep = regenerate(repo, cfg, check=True, after_merge=True, recipes=recipes)
+        rep = regenerate(repo, cfg, check=True, after_merge=not everything, recipes=recipes)
     except Exception as exc:  # a line of advice never stops a merge that has landed, or goes quiet
         return {"unknown": [f"the pin check failed: {type(exc).__name__}: {exc}"]}
     if rep.problem:
         return {"unknown": [rep.problem]}
-    unchecked = [r.name for r in recipes if not r.after_merge]
     out = {
         "stale": [p.name for p in rep.stale],
         "unknown": [p.name for p in rep.unavailable],
-        "unchecked": unchecked,
+        "unchecked": [] if everything else [r.name for r in recipes if not r.after_merge],
     }
     return {k: v for k, v in out.items() if v}
 
@@ -154,7 +158,8 @@ def merge_lines(report: dict[str, list[str]]) -> list[str]:
     if "unchecked" in report:
         lines.append(
             f"pins the post-merge hook never re-records (they run a suite): {names['unchecked']}"
-            " -- `ddflow pins regenerate --check` says whether this merge made them stale"
+            " -- `ddflow pins regenerate --check` says whether this merge made them stale "
+            "([pins].merge_check = all checks them at every merge)"
         )
     return lines
 

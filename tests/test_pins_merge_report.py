@@ -47,6 +47,19 @@ def test_the_report_names_a_stale_pin_and_the_ones_the_hook_never_runs(repo):
     assert "golden-suite" in text and "never re-records" in text
 
 
+def test_merge_check_all_checks_the_suite_pins_too_and_off_says_nothing(repo):
+    """critic on this fix: the one case the bug is about is a suite pin that has drifted."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "pins.toml").write_text(RECIPES.replace("sys.exit(0)", "sys.exit(1)"))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    cfg = Config.load(repo)
+    cfg.pins.merge_check = "all"
+    assert PM.merge_report(repo, cfg) == {"stale": ["fast-table", "golden-suite"]}
+    cfg.pins.merge_check = "off"
+    assert PM.merge_report(repo, cfg) == {}
+
+
 def test_no_recipes_means_nothing_to_say(repo):
     run_cli(repo, "init")
     assert PM.merge_report(repo, Config.load(repo)) == {}
