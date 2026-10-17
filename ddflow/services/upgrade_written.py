@@ -11,13 +11,14 @@ lease like any other change.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+from ..core.digest import hasher
+
 
 def digest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    return hasher(data).hexdigest()
 
 
 def _rel(repo: Path, path: Path) -> str | None:
@@ -41,8 +42,8 @@ def digests(repo: Path, paths: Iterable[Path]) -> dict[str, str | None]:
     return out
 
 
-def written(repo: Path, before: Mapping[str, str | None], paths: Iterable[Path]) -> dict[str, str]:
-    """The files among ``paths`` that exist now and differ from ``before`` (absent counts as
-    different), with their digests."""
-    now = digests(repo, paths)
+def written(repo: Path, before: Mapping[str, str | None]) -> dict[str, str]:
+    """The files named in ``before`` (path -> digest then) that exist now with other bytes
+    (absent counts as different), with their digests now."""
+    now = digests(repo, [Path(repo) / rel for rel in before])
     return {rel: d for rel, d in sorted(now.items()) if d is not None and before.get(rel) != d}
