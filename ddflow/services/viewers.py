@@ -168,9 +168,7 @@ def _session_row(s: Session, cfg: Config) -> dict[str, Any]:
 
 def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     if kind == "task":
-        return [
-            _item_row(st, i, cfg) for i in st.items.values() if i.kind == "task" and not i.removed
-        ]
+        return [_item_row(st, i, cfg) for i in st.items.values() if i.is_work and not i.removed]
     if kind == "phase":
         return [_item_row(st, i, cfg) for i in st.phases()]
     if kind == "bug":

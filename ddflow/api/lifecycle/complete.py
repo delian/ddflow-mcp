@@ -227,7 +227,7 @@ def _umbrella_children(st: State, it) -> list[str]:
 
     Its work is its sub-tasks', each of which ran its own pipeline (B651a63e574). All of
     them abandoned is not the work finished, and a phase keeps its own close."""
-    if it.kind != "task" or it.state in (DONE, ABANDONED):
+    if not it.is_work or it.state in (DONE, ABANDONED):
         return []
     below = sorted(st.descendants(it.id))
     if not below or st.open_descendants(it.id):
@@ -377,7 +377,7 @@ def remove(
     stranded = stuck_edges_to(st, item)
     if it.lease:
         L.release(log, item, note="removed from the queue")
-    log.append("phase.removed" if it.kind == "phase" else "task.removed", item, {"reason": reason})
+    log.append(f"{it.family}.removed", item, {"reason": reason})
     return O.ok(
         "item.removed",
         id=item,
