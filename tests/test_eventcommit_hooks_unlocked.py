@@ -142,3 +142,33 @@ def test_an_unreadable_blob_is_named_not_silently_dropped(repo):
     finally:
         blob.chmod(0o644)
     assert sha and "x.json" in note and "unreadable" in note, (sha, note)
+
+
+def test_a_commit_that_lands_while_the_hooks_run_is_not_reverted(repo):
+    """git takes the parent when the commit begins and will not move HEAD from elsewhere: the
+    event-log commit is refused, the other commit stays, and the lines wait for the next door."""
+    from ddflow.services import eventcommit as EC
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "adopt", "--no-verify")
+    K.session_end(repo, "s1")
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"cd {str(repo)!r}\n"
+        "echo v2 > other.txt\n"
+        "env -u GIT_INDEX_FILE git add other.txt\n"
+        "env -u GIT_INDEX_FILE git commit --no-verify -qm 'landed during the hooks' -- other.txt\n"
+    )
+    hook.chmod(0o755)
+    sha, note = EC.commit_shards(repo, "mine")
+    assert not sha and "not committed" in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was reverted"
+    assert EC.uncommitted_shards(repo), "the lines are still there for the next door"

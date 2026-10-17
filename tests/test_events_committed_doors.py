@@ -153,7 +153,8 @@ def test_the_shards_are_read_under_the_log_lock_and_the_commit_is_not(repo, monk
     from ddflow.api import knowledge as K
 
     K.session_end(repo, "s1")
-    assert held.get("read", 0) > 0 and held.get("commit") == 0, held
+    assert "commit" in held, "the commit never ran, so it proves nothing"
+    assert held.get("read", 0) > 0 and held["commit"] == 0, held
 
 
 def test_a_commit_made_between_the_read_and_the_commit_is_not_reverted(repo, monkeypatch):
