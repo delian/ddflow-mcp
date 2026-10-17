@@ -1783,7 +1783,7 @@ The hook never makes a merge wait for a test suite. It runs only the recipes tha
 (a `[[pin]]` with `after_merge = false`, the golden-snapshot and transcript suites in this
 repository, is left to an explicit `ddflow pins regenerate`), bounds each command by
 `[pins].after_merge_timeout_s`, and reports a recipe it could not finish as unavailable, never
-as stale or failed. Two re-recordings never overlap in one tree: the second is unavailable.
+as failed. Two re-recordings never overlap in one tree: the second is unavailable.
 
 ## Finding a test polluter
 

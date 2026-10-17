@@ -90,6 +90,10 @@ def _regenerate_pins(repo: Path, cfg, wt: W.Worktree) -> str:
         return f"pins: {rep.problem}"
     if rep.failed:
         return "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
+    if rep.unavailable:  # not re-recorded, and not known to be current: not a merge to build on
+        return "pins unavailable: " + "; ".join(
+            f"{p.name}: {p.unavailable}" for p in rep.unavailable
+        )
     names = [p.name for p in rep.pins if p.regenerated]
     if not names:
         return ""

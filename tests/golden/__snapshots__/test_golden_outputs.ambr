@@ -1954,9 +1954,9 @@
       pins.after_merge_timeout_s = 120   [default]
           Seconds one recipe command may run when the post-merge hook runs it. A merge
           must not wait for a test suite: a recipe that does not finish in this time
-          is reported as UNAVAILABLE (never failed, never stale) and the hook exits
-          cleanly. A recipe table with `after_merge = false` is not run by the hook at
-          all (the golden-snapshot suites are those in this repository); `ddflow pins
+          is reported as UNAVAILABLE (never as failed) and the hook exits cleanly. A
+          recipe table with `after_merge = false` is not run by the hook at all (the
+          golden-snapshot suites are those in this repository); `ddflow pins
           regenerate` runs every recipe, bounded by `timeout_s`.
       pins.after_merge = 'amend'   [default]
           What the post-merge hook installed by `ddflow pins regenerate --install`

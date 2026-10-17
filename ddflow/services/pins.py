@@ -195,7 +195,7 @@ def regenerate(
 
     ``after_merge`` is the post-merge hook's run: only the recipes that allow it, each command
     bounded by `[pins].after_merge_timeout_s`; one that cannot finish in time is
-    ``unavailable``, never failed or stale. Two runs never overlap in one tree: the second is
+    ``unavailable``, never failed. Two runs never overlap in one tree: the second is
     ``unavailable`` too, because a recipe re-records files the other is reading or writing
     (README.md left with thousands of duplicated lines, snapshots deleted: Bf965d87b66)."""
     rep = Report()
