@@ -26,6 +26,11 @@ DECIDE_TAGS = frozenset({"decide", "decision"})
 ACTOR = "ddflow:auto-order"
 
 
+def is_decide(tags) -> bool:
+    """Does a tag list mark a decide task (case and padding ignored)?"""
+    return bool(DECIDE_TAGS & {str(t).strip().lower() for t in tags or ()})
+
+
 @dataclass(frozen=True)
 class Cand:
     """What the ordering needs to know of one item."""

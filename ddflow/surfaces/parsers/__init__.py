@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from . import (
     chore,
+    decide,
     docs,
     flow,
     jobs,
@@ -42,6 +43,7 @@ REGISTER_ORDER = (
     report.register,
     maintenance.register,
     lanes.register,
+    decide.register,
     docs.register,
     metrics.register,
     review.register,
