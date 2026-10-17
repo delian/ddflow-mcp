@@ -54,8 +54,13 @@ def merge_log(root: Path) -> list[str]:
     Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
     parent, so a first-parent walk saw an older window than main does and the replay failed
     on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161)."""
-    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H")
-    return log.stdout.split() if log.returncode == 0 else []
+    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H %s")
+    if log.returncode != 0:
+        return []
+    # `merge main` brings main's merges INTO a branch: its first-parent diff is other agents'
+    # work, replayed a second time, and not a change its author made with its tests.
+    rows = [ln.split(" ", 1) for ln in log.stdout.splitlines() if ln.strip()]
+    return [r[0] for r in rows if len(r) < 2 or r[1].strip() != "merge main"]
 
 
 def _merges() -> list[str]:
