@@ -34,7 +34,7 @@ def test_a_hand_edited_number_still_conflicts() -> None:
 
 def test_a_hand_edited_number_after_of_the_still_conflicts() -> None:
     base = BASE + b"one of the 3 modes\n"
-    out, conflicted = merge_pin_text(
+    _out, conflicted = merge_pin_text(
         base.replace(b"3 modes", b"5 modes"), base, base.replace(b"3 modes", b"9 modes")
     )
     assert conflicted
