@@ -32,10 +32,11 @@ from pathlib import Path
 
 from ..config import Config
 from ..infra import proc as P
+from ..infra.fsio import replace_text
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
 from .pins_conflict import apply as apply_settled
-from .pins_conflict import settle_files
+from .pins_conflict import settle_files, take_side
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,7 @@ def regenerate(
     if not chosen:
         rep.problem = f"no pin recipes: {cfg.pins.recipes_file} is missing or has no [[pin]]"
         return rep
-    if not check and _unsettled(repo, chosen, rep):
+    if not check and _unsettled(repo, chosen, rep, cfg.pins.timeout_s, tick):
         return rep
     limit = cfg.pins.timeout_s
     for r in chosen:
@@ -211,12 +212,53 @@ def regenerate(
     return rep
 
 
-def _unsettled(repo: Path, chosen: list[Recipe], rep: Report) -> bool:
+def _owns(r: Recipe, path: str) -> bool:
+    return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in r.files)
+
+
+def _decided_by_generators(repo: Path, s, chosen: list[Recipe], limit: int, tick) -> bool:
+    """Whether the recipes that own ``s``'s file settle its prose conflicts: the file is taken
+    our way and then theirs, each re-recorded by its owners, and kept only when both come out
+    the same (a knob count a generator writes, say). Otherwise it is put back as it was."""
+    owners = [r for r in chosen if s.file is not None and _owns(r, s.path)]
+    if not owners or s.file is None:
+        return False
+    original = s.file.read_text("utf-8")
+    result: dict[str, str] = {}
+    for side in ("ours", "theirs"):
+        replace_text(s.file, take_side(original, side))
+        for r in owners:
+            if _run(repo, r.check, r, limit, write=False, tick=tick).returncode == 0:
+                continue
+            if _run(repo, r.regen, r, limit, write=True, tick=tick).returncode != 0:
+                replace_text(s.file, original)
+                return False
+        result[side] = s.file.read_text("utf-8")
+    if result["ours"] == result["theirs"]:
+        replace_text(s.file, result["ours"])
+        return True
+    replace_text(s.file, original)
+    return False
+
+
+def _unsettled(repo: Path, chosen: list[Recipe], rep: Report, limit: int = 900, tick=None) -> bool:
     """Settle the conflict markers a merge left in the pin files (`pins_conflict`): True, with
-    ``rep.problem`` saying where, when one is in hand-written prose and nothing was changed."""
+    ``rep.problem`` saying where, when one cannot be settled -- markers that do not pair up, or
+    a conflict in hand-written prose that the generators do not decide the same either way."""
     files = sorted({f.rstrip("/") for r in chosen for f in r.files})
     found = settle_files(repo, files)
-    stuck = [s for s in found if s.refused]
+    if any(s.stray for s in found):
+        stuck = [s for s in found if s.stray]
+    else:
+        stuck = []
+        for s in found:
+            if s.refused and _decided_by_generators(repo, s, chosen, limit, tick):
+                rep.resolved.append(
+                    f"{s.path}: {s.hunks} conflict(s) in generated content or in text the "
+                    "generators write, re-recorded"
+                )
+            elif s.refused:
+                stuck.append(s)
     if stuck:
         rep.problem = "; ".join(
             f"{s.path}: "
@@ -229,10 +271,11 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report) -> bool:
             for s in stuck
         )
         return True
-    apply_settled(found)
-    rep.resolved = [
+    apply_settled([s for s in found if not s.refused])
+    rep.resolved += [
         f"{s.path}: {s.hunks} conflict(s) in generated content, our side taken and re-recorded"
         for s in found
+        if not s.refused
     ]
     return False
 
