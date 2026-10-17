@@ -837,18 +837,22 @@ COMMANDS: tuple[Command, ...] = (
         "[flow].integration = 'pr' it pushes and opens (or updates) a pull request "
         "instead, releases your lease and parks the item in REVIEW — take the next "
         "item; `ddflow_pr_sync` completes it once a person merges it.",
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().merge_item(
-            repo,
-            a["id"],
-            message=a.get("message", "") or "",
-            allow_dirty=bool(a.get("allow_dirty")),
-            allow_empty=bool(a.get("allow_empty")),
-            keep=bool(a.get("keep")),
-            model=a.get("model", "") or "",
-            branch=a.get("branch", "") or "",
-            called_from=called_from,
-            shell_cwd=shell_cwd,
-            agent=agent,
+        wants_progress=True,
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None, on_progress=None: (
+            _api().merge_item(
+                repo,
+                a["id"],
+                message=a.get("message", "") or "",
+                allow_dirty=bool(a.get("allow_dirty")),
+                allow_empty=bool(a.get("allow_empty")),
+                keep=bool(a.get("keep")),
+                model=a.get("model", "") or "",
+                branch=a.get("branch", "") or "",
+                called_from=called_from,
+                shell_cwd=shell_cwd,
+                agent=agent,
+                on_progress=on_progress,
+            )
         ),
         payload=L.MERGE_PAYLOAD,
         render=L.merge_text,
@@ -857,7 +861,7 @@ COMMANDS: tuple[Command, ...] = (
             reason=L.merge_reason,
             notes=L.merge_notes,
             body=L.merge_body,
-            call_kwargs=L.merge_kwargs,
+            call_kwargs=L.merge_progress_kwargs,
         ),
         wants_called_from=True,
         params=(

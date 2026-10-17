@@ -7,6 +7,7 @@ executor (`surfaces/cliexec.py`) prints what these return. It imports nothing th
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -387,6 +388,16 @@ def merge_kwargs(ctx) -> dict[str, Any]:
         return {"shell_cwd": Path.cwd()}
     except OSError:
         return {"shell_cwd": None}
+
+
+def merge_progress_kwargs(ctx) -> dict[str, Any]:
+    """`merge`'s: the above, and progress on stderr. The post-merge work runs for minutes, and
+    a merge that says nothing in that time is indistinguishable from a hang
+    (merge-silent-during-post-merge-ci)."""
+    return {
+        **merge_kwargs(ctx),
+        "on_progress": lambda line: print(line, file=sys.stderr, flush=True),
+    }
 
 
 def merge_shown(out) -> bool:
