@@ -19,7 +19,7 @@ from ...services import ledger as LG
 from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
-from ...services.gates import outcomes as GO
+from ...services.gates import failed_review as GO
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
