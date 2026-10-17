@@ -17,11 +17,11 @@ no lease to carry.
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from ..core.digest import hasher
+from ..infra import git as G
 
 
 def digest(data: bytes) -> str:
@@ -38,17 +38,9 @@ def _rel(repo: Path, path: Path) -> str | None:
 def _stored_id(repo: Path, rel: str) -> str | None:
     """The blob id git would store for ``rel`` (clean filters and eol conversion applied), or
     None when git cannot say."""
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(repo), "hash-object", "--path", rel, "--", rel],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    out = r.stdout.strip()
-    return out if r.returncode == 0 and out else None
+    r = G.run(repo, "hash-object", "--path", rel, "--", rel, timeout=30)
+    out = r.out.strip()
+    return out if r.ok and out else None
 
 
 def digests(repo: Path, paths: Iterable[Path]) -> dict[str, str | None]:
