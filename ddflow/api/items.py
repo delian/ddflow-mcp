@@ -299,7 +299,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
             return O.refused(
                 "item.updated", refusal + _waiting(log, cfg, it, lease, globs, queue), id=it.id
             )
-        log.append(f"{it.kind}.updated", it.id, fields)
+        log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, globs, resources)
     return O.ok(
@@ -531,6 +531,11 @@ def _add_ports(
     return ports, ""
 
 
+def _kind_field(kind: str) -> str | None:
+    """The payload's `kind`: None (not written) for a plain task."""
+    return kind if kind and kind != "task" else None
+
+
 def _csv_none_when_empty(v: str) -> list[str] | None:
     """A comma list, or None (field not written) when empty."""
     return csv_list(v) or None
@@ -551,6 +556,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     lines: str = "",
     port_of: str = "",
     resources: str = "",
+    kind: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -585,6 +591,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         tags=csv_list(tags),
         priority=priority,
         resources=_csv_none_when_empty(resources),
+        kind=_kind_field(kind),
     )
     bad = IT.problem_of(base)
     if bad:
@@ -771,7 +778,7 @@ def _apply_resolution(
         )
     log.append("item.resolved", item, data)
     for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
-        log.append(f"{it.kind}.added", nid, d["data"])
+        log.append(f"{it.family}.added", nid, d["data"])
 
 
 def _no_such_item(item: str, it) -> O.Outcome:

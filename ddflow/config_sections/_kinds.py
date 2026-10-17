@@ -30,7 +30,7 @@ KINDS: dict[str, KindSpec] = {
         KindSpec("task", "task_pipeline", "a unit of work with its own worktree"),
         KindSpec("phase", "phase_pipeline", "a group of tasks, closed as a whole"),
         KindSpec("bug", "task_pipeline", "a recorded defect and its fix"),
-        KindSpec("doc", "task_pipeline", "a project document"),
+        KindSpec("doc", "doc_pipeline", "a project document"),
         KindSpec("research", "task_pipeline", "a recorded question and its verdict"),
         KindSpec("job", "task_pipeline", "a scheduled or manual job"),
     )
