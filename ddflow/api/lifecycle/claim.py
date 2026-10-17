@@ -380,7 +380,11 @@ def _record_waiting(log, cfg, item: str, want, queue: bool) -> str:
         rec = WG.register(log, cfg, st, item, log.agent_id, globs, now, queue=queue)
     if rec is None:
         return ""
-    who = ", ".join(f"{o['item']} ({o['holder']})" for o in rec["on"])
+    # An item blocked by its OWN lease is not waiting for itself: another agent holds it.
+    who = ", ".join(
+        f"its lease held by {o['holder']}" if o["item"] == item else f"{o['item']} ({o['holder']})"
+        for o in rec["on"]
+    )
     return f"\n\nRecorded: {item} is waiting for {who}."
 
 
@@ -423,8 +427,9 @@ def _adopt(
             "item.claimed",
             f"this worktree is already bound to {held}, which is still open. "
             f"Two items sharing one tree cannot be merged or recovered "
-            f"separately. Finish {held}, work somewhere else, or "
-            f"`--no-worktree` to claim without binding a tree.",
+            f"separately. Finish it (`ddflow complete {held}`), claim without a tree "
+            f"(`ddflow claim {item} --no-worktree`), or claim from the primary checkout "
+            f"for a tree of its own (`cd {repo} && ddflow claim {item}`).",
             id=item,
             conflicts_with=held,
         )
@@ -456,8 +461,8 @@ def _create_tree(
                 return O.refused(
                     "item.claimed",
                     f"{wt.path} already exists with {there} checked out, which "
-                    f"does not carry {wt.branch}. It is not {item}'s tree; move or "
-                    f"remove it, or claim from a tree of your own.",
+                    f"does not carry {wt.branch}. It is not {item}'s tree; remove it "
+                    f"(`git worktree remove {wt.path}`), then `ddflow claim {item}` again.",
                     id=item,
                     path=str(wt.path),
                 )

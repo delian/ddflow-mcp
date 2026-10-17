@@ -313,7 +313,8 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 f"{item_id} has an EXPIRED lease from {existing.holder} "
                 f"(worktree {existing.worktree or '-'}). It is NOT stolen automatically: "
                 f"a crashed agent's worktree often holds finished work. "
-                f"Run `ddflow recover --item {item_id}`, then retry with --force.",
+                f"To take it over: `ddflow recover --item {item_id}`, then "
+                f"`ddflow claim {item_id} --force`.",
                 holder=existing.holder,
                 item=item_id,
             )
