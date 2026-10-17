@@ -373,29 +373,30 @@ def _strings(value: object) -> Iterator[str]:
             yield from _strings(v)
 
 
-def _command_lines(lines: list[str]) -> set[int]:
-    """The 0-based lines of a pre-commit config that carry a hook's command: what its
-    ``entry:`` and ``args:`` say, nothing else (a hook's ``name:`` is a sentence that may
-    begin ``ddflow lease ...``). The config is parsed, so a folded or block-scalar prose
-    value cannot be taken for a command; a file the reader cannot parse falls back to the
-    lines that open an ``entry:`` or ``args:`` key."""
+def _command_lines(lines: list[str]) -> dict[int, list[tuple[int, int]]]:
+    """Where a hook's command sits in a pre-commit config, as ``{0-based line: [(start, end)]}``:
+    what its ``entry:`` and ``args:`` say, nothing else (a hook's ``name:`` is a sentence that
+    may begin ``ddflow lease ...``, even on the very line of a flow mapping). The config is
+    parsed, so a folded or block-scalar prose value cannot be taken for a command; a file the
+    reader cannot parse falls back to the text after each ``entry:``/``args:`` key."""
+    candidates = _command_candidates(lines)
     try:
         values = list(_command_values(read_precommit_yaml("\n".join(lines))))
     except UnreadableYaml:
-        return {i for i, line in enumerate(lines) if _ENTRY_KEY.match(line)}
-    candidates = _command_candidates(lines)
-    out: set[int] = set()
+        return {i: [(col, len(lines[i]))] for i, col in candidates.items() if col}
+    out: dict[int, list[tuple[int, int]]] = {}
     at = 0
     for value in values:
         for piece in (v.strip() for v in value.splitlines()):
             if not piece:
                 continue
-            hit = next(
-                (i for i in range(at, len(lines)) if i in candidates and piece in lines[i]), None
-            )
-            if hit is not None:
-                out.add(hit)
-                at = hit
+            for i in range(at, len(lines)):
+                col = candidates.get(i)
+                where = lines[i].find(piece, col) if col is not None else -1
+                if where >= 0:
+                    out.setdefault(i, []).append((where, where + len(piece)))
+                    at = i
+                    break
     return out
 
 
@@ -403,23 +404,23 @@ _KEY_LINE = re.compile(r"^\s*(?:-\s+)*[A-Za-z_][\w-]*\s*:")
 _FLOW_COMMAND_KEY = re.compile(r"[{,]\s*(?:entry|args)\s*:")
 
 
-def _command_candidates(lines: list[str]) -> set[int]:
-    """The lines a command's text can sit on: one that opens an ``entry:``/``args:`` key,
-    a flow mapping carrying one, and what is folded or listed under such a key. A ``name:``
-    that quotes the command it runs is none of these."""
-    out: set[int] = set()
+def _command_candidates(lines: list[str]) -> dict[int, int]:
+    """The lines a command's text can sit on, each with the column it can start at: one that
+    opens an ``entry:``/``args:`` key, a flow mapping carrying one, and what is folded or
+    listed under such a key. A ``name:`` that quotes the command it runs is none of these."""
+    out: dict[int, int] = {}
     inside = False
     for i, line in enumerate(lines):
-        if _ENTRY_KEY.match(line):
+        if m := _ENTRY_KEY.match(line):
             inside = True
-            out.add(i)
-        elif _FLOW_COMMAND_KEY.search(line):
+            out[i] = m.end()
+        elif m := _FLOW_COMMAND_KEY.search(line):
             inside = False
-            out.add(i)
+            out[i] = m.end()
         elif _KEY_LINE.match(line):
             inside = False
         elif inside:
-            out.add(i)
+            out[i] = 0
     return out
 
 
@@ -431,19 +432,26 @@ def _text_findings(
     *,
     code: bool,
     whole: bool = False,
-    only: Callable[[list[str]], set[int]] | None = None,
+    only: Callable[[list[str]], dict[int, list[tuple[int, int]]]] | None = None,
 ) -> list[Finding]:
     lines = text.splitlines()
     owned = _owned_spans(text)
     fenced = False
     out: list[Finding] = []
     scanned = only(lines) if only is not None else None
-    for i, line in enumerate(lines):
+    for i, text_line in enumerate(lines):
+        line = text_line
         if not code and _FENCE.match(line):
             fenced = not fenced
             continue
-        if scanned is not None and i not in scanned:
-            continue
+        if scanned is not None:
+            if i not in scanned:
+                continue
+            # only the command's own columns: the rest of the line is the hook's prose
+            line = "".join(
+                c if any(a <= k < b for a, b in scanned[i]) else " "
+                for k, c in enumerate(text_line)
+            )
         managed = whole or any(sp.first <= i < sp.last for sp in owned)
         for ref in refs_in(line, vocab, code=code or fenced):
             if ref.status != OK:
