@@ -149,7 +149,7 @@ from .operations import (
     precommit,
     relevant_tests,
 )
-from .plan import plan_check
+from .plan import plan_apply, plan_check, plan_confirm
 from .report import item_report, show_report
 from .reporting import (
     DEFAULT_RENDER_DIR,
@@ -306,7 +306,9 @@ __all__ = [
     "phase_close",
     "phase_progress",
     "pins",
+    "plan_apply",
     "plan_check",
+    "plan_confirm",
     "pr_status",
     "pr_sync",
     "pr_threads",
