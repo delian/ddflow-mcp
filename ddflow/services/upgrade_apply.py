@@ -50,6 +50,7 @@ from . import enforce as E
 from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_plan as UP
+from . import upgrade_written as UW
 from .backups import (  # noqa: F401 -- the backups' home
     BACKUPS,
     MANIFEST,
@@ -328,11 +329,12 @@ def apply(
         return _not_saved(results, todo, why, refused, frm)
 
     saved = {p.resolve() for p in files} if backup_dir else set()
-    late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
+    before = UW.digests(repo, files)  # what the run changes is what it records as written
+    late_backup = _late_saver(repo, cfg, backup, (frm, to), saved, repo_before=before)
 
     run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
     results += _execute(
-        repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
+        repo, log, cfg, todo, agent, late_backup, _stepper(repo, log, run, watch, before)
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
     ok |= earlier  # settled by the interrupted run this one finishes
@@ -340,7 +342,8 @@ def apply(
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     lags = _lags(results, plan, frm, to)
-    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags)
+    wrote = UW.written(repo, before)
+    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags, wrote)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
 
 
@@ -401,13 +404,20 @@ def _with_earlier(
 
 
 def _late_saver(
-    repo: Path, cfg: Config, mode: str, versions: tuple[str, str], saved: set[Path]
+    repo: Path,
+    cfg: Config,
+    mode: str,
+    versions: tuple[str, str],
+    saved: set[Path],
+    repo_before: dict[str, str | None],
 ) -> Callable[[list[Path]], str]:
     """The function a migration calls with files its own detect now plans that the plan's did
     not name (earlier steps of a run can change what it finds): they are saved too, in the same
     mode, so none is rewritten without a copy."""
 
     def late_backup(more: list[Path]) -> str:
+        for rel, d in UW.digests(repo, more).items():
+            repo_before.setdefault(rel, d)  # untouched until now: its bytes are the "before"
         fresh = [p for p in more if p.resolve() not in saved]
         if not fresh or mode == "none":
             return ""
@@ -439,14 +449,21 @@ def _close(
     backup_dir: str,
     reasons: dict[str, str],
     stamp_only: bool = False,
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """End the run's record: the upgrade itself when something was settled (or only the
     stamp was left to move), else a failure."""
     frm, new_to, to = versions
     if ok or stamp_only:
-        _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run)
+        _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run, wrote)
     elif run:
-        _note(log, run, "failed", summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled")
+        _note(
+            log,
+            run,
+            "failed",
+            summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled",
+            written=wrote or {},
+        )
 
 
 def _ids(items: list[dict[str, Any]]) -> list[str]:
@@ -472,16 +489,39 @@ def _note(log: Any, run: str, status: str, **fields: Any) -> None:
     log.append(UPGRADE_APPLIED_KIND, "upgrade", {"run": run, "status": status, **fields})
 
 
+def _stepper(
+    repo: Path, log: Any, run: str, watch: Watch, before: dict[str, str | None]
+) -> Callable[[dict[str, Any]], None]:
+    """The callback `_execute` calls as each item ends: it records the step together with
+    everything the run has written so far, so a run that is interrupted (and never reaches its
+    closing event) still leaves the digests of the files it changed."""
+
+    def on_step(rec: dict[str, Any]) -> None:
+        _step(log, run, rec, watch.progress, UW.written(repo, before))
+
+    return on_step
+
+
 def _step(
-    log: Any, run: str, rec: dict[str, Any], progress: Callable[[str], None] | None = None
+    log: Any,
+    run: str,
+    rec: dict[str, Any],
+    progress: Callable[[str], None] | None = None,
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """One item's outcome, recorded the moment it is known: what an interruption leaves."""
-    if progress:
-        progress(f"[{rec['status']}] {rec['id']}")
     if run:
         _note(
-            log, run, "step", step=rec["id"], step_status=rec["status"], detail=rec["detail"][:300]
+            log,
+            run,
+            "step",
+            step=rec["id"],
+            step_status=rec["status"],
+            detail=rec["detail"][:300],
+            written=wrote or {},
         )
+    if progress:
+        progress(f"[{rec['status']}] {rec['id']}")
 
 
 def _summarise(
@@ -544,6 +584,7 @@ def _record(
     backup_dir: str,
     reasons: dict[str, str],
     run: str = "",
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """Append the closing `upgrade.applied` event: replay's account of this upgrade."""
     log.append(
@@ -557,6 +598,7 @@ def _record(
             "backup": backup_dir,
             "items": sorted(ok),
             "confirmed": reasons,
+            "written": wrote or {},
             "config_changes": [
                 {k: i[k] for k in ("key", "change", "old", "new")}
                 for i in todo

@@ -641,9 +641,15 @@ def plan_retarget(
     item_id: str,
     globs: list[str] | None,
     resources: list[str] | None = None,
+    *,
+    now: float | None = None,
 ) -> tuple[Lease | None, str]:
     """(the LIVE lease to point at ``globs`` / ``resources`` or None, why that is refused
     or "").
+
+    ``now`` (default: the clock) is the instant the lease is judged live at: the heartbeat
+    that revived a lapsed lease passes the instant it renewed it, so a slow process cannot
+    find the lease it just revived lapsed again (B8eb33fe297).
 
     Call with ``log.transaction()`` held, and append nothing if the reason is non-empty.
     ``None`` leaves that field of the claim alone.
@@ -660,7 +666,7 @@ def plan_retarget(
     TTL and grace -- is left for recovery rather than touched, so no lease is brought
     back by an edit. An unclaimed item's globs are not checked, as before.
     """
-    now = time.time()
+    now = time.time() if now is None else now
     state = _fold(log)
     it = state.items.get(item_id)
     lz = it.lease if it else None

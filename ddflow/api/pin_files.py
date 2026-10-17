@@ -49,6 +49,12 @@ def pins_regenerate(
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if rep.problem:
         return O.failed("pins", rep.problem)
+    return _regenerate_outcome(rep, check)
+
+
+def _regenerate_outcome(rep, check: bool) -> O.Outcome:
+    """The outcome of a run: failed when a recipe failed (or, with ``check``, is stale); nothing
+    (exit 2, could not run) when a recipe could not finish; ok otherwise."""
     rows = [
         {
             "name": p.name,
@@ -56,6 +62,7 @@ def pins_regenerate(
             "stale": p.stale,
             "regenerated": p.regenerated,
             "error": p.error,
+            **({"unavailable": p.unavailable} if p.unavailable else {}),
         }
         for p in rep.pins
     ]
@@ -72,6 +79,9 @@ def pins_regenerate(
             + ". `ddflow pins regenerate` re-records them",
             pins=rows,
         )
+    if rep.unavailable:
+        why = "; ".join(f"{p.name}: {p.unavailable}" for p in rep.unavailable)
+        return O.nothing("pins", f"could not finish: {why}", pins=rows, **extra)
     return O.ok("pins", pins=rows, **extra)
 
 
