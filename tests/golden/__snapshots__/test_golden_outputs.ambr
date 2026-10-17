@@ -2125,15 +2125,16 @@
           tests the change reaches (`ddflow tests --item`), records the scope, the
           selected count and the cut set in the gate evidence, and runs the whole
           suite instead when the selector says so (a hub, conftest, pyproject, the
-          pre-commit config, an unknown file type, or no test reaches the change);
-          full runs the whole suite. `ddflow ci run --full`, the merge queue
-          integrator (one run per batch) and a run of a ref that is no item always run
-          the whole suite. Applies to the default pre-push command only: an explicit
-          [ci].command runs as written. An unrecognised value in a config file is
-          warned about, reported by `doctor` and falls back to 'full', the strictest
-          (every item's ci run takes the whole suite); `config --set`,
-          `ddflow_configure` and the environment refuse it, and so does loading
-          ddflow's own source tree, where the file and the code are one commit.
+          pre-commit config, an unknown file type, or neither a test nor an
+          `always_tests` file to run); full runs the whole suite. `ddflow ci run
+          --full`, the merge queue integrator (one run per batch) and a run of a ref
+          that is no item always run the whole suite. Applies to the default pre-push
+          command only: an explicit [ci].command runs as written. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'full', the strictest (every item's ci run takes the whole suite);
+          `config --set`, `ddflow_configure` and the environment refuse it, and so
+          does loading ddflow's own source tree, where the file and the code are one
+          commit.
       ci.always_tests = ['tests/test_constants_ratchet.py', 'tests/test_layering*.py', 'tests/golden/**', 'tests/test_uc_surf_setup_ops_transcript.py', 'tests/test_uc_surf_loop_transcript.py', 'tests/test_readme_*.py', 'tests/test_mcp_tool_budget.py']   [default]
           Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for
           EVERY item in addition to the tests its change reaches, plus any test file
