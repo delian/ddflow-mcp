@@ -73,7 +73,7 @@ class Refusal:
         )
 
 
-_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([A-Za-z_]\w*)")
+_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([^\s;|&<>()'\"]+)")
 
 
 def _strip_heredocs(text: str) -> str:
@@ -114,34 +114,45 @@ def _commands(text: str, *, nested: bool = False) -> list[list[str]]:
                 cur = []
             else:
                 cur.append(w)
-    if not nested:  # one `sh -c` level; a deeper one is not looked into
-        for c in list(cmds):
+    todo = cmds
+    for _ in range(3):  # three nested `sh -c` levels are looked into
+        found: list[list[str]] = []
+        for c in todo:
             body = _head(c)
             if body and body[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in body:
                 i = body.index("-c")
                 if i + 1 < len(body):
-                    cmds.extend(_commands(body[i + 1], nested=True))
+                    found.extend(_commands(body[i + 1], nested=True))
+        cmds.extend(found)
+        todo = found
     return cmds
 
 
-#: Wrapper options that take their value as the next word (`sudo -u root`, `nice -n 5`).
-_VALUED = frozenset({"-u", "-g", "-n", "-C", "-p", "-t", "-s", "-I", "-L", "-P", "-a", "-U", "-D"})
+#: Each wrapper's options that take their value as the next word (`sudo -u root`, `nice -n 5`);
+#: its other options (`sudo -n`, `time -p`, `xargs -t`) stand alone.
+_VALUED = {
+    "sudo": frozenset({"-u", "-g", "-C", "-p", "-h", "-r", "-t", "-U", "-D", "-R", "-T"}),
+    "doas": frozenset({"-u", "-C"}),
+    "nice": frozenset({"-n"}),
+    "env": frozenset({"-u", "-C", "-S"}),
+    "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-a", "-d", "-E", "-l", "-i"}),
+}
 
 
 def _head(words: list[str]) -> list[str]:
     """`words` from the command's own word on: wrappers, their options and values, and
     VAR=x assignments dropped."""
     i = 0
-    wrapped = False
+    wrapper = ""
     while i < len(words):
         w = words[i]
         if w in _WRAPPERS:
-            wrapped = True
+            wrapper = w
             i += 1
         elif "=" in w and not w.startswith("-") and w.split("=")[0].isidentifier():
             i += 1
-        elif wrapped and w.startswith("-"):
-            i += 2 if w in _VALUED else 1
+        elif wrapper and w.startswith("-"):
+            i += 2 if w in _VALUED.get(wrapper, ()) else 1
         else:
             break
     return words[i:]
@@ -224,10 +235,21 @@ def is_primary(cwd: str | Path) -> bool:
 
 def _elsewhere(cmds: list[list[str]]) -> bool:
     """Whether the command line may act on another checkout than the cwd's (`git -C dir`,
-    `cd dir && ...`): then the cwd cannot say which one, so it is judged as the primary."""
-    return any(w in ("-C", "--git-dir", "--work-tree") for c in cmds for w in c) or any(
-        c[0] in ("cd", "pushd") for c in cmds
-    )
+    `--git-dir=...`, `GIT_DIR=... git`, `cd dir && ...`): then the cwd cannot say which one,
+    so it is judged as the primary. Only git's own options count, not `make -C`."""
+    for c in cmds:
+        if c[0] in ("cd", "pushd"):
+            return True
+        if any(w.startswith(("GIT_DIR=", "GIT_WORK_TREE=")) for w in c):
+            return True
+        head = _head(c)
+        if head and head[0].rsplit("/", 1)[-1] == "git":
+            for w in head[1:]:
+                if not w.startswith("-"):
+                    break  # the subcommand: git's own options are over
+                if w.startswith(("-C", "--git-dir", "--work-tree")):
+                    return True
+    return False
 
 
 def _lifted(env: dict[str, str]) -> tuple[bool, set[str]]:
