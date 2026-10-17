@@ -80,3 +80,21 @@ def test_a_scratch_merge_git_could_not_finish_is_unavailable_not_a_conflict(
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.status == "unavailable" and res.exit == 2, res
     assert "timed out" in res.reason and "does not merge" not in res.reason
+
+
+def test_a_merge_git_refused_for_another_reason_is_not_a_conflict_either(
+    repo, passing_precommit, monkeypatch
+):
+    """A base git cannot resolve, a held index lock: exit 128, not a conflict (exit 1)."""
+    default = _diverged(repo)
+    real = CI.W.git
+
+    def refused(path, *args, **kw):
+        if "merge" in args and "--no-ff" in args:
+            return IG.GitResult(128, "", "fatal: 'main' - not something we can merge")
+        return real(path, *args, **kw)
+
+    monkeypatch.setattr(CI.W, "git", refused)
+    res = CI.run(repo, Config.load(repo), base=default)
+    assert res.status == "unavailable", res
+    assert "not something we can merge" in res.reason
