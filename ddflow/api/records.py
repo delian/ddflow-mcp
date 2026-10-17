@@ -1,4 +1,4 @@
-"""One record surface, the API half: a `RecordKind` descriptor and the seven verbs it gets.
+"""One record surface, the API half: a `RecordKind` descriptor and the verbs it gets.
 
 About twelve families (rules, skills, agents, schedules, triggers, doc types, quotas,
 harnesses, ids ...) each planned their own list / show / add / edit / remove / search /
@@ -13,6 +13,9 @@ this module is what answers for it:
 * ``record_remove``  retire it, with a reason (kept, with its history);
 * ``record_search``  ranked, exact or bounded-regex search over the record's own text;
 * ``record_revise``  replace the whole record, with a reason, bringing a retired one back.
+
+History, supersede, merge, split and restore are `ddflow.api.record_lifecycle`'s; a kind offers
+or declines each, with a reason (``declined``).
 
 The records are definitions (`core.defs`, `api.defs`): the descriptor's ``def_kind`` is the
 kind they are filed under, so history, provenance, digest and the duplicate check come
@@ -45,8 +48,22 @@ from . import _dedupe as DD
 from . import defs as DEFS
 from ._base import _load
 
-#: The seven verbs, in the order a surface lists them.
-VERBS = ("list", "show", "add", "edit", "remove", "search", "revise")
+#: The verbs, in the order a surface lists them: the seven of a record's everyday use, then
+#: the five that follow it through its life (`api.record_lifecycle`).
+VERBS = (
+    "list",
+    "show",
+    "add",
+    "edit",
+    "remove",
+    "search",
+    "revise",
+    "history",
+    "supersede",
+    "merge",
+    "split",
+    "restore",
+)
 #: Rows a list or a search shows unless ``limit`` says otherwise, and the most it ever shows.
 DEFAULT_LIMIT = 25
 MAX_LIMIT = 1000
@@ -110,6 +127,13 @@ class RecordKind:
     verbs: tuple[str, ...] = VERBS
     aliases: tuple[str, ...] = ()
     ops: Mapping[str, Callable[..., O.Outcome]] = field(default_factory=dict)
+    #: A verb the kind does not offer, with WHY (a proposal is never removed: reject and
+    #: expire are its tombstones). B-rc-conformance requires one for every verb not offered.
+    declined: Mapping[str, str] = field(default_factory=dict)
+    #: ``weakening(before, after)``: why ``after`` is weaker than ``before`` (lower
+    #: enforcement, a widened override, a guard removed), or "". A merge refuses to weaken
+    #: without ``--allow-weaken``.
+    weakening: Callable[[Mapping[str, Any], Mapping[str, Any]], str] | None = None
 
     def __post_init__(self) -> None:
         names = [f.name for f in self.fields]
@@ -118,10 +142,12 @@ class RecordKind:
         wanted = {self.title, *self.text, *self.columns, *self.filters}
         if missing := sorted(wanted - set(names)):
             raise ValueError(f"record kind {self.name!r}: no such field(s) {', '.join(missing)}")
-        if bad := [v for v in (*self.verbs, *self.ops) if v not in VERBS]:
+        if bad := [v for v in (*self.verbs, *self.ops, *self.declined) if v not in VERBS]:
             raise ValueError(f"record kind {self.name!r}: unknown verb {bad[0]!r}")
         if self.ops and not self.ops.keys() <= set(self.verbs):
             raise ValueError(f"record kind {self.name!r}: ops for a verb that is not offered")
+        if bad := [v for v, why in self.declined.items() if not str(why).strip()]:
+            raise ValueError(f"record kind {self.name!r}: declining {bad[0]!r} needs a reason")
         if not self.ops and self.def_kind not in D.DEF_KINDS:
             raise ValueError(f"record kind {self.name!r}: {self.def_kind!r} is not a def kind")
 
@@ -132,6 +158,11 @@ class RecordKind:
         """Whether ``verb`` runs on definition records (no family function replaces it)."""
         return verb in self.verbs and verb not in self.ops
 
+
+#: The verbs every kind has had since the surface began, and why a family not yet on the
+#: surface does not offer the others.
+_EVERYDAY = VERBS[:7]
+_UNWIRED = "offered when the rules move onto the record surface (B-rules-onto-record-surface)"
 
 # -- the descriptors -----------------------------------------------------------------
 
@@ -168,6 +199,8 @@ RULE = declare(
         columns=("title", "scope", "priority", "tags"),
         filters=("tags", "scope"),
         aliases=("rules",),
+        verbs=_EVERYDAY,
+        declined={v: _UNWIRED for v in VERBS if v not in _EVERYDAY},
     )
 )
 
@@ -288,8 +321,12 @@ def _pre(kind: RecordKind, verb: str, repo: Path, **kw: Any) -> O.Outcome | None
     offer ``verb``, what the family's own function answers when it replaces it, else None.
     (Compare with ``is not None``: a refused `Outcome` is falsy.)"""
     if verb not in kind.verbs:
+        why = kind.declined.get(verb, "")
         return O.refused(
-            _event(kind, verb), f"{kind.name} has no {verb!r}; it offers {', '.join(kind.verbs)}"
+            _event(kind, verb),
+            f"{kind.name} has no {verb!r}"
+            + (f" ({why})" if why else "")
+            + f"; it offers {', '.join(kind.verbs)}",
         )
     fn = kind.ops.get(verb)
     return None if fn is None else fn(repo, kind, **kw)

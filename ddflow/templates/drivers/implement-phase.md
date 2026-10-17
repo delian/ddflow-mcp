@@ -74,6 +74,14 @@ Rules that make this worth doing:
   is the measurement" stops the next session re-researching it.
 - A pass with zero CONFIRMED/REFUTED labels is a literature summary. Label it one.
 
+**Before filing a phase's tasks, write the plan down and run `ddflow plan check <file>`.**
+It flags a wildcard-directory glob, a cycle, an unknown `needs`, two tasks that can run
+together whose globs collide, and a task with no acceptance (exit 1 with the findings; fix
+the plan, not the check). Then `ddflow plan apply <file>` is a dry run; with `--apply
+--hash <the hash it printed>` it files the tasks as PROPOSED, labelled `plan:<id>`, and the
+operator releases them with `ddflow plan confirm <id> --yes --reason ...`. An agent runs
+only the dry run.
+
 ---
 
 ## 2. The task loop — repeat until the phase is empty
