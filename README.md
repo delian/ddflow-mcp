@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=0fdf370c61b2 -->
+<!-- ddflow:begin README/toc sha=ede9a1895679 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -257,6 +257,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 - [The default workflow at a glance](#the-default-workflow-at-a-glance)
 - [Two ways to drive it](#two-ways-to-drive-it)
   - [Standalone: a terminal, a Makefile, CI](#standalone-a-terminal-a-makefile-ci)
+  - [Every command](#every-command)
   - [As an MCP server](#as-an-mcp-server)
   - [What goes in AGENTS.md / CLAUDE.md](#what-goes-in-agentsmd--claudemd)
 - [The workflow, and changing it](#the-workflow-and-changing-it)
@@ -532,6 +533,100 @@ check:
 
 `2` is never "no problem". A job that treats it as success reports a green build for a
 suite that never ran.
+
+### Every command
+
+Every top-level command, with the first line of its `--help`. The list is generated from the
+command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it, and
+`ddflow pins regenerate` does so after a merge), so a command added on another branch never
+needs a line written by hand here.
+
+<!-- ddflow:begin README/commands sha=84ca7f1901ac -->
+<details><summary>All 78 commands</summary>
+
+| Command | What it does |
+|---|---|
+| `ddflow init` | create .ddflow/ in this repository |
+| `ddflow phase` | add, list or close a phase |
+| `ddflow task` | add a task |
+| `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
+| `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
+| `ddflow update` | change an item's fields |
+| `ddflow plan` | check a plan before filing it |
+| `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
+| `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
+| `ddflow heartbeat` | renew a lease |
+| `ddflow release` | give up a lease |
+| `ddflow wait` | sleep until an item (or anything) can be claimed; exit 2 = deadline, or waiting cannot help |
+| `ddflow approve` | a PERSON clears (or rejects) a human-approval gate — no MCP equivalent |
+| `ddflow gate` | run / record / inspect a gate |
+| `ddflow complete` | finish an item (exit 3 = gates not satisfied) |
+| `ddflow abandon` | stop work on an item without completing it |
+| `ddflow remove` | take an item out of the queue (recorded, not erased) |
+| `ddflow block` | see `ddflow block --help` |
+| `ddflow unblock` | release a blocked item back into the queue (exit 2 = not blocked) |
+| `ddflow merge` | merge an item's branch from the primary checkout |
+| `ddflow pr` | pull/merge requests: what reviewers did ([flow].integration = pr) |
+| `ddflow version` | version tags: the next version, and cutting it |
+| `ddflow promote` | environment branches: move work one step downstream ([flow].environments) |
+| `ddflow flow` | how this project works: branching model, release lines, and every workflow choice with who made it |
+| `ddflow brief` | budgeted session-start pack |
+| `ddflow external` | dependencies on items in sibling repositories |
+| `ddflow job` | long-running processes an item waits on: run, add, list, end |
+| `ddflow memory` | operational facts about this machine/repo, shown at session start |
+| `ddflow lesson` | see `ddflow lesson --help` |
+| `ddflow recall` | 'have we been here before?' — search decisions, lessons, research, bugs, tasks and past prompts at once |
+| `ddflow similar` | 'is this already filed?' -- the existing bugs, tasks, lessons and other records most like a text, before you… |
+| `ddflow dupes` | 'is anything filed twice?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or… |
+| `ddflow link` | settle a near-duplicate pair: say how one record relates to another |
+| `ddflow decision` | architectural decisions: record and consult |
+| `ddflow rule` | project rules: add, edit, list, search, show, remove |
+| `ddflow verify` | re-derive the claims behind a done task, or sweep them all (exit 1 = one fails) |
+| `ddflow ci` | the CI parity gate: run the pre-push checks on the merge result |
+| `ddflow onboard` | run an onboarding stage: one report, propose by default (status\|preflight\|legacy\|memory\|test-gate\|verify) |
+| `ddflow status` | one answer to 'what is the state of this project?' |
+| `ddflow research` | see `ddflow research --help` |
+| `ddflow bug` | see `ddflow bug --help` |
+| `ddflow session` | see `ddflow session --help` |
+| `ddflow replay` | reconstruct the decision history from the log |
+| `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
+| `ddflow progress` | work actually done, aggregated from the log |
+| `ddflow loops` | circular references and runtime loops (exit 2 = none) |
+| `ddflow cleanup` | classify ddflow worktrees/branches; --apply lands the safe ones |
+| `ddflow doctor` | integrity + health check |
+| `ddflow rebuild` | re-derive the index from the log |
+| `ddflow render` | regenerate the human-readable views |
+| `ddflow board` | see `ddflow board --help` |
+| `ddflow show` | see `ddflow show --help` |
+| `ddflow report` | the completion report of an item, from the log (shas, tests, gates, overrides) |
+| `ddflow config` | print every knob, its value and its source |
+| `ddflow upgrade` | what upgrading this project to the running ddflow would change (the plan; writes nothing; exit 0 up to date… |
+| `ddflow export` | documents generated from the log: list, print, enable, disable, --diff, --check, --update |
+| `ddflow bisect` | find which earlier test file makes a test fail only in full-suite order (exit 0 = found, 2 = nothing to… |
+| `ddflow cadence` | which periodic passes are due (exit 2 = none) |
+| `ddflow pins` | which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files |
+| `ddflow queue` | the merge queue: add an item, run the integrator, show the line, remove an entry |
+| `ddflow tests` | the tests your change reaches, and a parallel command to run them (exit 2 = none) |
+| `ddflow precommit` | propose a .pre-commit-config.yaml for this repository's stacks (writes nothing without --write) |
+| `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise` |
+| `ddflow docs` | the mechanical documentation check: `docs check [--diff BASE]` |
+| `ddflow metrics` | metrics from the log: cycle time, review rounds, waits; `forecast`, `retro <id>`, `skips` |
+| `ddflow reviewers` | find, list and test cross-family reviewers |
+| `ddflow review` | run the configured reviewer(s) over an item's diff |
+| `ddflow adopt` | install ddflow into this project for one or more agents |
+| `ddflow history` | one timeline of everything that happened (exit 2 = nothing) |
+| `ddflow workflow` | the rules this project runs by, and how to change them (exit 1 = incoherent) |
+| `ddflow help` | what ddflow is, what it can do, and the workflow (try: ddflow help workflow) |
+| `ddflow import` | propose the existing project's work, lessons and decisions (exit 2 = nothing) |
+| `ddflow companions` | companion MCP servers that serve the gates (exit 2 = a default one is missing) |
+| `ddflow prompts` | inspect and override the prompt templates |
+| `ddflow hooks` | install/inspect the enforcement git hook and the Claude Code session hook |
+| `ddflow mcp` | run the MCP stdio server over this repository |
+| `ddflow search` | search tasks, phases, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs… |
+| `ddflow list` | list tasks, phases, bugs, research notes or lessons (what `<kind> list` shows) |
+
+</details>
+<!-- ddflow:end README/commands -->
 
 ### As an MCP server
 

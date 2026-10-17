@@ -39,3 +39,16 @@ name = "readme-tool-table"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_tool_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "ddflow.surfaces.tool_table", "README.md"]
+
+[[pin]]
+name = "loop-transcript"
+files = ["tests/test_uc_surf_loop_transcript.json"]
+check = ["{python}", "-m", "pytest", "tests/test_uc_surf_loop_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "pytest", "tests/test_uc_surf_loop_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+env = { DDFLOW_UPDATE_GOLDEN = "1" }
+
+[[pin]]
+name = "readme-commands"
+files = ["README.md"]
+check = ["{python}", "-m", "pytest", "tests/test_readme_command_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "ddflow.surfaces.command_table", "README.md", "--force"]
