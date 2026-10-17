@@ -65,5 +65,22 @@ def test_no_recipes_no_notes(repo):
 
 def test_doctor_carries_the_note(repo):
     _project(repo)
-    code, out, err = run_cli(repo, "doctor")
+    _, out, err = run_cli(repo, "doctor")
     assert "pin files are not re-recorded after a git merge" in out + err, out + err
+
+
+def test_a_hand_written_hook_that_runs_the_regeneration_counts_as_installed(repo):
+    """critic on this fix: advice to add the command to a foreign hook must not then be nagged."""
+    cfg = _project(repo)
+    hook = PM.hooks_dir(repo) / "post-merge"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text("#!/bin/sh\nddflow pins regenerate --after-merge\n")
+    hook.chmod(0o755)
+    assert "not installed" not in "\n".join(PM.hook_notes(repo, cfg))
+
+
+def test_a_hook_that_is_not_executable_is_not_a_hook(repo):
+    cfg = _project(repo)
+    PM.install(repo, cfg)
+    (PM.hooks_dir(repo) / "post-merge").chmod(0o644)
+    assert "not installed" in "\n".join(PM.hook_notes(repo, cfg))
