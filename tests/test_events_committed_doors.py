@@ -123,24 +123,27 @@ def test_pre_push_warn_mode_does_not_refuse_for_the_shards(repo, tmp_path):
     assert "not committed" in p.stderr and p.returncode == 0
 
 
-def test_the_commit_runs_under_the_log_lock(repo, monkeypatch):
-    """A ddflow writer cannot append between the whole-line check and the commit."""
+def test_the_staging_runs_under_the_log_lock_and_the_commit_does_not(repo, monkeypatch):
+    """A ddflow writer cannot append between the whole-line check and the staging; the
+    commit, whose hooks can run for minutes, does not hold the lock (the hooks of a project
+    must not make every other ddflow command time out)."""
     from ddflow.infra import log as L
     from ddflow.services import eventcommit
 
     _project(repo)
-    seen = []
-    real = eventcommit.commit_shards
+    held = {}
+    real = eventcommit.W.git
 
-    def spy(root, *a, **k):
-        seen.append(L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0))
-        return real(root, *a, **k)
+    def spy(root, *args, **kw):
+        if args and args[0] in ("add", "commit"):
+            held[args[0]] = L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0)
+        return real(root, *args, **kw)
 
-    monkeypatch.setattr(eventcommit, "commit_shards", spy)
+    monkeypatch.setattr(eventcommit.W, "git", spy)
     from ddflow.api import knowledge as K
 
     K.session_end(repo, "s1")
-    assert seen and seen[0] > 0
+    assert held.get("add", 0) > 0 and held.get("commit") == 0, held
 
 
 def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monkeypatch):
