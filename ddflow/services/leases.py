@@ -109,7 +109,7 @@ def _record_claimed_globs(
     if resources is not None and sorted(resources) != sorted(it.resources):
         fields["resources"] = list(resources)
     if fields:
-        log.append(f"{it.kind}.updated", it.id, fields)
+        log.append(f"{it.family}.updated", it.id, fields)
 
 
 def _renew_in_place(

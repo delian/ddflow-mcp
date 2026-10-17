@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ..core import globspec as GS
-from ..core.model import Item
+from ..core.model import WORK_KINDS, Item
 from . import leases as L
 
 if TYPE_CHECKING:
@@ -27,7 +27,18 @@ if TYPE_CHECKING:
     from ..infra.log import EventLog
 
 #: ``TaskDraft`` fields written to the event, in the order they are written.
-_FIELDS = ("parent", "title", "needs", "globs", "resources", "body", "tags", "priority", "line")
+_FIELDS = (
+    "parent",
+    "title",
+    "needs",
+    "globs",
+    "resources",
+    "body",
+    "tags",
+    "priority",
+    "line",
+    "kind",
+)
 
 
 def bad_id(item: str) -> str:
@@ -84,6 +95,8 @@ class TaskDraft:
     tags: list[str] | None = None
     priority: int | None = None
     line: str | None = None
+    #: A work kind other than a plain task ("doc", ...); None writes nothing: a task.
+    kind: str | None = None
     #: Fields only some callers write: `fixes`, `promote_from`, `port_of`, `source` ...
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -113,8 +126,17 @@ class Added:
 
 
 def problem_of(draft: TaskDraft) -> str:
-    """Why the draft's id or globs cannot be recorded, or "" (needs no state)."""
-    return bad_id(draft.id) or GS.problem(draft.globs or [])
+    """Why the draft's id, globs or kind cannot be recorded, or "" (needs no state)."""
+    return bad_id(draft.id) or GS.problem(draft.globs or []) or _bad_kind(draft.kind)
+
+
+def _bad_kind(kind: str | None) -> str:
+    """Why ``kind`` is not an item kind `task add` can make, or "" (none, or a work kind)."""
+    if not kind or kind in WORK_KINDS:
+        return ""
+    if kind == "phase":
+        return "a phase is made with `ddflow phase add`, not `task add --kind phase`."
+    return f"unknown kind {kind!r}: task add makes {', '.join(WORK_KINDS)}."
 
 
 def missing_parent(st: State, parent: str | None) -> str:
@@ -137,7 +159,7 @@ def release_umbrella(
     ``tasks_only`` is False: `split` lets any item go.
     """
     holder = st.items.get(parent) if parent else None
-    if not (holder and holder.lease) or (tasks_only and holder.kind != "task"):
+    if not (holder and holder.lease) or (tasks_only and not holder.is_work):
         return False
     L.release(log, parent, note=note)
     holder.lease = None  # a second child added in this batch finds nothing to release

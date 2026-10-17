@@ -213,6 +213,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
     for kind, pipeline in (
         ("task", cfg.gates.task_pipeline),
         ("phase", cfg.gates.phase_pipeline),
+        ("doc", cfg.gates.doc_pipeline),
         *((k, ids) for k, ids in cfg.gates.kind_pipelines.items()),
     ):
         # `applies_to` names the two scopes; every kind but a phase is task-like.
