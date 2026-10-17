@@ -14,6 +14,7 @@ report.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -67,10 +68,34 @@ def whole(repo: Path, rel: str) -> bool:
         return False
 
 
-def commit_shards(repo: Path, reason: str, template: str = "events: {reason}") -> tuple[str, str]:
+def commit_shards(
+    repo: Path, reason: str, template: str = "events: {reason}", *, hold=None
+) -> tuple[str, str]:
     """(commit sha, note): the sha when shards were committed; the note says why not, or
-    which shards were left out as half-written ("" when there was nothing to say)."""
-    repo = Path(repo)
+    which shards were left out as half-written ("" when there was nothing to say).
+
+    ``hold`` is a context manager factory (the log's `transaction`): the whole-line check and
+    the staging run inside it, the `git commit` and its hooks do NOT. The hooks of a project
+    can run for minutes (a pre-commit suite), and holding the append lock that long made
+    every other ddflow command in the project time out with a "wedged agent" message
+    (merge-holds-event-lock-during-ci). The commit takes its pathspec snapshot of whole lines
+    ddflow appends in one write, so a writer that appends meanwhile only waits for the next
+    door."""
+    hold = hold or contextlib.nullcontext
+    with hold():
+        prepared = _stage(Path(repo), reason, template)
+    if len(prepared) == 2:
+        return prepared
+    message, shards, skipped = prepared
+    done = W.git(Path(repo), "commit", "-q", "-m", message, "--", *shards)
+    if not done.ok:
+        return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
+    return W.rev(Path(repo), "HEAD"), skipped
+
+
+def _stage(repo: Path, reason: str, template: str):
+    """(message, the paths to commit, the note) once they are staged; or the finished
+    ``("", why)`` answer when there is nothing to commit or it must not be."""
     listed = uncommitted_shards(repo)
     if listed is None:
         return "", "event log not committed: git could not list .ddflow/events"
@@ -91,10 +116,7 @@ def commit_shards(repo: Path, reason: str, template: str = "events: {reason}") -
     add = W.git(repo, "add", "--", *shards)
     if not add.ok:
         return "", f"event log not committed: git add failed: {(add.err or add.out)[-200:]}"
-    done = W.git(repo, "commit", "-q", "-m", message, "--", *shards)
-    if not done.ok:
-        return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
-    return W.rev(repo, "HEAD"), skipped
+    return message, shards, skipped
 
 
 def commit_at(log, cfg, door: str, reason: str) -> dict[str, str]:
@@ -103,10 +125,11 @@ def commit_at(log, cfg, door: str, reason: str) -> dict[str, str]:
     if not cfg.log.commit_events or door not in cfg.log.commit_events_at:
         return {}
     try:
-        # The append lock held from the check to the commit: a ddflow writer cannot add a
-        # line between the "whole" check and the snapshot `git commit -- <paths>` takes.
-        with log.transaction():
-            sha, note = commit_shards(log.root, reason, cfg.log.commit_events_message)
+        # The append lock is held for the "whole" check and the staging only; the commit's
+        # hooks run outside it (see `commit_shards`).
+        sha, note = commit_shards(
+            log.root, reason, cfg.log.commit_events_message, hold=log.transaction
+        )
     except Exception as e:
         return {"events_note": f"event log not committed: {e}"}
     return {**({"events_committed": sha} if sha else {}), **({"events_note": note} if note else {})}
