@@ -210,9 +210,10 @@ def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monke
     assert EC.uncommitted_shards(repo) == []
 
 
-def test_a_commit_that_lands_just_before_ours_begins_is_reported(repo, monkeypatch):
-    """The one span the commit cannot protect (between the index being built and git beginning
-    the commit): HEAD moved, so the note says so instead of staying silent."""
+def test_a_commit_that_lands_just_before_ours_begins_is_kept(repo, monkeypatch):
+    """The one span git's own ref check cannot cover (between the index being built and git
+    beginning the commit): the commit that landed there would be undone, so the event-log
+    commit is remade on top of it, and the note says so."""
     from ddflow.services import eventcommit
 
     _project(repo)
@@ -233,4 +234,9 @@ def test_a_commit_that_lands_just_before_ours_begins_is_reported(repo, monkeypat
 
     monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
     sha, note = eventcommit.commit_shards(repo, "mine")
-    assert sha and "HEAD moved" in note, (sha, note)
+    assert sha and "made again" in note, (sha, note)
+    assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was undone"
+    assert _git(repo, "log", "-1", "--format=%s").startswith("events:")
+    assert _git(repo, "log", "-2", "--format=%s").splitlines()[1] == "other v2"
+    assert eventcommit.uncommitted_shards(repo) == []
+    assert _git(repo, "diff", "--cached", "--name-only") == ""
