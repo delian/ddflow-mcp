@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import participation as PA
 from ..core import textsim
 from ..core.model import State
 from ..core.rank import tfidf
@@ -71,7 +72,7 @@ SOURCES = (
     "schedule",
 )
 _RECORD_SOURCES = frozenset({"task", "phase", "bug", "research", "decision", "lesson"})
-_DEF_KINDS = frozenset({"rule", "skill", "agent", "schedule"})  # the definitions with a source
+_DEF_KINDS = PA.LEGACY_DEF_KINDS  # the definitions with a hand-written source
 _OWNER = {  # the source that holds each kind that also leaves events in the log
     **dict.fromkeys(_RECORD_SOURCES, "records"),
     "session": "sessions",
@@ -182,6 +183,14 @@ def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()
             kind = ev.subject.partition(":")[0]
             if kind in _DEF_KINDS and held(kind):
                 continue  # and the rules, skills, agents and schedules ones, which are definitions
+            if any(
+                d.searched
+                and d.def_kind == kind
+                and d.name in kinds
+                and (not names or "records" in names)
+                for d in PA.DECLARED.values()
+            ):
+                continue  # and the declared kinds' (the records source)
         payload = json.dumps(ev.data or {}, ensure_ascii=False, sort_keys=True)
         out.append(
             Doc("log", ev.id, ev.kind, ev.ts, ev.agent, "", f"{ev.kind} {ev.subject} {payload}")
@@ -291,6 +300,59 @@ def _schedule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     return out
 
 
+def kind_names() -> list[str]:
+    """The kinds `--kind` takes: the fixed ones, then each declared kind searched through the
+    declared source (`core.participation`)."""
+    return [*SOURCES, *(n for n in PA.searched_names() if n not in SOURCES)]
+
+
+def _declared_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    """The records of every declared kind asked for, as rows: id, the descriptor's text, the
+    reason it was retired, its status, author and last change (RC4: a kind is searchable by
+    declaring it, with no code of its own)."""
+    out = []
+    for d in PA.DECLARED.values():
+        if not d.searched or d.name not in kinds:
+            continue
+        for rec in c.st.defs.values():
+            if rec.kind != d.def_kind:
+                continue
+            text = _join(rec.id, d.text(rec.fields), rec.reason)
+            phase = rec.fields.get("phase")
+            out.append(
+                Doc(
+                    d.name,
+                    rec.id,
+                    rec.status,
+                    rec.updated_at or rec.at,
+                    rec.by,
+                    phase if isinstance(phase, str) else "",
+                    text,
+                )
+            )
+    return out
+
+
+class _RecordsSource:
+    """The ``records`` source: tasks, phases, bugs, research, decisions and lessons, and every
+    declared kind. Its kinds are whatever is declared now."""
+
+    name = "records"
+
+    @property
+    def kinds(self) -> tuple[str, ...]:
+        return (*sorted(_RECORD_SOURCES), *PA.searched_names())
+
+    def hits(self, ctx: Any, kinds: set[str]) -> list[Doc]:
+        if not kinds & set(self.kinds):
+            return []
+        return (
+            _item_docs(ctx.st, ctx.cfg, kinds)
+            + _record_docs(ctx.st, ctx.cfg, kinds)
+            + _declared_docs(ctx, kinds)
+        )
+
+
 @dataclass(frozen=True)
 class Ctx:
     """What the sources of one request read: the folded state, the events, the config and,
@@ -304,13 +366,7 @@ class Ctx:
 
 
 # The sources, in the order their rows are listed before ranking.
-register(
-    FuncSource(
-        "records",
-        tuple(sorted(_RECORD_SOURCES)),
-        lambda c, kinds: _item_docs(c.st, c.cfg, kinds) + _record_docs(c.st, c.cfg, kinds),
-    )
-)
+register(_RecordsSource())
 register(
     FuncSource(
         "sessions", ("session",), lambda c, kinds: _session_docs(c.events, kinds & {"session"})
@@ -400,10 +456,11 @@ def _source_names(f: Filters) -> set[str]:
 
 def _sources(f: Filters) -> set[str]:
     wanted = [k.strip().lower() for k in f.kinds.split(",") if k.strip()]
-    bad = [k for k in wanted if k not in SOURCES]
+    known = kind_names()
+    bad = [k for k in wanted if k not in known]
     if bad:
-        raise SearchError(f"unknown kind {', '.join(bad)}: one of {', '.join(SOURCES)}")
-    return set(wanted) or set(SOURCES)
+        raise SearchError(f"unknown kind {', '.join(bad)}: one of {', '.join(known)}")
+    return set(wanted) or set(known)
 
 
 def _narrow(docs: list[Doc], st: State, f: Filters) -> list[Doc]:

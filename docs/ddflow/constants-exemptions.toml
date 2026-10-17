@@ -139,6 +139,7 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
+"ddflow/core/participation.py:DEFAULT_RECALL_CAP" = "the default of a declared kind's own `recall_cap` field: a descriptor sets it per kind, it is not a project preference"
 "ddflow/api/record_lifecycle.py:VALUE_MAX" = "the cut of one field value shown in a history diff, a presentation width (the full text stays in the log)"
 "ddflow/api/record_lifecycle.py:MIN_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/config_sections/bugs.py:_MIN_BUNDLE" = "the floor [bugs] repro_max_bytes accepts: below it not even the bundle's skeleton fits"

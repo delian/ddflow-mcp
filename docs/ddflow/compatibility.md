@@ -80,7 +80,7 @@ release, is checked by name only).
 | `core.events.SCHEMA_VERSION` | 1 | the envelope of every event (id, kind, subject, agent, lamport, ts, schema) | only with a `FORMAT_LEVEL` bump | none: the log is never rewritten. A reader meeting a higher `schema` counts the event as skipped and says to upgrade; it never guesses |
 | payload versions (`core.upcasters.PAYLOAD_VERSIONS`) | none above 1 yet | one event kind's `data` shape, per kind (`data["v"]`, absent = 1) | a kind at a time, with an upcaster for each step and an entry on this page | the fold upcasts when it reads, so old events keep folding unchanged on disk; an older reader skips a newer payload and counts it |
 | `infra.log.SNAPSHOT_FORMAT` | 1 | the local read snapshot of the parsed log (`read-snapshot.bin`, machine-local, never committed) | any release that changes how events are stored in it | none to run: a snapshot whose format, ddflow version, field layout or parser differs is ignored and the log is parsed again; one snapshot is kept per fingerprint and stale ones are collected |
-| `infra.store.SCHEMA` | 10 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
+| `infra.store.SCHEMA` | 11 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
 | `core.textsim.VERSION` | 2 | the similarity tokens, weights and record digest | any release that changes how text is compared | the index stores it and rebuilds when it differs; nothing outside the index keeps it |
 | `services.ticks.FORMAT` | 1 | `.ddflow/local/ticks.json`, machine-local schedule state | rarely | written beside the data but not checked by readers yet: a shape change must stay readable by the old reader or be recomputed (an unreadable file reads as empty) |
 | `services.quota.STORE_VERSION` | 1 | the user-level `quotas.json` (usage quotas) | when the file shape changes | a newer file is read for the fields this version knows and kept whole when this one writes; an older or missing version is refused |
@@ -96,8 +96,8 @@ project's committed files except the event log (`schema`, `v`) and the `ddflow.s
 Additive payload keys change none of the numbers above. `decision.recorded` gained `data["saw"]`
 (B0dcccd8594): the ids of the live decisions whose globs overlapped the new one when its author
 wrote it. An older reader ignores the key and keeps it when it rewrites the file; no event kind
-and no required key is new, and `infra.store.SCHEMA` stays 10 because the index does not store
-it. A decision without the key (every log written before) never forms an unreconciled pair, so
+and no required key is new, and it needed no `infra.store.SCHEMA` bump because the index does not
+store it. A decision without the key (every log written before) never forms an unreconciled pair, so
 an old log folds exactly as before. The fold marks two live decisions on overlapping globs that
 do not name each other as unreconciled; `doctor`, `brief` and `decision applicable` show it.
 
