@@ -293,7 +293,11 @@
    "outside_globs_unknown",
    "merge_gate_human",
    "worktree",
-   "worktree_removed"
+   "worktree_removed",
+   "queued",
+   "state",
+   "position",
+   "eta_s"
   ],
   "output_schema": {
    "type": "object",
@@ -312,6 +316,10 @@
     "merge_gate_human": {},
     "worktree": {},
     "worktree_removed": {},
+    "queued": {},
+    "state": {},
+    "position": {},
+    "eta_s": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
