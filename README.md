@@ -5507,7 +5507,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=e74a4b013161 -->
+<!-- ddflow:begin README/tools sha=37a3f2f8ec73 -->
 <details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5617,7 +5617,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Looking at it | `ddflow_metrics` | all | Metrics derived from the event log, read-only. |
 | Looking at it | `ddflow_progress` | standard | What work has ACTUALLY been done, aggregated from the event log: attempts per item, wall-clock held, gate… |
 | Looking at it | `ddflow_render` | standard | Regenerate the human-readable markdown views (queue, lessons, the one-paragraph lessons summary, research)… |
-| Looking at it | `ddflow_show` | core | Everything known about one phase, task or bug: state, dependencies, globs, the lease holder, the worktree… |
+| Looking at it | `ddflow_show` | core | Everything known about one phase, task, bug or research note: state, dependencies, globs, the lease holder… |
 | Looking at it | `ddflow_status` | core | The state of the whole project in one answer: how many tasks are done and which, what is in flight and who… |
 | Looking at it | `ddflow_verify` | standard | Re-check a done task's claims; fails if one does not hold. |
 | When something is wrong | `ddflow_bisect` | all | Which earlier test file makes `victim` fail only in full-suite order? |
