@@ -66,3 +66,7 @@ def test_a_named_path_does_not_match_the_same_basename_elsewhere():
     assert inherit_globs(["ddflow/services/config.py"], "config.py is slow") == [
         "ddflow/services/config.py"
     ]
+
+
+def test_a_bare_named_file_matches_a_wildcard_basename_glob():
+    assert inherit_globs(["ddflow/services/*.py"], "config.py is slow") == ["ddflow/services/*.py"]

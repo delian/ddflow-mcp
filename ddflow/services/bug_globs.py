@@ -33,7 +33,7 @@ def _names(path: str, glob: str) -> bool:
         fnmatch(path, glob)
         or glob.endswith("/" + path)
         or path.endswith("/" + glob)
-        or ("/" not in path and fnmatch(basename(glob), path))
+        or ("/" not in path and fnmatch(path, basename(glob)))
     )
 
 
