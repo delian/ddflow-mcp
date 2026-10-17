@@ -30,6 +30,7 @@ from ..core.admission import is_shared
 from ..core.model import Item, State
 from ..infra import worktree as W
 from . import changes as CH
+from . import chore as CO
 from . import gates as G
 from . import testselect as TS
 from .cadence import phase_overdue
@@ -67,6 +68,9 @@ class Verdict:
     #: and patterns it was judged on. Recorded on the completion event, so a gate that did
     #: not run is accounted for rather than silently absent (B-na-required-gate).
     na_evidence: list[str] = field(default_factory=list)
+    #: Set when the item is a chore (`services.chore`): why it needs no reviewer. Recorded
+    #: on the completion event with the approval it rests on.
+    chore: str = ""
 
     @property
     def may_complete(self) -> bool:
@@ -137,6 +141,34 @@ def _reported_bug_warnings(state: State, cfg: Config, item_id: str) -> list[str]
     ]
 
 
+def _unsettled(cfg: Config, it: Item, excused, s, required) -> list[str]:
+    """The required gates of the pipeline that carry no settled outcome (a chore's recorded
+    skip settles one) and that the actual diff does not excuse."""
+    return [
+        g
+        for g in s.pipeline
+        if g in required
+        and g not in s.not_applicable
+        and not (CO.skipped_ok(cfg, it, excused, g) or it.gate_satisfied(g, True))
+    ]
+
+
+def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excused):
+    """(why, blockers): whether a reviewer from another family ran. The project's own
+    reviewer gates count, as their definitions declare (B0e1330bf74).
+
+    Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
+    very check, as the tasks that produced it; demanding an independent reviewer of a merge
+    between environment branches blocked every promotion, since its pipeline (rightly) has no
+    review gate to satisfy it with. Not for a chore either (D-chore-class): a person
+    approved its file list instead."""
+    ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
+    needed = cfg.agent.reviewer_family_must_differ and it.kind == "task" and not it.promote_to
+    if needed and not ok and excused is None:
+        return why, [f"reviewer independence not satisfied: {why}"]
+    return why, []
+
+
 def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
     """Why this item may or may not complete. Reads only; writes nothing."""
     it = state.items.get(item_id)
@@ -154,11 +186,13 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     )
     required = G.required_gates(cfg)
 
-    missing = [
-        g
-        for g in s.pipeline
-        if g in required and g not in s.not_applicable and not it.gate_satisfied(g, True)
-    ]
+    # A chore (D-chore-class) is judged on the paths it ACTUALLY changed and a person's
+    # approval of the chore list -- never on its tag. It is excused the gates it skipped
+    # on the record, even a required one, and the reviewer.
+    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
+    v.warnings += why_not
+
+    missing = _unsettled(cfg, it, excused, s, required)
     if missing:
         v.blockers.append(
             f"required gate(s) not passed: {', '.join(missing)} (current outcome: "
@@ -236,15 +270,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
         )
 
-    # The project's own reviewer gates count, as their definitions declare (B0e1330bf74).
-    ok, why = G.reviewer_independence(state, cfg, item_id, model, gdefs)
-    v.independence = why
-    # Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
-    # very check, as the tasks that produced it. Demanding an independent reviewer of a
-    # merge between environment branches blocked every promotion, since its pipeline
-    # (rightly) has no review gate to satisfy it with.
-    if cfg.agent.reviewer_family_must_differ and not ok and it.kind == "task" and not it.promote_to:
-        v.blockers.append(f"reviewer independence not satisfied: {why}")
+    v.independence, no_reviewer = _independence(state, cfg, it, model, gdefs, excused)
+    v.blockers += no_reviewer
 
     if s.unavailable:
         v.coverage_note = _coverage_note(it, s.unavailable)
