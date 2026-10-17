@@ -531,6 +531,11 @@ def _add_ports(
     return ports, ""
 
 
+def _csv_none_when_empty(v: str) -> list[str] | None:
+    """A comma list, or None (field not written) when empty."""
+    return csv_list(v) or None
+
+
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
     repo: Path,
     item: str,
@@ -545,6 +550,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     line: str = "",
     lines: str = "",
     port_of: str = "",
+    resources: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -578,6 +584,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         body=body,
         tags=csv_list(tags),
         priority=priority,
+        resources=_csv_none_when_empty(resources),
     )
     bad = IT.problem_of(base)
     if bad:
