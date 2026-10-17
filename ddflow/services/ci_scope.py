@@ -11,6 +11,7 @@ in the run's output, from which the `ci` gate's evidence takes it (`ci_marker`).
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +33,8 @@ KNOWN_SUFFIXES = frozenset(
     {".py", ".md", ".txt", ".rst", ".toml", ".json", ".jsonl", ".yaml", ".yml", ".j2", ".jinja",
      ".ambr", ".sh", ".cfg", ".ini", ".csv"}
 )  # fmt: skip
+#: A test file that asks to run on every item's ci run, whatever the closure reaches.
+ALWAYS_DECLARATION = re.compile(r"^ALWAYS\s*=\s*True\b", re.M)
 #: Most paths the evidence lists, per list; the counts are always complete.
 EVIDENCE_PATHS = 120
 
@@ -45,6 +48,14 @@ class Plan:
     tests: list[str] = field(default_factory=list)
     cut: list[str] = field(default_factory=list)
     cut_at: list[str] = field(default_factory=list)
+    #: the always-run tests the selection did not already hold (`[ci].always_tests`)
+    always: list[str] = field(default_factory=list)
+    always_command: str = ""
+    always_s: float = 0.0  #: what they cost; set once they ran
+
+    def commands(self) -> list[str]:
+        """The pytest commands of a selected run, in order (the selection, then the guards)."""
+        return [c for c in (self.command, self.always_command) if c]
 
     def evidence(self, sha: str = "") -> dict:
         """The recorded form: small, and complete in its counts."""
@@ -56,6 +67,9 @@ class Plan:
                 cut=len(self.cut),
                 cut_tests=self.cut[:EVIDENCE_PATHS],
                 cut_at_hubs=self.cut_at[:EVIDENCE_PATHS],
+                always=len(self.always),
+                always_tests=self.always[:EVIDENCE_PATHS],
+                always_s=round(self.always_s, 1),
             )
         return ev
 
@@ -87,6 +101,31 @@ def tests_entry(root: Path, hook_id: str = "tests") -> str:
             parts.append(body.strip())
         return " ".join(p for p in parts if p)
     return ""
+
+
+def always_tests(cfg: Config, tree: Path) -> list[str]:
+    """The test files that run for every item whatever the change reaches: those matching
+    `[ci].always_tests` and those declaring `ALWAYS = True`. They are the repo-wide guards and
+    pins, whose input is the whole code base, so no import closure can know a change affects
+    them (a new constant, a new knob in a pinned output)."""
+    tests = Path(tree) / "tests"
+    if not tests.is_dir():
+        return []
+    globs = list(cfg.ci.always_tests)
+    found: list[str] = []
+    for f in sorted(tests.rglob("*.py")):
+        rel = f.relative_to(tree).as_posix()
+        if not is_test_file(rel):
+            continue
+        if any(fnmatch.fnmatchcase(rel, g) for g in globs):
+            found.append(rel)
+            continue
+        try:
+            if ALWAYS_DECLARATION.search(f.read_text(encoding="utf-8", errors="replace")):
+                found.append(rel)
+        except OSError:
+            continue
+    return found
 
 
 def _infrastructure(changed: list[str]) -> str:
@@ -128,13 +167,18 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     if sel.full:
         return Plan("full", f"{sel.full}: only the whole suite keeps recall")
     paths = [t.path for t in sel.tests]
-    if not paths:
+    held = set(paths)
+    always = [t for t in always_tests(cfg, tree) if t not in held]
+    if not paths and not always:
         return Plan("full", "no test reaches the change (running none would pass vacuously)")
-    cmd = run_command(entry, paths, tree)
-    if not cmd:
+    cmd = run_command(entry, paths, tree) if paths else ""
+    always_cmd = run_command(entry, always, tree) if always else ""
+    if not (cmd or always_cmd):
         return Plan("full", "the `tests` hook does not run pytest")
     cut = [t.path for t in sel.cut]
     why = f"{len(paths)} test file(s) its change reaches" + (
         f", {len(cut)} cut at the budget" if cut else ""
     )
-    return Plan("selected", why, cmd, TESTS_HOOKS, paths, cut, sel.cut_at)
+    if always:
+        why += f", {len(always)} always-run guard file(s)"
+    return Plan("selected", why, cmd, TESTS_HOOKS, paths, cut, sel.cut_at, always, always_cmd)
