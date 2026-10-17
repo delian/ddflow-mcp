@@ -76,3 +76,17 @@ def test_a_stale_primary_is_named_with_the_restore_command(repo: Path) -> None:
     )
     # from the linked worktree the same primary is named
     assert RH.stale_primary_notes(wt) == RH.stale_primary_notes(repo)
+
+
+def test_doctor_reports_a_stray_local_identity_through_the_cli(repo: Path) -> None:
+    """The hygiene notes are wired into `ddflow doctor`, not only available as a service."""
+    import json
+
+    from conftest import run_cli
+
+    assert run_cli(repo, "init")[0] == 0
+    _git(repo, "config", "user.name", "Stray")
+    code, out, err = run_cli(repo, "--json", "doctor")
+    assert code in (0, 1), err
+    notes = json.loads(out)["notes"]
+    assert any("user.name = 'Stray'" in n for n in notes), notes
