@@ -26,7 +26,7 @@ class ChoreConfig:
             "docs/ddflow/LESSONS.md",
             "docs/ddflow/LESSONS-SUMMARY.md",
         ],
-        doc="The chore class: files `ddflow chore commit FILES -m MSG` may commit, merge and COMPLETE with no reviewer (rules, .mailmap, DDFLOW.md, decision records, generated views). A change to any file outside the list is refused and takes the normal pipeline. The list is approved by a person: `ddflow chore approve` records the approval of THIS list (an agent identity cannot), so a changed list needs approving again before a chore may use it, whoever edited it.",
+        doc="The chore class: files `ddflow chore commit FILES -m MSG` may commit, merge and COMPLETE with no reviewer (rules, .mailmap, DDFLOW.md, decision records, generated views). A change to any file outside the list is refused and takes the normal pipeline. The list is approved by a person: `ddflow chore approve` records the approval of THIS list and of `skip_gates` (an agent identity cannot), so a changed list needs approving again before a chore may use it, whoever edited it.",
     )
     skip_gates: list[str] = knob(
         factory=lambda: [

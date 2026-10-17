@@ -190,7 +190,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # approval of the chore list -- never on its tag. It is excused the gates it skipped
     # on the record, even a required one, and the reviewer.
     excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
-    v.blockers += why_not
+    v.warnings += why_not
 
     missing = _unsettled(cfg, it, excused, s, required)
     if missing:

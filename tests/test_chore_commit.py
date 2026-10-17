@@ -154,3 +154,37 @@ def test_only_a_task_can_be_a_chore(proj):
     assert CO.exemption(_state(proj), cfg, it, [".mailmap"])[0] is not None
     it.kind = "phase"
     assert CO.exemption(st, cfg, it, [".mailmap"]) == (None, "")
+
+
+def test_editing_the_skipped_gates_withdraws_the_approval_too(proj):
+    _approve(proj)
+    code, _o, err = run_cli(proj, "config", "--set", "chore.skip_gates", '["merge"]')
+    assert code == 0, err
+    (proj / ".mailmap").write_text("A <a@x> <b@x>\n")
+    code, out, err = run_cli(proj, "--agent", "bot", "chore", "commit", ".mailmap", "-m", "m")
+    assert code == 3 and "changed since it was approved" in out + err
+
+
+def test_a_non_ascii_path_and_a_deleted_directory_are_landed(proj):
+    (proj / "docs" / "ddflow" / "decisions").mkdir(parents=True)
+    (proj / "docs" / "ddflow" / "decisions" / "gone.md").write_text("x\n")
+    _git(proj, "add", "-A")
+    _git(proj, "commit", "-qm", "decision")
+    _approve(proj)
+    (proj / "docs" / "ddflow" / "decisions" / "é.md").write_text("y\n")
+    code, out, err = run_cli(proj, "chore", "commit", "docs/ddflow/decisions/é.md", "-m", "utf8")
+    assert code == 0, (out, err)
+    assert _git(proj, "show", "HEAD:docs/ddflow/decisions/é.md") == "y\n"
+    (proj / "docs" / "ddflow" / "decisions" / "gone.md").unlink()
+    code, out, err = run_cli(proj, "chore", "commit", "docs/ddflow/decisions/gone.md", "-m", "rm")
+    assert code == 0, (out, err)
+
+
+def test_a_tagged_task_outside_the_list_gets_a_warning_not_a_second_blocker(proj):
+    from ddflow.config import Config
+    from ddflow.services import chore as CO
+
+    run_cli(proj, "task", "add", "T1", "--title", "t", "--globs", "app.py", "--tags", "chore")
+    cfg = Config.load(proj)
+    excused, note, warnings = CO.judge(_state(proj), cfg, _state(proj).items["T1"], ["app.py"])
+    assert excused is None and note == "" and "not a chore" in warnings[0]

@@ -49,22 +49,20 @@ def chore_approve(repo: Path, *, agent: str = "", note: str = "") -> O.Outcome:
 
 
 def _changes(repo: Path, rels: list[str]) -> list[str]:
-    """Those of ``rels`` whose working copy differs from HEAD (new, modified or deleted)."""
-    tracked = W.git(repo, "diff", "--name-only", "HEAD", "--", *rels)
-    new = W.git(repo, "ls-files", "--others", "--exclude-standard", "--", *rels)
+    """The files under ``rels`` whose working copy differs from HEAD (new, modified, deleted)."""
+    tracked = W.git(repo, "-c", "core.quotePath=false", "diff", "--name-only", "HEAD", "--", *rels)
+    new = W.git(
+        repo,
+        "-c",
+        "core.quotePath=false",
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "--",
+        *rels,
+    )
     names = (tracked.out or "").splitlines() + (new.out or "").splitlines()
     return [n.strip() for n in names if n.strip()]
-
-
-def _expand(repo: Path, rels: list[str]) -> list[str]:
-    """Directories become the changed files beneath them; files stay."""
-    out: list[str] = []
-    for rel in rels:
-        if (repo / rel).is_dir():
-            out += _changes(repo, [rel])
-        else:
-            out.append(rel)
-    return list(dict.fromkeys(out))
 
 
 def _failure(stage: str, item: str, out: O.Outcome, **data) -> O.Outcome:
@@ -87,10 +85,10 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
         if rel is None:
             return O.refused(KIND, f"{name} is outside the repository")
         rels.append(rel)
-    rels = _expand(repo, rels)
     if not rels:
         return O.refused(KIND, "no files named")
-    if bad := CO.outside(cfg, rels):
+    todo = list(dict.fromkeys(_changes(repo, rels)))  # a directory stands for what changed in it
+    if bad := CO.outside(cfg, [*rels, *todo]):
         return O.refused(
             KIND,
             f"not a chore: {', '.join(bad)} match no [chore].globs ({', '.join(cfg.chore.globs)})."
@@ -104,8 +102,6 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
             f"{approved.reason}. The chore class is a person's to approve: they run "
             f"`ddflow chore approve` from their own terminal.",
         )
-    changed = set(_changes(repo, rels))
-    todo = [r for r in rels if r in changed]
     if not todo:
         return O.nothing(KIND, f"nothing to commit: {', '.join(rels)} match HEAD")
     return todo, approved
