@@ -2003,6 +2003,20 @@
           Seconds between the lines `ddflow pins regenerate` prints on stderr while
           recipes are still running, naming them, so a long regeneration can be told
           from a hang. 0 prints only a line when a recipe starts and finishes.
+      pins.merge_check = 'fast'   [default]
+          What `ddflow merge` says about the pin files once a merge has landed. 'fast'
+          (default): it CHECKS the pins the post-merge hook may run (read-only, each
+          bounded by after_merge_timeout_s), reports the stale ones, and NAMES the
+          pins the hook never runs (a recipe with `after_merge = false` runs a test
+          suite) so a stale golden pin is never silent. 'all': it also checks those
+          suite recipes, which makes the merge wait for them (each bounded by
+          after_merge_timeout_s; a check that times out is reported as not finished,
+          never as stale). 'off': it says nothing about pins. An unrecognised value in
+          a config file is warned about, reported by `doctor` and falls back to
+          'fast', the strictest (checks the pins the hook may run and names the rest,
+          without making a merge wait for a test suite); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       plan.warn_missing_globs = True   [default]
           Whether `claim` and `plan check` WARN about a task whose declared literal
           globs (no wildcard) name files that do not exist, with the nearest existing
