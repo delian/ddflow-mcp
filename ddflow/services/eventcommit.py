@@ -78,23 +78,26 @@ def commit_shards(
     """(commit sha, note): the sha when shards were committed; the note says why not, or
     which shards were left out as half-written ("" when there was nothing to say).
 
-    ``hold`` is a context manager factory (the log's `transaction`): the whole-line check and
-    the staging run inside it, the `git commit` and its hooks do NOT. The hooks of a project
-    can run for minutes (a pre-commit suite), and holding the append lock that long made
-    every other ddflow command in the project time out with a "wedged agent" message
+    ``hold`` is a context manager factory (the log's `transaction`). Under it the shards are
+    read ONCE, each checked to hold whole lines, and written into a private index; the
+    `git commit` of that index -- and the project's hooks it runs, which can take minutes
+    (a pre-commit suite) -- happens outside it. The commit is therefore of exactly the bytes
+    that were checked, whatever a writer appends meanwhile (that line waits for the next
+    door), and no other ddflow command waits for the hooks: holding the append lock that long
+    made every one of them time out with a "wedged agent" message
     (merge-holds-event-lock-during-ci).
 
-    Two doors committing at once would stage into, and commit from, the one index, so the
-    stage, the commit and the read of its sha sit under a lock of their own (in the git
-    directory) that only event-log commits wait for. `git commit -- <paths>` reads the files
-    as they are when it runs, not what was staged: a writer that appends meanwhile has its
-    whole line (ddflow appends a line in one write) in this commit, and the committed shards
-    are checked again afterwards -- a torn line is said, not hidden."""
+    Two doors would still move HEAD together, so the commit and the resetting of the shared
+    index sit under a lock of their own (in the git directory) that only event-log commits
+    wait for, `COMMIT_WAIT_S` at most: a door that cannot get it leaves its lines, committed
+    by whichever door comes next."""
     repo = Path(repo)
     hold = hold or contextlib.nullcontext
     git_dir = W.git(repo, "rev-parse", "--absolute-git-dir")
     held = contextlib.ExitStack()
+    private = None
     if git_dir.ok and git_dir.out.strip():
+        private = Path(git_dir.out.strip()) / "ddflow-eventcommit.index"
         try:  # only the wait for another door's commit is this note's; the append lock's is not
             held.enter_context(
                 file_lock(Path(git_dir.out.strip()) / "ddflow-eventcommit.lock", COMMIT_WAIT_S)
@@ -105,49 +108,29 @@ def commit_shards(
                 f"event log not committed: another event-log commit ran for over {COMMIT_WAIT_S}s",
             )
     with held:
-        with hold():
-            early, message, shards, skipped = _stage(repo, reason, template)
-        if early is not None:
-            return early
-        done = W.git(repo, "commit", "-q", "-m", message, "--", *shards)
-        if not done.ok and not _taken_by_another(repo, shards):
-            return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
-        torn = [s for s in shards if s.endswith(".jsonl") and not _committed_whole(repo, s)]
-        if torn:
-            skipped = "; ".join(
-                filter(None, [skipped, f"committed with a half-written last line: {torn}"])
-            )
-        return W.rev(repo, "HEAD"), skipped
+        if private is None:
+            return "", "event log not committed: not a git repository"
+        try:
+            with hold():
+                early, message, paths, skipped = _snapshot(repo, reason, template, private)
+            if early is not None:
+                return early
+            env = {"GIT_INDEX_FILE": str(private)}
+            done = W.git(repo, "commit", "-q", "-m", message, env=env)
+            if not done.ok:
+                return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
+            # The shared index still holds these paths as they were before the commit.
+            W.git(repo, "reset", "-q", "--", *paths)
+            return W.rev(repo, "HEAD"), skipped
+        finally:
+            private.unlink(missing_ok=True)
 
 
-def _taken_by_another(repo: Path, shards: list[str]) -> bool:
-    """Whether the shards this door staged are already committed: a commit that began while
-    this door was between its append and its own commit read the working tree and took
-    these lines too (`git commit -- <paths>` commits the files as they are), so there is
-    nothing left to commit and nothing lost."""
-    left = uncommitted_shards(repo)
-    if left is None:  # git cannot say: not "taken"
-        return False
-    return not set(shards) & {*left, *uncommitted_blobs(repo)}
-
-
-def _committed_whole(repo: Path, rel: str) -> bool:
-    """Whether the shard as committed in HEAD has only whole lines."""
-    shown = W.git(repo, "show", f"HEAD:{rel}")
-    if not shown.ok:
-        return True  # not readable back: nothing to say about it
-    try:
-        return all(
-            not ln.strip() or isinstance(json.loads(ln), dict) for ln in shown.out.splitlines()
-        )
-    except ValueError:
-        return False
-
-
-def _stage(repo: Path, reason: str, template: str):
-    """(early answer, message, the paths to commit, the note) once they are staged. The early
-    answer is the finished ``("", why)`` when there is nothing to commit or it must not be,
-    else None."""
+def _snapshot(repo: Path, reason: str, template: str, index: Path):
+    """(early answer, message, the paths committed, the note): the shards and blobs read once,
+    the whole-line shards written into the private ``index`` on top of HEAD. The early answer
+    is the finished ``("", why)`` when there is nothing to commit or it must not be, else
+    None."""
 
     def stop(why: str):
         return ("", why), "", [], ""
@@ -155,11 +138,19 @@ def _stage(repo: Path, reason: str, template: str):
     listed = uncommitted_shards(repo)
     if listed is None:
         return stop("event log not committed: git could not list .ddflow/events")
-    shards = [s for s in listed if whole(repo, s)]
-    left = [s for s in listed if s not in shards]
+    taken: dict[str, bytes] = {}
+    left: list[str] = []
+    for rel in listed:
+        data = _read_whole(repo, rel)
+        if data is None:
+            left.append(rel)
+        else:
+            taken[rel] = data
     skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
-    blobs = uncommitted_blobs(repo)
-    if not shards and not blobs:
+    for rel in uncommitted_blobs(repo):
+        with contextlib.suppress(OSError):
+            taken[rel] = (repo / rel).read_bytes()
+    if not taken:
         return stop(f"event log not committed: {skipped}" if skipped else "")
     busy = _busy(repo)
     if busy:
@@ -168,11 +159,31 @@ def _stage(repo: Path, reason: str, template: str):
         message = template.format(reason=reason)
     except (KeyError, IndexError, ValueError):
         message = f"events: {reason}"
-    shards = [*shards, *blobs]
-    add = W.git(repo, "add", "--", *shards)
-    if not add.ok:
-        return stop(f"event log not committed: git add failed: {(add.err or add.out)[-200:]}")
-    return None, message, shards, skipped
+    env = {"GIT_INDEX_FILE": str(index)}
+    has_head = W.git(repo, "rev-parse", "-q", "--verify", "HEAD").ok
+    loaded = W.git(repo, "read-tree", *(["HEAD"] if has_head else ["--empty"]), env=env)
+    if not loaded.ok:
+        return stop(f"event log not committed: git read-tree failed: {loaded.err[-200:]}")
+    for rel, data in taken.items():
+        blob = W.git(repo, "hash-object", "-w", "--stdin", input=data)
+        if not blob.ok:
+            return stop(f"event log not committed: git could not store {rel}")
+        spec = f"100644,{blob.out.strip()},{rel}"
+        if not W.git(repo, "update-index", "--add", "--cacheinfo", spec, env=env).ok:
+            return stop(f"event log not committed: git could not stage {rel}")
+    return None, message, sorted(taken), skipped
+
+
+def _read_whole(repo: Path, rel: str) -> bytes | None:
+    """The shard's bytes when every line parses as a JSON object; None when it does not (a
+    writer is mid-line) or cannot be read."""
+    try:
+        data = (Path(repo) / rel).read_bytes()
+        text = data.decode("utf-8")
+        ok = all(not ln.strip() or isinstance(json.loads(ln), dict) for ln in text.splitlines())
+    except (OSError, ValueError):
+        return None
+    return data if ok else None
 
 
 def commit_at(log, cfg, door: str, reason: str) -> dict[str, str]:
