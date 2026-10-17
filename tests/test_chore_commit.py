@@ -202,3 +202,17 @@ def test_a_rename_into_the_list_is_refused_before_a_task_exists(proj):
     code, out, err = run_cli(proj, "chore", "commit", "docs/ddflow/decisions/foo.py", "-m", "mv")
     assert code == 3 and "foo.py" in out + err
     assert _chore_items(proj) == []
+
+
+def test_a_failed_merge_puts_a_deleted_file_back_as_deleted(proj, monkeypatch):
+    from ddflow.api import chore as A
+
+    (proj / ".mailmap").write_text("A <a@x> <b@x>\n")
+    _git(proj, "add", ".mailmap")
+    _git(proj, "commit", "-qm", "mailmap")
+    _approve(proj)
+    (proj / ".mailmap").unlink()
+    monkeypatch.setattr(A, "merge_item", lambda *a, **k: A.O.failed("worktree.merged", "boom"))
+    out = A.chore_commit(proj, [".mailmap"], message="drop")
+    assert out.exit != 0 and out.data["stage"] == "merge"
+    assert not (proj / ".mailmap").exists(), "the user's deletion was undone by the failure"
