@@ -35,3 +35,13 @@ class PinsConfig:
             "never rewrites a commit; the regenerated files are left for you to commit",
         ),
     )
+    parallel: int = knob(
+        4,
+        doc="How many pin checks `ddflow pins regenerate` runs at once (a check only reads). Re-recording is always one recipe after another: a test suite refuses to run while another recipe changes the working tree. 1 runs every check in turn.",
+        check=int_at_least(1),
+    )
+    progress_s: int = knob(
+        30,
+        doc="Seconds between the lines `ddflow pins regenerate` prints on stderr while recipes are still running, naming them, so a long regeneration can be told from a hang. 0 prints only a line when a recipe starts and finishes.",
+        check=int_at_least(0),
+    )
