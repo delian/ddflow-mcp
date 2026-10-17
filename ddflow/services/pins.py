@@ -435,7 +435,11 @@ def _restore(repo: Path, r: Recipe, kept: dict[Path, bytes | None]) -> bool:
                 p.mkdir(parents=True, exist_ok=True)
             elif not p.is_file() or p.read_bytes() != data:
                 p.parent.mkdir(parents=True, exist_ok=True)
-                replace_text(p, data.decode("utf-8")) if _is_text(data) else atomic_write(p, data)
+                where = Path(os.path.realpath(p)) if p.is_symlink() else p  # the link stays
+                if _is_text(data):
+                    replace_text(where, data.decode("utf-8"))
+                else:
+                    atomic_write(where, data)
     except OSError:
         return False
     return True

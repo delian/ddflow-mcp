@@ -223,3 +223,28 @@ def test_a_malformed_file_does_not_hide_a_decidable_conflict_elsewhere(tmp_path)
     rep = PN.regenerate(repo, Config())
     assert "guide.md" in rep.problem and "do not pair up" in rep.problem
     assert "9 knobs" in (repo / "README.md").read_text()  # the count was still decided
+
+
+def test_a_killed_regeneration_while_settling_a_conflict_puts_every_owned_file_back(tmp_path):
+    """The generators are asked to decide a prose conflict and the regeneration fails after
+    damaging a file of its own besides the conflicted one: all of it comes back."""
+    recipe = (
+        '[[pin]]\nname = "t"\nfiles = ["README.md", "snap.txt"]\n'
+        f'check = ["{sys.executable}", "-c", "raise SystemExit(1)"]\n'
+        f"regen = [\"{sys.executable}\", \"-c\", \"open('snap.txt', 'w').write('junk'); "
+        'raise SystemExit(2)"]\n'
+    )
+    readme = (
+        "intro\n"
+        + _block("good")
+        + _conflict("timeout 30 seconds\n", "timeout 60 seconds\n")
+        + "outro\n"
+    )
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(recipe)
+    (tmp_path / "README.md").write_text(readme)
+    (tmp_path / "snap.txt").write_text("orig\n")
+    rep = PN.regenerate(tmp_path, Config())
+    assert rep.problem  # the conflict is left to a person
+    assert (tmp_path / "README.md").read_text() == readme
+    assert (tmp_path / "snap.txt").read_text() == "orig\n"
