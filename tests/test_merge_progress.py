@@ -23,7 +23,7 @@ def _git(where: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
-def test_merge_prints_progress_on_stderr_once_it_has_landed(repo, monkeypatch):
+def _landing(repo, monkeypatch) -> None:
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     run_cli(repo, "init")
     (repo / "c.txt").write_text("base\n")
@@ -35,7 +35,24 @@ def test_merge_prints_progress_on_stderr_once_it_has_landed(repo, monkeypatch):
     tree = Path(json.loads(out)["worktree"])
     (tree / "c.txt").write_text("branch\n")
     _git(tree, "commit", "-qam", "branch edit")
+
+
+def test_merge_prints_progress_on_stderr_once_it_has_landed(repo, monkeypatch):
+    _landing(repo, monkeypatch)
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == OK, out + err
+    assert "merging ddflow/T1 into main" in err, err  # before the landing too
     assert "merged T1 into main" in err, err
-    assert "post-merge check" in err and "[ci].on_merge" in err, err
+    # this project has no CI command: the line says there is nothing to run
+    assert "post-merge check: nothing to run" in err, err
+
+
+def test_the_progress_names_the_check_and_the_knob_that_bounds_it(repo, monkeypatch):
+    _landing(repo, monkeypatch)
+    run_cli(repo, "config", "--set", "ci.command", "echo ok")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ci command", "--no-verify")
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == OK, out + err
+    assert "post-merge check starting" in err and "[ci].timeout_s" in err, err
+    assert "post-merge check finished (passed)" in err, err

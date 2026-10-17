@@ -13,6 +13,7 @@ from ...core.admission import new_file_globs
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
@@ -148,6 +149,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
+    (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
     if not r.ok and not landed_note:
@@ -225,7 +227,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
 
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
-    say(_ci_notice(repo, agent))
+    say(_ci_notice(repo, cfg))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
@@ -254,15 +256,18 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     )
 
 
-def _ci_notice(repo: Path, agent: str) -> str:
+def _ci_notice(repo: Path, cfg) -> str:
     """The line said before the post-merge check starts: what runs and which knobs bound it."""
-    cfg = _load(repo, agent)[1]
-    mode = cfg.ci.on_merge
-    if mode == "off":
-        return "post-merge check: off ([ci].on_merge)"
+    try:
+        command, why = CI.main_command(repo, cfg)
+    except Exception:  # a line of progress never stops a merge that has landed
+        command, why = "?", ""
+    if not command:
+        return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
     return (
-        f"post-merge check starting: [ci].on_merge={mode}, at most {cfg.ci.timeout_s}s "
-        f"([ci].timeout_s); a timeout is recorded unavailable, never as a failure"
+        f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+        f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never as "
+        f"a failure"
     )
 
 
