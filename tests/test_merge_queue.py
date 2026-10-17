@@ -520,6 +520,7 @@ def test_merge_queue_cli_and_mcp_bodies_are_equal(repo):
     _ready(repo)
     _code, out, _err = run_cli(repo, "--json", "merge", "T1", "--queue")
     cli = json.loads(out)
+    run_cli(repo, "queue", "remove", "T1")  # the MCP leg enqueues on the same fresh state
     reply = Server(repo).handle(
         {
             "jsonrpc": "2.0",
@@ -536,8 +537,9 @@ def test_merge_queue_cli_and_mcp_bodies_are_equal(repo):
 
 def test_merge_queue_refuses_landing_flags_and_unready_items(repo):
     _ready(repo)
-    code, out, err = run_cli(repo, "merge", "T1", "--queue", "--keep")
-    assert code == 3 and "keep" in out + err
+    for flag in (["--keep"], ["--model", "m"]):
+        code, out, err = run_cli(repo, "merge", "T1", "--queue", *flag)
+        assert code == 3 and flag[0][2:] in out + err, flag
     run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "b.py")
     run_cli(repo, "claim", "T2")
     code, out, err = run_cli(repo, "merge", "T2", "--queue")

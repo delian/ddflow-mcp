@@ -390,7 +390,7 @@ MERGE_PAYLOAD = (
 )
 
 #: What a landing flag means nothing for once the item is only being enqueued.
-_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch")
+_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch", "model")
 
 
 def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=None):
