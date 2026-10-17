@@ -222,6 +222,7 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
     done = set(ran.get("tests") or ())
     if int(ran.get("selected") or 0) > len(done):  # a truncated list proves nothing about the rest
         return Scope("full", "the ci gate's test list is cut: this gate runs its own selection")
+    done |= set(ran.get("always_tests") or ())  # the always-run guards ran as well
     rest = _not_run(sel.tests, _regression(st, it), done)
     if not rest:
         return Scope(
