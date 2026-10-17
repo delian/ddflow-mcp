@@ -954,20 +954,22 @@ def _evidence_fields(
 
 
 def _agent_skip_refusal(
-    it, gdef, gate: str, item: str, agent: str, skipping: bool
+    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool
 ) -> O.Outcome | None:
-    """D-failed-review-gate (B85841c0846): setting a FAILED review gate aside while its
-    confirmed findings were never re-reviewed is the operator's override. An agent
-    (`--agent`, DDFLOW_AGENT, a harness's shell) is refused; the person records the reason."""
-    if not skipping or gdef is None or not gdef.reviewer:
+    """D-failed-review-gate (B85841c0846): replacing the FAILED outcome of a review gate whose
+    confirmed findings were never re-reviewed -- by a skip, or a hand-recorded pass,
+    unavailable or partial -- is the operator's override. An agent (`--agent`, DDFLOW_AGENT,
+    a harness's shell) is refused; the person records the reason. A review that really runs
+    (`ddflow review`, a triage) does not come through here."""
+    if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
         return None
-    why = GO.unresolved_review_failure(it, gate)
+    why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
         return None
     return O.refused(
         "gate.record",
-        f"{gate} failed ({why}); skipping it past those findings is the operator's "
+        f"{gate} failed ({why}); setting it aside past those findings is the operator's "
         f"override, and this call is an agent's ({marker}). Fix and re-run "
         f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
         f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
@@ -1005,7 +1007,9 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    refused = _agent_skip_refusal(it, gdef, gate, item, agent, skip or outcome == "skipped")
+    refused = _agent_skip_refusal(
+        it, gdef, gate, item, agent, skip or outcome == "skipped", outcome != "failed"
+    )
     if refused is not None:
         return refused
 

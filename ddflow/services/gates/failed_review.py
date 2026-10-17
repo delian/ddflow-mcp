@@ -51,19 +51,22 @@ def _cleared_after_delta(runs: list, digest: str) -> bool:
     return cleared
 
 
-def unresolved_review_failure(it, gate: str) -> str:
+def unresolved_review_failure(it, gate: str, *, confirmed_only: bool = False) -> str:
     """Why ``gate``'s FAILED outcome is still unanswered, or "" (decision
     D-failed-review-gate): a gate not failed, one whose findings were all refuted, or one
     whose every confirmed finding a later delta round did not raise again, is answered.
     Findings without a verdict, and a failure with no numbered findings (a hand record),
-    are not: nothing re-reviewed them."""
+    are not: nothing re-reviewed them. ``confirmed_only`` looks at the confirmed findings
+    alone: a hand PASS over findings nobody has triaged yet is an established way to settle
+    them (B29667ba4b4), a hand PASS over a CONFIRMED defect nobody re-checked is not."""
     if it.gate_outcome(gate) != "failed":
         return ""
     counts = triage_counts(it, gate)
-    if counts is None:
-        return "failed with no triaged findings on record"
-    if counts["untriaged"]:
-        return f"{counts['untriaged']} finding(s) without a verdict"
+    if not confirmed_only:
+        if counts is None:
+            return "failed with no triaged findings on record"
+        if counts["untriaged"]:
+            return f"{counts['untriaged']} finding(s) without a verdict"
     mine = it.triage.get(gate, {})
     runs = it.runs_of(gate)
     # EVERY confirmed finding the gate ever recorded, not only those the latest round carries:
