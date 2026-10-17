@@ -7,16 +7,9 @@ B-uni-cmd-migrate.6g-memory). Their handlers stay in `surfaces/commands/operatio
 
 from __future__ import annotations
 
+from ...api import pin_files as PF  # not re-exported by `api`: `_api().pins_regenerate` raised
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
-
-
-def _pins_regenerate():
-    """`api.pin_files.pins_regenerate`: `api` does not re-export it, so `_api().pins_regenerate`
-    raised AttributeError over MCP. Imported at call time like `_api` (flat import graph)."""
-    from ...api.pin_files import pins_regenerate
-
-    return pins_regenerate
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -53,7 +46,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         wants_progress=True,
         call=lambda repo, a, agent, on_progress=None: (
-            _pins_regenerate()(
+            PF.pins_regenerate(
                 repo,
                 on_progress=on_progress,
                 only=a.get("only") or "",
