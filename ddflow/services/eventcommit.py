@@ -128,12 +128,13 @@ def commit_shards(
             if built:
                 return "", f"event log not committed: {built}"
             env = {"GIT_INDEX_FILE": str(private)}
+            # the tree is read before the hooks run: a hook that stages something would change it
+            built_tree = W.git(repo, "write-tree", env=env)
             done = W.git(repo, "commit", "-m", message, env=env)
             if not done.ok:
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            built_tree = W.git(repo, "write-tree", env=env)
             ours = _printed_sha(repo, done.out, built_tree.out.strip()) if built_tree.ok else None
             if ours is None:
                 skipped = "; ".join(
