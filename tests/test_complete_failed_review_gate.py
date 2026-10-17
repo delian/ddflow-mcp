@@ -172,3 +172,18 @@ def test_a_confirmed_finding_a_later_full_round_dropped_still_needs_a_delta(repo
     t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="y.py is fine")
     assert t.exit == 0, t.reason
     assert BLOCKER in _complete(repo)[1]
+
+
+def test_any_gate_with_a_reviewer_counts_not_only_different_family_ones(repo, tmp_path):
+    """The critic's finding on the skip guard: same_family_ok review gates were left out."""
+    from dataclasses import replace
+
+    from ddflow.config import Config
+    from ddflow.services.gates import failed_review_blockers
+    from ddflow.services.gates.defs import DEFAULT_GATES
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    st = fold(EventLog(repo).read_all(), strict=False)
+    own = {"critic": replace(DEFAULT_GATES["critic"], reviewer="same_family_ok")}
+    assert failed_review_blockers(st, Config.load(repo), "T1", own)

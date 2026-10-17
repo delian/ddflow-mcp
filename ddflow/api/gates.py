@@ -957,7 +957,7 @@ def _agent_skip_refusal(it, gdef, gate: str, item: str, agent: str) -> O.Outcome
     """D-failed-review-gate (B85841c0846): setting a FAILED review gate aside while its
     confirmed findings were never re-reviewed is the operator's override. An agent
     (`--agent`, DDFLOW_AGENT, a harness's shell) is refused; the person records the reason."""
-    if gdef is None or gdef.reviewer != "different_family":
+    if gdef is None or not gdef.reviewer:
         return None
     why = GO.unresolved_review_failure(it, gate)
     marker = agent_marker(agent) if why else ""
