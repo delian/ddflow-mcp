@@ -79,7 +79,9 @@ def test_a_machine_local_scrub_env_reaches_a_gate_run_in_the_items_worktree(repo
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "adopt"], check=True)
     local = repo / ".ddflow" / "local"
     local.mkdir(parents=True, exist_ok=True)
-    (local / "config.toml").write_text('[gates]\nscrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "KEEPME"]\n')
+    (local / "config.toml").write_text(
+        '[gates]\nscrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "KEEPME"]\n'
+    )
     (repo / ".ddflow" / "gates.toml").write_text(f"[gate.unit_tests]\ncommand = {SHOW!r}\n")
     monkeypatch.setenv("KEEPME", "x")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
