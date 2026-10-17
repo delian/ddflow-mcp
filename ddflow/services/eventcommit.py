@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from pathlib import Path
 
 from ..infra import git as G
@@ -127,14 +128,13 @@ def commit_shards(
             if built:
                 return "", f"event log not committed: {built}"
             env = {"GIT_INDEX_FILE": str(private)}
-            done = W.git(repo, "commit", "-q", "-m", message, env=env)
+            done = W.git(repo, "commit", "-m", message, env=env)
             if not done.ok:
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            head = W.rev(repo, "HEAD")
-            verdict = _is_ours(repo, head, message, env)
-            if verdict is None:
+            ours = _printed_sha(repo, done.out)
+            if ours is None:
                 skipped = "; ".join(
                     filter(
                         None,
@@ -144,30 +144,38 @@ def commit_shards(
                         ],
                     )
                 )
-            elif verdict:
-                if W.rev(repo, f"{head}^") != base:  # a commit landed just before ours began
+            else:
+                parent = W.rev(repo, f"{ours}^")
+                if parent and parent != base:  # a commit landed just before ours began
                     skipped = "; ".join(
-                        filter(None, [skipped, _rebuild_on(repo, taken, private, head)])
+                        filter(None, [skipped, _rebuild_on(repo, taken, private, ours)])
                     )
-                return W.rev(repo, "HEAD"), skipped
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
 
 
-def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool | None:
-    """Whether ``head`` is the event-log commit this door just made: one parent, the message it
-    was given (whitespace as git folds it, trailers a hook adds allowed) and the tree of the private index. None when git
-    could not say."""
-    ours = W.git(repo, "write-tree", env=env)
-    info = W.git(repo, "log", "-1", "--format=%T%n%P%n%B", head)
-    if not (ours.ok and info.ok):
+#: The summary line `git commit` prints after its hooks: "[branch sha] subject". The subject is
+#: whatever a commit-msg hook made of it, so only the bracket is read.
+_SUMMARY = re.compile(r"^\[[^\]]*?([0-9a-f]{7,40})\]", re.MULTILINE)
+
+
+def _printed_sha(repo: Path, printed: str) -> str | None:
+    """The full sha of the commit ``git commit`` says it made, read from what it printed (the last
+    summary line: hooks print before it), never from HEAD or from a message: HEAD may have moved
+    since, and a hook may have rewritten the message. None when it cannot be read or is not a
+    one-parent commit."""
+    found = _SUMMARY.findall(printed)
+    if not found:
         return None
-    tree, _, rest = info.out.partition("\n")
-    parents, _, body = rest.partition("\n")
-    # a commit-msg hook may append trailers: the message it was given still starts the body
-    same = " ".join(body.split()).startswith(" ".join(message.split()))
-    return tree == ours.out.strip() and len(parents.split()) == 1 and same
+    full = W.git(repo, "rev-parse", "--verify", "-q", f"{found[-1]}^{{commit}}")
+    if not full.ok or not full.out.strip():
+        return None
+    sha = full.out.strip()
+    info = W.git(repo, "log", "-1", "--format=%P", sha)
+    if not info.ok or len(info.out.split()) != 1:
+        return None
+    return sha
 
 
 def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
