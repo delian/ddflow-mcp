@@ -45,6 +45,9 @@ def pins_regenerate(
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
     files = PN.pin_files(repo, cfg)
+    attrs = repo / ".gitattributes"
+    if not check and not after_merge and attrs.exists() and "merge=pinsregen" in attrs.read_text("utf-8"):
+        PM.sync_attributes(repo, cfg)  # attributes follow the recipes; the hook is `--install`'s
     before = PW.snapshot(repo, files) if not check else {}
     if after_merge:
         if _linked_worktree(repo):
