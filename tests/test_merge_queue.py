@@ -544,3 +544,23 @@ def test_merge_queue_refuses_landing_flags_and_unready_items(repo):
     run_cli(repo, "claim", "T2")
     code, out, err = run_cli(repo, "merge", "T2", "--queue")
     assert code == 3 and "gates" in out + err
+
+
+def test_merge_queue_refusal_over_mcp_names_the_landing_flag(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _ready(repo)
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_merge",
+                "arguments": {"id": "T1", "queue": True, "keep": True},
+            },
+        }
+    )
+    text = json.dumps(reply)
+    assert "keep" in text and "only enqueues" in text, text
+    assert _state(repo).items["T1"].state != "done"
