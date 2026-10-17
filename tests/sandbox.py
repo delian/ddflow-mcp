@@ -26,7 +26,9 @@ def assert_sandboxed(repo: Path, tmp_path: Path) -> None:
     assert real.is_relative_to(root), f"{real} is not under {root}: refusing to run"
     top = subprocess.run(
         ["git", "-C", str(real), "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout.strip()
     assert top and Path(top).resolve() == real, (
         f"git resolves {real} to the work tree {top!r}: refusing to run"
