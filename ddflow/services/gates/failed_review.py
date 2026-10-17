@@ -11,7 +11,7 @@ from typing import Any
 from ...config import Config
 from ...core.model import State
 from .. import logblobs as LB
-from .defs import GateDef, pipeline_for
+from .defs import DEFAULT_GATES, GateDef, pipeline_for
 from .outcomes import is_triageable, triage_counts
 
 #: How a blocker of `failed_review_blockers` begins; `complete` never lifts these with
@@ -97,7 +97,7 @@ def failed_review_blockers(
     excused = set(skip)
     rows = []
     for g in pipeline_for(it, cfg):
-        gd = (defs or {}).get(g)
+        gd = (defs or {}).get(g) or DEFAULT_GATES.get(g)
         if g in excused or gd is None or gd.reviewer != "different_family":
             continue
         if why := unresolved_review_failure(it, g):
