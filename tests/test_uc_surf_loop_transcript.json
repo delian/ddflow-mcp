@@ -842,7 +842,7 @@
   ],
   0,
   "merged T3 (<hex>) into main\n",
-  ""
+  "merging ddflow/T3 into main ...\nmerged T3 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n"
  ],
  [
   [
@@ -909,7 +909,7 @@
   ],
   0,
   "merged T5 (<hex>) into main\n",
-  "  refusing to remove <repo>/.ddflow/worktrees/T5: 1 uncommitted file(s), 0 unmerged commit(s). Inspect with `git -C <repo>/.ddflow/worktrees/T5 diff main`; pass --force once you are certain.\n"
+  "merging ddflow/T5 into main ...\nmerged T5 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n  refusing to remove <repo>/.ddflow/worktrees/T5: 1 uncommitted file(s), 0 unmerged commit(s). Inspect with `git -C <repo>/.ddflow/worktrees/T5 diff main`; pass --force once you are certain.\n"
  ],
  [
   [
@@ -1034,7 +1034,7 @@
   ],
   0,
   "{\n  \"schema\": \"merge@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"branch_head\": \"<hex>\",\n  \"base\": \"main\",\n  \"pr\": \"\",\n  \"branch\": \"ddflow/T9\",\n  \"outside_globs\": [],\n  \"outside_globs_unknown\": null,\n  \"merge_gate_human\": false,\n  \"worktree\": \"<repo>/.ddflow/worktrees/T9\",\n  \"worktree_removed\": false\n}\n",
-  ""
+  "merging ddflow/T9 into main ...\nmerged T9 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n"
  ],
  [
   [
