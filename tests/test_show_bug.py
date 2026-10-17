@@ -127,20 +127,44 @@ def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
     assert body["mentioned_by"] == ["SEE"], body
 
 
+def _show_within_budget(repo, bid, clock=None) -> str:
+    """`show <bug>` and assert it was answered at once. The budget is a ceiling for catastrophic
+    backtracking (which would take far longer than any load makes a CLI start), so it scales
+    with the machine's load; ``clock`` lets a test inject the slow path (Bfaef48ced6)."""
+    import time
+
+    from _wait import scaled
+
+    clock = clock or time.monotonic
+    t0 = clock()
+    code, out, err = run_cli(repo, "--json", "show", bid)
+    assert code == 0, err
+    elapsed = clock() - t0
+    assert elapsed < scaled(10), f"show took {elapsed:.0f}s"
+    return out
+
+
 def test_the_fix_list_pattern_neither_backtracks_nor_matches_inside_a_word(repo):
     """Review of Bfc863d295f: an 'and' can end a separator or be the next element, so a
     title of many ', and's must still be answered at once; and an id embedded in a word
     (`AX`) is never a fix of X."""
-    import time
-
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
     run_cli(repo, "task", "add", "MANY", "--title", "T (fixes A" + ", and" * 200 + f" ) {bid}")
     run_cli(repo, "task", "add", "WORD", "--title", f"Fixes A{bid} and {bid}x, see {bid}")
-    t0 = time.monotonic()
-    code, out, err = run_cli(repo, "--json", "show", bid)
-    assert code == 0, err
-    assert time.monotonic() - t0 < 10
+    out = _show_within_budget(repo, bid)
     body = json.loads(out)
     assert body["fixing"] == [] and body["mentioned_by"] == ["MANY", "WORD"], body
+
+
+def test_a_slow_machine_does_not_read_as_backtracking(repo, monkeypatch):
+    """The slow path forced: a clock that says the call took 11 s on a saturated host. The old
+    fixed `< 10` failed here; the scaled budget does not."""
+    import _wait
+
+    _wait.pretend_saturated(monkeypatch)
+    run_cli(repo, "init")
+    bid = _bug(repo, "the widget drops its last row", "--no-task")
+    ticks = iter([0.0, 11.0])
+    _show_within_budget(repo, bid, clock=lambda: next(ticks))

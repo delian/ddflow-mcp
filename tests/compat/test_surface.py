@@ -33,6 +33,15 @@ from surface import surface
 from ddflow.core.events import version_key
 from ddflow.services import upgrade_manifest as UM
 
+#: It compares what the code exposes (read at run time from the registries, not imported), so
+#: a change to any of these is one no import reaches: it selects this test.
+GOVERNS = (
+    "ddflow/api/**",
+    "ddflow/surfaces/**",
+    "ddflow/config_sections/**",
+    "ddflow/core/events.py",
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = Path(__file__).resolve().parent / "surfaces"
 VERSIONS = sorted((p.stem for p in SURFACES.glob("*.json")), key=version_key)

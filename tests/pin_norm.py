@@ -47,3 +47,20 @@ def stable(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: stable(v) for k, v in value.items()}
     return value
+
+
+def rerecord(got: list[list], want: list[list]) -> list[list]:
+    """The recorded transcript ``want`` with the rows of ``got`` that differ replaced.
+
+    By command, not by position: a step added to or dropped from a script changes the count,
+    and every unchanged step keeps its recorded text byte for byte, so the diff is exactly the
+    commands whose output changed. Rows are ``[argv, code, stdout, stderr]``."""
+    old: dict[tuple, list[list]] = {}
+    for w in want:
+        old.setdefault(tuple(w[0]), []).append(w)
+    merged = []
+    for g in got:
+        queue = old.get(tuple(g[0]))
+        w = queue.pop(0) if queue else None
+        merged.append(w if w is not None and stable(g) == stable(w) else g)
+    return merged

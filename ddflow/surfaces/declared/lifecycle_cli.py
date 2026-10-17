@@ -7,6 +7,7 @@ executor (`surfaces/cliexec.py`) prints what these return. It imports nothing th
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from ...core import clock
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
 from ...core.tier import tier_of
+from ..tools._common import _api
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
 #: whether they are build artefacts or real source -- which is the judgement the operator
@@ -245,11 +247,13 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    return out.body(CLAIM_BODY + (("guidance",) if out.data.get("guidance") else ()))
+    extra = tuple(k for k in ("guidance", "glob_warnings") if out.data.get(k))
+    return out.body(CLAIM_BODY + extra)
 
 
 def claim_text(out, a, ctx) -> str:
-    d = out.data
+    # a claim of a bug's fix task starts from how the bug was seen (DX-bug-repro-bundle)
+    d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), a["id"]).data
     msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
     for b in d.get("broke") or []:
         msg += (
@@ -294,6 +298,7 @@ def claim_text(out, a, ctx) -> str:
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
+    msg += "".join(f"\n  warning:  {w}" for w in d.get("glob_warnings", []))
     if not d["globs"]:
         msg += (
             f"\n  The commit hook refuses files no glob covers; to cover yours: "
@@ -385,6 +390,16 @@ def merge_kwargs(ctx) -> dict[str, Any]:
         return {"shell_cwd": Path.cwd()}
     except OSError:
         return {"shell_cwd": None}
+
+
+def merge_progress_kwargs(ctx) -> dict[str, Any]:
+    """`merge`'s: the above, and progress on stderr. The post-merge work runs for minutes, and
+    a merge that says nothing in that time is indistinguishable from a hang
+    (merge-silent-during-post-merge-ci)."""
+    return {
+        **merge_kwargs(ctx),
+        "on_progress": lambda line: print(line, file=sys.stderr, flush=True),
+    }
 
 
 def merge_shown(out) -> bool:

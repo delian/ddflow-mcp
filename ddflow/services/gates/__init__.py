@@ -59,10 +59,13 @@ from .evidence import (  # noqa: F401
     diff_stat,
     differing_paths,
     digest,
+    head_of,
     is_tree,
+    moved_past,
     normal_fingerprint,
     recorded_content,
     source_tree,
+    superseded_by,
     tree_being_completed,
     tree_fingerprint,
     tree_identity,
@@ -147,6 +150,14 @@ from .runner import (  # noqa: F401
     output_evidence,
     run_command_gate,
     run_log_writer,
+)
+from .running import (  # noqa: F401
+    Marker,
+    RunTerminated,
+    clear_started,
+    dead_runs,
+    mark_started,
+    terminating,
 )
 from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,

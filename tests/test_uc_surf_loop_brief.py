@@ -18,7 +18,7 @@ def test_brief_has_no_hand_written_half_left():
     assert not hasattr(commands, "cmd_brief")
     served = tools.TOOLS["ddflow_brief"]
     assert served["description"].startswith("START HERE every session. Returns a budgeted pack")
-    assert list(served["properties"]) == ["item", "phase", "check_recovery"]
+    assert list(served["properties"]) == ["item", "phase", "check_recovery", "for_agent"]
     assert (served["payload"], served["kind"]) == ("text", "brief")
 
 

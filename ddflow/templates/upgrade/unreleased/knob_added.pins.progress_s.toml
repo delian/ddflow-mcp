@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.progress_s"
+new = "30"
+why = "`ddflow pins regenerate` prints per-recipe progress on stderr, and a line naming the running recipes every this many seconds."
+impact = "additive"

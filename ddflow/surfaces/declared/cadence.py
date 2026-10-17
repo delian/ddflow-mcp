@@ -42,9 +42,11 @@ COMMANDS: tuple[Command, ...] = (
         description=(
             "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file."
         ),
-        call=lambda repo, a, agent: (
+        wants_progress=True,
+        call=lambda repo, a, agent, on_progress=None: (
             _api().pins_regenerate(
                 repo,
+                on_progress=on_progress,
                 only=a.get("only") or "",
                 check=bool(a.get("check")),
                 install=bool(a.get("install")),
