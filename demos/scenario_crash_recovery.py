@@ -42,6 +42,14 @@ SCAFFOLD = {
 }
 
 
+def refused_while_live(code: int, err: str) -> bool:
+    """A claim refused by DELTA's live lease: before the TTL it says "is held by", after
+    it (a slow start, under xdist) it says the lease "ran out" and is in its grace."""
+    held = "is held by delta" in err
+    in_grace = "delta's lease ran out" in err and f"{LIVE_GRACE_S}s grace period" in err
+    return code == 3 and (held or in_grace)
+
+
 def _lease_config(sc: Scenario, grace_s: int) -> None:
     sc.write(
         ".ddflow/config.toml",
@@ -156,11 +164,7 @@ def run(sc: Scenario) -> None:
     # still a refusal by the live (grace) lease, which is what is asserted.
     sc.check(
         "another agent is refused while the lease is still live",
-        code == 3
-        and (
-            "is held by delta" in err
-            or ("delta's lease ran out" in err and "3600s grace period" in err)
-        ),
+        refused_while_live(code, err),
         err,
     )
     code = _while_live(sc, lambda: sc.ddflow("recover", expect=None))[0]
