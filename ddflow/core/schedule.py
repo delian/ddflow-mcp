@@ -559,13 +559,6 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
     """
     out: dict[str, int] = {}
     for spec in specs:
-        if "=" in spec:
-            name_, _, cap_ = spec.partition("=")
-            raise ValueError(
-                f"resource {spec!r}: an item names its resources as name:count "
-                f"(`{name_.strip()}:{cap_.strip() or 1}`); name=count is the "
-                "[schedule] resources capacity form"
-            )
         name, _, count = spec.strip().partition(":")
         name = name.strip()
         if not name:
@@ -579,6 +572,15 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
 
 def problem(specs: list[str]) -> str:
     """Why ``specs`` cannot be an item's resources, or ""."""
+    # Only NEW input: a stored `gpu=1` (from before this check) must still parse, as a name.
+    for spec in specs:
+        if "=" in spec:
+            name, _, cap = spec.partition("=")
+            return (
+                f"resource {spec!r}: an item names its resources as name:count "
+                f"(`{name.strip()}:{cap.strip() or 1}`); name=count is the "
+                "[schedule] resources capacity form"
+            )
     try:
         parse_resources(specs)
     except ValueError as exc:
