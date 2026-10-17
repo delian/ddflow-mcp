@@ -28,7 +28,7 @@ import pytest
 import ddflow
 from ddflow.infra import hostinfo
 from ddflow.surfaces.cli import main
-from tests.pin_norm import stable
+from tests.pin_norm import rerecord, stable
 
 SCRIPT: tuple[tuple[str, ...], ...] = (
 # setup of the sandbox
@@ -178,16 +178,7 @@ def test_the_setup_and_operations_cli_transcript_is_unchanged(tmp_path, monkeypa
     got = record(tmp_path, monkeypatch)
     want = json.loads(EXPECTED.read_text("utf-8"))
     if update:
-        # By command, not by position: a step added to or dropped from SCRIPT changes the
-        # count, and every unchanged step still keeps its recorded text byte for byte.
-        old: dict[tuple, list] = {}
-        for w in want:
-            old.setdefault(tuple(w[0]), []).append(w)
-        merged = []
-        for g in got:
-            queue = old.get(tuple(g[0]))
-            w = queue.pop(0) if queue else None
-            merged.append(w if w is not None and stable(g) == stable(w) else g)
+        merged = rerecord(got, want)
         if merged != want:
             EXPECTED.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n", "utf-8")
             want = merged
