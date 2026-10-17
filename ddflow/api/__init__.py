@@ -150,6 +150,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_check
+from .report import item_report, show_report
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -283,6 +284,7 @@ __all__ = [
     "hooks",
     "import_project",
     "import_verify",
+    "item_report",
     "job_add",
     "job_end",
     "job_list",
@@ -351,6 +353,7 @@ __all__ = [
     "session_prompt",
     "session_start",
     "show",
+    "show_report",
     "similar",
     "split",
     "stale_server_facts",

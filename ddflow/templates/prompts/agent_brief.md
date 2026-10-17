@@ -57,4 +57,4 @@ Every ddflow defect or gap you notice becomes a bug (`ddflow bug found`) or a ta
 <!-- section: report -->
 ## Report
 
-End your run with ONLY this report, nothing before or after it: merge and commit shas; regression test ids and whether `complete` verified them; each gate's outcome (reviewer model and family; any gate recorded by hand, with its evidence); overrides and skips with their reasons; bugs and tasks you filed; open follow-ups; what you did NOT do.
+File any caveat as a task or bug FIRST. Then end your run with ONLY the output of `ddflow report {{ item }} --agent {{ agent }}` (MCP: `ddflow_show` with `report=true`), nothing before or after it.
