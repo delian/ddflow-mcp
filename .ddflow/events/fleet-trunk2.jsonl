@@ -1,0 +1,2 @@
+{"agent":"fleet-trunk2","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"efd3bd5fdbcb0f469aa26ebd6","kind":"ddflow.seen","lamport":75702,"schema":1,"subject":"ddflow","ts":"2026-10-17T15:03:42.380069Z"}
+{"agent":"fleet-trunk2","data":{"by":"fleet-trunk2","event":"ee2f82b3aaf3b2382a5dffcab","holder":"fleet-trunk","note":"salvaged"},"id":"eee4be2825b3ca1668c27023f","kind":"lease.released","lamport":75703,"schema":1,"subject":"P-extension-seams.registry","ts":"2026-10-17T15:03:42.404788Z"}
