@@ -88,7 +88,8 @@ def commit_shards(
     (merge-holds-event-lock-during-ci). A commit that lands while the hooks run cannot be
     reverted by this one: git takes the parent when the commit begins and refuses to move HEAD
     if it is no longer there ("cannot lock ref"), which is reported as a refusal; the short span
-    before the commit begins (a `read-tree` and an `update-index`) is checked afterwards.
+    before the commit begins (a `rev-parse`, a `read-tree` and an `update-index`) is checked
+    afterwards, and a commit that landed in it is remade on top of that commit.
 
     Two doors would still move HEAD together, so the commit and the resetting of the shared
     index sit under a lock of their own (in the git directory) that only event-log commits
@@ -129,19 +130,34 @@ def commit_shards(
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            if W.rev(repo, "HEAD^") != base:
+            parent = W.rev(repo, "HEAD^")
+            if parent != base:  # someone's commit landed before this one began
                 skipped = "; ".join(
-                    filter(
-                        None,
-                        [
-                            skipped,
-                            f"HEAD moved while the event log was committed (was {base[:12]}): check `git log`",
-                        ],
-                    )
+                    filter(None, [skipped, _rebuild_on(repo, taken, private, parent)])
                 )
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
+
+
+def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, parent: str) -> str:
+    """The event-log commit was made on HEAD after a commit it did not know: its tree is the old
+    HEAD's, so it would undo that commit. Make it again on ``parent`` (its real parent): a note
+    saying so, or saying it could not."""
+    head = W.rev(repo, "HEAD")
+    made, why = _private_index(repo, taken, index, onto=parent)
+    msg = W.git(repo, "log", "-1", "--format=%B", head)
+    tree = W.git(repo, "write-tree", env={"GIT_INDEX_FILE": str(index)})
+    new = W.git(repo, "commit-tree", tree.out.strip(), "-p", parent, input=msg.out + "\n")
+    ok = not why and made == parent and tree.ok and new.ok and msg.ok
+    if ok and W.git(repo, "update-ref", "HEAD", new.out.strip(), head).ok:
+        return (
+            "a commit landed just before the event-log commit began: it was made again on top of it"
+        )
+    return (
+        f"HEAD moved while the event log was committed (was {parent[:12]}) and the commit could "
+        f"not be remade on it: it may undo that commit, check `git log` ({why or new.err})"
+    )
 
 
 def _read_plan(repo: Path, reason: str, template: str):
@@ -181,7 +197,9 @@ def _read_plan(repo: Path, reason: str, template: str):
     return None, message, taken, skipped
 
 
-def _private_index(repo: Path, taken: dict[str, bytes], index: Path) -> tuple[str, str]:
+def _private_index(
+    repo: Path, taken: dict[str, bytes], index: Path, *, onto: str = ""
+) -> tuple[str, str]:
     """(the commit it is built on, why not): ``taken`` written into the private ``index`` on top
     of the commit HEAD names at this moment ("" for an unborn branch).
 
@@ -195,7 +213,7 @@ def _private_index(repo: Path, taken: dict[str, bytes], index: Path) -> tuple[st
             return "", f"git could not store {rel}"
         entries.append(f"100644 {blob.out.strip()}\t{rel}\n")
     env = {"GIT_INDEX_FILE": str(index)}
-    base = W.rev(repo, "HEAD")
+    base = onto or W.rev(repo, "HEAD")
     loaded = W.git(repo, "read-tree", *([base] if base else ["--empty"]), env=env)
     if not loaded.ok:
         return base, f"git read-tree failed: {loaded.err[-200:]}"
