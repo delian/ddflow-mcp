@@ -20,6 +20,7 @@ A hub is a module imported by at least ``hub_importers`` distinct files of the r
 from __future__ import annotations
 
 import ast
+import sys
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -99,6 +100,8 @@ def _bare(name: str, importer: str, homes: dict[tuple[str, str], str]) -> str:
     """The module a bare ``name`` imported by ``importer`` is: a file of its own directory, or
     of one above it that is not a package."""
     head = name.split(".", maxsplit=1)[0]
+    if head in sys.stdlib_module_names:  # `import queue` is the library's, whatever tests/ holds
+        return ""
     for d in PurePosixPath(importer).parents:
         if mod := homes.get((str(d), head)):
             return mod

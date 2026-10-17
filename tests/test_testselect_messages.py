@@ -117,3 +117,41 @@ def test_a_bare_name_that_is_no_file_of_the_repository_resolves_to_nothing():
     assert TR._bare("_wait", "tests/test_a.py", homes) == "tests._wait"
     assert TR._bare("json", "tests/test_a.py", homes) == ""
     assert TR._bare("m", "tests/test_a.py", homes) == "", "pkg is a package, not on sys.path"
+
+
+def test_a_removed_line_that_begins_with_dashes_is_content_not_a_diff_header():
+    diff = (
+        "diff --git a/m.py b/m.py\n--- a/m.py\n+++ b/m.py\n@@ -1,2 +1,2 @@\n"
+        '-    sql = "-- fetch the rows that were not adopted yet"\n'
+        '+    sql = "++ fetch the rows that were adopted already"\n'
+    )
+    got = TI._added_removed(diff)
+    assert got == {
+        "m.py": [
+            '    sql = "-- fetch the rows that were not adopted yet"',
+            '    sql = "++ fetch the rows that were adopted already"',
+        ]
+    }, got
+
+
+def test_phrases_of_many_files_come_from_one_diff_not_three_git_calls_each(messaged, monkeypatch):
+    files = {f"pkg/m{i}.py": f'MSG = "message number {i} says something long"\n' for i in range(7)}
+    _write(messaged, files)
+    for f in files:
+        (messaged / f).write_text(f'MSG = "reworded text of the {f} message goes here"\n')
+    calls = []
+    real = TI.W.git
+    monkeypatch.setattr(TI.W, "git", lambda *a, **k: calls.append(a) or real(*a, **k))
+    got = TI.changed_phrases(messaged, "main", sorted(files))
+    assert {got[p] for p in got} == set(files), got
+    assert len(calls) <= 4, f"{len(calls)} git calls for {len(files)} files"
+
+
+def test_a_one_word_change_is_no_phrase():
+    assert TI._phrases(['    f.read_text(encoding="UTF-8")\n']) == set()
+
+
+def test_a_stdlib_name_is_not_a_tests_directory_helper():
+    homes = TR._bare_homes(["tests/queue.py", "tests/test_a.py"])
+    assert TR._bare("queue", "tests/test_a.py", homes) == ""
+    assert TR._bare("test_a", "tests/test_a.py", homes) == "tests.test_a"
