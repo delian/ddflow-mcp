@@ -248,3 +248,24 @@ def test_a_killed_regeneration_while_settling_a_conflict_puts_every_owned_file_b
     assert rep.problem  # the conflict is left to a person
     assert (tmp_path / "README.md").read_text() == readme
     assert (tmp_path / "snap.txt").read_text() == "orig\n"
+
+
+def test_files_that_cannot_be_put_back_are_reported_as_possibly_half_written(
+    tmp_path, monkeypatch
+):
+    """Bug Bf9fac3e4ea: put_back ignored _restore's result, so the person was told only to
+    resolve the conflict, not that the pin files may be half written."""
+    recipe = (
+        '[[pin]]\nname = "t"\nfiles = ["README.md", "snap.txt"]\n'
+        f'check = ["{sys.executable}", "-c", "raise SystemExit(1)"]\n'
+        f"regen = [\"{sys.executable}\", \"-c\", \"open('snap.txt', 'w').write('junk'); "
+        'raise SystemExit(2)"]\n'
+    )
+    readme = "intro\n" + _block("good") + _conflict("timeout 30 seconds\n", "timeout 60 seconds\n")
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(recipe)
+    (tmp_path / "README.md").write_text(readme + "outro\n")
+    (tmp_path / "snap.txt").write_text("orig\n")
+    monkeypatch.setattr(PN, "_restore", lambda *a, **k: False)
+    rep = PN.regenerate(tmp_path, Config())
+    assert "half written" in rep.problem and "t" in rep.problem, rep.problem

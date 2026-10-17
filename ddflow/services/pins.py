@@ -467,10 +467,13 @@ def _owns(r: Recipe, path: str) -> bool:
     return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in r.files)
 
 
-def _decided_by_generators(repo: Path, s, chosen: list[Recipe], limit: int, tick) -> bool:
+def _decided_by_generators(
+    repo: Path, s, chosen: list[Recipe], limit: int, tick, torn: list[str] | None = None
+) -> bool:
     """Whether the recipes that own ``s``'s file settle its prose conflicts: the file is taken
     our way and then theirs, each re-recorded by its owners, and kept only when both come out
-    the same (a knob count a generator writes, say). Otherwise it is put back as it was."""
+    the same (a knob count a generator writes, say). Otherwise it is put back as it was; a
+    recipe whose files could not all be put back is named in ``torn``."""
     owners = [r for r in chosen if s.file is not None and _owns(r, s.path)]
     if not owners or s.file is None:
         return False
@@ -481,8 +484,8 @@ def _decided_by_generators(repo: Path, s, chosen: list[Recipe], limit: int, tick
     def put_back() -> None:  # the file as it was, and whatever else a killed regeneration touched
         replace_text(s.file, original)
         for r, kept in snaps:
-            if kept is not None:
-                _restore(repo, r, kept)
+            if kept is not None and not _restore(repo, r, kept) and torn is not None:
+                torn.append(r.name)
 
     for side in ("ours", "theirs"):
         replace_text(s.file, take_side(original, side))
@@ -507,8 +510,11 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report, limit: int = 900, 
     files = sorted({f.rstrip("/") for r in chosen for f in r.files})
     found = settle_files(repo, files)
     stuck = []
+    torn: list[str] = []
     for s in found:
-        if s.refused and not s.stray and _decided_by_generators(repo, s, chosen, limit, tick):
+        if s.refused and not s.stray and _decided_by_generators(
+            repo, s, chosen, limit, tick, torn
+        ):
             rep.resolved.append(
                 f"{s.path}: {s.hunks} conflict(s) in generated content or in text the "
                 "generators write, re-recorded"
@@ -526,6 +532,12 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report, limit: int = 900, 
             + f" (line {', '.join(map(str, s.refused))}): resolve it by hand, then run this again"
             for s in stuck
         )
+        if torn:
+            names = ", ".join(sorted(set(torn)))
+            rep.problem += (
+                f". The files of {names} could not all be put back after a failed regeneration "
+                "and may be half written: check `git status`"
+            )
         return True
     apply_settled([s for s in found if not s.refused])
     rep.resolved += [
