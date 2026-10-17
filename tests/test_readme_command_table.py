@@ -41,7 +41,7 @@ def test_a_command_registered_without_help_is_still_listed():
 
     parser = cli.build_parser()
     (sub,) = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
-    assert len(CT.commands()) == len(sub.choices)
+    assert len(CT.commands()) == len({id(p) for p in sub.choices.values()})
 
 
 def test_an_alias_is_not_a_second_row_and_a_multi_sentence_help_is_not_cut_at_the_first(
