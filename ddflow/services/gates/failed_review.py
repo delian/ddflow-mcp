@@ -64,20 +64,26 @@ def unresolved_review_failure(it, gate: str) -> str:
         return "failed with no triaged findings on record"
     if counts["untriaged"]:
         return f"{counts['untriaged']} finding(s) without a verdict"
-    rec = it.gates[gate]
-    found = LB.full(rec.evidence or {}).get("chunk_findings") or []
     mine = it.triage.get(gate, {})
     runs = it.runs_of(gate)
+    # EVERY confirmed finding the gate ever recorded, not only those the latest round carries:
+    # a later full round that merely did not raise one has not re-checked the fix.
+    seen: dict[str, str] = {}
+    for run in runs:
+        found = LB.full(run.evidence or {}).get("chunk_findings")
+        for f in found if is_triageable(found) else []:
+            seen.setdefault(f["digest"], str(f.get("title") or f.get("location") or "a finding"))
     left = [
-        f"#{n}"
-        for n, f in enumerate(found, 1)
-        if mine.get(f["digest"], {}).get("verdict") == "confirmed"
-        and not _cleared_after_delta(runs, f["digest"])
+        title
+        for digest, title in seen.items()
+        if mine.get(digest, {}).get("verdict") == "confirmed"
+        and not _cleared_after_delta(runs, digest)
     ]
     if not left:
         return ""
     return (
-        f"confirmed finding(s) {', '.join(left)} have no later delta round that did not raise them"
+        f"confirmed finding(s) {', '.join(repr(t) for t in left)} have no later delta round "
+        "that did not raise them"
     )
 
 

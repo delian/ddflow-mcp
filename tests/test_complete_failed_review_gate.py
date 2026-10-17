@@ -92,7 +92,7 @@ def test_a_delta_round_that_did_not_raise_the_finding_again_clears_it(repo, tmp_
     t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="y.py is wrong")
     assert t.exit == 0, t.reason
     _, text = _complete(repo)
-    assert BLOCKER in text and "confirmed finding(s) #2 " in text, text
+    assert BLOCKER in text and "confirmed finding(s) " in text, text
     # the second finding gets its own delta round that does not raise it
     _commit(repo, "y.py", "y = 1\n")
     api.review(repo, gate="critic", item="T1", branch="feat")
@@ -159,3 +159,16 @@ def test_a_missing_gate_definition_does_not_excuse_a_failed_built_in_review_gate
     _failed_and_confirmed(repo)
     st = fold(EventLog(repo).read_all(), strict=False)
     assert failed_review_blockers(st, Config.load(repo), "T1", None), "fail-open without defs"
+
+
+def test_a_confirmed_finding_a_later_full_round_dropped_still_needs_a_delta(repo, tmp_path):
+    """The critic's finding: the check looked only at the latest record's findings."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 raises #1, confirmed
+    _commit(repo, "x.py", "x = 1\n")
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")
+    out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)  # R2: only #B
+    assert out.data["outcome"] == "failed", out.data
+    t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="y.py is fine")
+    assert t.exit == 0, t.reason
+    assert BLOCKER in _complete(repo)[1]
