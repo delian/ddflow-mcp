@@ -260,7 +260,7 @@ def tree_identity(cwd: Path) -> str:
     return f"{head}+{manifest or _dirt(parts)}"
 
 
-def _head_of(tree_sha: str) -> str:
+def head_of(tree_sha: str) -> str:
     return tree_sha.split("+", 1)[0] if "+" in tree_sha else ""
 
 
@@ -269,7 +269,7 @@ def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
     `tree_identity`)? True when the commits differ and the run's commit is an ancestor of the
     other: its outcome describes source that has since moved on (B27a236a534). Unknown
     commits, or ones neither of which descends from the other, are not superseded."""
-    a, b = _head_of(started_on), _head_of(newer)
+    a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
     return W.git(cwd, "merge-base", "--is-ancestor", a, b).ok
