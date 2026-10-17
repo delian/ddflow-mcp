@@ -122,14 +122,8 @@ def wide_globs(plan: Mapping[str, Any]) -> list[Finding]:
     ]
 
 
-def unknown_deps(plan: Mapping[str, Any], known: Iterable[str] | None = ()) -> list[Finding]:
-    """A `needs` that is neither in the plan nor in ``known`` (the queue's own ids).
-
-    ``known`` None means the queue could not be read: a `needs` outside the plan then cannot
-    be told from a queued id, so it is not reported.
-    """
-    if known is None:
-        return []
+def unknown_deps(plan: Mapping[str, Any], known: Iterable[str] = ()) -> list[Finding]:
+    """A `needs` that is neither in the plan nor in ``known`` (the queue's own ids)."""
     outside = set(known)
     return [
         Finding(
@@ -264,7 +258,7 @@ def check(
     *,
     tracked: Iterable[str] | None = None,
     similar: Callable[[str, str], list[str]] | None = None,
-    known: Iterable[str] | None = (),
+    known: Iterable[str] = (),
     cap: int | None = None,
     max_dirs: int = 3,
 ) -> Report:
