@@ -155,3 +155,21 @@ def test_a_stdlib_name_is_not_a_tests_directory_helper():
     homes = TR._bare_homes(["tests/queue.py", "tests/test_a.py"])
     assert TR._bare("queue", "tests/test_a.py", homes) == ""
     assert TR._bare("test_a", "tests/test_a.py", homes) == "tests.test_a"
+
+
+def test_a_non_ascii_file_name_keeps_its_own_phrases(messaged):
+    name = "pkg/méssage.py"
+    _write(messaged, {name: 'MSG = "a message that was said before"\n', "pkg/ascii.py": "A = 1\n"})
+    (messaged / name).write_text('MSG = "reworded text that holds new words"\n')
+    (messaged / "pkg/ascii.py").write_text("A = 2\n")
+    got = TI.changed_phrases(messaged, "main", ["pkg/ascii.py", name])
+    assert set(got.values()) == {name}, got
+    assert "reworded text that holds" in got
+
+
+def test_a_quoted_diff_header_is_not_the_file_before_it():
+    diff = (
+        "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+        'diff --git "a/q\\"x.py" "b/q\\"x.py"\n--- "a/q\\"x.py"\n+++ "b/q\\"x.py"\n@@ -1 +1 @@\n-y = 1\n+y = 2\n'
+    )
+    assert TI._added_removed(diff) == {"a.py": ["x = 1", "x = 2"]}

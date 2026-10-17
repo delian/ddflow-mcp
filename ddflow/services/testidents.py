@@ -80,7 +80,10 @@ def _enclosing(source: str, lines: set[int]) -> set[str]:
 
 
 def _diff(tree: Path, *args: str) -> str:
-    r = W.git(tree, "diff", "-U0", "--no-color", "--no-renames", *args)
+    # `quotepath=false`: a non-ASCII file name stays that name in the headers.
+    r = W.git(
+        tree, "-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-renames", *args
+    )
     return r.out if r.code == 0 else ""
 
 
@@ -168,8 +171,11 @@ def _added_removed(diff: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     current: list[str] | None = None
     for line in diff.splitlines():
-        if m := _FILE_HEAD.match(line):
-            current = out.setdefault(m.group(1), [])
+        if line.startswith("diff --git "):
+            # A quoted path (a `"` or a control character in it) is not matched: its lines
+            # are dropped, never given to the file before it.
+            m = _FILE_HEAD.match(line)
+            current = out.setdefault(m.group(1), []) if m else None
             started = False
         elif current is None:
             continue
@@ -200,9 +206,9 @@ def changed_phrases(
             for f, got in _added_removed(_diff(tree, spec, "--", *part)).items():
                 if f in lines:
                     lines[f] += got
-        tracked = W.git(tree, "ls-files", "--", *part)
+        tracked = W.git(tree, "ls-files", "-z", "--", *part)
         if tracked.code == 0:
-            untracked -= set(tracked.out.splitlines())
+            untracked -= set(tracked.out.split("\0"))
     out: dict[str, str] = {}
     for f in py:
         if f in untracked:
