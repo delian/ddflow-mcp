@@ -127,8 +127,12 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
                 "--no-ff",
                 base,
             )
-            if m.timed_out or m.unavailable:
-                # git did not answer: the gate could not say, which is not a conflict.
+            said = m.out or m.err
+            # A conflict is git's own answer: exit 1, or histories with nothing in common.
+            # Anything else (killed at the timeout, a base it cannot resolve, a lock held:
+            # exit 128) is a merge it could not do, which the gate cannot call a conflict.
+            conflict = m.code == 1 or "unrelated histories" in said
+            if not m.ok and not conflict:
                 yield None, f"could not merge {base} into {ref}: {m.err or m.out}"[-400:]
                 return
             if not m.ok:
