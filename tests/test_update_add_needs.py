@@ -54,3 +54,11 @@ def test_add_and_remove_tags_and_tags_replace_names_the_dropped(repo):
     code, out, err = run_cli(repo, "update", "T", "--tags", "q")
     assert code == 0, err
     assert "dropped" in out and "y" in out and "z" in out
+
+
+def test_a_noop_needs_fold_does_not_swallow_a_tags_edit(repo):
+    _tasks(repo)
+    assert run_cli(repo, "update", "T", "--tags", "t1")[0] == 0
+    code, _o, err = run_cli(repo, "update", "T", "--remove-needs", "C", "--add-tags", "t2")
+    assert code == 0, err
+    assert _items(repo)["T"].tags == ["t1", "t2"]
