@@ -150,10 +150,18 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
         results = [r for r in pool.map(_one, shas) if r is not None]
     total = sum(r[0] for r in results)
     held = sum(r[1] for r in results)
-    lost = [x for r in results for x in r[2] if not any(x.startswith(k) for k in UNROUTABLE)]
+    lost = [x for r in results for x in r[2]]
     residual = [x for r in results for x in r[3]]
     if len(results) < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
     report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
-    assert not lost, f"the precise selection lost tests the earlier selector held: {lost}; {report}"
+    # Exactly the pinned losses: a new one fails, and so does a pinned one the selector now
+    # routes (drop its entry then), so the pin cannot go stale or hide a fresh miss.
+    unexpected = [x for x in lost if x not in UNROUTABLE]
+    assert not unexpected, (
+        f"the precise selection lost tests the earlier selector held: {unexpected}; {report}"
+    )
+    in_window = {sha[:8] for sha in shas}
+    stale = [k for k in UNROUTABLE if k.split()[0] in in_window and k not in lost]
+    assert not stale, f"pinned as unroutable, but the selection holds them now: {stale}"
     assert held / total >= ABSOLUTE_FLOOR, report
