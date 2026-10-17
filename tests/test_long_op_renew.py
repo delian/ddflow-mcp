@@ -136,3 +136,37 @@ def test_a_review_waiting_on_a_slow_reviewer_ticks(monkeypatch, tmp_path):
     diff = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-a\n+b\n"
     RV.review(rev, diff, "i", on_tick=lambda: seen.append(1), tick_s=0.2)
     assert len(seen) >= 2, seen
+
+
+def test_a_review_run_renews_the_holders_lease(repo, tmp_path, monkeypatch):
+    """End to end through `api.review`: a command reviewer that answers only once a renewal
+    is in the log. With the tick unwired it runs to its ceiling and the count is unchanged."""
+    import stat
+
+    import ddflow.api.review as api
+
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    events = repo / ".ddflow" / "events"
+    ceiling = int(scaled(30) / 0.05)
+    cli = tmp_path / "slow-reviewer"
+    run_cli(repo, "init")
+    base = f"$(cat {events}/* | grep -o lease.renewed | wc -l)"
+    cli.write_text(
+        f"#!/bin/sh\ncat >/dev/null\nstart={base}\nn=0\n"
+        f"while [ {base} -le $start ] && [ $n -lt {ceiling} ]; do sleep 0.05; n=$((n+1)); done\n"
+        "echo 'STATUS: NO FINDINGS'\n"
+    )
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n[lease]\nheartbeat_s = 1\nrenew_log_min_s = 0\n"
+        f'[[reviewer]]\nname = "slow"\nkind = "command"\ncommand = "{cli}"\n'
+        'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n'
+    )
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    (repo / "x.py").write_text("x = 1\n")
+    assert LC.claim(repo, "T1", agent="me", no_worktree=True).exit == 0
+    before = _renewals(repo)
+    t0 = __import__("time").time()
+    api.review(repo, gate="critic", item="T1", agent="me")
+    assert _renewals(repo) > before
+    assert __import__("time").time() - t0 < scaled(25)
