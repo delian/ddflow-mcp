@@ -175,7 +175,7 @@ def _fix_task_of(st, cfg, item: str):
     phase -- names where to look, and gets a task of its own."""
 
     it = st.items.get(item) if item else None
-    if it is None or it.removed or it.kind != "task" or it.terminal:
+    if it is None or it.removed or not it.is_work or it.terminal:
         return None
     return it if branch_kind(it, cfg) != FEATURE else None
 
