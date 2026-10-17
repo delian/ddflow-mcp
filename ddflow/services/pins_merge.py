@@ -117,14 +117,22 @@ def merge_report(repo: Path, cfg: Config) -> dict[str, list[str]]:
     pin is never silent. Keys: ``stale``, ``unknown`` (the check did not finish),
     ``unchecked``; empty lists are omitted, ``{}`` when there is nothing to say."""
     try:
-        rep = regenerate(repo, cfg, check=True, after_merge=True)
         recipes = load_recipes(repo, cfg)
-    except Exception:  # a line of advice never stops a merge that has landed
+    except ValueError as exc:  # an unreadable recipes file is not "nothing to say"
+        return {"unknown": [str(exc)]}
+    if not recipes:
         return {}
+    try:
+        rep = regenerate(repo, cfg, check=True, after_merge=True, recipes=recipes)
+    except Exception as exc:  # a line of advice never stops a merge that has landed, or goes quiet
+        return {"unknown": [f"the pin check failed: {type(exc).__name__}: {exc}"]}
+    if rep.problem:
+        return {"unknown": [rep.problem]}
+    unchecked = [r.name for r in recipes if not r.after_merge]
     out = {
         "stale": [p.name for p in rep.stale],
         "unknown": [p.name for p in rep.unavailable],
-        "unchecked": [r.name for r in recipes if not r.after_merge],
+        "unchecked": unchecked,
     }
     return {k: v for k, v in out.items() if v}
 
