@@ -20,12 +20,14 @@ An entry that starts with `-` is a flag and matches in any command.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..infra import git
 from ..infra.log import EventLog
 from . import sessions as S
 
@@ -38,8 +40,6 @@ _WRAPPERS = frozenset(
     {"sudo", "env", "nohup", "time", "command", "exec", "nice", "xargs", "builtin", "doas"}
 )
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
-_REVPARSE_LINES = 2
-_MAX_DEPTH = 3  #: nested `sh -c` strings looked into
 _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
@@ -73,25 +73,29 @@ class Refusal:
         )
 
 
+_HEREDOC = re.compile(r"(?<![<\d(])<<-?\s*['\"]?([A-Za-z_]\w*)")
+
+
 def _strip_heredocs(text: str) -> str:
-    """The command line without heredoc bodies, which are data, not commands."""
+    """The command line without heredoc bodies, which are data, not commands. A `<<` that
+    opens no body (a here-string, a shift, a quoted `a<<b`) drops nothing: only a terminator
+    line that really follows makes it a heredoc."""
+    lines = text.split("\n")
     out: list[str] = []
-    ends: list[str] = []
-    for line in text.split("\n"):
-        if ends:
-            if line.strip() == ends[0]:
-                ends.pop(0)
-            continue
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         out.append(line)
-        parts = line.split("<<")[1:]
-        for p in parts:
-            w = p.lstrip("-").strip().split(" ")[0].strip("'\"")
-            if w:
-                ends.append(w)
+        i += 1
+        for m in _HEREDOC.finditer(line):
+            end = next((j for j in range(i, len(lines)) if lines[j].strip() == m.group(1)), None)
+            if end is not None:
+                i = end + 1
+                break
     return "\n".join(out)
 
 
-def _commands(text: str, depth: int = 0) -> list[list[str]]:
+def _commands(text: str, *, nested: bool = False) -> list[list[str]]:
     """Each command of `text` as its words."""
     cmds: list[list[str]] = []
     for line in _strip_heredocs(text).split("\n"):
@@ -110,27 +114,34 @@ def _commands(text: str, depth: int = 0) -> list[list[str]]:
                 cur = []
             else:
                 cur.append(w)
-    if depth < _MAX_DEPTH:
+    if not nested:  # one `sh -c` level; a deeper one is not looked into
         for c in list(cmds):
             body = _head(c)
             if body and body[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in body:
                 i = body.index("-c")
                 if i + 1 < len(body):
-                    cmds.extend(_commands(body[i + 1], depth + 1))
+                    cmds.extend(_commands(body[i + 1], nested=True))
     return cmds
 
 
+#: Wrapper options that take their value as the next word (`sudo -u root`, `nice -n 5`).
+_VALUED = frozenset({"-u", "-g", "-n", "-C", "-p", "-t", "-s", "-I", "-L", "-P", "-a", "-U", "-D"})
+
+
 def _head(words: list[str]) -> list[str]:
-    """`words` from the command's own word on: wrappers and VAR=x assignments dropped."""
+    """`words` from the command's own word on: wrappers, their options and values, and
+    VAR=x assignments dropped."""
     i = 0
+    wrapped = False
     while i < len(words):
         w = words[i]
-        if w in _WRAPPERS or (
-            "=" in w and not w.startswith("-") and w.split("=")[0].isidentifier()
-        ):
+        if w in _WRAPPERS:
+            wrapped = True
             i += 1
-        elif w.startswith("-") and i and words[i - 1] in _WRAPPERS:
-            i += 1  # a wrapper's own option (`sudo -u`, `nice -n`); its value is dropped below
+        elif "=" in w and not w.startswith("-") and w.split("=")[0].isidentifier():
+            i += 1
+        elif wrapped and w.startswith("-"):
+            i += 2 if w in _VALUED else 1
         else:
             break
     return words[i:]
@@ -161,7 +172,7 @@ def _word(entry: str, seen: str) -> bool:
     return entry == seen or f"/{entry}/" in f"/{seen.strip('/')}/"
 
 
-def matches(entry: str, words: list[str]) -> bool:
+def matches(entry: str, words: list[str], *, ordered: bool = True) -> bool:
     """Whether the command `words` is one the (primary-marker-free) `entry` describes."""
     want = entry.split()
     if not want:
@@ -170,7 +181,11 @@ def matches(entry: str, words: list[str]) -> bool:
     if not head:
         return False
     if want[0].startswith("-"):
-        return any(_word(want[0], w) for w in head) and _inorder(want[1:], head)
+        return any(_word(want[0], w) for w in head) and (
+            _inorder(want[1:], head)
+            if ordered
+            else all(any(_word(x, a) for a in head) for x in want[1:])
+        )
     cmd = head[0].rsplit("/", 1)[-1]
     if cmd != want[0]:
         return False
@@ -181,7 +196,7 @@ def matches(entry: str, words: list[str]) -> bool:
         if not args or args[0] != rest[0]:
             return False
         args, rest = args[1:], rest[1:]
-    return _inorder(rest, args)
+    return _inorder(rest, args) if ordered else all(any(_word(w, a) for a in args) for w in rest)
 
 
 def _inorder(want: list[str], seen: list[str]) -> bool:
@@ -197,28 +212,28 @@ def _inorder(want: list[str], seen: list[str]) -> bool:
 
 def is_primary(cwd: str | Path) -> bool:
     """Whether `cwd` is in the primary checkout (not an item's worktree)."""
-    import subprocess
-
+    r = git.run(cwd or Path.cwd(), "rev-parse", "--git-dir", "--git-common-dir")
     try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--git-dir", "--git-common-dir"],
-            cwd=str(cwd) or None,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.split("\n")
-        if len(out) < _REVPARSE_LINES:
-            return False
-        git_dir, common = out[0], out[1]
-        return (Path(cwd) / git_dir).resolve() == (Path(cwd) / common).resolve()
-    except (OSError, subprocess.SubprocessError):
+        git_dir, common = r.out.split("\n")[:2]
+    except ValueError:
         return False
+    if not r.ok:
+        return False
+    return (Path(cwd) / git_dir).resolve() == (Path(cwd) / common).resolve()
+
+
+def _elsewhere(cmds: list[list[str]]) -> bool:
+    """Whether the command line may act on another checkout than the cwd's (`git -C dir`,
+    `cd dir && ...`): then the cwd cannot say which one, so it is judged as the primary."""
+    return any(w in ("-C", "--git-dir", "--work-tree") for c in cmds for w in c) or any(
+        c[0] in ("cd", "pushd") for c in cmds
+    )
 
 
 def _lifted(env: dict[str, str]) -> tuple[bool, set[str]]:
     raw = env.get(ENV_ALLOW, "").strip()
     items = {s.strip() for s in raw.split(",") if s.strip()}
-    return "all" in items, {" ".join(i.split()) for i in items}
+    return "all" in items, {" ".join(i.removesuffix(PRIMARY).split()) for i in items}
 
 
 def _instead(entry: str) -> str:
@@ -247,8 +262,9 @@ def check(
     if everything:
         return None
     primary: bool | None = None
-    for words in _commands(command):
-        if any(matches(a, words) for a in cfg.hooks.allowed_commands):
+    cmds = _commands(command)
+    for words in cmds:
+        if any(matches(a, words, ordered=False) for a in cfg.hooks.allowed_commands):
             continue
         for raw in entries:
             only_primary = raw.endswith(PRIMARY)
@@ -257,7 +273,7 @@ def check(
                 continue
             if only_primary:
                 if primary is None:
-                    primary = is_primary(cwd or Path.cwd())
+                    primary = _elsewhere(cmds) or is_primary(cwd or Path.cwd())
                 if not primary:
                     continue
             return Refusal(entry, " ".join(words)[:200], _instead(entry))
