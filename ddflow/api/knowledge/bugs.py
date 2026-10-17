@@ -297,7 +297,7 @@ def _file_fix_task(
         globs=GS.parse(globs) if globs else inherit_globs(src.globs if src else [], summary),
         body=body,
         tags=[tag],
-        priority=src.priority if src else DEFAULT_PRIORITY,
+        priority=min(src.priority, cfg.schedule.bug_priority) if src else cfg.schedule.bug_priority,
         line=src.line if src else "",
         extra={"fixes": [bug_id]},
     )

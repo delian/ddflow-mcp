@@ -217,6 +217,20 @@ class ScheduleConfig:
         True,
         doc="Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` orders by priority alone.",
     )
+    dx_priority: int = knob(
+        8,
+        doc="The priority a task gets when filed with none and it is a DX task: tagged one of dx_tags, or its id starts `DX-` (default 8, lower is offered first). Before this, DX and fix tasks filed without `--priority` landed at 100, behind all feature work (26 DX and 6 fix tasks, 2026-10-16). An explicit `--priority`, 100 included, is never changed.",
+        check=int_at_least(0),
+    )
+    bug_priority: int = knob(
+        10,
+        doc="The priority a task gets when filed with none and it is a bug fix: tagged one of `[flow] bugfix_tags` or `hotfix_tags` (default 10, lower is offered first). The fix task `bug found` files takes the lower of this and the item's priority. An explicit `--priority` is never changed.",
+        check=int_at_least(0),
+    )
+    dx_tags: list[str] = knob(
+        factory=lambda: ["dx"],
+        doc='Tags that make a task a DX task for dx_priority (default ["dx"]); an id starting `DX-` counts too. `plan check` warns about one filed at the generic priority 100.',
+    )
     #: `name=capacity` for each physical resource items may declare.
     resources: list[str] = knob(
         factory=list,
