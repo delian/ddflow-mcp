@@ -125,7 +125,8 @@ def cmd_review(a, c: Ctx) -> int:
         called_from=c.called_from,
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
-        on_progress=lambda line: print(line, flush=True),
+        # Under --json stdout is the one JSON body, so progress goes to stderr.
+        on_progress=lambda line: print(line, file=sys.stderr if c.json else sys.stdout, flush=True),
         agent=c.requested_agent,
         chunks=a.chunk or None,
         delta=bool(a.delta),
@@ -137,6 +138,11 @@ def cmd_review(a, c: Ctx) -> int:
     # cannot merge -- has printed nothing else (roborev 991).
     if out.exit == FAIL or (out.exit in (NOTHING, REFUSED) and not out.data.get("reviewer")):
         print(out.reason, file=sys.stderr)
+    if c.json and out.exit != OK:
+        c.out(
+            out.reason,
+            {"refusal": {"reason": out.reason, "exit": out.exit}, "gate": a.gate or "critic"},
+        )
     return out.exit
 
 
