@@ -207,3 +207,22 @@ def test_a_claim_gives_its_worktree_the_driver_and_doctor_names_the_gap(repo):
     assert PM.driver_gaps(tree, Config()) == []
     _code, out, _ = run_cli(repo, "--json", "doctor")
     assert "pin files will conflict" not in out
+
+
+def test_regenerate_adds_a_new_recipes_attribute_without_the_hook(tmp_path):
+    """A recipe added after install gets its merge=pinsregen line from a plain `pins regenerate`;
+    the post-merge hook is neither written nor changed (DX-pins-attributes-follow-recipes)."""
+    from ddflow.api import pin_files as PF
+
+    repo, _wt = _history(tmp_path, installed=True)
+    (repo / ".ddflow" / "pins.toml").write_text(
+        RECIPES + '[[pin]]\nname = "extra"\nfiles = ["extra.json"]\ncheck = ["true"]\nregen = ["true"]\n'
+    )
+    (repo / "extra.json").write_text("{}\n")
+    hook = repo / ".git" / "hooks" / "post-merge"
+    assert not hook.exists()
+    assert "extra.json" not in (repo / ".gitattributes").read_text()
+    out = PF.pins_regenerate(repo, start=repo)
+    assert out.exit == 0
+    assert "extra.json merge=pinsregen" in (repo / ".gitattributes").read_text()
+    assert not hook.exists()
