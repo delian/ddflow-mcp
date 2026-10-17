@@ -1090,7 +1090,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 312 knobs.
+cadences, and the rest of the 313 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1778,6 +1778,12 @@ as data in `.ddflow/pins.toml` (`[pins].recipes_file`), one `[[pin]]` per kind w
 regenerates the stale pins and folds them into the merge commit (`[pins].after_merge` =
 `amend`, `leave` or `off`). List the pin files in `[lease].shared_globs` so a lease on them is
 not exclusive. A recipe never runs under xdist.
+
+The hook never makes a merge wait for a test suite. It runs only the recipes that allow it
+(a `[[pin]]` with `after_merge = false`, the golden-snapshot and transcript suites in this
+repository, is left to an explicit `ddflow pins regenerate`), bounds each command by
+`[pins].after_merge_timeout_s`, and reports a recipe it could not finish as unavailable, never
+as failed. Two re-recordings never overlap in one tree: the second is unavailable.
 
 ## Finding a test polluter
 
@@ -5249,7 +5255,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 312): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 313): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5764,7 +5770,7 @@ declared once and persists — see
 
 ## Configuration
 
-312 knobs across 35 sections, every one documented in place and listed, with its default
+313 knobs across 35 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
