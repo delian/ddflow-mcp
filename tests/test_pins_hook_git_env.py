@@ -32,3 +32,30 @@ def test_after_merge_hook_skips_a_linked_worktree(tmp_path: Path, monkeypatch) -
     assert subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"]) == head
     pin_files.pins_regenerate(main, after_merge=True, start=main)
     assert ran == [main]
+
+
+def test_recipe_child_with_hook_git_env_leaves_the_scratch_repo_untouched(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import sys
+
+    from ddflow.services import pins as PINS
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    _git(scratch, "init", "-q")
+    _git(scratch, "commit", "-q", "--allow-empty", "-m", "i")
+    before = subprocess.check_output(["git", "-C", str(scratch), "reflog"])
+    monkeypatch.setenv("GIT_DIR", str(scratch / ".git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(scratch / ".git" / "index"))
+    work = tmp_path / "work"
+    work.mkdir()
+    code = (
+        "import subprocess as s;"
+        "s.run(['git','init','-q']);"
+        "s.run(['git','-c','user.name=t','-c','user.email=t@t','commit','-q','--allow-empty','-m','init'])"
+    )
+    r = PINS.Recipe("p", ("x",), (sys.executable, "-c", code), (sys.executable, "-c", code))
+    PINS._run(work, r.regen, r, 60, write=True)
+    assert subprocess.check_output(["git", "-C", str(scratch), "reflog"]) == before
+    assert (work / ".git").is_dir()
