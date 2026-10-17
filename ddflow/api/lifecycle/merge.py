@@ -18,6 +18,7 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
@@ -31,6 +32,12 @@ from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
 from .merge_refresh import _refresh_documents
+
+
+def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
+    """Say which pins the merge left stale or never re-recorded."""
+    for line in PM.merge_lines(PM.merge_report(repo, cfg)):
+        say(line)
 
 
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
@@ -243,6 +250,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
     )
+    _say_pins(repo, cfg, say)
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
