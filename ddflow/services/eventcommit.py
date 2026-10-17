@@ -157,7 +157,7 @@ def commit_shards(
 
 def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool | None:
     """Whether ``head`` is the event-log commit this door just made: one parent, the message it
-    was given (whitespace as git folds it) and the tree of the private index. None when git
+    was given (whitespace as git folds it, trailers a hook adds allowed) and the tree of the private index. None when git
     could not say."""
     ours = W.git(repo, "write-tree", env=env)
     info = W.git(repo, "log", "-1", "--format=%T%n%P%n%B", head)
@@ -165,7 +165,8 @@ def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool |
         return None
     tree, _, rest = info.out.partition("\n")
     parents, _, body = rest.partition("\n")
-    same = " ".join(body.split()) == " ".join(message.split())
+    # a commit-msg hook may append trailers: the message it was given still starts the body
+    same = " ".join(body.split()).startswith(" ".join(message.split()))
     return tree == ours.out.strip() and len(parents.split()) == 1 and same
 
 
