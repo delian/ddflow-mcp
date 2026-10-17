@@ -87,4 +87,4 @@ def test_a_machine_local_scrub_env_reaches_a_gate_run_in_the_items_worktree(repo
     assert code == 0, (out, err)
     code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
     assert code == 0, (out, err)
-    assert "|unset]" in json.loads(out)["evidence"]["tail"], out
+    assert "[unset|unset|unset]" in json.loads(out)["evidence"]["tail"], out
