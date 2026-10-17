@@ -32,6 +32,10 @@ def heartbeat(
     holder, never taking the lease over, and standing in some OTHER tree renews nothing.
     """
     log, cfg, st = _load(repo, agent)
+    if not item:
+        item, missing = _the_held_item(repo, st, log.agent_id, called_from)
+        if missing is not None:
+            return missing
     gone = st.items.get(item)
     if (
         gone is not None
@@ -85,6 +89,34 @@ def heartbeat(
         waiters=[],
         globs_withheld="",
         yield_requested="",
+    )
+
+
+def _the_held_item(repo: Path, st, me: str, called_from) -> tuple[str, O.Outcome | None]:
+    """The item to renew when none was named: the only one ``me`` holds (or whose tree this
+    is), else the refusal that names the missing id and lists what is held."""
+    here = _tree_of(called_from or repo)
+    leased = [(i, it.lease) for i, it in st.items.items() if it.lease and not it.removed]
+    held = sorted(i for i, ls in leased if ls.holder == me)
+    whose = f"{me} holds"
+    if not held:
+        # The lease that made the tree I stand in is mine to renew: identity is the tree's.
+        held = sorted(i for i, ls in leased if _in_leased_tree(repo, ls.worktree, here))
+        whose = "this tree carries"
+    if len(held) == 1:
+        return held[0], None
+    base = {"renewed": False, "waiters": [], "globs_withheld": "", "yield_requested": ""}
+    if not held:
+        return "", O.nothing(
+            "lease.renewed",
+            f"heartbeat needs an item id (`ddflow heartbeat <id>`), and {me} holds no lease.",
+            **base,
+        )
+    return "", O.failed(
+        "lease.renewed",
+        f"heartbeat needs an item id: {whose} {len(held)} items -- "
+        + ", ".join(f"`ddflow heartbeat {i}`" for i in held),
+        **base,
     )
 
 

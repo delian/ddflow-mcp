@@ -37,23 +37,25 @@ def waiting(rows: list, head: str) -> str:
 
 
 def heartbeat_notes(out, a, ctx) -> Iterator[str]:
+    item = out.data.get("id") or a["id"]  # none named: the one held
     if out.data.get("yield_requested"):
         yield f"  YIELD REQUESTED: {out.data['yield_requested']}"
     if out.data.get("globs_withheld"):
-        yield f"  lease renewed WITHOUT {a['id']}'s newer globs/resources: {out.data['globs_withheld']}"
+        yield f"  lease renewed WITHOUT {item}'s newer globs/resources: {out.data['globs_withheld']}"
 
 
 def heartbeat_text(out, a) -> str:
+    item = out.data.get("id") or a["id"]
     waiters = out.data.get("waiters", [])
     return (
-        (f"renewed {a['id']}" if out.data["renewed"] else out.reason)
+        (f"renewed {item}" if out.data["renewed"] else out.reason)
         + waiting(
             waiters,
-            f"{len(waiters)} agent(s) are waiting on {a['id']}. Finishing, narrowing its "
+            f"{len(waiters)} agent(s) are waiting on {item}. Finishing, narrowing its "
             f"globs, or releasing it wakes them:",
         )
         + (
-            "\n" + new_reports_line(a["id"], out.data.get("new_reports", 0))
+            "\n" + new_reports_line(item, out.data.get("new_reports", 0))
             if out.data.get("new_reports")
             else ""
         )
