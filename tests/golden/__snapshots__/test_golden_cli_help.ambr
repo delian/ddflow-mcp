@@ -2259,7 +2259,7 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
@@ -2272,6 +2272,9 @@
                           to add more -- every value is kept
     --tags TAGS
     --body BODY
+    --kind KIND           what kind of work: task (default), doc, research or job. A kind runs the
+                          gate pipeline [gates].kind_pipelines gives it (doc ships without the code
+                          gates), so docs-only work completes without unit_tests
     --resources RESOURCES
                           physical resources the work RUNS on, as `ddflow update --resources` takes
                           them: 'gpu:4,vllm-fleet'
