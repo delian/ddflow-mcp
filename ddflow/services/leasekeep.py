@@ -59,6 +59,15 @@ def throttled(
     return tick
 
 
+def ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
+    """A throttled tick renewing the caller's lease on ``it`` (None if it holds none): for a
+    command that polls every ``tick_s`` seconds (`review`, `ci run`)."""
+    keep = keeper(log, cfg, it) if it else None
+    if keep is None:
+        return None
+    return throttled(keep, it.lease.renewed_at, cfg.lease.heartbeat_s, tick_s)
+
+
 def for_holder(log, cfg, st: Any) -> tuple[Callable[[], None] | None, float]:
     """(a tick renewing EVERY live lease the caller holds, the tick interval in seconds):
     for a command that is not about one item (`pins regenerate`). ``(None, 0)`` for none."""
