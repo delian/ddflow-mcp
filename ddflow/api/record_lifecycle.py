@@ -123,6 +123,24 @@ def _entries(chain: Sequence[Any], *, diff: bool) -> list[dict[str, Any]]:
     return out
 
 
+def _inbound(log: Any, kind: RecordKind, rid: str) -> list[dict[str, Any]]:
+    """The entries of OTHER records that name ``rid``: a record merged into it, or superseded
+    by it. They are written on the other record's chain, so a chain alone shows one side of a
+    merge or a supersede; here each side names the other."""
+    out: list[dict[str, Any]] = []
+    for ev in log.read_all():
+        if ev.kind not in ("def.merged", "def.superseded") or ev.data.get("successor") != rid:
+            continue
+        other = ev.subject.partition(":")
+        if other[0] != kind.def_kind or other[2] == rid:
+            continue
+        word = "absorbed" if ev.kind == "def.merged" else "supersedes"
+        row = {"event": ev.kind, "at": ev.ts, "by": ev.agent, "lamport": ev.lamport, word: other[2]}
+        row.update({k: ev.data[k] for k in ("reason", "digest") if ev.data.get(k)})
+        out.append(row)
+    return out
+
+
 def record_history(
     repo: Path,
     kind: RecordKind,
@@ -145,6 +163,7 @@ def record_history(
     if _exists(st, kind, rid) is None:
         return O.failed(ev, f"no {kind.name} {rid!r}", record_kind=kind.name, id=rid)
     rows = _entries(_chain(log, D.key(kind.def_kind, rid)), diff=diff)
+    rows = sorted([*rows, *_inbound(log, kind, rid)], key=lambda r: r["lamport"])
     shown = rows[-limit:] if limit else rows
     return O.ok(
         ev,
