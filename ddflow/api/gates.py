@@ -1003,7 +1003,9 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    refused = _agent_skip_refusal(it, gdef, gate, item, agent) if skip else None
+    refused = (
+        _agent_skip_refusal(it, gdef, gate, item, agent) if skip or outcome == "skipped" else None
+    )
     if refused is not None:
         return refused
 
