@@ -99,14 +99,14 @@ def test_a_regeneration_that_times_out_is_not_reported_as_current(tree):
     from ddflow.api import pin_files as PF
 
     cfg = Config.load(tree)
-    cfg.pins.timeout_s = 1
+    cfg.pins.after_merge_timeout_s = 1
     stuck = PN.Recipe(
         "stuck",
         ("stuck.txt",),
         (PY, "-c", "raise SystemExit(1)"),
         (PY, "-c", "import time; time.sleep(60)"),
     )
-    rep = PN.regenerate(tree, cfg, recipes=[stuck])
+    rep = PN.regenerate(tree, cfg, recipes=[stuck], after_merge=True)
     out = PF._regenerate_outcome(rep, check=False)
     assert out.exit == 2, out  # NOTHING: could not finish
     assert "stuck" in out.reason and "timed out" in out.reason, out.reason
@@ -130,3 +130,13 @@ def test_the_hook_says_so_when_another_run_holds_the_tree(tree):
     with file_lock(Path(git_dir) / "ddflow-pins.lock", 0):
         line = PM.after_merge(tree, Config.load(tree))
     assert "unavailable" in line and "quick" in line and "another pins regeneration" in line, line
+
+
+def test_a_run_asked_for_still_reports_a_recipe_that_outlives_timeout_s_as_failed(tree):
+    """Only the hook reports a timeout as unavailable: `ddflow pins regenerate` keeps the
+    documented `timeout_s` behaviour (tests/test_pins_recipes.py)."""
+    cfg = Config.load(tree)
+    cfg.pins.timeout_s = 1
+    slow = _recipe("slow", "import time; time.sleep(60)")
+    rep = PN.regenerate(tree, cfg, recipes=[slow])
+    assert [p.name for p in rep.failed] == ["slow"] and not rep.unavailable
