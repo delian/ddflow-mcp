@@ -35,6 +35,12 @@ def _note(rec: DefRecord, ev: Event, **extra: Any) -> None:
     rec.updated_at = ev.ts
 
 
+def _why(ev: Event) -> str:
+    """The reason a content event (recorded, updated) carries beside its fields: a merge, a
+    restore, a split part says why. Absent on the events older ddflows wrote."""
+    return str(ev.data.get("reason") or "")
+
+
 def _record(st: State, ev: Event) -> DefRecord:
     """The record an event is about, created when an update or a status change arrives
     before its definition (a shard merged out of order): the definition then replaces the
@@ -79,7 +85,7 @@ def h_recorded(st: State, ev: Event) -> None:
             into.merged_from.remove(rec.id)
     rec.status, rec.successor, rec.reason = ACTIVE, "", ""
     _envelope(rec, ev)
-    _note(rec, ev)
+    _note(rec, ev, reason=_why(ev))
 
 
 def h_updated(st: State, ev: Event) -> None:
@@ -93,7 +99,7 @@ def h_updated(st: State, ev: Event) -> None:
             rec.fields[name] = value
     rec.digest = str(ev.data.get("digest") or digest(rec.fields))
     _envelope(rec, ev)
-    _note(rec, ev)
+    _note(rec, ev, reason=_why(ev))
 
 
 def h_retired(st: State, ev: Event) -> None:
@@ -101,7 +107,8 @@ def h_retired(st: State, ev: Event) -> None:
     rec.status, rec.successor = RETIRED, ""
     rec.reason = str(ev.data.get("reason") or "")
     _envelope(rec, ev, content=False)
-    _note(rec, ev, reason=rec.reason)
+    into = ev.data.get("split_into")
+    _note(rec, ev, reason=rec.reason, split_into=list(into) if isinstance(into, list) else [])
 
 
 def h_superseded(st: State, ev: Event) -> None:
