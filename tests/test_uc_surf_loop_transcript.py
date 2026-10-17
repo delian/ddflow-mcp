@@ -282,10 +282,13 @@ def _agree(repo):
 EXPECTED = Path(__file__).with_suffix(".json")
 
 
-def test_the_loop_cli_transcript_is_unchanged(repo):
+def test_the_loop_cli_transcript_is_unchanged(repo, monkeypatch):
     """The recorded transcript is `test_uc_surf_loop_transcript.json`, re-recorded on purpose
     only, by `ddflow pins regenerate` (which sets DDFLOW_UPDATE_GOLDEN=1): the rows that differ
     are replaced and every other row is kept byte for byte."""
+    # argparse wraps at the terminal width; a piped child never has one, so pin it to 80 for
+    # this process and the children alike, whatever terminal runs pytest.
+    monkeypatch.setenv("COLUMNS", "80")
     got = [[list(w), c, o, e] for (w, c, o, e) in transcript(repo)]
     _agree(repo)
     want = json.loads(EXPECTED.read_text("utf-8"))
