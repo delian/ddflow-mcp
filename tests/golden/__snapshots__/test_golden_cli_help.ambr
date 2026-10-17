@@ -834,7 +834,8 @@
     -h, --help            show this help message and exit
     --run                 the periodic pass: correct per mode and record it for `cadence`
     --mode {off,propose,apply}
-                          override [health].mode: off, propose or apply
+                          override every health mode (mode and mode_<kind>) for this call: off,
+                          propose or apply
   
   '''
 # ---
@@ -2766,8 +2767,8 @@
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
       lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
-      health              stalled, locked, crashed and runaway lanes; `--run` is the periodic
-                          watchdog pass
+      health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
+                          the periodic watchdog pass
       decide              close a decide task: write its decision document from the record, land,
                           complete
       docs                the mechanical documentation check: `docs check [--diff BASE]`

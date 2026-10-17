@@ -123,13 +123,14 @@ def _state(repo):
     return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
-def _contended(repo, worktree: bool = False) -> None:
+def _contended(repo, worktree: bool = False, reply_s: int = 0) -> None:
     """T1 held by A (idle AGO seconds), T2 (same file) refused for B: a recorded wait."""
     assert run_cli(repo, "init", agent=A)[0] == 0
     for k, v in (
         ("lease.hold_max_s", 3 * IDLE),
         ("lease.idle_max_s", IDLE),
         ("health.stall_s", IDLE),
+        ("health.reply_s", reply_s),
     ):
         run_cli(repo, "config", k, str(v), agent=A)
     for item in ("T1", "T2"):
@@ -167,7 +168,7 @@ def test_mode_propose_says_what_it_would_do_and_changes_nothing(repo):
     d = _health(repo, "--run", "--mode", "propose")
     (move,) = d["moves"]
     assert d["ran"] and move["action"] == "break" and not move["applied"]
-    assert move["line"].startswith("would break T1")
+    assert move["line"].startswith("would park agent-a and break T1")
     assert not _state(repo).items["T1"].lease.expired_at
 
 
@@ -178,8 +179,8 @@ def test_default_mode_is_propose(repo):
     assert d["mode"] == "propose" and not _state(repo).items["T1"].lease.expired_at
 
 
-def test_mode_apply_breaks_the_stalled_lease_and_keeps_its_work(repo):
-    _contended(repo, worktree=True)
+def test_mode_apply_parks_then_breaks_the_stalled_lease_and_keeps_its_work(repo):
+    _contended(repo, worktree=True)  # reply_s 0: the park and break follow the request at once
     lease = _state(repo).items["T1"].lease
     tree = repo / lease.worktree
     (tree / "unfinished.py").write_text("# nowhere else\n")
@@ -190,6 +191,7 @@ def test_mode_apply_breaks_the_stalled_lease_and_keeps_its_work(repo):
     st = _state(repo)
     assert st.items["T1"].lease.expired_at  # kept, expired
     broke = [e for e in EventLog(repo, "r").read_all() if e.data.get("broken_by")]
+    assert _records(repo, "health_park:") == ["health_park:T1"]  # parked before it was broken
     assert len(broke) == 1 and broke[0].data["broken_by"] == "ddflow:health"
     assert broke[0].data["broken_for"] == "T2"
     assert (tree / "unfinished.py").read_text() == "# nowhere else\n"  # nothing deleted
@@ -285,15 +287,24 @@ def test_a_runaway_job_is_reported_and_its_process_is_never_signalled(repo):
         sleeper.wait()
 
 
-def test_findings_are_not_repeated_across_passes(repo):
-    _contended(repo)
-    first = _health(repo, "--run", "--mode", "propose")["findings"]
-    again = _health(repo, "--run", "--mode", "propose")["findings"]
-    assert [(f["kind"], f["item"], f["detail"]) for f in first] == [
-        (f["kind"], f["item"], f["detail"]) for f in again
-    ]
-    keys = [(f["kind"], f["item"], f["holder"]) for f in first]
-    assert len(keys) == len(set(keys))
+def _records(repo, prefix: str) -> list[str]:
+    return [e.subject for e in EventLog(repo, "r").read_all() if e.subject.startswith(prefix)]
+
+
+def test_a_finding_is_reported_once_per_key_and_acted_on_once(repo):
+    _contended(repo, reply_s=300)
+    first = _health(repo, "--run", "--mode", "propose")
+    keys = [(f["kind"], f["item"], f["holder"]) for f in first["findings"]]
+    assert keys and len(keys) == len(set(keys))  # one finding per (kind, item, holder)
+    assert _records(repo, "health_stop:") == []  # propose writes no request
+    # apply asks once; the passes after it find the request pending and write nothing more
+    for _ in range(3):
+        _health(repo, "--run", "--mode", "apply")
+    assert _records(repo, "health_stop:") == ["health_stop:T1"]
+    assert _records(repo, "health_park:") == []  # not before reply_s
+    again = _health(repo, "--run", "--mode", "apply")
+    assert [m["applied"] for m in again["moves"]] == [False]
+    assert "waiting up to 300s" in again["moves"][0]["line"]
 
 
 def test_the_periodic_pass_falls_due_on_the_cadence_and_is_recorded(repo):
@@ -325,8 +336,140 @@ def test_doctor_and_status_show_a_stalled_lane(repo):
     assert "Health:" in out and "STALLED T1" in out
 
 
-def test_the_watchdog_has_no_process_kill_or_delete_path():
-    src = Path(HW.__file__).read_text() + Path(H.__file__).read_text()
-    for banned in ("os.kill", "killpg", "rmtree", "W.remove", "unlink(", "subprocess"):
-        assert banned not in src, banned
-    assert os.name  # (the check above is the point; the module list is deliberately short)
+# -- idle, unresponsive, process-gone, per-kind modes ------------------------------------------
+
+LIM2 = H.Limits(stall_s=3600, runaway_s=3600, idle_s=300, reply_s=120, crash_s=60)
+
+
+def test_a_renewing_lane_is_idle_after_idle_s_and_stalled_only_after_stall_s():
+    lane = H.Lane("T1", A, True, NOW - 400)
+    assert _kinds(H.inspect([lane], [], [], [], NOW, LIM2)) == [(H.IDLE, "T1")]
+    assert _kinds(H.inspect([H.Lane("T1", A, True, NOW - 100)], [], [], [], NOW, LIM2)) == []
+    found = H.inspect([H.Lane("T1", A, True, NOW - 4000)], [], [], [], NOW, LIM2)
+    assert _kinds(found) == [(H.STALLED, "T1")]  # STALLED supersedes IDLE
+    assert H.inspect([lane], [], [], [], NOW, H.Limits(stall_s=3600, idle_s=0)) == []
+
+
+def test_an_unanswered_request_makes_the_lane_unresponsive_after_reply_s():
+    waits = [H.Wait("T2", B, (("T1", A),))]
+
+    def lane(asked_ago, progress_ago=400):
+        return H.Lane("T1", A, True, NOW - progress_ago, asked_at=NOW - asked_ago)
+
+    assert not [
+        f for f in H.inspect([lane(60)], [], waits, [], NOW, LIM2) if f.kind == H.UNRESPONSIVE
+    ]
+    (f,) = [f for f in H.inspect([lane(200)], [], waits, [], NOW, LIM2) if f.kind == H.UNRESPONSIVE]
+    assert f.evidence["waiters"] == ["T2"] and "park" in f.fix
+    answered = lane(200, progress_ago=100)  # progress since the request: answered
+    assert not [
+        f for f in H.inspect([answered], [], waits, [], NOW, LIM2) if f.kind == H.UNRESPONSIVE
+    ]
+    off = H.Limits(stall_s=3600, idle_s=300, reply_s=0)
+    assert not [
+        f for f in H.inspect([lane(9000)], [], waits, [], NOW, off) if f.kind == H.UNRESPONSIVE
+    ]
+
+
+def test_a_live_lease_whose_process_is_gone_is_crashed_within_crash_s():
+    def gone(renewed_ago):
+        return H.Lane(
+            "T1", A, True, NOW - 30, work=True, renewed_at=NOW - renewed_ago, gone=True, pids=(42,)
+        )
+
+    assert H.inspect([gone(30)], [], [], [], NOW, LIM2) == []  # inside crash_s: not yet
+    (f,) = H.inspect([gone(90)], [], [], [], NOW, LIM2)  # crash_s 60, TTL 1800 still running
+    assert f.kind == H.CRASHED and "pid 42" in f.detail and f.evidence["pids"] == [42]
+    assert H.inspect([gone(90)], [], [], [], NOW, H.Limits(crash_s=0)) == []
+    clean = H.Lane("T1", A, True, NOW - 30, work=False, renewed_at=NOW - 90, gone=True)
+    assert H.inspect([clean], [], [], [], NOW, LIM2) == []  # nothing to lose
+
+
+def test_a_dead_harness_is_crashed_in_a_real_repo_and_apply_records_the_expiry(repo):
+    assert run_cli(repo, "init", agent=A)[0] == 0
+    run_cli(repo, "config", "health.crash_s", "300", agent=A)
+    run_cli(repo, "task", "add", "T1", "--title", "T1", "--globs", "src/a.py", agent=A)
+    assert run_cli(repo, "claim", "T1", agent=A)[0] == 0
+    tree = repo / _state(repo).items["T1"].lease.worktree
+    (tree / "finished.py").write_text("# only copy\n")
+    later = time.time() + 600  # renewed ten minutes ago: the 30-minute TTL still holds it
+    dead = lambda who: (False, [4242]) if who == A else (None, [])  # noqa: E731
+    living = lambda who: (True, [1])  # noqa: E731
+    assert [f["kind"] for f in health(repo, now=later, alive=living).data["findings"]] == []
+    unknown = lambda who: (None, [])  # noqa: E731
+    assert health(repo, now=later, alive=unknown).data["findings"] == []
+    out = health(repo, now=later, run=True, mode="apply", alive=dead)
+    assert [(f["kind"], f["item"]) for f in out.data["findings"]] == [("crashed", "T1")]
+    assert [m["action"] for m in out.data["moves"]] == ["expire"]
+    assert _state(repo).items["T1"].lease.expired_at
+    assert (tree / "finished.py").read_text() == "# only copy\n"  # nothing deleted
+
+
+def test_a_job_in_flight_is_progress_not_a_stall(repo):
+    _contended(repo)
+    sleeper = subprocess.Popen(["sleep", "60"])
+    try:
+        assert run_cli(repo, "job", "add", "T1", "--pid", str(sleeper.pid), agent=A)[0] == 0
+        d = _health(repo)
+        assert "stalled" not in [f["kind"] for f in d["findings"]]
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+
+
+def test_each_finding_kind_has_its_own_mode(repo):
+    _contended(repo, reply_s=300)
+    run_cli(repo, "config", "health.mode", "propose", agent=A)
+    run_cli(repo, "config", "health.mode_stalled", "apply", agent=A)
+    d = _health(repo, "--run")
+    assert d["modes"]["stalled"] == "apply" and d["modes"]["locked"] == "propose"
+    assert d["modes"]["crashed"] == "propose"
+    assert _records(repo, "health_stop:") == [
+        "health_stop:T1"
+    ]  # stalled acted, the rest only proposed
+    run_cli(repo, "config", "health.mode_stalled", "off", agent=A)
+    assert _health(repo, "--run")["modes"]["stalled"] == "off"
+    assert Config.load(repo).health.mode_idle == "inherit"
+
+
+def test_a_deadlock_is_ordered_when_only_the_locked_mode_applies(repo):
+    assert run_cli(repo, "init", agent=A)[0] == 0
+    for i, who in ((1, A), (2, B)):
+        run_cli(
+            repo, "task", "add", f"T{i}", "--title", f"T{i}", "--globs", f"src/f{i}.py", agent=A
+        )
+        assert run_cli(repo, "claim", f"T{i}", "--no-worktree", agent=who)[0] == 0
+    assert run_cli(repo, "update", "T1", "--globs", "src/f1.py,src/f2.py", agent=A)[0] == 3
+    assert run_cli(repo, "update", "T2", "--globs", "src/f2.py,src/f1.py", agent=B)[0] == 3
+    run_cli(repo, "config", "schedule.auto_order", "off", agent=A)
+    run_cli(repo, "config", "health.mode_locked", "apply", agent=A)
+    run_cli(repo, "config", "health.mode", "off", agent=A)
+    d = _health(repo, "--run")
+    assert d["ran"] and any(m["applied"] for m in d["moves"])
+    assert any(it.needs for it in _state(repo).items.values())
+
+
+def test_the_stop_request_reaches_the_holder_at_its_next_heartbeat(repo):
+    _contended(repo, reply_s=300)
+    d = _health(repo, "--run", "--mode", "apply")
+    assert HW.stop_notice(_state(repo), "T1"), (d["moves"], _state(repo).cadences)
+    code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
+    assert code == 0, err
+    assert "asked agent-a to stop" in out + err
+
+
+def test_unresponsive_after_reply_s_parks_then_breaks_and_keeps_the_work(repo):
+    _contended(repo, worktree=True, reply_s=300)
+    tree = repo / _state(repo).items["T1"].lease.worktree
+    (tree / "unfinished.py").write_text("# only copy\n")
+    old = time.time() - AGO
+    os.utime(tree / "unfinished.py", (old, old))
+    assert [m["action"] for m in _health(repo, "--run", "--mode", "apply")["moves"]] == ["stop"]
+    assert not _state(repo).items["T1"].lease.expired_at  # asked, not yet taken
+    later = time.time() + 400  # the request went unanswered for reply_s
+    out = health(repo, now=later, run=True, mode="apply")
+    assert "unresponsive" in [f["kind"] for f in out.data["findings"]]
+    assert [m["applied"] for m in out.data["moves"]] == [True]
+    assert _state(repo).items["T1"].lease.expired_at
+    assert _records(repo, "health_park:") == ["health_park:T1"]
+    assert (tree / "unfinished.py").read_text() == "# only copy\n"

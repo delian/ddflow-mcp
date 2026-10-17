@@ -1222,7 +1222,7 @@
     'ddflow_health': '''
       {
        "name": "ddflow_health",
-       "description": "Watchdog: stalled, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode.",
+       "description": "Watchdog: idle, stalled, unresponsive, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode and the mode_<kind> overrides.",
        "inputSchema": {
         "type": "object",
         "properties": {
