@@ -11,8 +11,11 @@ from ddflow.services import pins_merge as PM
 
 
 def _git(cwd: Path, *a: str) -> None:
-    subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *a],
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+        check=True,
+        capture_output=True,
+    )
 
 
 def test_after_merge_hook_skips_a_linked_worktree(tmp_path: Path, monkeypatch) -> None:
