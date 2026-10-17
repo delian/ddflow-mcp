@@ -25,6 +25,7 @@ from ...services.cleanup import (  # noqa: F401  (re-exported)
 )
 from ...services.enforce import SELF_MANAGED
 from ...services.gates import measured as GM
+from ...services.gates import outcomes as GO
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
@@ -79,6 +80,16 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
+    if failed := GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg)):
+        # D-failed-review-gate (B85841c0846): landing work whose review failed and was
+        # never re-reviewed ships it unreviewed. Before any git action.
+        return O.refused(
+            "worktree.merged",
+            f"cannot merge {item}: {failed[0]}",
+            id=item,
+            sha="",
+            dirty=[],
+        )
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
     source = _what_to_land(repo, cfg, st, it, target, branch, called_from)

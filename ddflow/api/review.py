@@ -476,6 +476,9 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     kept = list(prior.get("chunk_findings") or [])
     mine = list(ev.get("chunk_findings") or [])
     ev["delta_findings"] = len(mine)
+    # Which findings THIS round raised (digests): the merged list below cannot tell, and
+    # `complete` needs it to know an earlier finding was not raised again (B85841c0846).
+    ev["delta_raised"] = [str(f["digest"]) for f in mine if f.get("digest")]
     if prior.get("full_coverage") or prior.get("review_kind") in ("full", "full_unavailable"):
         ev["full_coverage"] = prior.get("full_coverage") or prior.get("coverage", "")
     if not kept:
