@@ -37,6 +37,12 @@ def _check(cmd: str, env: dict | None = None, **kw):
         "true; git stash pop",
         "echo hi | xargs pkill",
         "sudo -u root pkill foo",
+        "sudo -n pkill -f worker",
+        "sudo -n bash -c 'pkill -f worker'",
+        "time -p pkill worker",
+        "xargs -t pkill",
+        "bash -c \"bash -c 'pkill -f worker'\"",
+        "cat <<EOF-2 >/dev/null\nx\nEOF\npkill foo",
         "pkill -f worker # ddflow review --force --reason",
         "nice -n 5 pkill foo",
         "env -u HOME pkill foo",
@@ -66,6 +72,8 @@ def test_refused(cmd):
         'ddflow review X --reason "an extra round" --force',
         "rm -rf build",
         "kill 1234",
+        "cat <<EOF-2\npkill -f worker\nEOF-2",
+        "cat <<'END.JSON'\npkill x\nEND.JSON",
         "cat <<'EOF'\npkill x\nEOF",
         "ls",
     ],
@@ -102,6 +110,9 @@ def test_reset_hard_only_on_primary(tmp_path):
     # from a worktree, a command that names another checkout is still judged as the primary
     assert _check(f"git -C {tmp_path} reset --hard", cwd=wt) is not None
     assert _check(f"cd {tmp_path} && git reset --hard", cwd=wt) is not None
+    assert _check(f"git --git-dir={tmp_path}/.git reset --hard", cwd=wt) is not None
+    assert _check(f"GIT_DIR={tmp_path}/.git git reset --hard", cwd=wt) is not None
+    assert _check("make -C build && git reset --hard", cwd=wt) is None
 
 
 def test_operator_lifts_per_session_and_config():
