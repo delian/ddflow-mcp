@@ -155,8 +155,6 @@ from .handlers.waiting import WAITING_HANDLERS
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
 # here, so `from ddflow.core.model import State, Item, fold, HANDLERS, ...` keeps working.
 from .records import (  # noqa: F401
-    WORK_KINDS,
-    work_kind,
     ABANDONED,
     ADD_RELATIONS,
     BLOCKED,
@@ -168,6 +166,7 @@ from .records import (  # noqa: F401
     OUTCOME_MARK,
     REVIEW,
     RUNNING,
+    WORK_KINDS,
     Bug,
     Decision,
     FoldProblem,
@@ -190,6 +189,7 @@ from .records import (  # noqa: F401
     _clashing,
     _overlaps,
     _span,
+    work_kind,
 )
 from .upcasters import NewerPayload, upcast
 

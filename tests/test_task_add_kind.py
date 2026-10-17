@@ -4,8 +4,6 @@ kind names (`[gates].kind_pipelines`), so docs-only work completes without the c
 
 from __future__ import annotations
 
-import json
-
 from conftest import run_cli
 from helpers import items_of as _items
 
