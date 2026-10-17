@@ -481,10 +481,13 @@ def _f_deps(ctx: PlanCtx, it: Item) -> Blocked | None:
 def _f_lease(ctx: PlanCtx, it: Item) -> Blocked | None:
     held = ctx.live.get(it.id)
     if held and held.holder != ctx.agent:
+        left = held.left_text(ctx.now, ctx.cfg.lease.grace_s, unit="another")
+        # Inside the grace the countdown is a clause of its own ("leased by a; ran out ...").
+        sep = " " if left.startswith("for another") else "; "
         return Blocked(
             it.id,
             "conflict",
-            f"leased by {held.holder} for another {held.remaining_s(ctx.now):.0f}s",
+            f"leased by {held.holder}{sep}{left}",
             [it.id],
         )
     return None
