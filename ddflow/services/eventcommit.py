@@ -156,16 +156,17 @@ def commit_shards(
 
 
 def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool | None:
-    """Whether ``head`` is the event-log commit this door just made: one parent, the subject it
-    was given and the tree of the private index. None when git could not say."""
+    """Whether ``head`` is the event-log commit this door just made: one parent, the message it
+    was given (whitespace as git folds it) and the tree of the private index. None when git
+    could not say."""
     ours = W.git(repo, "write-tree", env=env)
-    info = W.git(repo, "log", "-1", "--format=%T%n%P%n%s", head)
+    info = W.git(repo, "log", "-1", "--format=%T%n%P%n%B", head)
     if not (ours.ok and info.ok):
         return None
     tree, _, rest = info.out.partition("\n")
-    parents, _, subject = rest.partition("\n")
-    first = message.splitlines()[0] if message.strip() else ""
-    return tree == ours.out.strip() and len(parents.split()) == 1 and subject == first
+    parents, _, body = rest.partition("\n")
+    same = " ".join(body.split()) == " ".join(message.split())
+    return tree == ours.out.strip() and len(parents.split()) == 1 and same
 
 
 def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
