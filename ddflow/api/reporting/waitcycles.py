@@ -50,7 +50,7 @@ def wait_order(log, st, cfg, cycles: list[LW.Cycle], notes: list[str], repo=None
 
 def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=None) -> list[str]:
     """Finding lines not already shown elsewhere, at most `[health].shown` in full."""
-    if all(m == "off" for m in HW.modes(cfg).values()):
+    if not HW.enabled(HW.modes(cfg)):
         return []
     at = time.time() if now is None else now
     by_kind = HW.modes(cfg)

@@ -71,6 +71,11 @@ def modes(cfg, override: str = "") -> dict[str, str]:
     return out
 
 
+def enabled(by_kind: dict[str, str]) -> bool:
+    """Is any finding kind's mode other than off: the one answer to "is the watchdog on"."""
+    return any(m != "off" for m in by_kind.values())
+
+
 def steps_of(st, item: str, lease) -> dict[str, float]:
     """Step -> time of the newest nudge, stop request or park record made for THIS lease."""
     out: dict[str, float] = {}
@@ -346,7 +351,7 @@ def due(ctx) -> list[dict[str, Any]]:
     """`cadence` evaluator: the watchdog pass is due when lanes exist and the last pass is older
     than `[health].interval_s` (never run counts as due)."""
     h = ctx.cfg.health
-    if all(m == "off" for m in modes(ctx.cfg).values()) or h.interval_s <= 0:
+    if not enabled(modes(ctx.cfg)) or h.interval_s <= 0:
         return []
     if not any(
         i.lease is not None and not i.terminal and not i.removed for i in ctx.st.items.values()
