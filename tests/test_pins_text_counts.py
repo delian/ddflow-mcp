@@ -22,3 +22,11 @@ def test_a_prose_edit_both_sides_made_still_conflicts() -> None:
     theirs = BASE.replace(b"intro", b"howdy")
     out, conflicted = merge_pin_text(ours, BASE, theirs)
     assert conflicted and b"<<<<<<<" in out
+
+
+def test_a_hand_edited_number_still_conflicts() -> None:
+    base = BASE + b"timeout: 3\n"
+    out, conflicted = merge_pin_text(
+        base.replace(b"3\n", b"5\n"), base, base.replace(b"3\n", b"9\n")
+    )
+    assert conflicted and b"<<<<<<<" in out
