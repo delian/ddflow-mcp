@@ -39,6 +39,9 @@ from .config_sections.bugs import (
 from .config_sections.cadence import (
     CadenceConfig,
 )
+from .config_sections.chore import (
+    ChoreConfig,
+)
 from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
     CI_ON_MERGE_MODES,
     CI_TESTS_SCOPES,
@@ -253,6 +256,7 @@ class Config:
     pins: PinsConfig = field(default_factory=PinsConfig)
     plan: PlanConfig = field(default_factory=PlanConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
+    chore: ChoreConfig = field(default_factory=ChoreConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)

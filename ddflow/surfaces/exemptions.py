@@ -18,6 +18,7 @@ from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.cadence import COMMANDS as _CADENCE
+from .declared.chore import COMMANDS as _CHORE
 from .declared.docs import COMMANDS as _DOCS
 from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
@@ -54,6 +55,11 @@ EXEMPTIONS: tuple[Command, ...] = (
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
     ),
     Command(
+        path=("chore",),
+        reason="CLI-only by design (D-chore-class): `commit` is a ceremony an agent runs from its "
+        "shell, `approve` a person's act; neither is worth tools/list bytes",
+    ),
+    Command(
         path=("plan",),
         reason="its only command, `plan check`, is CLI-only: a pre-filing convenience on a document",
     ),
@@ -86,6 +92,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_MERGEQUEUE,
     *_MEMORY,
     *_PLAN,
+    *_CHORE,
     *_FLOW,
     *_HOOKS,
     *_LANES,
