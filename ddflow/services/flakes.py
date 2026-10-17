@@ -186,6 +186,28 @@ def _fixture_of(tail: str) -> str:
     return ""
 
 
+def _error_line(i: str, where: dict[str, Any], why: dict[str, str]) -> str:
+    """`  ERROR <id> [setup of fixture x] - message` for one errored test."""
+    w = where.get(i) or {}
+    place = ""
+    if w:
+        place = (
+            f" [{w['phase']}" + (f" of fixture {w['fixture']}" if w.get("fixture") else "") + "]"
+        )
+    return f"  ERROR {i}{place} - {why.get(i) or 'no message in the output'}"
+
+
+def _tail_lines(ev: dict[str, Any]) -> list[str]:
+    """The failure sections, then the rerun note, of a gate's evidence."""
+    lines = []
+    for t in ev.get("failure_tails") or []:
+        lines += [f"--- {t['test']} ---", t["tail"]]
+    if rr := ev.get("rerun"):
+        note = f" ({rr['note']})" if rr.get("note") else ""
+        lines.append(f"rerun of the failed tests once: {rr.get('outcome', '?')}{note}")
+    return lines
+
+
 def failure_text(ev: dict[str, Any]) -> str:
     """The failing tests of a gate's evidence, as lines for a person ("" when none).
     Failures and errors (a fixture that raised, a teardown that did) are listed apart: an
@@ -195,7 +217,6 @@ def failure_text(ev: dict[str, Any]) -> str:
         return ""
     why = ev.get("failed_reasons") or {}
     errored = set(ev.get("errored_tests") or [])
-    where = ev.get("errored_where") or {}
     failed = [i for i in ids if i not in errored]
     erred = [i for i in ids if i in errored]
     more = int(ev.get("failed_tests_more") or 0)
@@ -205,31 +226,10 @@ def failure_text(ev: dict[str, Any]) -> str:
         lines += [f"  FAILED {i}" + (f" - {why[i]}" if i in why else "") for i in failed]
     if erred:
         lines.append(f"{len(erred)} error(s) (the test did not get to pass or fail):")
-        for i in erred:
-            w = where.get(i) or {}
-            place = (
-                f" [{w['phase']}"
-                + (f" of fixture {w['fixture']}" if w.get("fixture") else "")
-                + "]"
-                if w
-                else ""
-            )
-            lines.append(
-                f"  ERROR {i}{place}"
-                + (f" - {why[i]}" if i in why else " - no message in the output")
-            )
+        lines += [_error_line(i, ev.get("errored_where") or {}, why) for i in erred]
     if more:
         lines.append(f"  ... and {more} more")
-    for t in ev.get("failure_tails") or []:
-        lines.append(f"--- {t['test']} ---")
-        lines.append(t["tail"])
-    rr = ev.get("rerun")
-    if rr:
-        lines.append(
-            f"rerun of the failed tests once: {rr.get('outcome', '?')}"
-            + (f" ({rr['note']})" if rr.get("note") else "")
-        )
-    return "\n".join(lines)
+    return "\n".join(lines + _tail_lines(ev))
 
 
 # -- the flake log ---------------------------------------------------------------------
