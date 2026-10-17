@@ -310,3 +310,48 @@ def test_a_merge_with_our_tree_landing_right_after_is_not_taken_for_ours(repo, m
     assert _git(repo, "log", "-1", "--format=%s") == "foreign merge"
     assert len(_git(repo, "log", "-1", "--format=%P").split()) == 2  # its parents are intact
     assert sha == _git(repo, "rev-parse", "HEAD")
+
+
+def test_when_git_cannot_say_whether_head_is_ours_the_note_says_so(repo, monkeypatch):
+    """'Could not tell' is not 'not ours': it is said, and nothing is rebuilt."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def cannot_log(root, *args, **kw):
+        if args and args[0] == "log" and "--format=%T%n%P%n%B" in args:
+            return eventcommit.G.GitResult(1, "", "boom")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", cannot_log)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "could not check HEAD" in note, (sha, note)
+
+
+def test_a_message_git_folds_is_still_recognised_as_ours(repo, monkeypatch):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    (repo / "other.txt").write_text("v1\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "commit", "-qm", "other v1", "--no-verify")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_first(root, *args, **kw):
+        if args and args[0] == "commit":
+            (root / "other.txt").write_text("v2\n")
+            _git(root, "add", "other.txt")
+            _git(root, "commit", "-qm", "other v2", "--no-verify")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_first)
+    _, note = eventcommit.commit_shards(repo, "mine  \n", "events: {reason}   \n\n")
+    assert "made again" in note, note
+    assert _git(repo, "show", "HEAD:other.txt") == "v2"
