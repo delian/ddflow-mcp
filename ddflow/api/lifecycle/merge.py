@@ -13,6 +13,7 @@ from ...core.admission import new_file_globs
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
@@ -44,6 +45,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -147,6 +149,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
+    (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
     if not r.ok and not landed_note:
@@ -222,7 +225,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
     )
 
+    say = on_progress or (lambda _line: None)
+    say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    say(_ci_notice(repo, cfg))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    say(
+        f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
+    )
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
@@ -245,6 +254,22 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
     )
+
+
+def _ci_notice(repo: Path, cfg) -> str:
+    """The line said before the post-merge check starts: what runs and which knobs bound it."""
+    try:
+        command, why = CI.main_command(repo, cfg)
+        notice = (
+            f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+            f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never "
+            f"as a failure"
+        )
+    except Exception:  # a line of progress never stops a merge that has landed
+        return "post-merge check starting"
+    if not command:
+        return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
+    return notice
 
 
 def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:

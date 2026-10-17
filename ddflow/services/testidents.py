@@ -16,6 +16,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
+from ..core import unidiff
 from ..infra import worktree as W
 from .testreach import module_name
 
@@ -80,7 +81,11 @@ def _enclosing(source: str, lines: set[int]) -> set[str]:
 
 
 def _diff(tree: Path, *args: str) -> str:
-    r = W.git(tree, "diff", "-U0", "--no-color", "--no-renames", *args)
+    # `quotepath=false`: a non-ASCII file name stays that name in the headers; the prefixes
+    # are named, so `diff.mnemonicPrefix` and `diff.noprefix` of the user's config do not
+    # change what `_added_removed` reads.
+    flags = ("-U0", "--no-color", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/")
+    r = W.git(tree, "-c", "core.quotepath=false", "diff", *flags, *args)
     return r.out if r.code == 0 else ""
 
 
@@ -133,6 +138,96 @@ def spelling_tests(
     """Test path -> why, for each test whose text spells a changed identifier as a whole word."""
     found = _spellers(idents, r"(?<![\w]){}(?![\w])", sources, max_tests)
     return {t: f"names {name}, changed in {idents[name]}" for t, name in found.items()}
+
+
+_LITERAL = re.compile(r"\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'")
+_PLACEHOLDER = re.compile(r"\{[^{}]*\}|\\[ntr]")
+_FLAG = re.compile(
+    r"(?<![\w-])--[a-z0-9]+(?:-[a-z0-9]+)+(?![\w-])"
+)  #: `--add-needs`, not `--force`
+_PHRASE_WORDS = 4  #: consecutive words that make a phrase
+_PHRASE_MIN = 16  #: characters a phrase has, so four short words are not one
+_PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is not a signal
+
+
+def _phrases(lines: Iterable[str]) -> set[str]:
+    """Runs of ``_PHRASE_WORDS`` words inside the string literals of ``lines``, split at an
+    interpolation (``{x}``) or a newline escape: the text a message is made of; and each
+    command-line flag with a hyphen in its name (``--add-needs``) a literal spells."""
+    out: set[str] = set()
+    for line in lines:
+        for m in _LITERAL.finditer(line):
+            out.update(_FLAG.findall(m.group(1) or m.group(2) or ""))
+            for part in _PLACEHOLDER.split(m.group(1) or m.group(2) or ""):
+                words = part.split()
+                for i in range(len(words) - _PHRASE_WORDS + 1):
+                    phrase = " ".join(words[i : i + _PHRASE_WORDS])
+                    if len(phrase) >= _PHRASE_MIN:
+                        out.add(phrase)
+    return out
+
+
+_BATCH = 200  #: files per git call, so the command line stays short
+
+
+def _added_removed(diff: str) -> dict[str, list[str]]:
+    """File -> the lines a ``-U0`` diff of several files adds or removes. The file is read by
+    `core.unidiff` (the one reader of a diff's headers: a quoted name, a name with a space);
+    only lines after its first hunk header count, so a content line that begins ``--`` is
+    never taken for a header."""
+    out: dict[str, list[str]] = {}
+    for section in unidiff.sections(diff):
+        path = unidiff.parse_section(section).path
+        rows = out.setdefault(path, [])
+        _head, _, hunks = section.partition("\n@@")
+        for line in hunks.splitlines()[1:] if hunks else ():
+            if line[:1] in "+-":
+                rows.append(line[1:])
+    return out
+
+
+def changed_phrases(
+    tree: Path, base: str, files: list[str], tip: str = "HEAD", source: Path | None = None
+) -> dict[str, str]:
+    """Phrase -> a changed .py file whose string literals gained or lost it: the message a
+    test asserts on, which the import graph cannot see (Bb5b8b17161: a CLI message reworded
+    in ``claim_text`` broke ``test_asagent_tree.py``, reached only through a hub). From the
+    committed change (``base...tip``) and the working tree against HEAD (when ``tip`` is
+    HEAD); every phrase of an untracked file. {} when git cannot say. A few git calls for
+    all the files, not three per file."""
+    root = source or tree
+    py = [f for f in files if f.endswith(".py")]
+    lines: dict[str, list[str]] = {f: [] for f in py}
+    untracked = set(py)
+    for i in range(0, len(py), _BATCH):
+        part = py[i : i + _BATCH]
+        specs = ([f"{base}...{tip}"] if base else []) + (["HEAD"] if tip == "HEAD" else [])
+        for spec in specs:
+            for f, got in _added_removed(_diff(tree, spec, "--", *part)).items():
+                if f in lines:
+                    lines[f] += got
+        tracked = W.git(tree, "ls-files", "-z", "--", *part)
+        if tracked.code == 0:
+            untracked -= set(tracked.out.split("\0"))
+    out: dict[str, str] = {}
+    for f in py:
+        if f in untracked:
+            try:
+                lines[f] += (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                pass
+        for phrase in sorted(_phrases(lines[f])):
+            if len(out) < _PHRASE_CAP:
+                out.setdefault(phrase, f)
+    return out
+
+
+def phrase_tests(
+    phrases: dict[str, str], sources: dict[str, str], max_tests: int = 30
+) -> dict[str, str]:
+    """Test path -> why, for each test whose text holds a changed phrase."""
+    found = _spellers(phrases, "{}", sources, max_tests)
+    return {t: f"says '{p}', changed in {phrases[p]}" for t, p in found.items()}
 
 
 def listed_packages(files: list[str]) -> dict[str, str]:
