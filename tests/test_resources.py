@@ -143,3 +143,6 @@ def test_a_capacity_style_spec_is_refused_not_stored_as_a_name(tmp_path):
     run_cli(tmp_path, "task", "add", "T2", "--globs", "b.py")
     code, out, err = run_cli(tmp_path, "update", "T2", "--resources", "gpu=1")
     assert code != 0 and "gpu:1" in out + err, (code, out, err)
+    run_cli(tmp_path, "task", "add", "T3", "--globs", "c.py")
+    code, out, err = run_cli(tmp_path, "claim", "T3", "--no-worktree", "--resources", "gpu=1")
+    assert code != 0 and "gpu:1" in out + err, (code, out, err)
