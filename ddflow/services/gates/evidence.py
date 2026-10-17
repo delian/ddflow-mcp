@@ -272,7 +272,16 @@ def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
-    return W.git(cwd, "merge-base", "--is-ancestor", a, b).ok
+    return _is_ancestor(cwd, a, b) is True
+
+
+def _is_ancestor(cwd: Path, a: str, b: str) -> bool | None:
+    """Is commit ``a`` an ancestor of ``b``? None when git could not say (an unknown
+    commit, git missing or killed): exit 1 is "no", and only 0 is "yes"."""
+    r = W.git(cwd, "merge-base", "--is-ancestor", a, b)
+    if r.unavailable or r.code not in (0, 1):
+        return None
+    return r.code == 0
 
 
 def moved_past(started_on: str, recorded: str, cwd: Path) -> bool:
@@ -283,7 +292,7 @@ def moved_past(started_on: str, recorded: str, cwd: Path) -> bool:
     a, b = head_of(started_on), head_of(recorded)
     if not a or not b or a == b:
         return False
-    return not W.git(cwd, "merge-base", "--is-ancestor", b, a).ok
+    return _is_ancestor(cwd, b, a) is False  # could not tell: the run keeps its record
 
 
 def is_tree(tree_sha: str, cwd: Path) -> bool:
