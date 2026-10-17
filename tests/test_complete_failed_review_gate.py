@@ -263,3 +263,17 @@ def test_recording_failed_again_over_a_failed_gate_is_not_refused(repo, tmp_path
     )
     assert code in (0, 1), out + err
     assert "operator" not in out + err, out + err
+
+
+def test_findings_that_cannot_be_read_back_are_not_no_findings(repo, tmp_path, monkeypatch):
+    """roborev: a lost findings blob must not let a hand record clear the blocker."""
+    from ddflow.core import blobref as B
+    from ddflow.services.gates import failed_review as FR
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    monkeypatch.setattr(
+        FR.LB, "full", lambda ev: {"chunk_findings": B.Unavailable("abc", "is missing")}
+    )
+    assert "cannot be read back" in FR.unresolved_review_failure(it, "critic", confirmed_only=True)
