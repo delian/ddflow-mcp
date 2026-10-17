@@ -497,7 +497,17 @@ def _history_text(data: Mapping[str, Any]) -> str:
     for h in data.get("entries", []):
         v = f" v{h['version']}" if "version" in h else ""
         head = f"  {h['at']}  {h['event']}{v}  {h['by']}"
-        for key in ("session", "reason", "successor", "split_into", "split_from", "restored_from"):
+        for key in (
+            "session",
+            "reason",
+            "successor",
+            "absorbed",
+            "supersedes",
+            "split_into",
+            "split_from",
+            "restored_from",
+            "digest",
+        ):
             if h.get(key):  # json: the reason is a person's text, one line, no control codes
                 head += f"  {key}={json.dumps(h[key]) if key == 'reason' else h[key]}"
         lines.append(head)

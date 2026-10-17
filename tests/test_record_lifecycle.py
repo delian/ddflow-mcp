@@ -441,20 +441,49 @@ def test_a_part_that_repeats_another_record_is_refused_naming_it_but_not_the_ori
     assert fine.exit == O.OK, fine.reason
 
 
-def test_a_version_number_is_never_read_as_a_lamport(repo):
-    _add(repo, "n1", "t", "v1")
-    R.record_edit(repo, NOTE, "n1", {"body": "v2"})
-    R.record_edit(repo, NOTE, "n1", {"body": "v3"})
-    entries = LC.record_history(repo, NOTE, "n1").data["entries"]
-    lamports = [e["lamport"] for e in entries]
-    # the trap: a version number that is also the lamport of ANOTHER entry
-    clash = next(lam for lam in lamports if lam <= len(lamports) and lamports.index(lam) + 1 != lam)
-    R.record_remove(repo, NOTE, "n1", reason="gone")
-    assert LC.record_restore(repo, NOTE, "n1", to=clash, reason="r").exit == O.OK
-    assert R.record_show(repo, NOTE, "n1").data["fields"]["body"] == f"v{clash}"
-    R.record_remove(repo, NOTE, "n1", reason="gone")
-    for bad in ("two", "x:3", "0", "99", "\u00b2", "lamport:\u00b2"):
-        assert LC.record_restore(repo, NOTE, "n1", to=bad, reason="r").exit == O.REFUSED
+def test_a_version_number_is_never_read_as_a_lamport():
+    from ddflow.core.events import Event
+
+    chain = [
+        Event("def.recorded", "skill:x", {"fields": {"body": "v1"}}, lamport=2),
+        Event("def.updated", "skill:x", {"fields": {"body": "v2"}}, lamport=7),
+        Event("def.updated", "skill:x", {"fields": {"body": "v3"}}, lamport=9),
+    ]
+    # the trap: "2" is the lamport of version 1 and the number of version 2
+    assert LC._version(chain, 2)[1] == {"body": "v2"}
+    assert LC._version(chain, "lamport:2")[1] == {"body": "v1"}
+    assert LC._version(chain, "lamport:9")[1] == {"body": "v3"}
+    assert LC._version(chain, None)[1] == {"body": "v3"}
+    for bad in ("two", "x:3", "0", "99", "\u00b2", "lamport:\u00b2", "lamport:3"):
+        assert LC._version(chain, bad)[2], bad
+
+
+def test_both_sides_of_a_merge_and_a_supersede_name_each_other_in_history(two):
+    LC.record_merge(two, NOTE, ["n2"], into="n1", reason="same topic")
+    mine = LC.record_history(two, NOTE, "n1").data["entries"]
+    assert any(e.get("absorbed") == "n2" and e["reason"] == "same topic" for e in mine)
+    _add(two, "n3", "Unrelated gardening note", "plant tomatoes in may")
+    _add(two, "n4", "Replacement policy text", "completely different words here")
+    LC.record_supersede(two, NOTE, "n3", by="n4", reason="better")
+    assert any(
+        e.get("supersedes") == "n3" for e in LC.record_history(two, NOTE, "n4").data["entries"]
+    )
+    assert [e["lamport"] for e in mine] == sorted(e["lamport"] for e in mine)
+
+
+def test_an_older_revisions_session_is_never_carried_into_a_new_write(repo):
+    _me(repo).append("session.started", "s1", {})
+    _add(repo, "n1", "t", "x")
+    from ddflow.api import defs as DEFS
+
+    log = _me(repo)
+    log.append("session.ended", "s1", {})
+    rec = _base._load(repo)[2].defs["skill:n1"]
+    assert rec.provenance["session"] == "s1"
+    out = DEFS.def_update(repo, "skill", "n1", {"body": "y"}, provenance=dict(rec.provenance))
+    assert out.exit == O.OK
+    (*_, last) = _events(repo, "skill:n1")
+    assert "session" not in last.data["provenance"]
 
 
 def test_a_parts_file_that_is_not_text_is_a_refusal_and_a_reason_is_one_quoted_line(two, capsys):
