@@ -187,3 +187,32 @@ def declared(repo: Path | str) -> str:
             return name
         pid = ppid
     return ""
+
+
+def liveness(repo: Path | str, agent: str) -> tuple[bool | None, list[int]]:
+    """Is the harness that declared ``agent`` still running? ``(True, pids)`` when any of
+    its records names a live process, ``(False, pids)`` when it has records and every one
+    names a process that has DEFINITELY exited (a reused pid does not count as alive), and
+    ``(None, [])`` when nothing is recorded -- an agent that never declared an identity
+    cannot be seen to die. Read-only: the watchdog's crash check, never a signal."""
+    d = _dir(repo)
+    if d is None or not d.is_dir() or not agent:
+        return None, []
+    pids: list[int] = []
+    gone = []
+    try:
+        entries = list(d.iterdir())
+    except OSError:
+        return None, []
+    for f in entries:
+        try:
+            name = f.read_text(errors="replace").strip()
+        except OSError:
+            continue
+        if name != agent:
+            continue
+        pids.append(int(f.name.partition("-")[0]) if f.name.partition("-")[0].isdigit() else 0)
+        gone.append(_gone(f.name))
+    if not gone:
+        return None, []
+    return (not all(gone)), pids

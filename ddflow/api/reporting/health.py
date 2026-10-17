@@ -451,7 +451,7 @@ def doctor(
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    ordered = wait_order(log, st, cfg, cycles, notes)
+    ordered = wait_order(log, st, cfg, cycles, notes, repo)
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,

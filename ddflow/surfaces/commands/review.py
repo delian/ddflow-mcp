@@ -101,6 +101,24 @@ def _stray_triage_flags(a, ids: list[str]) -> str:
     )
 
 
+def _progress_stream(c: Ctx):
+    """Under --json stdout is the one JSON body, so progress goes to stderr."""
+    return sys.stderr if c.json else sys.stdout
+
+
+def _report_refusal(a, c: Ctx, out) -> None:
+    """The refusal text on stderr, and under --json the one body on stdout."""
+    # A refusal (exit 3) with no reviewer behind it -- a `--chunk` re-review that
+    # cannot merge -- has printed nothing else (roborev 991).
+    if out.exit == FAIL or (out.exit in (NOTHING, REFUSED) and not out.data.get("reviewer")):
+        print(out.reason, file=sys.stderr)
+    if c.json and out.exit != OK:
+        c.out(
+            out.reason,
+            {"refusal": {"reason": out.reason, "exit": out.exit}, "gate": a.gate or "critic"},
+        )
+
+
 def cmd_review(a, c: Ctx) -> int:
     ids = list(a.id or [])
     if ids[:1] == ["triage"]:
@@ -125,7 +143,7 @@ def cmd_review(a, c: Ctx) -> int:
         called_from=c.called_from,
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
-        on_progress=lambda line: print(line, flush=True),
+        on_progress=lambda line: print(line, file=_progress_stream(c), flush=True),
         agent=c.requested_agent,
         chunks=a.chunk or None,
         delta=bool(a.delta),
@@ -133,10 +151,7 @@ def cmd_review(a, c: Ctx) -> int:
         force=bool(a.force),
         reason=a.reason or "",
     )
-    # A refusal (exit 3) with no reviewer behind it -- a `--chunk` re-review that
-    # cannot merge -- has printed nothing else (roborev 991).
-    if out.exit == FAIL or (out.exit in (NOTHING, REFUSED) and not out.data.get("reviewer")):
-        print(out.reason, file=sys.stderr)
+    _report_refusal(a, c, out)
     return out.exit
 
 

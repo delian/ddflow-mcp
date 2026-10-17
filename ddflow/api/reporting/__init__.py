@@ -13,4 +13,4 @@ from .health import FOLD_PROBLEMS_SHOWN, doctor, fold_problem_notes, recover  # 
 from .overview import STATUS_LIST_LIMIT, loops, progress, status  # noqa: F401
 from .records import addenda, new_reports, record_summary, show  # noqa: F401
 from .views import DEFAULT_RENDER_DIR, board, rebuild, render, replay  # noqa: F401
-from .waitcycles import wait_cycles, wait_findings, wait_order  # noqa: F401
+from .waitcycles import health_lines, wait_cycles, wait_findings, wait_order  # noqa: F401
