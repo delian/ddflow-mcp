@@ -227,3 +227,14 @@ def test_a_parent_removed_from_the_queue_is_refused(repo, tmp_path):
 
     assert code == 1, out + err
     assert "PH" in out + err
+
+
+def test_plan_check_refuses_when_the_queue_cannot_be_read(repo, tmp_path, monkeypatch):
+    """No queue, no way to tell a queued `needs` from a typo: not a clean plan."""
+    from ddflow.api import plan as api_plan
+
+    monkeypatch.setattr(api_plan, "_queue", lambda repo, agent="": None)
+
+    out = api_plan.plan_check(repo, _write(tmp_path))
+
+    assert out.exit == 3, out
