@@ -22,7 +22,10 @@ def bug_globs_of(state: State, item_id: str, cfg: Config | None = None) -> list[
 
 
 _EXTS = "py|md|toml|json|ya?ml|sh|txt|cfg|ini|js|ts|rs|go|c|h"
-_PATHISH = re.compile(rf"[\w.*-]+(?:/[\w*-]+)*/[\w*-]*[.*][\w.*-]*|[\w-]+\.(?:{_EXTS})\b")
+_PATHISH = re.compile(
+    rf"[\w.*-]+(?:/[\w*-]+)*/[\w*-]*(?:\*|\.[A-Za-z]\w{{0,4}}\b)[\w*-]*(?:\.[A-Za-z]\w*)*"
+    rf"|[\w-]+\.(?:{_EXTS})\b"
+)
 
 
 def _names(path: str, glob: str) -> bool:
