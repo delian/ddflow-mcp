@@ -111,3 +111,22 @@ def test_a_regeneration_that_times_out_is_not_reported_as_current(tree):
     assert out.exit == 2, out  # NOTHING: could not finish
     assert "stuck" in out.reason and "timed out" in out.reason, out.reason
     assert out.data["pins"][0]["unavailable"] and not out.data["pins"][0]["regenerated"]
+
+
+def test_the_hook_says_so_when_another_run_holds_the_tree(tree):
+    """A second hook run while one is re-recording: it prints that it did not check, it is
+    not silent (an empty line reads as 'all current')."""
+    (tree / ".ddflow").mkdir()
+    (tree / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "quick"\nfiles = ["quick.txt"]\n'
+        f'check = ["{PY}", "-c", "pass"]\nregen = ["{PY}", "-c", "pass"]\n'
+    )
+    git_dir = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    with file_lock(Path(git_dir) / "ddflow-pins.lock", 0):
+        line = PM.after_merge(tree, Config.load(tree))
+    assert "unavailable" in line and "quick" in line and "another pins regeneration" in line, line
