@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..infra.fsio import replace_text
 
-_BEGIN = re.compile(r"<!-- ddflow:begin (\S+)")
+_BEGIN = re.compile(r"<!-- ddflow:begin (\S+)")  # at the start of a line: prose may quote it
 _END = re.compile(r"<!-- ddflow:end (\S+) -->")
 
 
@@ -82,9 +82,9 @@ def _owned(lines: list[str], inside: bool) -> tuple[bool, bool]:
     of a hunk that starts ``inside`` a region or not."""
     ok = True
     for ln in lines:
-        if _BEGIN.search(ln):
+        if _BEGIN.match(ln):
             inside = True
-        elif _END.search(ln):
+        elif _END.match(ln):
             inside = False  # the end marker belongs to the region it closes
         elif not inside:
             ok = False
@@ -109,7 +109,7 @@ def settle(path: str, text: str) -> Settled:
     res.stray = bool(res.refused)
     if res.refused or not found:
         return res
-    mixed = any(_BEGIN.search(ln) for ln in lines)
+    mixed = any(_BEGIN.match(ln) for ln in lines)
     out: list[str] = []
     pos = 0
     inside = False
@@ -127,6 +127,17 @@ def settle(path: str, text: str) -> Settled:
         return res
     res.text = "".join(out + lines[pos:])
     return res
+
+
+def take_side(text: str, side: str) -> str:
+    """``text`` with every conflict settled to one side: ``"ours"`` or ``"theirs"``."""
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    pos = 0
+    for first, last, h in hunks_of(lines):
+        out += lines[pos:first] + (h.ours if side == "ours" else h.theirs)
+        pos = last + 1
+    return "".join(out + lines[pos:])
 
 
 def settle_files(repo: Path, files: list[str]) -> list[Settled]:
