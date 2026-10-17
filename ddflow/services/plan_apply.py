@@ -56,7 +56,7 @@ def body_of(item: Mapping[str, Any]) -> str:
 
 def draft_of(iid: str, item: Mapping[str, Any], plan_id: str) -> IT.TaskDraft:
     """The task a plan item becomes, labelled `plan:<id>`."""
-    parent = str(item.get("parent", "")) or None
+    parent = str(item.get("parent") or "") or None
     return IT.TaskDraft(
         iid,
         title=str(item.get("title", iid)),
@@ -101,7 +101,7 @@ def order(plan: Mapping[str, Any]) -> list[str]:
         if iid in seen or iid not in plan:
             return
         seen.add(iid)
-        for dep in [*_list(plan[iid], "needs"), str(plan[iid].get("parent", ""))]:
+        for dep in [*_list(plan[iid], "needs"), str(plan[iid].get("parent") or "")]:
             visit(dep)
         out.append(iid)
 

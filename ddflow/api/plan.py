@@ -127,7 +127,7 @@ def _report(repo: Path, plan: dict[str, Any], queue) -> tuple[PC.Report, Config]
     tracked = _tracked(repo)
     cfg = queue[1] if queue else Config.load(repo)
     similar = _hunt(repo, queue[0], cfg, queue[2], set(plan)) if queue else None
-    known = _live(queue[2] if queue else None)
+    known = _live(queue[2]) if queue else None
     return PC.check(plan, tracked=tracked, similar=similar, known=known), cfg
 
 
@@ -171,10 +171,13 @@ def _clashes(st: State, plan: dict[str, Any], plan_id: str) -> list[str]:
 
 
 def _missing_parents(st: State, plan: dict[str, Any]) -> list[str]:
+    """Items whose parent is neither in the plan nor LIVE in the queue (a removed one
+    cannot hold a task)."""
+    live = set(PA.live_ids(st))
     return sorted(
         f"{i} -> {p}"
         for i, it in plan.items()
-        if (p := str(it.get("parent", ""))) and p not in plan and p not in st.items
+        if (p := str(it.get("parent") or "")) and p not in plan and p not in live
     )
 
 
@@ -300,9 +303,16 @@ def _commit(log, cfg, plan, pid, waves, base) -> O.Outcome:
     with log.transaction():
         st = L._fold(log)
         live = set(PA.live_ids(st))
-        changed = _clashes(st, plan, pid) + [
-            d for i in plan for d in PA._list(plan[i], "needs") if d not in plan and d not in live
-        ]
+        changed = (
+            _clashes(st, plan, pid)
+            + _missing_parents(st, plan)
+            + [
+                d
+                for i in plan
+                for d in PA._list(plan[i], "needs")
+                if d not in plan and d not in live
+            ]
+        )
         if changed:
             return O.refused(
                 "plan.apply", f"the queue changed while applying: {', '.join(changed)}", **base
@@ -321,6 +331,14 @@ def plan_confirm(
     when nothing of the plan is waiting."""
     log, _cfg, st = _load(repo, agent)
     waiting = PA.proposed_by(st, plan_id)
+    if waiting and yes and reason.strip():
+        with log.transaction():
+            st = L._fold(log)  # decided under the lock: a second confirm finds nothing
+            waiting = PA.proposed_by(st, plan_id)
+            for iid in waiting:
+                log.append("item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {reason}"})
+        if waiting:
+            return O.ok("plan.confirm", plan=plan_id, released=waiting)
     if not waiting:
         return O.nothing(
             "plan.confirm", f"nothing proposed by plan {plan_id} is waiting", plan=plan_id
@@ -333,7 +351,4 @@ def plan_confirm(
             plan=plan_id,
             waiting=waiting,
         )
-    with log.transaction():
-        for iid in waiting:
-            log.append("item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {reason}"})
-    return O.ok("plan.confirm", plan=plan_id, released=waiting)
+    return O.nothing("plan.confirm", f"plan {plan_id} was confirmed meanwhile", plan=plan_id)

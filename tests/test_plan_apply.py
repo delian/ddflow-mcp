@@ -198,3 +198,32 @@ def test_a_refused_apply_carries_its_findings_as_data(repo, tmp_path):
 
     assert code == 1
     assert json.loads(out)["findings"][0]["kind"] == "no_acceptance"
+
+
+def test_apply_refuses_a_plan_item_that_duplicates_a_queued_task(repo, tmp_path, monkeypatch):
+    """The exemption of `_file` from the add-time check rests on this: apply runs the hunt."""
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "ask")
+    title = "Rotate the credentials of the staging database every thirty days"
+    body = "Rotation job for staging database credentials, thirty day interval, alert on failure."
+    run_cli(repo, "task", "add", "queued", "--title", title, "--body", body, "--new")
+    plan = _write(
+        tmp_path,
+        f'[dup]\ntitle = "{title}"\nbody = "{body}"\nglobs = ["src/rot.py"]\nacceptance = "ok"\n',
+    )
+
+    code, out, err = run_cli(repo, "plan", "apply", plan, "--apply", "--hash", "any")
+
+    assert code == 1, out + err
+    assert "duplicate" in out + err
+    assert run_cli(repo, "show", "dup")[0] != 0
+
+
+def test_a_parent_removed_from_the_queue_is_refused(repo, tmp_path):
+    run_cli(repo, "phase", "add", "PH", "--title", "gone")
+    run_cli(repo, "remove", "PH")
+    plan = _write(tmp_path, PLAN.replace("[a]\n", '[a]\nparent = "PH"\n'))
+
+    code, out, err = run_cli(repo, "plan", "apply", plan)
+
+    assert code == 1, out + err
+    assert "PH" in out + err
