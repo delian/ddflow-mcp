@@ -151,6 +151,14 @@ from .runner import (  # noqa: F401
     run_command_gate,
     run_log_writer,
 )
+from .running import (  # noqa: F401
+    Marker,
+    RunTerminated,
+    clear_started,
+    dead_runs,
+    mark_started,
+    terminating,
+)
 from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,
     Runner,
