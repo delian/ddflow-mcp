@@ -178,3 +178,35 @@ def test_an_automatic_merge_of_a_file_both_sides_changed_passes_by_default(mergi
     _merge_no_commit(merging)
     r = _git(merging, "commit", "-qm", "merge main")
     assert r.returncode == 0, r.stderr
+
+
+def _rival_holds(repo: Path, path: str) -> None:
+    run_cli(repo, "task", "add", "T2", "--globs", path)
+    assert A.claim(repo, "T2", no_worktree=True, agent="agent-rival").ok
+
+
+def test_a_conflict_resolution_in_a_file_the_branch_changed_is_not_blocked_by_a_rival_lease(
+    merging,
+):
+    """B01ce0f1283: another agent's live lease on a path the branch's own commits changed
+    must not stop the merge that brings main in from being concluded."""
+    (merging / "rival.py").write_text("feat\n")
+    _git(merging, "add", "rival.py")
+    assert _git(merging, "commit", "-qm", "feat rival", "--no-verify").returncode == 0
+    _main_moves(merging, {"rival.py": "main\n", "from_main.txt": "m\n"})
+    _rival_holds(merging, "rival.py")
+    _merge_no_commit(merging, conflict=True)
+    (merging / "rival.py").write_text("both\n")
+    _git(merging, "add", "rival.py")
+    r = _git(merging, "commit", "-qm", "merge main")
+    assert r.returncode == 0, r.stderr
+
+
+def test_a_rival_held_file_the_branch_never_changed_still_blocks_a_merge(merging):
+    _main_moves(merging, {"rival.py": "main\n"})
+    _rival_holds(merging, "rival.py")
+    _merge_no_commit(merging)
+    (merging / "rival.py").write_text("hand edit\n")
+    _git(merging, "add", "rival.py")
+    r = _git(merging, "commit", "-qm", "merge main")
+    assert r.returncode != 0 and "rival.py" in r.stderr, r.stderr
