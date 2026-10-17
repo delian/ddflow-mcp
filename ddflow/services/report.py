@@ -13,6 +13,7 @@ from typing import Any
 
 from ..core.records import State
 from ..infra import worktree as W
+from . import forbidden as FB
 from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
@@ -112,8 +113,6 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
 def _refusals(events, item_id: str, who: str) -> list[str]:
     """The commands the PreToolUse guard (`[hooks].forbidden_commands`) refused while the item
     was worked: ``who``'s, between the claim and the completion."""
-    from . import forbidden as FB
-
     start, end = _window(events, item_id, who)
     return [
         f"refused by the forbidden-commands hook: {ev.data.get('text', '')}"

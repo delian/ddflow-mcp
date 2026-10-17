@@ -28,6 +28,10 @@ from ddflow.services import launchers as LA
 
 CLAUDE = ".claude/settings.json"
 GEMINI = ".gemini/settings.json"
+GUARD = (
+    "commands an agent is told never to run (pkill, git stash, git push, force flags) are "
+    "refused before they run ([hooks].forbidden_commands)"
+)
 
 
 def _old_lines() -> dict[str, str]:
@@ -40,6 +44,10 @@ def _old_lines() -> dict[str, str]:
         + " || true",
         "prompt-claude": E.command_line(
             "hooks prompt", extra="", refresh="ddflow hooks install --claude"
+        )
+        + " || true",
+        "pre-tool": E.command_line(
+            "hooks run pre_tool --harness claude", refresh="ddflow hooks install --claude"
         )
         + " || true",
         "prompt-gemini": E.command_line(
@@ -66,6 +74,7 @@ def _expected_files() -> dict[str, dict]:
                 ],
                 "PreCompact": [{"hooks": [cmd(old["pre-compact"])]}],
                 "UserPromptSubmit": [{"hooks": [cmd(old["prompt-claude"])]}],
+                "PreToolUse": [{"matcher": "Bash", "hooks": [cmd(old["pre-tool"])]}],
             }
         },
         GEMINI: {"hooks": {"BeforeAgent": [{"hooks": [cmd(old["prompt-gemini"])]}]}},
@@ -107,6 +116,7 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         # Ba0febd9946: this line used to say "every operator prompt is recorded".
         f"added a PreCompact hook to {c}: the session's state is recorded before every compaction",
         f"added a UserPromptSubmit hook to {c}: every operator prompt is recorded",
+        f"added a PreToolUse hook to {c}: {GUARD}",
         f"added a BeforeAgent hook to {g}: every operator prompt is recorded",
     ]
     assert API.hooks(repo, action="install", claude=True, gemini=True).data["message"] == "\n".join(
@@ -117,6 +127,7 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         *([note] if note else []),
         f"the ddflow PreCompact hook is already in {c}",
         f"the ddflow UserPromptSubmit hook is already in {c}",
+        f"the ddflow PreToolUse hook is already in {c}",
         f"the ddflow BeforeAgent hook is already in {g}",
     ]
     assert API.hooks(repo, action="install", claude=True, gemini=True).data["message"] == "\n".join(
@@ -126,6 +137,7 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         f"removed the ddflow SessionStart hook from {c}",
         f"removed the ddflow PreCompact hook from {c}",
         f"removed the ddflow UserPromptSubmit hook from {c}",
+        f"removed the ddflow PreToolUse hook from {c}",
         f"removed the ddflow BeforeAgent hook from {g}",
     ]
     assert API.hooks(repo, action="uninstall", claude=True, gemini=True).data[
@@ -136,6 +148,7 @@ def test_install_and_uninstall_messages_are_pinned(repo: Path) -> None:
         f"no ddflow SessionStart hook in {c}",
         f"no ddflow PreCompact hook in {c}",
         f"no ddflow UserPromptSubmit hook in {c}",
+        f"no ddflow PreToolUse hook in {c}",
         f"no ddflow BeforeAgent hook in {g}",
     ]
     assert API.hooks(repo, action="uninstall", claude=True, gemini=True).data[
@@ -157,6 +170,8 @@ def test_status_lines_are_pinned(repo: Path) -> None:
         "Claude Code SessionStart hook: not installed (`ddflow hooks install --claude` puts "
         "the brief in every session)\n"
         "Claude Code PreCompact hook: not installed (`ddflow hooks install --claude`)\n"
+        "Claude Code PreToolUse hook: not installed (`ddflow hooks install --claude` refuses "
+        "pkill, git stash, git push and force flags before they run)\n"
         "prompt capture hook: Claude Code: not installed; Gemini CLI: not installed"
     ) in before
     API.hooks(repo, action="install", claude=True, gemini=True)
@@ -164,6 +179,7 @@ def test_status_lines_are_pinned(repo: Path) -> None:
     assert (
         "Claude Code SessionStart hook: installed\n"
         "Claude Code PreCompact hook: installed\n"
+        "Claude Code PreToolUse hook: installed\n"
         "prompt capture hook: Claude Code: installed; Gemini CLI: installed"
     ) in after.data["message"]
     assert after.data["session_hook"] is True
@@ -212,6 +228,7 @@ def test_the_table_names_every_harness_hook_once() -> None:
         ("claude", "session-start"),
         ("claude", "pre-compact"),
         ("claude", "prompt"),
+        ("claude", "pre-tool"),
         ("gemini", "prompt"),
     ]
     assert len({(h.file, h.event) for h in CH.HOOKS}) == len(CH.HOOKS)
