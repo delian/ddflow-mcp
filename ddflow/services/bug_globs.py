@@ -21,7 +21,7 @@ def bug_globs_of(state: State, item_id: str, cfg: Config | None = None) -> list[
     return out
 
 
-_EXTS = "py|md|toml|json|ya?ml|sh|txt|cfg|ini|js|ts|rs|go|c|h"
+_EXTS = "py|md|toml|json|ya?ml|sh|txt|cfg|conf|ini|lock|js|ts|rs|go|c|h|html|css|sql|xml|rb|java"
 _PATHISH = re.compile(
     rf"[\w.*-]+(?:/[\w*-]+)*/[\w*-]*(?:\*|\.[A-Za-z]\w{{0,4}}\b)[\w*-]*(?:\.[A-Za-z]\w*)*"
     rf"|[\w-]+\.(?:{_EXTS})\b"
@@ -41,7 +41,7 @@ def inherit_globs(source_globs: list[str], text: str) -> list[str]:
     """The source item's globs a fix task for a bug described by ``text`` inherits.
 
     Text naming no file inherits them all (the bug is in what the item touched). Text that
-    names files keeps only the source globs it names -- none, when it names others -- so a
+    names files (a known extension, or a path) keeps only the source globs it names -- none, when it names others -- so a
     bug found beside ``claim.py`` but about ``merge.py`` is not given ``claim.py``."""
     named = _PATHISH.findall(text)
     if not named:
