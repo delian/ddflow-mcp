@@ -86,7 +86,7 @@ class Report:
 
     @property
     def unavailable(self) -> list[PinState]:
-        return [p for p in self.pins if p.unavailable and not p.error]
+        return [p for p in self.pins if p.unavailable]
 
 
 def _argv(raw: object, label: str) -> tuple[str, ...]:
@@ -306,6 +306,7 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
     def checked(r: Recipe) -> bool:
         say(f"pins: {r.name}: checking")
         began = time.monotonic()
+        states[r.name].unavailable = ""  # what this check finds is what it finds
         c = _run(repo, r.check, r, limit, write=False, tick=tick)
         ok = c.error is None and c.returncode == 0
         st = states[r.name]
@@ -329,7 +330,7 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         elif st.unavailable:  # the re-check did not finish: nothing is known to be wrong
             st.stale, st.output = was
         else:
-            st.error = f"still stale after regeneration: {st.output}"
+            st.error, st.unavailable = f"still stale after regeneration: {st.output}", ""
         return ok
 
     workers, every = cfg.pins.parallel, cfg.pins.progress_s
@@ -349,6 +350,7 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
             say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
         elif done.error is not None or done.returncode != 0:
             states[r.name].error = f"regeneration failed: {_tail(done)}"
+            states[r.name].unavailable = ""
             say(f"pins: {r.name}: FAILED ({time.monotonic() - began:.0f}s)")
         else:
             say(f"pins: {r.name}: re-recorded ({time.monotonic() - began:.0f}s)")
