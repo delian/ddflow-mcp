@@ -1452,6 +1452,21 @@
   
   '''
 # ---
+# name: test_help[ddflow plan apply]
+  '''
+  usage: ddflow plan apply [-h] [--apply] [--hash HASH] [--plan-id PLAN_ID] source
+  
+  positional arguments:
+    source             the plan file, or - for stdin
+  
+  options:
+    -h, --help         show this help message and exit
+    --apply            File the plan (default: a dry run).
+    --hash HASH        The hash the dry run printed; a changed plan is refused.
+    --plan-id PLAN_ID  The plan's label (default: from the hash).
+  
+  '''
+# ---
 # name: test_help[ddflow plan check]
   '''
   usage: ddflow plan check [-h] source
@@ -1464,16 +1479,33 @@
   
   '''
 # ---
-# name: test_help[ddflow plan]
+# name: test_help[ddflow plan confirm]
   '''
-  usage: ddflow plan [-h] {check} ...
+  usage: ddflow plan confirm [-h] [--yes] [--reason REASON] plan_id
   
   positional arguments:
-    {check}
-      check     check a proposed plan before filing it (globs, cycles, collisions)
+    plan_id          The plan's label.
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
+    --yes            The operator's consent.
+    --reason REASON  Why the operator accepts the plan.
+  
+  '''
+# ---
+# name: test_help[ddflow plan]
+  '''
+  usage: ddflow plan [-h] {check,apply,confirm} ...
+  
+  positional arguments:
+    {check,apply,confirm}
+      check               check a proposed plan before filing it (globs, cycles, collisions)
+      apply               file a checked plan as PROPOSED tasks, in one step (dry run unless
+                          --apply)
+      confirm             the operator confirms a plan: its proposed tasks become ready
+  
+  options:
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -2840,7 +2872,9 @@
     'ddflow phase list',
     'ddflow pins',
     'ddflow plan',
+    'ddflow plan apply',
     'ddflow plan check',
+    'ddflow plan confirm',
     'ddflow pr',
     'ddflow pr status',
     'ddflow pr sync',

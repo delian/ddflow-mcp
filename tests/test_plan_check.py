@@ -184,3 +184,11 @@ def test_a_document_that_is_not_a_plan_is_refused_not_called_clean(repo, tmp_pat
     code, out, err = _plan_file(repo, tmp_path, "this is not TOML or JSON at all\n")
     assert code == 3, (out, err)
     assert "neither TOML nor JSON" in (out + err)
+
+
+def test_a_needs_naming_a_queued_item_is_not_unknown_when_the_queue_is_given():
+    """A plan filed into a queue depends on what is already there (`known`)."""
+    plan = {"a": _task(needs=["queued"], globs=["src/a.py"])}
+
+    assert _kinds(PC.check(plan)) == ["unknown_dep"]
+    assert PC.check(plan, known=["queued"]).findings == []

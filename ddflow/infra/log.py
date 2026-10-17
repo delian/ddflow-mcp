@@ -1051,6 +1051,25 @@ class EventLog:
                 payload.update(self._stamp_and_guard(kind))
             return self._write(kind, subject, payload, observed)
 
+    def append_many(self, items: Iterable[tuple[str, str, dict[str, Any]]]) -> list[Event]:
+        """Append several events as ONE unit: all of them, or (when one cannot be written)
+        none. The append lock is held throughout, so no other writer's event lands between
+        them; a failure truncates this shard back to where it was, so a reader never sees
+        half of a merge or a split."""
+        with self.transaction():
+            before = self.shard.stat().st_size if self.shard.exists() else 0
+            clock = self._lamport
+            out: list[Event] = []
+            try:
+                for kind, subject, data in items:
+                    out.append(self.append(kind, subject, data))
+            except BaseException:
+                if self.shard.exists():
+                    os.truncate(self.shard, before)
+                self._lamport = clock
+                raise
+            return out
+
     def _write(
         self, kind: str, subject: str, data: dict[str, Any], observed: Iterable[Event] = ()
     ) -> Event:
