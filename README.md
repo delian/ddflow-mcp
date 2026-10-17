@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=84ca7f1901ac -->
+<!-- ddflow:begin README/commands sha=3057c80ca5a7 -->
 <details><summary>All 78 commands</summary>
 
 | Command | What it does |
@@ -552,7 +552,7 @@ needs a line written by hand here.
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
 | `ddflow update` | change an item's fields |
-| `ddflow plan` | check a plan before filing it |
+| `ddflow plan` | check, file (proposed) and confirm a plan |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |

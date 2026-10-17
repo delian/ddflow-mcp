@@ -18,6 +18,6 @@ def register(s: argparse._SubParsersAction) -> None:
     add_commands(
         s,
         declared.COMMANDS,
-        groups={"plan": "check a plan before filing it"},
+        groups={"plan": "check, file (proposed) and confirm a plan"},
         executor=cliexec.handler,
     )
