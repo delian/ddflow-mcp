@@ -383,16 +383,43 @@ def _command_lines(lines: list[str]) -> set[int]:
         values = list(_command_values(read_precommit_yaml("\n".join(lines))))
     except UnreadableYaml:
         return {i for i, line in enumerate(lines) if _ENTRY_KEY.match(line)}
+    candidates = _command_candidates(lines)
     out: set[int] = set()
     at = 0
     for value in values:
         for piece in (v.strip() for v in value.splitlines()):
             if not piece:
                 continue
-            hit = next((i for i in range(at, len(lines)) if piece in lines[i]), None)
+            hit = next(
+                (i for i in range(at, len(lines)) if i in candidates and piece in lines[i]), None
+            )
             if hit is not None:
                 out.add(hit)
                 at = hit
+    return out
+
+
+_KEY_LINE = re.compile(r"^\s*(?:-\s+)*[A-Za-z_][\w-]*\s*:")
+_FLOW_COMMAND_KEY = re.compile(r"[{,]\s*(?:entry|args)\s*:")
+
+
+def _command_candidates(lines: list[str]) -> set[int]:
+    """The lines a command's text can sit on: one that opens an ``entry:``/``args:`` key,
+    a flow mapping carrying one, and what is folded or listed under such a key. A ``name:``
+    that quotes the command it runs is none of these."""
+    out: set[int] = set()
+    inside = False
+    for i, line in enumerate(lines):
+        if _ENTRY_KEY.match(line):
+            inside = True
+            out.add(i)
+        elif _FLOW_COMMAND_KEY.search(line):
+            inside = False
+            out.add(i)
+        elif _KEY_LINE.match(line):
+            inside = False
+        elif inside:
+            out.add(i)
     return out
 
 
