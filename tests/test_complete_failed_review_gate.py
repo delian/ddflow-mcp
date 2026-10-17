@@ -91,12 +91,12 @@ def test_a_delta_round_that_did_not_raise_the_finding_again_clears_it(repo, tmp_
     assert len(ev["delta_raised"]) == 1 and ev["findings"] == 2, ev
     t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="y.py is wrong")
     assert t.exit == 0, t.reason
-    code, text = _complete(repo)
+    _, text = _complete(repo)
     assert BLOCKER in text and "confirmed finding(s) #2 " in text, text
     # the second finding gets its own delta round that does not raise it
     _commit(repo, "y.py", "y = 1\n")
     api.review(repo, gate="critic", item="T1", branch="feat")
-    code, text = _complete(repo)
+    _, text = _complete(repo)
     assert BLOCKER not in text, text
 
 
@@ -148,3 +148,14 @@ def test_a_clearing_delta_before_a_full_round_that_raises_the_finding_again_clea
     out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)
     assert out.data["outcome"] == "failed", out.data
     assert BLOCKER in _complete(repo)[1]
+
+
+def test_a_missing_gate_definition_does_not_excuse_a_failed_built_in_review_gate(repo, tmp_path):
+    """rubber_duck's finding on the delta: no definitions supplied must not fail open."""
+    from ddflow.config import Config
+    from ddflow.services.gates import failed_review_blockers
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert failed_review_blockers(st, Config.load(repo), "T1", None), "fail-open without defs"
