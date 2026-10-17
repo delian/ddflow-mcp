@@ -42,8 +42,8 @@ from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
+from ..services.gates import failed_review as GO
 from ..services.gates import measured as R
-from ..services.gates import outcomes as GO
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
@@ -953,6 +953,28 @@ def _evidence_fields(
     return ev, None
 
 
+def _agent_skip_refusal(it, gdef, gate: str, item: str, agent: str) -> O.Outcome | None:
+    """D-failed-review-gate (B85841c0846): setting a FAILED review gate aside while its
+    confirmed findings were never re-reviewed is the operator's override. An agent
+    (`--agent`, DDFLOW_AGENT, a harness's shell) is refused; the person records the reason."""
+    if gdef is None or gdef.reviewer != "different_family":
+        return None
+    why = GO.unresolved_review_failure(it, gate)
+    marker = agent_marker(agent) if why else ""
+    if not marker:
+        return None
+    return O.refused(
+        "gate.record",
+        f"{gate} failed ({why}); skipping it past those findings is the operator's "
+        f"override, and this call is an agent's ({marker}). Fix and re-run "
+        f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
+        f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
+        id=item,
+        gate=gate,
+        outcome="",
+    )
+
+
 def record(
     repo: Path,
     item: str,
@@ -981,22 +1003,9 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    # D-failed-review-gate (B85841c0846): setting a FAILED review gate aside, while its
-    # confirmed findings were never re-reviewed, is the operator's override. An agent
-    # (`--agent`, DDFLOW_AGENT, a harness's shell) is refused; the person records the reason.
-    if skip and gdef is not None and gdef.reviewer == "different_family":
-        why = GO.unresolved_review_failure(it, gate)
-        if why and (marker := agent_marker(agent)):
-            return O.refused(
-                "gate.record",
-                f"{gate} failed ({why}); skipping it past those findings is the operator's "
-                f"override, and this call is an agent's ({marker}). Fix and re-run "
-                f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
-                f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
-                id=item,
-                gate=gate,
-                outcome="",
-            )
+    refused = _agent_skip_refusal(it, gdef, gate, item, agent) if skip else None
+    if refused is not None:
+        return refused
 
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
