@@ -20,7 +20,6 @@ Two rules here are worth reading before changing anything:
 
 from __future__ import annotations
 
-import contextlib
 import re
 import shlex
 from collections.abc import Callable
@@ -75,26 +74,30 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
         it = st.items.get(m.item)
         rec = it.gates.get(m.gate) if it else None
         newer = bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(m.at))
-        if it is not None and not it.removed and m.gate in known and not newer:
-            reason = (
-                f"the run of {m.gate} started {m.at} (pid {m.pid}) was killed before it "
-                f"recorded an outcome: its process is gone. Not a pass and not a failure; "
-                f"run `ddflow gate run {m.item} {m.gate}` again."
+        if it is None or it.removed or m.gate not in known or newer:
+            RUN.clear_started(m)  # nothing to record, now or ever
+            continue
+        reason = (
+            f"the run of {m.gate} started {m.at} (pid {m.pid}) was killed before it "
+            f"recorded an outcome: its process is gone. Not a pass and not a failure; "
+            f"run `ddflow gate run {m.item} {m.gate}` again."
+        )
+        try:
+            R.record_measured(
+                log,
+                cfg,
+                repo,
+                it,
+                m.gate,
+                "unavailable",
+                reason=reason,
+                evidence={"run_killed": True, "run_pid": m.pid, "run_started_at": m.at},
+                gates=known,
             )
-            with contextlib.suppress(ValueError):
-                R.record_measured(
-                    log,
-                    cfg,
-                    repo,
-                    it,
-                    m.gate,
-                    "unavailable",
-                    reason=reason,
-                    evidence={"run_killed": True, "run_pid": m.pid, "run_started_at": m.at},
-                    gates=known,
-                )
-                swept.append(f"{m.item}.{m.gate}")
+        except ValueError:
+            continue  # refused: the marker stays, so a later call tries again
         RUN.clear_started(m)
+        swept.append(f"{m.item}.{m.gate}")
     return swept
 
 
