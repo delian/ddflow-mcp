@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git as _git
@@ -22,11 +24,12 @@ from helpers import git as _git
 OK = 0
 
 
-def _probe(release: Path) -> str:
+def _probe(release: Path, began: Path) -> str:
     # Judges the tree it STARTS on: no b.py -> wait for `release`, then fail; b.py -> pass.
     code = (
         "import pathlib,sys,time; "
         "bad = not pathlib.Path('b.py').exists(); "
+        f"bad and pathlib.Path({str(began)!r}).write_text('x'); "
         f"r = pathlib.Path({str(release)!r}); "
         "[time.sleep(0.1) for _ in range(600) if bad and not r.exists()]; "
         "sys.exit(1 if bad else 0)"
@@ -34,10 +37,16 @@ def _probe(release: Path) -> str:
     return f'{sys.executable} -c "{code}"'
 
 
-def test_a_late_finishing_run_on_an_older_commit_does_not_overwrite_a_newer_pass(repo, tmp_path):
+@pytest.mark.parametrize("amend", [False, True], ids=["new-commit", "amended-commit"])
+def test_a_late_finishing_run_on_an_older_commit_does_not_overwrite_a_newer_pass(
+    repo, tmp_path, amend
+):
     release = tmp_path / "release"
+    began = tmp_path / "began"
     run_cli(repo, "init")
-    assert run_cli(repo, "config", "--set", "gate.unit_tests.command", _probe(release))[0] == OK
+    assert (
+        run_cli(repo, "config", "--set", "gate.unit_tests.command", _probe(release, began))[0] == OK
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = repo.parent / "agent-tree"
@@ -67,10 +76,13 @@ def test_a_late_finishing_run_on_an_older_commit_does_not_overwrite_a_newer_pass
         text=True,
         env=env,
     )
-    time.sleep(3)  # let it start on the commit without b.py
+    deadline = time.monotonic() + 120  # until its command has started on the commit without b.py
+    while not began.exists() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert began.exists()
     (tree / "b.py").write_text("b = 1\n")
     _git(tree, "add", "b.py")
-    _git(tree, "commit", "-qm", "b")
+    _git(tree, "commit", *(["--amend", "--no-edit", "-q"] if amend else ["-qm", "b"]))
     code, out, err = run_cli(tree, "--json", "gate", "run", "T1", "unit_tests")
     assert code == OK, out + err
     release.write_text("go")

@@ -59,6 +59,7 @@ from .evidence import (  # noqa: F401
     diff_stat,
     differing_paths,
     digest,
+    head_of,
     is_tree,
     normal_fingerprint,
     recorded_content,
