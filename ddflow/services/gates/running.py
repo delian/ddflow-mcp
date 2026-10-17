@@ -89,8 +89,8 @@ def _read(path: Path) -> Marker | None:
 
 def dead_runs(repo: Path, item: str = "") -> list[Marker]:
     """Markers (of ``item``, else every item) whose process no longer exists on this host.
-    One on another host, or whose pid now belongs to a different process, is not judged
-    from here: an unreadable marker is left alone."""
+    One on another host is not judged from here, nor is an unreadable one. A pid now
+    held by a different process (its start time differs) is dead for this run: swept."""
     root = Path(repo) / ".ddflow" / RUNS_DIR
     dirs = (
         [root / item]

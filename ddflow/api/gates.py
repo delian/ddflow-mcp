@@ -74,7 +74,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
         it = st.items.get(m.item)
         rec = it.gates.get(m.gate) if it else None
         newer = bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(m.at))
-        if it is None or it.removed or m.gate not in known or newer:
+        if it is None or it.removed or it.terminal or m.gate not in known or newer:
             RUN.clear_started(m)  # nothing to record, now or ever
             continue
         reason = (
@@ -594,6 +594,11 @@ def run(
             )
     except RUN.RunTerminated as stop:
         reason = f"the run was terminated by {stop.signame} before its command finished"
+        _log, _cfg, now = _load(repo, agent)
+        rec = now.items[item].gates.get(gate) if item in now.items else None
+        if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
+            # Something was recorded while the run lived: that stands, as in the sweep.
+            return O.nothing("gate.run", reason, gate=gate, outcome="", evidence={}, id=item)
         R.record_measured(
             log,
             cfg,
