@@ -31,6 +31,9 @@ from .gateenv import child_env
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
+#: What `merge_tree` says of a base that conflicts with the ref, and what `run` reads back to
+#: tell that FAILED from a merge git could not finish (UNAVAILABLE): one constant for both.
+NOT_MERGEABLE = "does not merge with"
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 
@@ -129,7 +132,7 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
                 yield None, f"could not merge {base} into {ref}: {m.err or m.out}"[-400:]
                 return
             if not m.ok:
-                yield None, f"{ref} does not merge with {base}: {(m.out or m.err)[-400:]}"
+                yield None, f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
                 return
         yield tree, ""
 
@@ -201,7 +204,7 @@ def run(
         return refused
     with merge_tree(repo, sha, base) as (tree, failure):
         if tree is None:
-            status = "failed" if "does not merge" in failure else "unavailable"
+            status = "failed" if NOT_MERGEABLE in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         scope = None
