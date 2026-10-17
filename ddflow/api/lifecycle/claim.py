@@ -461,8 +461,10 @@ def _create_tree(
                 return O.refused(
                     "item.claimed",
                     f"{wt.path} already exists with {there} checked out, which "
-                    f"does not carry {wt.branch}. It is not {item}'s tree; remove it "
-                    f"(`git worktree remove {wt.path}`), then `ddflow claim {item}` again.",
+                    f"does not carry {wt.branch}. It is not {item}'s tree. Inspect it "
+                    f"first: `git -C {wt.path} status`. If it is yours to discard, "
+                    f"`git worktree remove {wt.path}`, then `ddflow claim {item}` again; "
+                    f"otherwise claim from a tree of your own.",
                     id=item,
                     path=str(wt.path),
                 )
