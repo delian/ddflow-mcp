@@ -2227,38 +2227,41 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --needs NEEDS
-    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
-                         to add more -- every value is kept
+    --globs GLOBS         path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                          to add more -- every value is kept
     --tags TAGS
     --body BODY
+    --resources RESOURCES
+                          physical resources the work RUNS on, as `ddflow update --resources` takes
+                          them: 'gpu:4,vllm-fleet'
     --priority PRIORITY
-    --line LINE          release line (default: the current one)
-    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
-                         change it with `ddflow update`
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
-                         unclaimed, else filed as a new record linked to it
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
-    --phase PHASE        owning phase
-    --parent PARENT      owning phase OR task — a task parent makes this a SUB-TASK, which carries
-                         its own globs and dependencies like any other task
-    --lines LINES        a FIX for several release lines, e.g. 1,2,3: written where
-                         [flow].port_strategy says, with a port task <id>@<line> generated for each
-                         other line
-    --port-of PORT_OF    a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its own
-                         ports carry what this one lands
+    --line LINE           release line (default: the current one)
+    --readd               file a REMOVED item's id again. An id still in the queue is always
+                          refused: change it with `ddflow update`
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
+    --phase PHASE         owning phase
+    --parent PARENT       owning phase OR task — a task parent makes this a SUB-TASK, which carries
+                          its own globs and dependencies like any other task
+    --lines LINES         a FIX for several release lines, e.g. 1,2,3: written where
+                          [flow].port_strategy says, with a port task <id>@<line> generated for each
+                          other line
+    --port-of PORT_OF     a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its
+                          own ports carry what this one lands
   
   '''
 # ---
