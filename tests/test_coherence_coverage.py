@@ -174,6 +174,8 @@ EXEMPT: dict[str, str] = {
 #: `items.resolve` writes `<kind>.added` through a computed kind (re-recording the rival
 #: add a contest kept), so it is not a literal and not listed.
 WRITERS_EXEMPT: dict[str, str] = {
+    "api/plan.py:_file": "plan apply files a plan `plan check` already ran the duplicate hunt "
+    "over, as PROPOSED tasks the operator confirms",
     "api/items.py:split": "the parts of an item being split: their text is the parent's, "
     "which every part would match",
     "api/items.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",

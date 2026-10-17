@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/implement-phase ddflow=0.2.1 fmt=1 sha=144c7d9e11d2 -->
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=75274d338a7d -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -74,6 +74,14 @@ Rules that make this worth doing:
 - **A rejection is as valuable as an adoption.** "We evaluated X and rejected it, here
   is the measurement" stops the next session re-researching it.
 - A pass with zero CONFIRMED/REFUTED labels is a literature summary. Label it one.
+
+**Before filing a phase's tasks, write the plan down and run `ddflow plan check <file>`.**
+It flags a wildcard-directory glob, a cycle, an unknown `needs`, two tasks that can run
+together whose globs collide, and a task with no acceptance (exit 1 with the findings; fix
+the plan, not the check). Then `ddflow plan apply <file>` is a dry run; with `--apply
+--hash <the hash it printed>` it files the tasks as PROPOSED, labelled `plan:<id>`, and the
+operator releases them with `ddflow plan confirm <id> --yes --reason ...`. An agent runs
+only the dry run.
 
 ---
 
