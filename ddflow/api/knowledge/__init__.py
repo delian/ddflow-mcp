@@ -21,7 +21,14 @@ exists because the record is worthless without it:
 
 from __future__ import annotations
 
-from .bug_close import NOTHING_TO_REMOVE, STILL_QUEUED, bug_fixed, bug_invalid  # noqa: F401
+from .bug_close import (  # noqa: F401
+    NOTHING_TO_REMOVE,
+    STILL_QUEUED,
+    bug_fixed,
+    bug_invalid,
+    could_not_run_text,
+)
+from .bug_repro import repro_lead  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,
     BUG_SCOPES,

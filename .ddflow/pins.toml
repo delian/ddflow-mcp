@@ -1,15 +1,19 @@
 # Pin recipes (DX-pins-regenerate): `ddflow pins regenerate [--check] [--only NAME]`.
 # `check` exits 0 when the pin is current; `regen` re-records only what differs.
 # A new kind of pin is a new [[pin]] table. Never under xdist.
+# `after_merge = false`: the post-merge hook does not run this recipe (it runs a test suite;
+# a merge must not wait for one). `ddflow pins regenerate` still does.
 
 [[pin]]
 name = "golden-snapshots"
+after_merge = false
 files = ["tests/golden/__snapshots__/"]
 check = ["{python}", "-m", "pytest", "tests/golden", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "pytest", "tests/golden", "-q", "-p", "no:xdist", "-p", "no:cacheprovider", "--snapshot-update"]
 
 [[pin]]
 name = "result-schemas"
+after_merge = false
 files = ["tests/golden/json/result_schemas.json"]
 check = ["{python}", "-m", "pytest", "tests/test_compat_json.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "pytest", "tests/test_compat_json.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
@@ -17,6 +21,7 @@ env = { DDFLOW_UPDATE_GOLDEN = "1" }
 
 [[pin]]
 name = "setup-ops-transcript"
+after_merge = false
 files = ["tests/test_uc_surf_setup_ops_transcript.json"]
 check = ["{python}", "-m", "pytest", "tests/test_uc_surf_setup_ops_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "pytest", "tests/test_uc_surf_setup_ops_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
@@ -33,3 +38,23 @@ name = "readme-toc"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_toc.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "ddflow.views.readme_toc", "README.md"]
+
+[[pin]]
+name = "readme-tool-table"
+files = ["README.md"]
+check = ["{python}", "-m", "pytest", "tests/test_readme_tool_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "ddflow.surfaces.tool_table", "README.md"]
+
+[[pin]]
+name = "loop-transcript"
+after_merge = false
+files = ["tests/test_uc_surf_loop_transcript.json"]
+check = ["{python}", "-m", "pytest", "tests/test_uc_surf_loop_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "pytest", "tests/test_uc_surf_loop_transcript.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+env = { DDFLOW_UPDATE_GOLDEN = "1" }
+
+[[pin]]
+name = "readme-commands"
+files = ["README.md"]
+check = ["{python}", "-m", "pytest", "tests/test_readme_command_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "ddflow.surfaces.command_table", "README.md", "--force"]

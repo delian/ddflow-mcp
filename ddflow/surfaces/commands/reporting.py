@@ -220,6 +220,9 @@ def cmd_show(a, c: Ctx) -> int:
     if "bug" in out.data["_render"]:
         print(_bug_lines(out.data["_render"]["bug"]))
         return OK
+    if "research" in out.data["_render"]:
+        print(_research_lines(out.data["_render"]["research"]))
+        return OK
     it = out.data["_render"]["item"]
     print(f"{it.id} [{it.kind}] {it.title}\n  state {it.state}")
     if it.needs:
@@ -320,6 +323,23 @@ def _bug_closure(b: dict) -> list[str]:
     return lines
 
 
+def _research_lines(r: dict) -> str:
+    """`show`'s answer for a research note id: its question, claim and verdict, then the
+    notes filed against it."""
+    lines = [f"{r['id']} [research] {r['verdict']}", f"  filed {r['at']}"]
+    if r.get("item"):
+        lines.append(f"  on {r['item']}")
+    if r.get("tags"):
+        lines.append(f"  tags {', '.join(r['tags'])}")
+    for key in ("question", "claim", "mechanism", "falsifier", "probe", "probe_output"):
+        if r.get(key):
+            lines += ["", f"{key.replace('_', ' ')}: {r[key]}"]
+    if r.get("sources"):
+        lines += ["", f"sources: {', '.join(r['sources'])}"]
+    lines += addenda_lines(r)
+    return "\n".join(lines)
+
+
 def _bug_lines(b: dict) -> str:
     """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
     how it was closed."""
@@ -327,6 +347,8 @@ def _bug_lines(b: dict) -> str:
     if b["lesson"]:
         lines.append(f"  lesson {b['lesson']}")
     lines += ["", b["summary"]]
+    if b.get("repro_text"):
+        lines += ["", b["repro_text"]]
     lines += addenda_lines(b)
     return "\n".join(lines)
 

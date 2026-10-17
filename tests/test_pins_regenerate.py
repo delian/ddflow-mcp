@@ -149,3 +149,133 @@ def test_check_never_re_records_even_when_the_recipe_sets_env(repo: Path):
     )
     ddflow_cli(repo, "pins", "regenerate", "--check")
     assert (repo / "e.txt").read_text() == ""
+
+
+MIXED_GEN = """\
+import sys
+from pathlib import Path
+
+knobs = sorted(Path("knobs.txt").read_text().split())
+block = "<!-- ddflow:begin doc/knobs sha=x -->\\n" + "".join(f"- {k}\\n" for k in knobs)
+block += "<!-- ddflow:end doc/knobs -->"
+doc = Path("doc.md")
+text = doc.read_text()
+head, rest = text.split("<!-- ddflow:begin doc/knobs", 1)
+tail = rest.split("<!-- ddflow:end doc/knobs -->", 1)[1]
+want = head + block + tail
+if "--check" in sys.argv:
+    sys.exit(0 if want == text else 1)
+doc.write_text(want)
+"""
+
+PROSE = "Intro line.\n\n<!-- ddflow:begin doc/knobs sha=x -->\n- a\n<!-- ddflow:end doc/knobs -->\n\nMiddle one.\n\nMiddle two.\n\nOutro line.\n"
+
+
+@pytest.fixture
+def mixed(repo: Path) -> Path:
+    (repo / "mixed_gen.py").write_text(MIXED_GEN)
+    (repo / "doc.md").write_text(PROSE)
+    with (repo / ".ddflow" / "pins.toml").open("a") as f:
+        f.write(
+            '\n[[pin]]\nname = "mixed"\nfiles = ["doc.md"]\n'
+            'check = ["{python}", "mixed_gen.py", "--check"]\nregen = ["{python}", "mixed_gen.py"]\n'
+        )
+    assert ddflow_cli(repo, "pins", "regenerate", "--install").returncode == 0
+    (repo / ".gitattributes").write_text(
+        (repo / ".gitattributes").read_text() + "knobs.txt merge=union\n"
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "mixed")
+    return repo
+
+
+def edit_branch(repo: Path, name: str, *, prose: dict[str, str], knob: str = "") -> None:
+    git(repo, "checkout", "-q", "-b", name, "main")
+    text = (repo / "doc.md").read_text()
+    for old, new in prose.items():
+        text = text.replace(old, new)
+    (repo / "doc.md").write_text(text)
+    if knob:
+        (repo / "knobs.txt").write_text(f"a\n{knob}\n")
+    ddflow_cli(repo, "pins", "regenerate")
+    git(repo, "commit", "-qam", name)
+
+
+def merge(repo: Path, other: str) -> subprocess.CompletedProcess:
+    env = {**os.environ, "PYTHONPATH": SRC}
+    env.pop("PYTEST_XDIST_WORKER", None)
+    return subprocess.run(
+        ["git", "-C", str(repo), "merge", "--no-edit", other],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_the_other_sides_prose_edit_survives_in_a_mixed_pin_file(mixed: Path):
+    edit_branch(mixed, "one", prose={}, knob="b")
+    git(mixed, "checkout", "-q", "main")
+    edit_branch(mixed, "two", prose={"Outro line.": "Outro, reworded."}, knob="c")
+    git(mixed, "checkout", "-q", "one")
+    done = merge(mixed, "two")
+    assert done.returncode == 0, done.stdout + done.stderr
+    text = (mixed / "doc.md").read_text()
+    assert "Outro, reworded." in text
+    assert "- b\n" in text and "- c\n" in text  # the generated block is regenerated
+    assert ddflow_cli(mixed, "pins", "regenerate", "--check").returncode == 0
+
+
+def test_prose_edited_in_different_places_by_both_sides_merges(mixed: Path):
+    edit_branch(mixed, "one", prose={"Intro line.": "Intro, reworded."}, knob="b")
+    git(mixed, "checkout", "-q", "main")
+    edit_branch(mixed, "two", prose={"Outro line.": "Outro, reworded."})
+    git(mixed, "checkout", "-q", "one")
+    done = merge(mixed, "two")
+    assert done.returncode == 0, done.stdout + done.stderr
+    text = (mixed / "doc.md").read_text()
+    assert "Intro, reworded." in text and "Outro, reworded." in text
+    assert "- b\n" in text
+
+
+def test_a_prose_conflict_stays_a_conflict(mixed: Path):
+    edit_branch(mixed, "one", prose={"Middle one.": "Mine."})
+    git(mixed, "checkout", "-q", "main")
+    edit_branch(mixed, "two", prose={"Middle one.": "Theirs."})
+    git(mixed, "checkout", "-q", "one")
+    done = merge(mixed, "two")
+    assert done.returncode != 0
+    text = (mixed / "doc.md").read_text()
+    assert "<<<<<<<" in text and "Mine." in text and "Theirs." in text
+    assert "<<<ddflow-generated" not in text  # the placeholder never leaks
+
+
+def test_generated_regions_are_regenerated_not_blended(mixed: Path):
+    edit_branch(mixed, "one", prose={}, knob="b")
+    git(mixed, "checkout", "-q", "main")
+    edit_branch(mixed, "two", prose={"Middle two.": "Second."}, knob="c")
+    git(mixed, "checkout", "-q", "one")
+    (mixed / "knobs.txt").write_text("a\nb\nc\n")  # what the union of the sources comes to
+    git(mixed, "commit", "-qam", "both knobs")
+    done = merge(mixed, "two")
+    assert done.returncode == 0, done.stdout + done.stderr
+    text = (mixed / "doc.md").read_text()
+    assert "- a\n- b\n- c\n" in text and "Second." in text
+    assert git(mixed, "status", "--porcelain").strip() == ""
+
+
+def test_text_that_is_not_utf8_still_merges_and_conflicts_are_kept():
+    from ddflow.services.pins_text import merge_pin_text
+
+    base = b"one\ntwo\n\xe9\nthree\n"
+    out, bad = merge_pin_text(base.replace(b"one", b"ONE"), base, base.replace(b"three", b"3"))
+    assert out == b"ONE\ntwo\n\xe9\n3\n" and not bad
+    out, bad = merge_pin_text(base.replace(b"two", b"a"), base, base.replace(b"two", b"b"))
+    assert bad and b"<<<<<<<" in out
+
+
+def test_binary_pin_content_keeps_our_side_without_a_conflict():
+    from ddflow.services.pins_text import merge_pin_text
+
+    base = b"a\x00\xff\nline2\n"
+    out, bad = merge_pin_text(base.replace(b"a", b"A"), base, base.replace(b"line2", b"B"))
+    assert out == base.replace(b"a", b"A") and not bad

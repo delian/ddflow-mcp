@@ -8,10 +8,12 @@ import os
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
+from ..services import ci_marker as CM
 from ._base import _load
-from .ci import status
+from .ci import lease_tick, status
 from .gates import Evidence, record
 
 #: Set by `gate run` in the environment of the command it runs: the gate that will record
@@ -53,7 +55,10 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
         outcome=outcome,
         reason="" if outcome == "passed" else res.reason or f"ci {outcome}",
         evidence=Evidence(
-            note=note, command=res.command, exit_code={"passed": 0, "failed": 1}.get(res.status, 2)
+            note=note,
+            command=res.command,
+            exit_code={"passed": 0, "failed": 1}.get(res.status, 2),
+            ci_scope=res.scope or None,
         ),
         agent=agent,
         called_from=called_from,
@@ -69,20 +74,34 @@ def run(
     command: str = "",
     agent: str = "",
     called_from: Path | None = None,
+    timeout_s: int = 0,
+    log_to: Path | None = None,
+    full: bool = False,
 ) -> O.Outcome:
     """Run the CI command on `ref` merged with `base`. 0 passed, 1 failed, 2 could not run.
 
     Run for an item (its id as the ref, or from the worktree of a live item) it records the
     item's `ci` gate with the commit it ran against, as `gate run <id> ci` does -- unless it
-    is being run BY that gate, which records the outcome itself."""
-    _log, cfg, st = _load(repo, agent)
+    is being run BY that gate, which records the outcome itself. ``log_to`` receives the whole
+    output of the command (the integrator keeps it for a parked entry). An item's run takes
+    only the tests its change reaches (`[ci].tests_scope`, D-test-economy-r2); ``full`` (the
+    integrator's batch, `--full`) takes the whole suite, and so does a ref that is no item."""
+    log, cfg, st = _load(repo, agent)
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
     if ref in st.items and st.items[ref].branch:  # an item id names its branch
         ref = st.items[ref].branch
-    res = CI.run(repo, cfg, ref=ref, base=base, command=command)
+    res = CI.run(
+        repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
+        for_item=bool(item), full=full, tick=lease_tick(log, cfg, st, item),
+    )  # fmt: skip
     data = res.as_data()
+    if res.scope:
+        data["scope_line"] = CM.marker_line(res.scope)
+    if log_to is not None and not res.ok:  # a pass keeps no log
+        log_to.parent.mkdir(parents=True, exist_ok=True)
+        fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
     if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
         why = _record_gate(repo, item, res, agent, called_from)
         data["recorded"] = {
@@ -107,6 +126,7 @@ def ci_tool(
     command: str = "",
     agent: str = "",
     called_from: Path | None = None,
+    full: bool = False,
 ) -> O.Outcome:
     """The `ddflow_ci` tool: action run | status."""
     if action == "run":
@@ -117,6 +137,7 @@ def ci_tool(
             command=command,
             agent=agent,
             called_from=called_from,
+            full=full,
         )
     if action == "status":
         if base or command or (ref and ref != "HEAD"):

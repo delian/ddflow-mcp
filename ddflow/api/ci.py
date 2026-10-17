@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from ..core import outcome as O
 from ..services import ci as CI
+from ..services import leasekeep as LK
 from ._base import _load
 from ._dedupe import Answer
 from .knowledge import bug_found
@@ -23,6 +25,14 @@ def _record(log, stage: str, res: CI.Result, subject: str = "ci") -> None:
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail[:300]} for c in res.checks],
         },
     )
+
+
+def lease_tick(log, cfg, st, item: str) -> tuple[Callable[[], None], float] | None:
+    """``tick`` for `CI.run`: renews the caller's own lease on ``item`` every
+    `[lease].heartbeat_s` while the command runs (DX-long-op-renew). None when it holds none."""
+    every = float(max(1, cfg.lease.heartbeat_s))
+    tick = LK.ticker(log, cfg, st.items.get(item), every) if item else None
+    return (tick, every) if tick else None
 
 
 def file_failures(
@@ -60,11 +70,14 @@ def file_failures(
     return filed, fixes
 
 
-def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str = "") -> dict:
+def check_after_merge(
+    repo: Path, *, sha: str = "", item: str = "", agent: str = "", since: str = ""
+) -> dict:
     """`[ci].on_merge`: run the CI command on the base a merge just landed on, record the
     result and file the failures. Never raises into the merge: it already landed.
-    Returns what to say about it ({} when nothing ran)."""
-    log, cfg, _st = _load(repo, agent)
+    Returns what to say about it ({} when nothing ran). ``since`` is the base the merge started
+    from: the tripwire hooks run on that range, not over every file."""
+    log, cfg, st = _load(repo, agent)
     mode = cfg.ci.on_merge
     if mode == "off":
         return {}
@@ -74,7 +87,10 @@ def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str =
     cmd, _why = CI.main_command(repo, cfg)
     if not cmd:
         return {}  # no CI command in this project: nothing to check, nothing to claim
-    res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd)
+    res = CI.run(
+        repo, cfg, ref=sha or "HEAD", command=cmd, changed_from=since,
+        tick=lease_tick(log, cfg, st, item),
+    )  # fmt: skip
     _record(log, "merge", res, item or "ci")
     filed, fixes = (
         ([], {}) if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)

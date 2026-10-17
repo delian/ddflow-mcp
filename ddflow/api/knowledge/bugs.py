@@ -13,6 +13,8 @@ from ...core import outcome as O
 from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
+from ...services import reprobundle as RB
+from ...services.bug_globs import inherit_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
@@ -49,6 +51,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     no_task: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
+    test: str = "",
+    repro_cmd: str = "",
+    repro_capture: str = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
     says what it is; a bug a task will fix is filed against it (``item``), which answers
@@ -64,7 +69,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    bad = _bug_fields_problem(scope, severity, globs)
+    bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
     log, cfg, st = _load(repo, agent)
@@ -85,6 +90,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
     # id) does not turn it back to `project`; `--scope project` says it and does.
     extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
+    if globs:
+        extra["globs"] = GS.parse(globs)
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
@@ -96,6 +103,10 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
             out = DD.extend(log, cfg, chk, "bug.found")
         offer = upstream_offer(scope or (held.scope if held else "project"), target)
         return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
+    repro = RB.attach(
+        repo, cfg, st, log, bid, item=item, agent=agent, test=test, repro_cmd=repro_cmd,
+        capture=repro_capture,
+    )  # fmt: skip
     prior = st.bugs.get(bid)
     # The bug's own event names its fix task, and is written FIRST: the lock is no
     # rollback (each append is durable on its own), so the order decides what a crash
@@ -127,6 +138,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
                 "summary": summary,
                 **extra,
                 **linked,
+                **repro,
                 **IDS.key_field(minted),
                 **chk.fields,
             },
@@ -145,6 +157,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     more: dict[str, Any] = {"offer": offer} if offer else {}
     more["fix_task"] = fix["fix_task"] or (prior.fix_task if prior else "")
     more["fix_task_filed"] = fix["filed"]
+    more["repro"] = repro.get("repro", {})
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
     return O.ok("bug.found", id=bid, **more, **chk.data())
@@ -163,7 +176,7 @@ def _fix_task_of(st, cfg, item: str):
     phase -- names where to look, and gets a task of its own."""
 
     it = st.items.get(item) if item else None
-    if it is None or it.removed or it.kind != "task" or it.terminal:
+    if it is None or it.removed or not it.is_work or it.terminal:
         return None
     return it if branch_kind(it, cfg) != FEATURE else None
 
@@ -281,10 +294,13 @@ def _file_fix_task(
         parent=parent,
         title=full_title,
         needs=[],
-        globs=GS.parse(globs) if globs else list(src.globs if src else []),
+        globs=GS.parse(globs) if globs else inherit_globs(src.globs if src else [], summary),
         body=body,
         tags=[tag],
-        priority=src.priority if src else DEFAULT_PRIORITY,
+        # the item's own priority when it set one; the bug band when it sits at the generic default
+        priority=src.priority
+        if src and src.priority != DEFAULT_PRIORITY
+        else cfg.schedule.bug_priority,
         line=src.line if src else "",
         extra={"fixes": [bug_id]},
     )
@@ -349,7 +365,14 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
                     tasks[b.id] = _fix_task_id(st, cfg, b.id, b.item)
                 continue
             fix = _file_fix_task(
-                log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item, globs=""
+                log,
+                cfg,
+                st,
+                b.id,
+                title=b.title,
+                summary=b.summary,
+                item=b.item,
+                globs=",".join(b.globs),
             )
             # A partial `bug.found` carries the link: the fold merges and never blanks
             # (`_h_bug_found`), and an older ddflow folds it as the record it already has.

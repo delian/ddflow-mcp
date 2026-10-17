@@ -22,7 +22,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -58,7 +58,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -90,7 +90,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -114,7 +114,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -124,7 +124,7 @@
     'ddflow_brief': '''
       {
        "name": "ddflow_brief",
-       "description": "START HERE every session. Returns a budgeted pack: work recoverable after a crash, the current item, what is ready to start now, why everything else is blocked, and the past lessons ranked as relevant to this task. Use this INSTEAD of reading the project's lesson or rule files — it is the same information retrieved for the task at hand, at a fraction of the tokens.",
+       "description": "START HERE every session. Returns a budgeted pack: work recoverable after a crash, the current item, what is ready to start now, why everything else is blocked, and the past lessons ranked as relevant to this task. Use this INSTEAD of reading the project's lesson or rule files: the same information, ranked for the task at hand, at a fraction of the tokens.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -138,11 +138,15 @@
          },
          "check_recovery": {
           "type": "boolean",
-          "description": "Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new."
+          "description": "Scan for crashed agents' worktrees and lead with them: know it BEFORE new work."
+         },
+         "for_agent": {
+          "type": "string",
+          "description": "Render this subagent's launch brief for item."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -162,7 +166,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -172,7 +176,7 @@
     'ddflow_bug_fixed': '''
       {
        "name": "ddflow_bug_fixed",
-       "description": "Close a bug. Requires the name of the regression test that would catch it again — write the test, watch it FAIL against the unfixed code, then close.",
+       "description": "Close a bug. Requires the regression test that would catch it again: write it, watch it FAIL against the unfixed code, then close.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -182,11 +186,11 @@
          },
          "regression_test": {
           "type": "string",
-          "description": "Test that now guards this. Several: separate them with ',' or ';', or pass regression_tests."
+          "description": "Test that now guards this. Several: separate with ',' or ';'."
          },
          "regression_tests": {
           "type": "array",
-          "description": "The tests that now guard this, one per element -- the list form of regression_test. One of the two is required.",
+          "description": "The tests guarding this, one per element: the list form of regression_test.",
           "items": {
            "type": "string"
           }
@@ -197,11 +201,11 @@
          },
          "lesson_rule": {
           "type": "string",
-          "description": "The lesson in full — the transferable rule, not the incident. A future agent on a different task has to be able to apply it."
+          "description": "The lesson in full: the transferable rule, not the incident."
          },
          "lesson": {
           "type": "string",
-          "description": "Id of an EXISTING lesson this bug belongs to."
+          "description": "Id of an existing lesson this bug belongs to."
          },
          "changelog": {
           "type": "string",
@@ -209,15 +213,19 @@
          },
          "skip_regression_verify": {
           "type": "boolean",
-          "description": "Do NOT run the named test on the pre-fix tree (default false: it is run and must FAIL there, PASS with the fix). Needs verify_reason."
+          "description": "Skip the pre-fix check (the test must FAIL pre-fix, PASS fixed). Needs verify_reason."
          },
          "verify_reason": {
           "type": "string",
-          "description": "Why the pre-fix regression check is skipped (recorded). Required when skip_regression_verify is true."
+          "description": "Why the pre-fix check is skipped (recorded); required with skip_regression_verify."
+         },
+         "mutation": {
+          "type": "string",
+          "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -268,15 +276,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -311,7 +319,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -339,7 +347,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -349,7 +357,7 @@
     'ddflow_ci': '''
       {
        "name": "ddflow_ci",
-       "description": "CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status).",
+       "description": "CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -369,9 +377,13 @@
           "type": "string",
           "description": "Override [ci].command (run)."
          },
+         "full": {
+          "type": "boolean",
+          "description": "Whole suite (run)."
+         },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -419,7 +431,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -442,7 +454,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -462,7 +474,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -490,7 +502,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -510,7 +522,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -520,7 +532,7 @@
     'ddflow_complete': '''
       {
        "name": "ddflow_complete",
-       "description": "Finish an item. Refuses (exit 3) when a required gate has not passed, when a phase still has open tasks, or when no reviewer came from a different model family than the author. Pass your own model as 'model'.",
+       "description": "Finish an item. Refuses (exit 3) when a required gate has not passed, a phase has open tasks, or no reviewer came from a different model family than the author. Pass your own 'model'.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -542,15 +554,19 @@
          },
          "regression_test": {
           "type": "string",
-          "description": "For a fix task: the test that now guards its bug(s); closes them."
+          "description": "Fix task: the test guarding its bug(s); closes them."
+         },
+         "mutation": {
+          "type": "string",
+          "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
          },
          "force": {
           "type": "boolean",
-          "description": "Complete over unmet conditions; each is recorded as overridden, forever. Prefer `ddflow_gate_skip` with a reason: it drops one named step."
+          "description": "Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -589,7 +605,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -657,15 +673,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -689,7 +705,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -720,7 +736,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -740,7 +756,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -771,7 +787,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -799,7 +815,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -815,7 +831,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -847,7 +863,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -931,7 +947,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -947,7 +963,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -975,7 +991,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -995,7 +1011,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1019,7 +1035,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1079,7 +1095,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1108,7 +1124,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1140,7 +1156,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1165,7 +1181,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1192,7 +1208,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1206,21 +1222,17 @@
     'ddflow_health': '''
       {
        "name": "ddflow_health",
-       "description": "The watchdog. Inspects every lane for STALLED (current lease, no progress), LOCKED (in a wait cycle, or waiting on a stalled lane), CRASHED (lease expired over work) and RUNAWAY (a job running past [health].runaway_s), each with evidence and the command that corrects it. run=true is the periodic pass: it also makes the corrections [health].mode allows (off | propose | apply; apply breaks a stalled contended lease, adds auto-order needs edges, records a crashed lane recoverable) and records the run for `cadence`. It never kills a process or deletes work.",
+       "description": "Watchdog: stalled, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "run": {
           "type": "boolean",
-          "description": "Also make the corrections [health].mode allows and record the pass."
-         },
-         "mode": {
-          "type": "string",
-          "description": "Override [health].mode for this call: off, propose or apply."
+          "description": "Correct per mode."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1240,12 +1252,9 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
-        "required": [
-         "id"
-        ],
         "additionalProperties": false
        }
       }
@@ -1263,7 +1272,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1303,7 +1312,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1327,7 +1336,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1371,7 +1380,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1387,7 +1396,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1419,7 +1428,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1455,7 +1464,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1482,7 +1491,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1514,7 +1523,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1542,7 +1551,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1602,15 +1611,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1637,7 +1646,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1656,7 +1665,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1688,7 +1697,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1765,7 +1774,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1784,7 +1793,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1812,15 +1821,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1847,7 +1856,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1879,7 +1888,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1901,29 +1910,33 @@
           "type": "string",
           "description": "Merge commit message."
          },
+         "queue": {
+          "type": "boolean",
+          "description": "Enqueue (ddflow_queue add) instead of landing."
+         },
          "keep": {
           "type": "boolean",
           "description": "Keep the worktree after merging, for inspection."
          },
          "model": {
           "type": "string",
-          "description": "The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then."
+          "description": "The AUTHOR's model. In PR mode the item completes at `ddflow_pr_sync`, which needs it for reviewer independence."
          },
          "allow_dirty": {
           "type": "boolean",
-          "description": "Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output."
+          "description": "Merge although the worktree is dirty; uncommitted changes are NOT included. Only once you know it is build output."
          },
          "allow_empty": {
           "type": "boolean",
-          "description": "Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree)."
+          "description": "Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree)."
          },
          "branch": {
           "type": "string",
-          "description": "For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs."
+          "description": "no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -1962,7 +1975,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -1986,7 +1999,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2017,7 +2030,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2069,15 +2082,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2104,7 +2117,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2118,7 +2131,7 @@
     'ddflow_pins': '''
       {
        "name": "ddflow_pins",
-       "description": "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1).",
+       "description": "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2156,7 +2169,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2175,7 +2188,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2195,7 +2208,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2227,7 +2240,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2254,7 +2267,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2278,7 +2291,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2302,7 +2315,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2329,7 +2342,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2348,7 +2361,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2379,7 +2392,43 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
+    'ddflow_queue': '''
+      {
+       "name": "ddflow_queue",
+       "description": "Merge queue. add: line up an item (gates done but ci/merge). run: the integrator (any agent, one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures park. status. remove.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "action": {
+          "type": "string",
+          "description": "add|run|status (default)|remove."
+         },
+         "id": {
+          "type": "string",
+          "description": "Item (add, remove)."
+         },
+         "max_batch": {
+          "type": "integer",
+          "description": "run: max entries."
+         },
+         "unit_tests": {
+          "type": "boolean",
+          "description": "Also run unit_tests."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "run: ci seconds."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2395,7 +2444,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2427,7 +2476,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2454,7 +2503,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2478,7 +2527,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2509,7 +2558,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2536,7 +2585,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2560,7 +2609,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2620,15 +2669,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2660,7 +2709,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2723,7 +2772,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2736,7 +2785,7 @@
     'ddflow_review_triage': '''
       {
        "name": "ddflow_review_triage",
-       "description": "Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that shows it false) or confirmed (probe = the fix or test that answers it). The finding number is the #N the review printed. The gate stays failed (D-review-triage) until, after the round cap, the triage of its last finding records it passed on refutation, flagged.",
+       "description": "Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that shows it false) or confirmed (probe = the fix or test that answers it). The finding number is the #N the review printed. The gate stays failed (D-review-triage) until, after the round cap, the triage of its last finding records it passed on refutation, flagged. Without finding, verdict and probe it LISTS the recorded findings (#N, severity, digest, state).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2749,8 +2798,8 @@
           "description": "Omit if one gate has findings."
          },
          "finding": {
-          "type": "integer",
-          "description": "The finding's number: #N in the review's output -- of the RECORDED reviewer's findings, which the output's last lines name when several ran."
+          "type": "string",
+          "description": "Finding #N or digest prefix (6+ hex)."
          },
          "verdict": {
           "type": "string",
@@ -2758,18 +2807,15 @@
          },
          "probe": {
           "type": "string",
-          "description": "The evidence for the verdict. Required."
+          "description": "The evidence for the verdict."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
-         "id",
-         "finding",
-         "verdict",
-         "probe"
+         "id"
         ],
         "additionalProperties": false
        }
@@ -2792,7 +2838,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2808,7 +2854,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2872,7 +2918,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2928,7 +2974,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -2955,7 +3001,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -2975,7 +3021,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3018,7 +3064,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3041,7 +3087,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3060,7 +3106,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3084,7 +3130,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3115,7 +3161,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3146,7 +3192,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3173,7 +3219,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3197,7 +3243,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3207,17 +3253,21 @@
     'ddflow_show': '''
       {
        "name": "ddflow_show",
-       "description": "Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared globs, the lease and who holds it, the worktree path you can cd to, and every gate's outcome with its evidence. Use it to check your own work before calling ddflow_complete.",
+       "description": "Everything known about one phase, task, bug or research note: state, dependencies, globs, the lease holder, the worktree path, and every gate's outcome with evidence. Check your work with it before ddflow_complete.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "id": {
           "type": "string",
-          "description": "Item id (phase, task) or bug id."
+          "description": "Item, bug or research-note id."
+         },
+         "report": {
+          "type": "boolean",
+          "description": "Its completion report."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3244,7 +3294,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3279,7 +3329,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3299,7 +3349,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3323,7 +3373,7 @@
          },
          "parent": {
           "type": "string",
-          "description": "Owning phase id, OR another TASK's id, which makes this a SUB-TASK with its own globs and dependencies, run in parallel with its siblings. Same field as `phase` (the CLI has both names)."
+          "description": "Owning phase id, or a TASK id (makes this a SUB-TASK with its own globs and needs, run parallel to its siblings). Same field as `phase`."
          },
          "title": {
           "type": "string",
@@ -3345,13 +3395,17 @@
           "type": "string",
           "description": "Comma-separated tags."
          },
+         "resources": {
+          "type": "string",
+          "description": "Resources it runs on: gpu:4,vllm."
+         },
          "priority": {
           "type": "integer",
-          "description": "Lower is offered first (default 100)."
+          "description": "Lower is offered first (default 100; a DX or bug-fix task: its band)."
          },
          "line": {
           "type": "string",
-          "description": "Release line this lands on (a name from [flow.lines], or the current line). Omit for the current line; tasks inherit a phase's line."
+          "description": "Release line (a [flow.lines] name). Omit for the current one; tasks inherit a phase's."
          },
          "lines": {
           "type": "string",
@@ -3367,15 +3421,15 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3402,7 +3456,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3426,7 +3480,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3489,7 +3543,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3563,7 +3617,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3615,7 +3669,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3659,7 +3713,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3683,7 +3737,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3723,7 +3777,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3739,7 +3793,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3763,7 +3817,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3830,7 +3884,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3861,7 +3915,7 @@
          },
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "required": [
@@ -3881,7 +3935,7 @@
         "properties": {
          "as_agent": {
           "type": "string",
-          "description": "A subagent's own name, this call only."
+          "description": "Subagent name, this call only."
          }
         },
         "additionalProperties": false
@@ -3966,6 +4020,7 @@
     'ddflow_promote_deployed',
     'ddflow_promote_status',
     'ddflow_prompts',
+    'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
     'ddflow_recover',

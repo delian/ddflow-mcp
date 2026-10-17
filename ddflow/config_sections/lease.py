@@ -22,6 +22,10 @@ class LeaseConfig:
         300,
         doc="How often a live agent renews its lease. Must be comfortably below ttl_s (a 6x margin is the default) or a slow turn looks like a crash.",
     )
+    renew_long_commands: bool = knob(
+        True,
+        doc="A long command (`gate run`, `review`, `ci run`, `pins regenerate`) renews the caller's own lease every heartbeat_s while it runs, on the thread running it, so a 20-minute run does not lapse a 30-minute lease. The renewal is liveness only: it is lease bookkeeping and never counts as progress, so an idle holder still reads as idle to progress-based breaking (D-lease-hold-limit). Off: nothing renews during a command and the agent heartbeats itself.",
+    )
     renew_log_min_s: int = knob(
         120,
         doc="A heartbeat is written to the log only when the lease's last written renewal is at least this many seconds old; closer ones are acknowledged and not recorded, so a busy agent's hooks do not fill the log (lease renewals were 43% of a real log's events). A claim, a re-claim and any renewal that changes the worktree, branch, globs or resources are always written. Cost: another clone sees this lease's expiry up to this much earlier than the holder's last heartbeat implies, so the window in force is never wider than heartbeat_s or grace_s (the slack the lease already allows): raising this alone changes nothing. 0 writes every heartbeat.",
@@ -69,10 +73,18 @@ class LeaseConfig:
         choices=("report", "auto"),
         strictest=("report", "never steals a lease, so a crashed agent's work survives"),
     )
+    resume_own: bool = knob(
+        True,
+        doc="The agent whose lease LAPSED resumes it with a plain `ddflow claim` (no --force), with its full glob set, when no live lease overlaps those files; files taken meanwhile are named and refuse the claim. Another agent's lapsed lease is still `recover`'s. Off: the holder needs --force too, as before.",
+    )
     #: Paths many items may hold at once (D-shared-globs).
     shared_globs: list[str] = knob(
         factory=list,
         doc='Files EVERY item edits that ddflow must not merge for you -- generated files (a regenerated config, a lockfile): ["configs/default.toml"]. A path inside one of these is exempt from lease-overlap checks (claim, update, next, wait) and counts as covered for any agent holding a live lease at commit time. ddflow does NOT write a merge driver for them: union-merging a generated file interleaves it. Regenerate it after merging, or declare a driver yourself in .gitattributes; doctor notes a shared glob that has none. For append-only files (a changelog) use append_only_globs instead.',
+    )
+    new_file_globs: list[str] = knob(
+        factory=lambda: ["ddflow/templates/upgrade/unreleased/*.toml"],
+        doc="Files each item ADDS as a new file named after its own work -- an upgrade-manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per knob. A NEW file matching one of these needs no glob of its own beyond holding some live lease (the commit hook covers it; claim globs are unaffected, so a lease you do take stays exclusive), so two tasks adding different knobs never collide on the directory. An EDIT, rename or delete of an existing file still needs a lease that covers it: another agent's fragment stays theirs. Set [] to require the directory in the task globs again.",
     )
     append_only_globs: list[str] = knob(
         factory=list,

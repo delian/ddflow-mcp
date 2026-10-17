@@ -19,6 +19,7 @@ from ...services import ledger as LG
 from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
+from ...services.gates import failed_review as GO
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
@@ -37,7 +38,7 @@ def _session_model(st: State, agent: str) -> str:
     return max(open_, key=lambda s: s.started_at).model if open_ else ""
 
 
-def complete(
+def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-only
     repo: Path,
     item: str,
     *,
@@ -47,6 +48,7 @@ def complete(
     agent: str = "",
     changelog: str = "",
     regression_test: str | list[str] = "",
+    mutation: dict[str, str] | None = None,
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
 ) -> O.Outcome:
@@ -110,6 +112,7 @@ def complete(
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
+    hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
@@ -127,13 +130,25 @@ def complete(
         "blockers": v.blockers,
         "bugs_closed": closed,
     }
+    if hard and force:
+        return O.refused(
+            "item.completed",
+            f"cannot complete {item}, and --force does not lift this:\n"
+            + "\n".join(f"  - {b}" for b in hard),
+            forced=False,
+            **base,
+        )
     if not v.may_complete and not force:
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
-            + f"\n\n`ddflow gate status {item}` shows the pipeline. --force overrides, "
-            f"and the override is recorded.",
+            + f"\n\n`ddflow gate status {item}` shows the pipeline. "
+            + (
+                "--force does not lift the review-gate blocker above."
+                if hard
+                else "--force overrides, and the override is recorded."
+            ),
             forced=False,
             **base,
         )
@@ -142,7 +157,7 @@ def complete(
         # Only now, with the completion going through: a refusal above closed nothing.
 
         for bid in pending:
-            out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
+            out = bug_fixed(repo, bid, regression_test=tests, mutation=mutation, agent=agent)
             if out.exit != O.OK:
                 return O.Outcome(
                     kind="item.completed",
@@ -209,6 +224,16 @@ def complete(
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
+def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[str]:
+    """Add the failed-review blockers (D-failed-review-gate, B85841c0846) to ``v`` and return
+    them. Not lifted by `--force`: the operator's `gate skip --reason` is the recorded way past."""
+    if umbrella:
+        return []
+    found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
+    v.blockers += found
+    return found
+
+
 def _na_map(evidence: list[str]) -> dict[str, str]:
     """`Verdict.na_evidence` ("gate: why" lines) as {gate: why}; a gate id holds no ': '."""
     return dict(line.split(": ", 1) if ": " in line else (line, "") for line in evidence)
@@ -226,7 +251,7 @@ def _umbrella_children(st: State, it) -> list[str]:
 
     Its work is its sub-tasks', each of which ran its own pipeline (B651a63e574). All of
     them abandoned is not the work finished, and a phase keeps its own close."""
-    if it.kind != "task" or it.state in (DONE, ABANDONED):
+    if not it.is_work or it.state in (DONE, ABANDONED):
         return []
     below = sorted(st.descendants(it.id))
     if not below or st.open_descendants(it.id):
@@ -376,7 +401,7 @@ def remove(
     stranded = stuck_edges_to(st, item)
     if it.lease:
         L.release(log, item, note="removed from the queue")
-    log.append("phase.removed" if it.kind == "phase" else "task.removed", item, {"reason": reason})
+    log.append(f"{it.family}.removed", item, {"reason": reason})
     return O.ok(
         "item.removed",
         id=item,

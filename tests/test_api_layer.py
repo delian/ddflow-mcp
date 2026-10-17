@@ -326,6 +326,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_render": (["render", "--show", "board"], {"show": "board"}),
     "ddflow_gate_status": (["gate", "status", "T1"], {"id": "T1"}),
     "ddflow_gate_list": (["gate", "list"], {}),
+    "ddflow_queue": (["queue", "status"], {"action": "status"}),
     "ddflow_next": (["next"], {}),
     # timeout 0: the question without the sleep, so both surfaces answer the same moment.
     "ddflow_wait": (["wait", "--timeout", "0"], {"timeout": 0}),
@@ -1290,7 +1291,6 @@ def test_a_task_cannot_be_added_under_a_parent_that_does_not_exist(repo):
 DEFAULT_SOURCES: list[tuple[tuple[str, ...], str, str]] = [
     (("next",), "kind", "DEFAULT_NEXT_KIND"),
     (("phase", "add"), "priority", "DEFAULT_PRIORITY"),
-    (("task", "add"), "priority", "DEFAULT_PRIORITY"),
     (("brief",), "check_recovery", "DEFAULT_CHECK_RECOVERY"),
     (("render",), "out", "DEFAULT_RENDER_DIR"),
 ]
@@ -1318,7 +1318,11 @@ def test_the_parser_and_the_api_agree_on_every_default(path, dest, constant):
 
 
 def test_every_api_default_constant_is_actually_used_by_a_signature():
-    """A constant the functions do not use is documentation, not a default."""
+    """A constant the functions do not use is documentation, not a default.
+
+    `task_add(priority=None)` is deliberately absent: with none given the task takes its band
+    (`services.priority.band`, DX-default-priority-for-dx), and only the generic task falls
+    back to DEFAULT_PRIORITY."""
     import inspect
 
     from ddflow import api
@@ -1326,7 +1330,6 @@ def test_every_api_default_constant_is_actually_used_by_a_signature():
     pairs = [
         (api.next_item, "kind", api.DEFAULT_NEXT_KIND),
         (api.phase_add, "priority", api.DEFAULT_PRIORITY),
-        (api.task_add, "priority", api.DEFAULT_PRIORITY),
         (api.brief, "check_recovery", api.DEFAULT_CHECK_RECOVERY),
         (api.render, "out_dir", api.DEFAULT_RENDER_DIR),
     ]

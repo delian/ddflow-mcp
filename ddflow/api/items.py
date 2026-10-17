@@ -14,6 +14,7 @@ from ..core import flow as F
 from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
+from ..core import schedule as SCH
 from ..core.defaults import DEFAULT_PRIORITY
 from ..core.flow import line_order
 from ..core.records import ADD_RELATIONS, record_pools
@@ -39,7 +40,16 @@ class ItemEdit:
     title: str | None = None
     body: str | None = None
     needs: list[str] | None = None
+    #: Ids added to / taken from the item's current needs (or from ``needs`` when given too).
+    add_needs: list[str] | None = None
+    remove_needs: list[str] | None = None
+    add_tags: list[str] | None = None
+    remove_tags: list[str] | None = None
     globs: list[str] | None = None
+    #: Globs added to / taken from the item's current ones (or from ``globs`` when that is
+    #: given too), so widening a lease never repeats the whole list (`--add-globs`).
+    add_globs: list[str] | None = None
+    remove_globs: list[str] | None = None
     tags: list[str] | None = None
     priority: int | None = None
     line: str | None = None
@@ -72,7 +82,15 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
-    bad = GS.problem(fields.get("globs", []))
+    # Every fold runs (no short-circuit: a no-op needs fold must not swallow a tags edit);
+    # it is "nothing to change" only when nothing else was edited and no fold moved a list.
+    _adjust_list(it, edit, fields, "needs")
+    _adjust_list(it, edit, fields, "tags")
+    _adjust_globs(it, edit, fields)
+    unchanged = _nothing_to_change(it, edit, fields)
+    if unchanged:
+        return O.nothing("item.updated", unchanged, id=item)
+    bad = GS.problem(fields.get("globs", [])) or SCH.problem(fields.get("resources", []))
     if bad:
         return O.failed("item.updated", f"{item}: {bad}", id=item)
     if not fields and edit.worktree is None:
@@ -85,6 +103,56 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     if edit.worktree is not None:
         return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
     return _record_update(log, cfg, it, fields, queue=edit.queue)
+
+
+def _held_globs(it) -> list[str]:
+    """The globs an item holds: its own and its lease's, without repeats."""
+    return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
+
+
+def _adjust_list(it, edit: ItemEdit, fields: dict[str, Any], name: str) -> None:
+    """Fold ``--add-<name>`` / ``--remove-<name>`` (needs, tags) into ``fields[name]``: onto
+    ``--<name>`` when given, else onto the item's current list."""
+    add, rem = getattr(edit, f"add_{name}"), getattr(edit, f"remove_{name}")
+    if add is None and rem is None:
+        return
+    held = fields.get(name)
+    if held is None:
+        held = list(getattr(it, name))
+    fields[name] = GS.adjust(held, add, rem)
+
+
+def _nothing_to_change(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
+    """Why the edit is a no-op when it only asked to add/remove what changed no list."""
+    folded = [
+        n
+        for n in ("needs", "tags", "globs")
+        if getattr(edit, f"add_{n}") is not None or getattr(edit, f"remove_{n}") is not None
+    ]
+    if not folded or set(fields) != set(folded):
+        return ""
+    for n in folded:
+        if getattr(edit, n) is not None:
+            return ""
+        held = _held_globs(it) if n == "globs" else list(getattr(it, n))
+        if fields[n] != held:
+            return ""
+    return (
+        "nothing to change: "
+        + " and ".join(f"--add-{n}/--remove-{n}" for n in folded)
+        + " add nothing new and remove nothing held."
+    )
+
+
+def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> None:
+    """Fold ``--add-globs`` / ``--remove-globs`` into ``fields["globs"]``: onto ``--globs``
+    when that was given, else onto the item's held globs (its own and its lease's)."""
+    if edit.add_globs is None and edit.remove_globs is None:
+        return
+    held = fields.get("globs")
+    if held is None:
+        held = _held_globs(it)
+    fields["globs"] = GS.adjust(held, edit.add_globs, edit.remove_globs)
 
 
 def _update_and_rebind(
@@ -232,7 +300,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
             return O.refused(
                 "item.updated", refusal + _waiting(log, cfg, it, lease, globs, queue), id=it.id
             )
-        log.append(f"{it.kind}.updated", it.id, fields)
+        log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, globs, resources)
     return O.ok(
@@ -242,6 +310,10 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         fields=fields,
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, globs),
+        needs_dropped=[n for n in it.needs if n not in fields["needs"]]
+        if "needs" in fields
+        else [],
+        tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
 
 
@@ -267,8 +339,7 @@ def _dropped(it, globs: list[str] | None) -> list[str]:
     """
     if globs is None:
         return []
-    before = [*it.globs, *(it.lease.globs if it.lease else [])]
-    return [g for g in dict.fromkeys(before) if g not in globs]
+    return [g for g in _held_globs(it) if g not in globs]
 
 
 #: Splitting into one piece is a rename, not a split.
@@ -375,7 +446,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
         if chk.refusal is not None:
             return chk.refusal
         if chk.extension:
-            return DD.extend(log, cfg, chk, "phase.added")
+            return DD.extend(log, cfg, chk, "phase.added", st=st, globs=GS.parse(globs))
         log.append(
             "phase.added",
             item,
@@ -461,6 +532,16 @@ def _add_ports(
     return ports, ""
 
 
+def _kind_field(kind: str) -> str | None:
+    """The payload's `kind`: None (not written) for a plain task."""
+    return kind if kind and kind != "task" else None
+
+
+def _csv_none_when_empty(v: str) -> list[str] | None:
+    """A comma list, or None (field not written) when empty."""
+    return csv_list(v) or None
+
+
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
     repo: Path,
     item: str,
@@ -471,10 +552,12 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     globs: str = "",
     body: str = "",
     tags: str = "",
-    priority: int = DEFAULT_PRIORITY,
+    priority: int | None = None,
     line: str = "",
     lines: str = "",
     port_of: str = "",
+    resources: str = "",
+    kind: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -508,6 +591,8 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         body=body,
         tags=csv_list(tags),
         priority=priority,
+        resources=_csv_none_when_empty(resources),
+        kind=_kind_field(kind),
     )
     bad = IT.problem_of(base)
     if bad:
@@ -537,7 +622,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         if chk.refusal is not None:
             return chk.refusal
         if chk.extension:
-            return DD.extend(log, cfg, chk, "task.added")
+            return DD.extend(log, cfg, chk, "task.added", st=st, globs=GS.parse(globs))
         plan = None
         adopted: list[str] = []
         if len(set(wanted)) > 1:
@@ -694,7 +779,7 @@ def _apply_resolution(
         )
     log.append("item.resolved", item, data)
     for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
-        log.append(f"{it.kind}.added", nid, d["data"])
+        log.append(f"{it.family}.added", nid, d["data"])
 
 
 def _no_such_item(item: str, it) -> O.Outcome:

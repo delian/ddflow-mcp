@@ -26,7 +26,7 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
 
     tasks: dict[str, int] = {}
     for i in live_items:
-        if i.kind == "task":
+        if i.is_work:
             tasks[i.state] = tasks.get(i.state, 0) + 1
     bugs = _bugs(st)
     task_pipeline, phase_pipeline, promotion = WF.pipeline_lists(cfg)

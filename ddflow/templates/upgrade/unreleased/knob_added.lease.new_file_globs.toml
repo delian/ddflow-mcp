@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.new_file_globs"
+new = "[\"ddflow/templates/upgrade/unreleased/*.toml\"]"
+why = "New files named after their own work (upgrade-manifest fragments) need no directory lease."
+impact = "additive"

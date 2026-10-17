@@ -189,7 +189,7 @@ the same implementation, so neither drifts from the other.
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
 | **onboard an existing project** | `ddflow onboard status` (standing drift report; also `preflight`, `legacy`, `memory`, `test-gate`, `verify`; propose by default, `--apply` acts, `--accept NAME` approves one item) | `ddflow_onboard` (stage, apply, accept) |
-| **the pre-push checks, on the merge result** | `ddflow ci run` (the `ci` gate; `ddflow ci status` shows what would run): a scratch worktree of your branch merged with the base, then the project's own `pre-commit run --hook-stage pre-push` (or `[ci].command`); exit 0 passed, 1 failed, 2 could not run (never a pass). After a merge lands, `[ci].on_merge` (`fast` default: the pre-commit set without the test hooks; `full`; `off`) checks the base, records a `ci.result` and files a bug and fix task per failing check; the pre-push hook reports with `ddflow ci record` | `ddflow_ci` (run, status) |
+| **the pre-push checks, on the merge result** | `ddflow ci run` (the `ci` gate; `ddflow ci status` shows what would run): a scratch worktree of your branch merged with the base, then the project's own `pre-commit run --hook-stage pre-push` (or `[ci].command`, run as written; with the default, a `language: fail` tripwire hook runs on the diff being checked, not over every file); exit 0 passed, 1 failed, 2 could not run (never a pass). After a merge lands, `[ci].on_merge` (`fast` default: the pre-commit set without the test hooks; `full`; `off`) checks the base, records a `ci.result` and files a bug and fix task per failing check; the pre-push hook reports with `ddflow ci record` | `ddflow_ci` (run, status) |
 | **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails; `--reopen` sends a completion that fails back to the queue with its gates cleared (`--reason` says why; `--force` reopens one that holds); `--pack` prints the evidence pack (requirement fenced as data, what landed, mechanical findings) for an independent verifier and `--judge` hands it to the cross-family reviewer (gate `verify`, optional, never part of the default pipeline); on a task that is not done it names work that landed anyway): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
 | **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=0fdf370c61b2 -->
+<!-- ddflow:begin README/toc sha=ede9a1895679 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -257,6 +257,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 - [The default workflow at a glance](#the-default-workflow-at-a-glance)
 - [Two ways to drive it](#two-ways-to-drive-it)
   - [Standalone: a terminal, a Makefile, CI](#standalone-a-terminal-a-makefile-ci)
+  - [Every command](#every-command)
   - [As an MCP server](#as-an-mcp-server)
   - [What goes in AGENTS.md / CLAUDE.md](#what-goes-in-agentsmd--claudemd)
 - [The workflow, and changing it](#the-workflow-and-changing-it)
@@ -507,6 +508,12 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Merge queue.** Where several agents land work at once, `ddflow queue add <id>` enqueues an item,
+`ddflow queue run` (any agent may) integrates the head of the queue — one entry's ci at a time,
+`--max-batch N` entries per run, `--unit-tests` / `--no-unit-tests` to run or skip each entry's
+`unit_tests` gate on the merged result — `ddflow queue status` (the default) prints the line, and
+`ddflow queue remove <id>` drops an entry. Defaults live in `[merge_queue]`.
+
 **Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
 `ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
 `ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
@@ -526,6 +533,102 @@ check:
 
 `2` is never "no problem". A job that treats it as success reports a green build for a
 suite that never ran.
+
+### Every command
+
+Every top-level command, with the first line of its `--help`. The list is generated from the
+command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it, and
+`ddflow pins regenerate` does so after a merge), so a command added on another branch never
+needs a line written by hand here.
+
+<!-- ddflow:begin README/commands sha=769bd0082780 -->
+<details><summary>All 80 commands</summary>
+
+| Command | What it does |
+|---|---|
+| `ddflow init` | create .ddflow/ in this repository |
+| `ddflow phase` | add, list or close a phase |
+| `ddflow task` | add a task |
+| `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
+| `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
+| `ddflow update` | change an item's fields |
+| `ddflow chore` | commit or approve chore files (no reviewer) |
+| `ddflow plan` | check, file (proposed) and confirm a plan |
+| `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
+| `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
+| `ddflow heartbeat` | renew a lease |
+| `ddflow release` | give up a lease |
+| `ddflow wait` | sleep until an item (or anything) can be claimed; exit 2 = deadline, or waiting cannot help |
+| `ddflow approve` | a PERSON clears (or rejects) a human-approval gate — no MCP equivalent |
+| `ddflow gate` | run / record / inspect a gate |
+| `ddflow complete` | finish an item (exit 3 = gates not satisfied) |
+| `ddflow abandon` | stop work on an item without completing it |
+| `ddflow remove` | take an item out of the queue (recorded, not erased) |
+| `ddflow block` | see `ddflow block --help` |
+| `ddflow unblock` | release a blocked item back into the queue (exit 2 = not blocked) |
+| `ddflow merge` | merge an item's branch from the primary checkout |
+| `ddflow pr` | pull/merge requests: what reviewers did ([flow].integration = pr) |
+| `ddflow version` | version tags: the next version, and cutting it |
+| `ddflow promote` | environment branches: move work one step downstream ([flow].environments) |
+| `ddflow flow` | how this project works: branching model, release lines, and every workflow choice with who made it |
+| `ddflow brief` | budgeted session-start pack |
+| `ddflow external` | dependencies on items in sibling repositories |
+| `ddflow job` | long-running processes an item waits on: run, add, list, end |
+| `ddflow memory` | operational facts about this machine/repo, shown at session start |
+| `ddflow lesson` | see `ddflow lesson --help` |
+| `ddflow recall` | 'have we been here before?' — search decisions, lessons, research, bugs, tasks and past prompts at once |
+| `ddflow similar` | 'is this already filed?' -- the existing bugs, tasks, lessons and other records most like a text, before you… |
+| `ddflow dupes` | 'is anything filed twice?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or… |
+| `ddflow link` | settle a near-duplicate pair: say how one record relates to another |
+| `ddflow decision` | architectural decisions: record and consult |
+| `ddflow rule` | project rules: add, edit, list, search, show, remove |
+| `ddflow verify` | re-derive the claims behind a done task, or sweep them all (exit 1 = one fails) |
+| `ddflow ci` | the CI parity gate: run the pre-push checks on the merge result |
+| `ddflow onboard` | run an onboarding stage: one report, propose by default (status\|preflight\|legacy\|memory\|test-gate\|verify) |
+| `ddflow status` | one answer to 'what is the state of this project?' |
+| `ddflow research` | see `ddflow research --help` |
+| `ddflow bug` | see `ddflow bug --help` |
+| `ddflow session` | see `ddflow session --help` |
+| `ddflow replay` | reconstruct the decision history from the log |
+| `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
+| `ddflow progress` | work actually done, aggregated from the log |
+| `ddflow loops` | circular references and runtime loops (exit 2 = none) |
+| `ddflow cleanup` | classify ddflow worktrees/branches; --apply lands the safe ones |
+| `ddflow doctor` | integrity + health check |
+| `ddflow rebuild` | re-derive the index from the log |
+| `ddflow render` | regenerate the human-readable views |
+| `ddflow board` | see `ddflow board --help` |
+| `ddflow show` | see `ddflow show --help` |
+| `ddflow report` | the completion report of an item, from the log (shas, tests, gates, overrides) |
+| `ddflow config` | print every knob, its value and its source |
+| `ddflow upgrade` | what upgrading this project to the running ddflow would change (the plan; writes nothing; exit 0 up to date… |
+| `ddflow export` | documents generated from the log: list, print, enable, disable, --diff, --check, --update |
+| `ddflow bisect` | find which earlier test file makes a test fail only in full-suite order (exit 0 = found, 2 = nothing to… |
+| `ddflow cadence` | which periodic passes are due (exit 2 = none) |
+| `ddflow pins` | which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files |
+| `ddflow queue` | the merge queue: add an item, run the integrator, show the line, remove an entry |
+| `ddflow tests` | the tests your change reaches, and a parallel command to run them (exit 2 = none) |
+| `ddflow precommit` | propose a .pre-commit-config.yaml for this repository's stacks (writes nothing without --write) |
+| `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise` |
+| `ddflow health` | stalled, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass |
+| `ddflow docs` | the mechanical documentation check: `docs check [--diff BASE]` |
+| `ddflow metrics` | metrics from the log: cycle time, review rounds, waits; `forecast`, `retro <id>`, `skips` |
+| `ddflow reviewers` | find, list and test cross-family reviewers |
+| `ddflow review` | run the configured reviewer(s) over an item's diff |
+| `ddflow adopt` | install ddflow into this project for one or more agents |
+| `ddflow history` | one timeline of everything that happened (exit 2 = nothing) |
+| `ddflow workflow` | the rules this project runs by, and how to change them (exit 1 = incoherent) |
+| `ddflow help` | what ddflow is, what it can do, and the workflow (try: ddflow help workflow) |
+| `ddflow import` | propose the existing project's work, lessons and decisions (exit 2 = nothing) |
+| `ddflow companions` | companion MCP servers that serve the gates (exit 2 = a default one is missing) |
+| `ddflow prompts` | inspect and override the prompt templates |
+| `ddflow hooks` | install/inspect the enforcement git hook and the Claude Code session hook |
+| `ddflow mcp` | run the MCP stdio server over this repository |
+| `ddflow search` | search tasks, phases, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs… |
+| `ddflow list` | list tasks, phases, bugs, research notes or lessons (what `<kind> list` shows) |
+
+</details>
+<!-- ddflow:end README/commands -->
 
 ### As an MCP server
 
@@ -989,7 +1092,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 270 knobs.
+cadences, and the rest of the 329 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1392,7 +1495,7 @@ recorded outcome. `review triage` records what became of each finding as its own
 fix or test that answers it. The gate's outcome is not changed — a review that reported
 findings stays `failed`, and that does not block completion; the log now shows what became
 of each finding (once the round budget is spent, the triage that settles the LAST finding
-records the gate passed on refutation, flagged: see below). Triage appears in `gate status` and `show`, and a re-review carries it over
+records the gate passed on refutation, flagged: see below). Likewise, when every finding of a failed round was *refuted*, the triage that settles the last one records the gate passed on refutation at once, flagged and with each probe as evidence (`[review].settle_all_refuted`, default true) -- no hand-recorded pass is needed. Triage appears in `gate status` and `show`, and a re-review carries it over
 only for a finding whose text is identical (decision D-review-triage). Over MCP it is
 `ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
 required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
@@ -1400,6 +1503,11 @@ required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` ar
 Finding numbers are per gate, so `--gate` is never defaulted on `review triage`: omitted, it is
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
+
+`ddflow review show <item> [--gate G]` lists the recorded round's numbered findings -- the `#N` that
+`review triage` takes -- each with severity, location, digest, triage state and probe; omit `--gate` for every
+gate that has a round (a gate whose findings blob is gone is named, not hidden). Over MCP,
+`ddflow_review_triage` without `finding`, `verdict` and `probe` lists them.
 
 **The review-round budget (`[review]`).** A shipped default in every project, with no
 configuration: a gate (`rubber_duck`, `critic`) gets **2 review rounds** per item, full and
@@ -1672,6 +1780,12 @@ as data in `.ddflow/pins.toml` (`[pins].recipes_file`), one `[[pin]]` per kind w
 regenerates the stale pins and folds them into the merge commit (`[pins].after_merge` =
 `amend`, `leave` or `off`). List the pin files in `[lease].shared_globs` so a lease on them is
 not exclusive. A recipe never runs under xdist.
+
+The hook never makes a merge wait for a test suite. It runs only the recipes that allow it
+(a `[[pin]]` with `after_merge = false`, the golden-snapshot and transcript suites in this
+repository, is left to an explicit `ddflow pins regenerate`), bounds each command by
+`[pins].after_merge_timeout_s`, and reports a recipe it could not finish as unavailable, never
+as failed. Two re-recordings never overlap in one tree: the second is unavailable.
 
 ## Finding a test polluter
 
@@ -5143,7 +5257,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 270): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 329): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5401,8 +5515,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=7bb94c0aeac8 -->
-<details><summary>All 116 MCP tools: 32 in the `core` tier, 47 more in `standard`, 37 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=9cf773a45412 -->
+<details><summary>All 118 MCP tools: 32 in the `core` tier, 48 more in `standard`, 38 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5453,14 +5567,14 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
-| Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
 | Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
 | Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
 | Gates and review | `ddflow_gate_status` | core | Where an item stands in its quality pipeline, which gate is next, and the instruction for that gate. |
 | Gates and review | `ddflow_gate_verify` | core | Break what a gate guards and require it to NOTICE: applies each mutation registered on the gate, runs it… |
-| Gates and review | `ddflow_pins` | all | BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt… |
+| Gates and review | `ddflow_pins` | all | BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its… |
 | Gates and review | `ddflow_review` | core | Run the configured cross-family reviewer over an item's diff and record the result: the critic gate… |
 | Gates and review | `ddflow_review_triage` | standard | Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that… |
 | Gates and review | `ddflow_reviewers_detect` | all | Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp… |
@@ -5474,6 +5588,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Landing it | `ddflow_promote_add` | all | File a PROMOTION to an environment branch ([flow].environments): a task that merges the branch immediately… |
 | Landing it | `ddflow_promote_deployed` | all | Record the sha a deploy put LIVE in an environment (from the deploy hook); promote_status then shows what… |
 | Landing it | `ddflow_promote_status` | all | Each environment: head, commits behind its upstream, open promotion, auto_promote, and the live (deployed)… |
+| Landing it | `ddflow_queue` | standard | Merge queue. |
 | Landing it | `ddflow_version_cut` | all | Tag the next version. |
 | Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
 | What the project remembers | `ddflow_bug_file_tasks` | all | File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one… |
@@ -5504,13 +5619,14 @@ drift. The groups are the ones `ddflow help` prints.
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
 | Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
+| Looking at it | `ddflow_health` | all | Watchdog: stalled, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode. |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
 | Looking at it | `ddflow_list` | standard | Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. |
 | Looking at it | `ddflow_metrics` | all | Metrics derived from the event log, read-only. |
 | Looking at it | `ddflow_progress` | standard | What work has ACTUALLY been done, aggregated from the event log: attempts per item, wall-clock held, gate… |
 | Looking at it | `ddflow_render` | standard | Regenerate the human-readable markdown views (queue, lessons, the one-paragraph lessons summary, research)… |
-| Looking at it | `ddflow_show` | core | Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared globs, the… |
+| Looking at it | `ddflow_show` | core | Everything known about one phase, task, bug or research note: state, dependencies, globs, the lease holder… |
 | Looking at it | `ddflow_status` | core | The state of the whole project in one answer: how many tasks are done and which, what is in flight and who… |
 | Looking at it | `ddflow_verify` | standard | Re-check a done task's claims; fails if one does not hold. |
 | When something is wrong | `ddflow_bisect` | all | Which earlier test file makes `victim` fail only in full-suite order? |
@@ -5565,6 +5681,7 @@ ddflow approve <id> <gate>      a PERSON clears a human gate  (no MCP equivalent
 ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none); --flakes: the flake log
+ddflow report <id> [--agent A]  the completion report of an item from the log (shas, tests, gates, overrides, what is open)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
 ddflow merge <id> --allow-empty land a branch with nothing ahead of its target (refused otherwise)
@@ -5656,7 +5773,7 @@ declared once and persists — see
 
 ## Configuration
 
-270 knobs across 33 sections, every one documented in place and listed, with its default
+329 knobs across 38 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5723,13 +5840,14 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c3cdb49ae053 -->
-<details><summary>All 270 knobs across 33 sections</summary>
+<!-- ddflow:begin README/knobs sha=b7b42f507a10 -->
+<details><summary>All 329 knobs across 38 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
 | `lease.ttl_s` | `1800` |  |
 | `lease.heartbeat_s` | `300` |  |
+| `lease.renew_long_commands` | `true` |  |
 | `lease.renew_log_min_s` | `120` |  |
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
@@ -5740,7 +5858,9 @@ long default is left to `ddflow config --explain`.
 | `lease.hold_max_s` | `3600` |  |
 | `lease.break_on_timeout` | `false` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
+| `lease.resume_own` | `true` |  |
 | `lease.shared_globs` | `[]` |  |
+| `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
 | `lease.append_only_globs` | `[]` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
@@ -5783,6 +5903,7 @@ long default is left to `ddflow config --explain`.
 | `flow.auto_promote` | `[]` |  |
 | `flow.version_files` | `{}` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
+| `gates.doc_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.kind_pipelines` | `{}` |  |
 | `gates.required` | `["implement", "unit_tests", "merge"]` |  |
@@ -5796,6 +5917,10 @@ long default is left to `ddflow config --explain`.
 | `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
 | `gates.unit_tests_scope` | `"selected"` | `selected` \| `full` |
 | `gates.unit_tests_small_lines` | `150` |  |
+| `gates.unit_tests_max_files` | `100` |  |
+| `gates.unit_tests_hub_importers` | `100` |  |
+| `gates.unit_tests_max_hops` | `2` |  |
+| `gates.unit_tests_name_max_tests` | `30` |  |
 | `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
 | `gates.keep_env` | `[]` |  |
 | `lessons.search_backend` | `"fts5"` | `fts5` \| `like` |
@@ -5806,6 +5931,9 @@ long default is left to `ddflow config --explain`.
 | `lessons.auto_capture_on_bug` | `true` |  |
 | `lessons.require_regression_test` | `true` |  |
 | `lessons.reflect_after_items` | `3` |  |
+| `lessons.test_file_globs` | (long: see `ddflow config --explain`) |  |
+| `lessons.verify_output_lines` | `12` |  |
+| `lessons.verify_load_ratio` | `1.0` |  |
 | `session.log_prompts` | `true` |  |
 | `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
 | `session.redact_extra` | `[]` |  |
@@ -5814,6 +5942,14 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.agent_brief_max_chars` | `9000` |  |
+| `session.agent_brief_off` | `[]` |  |
+| `session.agent_brief_decisions` | `6` |  |
+| `session.report_commits` | `20` |  |
+| `session.report_note_chars` | `200` |  |
+| `session.report_test_files` | `12` |  |
+| `session.agent_brief_lessons` | `3` |  |
+| `session.agent_brief_extra` | `""` |  |
 | `schedule.parallel` | `"auto"` | `auto` \| `fixed` |
 | `schedule.max_parallel_tasks` | `4` |  |
 | `schedule.max_parallel_min` | `2` |  |
@@ -5828,10 +5964,21 @@ long default is left to `ddflow config --explain`.
 | `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.bugs_first` | `true` |  |
+| `schedule.dx_priority` | `8` |  |
+| `schedule.bug_priority` | `10` |  |
+| `schedule.dx_tags` | `["dx"]` |  |
+| `schedule.dx_id_prefix` | `"DX-"` |  |
 | `schedule.resources` | `[]` |  |
 | `schedule.repos` | `[]` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
+| `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
+| `bugs.repro_max_bytes` | `65536` |  |
+| `bugs.repro_tail_bytes` | `4096` |  |
+| `bugs.repro_events` | `10` |  |
+| `bugs.repro_test_timeout_s` | `300` |  |
+| `bugs.repro_env` | (long: see `ddflow config --explain`) |  |
+| `bugs.repro_redact_extra` | `[]` |  |
 | `importer.max_tasks` | `200` |  |
 | `importer.preview_rows` | `8` |  |
 | `importer.phase_slug_chars` | `32` |  |
@@ -5873,6 +6020,7 @@ long default is left to `ddflow config --explain`.
 | `enforce.generated_views` | `"block"` | `block` \| `warn` \| `off` |
 | `enforce.stale_docs` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.merge_commit_scope` | `"own"` | `own` \| `all` |
+| `enforce.lapsed_lease` | `"accept"` | `accept` \| `holder` \| `refuse` |
 | `enforce.environment_commits` | `"block"` | `block` \| `warn` \| `off` |
 | `enforce.doc_globs` | `["**/*.md", "**/*.rst", "**/*.adoc"]` |  |
 | `enforce.doc_exclude` | (long: see `ddflow config --explain`) |  |
@@ -5897,6 +6045,11 @@ long default is left to `ddflow config --explain`.
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
+| `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
+| `health.stall_s` | `3600` |  |
+| `health.runaway_s` | `14400` |  |
+| `health.interval_s` | `900` |  |
+| `health.shown` | `10` |  |
 | `metrics.min_samples` | `10` |  |
 | `metrics.top` | `5` |  |
 | `metrics.forecast_runs` | `1000` |  |
@@ -5906,8 +6059,10 @@ long default is left to `ddflow config --explain`.
 | `metrics.grid_step_s` | `3600` |  |
 | `metrics.grid_max_folds` | `24` |  |
 | `review.max_rounds` | `2` |  |
+| `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
 | `review.delta_default` | `false` |  |
+| `review.fix_round_free` | `true` |  |
 | `review.combined_under_lines` | `150` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
@@ -5936,20 +6091,41 @@ long default is left to `ddflow config --explain`.
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
+| `pins.after_merge_timeout_s` | `120` |  |
 | `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
+| `pins.parallel` | `4` |  |
+| `pins.progress_s` | `30` |  |
+| `pins.merge_check` | `"fast"` | `fast` \| `all` \| `off` |
+| `plan.warn_missing_globs` | `true` |  |
+| `merge_queue.max_batch` | `5` |  |
+| `merge_queue.run_unit_tests` | `false` |  |
+| `merge_queue.timeout_s` | `0` |  |
+| `merge_queue.eta_default_s` | `900` |  |
+| `merge_queue.eta_history` | `5` |  |
+| `merge_queue.keep_history` | `50` |  |
+| `chore.globs` | (long: see `ddflow config --explain`) |  |
+| `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
+| `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
+| `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
+| `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
+| `mcp.stale_check_every_s` | `60.0` |  |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |
 | `ci.timeout_s` | `3600` |  |
 | `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
+| `ci.tests_scope` | `"selected"` | `selected` \| `full` |
+| `ci.always_tests` | (long: see `ddflow config --explain`) |  |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |
 | `prompts.session_brief_header` | `""` |  |
 | `prompts.mcp_instructions` | `""` |  |
+| `prompts.agent_brief` | `""` |  |
+| `prompts.agent_report` | `""` |  |
 | `export.documents` | `[]` |  |
 | `export.redact` | `true` |  |
 | `export.max_bytes` | `60000` |  |
@@ -6107,9 +6283,12 @@ part that matters.
   words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
-  The hook's refusals say what to do. A **lapsed lease** on the item whose tree you commit
-  from is named with when it lapsed and its remedy (`ddflow --agent <holder> heartbeat <id>`
-  for its holder; for anyone else `recover --item`, `release --note salvaged`, `claim`). When
+  The hook's refusals say what to do. A **lapsed lease** nobody has taken over, on the item
+  whose tree you commit from (or held by you), is accepted with a note naming when it lapsed
+  and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
+  `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
+  refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
+  salvaged`, `claim`). Another agent's live lease is never accepted. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted

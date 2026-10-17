@@ -14,6 +14,8 @@ from ._docs import declare, knob
 MCP_TOOL_TIERS = ("core", "standard", "all")
 #: `[mcp].output_schemas`.
 MCP_OUTPUT_SCHEMAS = ("off", "on")
+#: `[mcp].on_upgrade`.
+MCP_ON_UPGRADE = ("notify", "reexec", "off")
 
 
 @declare("mcp")
@@ -33,4 +35,16 @@ class McpConfig:
         doc='Whether `tools/list` declares an `outputSchema` for every tool whose result is a JSON object of declared fields (not `show`, `decision_show` or `recall`, which answer one record or null, nor text), and a call returns that object also as `structuredContent` (not when it failed; MCP 2025-06-18 and later; an older client is served as with `off`). `off` (default): the result is the JSON text in the first content block only, and `tools/list` is as small as before. `on`: each object tool lists `{"type": "object", "properties": {"schema": {"const": "<tool>@<n>"}, <its declared fields>: {}}}` -- additive, nothing required -- and a bare-array tool lists its schema under `_meta["ddflow/outputSchema"]`, since an `outputSchema` must be an object. Costs about 16 KB more `tools/list` and every object result is sent twice (the text block and `structuredContent`). Every object result carries its `schema` tag either way. Read once at server start, so change it and restart the server.',
         choices=MCP_OUTPUT_SCHEMAS,
         strictest=("off", "no safety dimension; the smaller, unchanged tool list and result"),
+    )
+
+    on_upgrade: str = knob(
+        "notify",
+        doc="What a running MCP server does once ddflow was upgraded under it (the installed package, or this project's log, is newer than the code the server imported). `notify` (default): a write the old code would refuse on version skew is answered with the one fix instead (reconnect the MCP server), flagged `restart_required` in the result meta, and every other call carries a one-line note; reads keep working. `reexec`: after answering the current call, once no other request is in flight or waiting, the server replaces itself with the installed code on the same stdio (same protocol, client and declared identity), so the next call just works; with no newer installed package (a restart would change nothing) it behaves as `notify`. `off`: no check, the skew refusal is shown as it is. Checked on a call at most once per `stale_check_every_s`, and on every skew refusal. Unlike `tools`, read per call, so a change applies to a running server.",
+        choices=MCP_ON_UPGRADE,
+        strictest=("notify", "no restart of the process; the agent is told what to do"),
+    )
+
+    stale_check_every_s: float = knob(
+        60.0,
+        doc="Seconds between a running MCP server's looks at the installed package and the project log's version stamps (`on_upgrade`), on the calls that succeed: each look reads the installed version from disk and folds the log, so it is bounded, not per call. A skew refusal always looks at once. 0 looks on every call.",
     )

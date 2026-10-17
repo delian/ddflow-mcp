@@ -9,25 +9,35 @@ from typing import Any
 
 from ...core import flow as F
 from ...core import outcome as O
+from ...core.admission import new_file_globs
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
     record_item_removed,
     stands_in,
 )
 from ...services.enforce import SELF_MANAGED
+from ...services.gates import failed_review as GO
 from ...services.gates import measured as GM
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
 from .merge_refresh import _refresh_documents
+
+
+def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
+    """Say which pins the merge left stale or never re-recorded."""
+    for line in PM.merge_lines(PM.merge_report(repo, cfg)):
+        say(line)
 
 
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
@@ -43,6 +53,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -76,6 +87,16 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
+    if failed := GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg)):
+        # D-failed-review-gate (B85841c0846): landing work whose review failed and was
+        # never re-reviewed ships it unreviewed. Before any git action.
+        return O.refused(
+            "worktree.merged",
+            f"cannot merge {item}: {failed[0]}",
+            id=item,
+            sha="",
+            dirty=[],
+        )
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
     source = _what_to_land(repo, cfg, st, it, target, branch, called_from)
@@ -146,8 +167,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
+    (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
-    if not r.ok:
+    landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+    if not r.ok and not landed_note:
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
         if r.attempted:  # a refused precondition says nothing about this branch
@@ -203,17 +226,31 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         "passed",
         gates=G.load_gates(repo, cfg),
         tree=None if borrowed else wt.path,
+        reason=landed_note,
         evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
     )
     removed_tree, kept_reason = _dispose_tree(
         repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
     )
-    if back_failed:
-        kept_reason = "; ".join(
-            filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
+    kept_reason = "; ".join(
+        filter(
+            None,
+            [
+                kept_reason,
+                landed_note,
+                ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else "",
+            ],
         )
+    )
 
-    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    say = on_progress or (lambda _line: None)
+    say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    say(_ci_notice(repo, cfg))
+    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=landed_before)
+    say(
+        f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
+    )
+    _say_pins(repo, cfg, say)
     # Last: the after-merge check may record a result of its own.
     committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
@@ -235,6 +272,47 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         merge_gate_human=human_gate,
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
+    )
+
+
+def _ci_notice(repo: Path, cfg) -> str:
+    """The line said before the post-merge check starts: what runs and which knobs bound it."""
+    try:
+        command, why = CI.main_command(repo, cfg)
+        notice = (
+            f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+            f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never "
+            f"as a failure"
+        )
+    except Exception:  # a line of progress never stops a merge that has landed
+        return "post-merge check starting"
+    if not command:
+        return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
+    return notice
+
+
+def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
+    """A note when git reported failure but the merge commit is on the base; else "".
+
+    git can be killed at its timeout AFTER it committed: the post-merge hook, which runs
+    inside `git merge`, takes minutes under load. Reporting that as a refusal left the
+    merge gate failed for a branch the base already held, and the next `merge` said "no
+    commits ahead" (B04bab3d1b3). The base having moved to a head that contains the branch
+    is what happened, whatever git's exit status said.
+    """
+    if not r.attempted:
+        return ""
+    now = W.rev(repo, wt.base)
+    # The head this run tried to land, not the branch ref: an item's tree can be ahead of it.
+    contained = (
+        bool(branch_head) and W.git(repo, "merge-base", "--is-ancestor", branch_head, wt.base).ok
+    )
+    if not now or now == landed_before or not contained:
+        return ""
+    how = "timed out" if r.timed_out else f"exited {r.code}"
+    return (
+        f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
+        f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
     )
 
 
@@ -318,7 +396,7 @@ def _what_to_land(
     tree = W.checked_out_at(repo, picked)
     wt = W.Worktree(item=it.id, path=tree or W.repo_root(repo), branch=picked, base=target)
     dirty = W.dirty(wt) if tree is not None else []
-    return wt, dirty, _outside_globs(repo, it, target, picked)
+    return wt, dirty, _outside_globs(repo, it, target, picked, cfg)
 
 
 def _branch_to_land(
@@ -395,7 +473,7 @@ def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     return {"outside_globs": outside, "outside_globs_unknown": False}
 
 
-def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None:
+def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
 
@@ -410,10 +488,20 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None
     changed = CH.changed_paths(repo, target, tip=branch, include=("committed",))
     if changed is None:
         return None
+    # A new file matching `[lease] new_file_globs` (a manifest fragment) is its author's own.
+    fresh: set[str] = set()
+    ng = new_file_globs(cfg)
+    if ng and any(path_in_glob(p, g) for p in changed for g in ng):
+        added = CH.changed_paths(repo, target, tip=branch, include=("committed",), diff_filter="A")
+        if added is None:
+            return None
+        fresh = {p for p in added if any(path_in_glob(p, g) for g in ng)}
     return [
         p
         for p in changed
-        if not p.startswith(SELF_MANAGED) and not any(path_in_glob(p, g) for g in it.globs)
+        if not p.startswith(SELF_MANAGED)
+        and p not in fresh
+        and not any(path_in_glob(p, g) for g in it.globs)
     ]
 
 

@@ -18,11 +18,14 @@ from ...infra import worktree as W
 from ...services import choices as CHO
 from ...services import flow as FS
 from ...services import leases as L
+from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import waiting as WG
+from ...services.bug_globs import bug_globs_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
+from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
@@ -232,6 +235,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
+    if want is None and parked is not None and not parked.globs:
+        want = bug_globs_of(st, item, cfg) or None  # a fix task declared no files: its bug did
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
@@ -266,6 +271,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
         return bound
     wt = bound.wt
     _bring_local_files(repo, cfg, wt)
+    if wt is not None:  # a pin file merges through its driver in the tree an agent works in
+        PM.ensure_driver(Path(wt.path), cfg)
     log.append("item.started", item, {})
     # The first branch made is where the branching model starts to matter. An unmade
     # choice is defaulted here, on the record, and followed from now on.
@@ -273,7 +280,10 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
-    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    if warned := missing_globs(repo, cfg, lz.globs):
+        out.data["glob_warnings"] = warned
+    return out
 
 
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
@@ -370,7 +380,11 @@ def _record_waiting(log, cfg, item: str, want, queue: bool) -> str:
         rec = WG.register(log, cfg, st, item, log.agent_id, globs, now, queue=queue)
     if rec is None:
         return ""
-    who = ", ".join(f"{o['item']} ({o['holder']})" for o in rec["on"])
+    # An item blocked by its OWN lease is not waiting for itself: another agent holds it.
+    who = ", ".join(
+        f"its lease held by {o['holder']}" if o["item"] == item else f"{o['item']} ({o['holder']})"
+        for o in rec["on"]
+    )
     return f"\n\nRecorded: {item} is waiting for {who}."
 
 
@@ -413,8 +427,9 @@ def _adopt(
             "item.claimed",
             f"this worktree is already bound to {held}, which is still open. "
             f"Two items sharing one tree cannot be merged or recovered "
-            f"separately. Finish {held}, work somewhere else, or "
-            f"`--no-worktree` to claim without binding a tree.",
+            f"separately. Finish it (`ddflow complete {held}`), claim without a tree "
+            f"(`ddflow claim {item} --no-worktree`), or claim from the primary checkout "
+            f"for a tree of its own (`cd {repo} && ddflow claim {item}`).",
             id=item,
             conflicts_with=held,
         )
@@ -445,9 +460,9 @@ def _create_tree(
                 _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
                 return O.refused(
                     "item.claimed",
-                    f"{wt.path} already exists with {there} checked out, which "
-                    f"does not carry {wt.branch}. It is not {item}'s tree; move or "
-                    f"remove it, or claim from a tree of your own.",
+                    f"{wt.path} already exists with {there} checked out, not {wt.branch}: it is not "
+                    f"{item}'s tree. Inspect it first: `git -C {wt.path} status`. If it is yours to "
+                    f"discard, `git worktree remove {wt.path}` then `ddflow claim {item}`; else claim from a tree of your own.",
                     id=item,
                     path=str(wt.path),
                 )

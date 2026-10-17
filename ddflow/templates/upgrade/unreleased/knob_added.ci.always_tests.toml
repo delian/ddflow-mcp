@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.always_tests"
+new = '["tests/test_constants_ratchet.py", "tests/test_layering*.py", "tests/golden/**", "tests/test_uc_surf_setup_ops_transcript.py", "tests/test_uc_surf_loop_transcript.py", "tests/test_readme_*.py", "tests/test_mcp_tool_budget.py"]'
+why = "A selected ci run also takes these repo-wide guard and pin tests (and any test declaring `ALWAYS = True`): an import closure cannot know a new constant, knob or printed line affects them."
+impact = "additive"

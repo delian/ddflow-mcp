@@ -7,14 +7,17 @@ executor (`surfaces/cliexec.py`) prints what these return. It imports nothing th
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from ...core import clock
+from ...core import outcome as O
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
 from ...core.tier import tier_of
+from ..tools._common import _api
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
 #: whether they are build artefacts or real source -- which is the judgement the operator
@@ -37,23 +40,25 @@ def waiting(rows: list, head: str) -> str:
 
 
 def heartbeat_notes(out, a, ctx) -> Iterator[str]:
+    item = out.data.get("id") or a["id"]  # none named: the one held
     if out.data.get("yield_requested"):
         yield f"  YIELD REQUESTED: {out.data['yield_requested']}"
     if out.data.get("globs_withheld"):
-        yield f"  lease renewed WITHOUT {a['id']}'s newer globs/resources: {out.data['globs_withheld']}"
+        yield f"  lease renewed WITHOUT {item}'s newer globs/resources: {out.data['globs_withheld']}"
 
 
 def heartbeat_text(out, a) -> str:
+    item = out.data.get("id") or a["id"]
     waiters = out.data.get("waiters", [])
     return (
-        (f"renewed {a['id']}" if out.data["renewed"] else out.reason)
+        (f"renewed {item}" if out.data["renewed"] else out.reason)
         + waiting(
             waiters,
-            f"{len(waiters)} agent(s) are waiting on {a['id']}. Finishing, narrowing its "
+            f"{len(waiters)} agent(s) are waiting on {item}. Finishing, narrowing its "
             f"globs, or releasing it wakes them:",
         )
         + (
-            "\n" + new_reports_line(a["id"], out.data.get("new_reports", 0))
+            "\n" + new_reports_line(item, out.data.get("new_reports", 0))
             if out.data.get("new_reports")
             else ""
         )
@@ -243,11 +248,13 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    return out.body(CLAIM_BODY + (("guidance",) if out.data.get("guidance") else ()))
+    extra = tuple(k for k in ("guidance", "glob_warnings") if out.data.get(k))
+    return out.body(CLAIM_BODY + extra)
 
 
 def claim_text(out, a, ctx) -> str:
-    d = out.data
+    # a claim of a bug's fix task starts from how the bug was seen (DX-bug-repro-bundle)
+    d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), a["id"]).data
     msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
     for b in d.get("broke") or []:
         msg += (
@@ -258,9 +265,9 @@ def claim_text(out, a, ctx) -> str:
     owner = ctx.tree_owner
     if owner and d["worktree"] and not d["rebound"]:
         msg += (
-            f"\n  not adopted: the tree you are in is {owner}'s working tree, and you are "
-            f"{ctx.log.agent_id}. Run claim from the tree without --agent (or as {owner}) "
-            f"to adopt it."
+            f"\n  leased to {ctx.log.agent_id}, in a worktree made for it: the tree you are in "
+            f"is {owner}'s, so it was not adopted. To work in that tree instead, run claim "
+            f"there as {owner}."
         )
     if d["worktree"] and d["rebound"] and not d["here"]:
         # The item already had a tree from an earlier claim, possibly holding unmerged
@@ -292,6 +299,12 @@ def claim_text(out, a, ctx) -> str:
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
+    msg += "".join(f"\n  warning:  {w}" for w in d.get("glob_warnings", []))
+    if not d["globs"]:
+        msg += (
+            f"\n  The commit hook refuses files no glob covers; to cover yours: "
+            f"ddflow --agent {ctx.log.agent_id} update {a['id']} --globs <comma,separated>"
+        )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
     if d.get("guidance"):
@@ -369,7 +382,43 @@ MERGE_PAYLOAD = (
     "merge_gate_human",
     "worktree",
     "worktree_removed",
+    # `--queue`: the entry `queue add` made, instead of a landing.
+    "queued",
+    "state",
+    "position",
+    "eta_s",
 )
+
+#: What a landing flag means nothing for once the item is only being enqueued.
+_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch", "model")
+
+
+def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=None):
+    """`merge`: land the item, or with `queue` line it up for the integrator (`queue add`)."""
+    api = _api()
+    if a.get("queue"):
+        if clash := [f for f in _NOT_WITH_QUEUE if a.get(f)]:
+            return O.refused(
+                "queue.add",
+                f"merge --queue only enqueues; {', '.join(c.replace('_', '-') for c in clash)} apply to landing. "
+                f"Drop them, or merge without --queue.",
+                id=a["id"],
+            )
+        return api.queue_add(repo, a["id"], agent=agent)
+    return api.merge_item(
+        repo,
+        a["id"],
+        message=a.get("message", "") or "",
+        allow_dirty=bool(a.get("allow_dirty")),
+        allow_empty=bool(a.get("allow_empty")),
+        keep=bool(a.get("keep")),
+        model=a.get("model", "") or "",
+        branch=a.get("branch", "") or "",
+        called_from=called_from,
+        shell_cwd=shell_cwd,
+        agent=agent,
+        on_progress=on_progress,
+    )
 
 
 def merge_kwargs(ctx) -> dict[str, Any]:
@@ -380,6 +429,16 @@ def merge_kwargs(ctx) -> dict[str, Any]:
         return {"shell_cwd": None}
 
 
+def merge_progress_kwargs(ctx) -> dict[str, Any]:
+    """`merge`'s: the above, and progress on stderr. The post-merge work runs for minutes, and
+    a merge that says nothing in that time is indistinguishable from a hang
+    (merge-silent-during-post-merge-ci)."""
+    return {
+        **merge_kwargs(ctx),
+        "on_progress": lambda line: print(line, file=sys.stderr, flush=True),
+    }
+
+
 def merge_shown(out) -> bool:
     return out.exit == OK
 
@@ -388,7 +447,7 @@ def merge_reason(out) -> str:
     """What a merge refused over uncommitted files says: the NAMES, truncated here rather
     than in the api (how many to show is a presentation decision; a caller reading JSON
     wants all of them)."""
-    if out.exit != REFUSED or not out.data.get("dirty"):
+    if out.exit != REFUSED or not out.data.get("dirty") or "queued" in out.data:
         return out.reason
     dirty = out.data["dirty"]
     lines = [
@@ -406,6 +465,8 @@ def merge_reason(out) -> str:
 
 
 def merge_body(out, a) -> Any:
+    if "queued" in out.data:
+        return out.body(MERGE_PAYLOAD)
     local = (
         () if out.data.get("pr") else tuple(k for k in ("export_refresh", "ci") if k in out.data)
     )
@@ -413,7 +474,7 @@ def merge_body(out, a) -> Any:
 
 
 def merge_notes(out, a, ctx) -> Iterator[str]:
-    if out.exit != OK:
+    if out.exit != OK or "queued" in out.data:
         return
     d = out.data
     if d.get("pr"):
@@ -458,6 +519,8 @@ def merge_notes(out, a, ctx) -> Iterator[str]:
 
 def merge_text(out, a) -> str:
     d = out.data
+    if "queued" in d:
+        return d["text"]
     if d.get("pr"):
         stacked = f", stacked on {d['stacked_on']}" if d["stacked_on"] else ""
         return (

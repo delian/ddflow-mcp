@@ -23,7 +23,9 @@ def _item(kind: str, **kw) -> Item:
 def test_default_pipeline_matches_the_pre_registry_rule(kind):
     """With no override, a kind runs exactly what `pipeline_for` ran before the registry."""
     cfg = Config()
-    old = cfg.gates.phase_pipeline if kind == "phase" else cfg.gates.task_pipeline
+    old = {"phase": cfg.gates.phase_pipeline, "doc": cfg.gates.doc_pipeline}.get(
+        kind, cfg.gates.task_pipeline
+    )
     assert pipeline_for(_item(kind), cfg) == list(old)
 
 
@@ -269,7 +271,7 @@ def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
 def test_workflow_text_lists_only_the_kinds_that_differ(repo):
     run_cli(repo, "init")
     default = run_cli(repo, "workflow")[1]
-    assert "A doc passes through" not in default
+    assert "A research passes through" not in default
     # the built-in phase line is printed once, by the phase pipeline itself
     assert default.count("A phase passes through") == 1, default
     assert (
@@ -535,3 +537,11 @@ def test_review_says_what_the_pool_and_route_stages_decided(repo, monkeypatch):
     # the skip reaches a caller that subscribed to no progress too
     assert "a: not independent of the author" in out.data["text"], out.data
     assert "→ a: not independent of the author" in said and "→ route: reviewer-agent" in said
+
+
+def test_a_doc_runs_the_shipped_doc_pipeline_without_the_code_gates():
+    cfg = Config()
+    doc = pipeline_for(_item("doc"), cfg)
+    assert doc == list(cfg.gates.doc_pipeline)
+    assert "unit_tests" not in doc and "critic" not in doc and "merge" in doc
+    assert "unit_tests" in pipeline_for(_item("task"), cfg)

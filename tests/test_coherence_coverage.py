@@ -38,6 +38,10 @@ from ddflow.surfaces.tools import TOOLS
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 
+#: It reads the source of the API, the surfaces and the fold's handlers (an AST scan, not an
+#: import), so a change to any of them selects it (B4067086b6b).
+GOVERNS = ("ddflow/api/**", "ddflow/surfaces/**", "ddflow/core/handlers/**")
+
 #: Event kinds that FILE a record whose text may repeat one already filed -> the API add
 #: function that runs the check for it.
 CHECKED: dict[str, str] = {
@@ -170,6 +174,8 @@ EXEMPT: dict[str, str] = {
 #: `items.resolve` writes `<kind>.added` through a computed kind (re-recording the rival
 #: add a contest kept), so it is not a literal and not listed.
 WRITERS_EXEMPT: dict[str, str] = {
+    "api/plan.py:_file": "plan apply files a plan `plan check` already ran the duplicate hunt "
+    "over, as PROPOSED tasks the operator confirms",
     "api/items.py:split": "the parts of an item being split: their text is the parent's, "
     "which every part would match",
     "api/items.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",

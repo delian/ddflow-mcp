@@ -90,9 +90,11 @@
     "duplicate_of": ["str"],
     "extends": ["str"],
     "fix_task": ["str"],
+    "globs": ["list"],
     "item": ["str"],
     "key": ["str"],
     "related": ["str"],
+    "repro": ["dict"],
     "scope": ["str"],
     "score": ["float"],
     "severity": ["str"],
@@ -200,6 +202,7 @@
     "id": ["str"],
     "kind": ["str"],
     "provenance": ["dict"],
+    "reason": ["str"],
     "source": ["str"]
    },
    "v": 1
@@ -211,7 +214,8 @@
     "kind": ["str"],
     "provenance": ["dict"],
     "reason": ["str"],
-    "source": ["str"]
+    "source": ["str"],
+    "split_into": ["list"]
    },
    "v": 1
   },
@@ -234,6 +238,7 @@
     "id": ["str"],
     "kind": ["str"],
     "provenance": ["dict"],
+    "reason": ["str"],
     "source": ["str"]
    },
    "v": 1

@@ -35,6 +35,20 @@ def _safe_parent(st: State, item_id: str, parent: str) -> str:
     return parent
 
 
+#: Marks a task that was filed PROPOSED (D-sdd-plan-modes): `plan apply` and the importers
+#: of other tools' specs. It is the existing BLOCKED state with this reason, so nothing the
+#: scheduler, `next` or `claim` already refuse changes; `plan confirm` is what releases it.
+PROPOSED_PREFIX = "proposed by plan:"
+
+
+def proposed_reason(plan_id: str) -> str:
+    """The blocked reason of a task proposed by plan ``plan_id``."""
+    return (
+        f"{PROPOSED_PREFIX}{plan_id}: not ready until the operator confirms "
+        f"(`ddflow plan confirm {plan_id} --yes --reason ...`)"
+    )
+
+
 def _definition(ev: Event) -> dict[str, Any]:
     return {
         "event": ev.id or ev.compute_id(),
@@ -82,6 +96,11 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
     for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
+    plan_id = d.get("proposed")
+    again = it.state == BLOCKED and (it.blocked_reason or "").startswith(PROPOSED_PREFIX)
+    if plan_id and kind == "task" and (it.state == OPEN or again):
+        it.state = BLOCKED
+        it.blocked_reason = proposed_reason(str(plan_id))
 
 
 def _h_updated(st: State, ev: Event, kind: str) -> None:

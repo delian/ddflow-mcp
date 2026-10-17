@@ -3,11 +3,15 @@
 import json
 import multiprocessing as mp
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _wait
+from _wait import scaled
+
 from ddflow.infra.log import Event, EventLog, canonical
 
 
@@ -68,24 +72,79 @@ def test_torn_line_is_skipped_not_fatal(log):
     assert any("torn append" in p for p in log.verify())
 
 
+_SHARED: dict = {}  # filled in each pool worker: the count of writers that have begun
+
+
+def _init_worker(counter):
+    _SHARED["started"] = counter
+
+
 def _writer(args):
-    root, name, n = args
-    lg = EventLog(Path(root), name)
+    root, name, n, lock_s = args
+    lg = EventLog(Path(root), name, lock_timeout_s=lock_s)
+    if (started := _SHARED.get("started")) is not None:
+        with started.get_lock():
+            started.value += 1
     for i in range(n):
         lg.append("session.note", f"{name}-{i}", {"text": str(i)})
     return n
 
 
-def test_concurrent_writers_lose_nothing(repo):
-    """The property the whole lock exists for, tested with real processes."""
+def _hold_lock(repo, taken, release):
+    """A process that owns the append lock until told to let go: the slow path, on demand."""
+    from ddflow.infra import fsio
+
+    with fsio.file_lock(EventLog(repo, "holder").lock_path, scaled(30)):
+        taken.set()
+        release.wait(scaled(60))
+
+
+def _lose_nothing(repo, lock_s: float, held_for_s: float = 0.0):
+    """8 processes append 15 events each. With ``held_for_s`` the lock is first taken by
+    another process and kept until every writer has started and then ``held_for_s`` longer,
+    so each writer really waits on it, as on a loaded machine; ``lock_s`` is the wait each
+    writer will accept."""
     n_proc, per = 8, 15
-    with mp.Pool(n_proc) as pool:
-        pool.map(_writer, [(str(repo), f"w{i}", per) for i in range(n_proc)])
-    events = EventLog(repo, "reader").read_all()
-    notes = [e for e in events if e.kind == "session.note"]
+    ctx = mp.get_context()
+    taken, release, counter = ctx.Event(), ctx.Event(), ctx.Value("i", 0)
+    holder = None
+    if held_for_s:
+        holder = ctx.Process(target=_hold_lock, args=(repo, taken, release), daemon=True)
+        holder.start()
+    jobs = [(str(repo), f"w{i}", per, lock_s) for i in range(n_proc)]
+    try:
+        if holder:
+            _wait.wait_until(lambda: taken.is_set() or not holder.is_alive(), 30, what="lock taken")
+            assert taken.is_set(), "the holder died before it took the lock"
+        with mp.Pool(n_proc, initializer=_init_worker, initargs=(counter,)) as pool:
+            pending = pool.map_async(_writer, jobs)
+            if holder:
+                _wait.wait_until(lambda: counter.value >= n_proc, 30, what="all writers started")
+                time.sleep(held_for_s)  # every writer is now past its start, waiting or about to
+                release.set()
+            pending.get(scaled(120))
+    finally:
+        release.set()
+        if holder:
+            holder.join(scaled(30))
+    notes = [e for e in EventLog(repo, "reader").read_all() if e.kind == "session.note"]
     assert len(notes) == n_proc * per, "an append was lost under concurrency"
     lamports = [e.lamport for e in notes]
     assert len(set(lamports)) == len(lamports), "lamport values must be unique"
+
+
+def test_concurrent_writers_lose_nothing(repo):
+    """The property the whole lock exists for, tested with real processes. The wait each
+    writer accepts is generous: under load a writer queues behind seven others, and the
+    default 30 s timed out in the ci gate (B83a8b93429)."""
+    _lose_nothing(repo, scaled(30))
+
+
+def test_a_slow_lock_wait_is_not_a_failed_append(repo, monkeypatch):
+    """The same run forced onto the slow path: the lock is busy for 3 s while each writer
+    accepts a wait of scaled(1.0) (64 s: the load factor is capped at 16). Unscaled (the old fixed timeout) it times out."""
+    _wait.pretend_saturated(monkeypatch)
+    _lose_nothing(repo, scaled(1.0), held_for_s=3.0)
 
 
 def test_canonical_json_is_stable():

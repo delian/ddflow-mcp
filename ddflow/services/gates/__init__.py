@@ -59,15 +59,19 @@ from .evidence import (  # noqa: F401
     diff_stat,
     differing_paths,
     digest,
+    head_of,
     is_tree,
+    moved_past,
     normal_fingerprint,
     recorded_content,
     source_tree,
+    superseded_by,
     tree_being_completed,
     tree_fingerprint,
     tree_identity,
     worktree_entries,
 )
+from .failed_review import failed_review_blockers, unresolved_review_failure  # noqa: F401
 from .kinds import (  # noqa: F401
     BOILERPLATE,
     EVIDENCE_FORMS,
@@ -118,6 +122,13 @@ from .outcomes import (  # noqa: F401
     triage_line,
     untriaged_note,
 )
+from .regression_collect import tree_provides  # noqa: F401
+from .regression_diag import describe_run, load_snapshot  # noqa: F401
+from .regression_testfix import (  # noqa: F401
+    VERIFIED_BY_MUTATION,
+    Tools,
+    verify_test_only_fix,
+)
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,
     family_for,
@@ -140,6 +151,14 @@ from .runner import (  # noqa: F401
     output_evidence,
     run_command_gate,
     run_log_writer,
+)
+from .running import (  # noqa: F401
+    Marker,
+    RunTerminated,
+    clear_started,
+    dead_runs,
+    mark_started,
+    terminating,
 )
 from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,

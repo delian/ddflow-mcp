@@ -15,6 +15,29 @@ def _count_recording(st: State, gate: str) -> None:
     st.gate_order.setdefault(gate, {"fired": 0, "recorded": 0})["recorded"] += 1
 
 
+#: Who reviewed, as the review recorded it; a hand record without its own keeps them.
+_REVIEWER_KEYS = ("model", "family", "reviewer", "reviewer_digest")
+
+
+def _carry_reviewer(prior: dict, evidence: dict) -> None:
+    """A hand record of a review gate keeps the reviewer of the round it settles (bug
+    Bf065905087): re-recording `passed` after triage must not make the agent the reviewer
+    and break the independence check. The identity moves as a unit: stating any part of
+    it (an explicit `model`) keeps no part of the prior one, or a stale family would
+    override it. The reviewed sha is kept unless restated."""
+    carried = []
+    if not any(evidence.get(k) for k in _REVIEWER_KEYS):
+        for k in _REVIEWER_KEYS:
+            if prior.get(k):
+                evidence[k] = prior[k]
+                carried.append(k)
+    if prior.get("reviewed_sha") and "reviewed_sha" not in evidence:
+        evidence["reviewed_sha"] = prior["reviewed_sha"]
+        carried.append("reviewed_sha")
+    if carried:
+        evidence["reviewer_carried"] = carried
+
+
 def _h_gate(outcome: str):
     def handler(st: State, ev: Event) -> None:
         d = ev.data
@@ -35,7 +58,13 @@ def _h_gate(outcome: str):
             # before it stay on the gate with their numbers, so `review triage` still
             # addresses them (bug B754cfb0c96). A new `ddflow review` brings its own.
             if prior.get("chunk_findings") and "review_kind" not in evidence:
-                evidence.setdefault("chunk_findings", prior["chunk_findings"])
+                if "chunk_findings" not in evidence:
+                    evidence["chunk_findings"] = prior["chunk_findings"]
+                    # Marked as carried: they belong to the EARLIER round, not to this
+                    # record (bug B29667ba4b4), so a pass over them settles them.
+                    evidence["findings_carried"] = True
+            if "review_kind" not in evidence:
+                _carry_reviewer(prior, evidence)
             it.gates[gate] = GateRecord(
                 gate=gate,
                 outcome=outcome,

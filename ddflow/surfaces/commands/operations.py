@@ -58,7 +58,10 @@ def cmd_cadence(a, c: Ctx) -> int:
         print(out.reason)
         return NOTHING
     for d in out.data["due"]:
-        print(f"DUE: {d['cadence']} — {d['since']} {d['unit']} since last (every {d['every']})")
+        runs = f" -- runs {d['runs']}" if d.get("runs") else ""
+        print(
+            f"DUE: {d['cadence']} — {d['since']} {d['unit']} since last (every {d['every']}){runs}"
+        )
     print("\nRecord one with: ddflow cadence --ran <name>")
     return OK
 
@@ -233,6 +236,8 @@ def _pins_regenerate(a, c: Ctx) -> int:
         after_merge=a.after_merge,
         verb=a.document,
         target=a.target or "",
+        agent=c.requested_agent,
+        on_progress=lambda line: print(line, file=sys.stderr, flush=True),
     )
     if c.json:
         emit_json(out.body())
@@ -250,6 +255,8 @@ def _pins_regenerate(a, c: Ctx) -> int:
         print(line)
     if out.data.get("note"):
         print(out.data["note"])
+    for line in out.data.get("resolved", []):
+        print(f"resolved {line}; `git add` marks it resolved")
     for p in out.data.get("pins", []):
         state = "re-recorded" if p["regenerated"] else "current"
         print(f"{p['name']}: {state}")

@@ -96,13 +96,20 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  
+  positional arguments:
+    target                the item id (as --item; required with --for-agent)
   
   options:
-    -h, --help        show this help message and exit
+    -h, --help            show this help message and exit
     --item ITEM
     --phase PHASE
     --check-recovery
+    --for-agent FOR_AGENT
+                          render the standard launch brief of subagent NAME for the item (`--item`
+                          or the positional id)
+    --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''
 # ---
@@ -118,7 +125,7 @@
 # ---
 # name: test_help[ddflow bug fixed]
   '''
-  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
   
   positional arguments:
     id
@@ -133,6 +140,14 @@
                           (recorded)
     --verify-reason VERIFY_REASON
                           why the pre-fix regression check is skipped (recorded)
+    --mutation-file MUTATION_FILE
+                          fix confined to test files: the changed test file the mutation edits (with
+                          --mutation-old/--mutation-new); ddflow applies it and the test must fail
+                          on it
+    --mutation-old MUTATION_OLD
+                          the text in --mutation-file (once) that --mutation-new replaces
+    --mutation-new MUTATION_NEW
+                          the replacement that disables the fix
     --lesson LESSON
     --lesson-title LESSON_TITLE
     --lesson-rule LESSON_RULE
@@ -143,25 +158,31 @@
 # ---
 # name: test_help[ddflow bug found]
   '''
-  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --id ID
     --summary SUMMARY
     --item ITEM
-    --title TITLE        a short headline for the bug
-    --severity SEVERITY  low | medium | high | critical (optional)
-    --scope SCOPE        project (default), or ddflow for a bug in ddflow itself
-    --globs GLOBS        the fix task's files (comma-separated); default: the item's own globs
-    --no-task            file no fix task: the bug is fixed in the commit that found it
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
-                         unclaimed, else filed as a new record linked to it
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
+    --title TITLE         a short headline for the bug
+    --severity SEVERITY   low | medium | high | critical (optional)
+    --scope SCOPE         project (default), or ddflow for a bug in ddflow itself
+    --globs GLOBS         the fix task's files (comma-separated); default: the item's own globs
+    --no-task             file no fix task: the bug is fixed in the commit that found it
+    --repro-cmd REPRO_CMD
+                          the command that shows the bug, kept in the repro bundle (never run)
+    --test TEST           a pytest id: run once, its output tail goes in the repro bundle
+    --repro-capture REPRO_CAPTURE
+                          off | basic | full: how much repro bundle to store (default [bugs]
+                          repro_capture)
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
   
   '''
 # ---
@@ -235,9 +256,50 @@
   
   '''
 # ---
+# name: test_help[ddflow chore approve]
+  '''
+  usage: ddflow chore approve [-h] [--note NOTE]
+  
+  options:
+    -h, --help   show this help message and exit
+    --note NOTE  why, recorded with the approval
+  
+  '''
+# ---
+# name: test_help[ddflow chore commit]
+  '''
+  usage: ddflow chore commit [-h] -m MESSAGE [--model MODEL] [files ...]
+  
+  positional arguments:
+    files                 the files (or directories) of this checkout to land; each must match
+                          [chore].globs
+  
+  options:
+    -h, --help            show this help message and exit
+    -m, --message MESSAGE
+                          the commit message, and the chore's title
+    --model MODEL         the author's model family, recorded on the completion
+  
+  '''
+# ---
+# name: test_help[ddflow chore]
+  '''
+  usage: ddflow chore [-h] {commit,approve} ...
+  
+  positional arguments:
+    {commit,approve}
+      commit          commit, merge and complete files in [chore].globs in one step, with no
+                      reviewer
+      approve         a person approves the current [chore].globs (refused under an agent identity)
+  
+  options:
+    -h, --help        show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
   
   positional arguments:
     {run,status,record}   run: check the merge result; status (default): what would run, and whether
@@ -248,6 +310,7 @@
     --ref REF             run: the commit or item id (default: HEAD here)
     --base BASE           run: merge this branch in first (default [ci].base)
     --command COMMAND     run: use this instead of [ci].command
+    --full                run: the whole test suite, not only the tests the change reaches
     --stage STAGE         record: gate | merge | pre-push | schedule
     --result {passed,failed}
                           record: how it went
@@ -333,7 +396,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] id
   
   positional arguments:
     id
@@ -349,6 +412,14 @@
     --regression-test REGRESSION_TEST
                           for a fix task: the test that now guards the bug(s) it fixes; closes them
                           (as `bug fixed` would) and completes. Repeat for several.
+    --mutation-file MUTATION_FILE
+                          fix confined to test files: the changed test file the mutation edits (with
+                          --mutation-old/--mutation-new); ddflow applies it and the test must fail
+                          on it
+    --mutation-old MUTATION_OLD
+                          the text in --mutation-file (once) that --mutation-new replaces
+    --mutation-new MUTATION_NEW
+                          the replacement that disables the fix
   
   '''
 # ---
@@ -753,7 +824,7 @@
 # ---
 # name: test_help[ddflow heartbeat]
   '''
-  usage: ddflow heartbeat [-h] id
+  usage: ddflow heartbeat [-h] [id]
   
   positional arguments:
     id
@@ -1233,7 +1304,7 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
@@ -1241,6 +1312,8 @@
   options:
     -h, --help         show this help message and exit
     --message MESSAGE
+    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
+                       add`)
     --keep
     --allow-dirty
     --allow-empty      land a branch with no commits ahead of its target (refused by default: it
@@ -1369,12 +1442,13 @@
 # ---
 # name: test_help[ddflow pins]
   '''
-  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target]
+  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target ...]
   
   positional arguments:
     document              the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale
                           pin files
-    target                merge-driver (git runs it): the file holding our side
+    target                merge-driver (git runs it): the files holding our side, the common
+                          ancestor and the other side
   
   options:
     -h, --help            show this help message and exit
@@ -1390,6 +1464,21 @@
   
   '''
 # ---
+# name: test_help[ddflow plan apply]
+  '''
+  usage: ddflow plan apply [-h] [--apply] [--hash HASH] [--plan-id PLAN_ID] source
+  
+  positional arguments:
+    source             the plan file, or - for stdin
+  
+  options:
+    -h, --help         show this help message and exit
+    --apply            File the plan (default: a dry run).
+    --hash HASH        The hash the dry run printed; a changed plan is refused.
+    --plan-id PLAN_ID  The plan's label (default: from the hash).
+  
+  '''
+# ---
 # name: test_help[ddflow plan check]
   '''
   usage: ddflow plan check [-h] source
@@ -1402,16 +1491,33 @@
   
   '''
 # ---
-# name: test_help[ddflow plan]
+# name: test_help[ddflow plan confirm]
   '''
-  usage: ddflow plan [-h] {check} ...
+  usage: ddflow plan confirm [-h] [--yes] [--reason REASON] plan_id
   
   positional arguments:
-    {check}
-      check     check a proposed plan before filing it (globs, cycles, collisions)
+    plan_id          The plan's label.
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
+    --yes            The operator's consent.
+    --reason REASON  Why the operator accepts the plan.
+  
+  '''
+# ---
+# name: test_help[ddflow plan]
+  '''
+  usage: ddflow plan [-h] {check,apply,confirm} ...
+  
+  positional arguments:
+    {check,apply,confirm}
+      check               check a proposed plan before filing it (globs, cycles, collisions)
+      apply               file a checked plan as PROPOSED tasks, in one step (dry run unless
+                          --apply)
+      confirm             the operator confirms a plan: its proposed tasks become ready
+  
+  options:
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -1601,6 +1707,26 @@
   
   '''
 # ---
+# name: test_help[ddflow queue]
+  '''
+  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
+  
+  positional arguments:
+    {add,run,status,remove}
+                          add ITEM: enqueue it; run: integrate the head (any agent may); status
+                          (default): the line; remove ITEM: drop an entry
+    id                    the item (add, remove)
+  
+  options:
+    -h, --help            show this help message and exit
+    --max-batch MAX_BATCH
+                          run: integrate at most this many entries (default [merge_queue].max_batch)
+    --unit-tests          run/add: also run each entry's unit_tests gate on the merged result
+    --no-unit-tests       run/add: do not run unit_tests (overrides [merge_queue].run_unit_tests)
+    --timeout TIMEOUT     run: seconds one entry's ci may run (default [merge_queue].timeout_s)
+  
+  '''
+# ---
 # name: test_help[ddflow rebuild]
   '''
   usage: ddflow rebuild [-h]
@@ -1690,6 +1816,19 @@
   
   '''
 # ---
+# name: test_help[ddflow report]
+  '''
+  usage: ddflow report [-h] [--agent AGENT] item
+  
+  positional arguments:
+    item           the item to report on
+  
+  options:
+    -h, --help     show this help message and exit
+    --agent AGENT  count as filed by this agent only (default: the agent that completed it)
+  
+  '''
+# ---
 # name: test_help[ddflow research]
   '''
   usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--all] [{add,list}]
@@ -1772,7 +1911,7 @@
     --force            run a full round past [review].max_rounds; needs --reason, recorded in the
                        evidence
     --reason REASON    why --force
-    --finding FINDING  triage: the finding's number (#N)
+    --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
     --refuted          triage: --probe shows the finding is false
     --confirmed        triage: --probe is the fix/test that answers it
     --probe PROBE      triage: the evidence for the verdict
@@ -1782,6 +1921,7 @@
                     a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage
     ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...
                                               record what became of one finding
+    ddflow review show <id> [--gate G]        list the recorded round's numbered findings
   --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
   `triage` verb: without it they are refused, never run as a review.
   
@@ -2174,38 +2314,45 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --needs NEEDS
-    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
-                         to add more -- every value is kept
+    --globs GLOBS         path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                          to add more -- every value is kept
     --tags TAGS
     --body BODY
-    --priority PRIORITY
-    --line LINE          release line (default: the current one)
-    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
-                         change it with `ddflow update`
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
-                         unclaimed, else filed as a new record linked to it
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
-    --phase PHASE        owning phase
-    --parent PARENT      owning phase OR task — a task parent makes this a SUB-TASK, which carries
-                         its own globs and dependencies like any other task
-    --lines LINES        a FIX for several release lines, e.g. 1,2,3: written where
-                         [flow].port_strategy says, with a port task <id>@<line> generated for each
-                         other line
-    --port-of PORT_OF    a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its own
-                         ports carry what this one lands
+    --kind KIND           what kind of work: task (default), doc, research or job. A kind runs the
+                          gate pipeline [gates].kind_pipelines gives it (doc ships without the code
+                          gates), so docs-only work completes without unit_tests
+    --resources RESOURCES
+                          physical resources the work RUNS on, as `ddflow update --resources` takes
+                          them: 'gpu:4,vllm-fleet'
+    --priority PRIORITY   lower is offered first (default 100; a task tagged dx or a bug fix gets
+                          its [schedule] band)
+    --line LINE           release line (default: the current one)
+    --readd               file a REMOVED item's id again. An id still in the queue is always
+                          refused: change it with `ddflow update`
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
+    --phase PHASE         owning phase
+    --parent PARENT       owning phase OR task — a task parent makes this a SUB-TASK, which carries
+                          its own globs and dependencies like any other task
+    --lines LINES         a FIX for several release lines, e.g. 1,2,3: written where
+                          [flow].port_strategy says, with a port task <id>@<line> generated for each
+                          other line
+    --port-of PORT_OF     a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its
+                          own ports carry what this one lands
   
   '''
 # ---
@@ -2266,7 +2413,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2276,12 +2423,26 @@
     --title TITLE
     --body BODY
     --needs NEEDS
+    --add-needs ADD_NEEDS
+                          ADD these comma-separated ids to the item's needs; the rest are kept
+    --remove-needs REMOVE_NEEDS
+                          REMOVE these comma-separated ids from the item's needs
     --tags TAGS
+    --add-tags ADD_TAGS   ADD these comma-separated tags to the item's tags; the rest are kept
+    --remove-tags REMOVE_TAGS
+                          REMOVE these comma-separated tags from the item's tags
     --line LINE
     --resources RESOURCES
-    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these; path
-                          globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
-                          add more -- every value is kept
+    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these -- the
+                          whole list, not an addition (see --add-globs); path globs, comma-separated
+                          (a.py,src/**) or a JSON array; repeat the flag to add more -- every value
+                          is kept
+    --add-globs ADD_GLOBS
+                          ADD these comma-separated globs to the item's current ones (and a claimed
+                          item's lease); the rest are kept
+    --remove-globs REMOVE_GLOBS
+                          REMOVE these comma-separated globs from the item's current ones (and a
+                          claimed item's lease)
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files
@@ -2509,13 +2670,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,health,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,health,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2523,7 +2684,8 @@
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
       update              change an item's fields
-      plan                check a plan before filing it
+      chore               commit or approve chore files (no reviewer)
+      plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
@@ -2569,6 +2731,8 @@
       doctor              integrity + health check
       rebuild             re-derive the index from the log
       render              regenerate the human-readable views
+      report              the completion report of an item, from the log (shas, tests, gates,
+                          overrides)
       config              print every knob, its value and its source
       upgrade             what upgrading this project to the running ddflow would change (the plan;
                           writes nothing; exit 0 up to date, 1 pending), or --apply it
@@ -2579,6 +2743,8 @@
       cadence             which periodic passes are due (exit 2 = none)
       pins                which text of an instruction file a test pins; or `pins regenerate` re-
                           records stale pin files
+      queue               the merge queue: add an item, run the integrator, show the line, remove an
+                          entry
       tests               the tests your change reaches, and a parallel command to run them (exit 2
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
@@ -2643,6 +2809,9 @@
     'ddflow bug list',
     'ddflow bug reopen',
     'ddflow cadence',
+    'ddflow chore',
+    'ddflow chore approve',
+    'ddflow chore commit',
     'ddflow ci',
     'ddflow claim',
     'ddflow cleanup',
@@ -2719,7 +2888,9 @@
     'ddflow phase list',
     'ddflow pins',
     'ddflow plan',
+    'ddflow plan apply',
     'ddflow plan check',
+    'ddflow plan confirm',
     'ddflow pr',
     'ddflow pr status',
     'ddflow pr sync',
@@ -2735,6 +2906,7 @@
     'ddflow prompts get',
     'ddflow prompts list',
     'ddflow prompts show',
+    'ddflow queue',
     'ddflow rebuild',
     'ddflow recall',
     'ddflow recover',
@@ -2742,6 +2914,7 @@
     'ddflow remove',
     'ddflow render',
     'ddflow replay',
+    'ddflow report',
     'ddflow research',
     'ddflow resolve',
     'ddflow review',

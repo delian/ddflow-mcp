@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_hub_importers"
+new = "100"
+why = "A module imported by this many files or more is a hub: the unit_tests selection does not walk through it, and a change to one runs the whole suite."
+impact = "additive"

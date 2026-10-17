@@ -11,6 +11,29 @@ from ._docs import declare, knob
 #: What `[session].progress_after_complete` accepts (services/progress_line).
 PROGRESS_MODES = ("on", "phase", "off")
 
+#: The sections of the standard subagent launch brief (`ddflow brief --for-agent`), in the order
+#: `templates/prompts/agent_brief.md` carries them; `agent_brief_off` names the ones to leave out.
+AGENT_BRIEF_SECTIONS = (
+    "identity",
+    "item",
+    "decisions",
+    "lessons",
+    "start",
+    "tests",
+    "reviews",
+    "gates",
+    "finish",
+    "forbidden",
+    "filing",
+    "project",
+    "report",
+)
+
+
+def _check_brief_sections(value) -> str:
+    bad = [x for x in value if x not in AGENT_BRIEF_SECTIONS]
+    return f"unknown section(s) {bad}; known: {', '.join(AGENT_BRIEF_SECTIONS)}" if bad else ""
+
 
 @declare("session")
 @dataclass
@@ -67,4 +90,37 @@ class SessionConfig:
     compaction_digest_chars: int = knob(
         2000,
         doc="Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session note of at most this many characters, and the SessionStart hook hands it back after compaction. The hook gets no summary from Claude Code, so this digest is the record of what the session was doing. 0 turns it off.",
+    )
+    agent_brief_max_chars: int = knob(
+        9000,
+        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+    )
+    agent_brief_off: list[str] = knob(
+        factory=list,
+        doc="Sections of the launch brief to leave out: identity, item, decisions, lessons, start, tests, reviews, gates, finish, forbidden, filing, project, report. Turning one off removes that standing rule from every launch brief: only for a project whose own instruction file already says it.",
+        check=_check_brief_sections,
+    )
+    agent_brief_decisions: int = knob(
+        6,
+        doc="How many of the decisions that govern the item's files the launch brief quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.",
+    )
+    report_commits: int = knob(
+        20,
+        doc="How many commit shas `ddflow report ITEM` lists for the landing before it says how many more there were.",
+    )
+    report_note_chars: int = knob(
+        200,
+        doc="Characters `ddflow report ITEM` keeps of a gate's reason, of the evidence text of a gate recorded by hand and of an earlier-tree note.",
+    )
+    report_test_files: int = knob(
+        12,
+        doc="How many changed test files `ddflow report ITEM` names before it says how many more there were.",
+    )
+    agent_brief_lessons: int = knob(
+        3,
+        doc="How many task-relevant lessons the launch brief carries.",
+    )
+    agent_brief_extra: str = knob(
+        "",
+        doc="Project text added to every launch brief as its `project` section: the commands and rules that hold only here (how to run the full test suite, a forbidden path). The standard text stays in one place; this is the project's addition to it.",
     )

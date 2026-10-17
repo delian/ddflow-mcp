@@ -310,7 +310,7 @@ def _settled_umbrella_detail(state: State, it: Item) -> str:
     (`api.lifecycle.complete._umbrella_children` is the same rule on the api side; core
     cannot import it). With every one abandoned there is nothing to complete: it is the
     operator's call to abandon it too or give it work."""
-    if it.kind != "task" or it.terminal:
+    if not it.is_work or it.terminal:
         return ""
     below = state.descendants(it.id)
     if not below or state.open_descendants(it.id):
@@ -568,6 +568,24 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
             raise ValueError(f"resource {spec!r}: the count must be a positive integer")
         out[name] = out.get(name, 0) + n
     return out
+
+
+def problem(specs: list[str]) -> str:
+    """Why ``specs`` cannot be an item's resources, or ""."""
+    # Only NEW input: a stored `gpu=1` (from before this check) must still parse, as a name.
+    for spec in specs:
+        if "=" in spec:
+            name, _, cap = spec.partition("=")
+            return (
+                f"resource {spec!r}: an item names its resources as name:count "
+                f"(`{name.strip()}:{cap.strip() or 1}`); name=count is the "
+                "[schedule] resources capacity form"
+            )
+    try:
+        parse_resources(specs)
+    except ValueError as exc:
+        return str(exc)
+    return ""
 
 
 def capacities(cfg: Config) -> dict[str, int]:
@@ -983,7 +1001,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         nothing after it waits on it here. Inside a chain it stays: it is the boundary a
         phase dependency waits on. Trimmed BEFORE the chains are compared, or a chain
         long only by its trailing phases beat a longer chain of real work."""
-        while chain and items[chain[-1]].kind != "task":
+        while chain and not items[chain[-1]].is_work:
             chain = chain[:-1]
         return chain
 
