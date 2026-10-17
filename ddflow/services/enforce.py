@@ -1577,8 +1577,6 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
-    if not uncovered:
-        return Verdict(OK, "")
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
     if not uncovered:
