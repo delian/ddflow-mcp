@@ -39,6 +39,9 @@ from .config_sections.bugs import (
 from .config_sections.cadence import (
     CadenceConfig,
 )
+from .config_sections.chore import (
+    ChoreConfig,
+)
 from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
     CI_ON_MERGE_MODES,
     CI_TESTS_SCOPES,
@@ -106,9 +109,6 @@ from .config_sections.log import (
 )
 from .config_sections.loops import (
     LoopsConfig,
-)
-from .config_sections.chore import (
-    ChoreConfig,
 )
 from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the move
     MCP_TOOL_TIERS,

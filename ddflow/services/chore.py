@@ -95,3 +95,22 @@ def relative(repo: Path, name: str) -> str | None:
     except ValueError:
         return None
     return rel.as_posix()
+
+
+def judge(
+    state: State, cfg: Config, it: Item, paths: list[str] | None
+) -> tuple[Exemption | None, str, list[str]]:
+    """(the exemption, its note for the completion event, the blockers it adds) for ``it``:
+    nothing for any kind but a task."""
+    if it.kind != "task":
+        return None, "", []
+    excused, why = exemption(state, cfg, it, paths)
+    return excused, excused.note() if excused else "", [why] if why else []
+
+
+def skipped_ok(cfg: Config, it: Item, excused: Exemption | None, gate: str) -> bool:
+    """Whether ``gate`` counts as settled because a chore skipped it on the record -- even
+    a required gate, which a skip otherwise does not satisfy."""
+    return (
+        excused is not None and gate in cfg.chore.skip_gates and it.gate_outcome(gate) == "skipped"
+    )

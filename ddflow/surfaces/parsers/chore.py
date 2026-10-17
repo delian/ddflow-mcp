@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 
 from .. import cliexec
+from ..commands.chore import cmd_chore_approve, cmd_chore_commit
 from ..declared import chore as declared
 from ..registry import add_commands
 
@@ -16,5 +17,9 @@ def register(s: argparse._SubParsersAction) -> None:
         s,
         declared.COMMANDS,
         groups={"chore": "commit or approve chore files (no reviewer)"},
+        handlers={
+            ("chore", "commit"): cmd_chore_commit,
+            ("chore", "approve"): cmd_chore_approve,
+        },
         executor=cliexec.handler,
     )
