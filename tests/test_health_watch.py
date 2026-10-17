@@ -191,7 +191,9 @@ def test_mode_apply_parks_then_breaks_the_stalled_lease_and_keeps_its_work(repo)
     st = _state(repo)
     assert st.items["T1"].lease.expired_at  # kept, expired
     broke = [e for e in EventLog(repo, "r").read_all() if e.data.get("broken_by")]
-    assert _records(repo, "health_park:") == ["health_park:T1"]  # parked before it was broken
+    order = [e.kind + ":" + e.subject for e in EventLog(repo, "r").read_all()]
+    park, broke_at = order.index("cadence.ran:health_park:T1"), order.index("lease.expired:T1")
+    assert park < broke_at  # parked before it was broken
     assert len(broke) == 1 and broke[0].data["broken_by"] == "ddflow:health"
     assert broke[0].data["broken_for"] == "T2"
     assert (tree / "unfinished.py").read_text() == "# nowhere else\n"  # nothing deleted

@@ -46,9 +46,10 @@ def health(
 ) -> O.Outcome:
     """Inspect; with ``run`` also correct per ``mode`` (default `[health].mode`) and record it."""
     log, cfg, st = _load(repo, agent)
-    if mode and mode not in HW.MODES:
-        return O.failed("health", f"unknown mode {mode!r}: one of {', '.join(HW.MODES)}")
     by_kind = HW.modes(cfg, mode)
+    bad = sorted({m for m in by_kind.values() if m not in HW.MODES})
+    if bad:
+        return O.failed("health", f"unknown mode {bad[0]!r}: one of {', '.join(HW.MODES)}")
     mode = mode or cfg.health.mode
     active = any(m != "off" for m in by_kind.values())
     at = time.time() if now is None else now
