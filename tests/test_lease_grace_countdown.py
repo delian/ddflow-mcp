@@ -3,6 +3,8 @@ printed a negative number of seconds (the claim refusal was fixed in Bc99060b8ca
 
 from __future__ import annotations
 
+import time
+
 from conftest import run_cli
 
 from ddflow.config import Config
@@ -30,6 +32,20 @@ def test_plan_and_show_never_print_a_negative_countdown(repo):
     why = blocked.detail
     assert "another -" not in why and "grace period" in why
 
-    text = lease.left_text(late)
+    text = lease.left_text(late, cfg.lease.grace_s)
     assert "-" not in text and "grace period" in text
     assert lease.left_text(lease.renewed_at + 5) == f"{lease.ttl_s - 5}s left"
+    dead = lease.renewed_at + lease.ttl_s + cfg.lease.grace_s + 100
+    assert "grace period" not in lease.left_text(dead, cfg.lease.grace_s)
+
+
+def test_show_inside_the_grace_window_is_not_negative(repo, monkeypatch):
+    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1", agent="a")[0] == 0
+    time.sleep(2.5)
+    code, out, _err = run_cli(repo, "show", "T1", agent="a")
+    assert code == 0 and "lease a" in out
+    assert "-" not in out.split("lease a")[1].split("\n")[0].split(")")[0]
+    assert "grace period" in out
