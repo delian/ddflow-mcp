@@ -109,7 +109,7 @@ def _record_claimed_globs(
     if resources is not None and sorted(resources) != sorted(it.resources):
         fields["resources"] = list(resources)
     if fields:
-        log.append(f"{it.kind}.updated", it.id, fields)
+        log.append(f"{it.family}.updated", it.id, fields)
 
 
 def _renew_in_place(
@@ -260,7 +260,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             raise LeaseError(f"no such item {item_id!r}", item=item_id)
         if it.removed:
             raise LeaseError(f"{item_id} was removed", item=item_id)
-        bad = GS.problem(globs or [])
+        bad = GS.problem(globs or []) or (schedule.problem(resources) if resources else "")
         if bad:
             raise LeaseError(f"{item_id}: {bad}", item=item_id)
         if it.state == DONE and not force:
@@ -291,7 +291,10 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 item=item_id,
                 alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
-        if existing and not force and cfg.lease.reclaim_policy == "report":
+        # Only reached for a lease that is NOT live (a live own one returned above), so a
+        # holder's own lease here is, by construction, a lapsed one.
+        own_lapsed = existing is not None and existing.holder == holder and cfg.lease.resume_own
+        if existing and not force and not own_lapsed and cfg.lease.reclaim_policy == "report":
             if existing.expired_at:
                 # Recorded by `recover --apply`, which records only a tree it measured
                 # EMPTY. Sending the agent back to `recover` sent it round in a circle:
@@ -310,7 +313,8 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 f"{item_id} has an EXPIRED lease from {existing.holder} "
                 f"(worktree {existing.worktree or '-'}). It is NOT stolen automatically: "
                 f"a crashed agent's worktree often holds finished work. "
-                f"Run `ddflow recover --item {item_id}`, then retry with --force.",
+                f"To take it over: `ddflow recover --item {item_id}`, then "
+                f"`ddflow claim {item_id} --force`.",
                 holder=existing.holder,
                 item=item_id,
             )
@@ -355,6 +359,11 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                     f". {item_id}'s lease lapsed and those files were claimed since: "
                     f"--force takes over the expired lease, not another live one: "
                     f"{lease.holder} releases {other_id}, or you wait for it."
+                    + (
+                        " Claim again with --globs naming only the files nobody holds."
+                        if own_lapsed
+                        else ""
+                    )
                     if existing is not None
                     else ""
                 ),
@@ -633,9 +642,15 @@ def plan_retarget(
     item_id: str,
     globs: list[str] | None,
     resources: list[str] | None = None,
+    *,
+    now: float | None = None,
 ) -> tuple[Lease | None, str]:
     """(the LIVE lease to point at ``globs`` / ``resources`` or None, why that is refused
     or "").
+
+    ``now`` (default: the clock) is the instant the lease is judged live at: the heartbeat
+    that revived a lapsed lease passes the instant it renewed it, so a slow process cannot
+    find the lease it just revived lapsed again (B8eb33fe297).
 
     Call with ``log.transaction()`` held, and append nothing if the reason is non-empty.
     ``None`` leaves that field of the claim alone.
@@ -652,7 +667,7 @@ def plan_retarget(
     TTL and grace -- is left for recovery rather than touched, so no lease is brought
     back by an edit. An unclaimed item's globs are not checked, as before.
     """
-    now = time.time()
+    now = time.time() if now is None else now
     state = _fold(log)
     it = state.items.get(item_id)
     lz = it.lease if it else None

@@ -14,7 +14,9 @@ from ...core.outcome import NOTHING, OK
 from ..argtypes import GLOBS_HELP, _Globs
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
+from . import agent_brief_cli as AB
 from . import lifecycle_cli as L
+from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: `api.lifecycle.DEFAULT_CHECK_RECOVERY`, spelled here so declaring the commands does not
 #: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
@@ -66,29 +68,24 @@ COMMANDS: tuple[Command, ...] = (
             "START HERE every session. Returns a budgeted pack: work recoverable after "
             "a crash, the current item, what is ready to start now, why everything else "
             "is blocked, and the past lessons ranked as relevant to this task. Use this "
-            "INSTEAD of reading the project's lesson or rule files — it is the same "
-            "information retrieved for the task at hand, at a fraction of the tokens."
+            "INSTEAD of reading the project's lesson or rule files: the same information, "
+            "ranked for the task at hand, at a fraction of the tokens."
         ),
         kind="brief",
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().brief(
-            repo,
-            item=a.get("item", "") or "",
-            phase=a.get("phase", "") or "",
-            check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
-            called_from=called_from,
-            shell_cwd=shell_cwd,
-            agent=agent,
-        ),
+        call=AB.call,
         payload="text",
         cli=CliPolicy(
             notes=L.brief_notes,
-            body=L.brief_body,
+            body=AB.brief_body,
             human=L.brief_text,
             call_kwargs=L.merge_kwargs,
         ),
         wants_called_from=True,
+        flag_exempt={
+            "--note": "with --for-agent, a coordinator's note: CLI only (tools/list bytes)"
+        },
         params=(
             Param(
                 "item", help="Focus on this phase or task id (optional).", cli_help="", default=""
@@ -102,9 +99,32 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "check_recovery",
                 type="boolean",
-                help="Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new.",
+                help="Scan for crashed agents' worktrees and lead with them: know it BEFORE new work.",
                 cli_help="",
                 default=DEFAULT_CHECK_RECOVERY,
+            ),
+            Param(
+                "for_agent",
+                help="Render this subagent's launch brief for item.",
+                cli_help="render the standard launch brief of subagent NAME for the item "
+                "(`--item` or the positional id)",
+                default="",
+            ),
+            Param(
+                "note",
+                help="",
+                cli_help="with --for-agent: the coordinator's note for this item",
+                default="",
+                cli_only=True,
+            ),
+            Param(
+                "target",
+                help="",
+                cli_help="the item id (as --item; required with --for-agent)",
+                positional=True,
+                nargs="?",
+                default="",
+                cli_only=True,
             ),
         ),
     ),
@@ -198,7 +218,7 @@ COMMANDS: tuple[Command, ...] = (
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
         call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a["id"], agent=agent, called_from=called_from
+            repo, a.get("id", ""), agent=agent, called_from=called_from
         ),
         payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
@@ -210,7 +230,16 @@ COMMANDS: tuple[Command, ...] = (
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
         wants_called_from=True,
-        params=(Param("id", help="Item id.", cli_help="", positional=True),),
+        params=(
+            Param(
+                "id",
+                help="Item id.",
+                cli_help="",
+                positional=True,
+                nargs="?",
+                default="",
+            ),
+        ),
     ),
     Command(
         path=("release",),
@@ -618,9 +647,10 @@ COMMANDS: tuple[Command, ...] = (
         path=("complete",),
         summary="finish an item (exit 3 = gates not satisfied)",
         tool="ddflow_complete",
-        description="Finish an item. Refuses (exit 3) when a required gate has not passed, when a "
-        "phase still has open tasks, or when no reviewer came from a different model "
-        "family than the author. Pass your own model as 'model'.",
+        flag_exempt=MUTATION_FLAG_EXEMPT,
+        description="Finish an item. Refuses (exit 3) when a required gate has not passed, a phase "
+        "has open tasks, or no reviewer came from a different model family than the "
+        "author. Pass your own 'model'.",
         call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().complete(
             repo,
             a["id"],
@@ -629,6 +659,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            mutation=mutation_of(a),
             called_from=called_from,
             shell_cwd=shell_cwd,
             agent=agent,
@@ -668,7 +699,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Complete over unmet conditions; each is recorded as overridden, forever. Prefer `ddflow_gate_skip` with a reason: it drops one named step.",
+                help="Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason.",
                 cli_help="",
             ),
             Param(
@@ -679,13 +710,14 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "regression_test",
-                help="For a fix task: the test that now guards its bug(s); closes them.",
+                help="Fix task: the test guarding its bug(s); closes them.",
                 cli_help="for a fix task: the test that now guards the bug(s) it fixes; closes them (as `bug fixed` would) and completes. Repeat for several.",
                 action="append",
                 default=[],
             ),
+            *MUTATION_PARAMS,
         ),
-        tool_order=("id", "sha", "model", "changelog", "regression_test", "force"),
+        tool_order=("id", "sha", "model", "changelog", "regression_test", *MUTATION_ORDER, "force"),
     ),
     Command(
         path=("abandon",),
@@ -814,19 +846,8 @@ COMMANDS: tuple[Command, ...] = (
         "[flow].integration = 'pr' it pushes and opens (or updates) a pull request "
         "instead, releases your lease and parks the item in REVIEW — take the next "
         "item; `ddflow_pr_sync` completes it once a person merges it.",
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().merge_item(
-            repo,
-            a["id"],
-            message=a.get("message", "") or "",
-            allow_dirty=bool(a.get("allow_dirty")),
-            allow_empty=bool(a.get("allow_empty")),
-            keep=bool(a.get("keep")),
-            model=a.get("model", "") or "",
-            branch=a.get("branch", "") or "",
-            called_from=called_from,
-            shell_cwd=shell_cwd,
-            agent=agent,
-        ),
+        wants_progress=True,
+        call=L.merge_call,
         payload=L.MERGE_PAYLOAD,
         render=L.merge_text,
         cli=CliPolicy(
@@ -834,12 +855,18 @@ COMMANDS: tuple[Command, ...] = (
             reason=L.merge_reason,
             notes=L.merge_notes,
             body=L.merge_body,
-            call_kwargs=L.merge_kwargs,
+            call_kwargs=L.merge_progress_kwargs,
         ),
         wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("message", help="Merge commit message.", cli_help="", default=""),
+            Param(
+                "queue",
+                type="boolean",
+                help="Enqueue (ddflow_queue add) instead of landing.",
+                cli_help="enqueue the item in the merge queue instead of landing it (`ddflow queue add`)",
+            ),
             Param(
                 "keep",
                 type="boolean",
@@ -849,29 +876,38 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "allow_dirty",
                 type="boolean",
-                help="Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output.",
+                help="Merge although the worktree is dirty; uncommitted changes are NOT included. Only once you know it is build output.",
                 cli_help="",
             ),
             Param(
                 "allow_empty",
                 type="boolean",
-                help="Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree).",
+                help="Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree).",
                 cli_help="land a branch with no commits ahead of its target (refused by default: it would record the item merged with nothing landed)",
             ),
             Param(
                 "branch",
-                help="For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs.",
+                help="no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs.",
                 cli_help="for an item claimed without a worktree: the branch to land (default: the one checked out in the worktree you are standing in)",
                 default="",
             ),
             Param(
                 "model",
-                help="The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then.",
+                help="The AUTHOR's model. In PR mode the item completes at `ddflow_pr_sync`, which needs it for reviewer independence.",
                 cli_help="the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and the reviewer-independence check needs it then",
                 default="",
             ),
         ),
-        tool_order=("id", "message", "keep", "model", "allow_dirty", "allow_empty", "branch"),
+        tool_order=(
+            "id",
+            "message",
+            "queue",
+            "keep",
+            "model",
+            "allow_dirty",
+            "allow_empty",
+            "branch",
+        ),
     ),
 )
 

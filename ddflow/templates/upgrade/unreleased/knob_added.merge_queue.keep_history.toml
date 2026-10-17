@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.keep_history"
+new = '50'
+why = "How many finished merge-queue entries are kept for `ddflow queue status` (default 50)."
+impact = "additive"

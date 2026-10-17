@@ -14,12 +14,15 @@ what only one caller has (``fixes``, ``promote_to``, ``source`` ...).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from ..core import globspec as GS
-from ..core.model import Item
+from ..core import schedule as SCH
+from ..core.defaults import DEFAULT_PRIORITY
+from ..core.model import WORK_KINDS, Item
 from . import leases as L
+from . import priority as P
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -27,7 +30,18 @@ if TYPE_CHECKING:
     from ..infra.log import EventLog
 
 #: ``TaskDraft`` fields written to the event, in the order they are written.
-_FIELDS = ("parent", "title", "needs", "globs", "resources", "body", "tags", "priority", "line")
+_FIELDS = (
+    "parent",
+    "title",
+    "needs",
+    "globs",
+    "resources",
+    "body",
+    "tags",
+    "priority",
+    "line",
+    "kind",
+)
 
 
 def bad_id(item: str) -> str:
@@ -84,6 +98,8 @@ class TaskDraft:
     tags: list[str] | None = None
     priority: int | None = None
     line: str | None = None
+    #: A work kind other than a plain task ("doc", ...); None writes nothing: a task.
+    kind: str | None = None
     #: Fields only some callers write: `fixes`, `promote_from`, `port_of`, `source` ...
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -113,8 +129,22 @@ class Added:
 
 
 def problem_of(draft: TaskDraft) -> str:
-    """Why the draft's id or globs cannot be recorded, or "" (needs no state)."""
-    return bad_id(draft.id) or GS.problem(draft.globs or [])
+    """Why the draft's id, globs or kind cannot be recorded, or "" (needs no state)."""
+    return (
+        bad_id(draft.id)
+        or GS.problem(draft.globs or [])
+        or SCH.problem(draft.resources or [])
+        or _bad_kind(draft.kind)
+    )
+
+
+def _bad_kind(kind: str | None) -> str:
+    """Why ``kind`` is not an item kind `task add` can make, or "" (none, or a work kind)."""
+    if not kind or kind in WORK_KINDS:
+        return ""
+    if kind == "phase":
+        return "a phase is made with `ddflow phase add`, not `task add --kind phase`."
+    return f"unknown kind {kind!r}: task add makes {', '.join(WORK_KINDS)}."
 
 
 def missing_parent(st: State, parent: str | None) -> str:
@@ -137,7 +167,7 @@ def release_umbrella(
     ``tasks_only`` is False: `split` lets any item go.
     """
     holder = st.items.get(parent) if parent else None
-    if not (holder and holder.lease) or (tasks_only and holder.kind != "task"):
+    if not (holder and holder.lease) or (tasks_only and not holder.is_work):
         return False
     L.release(log, parent, note=note)
     holder.lease = None  # a second child added in this batch finds nothing to release
@@ -174,6 +204,10 @@ def add_task(
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)
+    if draft.priority is None:  # filed with none: a DX or fix task takes its band
+        banded = P.band(cfg, draft.id, draft.tags or [])
+        if banded != DEFAULT_PRIORITY:
+            draft = replace(draft, priority=banded)
     data = draft.data()
     if not isinstance(dedupe, str):
         data.update(dedupe.fields)
@@ -188,7 +222,7 @@ def add_task(
         resources=list(draft.resources or []),
         body=draft.body or "",
         tags=list(draft.tags or []),
-        priority=100 if draft.priority is None else draft.priority,
+        priority=DEFAULT_PRIORITY if draft.priority is None else draft.priority,
         line=draft.line or "",
         fixes=list(draft.extra.get("fixes", [])),
     )

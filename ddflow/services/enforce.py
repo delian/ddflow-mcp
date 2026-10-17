@@ -45,6 +45,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import clock
+from ..core.admission import new_file_globs
 from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
@@ -62,6 +63,8 @@ from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
 from . import docsync
+from . import pins_written as PW
+from . import upgrade_written as UW
 from .backups import make_backup
 from .enforce_committed import committed_log
 from .export import frame as F
@@ -1120,7 +1123,9 @@ def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> boo
     return bool(here and leased_tree and leased_tree.resolve() == here)
 
 
-def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
+def _lapsed_lines(
+    item_id: str, lease: Lease, now: float, me: str, *, allowed: bool = False
+) -> list[str]:
     """What to say about a lapsed lease on this work: when it lapsed, and how to renew
     it -- as its holder, since a heartbeat from the tree will not revive an expired one.
 
@@ -1138,6 +1143,12 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
         f"heartbeat for {idle}, past its {ttl} TTL, and nobody has taken",
         "it over.",
     ]
+    if allowed:
+        return [
+            *lines,
+            f"Renew it so later commits are not on a lapse: ddflow --agent {lease.holder} heartbeat {item_id}",
+            "",
+        ]
     if lease.holder == me:
         lines += ["Renew it, then commit again:"]
     else:
@@ -1354,6 +1365,27 @@ def _split_leases(
     return mine, others, holds_any
 
 
+def _without_new_files(
+    repo: Path, cfg: Config, uncovered: list[str], holds_any: bool, others: dict[str, str]
+) -> list[str]:
+    """``uncovered`` less the staged NEW files `[lease] new_file_globs` names: a fragment
+    named after its own knob is nobody else's (B92e13a521f). An edit stays uncovered, and so
+    does a path another agent's live lease names."""
+    if not holds_any:
+        return uncovered
+    globs = new_file_globs(cfg)
+    cand = [
+        p
+        for p in uncovered
+        if any(path_in_glob(p, g) for g in globs) and not any(path_in_glob(p, o) for o in others)
+    ]
+    if not cand:
+        return uncovered
+    added = CH.changed_paths(_index_tree(repo), include=("staged",), renames=True, diff_filter="A")
+    fresh = set(added or ())
+    return [p for p in uncovered if p not in cand or p not in fresh]
+
+
 def _uncovered_paths(paths: list[str], mine: list[str], shared: list[str]) -> list[str]:
     """The staged paths neither shared nor inside a glob I hold."""
     return [
@@ -1385,6 +1417,40 @@ def _lapsed_mine(
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
         and not any(globs_overlap(g, o) for g in lease.globs for o in others)
     ]
+
+
+def _accepted_lapsed(cfg: Config, lapsed: list, me: str) -> list:
+    """The lapsed leases `[enforce].lapsed_lease` lets this commit stand on: nobody took
+    them over (`_lapsed_mine` already excludes any overlapping a live lease), so
+    refusing the holder, or the agent in the item's own tree, for a lapse only costs a
+    heartbeat it may not know to send (bug B8aa03801a0)."""
+    policy = cfg.enforce.lapsed_lease
+    if policy == "refuse":
+        return []
+    return [(i, lease) for i, lease in lapsed if policy == "accept" or lease.holder == me]
+
+
+def _after_accepting(cfg: Config, uncovered: list[str], lapsed: list, me: str, now: float):
+    """(paths still uncovered, lapsed leases still unaccepted, the note for accepted ones)."""
+    accepted = _accepted_lapsed(cfg, lapsed, me)
+    if not accepted:
+        return uncovered, lapsed, ""
+    left = [p for p in uncovered if not _covered_by(p, accepted)]
+    return left, [x for x in lapsed if x not in accepted], _accepted_note(accepted, now, me)
+
+
+def _covered_by(path: str, leases: list) -> bool:
+    return any(path_in_glob(path, g) for _i, lease in leases for g in lease.globs)
+
+
+def _accepted_note(accepted: list, now: float, me: str) -> str:
+    lines = [
+        "ddflow: allowed on a LAPSED lease nobody has taken over (policy [enforce].lapsed_lease).",
+        "",
+    ]
+    for item_id, lease in accepted:
+        lines += _lapsed_lines(item_id, lease, now, me, allowed=True)
+    return "\n".join(lines).rstrip()
 
 
 def _uncovered_message(
@@ -1463,6 +1529,9 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     state = localize(fold(log.read_all(), strict=False), log, time.time())
+    paths = _beyond_upgrade_output(repo, state, paths)
+    if not paths:
+        return Verdict(OK, "")
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)
@@ -1472,6 +1541,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
+    uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
     if not uncovered:
         return Verdict(OK, "")
 
@@ -1479,10 +1549,39 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
+    uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
+    if not uncovered:
+        return Verdict(OK, note)
     msg = _uncovered_message(cfg, state, uncovered, stolen, lapsed, mine, me, now, mode, agent)
+    msg = f"{note}\n\n{msg}" if note else msg
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
     return Verdict(FAIL, msg)
+
+
+def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
+    """``paths`` less the ones whose staged bytes are exactly what an `upgrade --apply`
+    recorded as written (`upgrade.applied` ``written``, or `pins regenerate`'s local record): the tool's own output needs no lease,
+    but a file edited after the upgrade has another digest and does."""
+    wrote: dict[str, set[str]] = {}
+    for run in state.upgrade_runs.values():
+        for rel, digest in (run.get("written") or {}).items():
+            wrote.setdefault(rel, set()).add(digest)
+    # A regenerated pin file is the same kind of output (bug B1579b8a1a9).
+    for rel, digests in PW.load(repo).items():
+        wrote.setdefault(rel, set()).update(digests)
+    out = []
+    for p in paths:
+        data = staged_bytes(repo, p) if p in wrote else None
+        if data is None or not ({UW.digest(data), _index_blob(repo, p)} & wrote[p]):
+            out.append(p)
+    return out
+
+
+def _index_blob(repo: Path, path: str) -> str | None:
+    """The blob id the index holds for ``path`` (what `upgrade_written.digests` records)."""
+    r = G.run(_index_tree(repo), "rev-parse", f":{path}", timeout=P.TIMEOUTS["git_listing"])
+    return r.out.strip() if r.ok and r.out.strip() else None
 
 
 def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | None:

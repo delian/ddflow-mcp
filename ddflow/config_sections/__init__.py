@@ -46,6 +46,10 @@ SECTION_NAMES = (
     "docs",
     "metrics",
     "pins",
+    "plan",
+    "merge_queue",
+    "chore",
+    "hooks",
     "health",
 )
 

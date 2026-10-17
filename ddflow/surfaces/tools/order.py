@@ -20,6 +20,7 @@ TOOL_ORDER: tuple[str, ...] = (
     "ddflow_gate_skip",
     "ddflow_complete",
     "ddflow_merge",
+    "ddflow_queue",
     "ddflow_pr_sync",
     "ddflow_pr_status",
     "ddflow_pr_threads",

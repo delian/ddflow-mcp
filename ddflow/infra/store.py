@@ -41,13 +41,14 @@ from ddflow import FORMAT_LEVEL, __version__
 
 from ..config import Config
 from ..core import digest as D
+from ..core import participation as PA
 from ..core import porter, textsim
 from ..core.model import State, fold
 from ..core.rank import TRIGRAM_MIN, bm25, fuse, rerank, substring_bm25
 from ..core.textcut import clip
 from ..infra.log import EventLog, _flock
 
-SCHEMA = 10
+SCHEMA = 11
 
 #: How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint
 #: `index.db`) is kept after its last write before a rebuild garbage-collects it. Worktrees
@@ -149,6 +150,8 @@ _SEARCH_COLS: dict[str, tuple[str, ...]] = {
     "prompts": ("text",),
     "items": ("title", "body", "tags"),
     "memories": ("text", "tags"),
+    # the declared record kinds (`core.participation`), one table, `id` = "<kind>:<id>"
+    "records": ("title", "body"),
 }
 
 
@@ -219,6 +222,9 @@ class Store:
         create table if not exists memories(
             id text primary key, text text, tags text, at text, origin_at text,
             by text, source text);
+        create table if not exists records(
+            id text primary key, kind text, rid text, title text, body text,
+            status text, at text);
         create table if not exists similar_docs(
             ord integer primary key, id text, kind text, item text, digest text);
         create table if not exists similar_terms(
@@ -243,6 +249,8 @@ class Store:
                 id unindexed, title, body, tags, tokenize='porter unicode61');
             create virtual table if not exists memories_fts using fts5(
                 id unindexed, text, tags, tokenize='porter unicode61');
+            create virtual table if not exists records_fts using fts5(
+                id unindexed, title, body, tokenize='porter unicode61');
             """)
         if self.trigram:
             for table in _SEARCH_COLS:
@@ -460,6 +468,7 @@ class Store:
             _insert_memories(con, state, self.fts)
             _insert_bugs(con, state, self.fts)
             _insert_sessions(con, state, self.fts)
+            _insert_records(con, state, self.fts)
             if self.trigram:
                 _fill_trigram(con)
             _insert_similar(con, similar_records(state))
@@ -554,7 +563,13 @@ class Store:
 
     # -- search ---------------------------------------------------------------------
     def search(
-        self, table: str, query: str, limit: int = 5, *, rerank_by_likeness: bool = False
+        self,
+        table: str,
+        query: str,
+        limit: int = 5,
+        *,
+        rerank_by_likeness: bool = False,
+        prefix: str = "",
     ) -> list[dict[str, Any]]:
         """Rank ``table`` against ``query``: BM25 over the porter words fused (reciprocal
         rank) with a trigram BM25 over the substrings, best first.
@@ -573,6 +588,10 @@ class Store:
         characters and ORs the terms. Raw user text reaching an FTS5 MATCH is a syntax
         error waiting to happen — an unbalanced quote or a bare ``-`` raises, and a
         search that throws on a normal question is a search nobody uses.
+
+        ``prefix`` keeps only the rows whose id starts with it (the declared kinds share
+        the ``records`` table, ids ``<kind>:<id>``), so one kind is ranked on its own and a
+        large one cannot crowd out another.
         """
         cols = _SEARCH_COLS[table]
         pool = max(limit * _POOL, _POOL_MIN)
@@ -587,6 +606,7 @@ class Store:
                 nonlocal scan
                 if scan is None:
                     rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
+                    rows = [r for r in rows if str(r.get("id", "")).startswith(prefix)]
                     keys = [_row_key(table, r, n) for n, r in enumerate(rows)]
                     if table == "prompts":  # the id the FTS path gives a prompt, too
                         rows = [{**r, "id": k} for r, k in zip(rows, keys, strict=True)]
@@ -606,9 +626,9 @@ class Store:
 
             lists: list[list[str]] = []
             if self.fts:
-                lists = [self._fts_ranking(con, f"{table}_fts", _fts_query(query), pool)]
+                lists = [self._fts_ranking(con, f"{table}_fts", _fts_query(query), pool, prefix)]
                 lists.append(
-                    self._fts_ranking(con, f"{table}_tri", _tri_query(terms), pool)
+                    self._fts_ranking(con, f"{table}_tri", _tri_query(terms), pool, prefix)
                     if self.trigram
                     else python_rankings("trigram")
                 )
@@ -632,17 +652,17 @@ class Store:
             return ordered[:limit]
 
     @staticmethod
-    def _fts_ranking(con, index: str, match: str, limit: int) -> list[str]:
+    def _fts_ranking(con, index: str, match: str, limit: int, prefix: str = "") -> list[str]:
         """Ids of the FTS5 table ``index`` matching ``match``, best BM25 first; empty for no
-        expression, no such table or one FTS5 refuses."""
+        expression, no such table or one FTS5 refuses. ``prefix`` keeps ids that start with it."""
         if not match:
             return []
         try:
             rows = con.execute(
                 # bandit B608: `index` is `<key of _SEARCH_COLS>_fts` or `_tri`, built here.
                 f"select id from {index} where {index} match ? "  # nosec B608
-                f"order by bm25({index}), id limit ?",
-                (match, limit),
+                f"and substr(id, 1, ?) = ? order by bm25({index}), id limit ?",
+                (match, len(prefix), prefix, limit),
             ).fetchall()
         except sqlite3.OperationalError:
             return []
@@ -746,6 +766,12 @@ RECALL_SOURCES: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def recall_sources() -> tuple[tuple[str, str, str], ...]:
+    """What recall searches now: the fixed sources, then each declared kind (its name is its
+    table, its label the name in capitals, its hint the descriptor's ``recall_hint``)."""
+    return RECALL_SOURCES + PA.recall_entries()
+
+
 def _fit(text: str, width: int) -> str:
     """The first ``width`` characters of a hit's body: no marker, no trimming."""
     return clip(text, width, rstrip=False)
@@ -792,7 +818,32 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
             "summary": f"SESSION SUMMARY ({row.get('session', '')}):",
         }.get(row.get("role") or "", "operator asked:")
         return f"{row.get('at', '')[:10]} {who}", _fit(text, width)
+    if table in PA.DECLARED:
+        status = row.get("status") or ""
+        tag = f"  [{status}]" if status and status != "active" else ""
+        return f"{row.get('title', '')}{tag}", _fit(row.get("body") or "", width)
     return row.get("id", ""), ""
+
+
+def _insert_records(con, state, fts: bool) -> None:
+    """The ACTIVE records of the declared kinds that are recalled, in the ``records`` table:
+    a retired, superseded or merged one no longer changes what an agent should do. A kind
+    keeps the text its descriptor names (`Declared.text`); the id is ``<kind>:<id>``."""
+    for rec in state.defs.values():
+        if not rec.live:
+            continue
+        for d in PA.recalled():
+            if d.def_kind != rec.kind:
+                continue
+            key = f"{d.name}:{rec.id}"
+            title = str(rec.fields.get(d.title, ""))
+            body = d.text({k: v for k, v in rec.fields.items() if k != d.title})
+            con.execute(
+                "insert or replace into records values(?,?,?,?,?,?,?)",
+                (key, d.name, rec.id, title, body, rec.status, rec.updated_at or rec.at),
+            )
+            if fts:
+                con.execute("insert into records_fts values(?,?,?)", (key, title, body))
 
 
 def _insert_memories(con, state, fts: bool) -> None:

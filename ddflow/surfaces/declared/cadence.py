@@ -40,11 +40,13 @@ COMMANDS: tuple[Command, ...] = (
         summary="which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files",
         tool="ddflow_pins",
         description=(
-            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1)."
+            "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file."
         ),
-        call=lambda repo, a, agent: (
+        wants_progress=True,
+        call=lambda repo, a, agent, on_progress=None: (
             _api().pins_regenerate(
                 repo,
+                on_progress=on_progress,
                 only=a.get("only") or "",
                 check=bool(a.get("check")),
                 install=bool(a.get("install")),
@@ -72,10 +74,10 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "target",
                 positional=True,
-                nargs="?",
+                nargs="*",
                 default="",
                 cli_only=True,
-                cli_help="merge-driver (git runs it): the file holding our side",
+                cli_help="merge-driver (git runs it): the files holding our side, the common ancestor and the other side",
             ),
             Param(
                 "check",

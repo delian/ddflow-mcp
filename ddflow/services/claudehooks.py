@@ -116,6 +116,16 @@ HOOKS: tuple[HookSpec, ...] = (
         "claude", "prompt", PROMPT_EVENT, CLAUDE_SETTINGS, None, "every operator prompt is recorded"
     ),
     HookSpec(
+        "claude",
+        "pre-tool",
+        "PreToolUse",
+        CLAUDE_SETTINGS,
+        "Bash",
+        "commands an agent is told never to run (pkill, git stash, git push, force flags) are "
+        "refused before they run ([hooks].forbidden_commands)",
+        run="run pre_tool --harness claude",
+    ),
+    HookSpec(
         "gemini",
         "prompt",
         GEMINI_PROMPT_EVENT,

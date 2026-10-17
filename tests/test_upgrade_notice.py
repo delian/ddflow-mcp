@@ -132,14 +132,15 @@ def test_a_server_older_than_the_installed_package_says_restart() -> None:
     assert "installed package" in note
 
 
-def test_a_server_older_than_the_log_says_so() -> None:
-    note = UN.stale_server_note(_state("0.1.12"), running="0.1.9", installed="0.1.9")
-    assert "restart the server" in note and "this project's log" in note
+def test_a_server_older_than_the_log_alone_says_nothing() -> None:
+    """Nothing newer is installed: a restart would run the same code (B3f7d0f7bf3)."""
+    assert UN.stale_server_note(_state("0.1.12"), running="0.1.9", installed="0.1.9") == ""
+    assert UN.stale_facts(_state("0.1.12"), running="0.1.9", installed="0.1.9")["reexec"] is False
 
 
 def test_the_newest_version_wins_the_note() -> None:
     note = UN.stale_server_note(_state("0.1.12"), running="0.1.9", installed="0.1.10")
-    assert "0.1.12" in note and "0.1.10" not in note
+    assert "0.1.12" in note and "this project's log" in note and "0.1.10" not in note
 
 
 @pytest.mark.parametrize(

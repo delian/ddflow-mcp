@@ -21,11 +21,13 @@ import dataclasses
 import difflib
 import io
 import re
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..config_sections._compat import MIN_REMOVED_IN, check_rename
+from .argtypes import glob_list_hint
 
 #: The per-CALL identity override every tool but `ddflow_identify` accepts (see mcp.py).
 AS_AGENT = "as_agent"
@@ -210,6 +212,12 @@ class SuggestingParser(argparse.ArgumentParser):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.register("action", "parsers", _WordsRecorder)
+        self._argv: list[str] = []
+
+    def parse_known_args(self, args=None, namespace=None):
+        # Kept for `error`: it reads the words that were really parsed, not `sys.argv`.
+        self._argv = list(sys.argv[1:] if args is None else args)
+        return super().parse_known_args(None if args is None else self._argv, namespace)
 
     def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
         # Before Python 3.13 argparse strips a `--` only for ordinary positionals: the
@@ -234,7 +242,7 @@ class SuggestingParser(argparse.ArgumentParser):
                 m := re.match(rf"argument {re.escape(a.dest)}: invalid choice: '([^']*)'", message)
             ):
                 message += _did_you_mean(m.group(1), list(a.choices))
-        super().error(message)
+        super().error(glob_list_hint(message, self._argv))
 
 
 def used_aliases(
@@ -319,6 +327,8 @@ class Param:
     #: What an old name should be replaced by when that is not simply this parameter; shown
     #: verbatim in the notice (spell a flag's as the flag, ``--name``).
     replacement: str = ""
+    #: A one-letter CLI spelling of the flag (``-m`` for ``--message``), CLI only.
+    short: str = ""
 
     def __post_init__(self) -> None:
         if self.positional and any(a.startswith("-") for a in self.aliases):
@@ -439,12 +449,12 @@ class Param:
             if self.nargs is not None:
                 kwargs["nargs"] = self.nargs
         else:
-            args = (self.option,)
+            args = (self.short, self.option) if self.short else (self.option,)
             if self.nargs is not None:
                 kwargs["nargs"] = self.nargs
             if self.required:
                 kwargs["required"] = True
-            if self.flag is not None:
+            if self.flag is not None or self.short:
                 kwargs["dest"] = self.name  # a custom flag must still land on the param's name
         target: Any = parser
         if self.exclusive is not None:

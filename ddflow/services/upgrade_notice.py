@@ -165,12 +165,14 @@ def installed_version() -> str:
         return ""
 
 
-def stale_server_note(st: State, running: str = "", installed: str = "") -> str:
-    """``restart the server`` when this process runs older code than the installed package or
-    the log's highest stamp, else "". Pure over its arguments (the caller reads them)."""
+def stale_facts(st: State, running: str = "", installed: str = "") -> dict[str, Any] | None:
+    """What a stale server knows: ``running``, ``newest``, ``where`` it was seen (the installed
+    package or this project's log) and ``reexec`` (the installed package is newer than the
+    running code, so replacing the process would change something), or None when the running
+    code is current. Pure over its arguments (the caller reads them)."""
     running = running or running_version()
     if not version_key(running):
-        return ""
+        return None
     newest, where = running, ""
     for version, label in (
         (installed, "the installed package"),
@@ -179,8 +181,19 @@ def stale_server_note(st: State, running: str = "", installed: str = "") -> str:
         if version_key(version) and is_older(newest, version):
             newest, where = version, label
     if not where:
+        return None
+    fresh = bool(version_key(installed)) and is_older(running, installed)
+    return {"running": running, "newest": newest, "where": where, "reexec": fresh}
+
+
+def stale_server_note(st: State, running: str = "", installed: str = "") -> str:
+    """``restart the server`` when a newer ddflow than this process runs is INSTALLED (so a
+    restart would run it), else "". Pure over its arguments (the caller reads them)."""
+    facts = stale_facts(st, running, installed)
+    if facts is None or not facts["reexec"]:
         return ""
     return (
-        f"note: this ddflow MCP server is running {running}, but {where} is at {newest}: "
-        "restart the server (reconnect the MCP server in your client) to pick up the upgrade."
+        f"note: this ddflow MCP server is running {facts['running']}, but {facts['where']} is "
+        f"at {facts['newest']}: restart the server (reconnect the MCP server in your client) "
+        "to pick up the upgrade."
     )

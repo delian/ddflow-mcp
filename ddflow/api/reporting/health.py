@@ -31,8 +31,10 @@ from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
 from ...services import logblobs as LB
+from ...services import pins_merge as PM
 from ...services import rates as RT
 from ...services import repairs as RP
+from ...services import repo_hygiene as RH
 from ...services import sessions as SS
 from ...services import shardmarks as SM
 from ...services import shared_files as SF
@@ -337,9 +339,7 @@ def doctor(
     notes += [f"{g.shard}: accepted the new count ({g.now}, was {g.was})" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
-
-    notes.extend(export_select.doctor_notes(repo, cfg, st))
-    notes.extend(_export_target_notes(repo, cfg))
+    notes += [*export_select.doctor_notes(repo, cfg, st), *_export_target_notes(repo, cfg)]
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
@@ -348,12 +348,12 @@ def doctor(
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
-    notes.extend(FL.doctor_notes(repo))
-    notes.extend(FL.history_notes(cfg, events))  # log signals with too little history yet
+    notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
     notes.extend(FK.doctor_notes(repo))  # a test that keeps failing and then passing
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
+    notes.extend(RH.doctor_notes(repo))  # a stray identity, core.bare, a stale primary
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
@@ -431,7 +431,7 @@ def doctor(
     found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
-    notes += _driver_drift_notes(repo)
+    notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 

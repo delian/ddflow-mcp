@@ -163,7 +163,8 @@ def test_the_board_json_and_markdown_come_from_the_same_rows(proj):
     md = M.board(st, cfg)
     ids = [r["id"] for r in data["phases"][0]["tasks"]]
     fix = next(t.id for t in st.tasks("P1") if t.fixes)
-    assert ids == ["T1", "T2", "T2a", "T2b", "T2b1", "T3", fix]  # a sub-task after its parent
+    # a sub-task after its parent; the fix task, in the bug band, ahead of the generic 100s
+    assert ids == [fix, "T1", "T2", "T2a", "T2b", "T2b1", "T3"]
     for r in data["phases"][0]["tasks"]:
         assert f"**{r['id']}**" in md
     secs = PR.board_rows(st, lambda t: ["a", "b"])

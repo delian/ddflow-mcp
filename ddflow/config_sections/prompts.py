@@ -39,3 +39,11 @@ class PromptsConfig:
         "",
         doc="Path to the instruction block the MCP server hands the agent on connect — the workflow, the reporting duties and the companion tools it should use. This is the file to edit to change how the project works. `ddflow prompts eject mcp_instructions` writes an editable copy into .ddflow/prompts/.",
     )
+    agent_brief: str = knob(
+        "",
+        doc="Path to the launch-brief template `ddflow brief --for-agent` renders for a subagent: sections split by `<!-- section: NAME -->` lines. Variables: agent, item, title, body, globs, needs, base, lease_s, heartbeat_s, decisions_text, lessons_text, note, extra. `ddflow prompts eject agent_brief` writes an editable copy.",
+    )
+    agent_report: str = knob(
+        "",
+        doc="Path to the completion-report template `ddflow report ITEM` renders: sections split by `<!-- section: NAME -->` lines. Variables: item, title, agent, state, landing, tests, gates, by_hand, overrides, filed, follow_ups, not_done (each already text). `ddflow prompts eject agent_report` writes an editable copy.",
+    )

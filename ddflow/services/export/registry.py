@@ -6,8 +6,6 @@ See the package docstring (``ddflow.services.export``) for the plug-in contract.
 from __future__ import annotations
 
 import ctypes
-import importlib
-import pkgutil
 import re
 import textwrap
 import threading
@@ -20,6 +18,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 
 from ...core.digest import content_digest
+from ...core.registry import Registry, UnknownName
 from ...core.version import running as running_version
 from ...infra.paths import templates_dir
 from ..prompts import Template
@@ -76,60 +75,49 @@ class DocKind:
             raise ValueError(f"{self.name}: unknown filter names {sorted(bad)}")
 
 
-_KINDS: dict[str, DocKind] = {}
+_REG: Registry[DocKind] = Registry(
+    "export kind", key=lambda k: k.name, package=__package__, prefix="kind_"
+)
+#: The registry's table, for the tests that read the names registered.
+_KINDS = _REG.table
 
 
 def register(kind: DocKind) -> DocKind:
     """Add a kind. Re-registering the same name is an error (two modules claiming one)."""
-    if kind.name in _KINDS:
-        raise ValueError(f"export kind {kind.name!r} is already registered")
-    _KINDS[kind.name] = kind
-    return kind
+    return _REG.register(kind)
 
 
 def unregister(name: str) -> None:
     """Remove a kind (tests)."""
-    _KINDS.pop(name, None)
-
-
-_discovered = [False]
+    _REG.unregister(name)
 
 
 def discover() -> None:
     """Import every ``ddflow/services/export/kind_*.py`` once, so each registers itself.
 
     Convention over a shared list: a new kind is one new file, and no two kinds edit the
-    same line.
+    same line. A kind module that fails to import is not remembered as done: the next call
+    imports it again and fails again.
     """
-    if _discovered[0]:
-        return
-    pkg = importlib.import_module(__package__)
-    for m in sorted(pkgutil.iter_modules(pkg.__path__), key=lambda m: m.name):
-        if m.name.startswith("kind_"):
-            importlib.import_module(f"{__package__}.{m.name}")
-    _discovered[0] = True  # only after every kind imported: a failure re-raises next call
+    _REG.discover()
 
 
 def names() -> list[str]:
-    discover()
-    return sorted(_KINDS)
+    return _REG.names()
 
 
 def get(name: str) -> DocKind:
-    discover()
     try:
-        return _KINDS[name]
-    except KeyError:
+        return _REG.get_or_raise(name)
+    except UnknownName as exc:
         if name == "replay":
             raise ExportError(
                 "replay is not an export kind: it carries private paths and addresses "
                 "and is built only for the machine that asks (use `ddflow replay`)",
                 EXIT_REFUSED,
             ) from None
-        raise ExportError(
-            f"unknown document kind {name!r}. Known: {', '.join(sorted(_KINDS)) or '(none)'}",
-            EXIT_REFUSED,
-        ) from None
+        known = ", ".join(_REG.names()) or "(none)"
+        raise ExportError(f"unknown document kind {name!r}. Known: {known}", EXIT_REFUSED) from exc
 
 
 def _read(path: Path) -> str:

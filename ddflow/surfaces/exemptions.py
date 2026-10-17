@@ -18,6 +18,7 @@ from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.cadence import COMMANDS as _CADENCE
+from .declared.chore import COMMANDS as _CHORE
 from .declared.docs import COMMANDS as _DOCS
 from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
@@ -27,10 +28,12 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lanes import COMMANDS as _LANES
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.memory import COMMANDS as _MEMORY
+from .declared.mergequeue import COMMANDS as _MERGEQUEUE
 from .declared.metrics import COMMANDS as _METRICS
 from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
+from .declared.report import COMMANDS as _REPORT
 from .declared.reporting import COMMANDS as _REPORTING
 from .declared.review import COMMANDS as _REVIEW
 from .declared.rules import COMMANDS as _RULES
@@ -51,6 +54,11 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("mcp",),
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
+    ),
+    Command(
+        path=("chore",),
+        reason="CLI-only by design (D-chore-class): `commit` is a ceremony an agent runs from its "
+        "shell, `approve` a person's act; neither is worth tools/list bytes",
     ),
     Command(
         path=("plan",),
@@ -79,10 +87,13 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_REPORT,
     *_EXPORT,
     *_CADENCE,
+    *_MERGEQUEUE,
     *_MEMORY,
     *_PLAN,
+    *_CHORE,
     *_FLOW,
     *_HOOKS,
     *_LANES,

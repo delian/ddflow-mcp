@@ -42,6 +42,7 @@ from __future__ import annotations
 from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
+from .briefing import agent_brief
 from .cirun import ci_tool
 from .completion import completion_verdict
 from .decisions import (
@@ -135,6 +136,8 @@ from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
 from .lifecycle import wait as wait_item
+from .mergequeue_add import queue_add, queue_remove, queue_status
+from .mergequeue_run import queue_run
 from .metrics import run_metrics
 from .onboard import onboard as onboard_run
 from .operations import (
@@ -147,7 +150,9 @@ from .operations import (
     precommit,
     relevant_tests,
 )
-from .plan import plan_check
+from .plan import plan_apply, plan_check, plan_confirm
+from .records import record_resource_listing, record_resource_read
+from .report import item_report, show_report
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -163,7 +168,8 @@ from .reporting import (
 )
 from .review import review as run_review
 from .review import reviewers_detect, reviewers_list
-from .review import triage as review_triage
+from .review_findings import show as review_show
+from .review_settle import triage as review_triage
 from .rules import (
     Rule,
     RuleDedupAnswer,
@@ -192,6 +198,7 @@ from .setup import (
     hooks,
     prompts,
     release_proposal,
+    stale_server_facts,
     stale_server_note,
     upgrade,
     upgrade_notice,
@@ -228,6 +235,7 @@ __all__ = [
     "_load",
     "abandon",
     "adopt_project",
+    "agent_brief",
     "block",
     "board",
     "brief",
@@ -279,6 +287,7 @@ __all__ = [
     "hooks",
     "import_project",
     "import_verify",
+    "item_report",
     "job_add",
     "job_end",
     "job_list",
@@ -300,7 +309,9 @@ __all__ = [
     "phase_close",
     "phase_progress",
     "pins",
+    "plan_apply",
     "plan_check",
+    "plan_confirm",
     "pr_status",
     "pr_sync",
     "pr_threads",
@@ -310,8 +321,14 @@ __all__ = [
     "promote_deployed",
     "promote_status",
     "prompts",
+    "queue_add",
+    "queue_remove",
+    "queue_run",
+    "queue_status",
     "rebuild",
     "recall",
+    "record_resource_listing",
+    "record_resource_read",
     "recover",
     "refuse_sweep_args",
     "release_item",
@@ -322,6 +339,7 @@ __all__ = [
     "replay",
     "research_add",
     "resolve",
+    "review_show",
     "review_triage",
     "reviewers_detect",
     "reviewers_list",
@@ -342,8 +360,10 @@ __all__ = [
     "session_prompt",
     "session_start",
     "show",
+    "show_report",
     "similar",
     "split",
+    "stale_server_facts",
     "stale_server_note",
     "status",
     "task_add",

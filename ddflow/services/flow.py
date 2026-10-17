@@ -1097,7 +1097,7 @@ def plan_version(
     }
     shipped: list[Item] = []
     for it in sorted(st.items.values(), key=lambda i: i.id):
-        if it.removed or it.state != DONE or it.kind != "task" or it.id in released:
+        if it.removed or it.state != DONE or not it.is_work or it.id in released:
             continue
         sha = reached(repo, cfg, it, ref)
         if not sha:

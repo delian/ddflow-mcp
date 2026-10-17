@@ -30,6 +30,10 @@ class GatesConfig:
         ],
         doc="Ordered gate ids every TASK passes through. Reorder or trim per project; ids must exist in [gate.*] definitions.",
     )
+    doc_pipeline: list[str] = knob(
+        factory=lambda: ["rules", "implement", "standards", "dedupe", "merge"],
+        doc="Ordered gate ids a DOC item passes through (`task add --kind doc`): documents and generated output, so no unit_tests, critic or bug hunt. `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when they appear here.",
+    )
     phase_pipeline: list[str] = knob(
         factory=lambda: [
             "research",
@@ -46,7 +50,7 @@ class GatesConfig:
     )
     kind_pipelines: dict[str, list[str]] = knob(
         factory=dict,
-        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default, so every kind runs as before. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
+        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default; a `doc` item (`task add --kind doc`) runs `doc_pipeline` unless this names it. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
         check=kind_pipelines_problem,
     )
     required: list[str] = knob(
@@ -99,7 +103,7 @@ class GatesConfig:
     )
     unit_tests_scope: str = knob(
         "selected",
-        doc="What the unit_tests gate of a BUG FIX or SMALL task runs (decision D-gate-economy 1): 'selected' (default) runs only the tests its change reaches -- `ddflow tests --item <id>`, plus the regression tests of the bugs it fixes -- and lists in the evidence which ran and why; 'full' runs the whole suite as every other item does. Selected only once the item's `ci` gate -- the whole suite on the branch merged with the base -- has PASSED on the clean commit its tree holds now (ci tests the committed HEAD) (a fix spent about 2.1 full-suite runs of 12 minutes each before this). A ci with no outcome, skipped, unavailable, failed, run over uncommitted edits or on another commit, a phase, a promotion, a larger task, and a selection that cannot be made (git cannot say what changed, no test reaches the change, the command does not run pytest) run the whole suite, and the evidence says why. Change it for the project (`ddflow config gates.unit_tests_scope full`), for this machine (add --local), per run (DDFLOW_GATES_UNIT_TESTS_SCOPE), or over MCP with `ddflow_configure`.",
+        doc="What the unit_tests gate of a BUG FIX or SMALL task runs (decision D-gate-economy 1): 'selected' (default) runs only the tests its change reaches -- `ddflow tests --item <id>`, plus the regression tests of the bugs it fixes -- and lists in the evidence which ran and why; 'full' runs the whole suite as every other item does. Selected only once the item's `ci` gate -- the whole suite, or with `[ci].tests_scope = 'selected'` its own selection (this gate then runs only the tests of ITS selection that ci did not take, normally none; with a scoped ci any item, not only a bug fix or small task), on the branch merged with the base -- has PASSED on the clean commit its tree holds now (ci tests the committed HEAD) (a fix spent about 2.1 full-suite runs of 12 minutes each before this). A ci with no outcome, skipped, unavailable, failed, run over uncommitted edits or on another commit, a phase, a promotion, a larger task, and a selection that cannot be made (git cannot say what changed, no test reaches the change, the command does not run pytest) run the whole suite, and the evidence says why. Change it for the project (`ddflow config gates.unit_tests_scope full`), for this machine (add --local), per run (DDFLOW_GATES_UNIT_TESTS_SCOPE), or over MCP with `ddflow_configure`.",
         choices=("selected", "full"),
         strictest=(
             "full",
@@ -109,6 +113,22 @@ class GatesConfig:
     unit_tests_small_lines: int = knob(
         150,
         doc='A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = "selected"`. A bug-fix task is selected whatever its size. 0 = no task is small (bug fixes still are).',
+    )
+    unit_tests_max_files: int = knob(
+        100,
+        doc="The most test files a selected unit_tests run (and `ddflow tests --item`) takes (default 100; 0 = no bound). Past it the farthest tests are cut -- two-hop importers first, then direct importers, never a test the change itself touches -- and the cut set is recorded in the gate evidence. The whole suite still runs in the merge queue, on the integration cadence and at phase end (D-test-economy-r2).",
+    )
+    unit_tests_hub_importers: int = knob(
+        100,
+        doc="A module imported by this many files or more (default 100; 0 = no hubs) is a HUB: the selection's import walk does not continue through it (a test that only reaches the change by importing a hub is not selected), and a change to a hub itself runs the whole suite, since it reaches everything. Raise it to select more, lower it to select less.",
+    )
+    unit_tests_max_hops: int = knob(
+        2,
+        doc="How far along the import graph a test still counts as reaching a change (default 2): it imports the changed module (1), or imports a module that does (2). Unbounded, the layer that imports everything makes every test reach every module.",
+    )
+    unit_tests_name_max_tests: int = knob(
+        30,
+        doc="A distinctive identifier the change defines, edits or removes selects the tests that spell it, unless more than this many tests do (default 30): then it is a word, not a name.",
     )
     scrub_env: list[str] = knob(
         factory=lambda: [

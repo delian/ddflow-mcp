@@ -72,3 +72,9 @@ max-returns = 14
 # `factory=`, never as a shared instance. Without this, RUF009 reads it as an arbitrary call
 # in a dataclass default.
 extend-immutable-calls = ["ddflow.config_sections._docs.knob"]
+
+[lint.isort]
+# The root conftest.py (it loads tests/_isolation.py) must not turn `conftest` into a
+# first-party module: the tests import `from conftest import run_cli` in the group with
+# `helpers`, as before.
+known-third-party = ["conftest"]

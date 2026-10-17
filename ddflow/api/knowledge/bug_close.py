@@ -9,9 +9,10 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import OPEN, fold
+from ...core.model import ABANDONED, OPEN, fold
 from ...infra import worktree as W
 from ...services import gates as G
+from ...services import leases as L
 from .._base import _load
 from .bugs import _unknown_bug
 from .regression import _looks_like_several, _split_outside_brackets, _unresolved_tests
@@ -43,7 +44,7 @@ def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome
     )
 
 
-def bug_fixed(
+def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     repo: Path,
     item: str,
     *,
@@ -55,6 +56,7 @@ def bug_fixed(
     changelog: str = "",
     verify_regression: bool = True,
     verify_reason: str = "",
+    mutation: dict[str, str] | None = None,
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 
@@ -73,6 +75,11 @@ def bug_fixed(
     worktree, no base ref -- the check is `could-not-run`, recorded, and the bug closes
     with the gap on the record rather than locked open. `verify_regression=False` with a
     `verify_reason` records the override instead; a reason is required and is recorded.
+
+    A fix confined to test files cannot fail on a pre-fix tree that has the new test
+    file: `mutation` ({file, old, new}, an edit to a changed test file disabling the
+    fix) is then applied by ddflow and the test must fail on it -- recorded as
+    `verified-by-mutation` with the mutation and the run (B Bc262739f62).
     """
     entry: dict[str, Any] = {}
     if changelog:
@@ -103,7 +110,14 @@ def bug_fixed(
             id=item,
         )
     verified, verify_ev = _verify_regression(
-        repo, cfg, st, item, tests, verify_regression=verify_regression, reason=verify_reason
+        repo,
+        cfg,
+        st,
+        item,
+        tests,
+        verify_regression=verify_regression,
+        reason=verify_reason,
+        mutation=mutation,
     )
     if verified in ("passed-on-prefix", "failed-on-fix"):
         return O.refused(
@@ -230,7 +244,21 @@ def bug_invalid(
         # since `_load` must be seen, or the task is removed under its holder.
         fresh = fold(log.read_all(), strict=False)
         rec = fresh.bugs.get(bug, rec)  # the record the removal is decided from, and reported
-        removed, kept = _drop_fix_task(log, fresh, rec)
+        removed, kept = _drop_fix_task(log, fresh, rec, reason=reason)
+        task = fresh.items.get(rec.fix_task) if rec.fix_task else None
+        holder = task.lease.holder if kept == "held" and task and task.lease else ""
+    # A task ended from the caller's own lease was ABANDONED, not removed (B8f9668d27d). Its
+    # worktree is NOT disposed here: this call cannot see where the caller's shell stands
+    # (over MCP the process cwd is the server's), so the tree stays for `ddflow cleanup`.
+    abandoned = removed if removed and _ended_by_abandon(log, removed) else ""
+    tree = ""
+    if abandoned:
+        wt = fold(log.read_all(), strict=False).items[abandoned].worktree
+        tree = (
+            f"worktree {wt} kept; `ddflow cleanup` reports it and removes it once clean"
+            if wt
+            else ""
+        )
     return O.ok(
         "bug.invalid",
         id=bug,
@@ -238,9 +266,18 @@ def bug_invalid(
         evidence=evidence,
         unchecked=unchecked,
         fix_task=rec.fix_task,
-        fix_task_removed=removed,
+        fix_task_removed="" if abandoned else removed,
+        fix_task_abandoned=abandoned,
         fix_task_kept=kept,
+        fix_task_holder=holder,
+        fix_task_tree=tree,
     )
+
+
+def _ended_by_abandon(log, item: str) -> bool:
+    """Whether the item's last ending event was an abandonment (by this very call)."""
+    it = fold(log.read_all(), strict=False).items.get(item)
+    return it is not None and it.state == ABANDONED
 
 
 #: Why `bug invalid` left a fix task alone (`fix_task_kept`), with the words the surfaces
@@ -259,15 +296,17 @@ NOTHING_TO_REMOVE: dict[str, str] = {
 }
 
 
-def _drop_fix_task(log, st, rec) -> tuple[str, str]:
-    removed, why = _drop_fix_task_unchecked(log, st, rec)
+def _drop_fix_task(log, st, rec, *, reason: str = "") -> tuple[str, str]:
+    removed, why = _drop_fix_task_unchecked(log, st, rec, reason=reason)
     assert not why or why in STILL_QUEUED or why in NOTHING_TO_REMOVE, why
     return removed, why
 
 
-def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
+def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
+    still OPEN -- or, under the CALLER's own lease, in any non-terminal state (RUNNING,
+    BLOCKED), when it is abandoned and released rather than removed (B8f9668d27d); a task
+    held by anyone else stays. No other open bug may name it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
     one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
     `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
@@ -282,9 +321,10 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
         return "", "missing"
     if t.removed:
         return "", "removed"
-    if t.lease:  # before the state: a claimed task is RUNNING, and held is the point
+    mine = bool(t.lease) and t.lease.holder == log.agent_id
+    if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.state != OPEN:
+    if t.terminal or (t.state != OPEN and not mine):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
@@ -292,7 +332,12 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
         not o.removed and t.id in o.needs for o in st.items.values()
     ):
         return "", "needed"
-    log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
+    why = f"bug {rec.id} closed as invalid" + (f": {reason}" if reason else "")
+    if mine:  # the caller's own lease: end the task and release it, as `abandon` does
+        log.append("item.abandoned", t.id, {"reason": why, "kind": t.kind})
+        L.release(log, t.id, note=f"abandoned: {why}")
+        return t.id, ""
+    log.append("task.removed", t.id, {"reason": why})
     return t.id, ""
 
 
@@ -322,6 +367,7 @@ def _verify_regression(
     *,
     verify_regression: bool,
     reason: str,
+    mutation: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run a bug's regression test on the pre-fix and fixed trees (B-bugfix-verified).
 
@@ -345,14 +391,22 @@ def _verify_regression(
         # which now holds the fix -- the driver merges first and completes after
         # (B0d5253d31f). `tree` is unused: the fixed tree is a checkout of `after`.
         status, ev = G.verify_regression_test(
-            repo, cfg, tree=repo, base=fx.landed_before, tests=module_tests, after=fx.landed_after
+            repo,
+            cfg,
+            tree=repo,
+            base=fx.landed_before,
+            tests=module_tests,
+            after=fx.landed_after,
+            mutation=mutation,
         )
         return _regression_status(status, ev, G)
     tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
     if tree is None:
         return "could-not-run", {
             "reason": "the bug's fix task is not working in a worktree, so there is no "
-            "pre-fix source to compare the test against"
+            "pre-fix source to compare the test against",
+            "remedy": "claim the bug's fix task (its worktree is the pre-fix source), or close "
+            "after it has merged and run `complete --regression-test`",
         }
     base = fx.base or cfg.worktree.base_ref or ""
     if not base:
@@ -361,9 +415,27 @@ def _verify_regression(
         except W.GitError:
             base = ""
     if not base:
-        return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
-    status, ev = G.verify_regression_test(repo, cfg, tree=tree, base=base, tests=module_tests)
+        return "could-not-run", {
+            "reason": "no base ref to build the pre-fix tree from",
+            "remedy": "set worktree.base_ref (`ddflow config --set worktree.base_ref <branch>`)",
+        }
+    status, ev = G.verify_regression_test(
+        repo, cfg, tree=tree, base=base, tests=module_tests, mutation=mutation
+    )
     return _regression_status(status, ev, G)
+
+
+_REMEDY = (
+    "re-run when the machine is quieter, or check the unit_tests command, the fix task's "
+    "worktree and the base ref; `--skip-regression-verify --verify-reason` records an override"
+)
+
+
+def could_not_run_text(ev: dict[str, Any]) -> str:
+    """The reason (and remedy) a could-not-run check carries, as one line for the CLI."""
+    reason = str(ev.get("reason") or "").strip()
+    remedy = str(ev.get("remedy") or "").strip()
+    return reason + (f" -- to fix: {remedy}" if remedy else "")
 
 
 def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, dict[str, Any]]:
@@ -374,10 +446,18 @@ def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, di
     # verified, the vacuous pass this whole feature exists to prevent (rubber_duck #1).
     if status == G.REGRESSION_VERIFIED:
         return "verified", ev
+    if status == G.VERIFIED_BY_MUTATION:
+        return "verified-by-mutation", ev
     if status == G.REGRESSION_PASSES_ON_PREFIX:
         return "passed-on-prefix", ev
     if status == G.REGRESSION_FAILS_ON_FIX:
         return "failed-on-fix", ev
     if status == G.REGRESSION_COULD_NOT_RUN:
-        return "could-not-run", ev
-    return "could-not-run", {**ev, "reason": f"unrecognized verification status {status!r}"}
+        # Never silent: every could-not-run names its reason, and what would let it run.
+        reason = str(ev.get("reason") or "").strip() or "the check ended without a reason"
+        return "could-not-run", {**ev, "reason": reason, "remedy": ev.get("remedy") or _REMEDY}
+    return "could-not-run", {
+        **ev,
+        "reason": f"unrecognized verification status {status!r}",
+        "remedy": ev.get("remedy") or _REMEDY,
+    }

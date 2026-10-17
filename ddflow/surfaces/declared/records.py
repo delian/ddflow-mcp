@@ -11,6 +11,7 @@ from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
+from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
 BUG_INVALID_FIELDS = (
@@ -20,7 +21,10 @@ BUG_INVALID_FIELDS = (
     "unchecked",
     "fix_task",
     "fix_task_removed",
+    "fix_task_abandoned",
     "fix_task_kept",
+    "fix_task_holder",
+    "fix_task_tree",
 )
 
 COMMANDS: tuple[Command, ...] = (
@@ -122,7 +126,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("bug", "found"),
         tool="ddflow_bug_found",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
+        flag_exempt={
+            **ANSWER_FLAG_EXEMPT,
+            "--test": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-cmd": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-capture": "CLI only; over MCP set [bugs] repro_capture with ddflow_configure",
+        },
         description="Report a bug the moment you find it, BEFORE fixing it. Recording it first "
         "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
         "a regression test. A hunt that records nothing looks like one that found nothing.",
@@ -176,6 +185,24 @@ COMMANDS: tuple[Command, ...] = (
                 help="File no fix task (fixed in the same commit).",
                 cli_help="file no fix task: the bug is fixed in the commit that found it",
             ),
+            Param(
+                "repro_cmd",
+                cli_only=True,
+                cli_help="the command that shows the bug, kept in the repro bundle (never run)",
+                default="",
+            ),
+            Param(
+                "test",
+                cli_only=True,
+                cli_help="a pytest id: run once, its output tail goes in the repro bundle",
+                default="",
+            ),
+            Param(
+                "repro_capture",
+                cli_only=True,
+                cli_help="off | basic | full: how much repro bundle to store (default [bugs] repro_capture)",
+                default="",
+            ),
             *ANSWER_PARAMS,
         ),
     ),
@@ -201,9 +228,9 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("bug", "fixed"),
         tool="ddflow_bug_fixed",
-        description="Close a bug. Requires the name of the regression test that would "
-        "catch it again — write the test, watch it FAIL against the "
-        "unfixed code, then close.",
+        flag_exempt=MUTATION_FLAG_EXEMPT,
+        description="Close a bug. Requires the regression test that would catch it again: "
+        "write it, watch it FAIL against the unfixed code, then close.",
         call=lambda repo, a, agent: _api().bug_fixed(
             repo,
             a["id"],
@@ -214,14 +241,21 @@ COMMANDS: tuple[Command, ...] = (
             changelog=a.get("changelog", "") or "",
             verify_regression=not a.get("skip_regression_verify", False),
             verify_reason=a.get("verify_reason", "") or "",
+            mutation=mutation_of(a),
             agent=agent,
         ),
-        payload=("id", "regression_verified", "lesson_captured", "lesson_capture"),
+        payload=(
+            "id",
+            "regression_verified",
+            "regression_verify",
+            "lesson_captured",
+            "lesson_capture",
+        ),
         params=(
             Param("id", help="Bug id.", cli_help="", positional=True),
             Param(
                 "regression_test",
-                help="Test that now guards this. Several: separate them with ',' or ';', or pass regression_tests.",
+                help="Test that now guards this. Several: separate with ',' or ';'.",
                 cli_help="the test that now guards this bug; repeat it, or separate with ',' or ';', for several",
                 action="append",
                 default=[],
@@ -229,18 +263,19 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "skip_regression_verify",
                 type="boolean",
-                help="Do NOT run the named test on the pre-fix tree (default false: it is run and must FAIL there, PASS with the fix). Needs verify_reason.",
+                help="Skip the pre-fix check (the test must FAIL pre-fix, PASS fixed). Needs verify_reason.",
                 cli_help="do not run the named test on the pre-fix tree; requires --verify-reason (recorded)",
             ),
             Param(
                 "verify_reason",
-                help="Why the pre-fix regression check is skipped (recorded). Required when skip_regression_verify is true.",
+                help="Why the pre-fix check is skipped (recorded); required with skip_regression_verify.",
                 cli_help="why the pre-fix regression check is skipped (recorded)",
                 default="",
             ),
+            *MUTATION_PARAMS,
             Param(
                 "lesson",
-                help="Id of an EXISTING lesson this bug belongs to.",
+                help="Id of an existing lesson this bug belongs to.",
                 cli_help="",
                 default="",
             ),
@@ -249,7 +284,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "lesson_rule",
-                help="The lesson in full — the transferable rule, not the incident. A future agent on a different task has to be able to apply it.",
+                help="The lesson in full: the transferable rule, not the incident.",
                 cli_help="",
                 default="",
             ),
@@ -262,7 +297,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "regression_tests",
                 type="array",
-                help="The tests that now guard this, one per element -- the list form of regression_test. One of the two is required.",
+                help="The tests guarding this, one per element: the list form of regression_test.",
                 mcp_only=True,
             ),
         ),
@@ -276,6 +311,7 @@ COMMANDS: tuple[Command, ...] = (
             "changelog",
             "skip_regression_verify",
             "verify_reason",
+            *MUTATION_ORDER,
         ),
     ),
     Command(

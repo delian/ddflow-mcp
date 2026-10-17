@@ -19,6 +19,10 @@ class ReviewConfig:
         2,
         doc='How many cross-family review rounds one gate (rubber_duck, critic) may have on one item, full and delta alike (default 2; 0 = unlimited; decision D-gate-economy 2 -- a delta after the cap was the way around it). Later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review triage` (refute each remaining finding with the run that shows it false, or confirm it with the test that now passes; always allowed), then recording the gate on that triage or asking the operator. A re-review of named chunks (--chunk) repeats part of a recorded round and is not counted. `--force --reason "..."` runs one more round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
     )
+    settle_all_refuted: bool = knob(
+        True,
+        doc="Whether the `ddflow review triage` that gives the LAST open finding of a failed review round its verdict, when every finding of the round was refuted, records the gate passed on refutation (flagged, with each refutation's probe as evidence) at once, instead of leaving it failed until the round budget is spent -- which sent agents to re-record the gate passed by hand. A round with a confirmed finding is never settled by triage alone. false = the gate stays failed until the budget settles it.",
+    )
     on_exceed: str = knob(
         "refuse",
         doc="What a round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent). `review triage` is never refused either way; a delta counts against the cap like any round.",
@@ -28,6 +32,10 @@ class ReviewConfig:
     delta_default: bool = knob(
         False,
         doc="Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered, instead of the whole diff. Default false (decision D-gate-economy 3): a re-review sends the item's WHOLE diff against its base together with the previous findings and the author's triage of each, so the reviewer confirms each one against the current code and looks for new issues -- a delta that saw only the follow-up commit kept reporting the fix as absent. A re-review is a full round (counted against review.max_rounds). true = the automatic delta: the delta's findings and coverage are merged into the gate's record (earlier findings keep their triage when byte-identical), it is not a full round but counts against review.max_rounds, and the output says 'delta review of N commits since <sha>'; a rebased branch or a partial prior review falls back to a full round and says why. `--delta` asks for one delta whatever the default (for a very large diff); `--full` forces a full round. Change it for the project (`ddflow config review.delta_default true`), for this machine (add --local), per run (DDFLOW_REVIEW_DELTA_DEFAULT=1), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
+    )
+    fix_round_free: bool = knob(
+        True,
+        doc="Whether a pure fix round is free: when commits since the head the last review covered rewrote at least one cited line and every finding of that round is rewritten or settled by the author, the next `ddflow review` is a delta over just those changes (prior findings whose cited lines were rewritten are marked superseded, not re-raised) and is not counted against review.max_rounds, nor refused past it. Default true; false counts it like any round. Change it for the project (`ddflow config --set review.fix_round_free false`), for this machine (add --local), per run (DDFLOW_REVIEW_FIX_ROUND_FREE), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
     )
     combined_under_lines: int = knob(
         150,

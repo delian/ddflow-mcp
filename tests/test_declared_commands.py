@@ -212,7 +212,8 @@ def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
     assert api_lifecycle.DEFAULT_NEXT_KIND is defaults.DEFAULT_NEXT_KIND
     assert api_lifecycle.DEFAULT_WAIT_TIMEOUT_S is defaults.DEFAULT_WAIT_TIMEOUT_S
     ns = build_parser().parse_args(["task", "add", "T"])
-    assert ns.priority == defaults.DEFAULT_PRIORITY
+    # none given: the task takes its DX or bug band, else DEFAULT_PRIORITY (services.priority)
+    assert ns.priority is None
     assert build_parser().parse_args(["next"]).kind == defaults.DEFAULT_NEXT_KIND
     wait = next(c for c in lifecycle.COMMANDS if c.path == ("wait",))
     timeout = next(p for p in wait.params if p.name == "timeout")
@@ -293,12 +294,13 @@ def test_review_is_one_parser_for_the_run_and_for_triage():
     run = parser.parse_args(["review", "I", "--gate", "critic", "--chunk", "2", "--chunk", "3,4"])
     assert (run.id, run.chunk, run.finding) == (["I"], ["2", "3,4"], None)
     triage = parser.parse_args(["review", "triage", "I", "--finding", "2", "--refuted"])
-    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], 2, True)
+    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], "2", True)
     assert parser.parse_args(["review"]).id == []  # the handler says what is missing
     entry = TOOLS["ddflow_review"]
     assert entry["wants_called_from"] and entry["wants_progress"] and entry["text"] is True
     assert entry["properties"]["id"][2] is True  # required on the tool, not on the command line
-    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is True
+    # optional: without finding/verdict/probe the tool LISTS the recorded findings
+    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is False
 
 
 def test_verify_takes_an_optional_id_and_the_sweep_flags():

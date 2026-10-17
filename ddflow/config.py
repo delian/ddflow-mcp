@@ -39,8 +39,12 @@ from .config_sections.bugs import (
 from .config_sections.cadence import (
     CadenceConfig,
 )
+from .config_sections.chore import (
+    ChoreConfig,
+)
 from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
     CI_ON_MERGE_MODES,
+    CI_TESTS_SCOPES,
     CiConfig,
 )
 from .config_sections.companions import (
@@ -77,12 +81,9 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
     FLOW_PR_MERGE,
     FlowConfig,
 )
-from .config_sections.gates import (
-    GatesConfig,
-)
-from .config_sections.health import (
-    HealthConfig,
-)
+from .config_sections.gates import GatesConfig
+from .config_sections.health import HealthConfig
+from .config_sections.hooks import HooksConfig
 from .config_sections.ids import (  # noqa: F401
     ID_KINDS,
     ID_PREFIXES,
@@ -116,11 +117,17 @@ from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the m
 from .config_sections.memory import (
     MemoryConfig,
 )
+from .config_sections.merge_queue import (
+    MergeQueueConfig,
+)
 from .config_sections.metrics import (
     MetricsConfig,
 )
 from .config_sections.pins import (
     PinsConfig,
+)
+from .config_sections.plan import (
+    PlanConfig,
 )
 from .config_sections.prompts import (
     PromptsConfig,
@@ -248,6 +255,10 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
+    plan: PlanConfig = field(default_factory=PlanConfig)
+    merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
+    chore: ChoreConfig = field(default_factory=ChoreConfig)
+    hooks: HooksConfig = field(default_factory=HooksConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)

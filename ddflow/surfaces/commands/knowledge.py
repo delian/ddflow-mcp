@@ -18,11 +18,13 @@ from ...core import provenance as PV
 from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..declared.mutation_params import mutation_of
 from ..declared.records import BUG_INVALID_FIELDS
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
 from ..render import emit_json, id_cell
+from .bug_found import _bug_found
 
 
 def cmd_lesson(a, c: Ctx) -> int:
@@ -270,43 +272,6 @@ def cmd_research(a, c: Ctx) -> int:
     return OK
 
 
-def _bug_found(a, c: Ctx) -> int:
-    out = D.run(
-        a,
-        c,
-        lambda answer: A.bug_found(
-            c.repo,
-            summary=a.summary,
-            item=a.item or "",
-            id=a.id or "",
-            title=a.title,
-            severity=a.severity,
-            scope=a.scope,
-            globs=a.globs,
-            no_task=a.no_task,
-            answer=answer,
-            agent=c.requested_agent,
-        ),
-    )
-    done = D.finish(a, c, out)
-    if done is not None:
-        return done
-    closed = out.data.get("resolution", "")
-    note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
-    offer = out.data.get("offer", "")
-    fix = out.data.get("fix_task", "")
-    task = ""
-    if fix and out.data.get("fix_task_filed"):
-        task = f"\nfix task {fix} filed in the queue (claim it to fix; `complete {fix} --regression-test <test>` closes the bug)"
-    elif fix:
-        task = f"\nfix task: {fix}"
-    c.out(
-        f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
-        out.body(("id", "offer", "fix_task", "fix_task_filed")),
-    )
-    return OK
-
-
 def _bug_file_tasks(a, c: Ctx) -> int:
     out = A.bug_file_tasks(c.repo, dry_run=a.dry_run, agent=c.requested_agent)
     if out.exit not in (OK, NOTHING):
@@ -355,6 +320,7 @@ def _bug_fixed(a, c: Ctx) -> int:
         changelog=getattr(a, "changelog", "") or "",
         verify_regression=not getattr(a, "skip_regression_verify", False),
         verify_reason=getattr(a, "verify_reason", "") or "",
+        mutation=mutation_of(vars(a)),
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
@@ -364,10 +330,16 @@ def _bug_fixed(a, c: Ctx) -> int:
         return out.exit
     verified = out.data.get("regression_verified", "")
     tail = f" [{verified}]" if verified else ""
+    if verified == "could-not-run":
+        tail += "\n  could not check: " + A.could_not_run_text(
+            out.data.get("regression_verify") or {}
+        )
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
-        out.body(("id", "regression_verified", "lesson_captured", "lesson_capture")),
+        out.body(
+            ("id", "regression_verified", "regression_verify", "lesson_captured", "lesson_capture")
+        ),
     )
     return OK
 
@@ -402,8 +374,19 @@ def _fix_task_tail(data: dict) -> str:
     task, why = data.get("fix_task", ""), data.get("fix_task_kept", "")
     if gone:
         return f"\nfix task {gone} removed from the queue"
+    if data.get("fix_task_abandoned"):
+        tree = data.get("fix_task_tree", "")
+        return (
+            f"\nfix task {data['fix_task_abandoned']} ended (abandoned) and released from "
+            f"your lease" + (f"; {tree}" if tree else "")
+        )
     if not task or not why:
         return ""
+    if why == "held" and data.get("fix_task_holder"):
+        return (
+            f"\nfix task {task} stays in the queue: held by {data['fix_task_holder']}, "
+            f"not you; it was not touched"
+        )
     if why in A.STILL_QUEUED:
         return f"\nfix task {task} stays in the queue: {A.STILL_QUEUED[why]}"
     if why in A.NOTHING_TO_REMOVE:

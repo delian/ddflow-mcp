@@ -9,9 +9,10 @@ queued, where it stood, or that the queue had ejected it.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from conftest import run_cli
-from test_flow import AUTHOR, _state, _work, pr_repo  # noqa: F401
+from test_flow import AUTHOR, _git, _state, _work, pr_repo  # noqa: F401
 
 GREEN = [{"status": "COMPLETED", "conclusion": "SUCCESS"}]
 
@@ -162,3 +163,404 @@ def test_pr_sync_text_says_why_an_unreadable_queue_holds_the_merge(pr_repo):
     _, out, err = run_cli(repo, "pr", "sync")
     assert "merge queue could not be read" in out, (out, err)
     assert not forge.calls("pr", "merge")
+
+
+# -- the local merge queue and its integrator (DX-merge-queue) ----------------------------
+#
+# Five agents racing for main each re-merged it and re-ran a ten-minute ci several times, and
+# the pin files conflicted every time. Now an agent enqueues a finished item and goes on; one
+# integrator lands the line. The project here has a pin (`pin.txt`, derived from `knobs/`)
+# that two branches both re-record, and a ci command that fails on a stale pin, so a green
+# landing proves the integrator regenerated it.
+
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+from conftest import append_config, pass_pipeline  # noqa: E402
+
+from ddflow.services import mergequeue as MQ  # noqa: E402
+
+GEN = """\
+import sys
+from pathlib import Path
+
+HEAD = "<!-- gen -->\\n"
+knobs = sorted(p.read_text().strip() for p in Path("knobs").glob("*.txt"))
+pin = Path("pin.txt")
+prose = pin.read_text().split(HEAD)[0] if pin.exists() else "# pins\\n\\n\\n\\n"
+want = prose + HEAD + f"{len(knobs)} knobs\\n" + "".join(f"- {k}\\n" for k in knobs)
+if "--check" in sys.argv:
+    sys.exit(0 if pin.exists() and pin.read_text() == want else 1)
+pin.write_text(want)
+"""
+
+CHECK = """\
+import subprocess, sys, time
+from pathlib import Path
+
+hold = Path({hold!r})
+deadline = time.time() + 120  # a test that forgot to release it must not hang the suite
+while hold.exists() and time.time() < deadline:
+    time.sleep(0.05)
+if any("BAD" in p.read_text() for p in Path("knobs").glob("*.txt")):
+    sys.exit(1)
+sys.exit(subprocess.run([sys.executable, "gen.py", "--check"]).returncode)
+"""
+
+RECIPES = """\
+[[pin]]
+name = "demo"
+files = ["pin.txt"]
+check = ["{python}", "gen.py", "--check"]
+regen = ["{python}", "gen.py"]
+"""
+
+
+def _git(where: Path, *args: str) -> str:
+    done = subprocess.run(["git", "-C", str(where), *args], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+@pytest.fixture
+def proj(repo: Path, monkeypatch) -> Path:
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)  # a pin regeneration refuses xdist
+    monkeypatch.delenv(
+        "DDFLOW_RUNNING_GATE", raising=False
+    )  # inside the ci gate it would not record
+    run_cli(repo, "init")
+    (repo / "knobs").mkdir()
+    (repo / "knobs" / "a.txt").write_text("a\n")
+    (repo / "gen.py").write_text(GEN)
+    (repo / "check.py").write_text(CHECK.format(hold=str(repo.parent / "hold")))
+    (repo / ".ddflow" / "pins.toml").write_text(RECIPES)
+    subprocess.run([sys.executable, "gen.py"], cwd=repo, check=True)
+    err, _ = append_config(
+        repo,
+        '[ci]\ncommand = "python check.py"\n\n[gates]\n'
+        'task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards",'
+        ' "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]\n',
+    )
+    assert not err
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    return repo
+
+
+def _finish(proj: Path, item: str, text: str = "", note: str = "") -> Path:
+    """Claim ``item`` as its own agent, add a knob and re-record the pin in its tree, commit,
+    and satisfy every gate but the two the integrator produces."""
+    name = item.lower()
+    run_cli(proj, "task", "add", item, "--title", f"knob {name}", "--globs", f"knobs/{name}.txt")
+    code, out, err = run_cli(proj, "--json", "claim", item, agent=name)
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "knobs" / f"{name}.txt").write_text(text or f"{name}\n")
+    if note:  # prose in the pin file, beside the generated part
+        pin = tree / "pin.txt"
+        pin.write_text(pin.read_text().replace("# pins\n", f"# pins\n{note}\n", 1))
+    subprocess.run([sys.executable, "gen.py"], cwd=tree, check=True)
+    _git(tree, "add", "-A")
+    _git(tree, "commit", "-qm", f"add knob {name}")
+    pass_pipeline(proj, item, omit=("ci", "merge"))
+    return tree
+
+
+def _queue(proj: Path, item: str):
+    return run_cli(proj, "queue", "add", item, agent=item.lower())
+
+
+def _status(proj: Path) -> dict:
+    code, out, err = run_cli(proj, "--json", "queue", "status")
+    assert code == 0, out + err
+    return {r["item"]: r for r in json.loads(out)["entries"]}
+
+
+def _ci_outcome(proj: Path, item: str) -> str:
+    code, out, err = run_cli(proj, "--json", "show", item)
+    assert code == 0, out + err
+    return json.loads(out)["gates"]["ci"]["outcome"]
+
+
+def _landed(proj: Path) -> list[str]:
+    log = _git(proj, "log", "--first-parent", "--reverse", "--format=%s").splitlines()
+    return [ln.split()[1].rstrip(":") for ln in log if ln.startswith("merge T")]
+
+
+def test_three_items_that_each_add_a_knob_land_in_queue_order_with_green_pins(proj):
+    for item in ("T1", "T2", "T3"):
+        _finish(proj, item, note="t1 wrote this" if item == "T1" else "")
+    for item in ("T1", "T3", "T2"):  # the order they are queued, not the order they were made
+        code, out, err = _queue(proj, item)
+        assert code == 0, out + err
+    assert _git(proj, "log", "-1", "--format=%s").strip() == "ddflow"  # nothing landed yet
+    assert [r["state"] for r in _status(proj).values()] == ["queued"] * 3
+
+    code, out, err = run_cli(proj, "queue", "run", agent="integrator")
+    assert code == 0, out + err
+    assert _landed(proj) == ["T1", "T3", "T2"]
+    # the generated part is re-recorded, and T1's prose beside it survived the later merges
+    assert (proj / "pin.txt").read_text() == (
+        "# pins\nt1 wrote this\n\n\n\n<!-- gen -->\n4 knobs\n- a\n- t1\n- t2\n- t3\n"
+    )
+    assert subprocess.run([sys.executable, "gen.py", "--check"], cwd=proj).returncode == 0
+    assert _git(proj, "status", "--porcelain", "--untracked-files=no").strip() == ""
+    assert {r["state"] for r in _status(proj).values()} == {"merged"}
+    assert _ci_outcome(proj, "T3") == "passed"
+    # the later branches' pins conflicted with what had landed; they were re-recorded, not merged
+    assert "regenerate pins: demo" in _git(proj, "log", "--format=%s")
+
+
+def test_a_failed_entry_is_parked_and_does_not_block_the_next(proj):
+    _finish(proj, "T1", "BAD\n")  # ci fails on it
+    _finish(proj, "T2")
+    for item in ("T1", "T2"):
+        assert _queue(proj, item)[0] == 0
+    code, out, err = run_cli(proj, "--json", "queue", "run", agent="integrator")
+    assert code == 1, out + err
+    rows = {p["item"]: p for p in json.loads(out)["processed"]}
+    assert rows["T1"]["state"] == "parked" and "ci" in rows["T1"]["reason"]
+    assert rows["T2"]["state"] == "merged"
+    assert _landed(proj) == ["T2"]
+    assert _status(proj)["T1"]["state"] == "parked"
+    assert "ci" in _status(proj)["T1"]["reason"]
+
+
+def test_two_integrators_do_not_run_at_once(proj):
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    hold = proj.parent / "hold"
+    hold.write_text("")  # ci waits here until the test removes the file: no clock involved
+    first = subprocess.Popen(
+        [sys.executable, "-m", "ddflow", "--repo", str(proj), "--agent", "one", "queue", "run"],
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for _ in range(1200):  # up to a minute: a loaded box starts a process slowly
+            if MQ.holder(proj):
+                break
+            time.sleep(0.05)
+        assert MQ.holder(proj), "the first integrator never took the lock"
+        code, out, err = run_cli(proj, "queue", "run", agent="two")
+        assert code == 2, out + err  # not 0: it did nothing
+        assert "another integrator" in err + out
+        assert "running" in run_cli(proj, "queue", "status")[1]
+    finally:
+        hold.unlink(missing_ok=True)  # release the first integrator
+        first.communicate(timeout=120)
+    assert first.returncode == 0
+    assert _landed(proj) == ["T1"]
+    assert MQ.holder(proj) is None
+
+
+def test_gates_are_still_required_to_queue_and_to_run(proj):
+    _finish(proj, "T1")
+    _finish(proj, "T2")
+    # a gate that was never recorded: refused at the door, naming the gate
+    run_cli(proj, "task", "add", "T3", "--title", "no gates", "--globs", "knobs/t3.txt")
+    run_cli(proj, "claim", "T3", agent="t3")
+    code, out, err = _queue(proj, "T3")
+    assert code == 3 and "rubber_duck" in err + out, out + err
+    assert MQ.get(proj, "T3") is None
+    # a gate that fails after it was queued: parked unrun, not landed
+    assert _queue(proj, "T1")[0] == 0
+    assert _queue(proj, "T2")[0] == 0
+    rec = run_cli(
+        proj,
+        "gate",
+        "record",
+        "T1",
+        "implement",
+        "--outcome",
+        "failed",
+        "--reason",
+        "found",
+        "--evidence",
+        "x",
+    )
+    assert rec[0] == 0, rec
+    code, out, err = run_cli(proj, "--json", "queue", "run", agent="integrator")
+    assert code == 1, out + err
+    rows = {p["item"]: p for p in json.loads(out)["processed"]}
+    assert rows["T1"]["state"] == "parked" and "implement" in rows["T1"]["reason"]
+    assert rows["T2"]["state"] == "merged"
+    assert _landed(proj) == ["T2"]
+
+
+def test_max_batch_bounds_a_run_and_status_orders_the_rest(proj):
+    for item in ("T1", "T2"):
+        _finish(proj, item)
+        assert _queue(proj, item)[0] == 0
+    code, out, err = run_cli(proj, "queue", "run", "--max-batch", "1", agent="integrator")
+    assert code == 0, out + err
+    assert _landed(proj) == ["T1"]
+    rows = _status(proj)
+    assert rows["T1"]["state"] == "merged" and rows["T2"]["state"] == "queued"
+    assert rows["T2"]["position"] == 1 and rows["T2"]["eta_s"] > 0
+    assert run_cli(proj, "queue", "run", agent="integrator")[0] == 0
+    assert _landed(proj) == ["T1", "T2"]
+    assert run_cli(proj, "queue", "run", agent="integrator")[0] == 2  # empty: nothing to do
+
+
+def test_the_knobs_are_overridable_per_run_and_by_config(proj):
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    # config: unit_tests on -> the integrator runs the gate, which this project cannot run
+    err, _ = append_config(proj, "[merge_queue]\nrun_unit_tests = true\n")
+    assert not err
+    code, out, err = run_cli(proj, "--json", "queue", "run", agent="integrator")
+    body = json.loads(out)
+    assert code == 1 and "unit_tests" in body["processed"][0]["reason"], out + err
+    # the CLI flag beats the config for one run: the same entry, added again, now lands
+    assert _queue(proj, "T1")[0] == 0
+    code, out, err = run_cli(proj, "queue", "run", "--no-unit-tests", agent="integrator")
+    assert code == 0, out + err
+    assert _landed(proj) == ["T1"]
+    # bad numbers are refused, not clamped
+    assert run_cli(proj, "queue", "run", "--max-batch", "0")[0] == 3
+
+
+def test_a_crashed_integrators_leftover_is_no_holder_and_does_not_block_the_line(proj):
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    here = proj / MQ.QUEUE_DIR
+    here.mkdir(parents=True, exist_ok=True)
+    # a start time no live process has either: even if the OS gave the pid to a new process
+    # meanwhile, it is not the integrator that wrote this
+    stale = {"pid": gone.pid, "started": "1", "agent": "x", "since": 1}
+    (here / "integrator.json").write_text(json.dumps(stale))
+    assert MQ.holder(proj) is None
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    assert run_cli(proj, "queue", "run", agent="integrator")[0] == 0
+    assert _landed(proj) == ["T1"]
+
+
+def test_a_status_check_never_makes_an_integrator_think_it_is_alone_no_more(proj):
+    import threading
+
+    stop = threading.Event()
+    reader = threading.Thread(target=lambda: [MQ.holder(proj) for _ in iter(stop.is_set, True)])
+    reader.start()
+    try:
+        for _ in range(300):
+            with MQ.integrator(proj, agent="x") as got:
+                assert got, "status took the lock out from under an integrator"
+    finally:
+        stop.set()
+        reader.join()
+
+
+def test_an_eta_window_of_zero_ignores_history_and_a_negative_timeout_is_refused(proj):
+    done = MQ.Entry(item="a", seq=1, state=MQ.MERGED, started_at=1.0, finished_at=11.0)
+    assert MQ.typical_s([done], window=1, default_s=60) == 10.0
+    assert MQ.typical_s([done], window=0, default_s=60) == 60.0
+    code, out, err = run_cli(proj, "queue", "run", "--timeout", "-5")
+    assert code == 3, out + err
+
+
+def test_removing_an_entry_and_taking_it_never_both_succeed(proj):
+    here = proj / MQ.QUEUE_DIR
+    here.mkdir(parents=True, exist_ok=True)
+    entry, _ = MQ.add(proj, "T1", agent="a", keep_history=5)
+    assert MQ.take(proj, entry).state == MQ.RUNNING
+    assert MQ.remove(proj, "T1") is None  # being landed: refused, not unlinked
+    assert MQ.get(proj, "T1").state == MQ.RUNNING
+    MQ.finish(proj, entry, MQ.PARKED, reason="x")
+    second, _ = MQ.add(proj, "T2", agent="a", keep_history=5)
+    assert MQ.remove(proj, "T2") is not None
+    assert MQ.take(proj, second) is None  # removed after the integrator looked: not resurrected
+    assert MQ.get(proj, "T2") is None
+
+
+# -- `ddflow merge --queue`: the merge verb enqueues instead of landing (DX-merge-queue-flag) --
+
+
+def _ready(repo):
+    """T1 with a commit on its branch and every gate but ci and merge settled."""
+    from conftest import pass_pipeline
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "a.py").write_text("a\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "feat: T1")
+    pass_pipeline(repo, "T1", omit=("merge", "ci"))
+
+
+def test_merge_queue_enqueues_instead_of_landing(repo):
+    _ready(repo)
+    head = _git(repo, "rev-parse", "main")
+    code, out, err = run_cli(repo, "--json", "merge", "T1", "--queue")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert body["queued"] is True and body["state"] == "queued" and body["position"] == 1
+    assert _git(repo, "rev-parse", "main") == head, "--queue must not land anything"
+    assert _state(repo).items["T1"].state != "done"
+    code, out, _err = run_cli(repo, "--json", "queue", "status")
+    assert [r["item"] for r in json.loads(out)["entries"]] == ["T1"]
+
+
+def test_merge_queue_cli_and_mcp_bodies_are_equal(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _ready(repo)
+    _code, out, _err = run_cli(repo, "--json", "merge", "T1", "--queue")
+    cli = json.loads(out)
+    run_cli(repo, "queue", "remove", "T1")  # the MCP leg enqueues on the same fresh state
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_merge", "arguments": {"id": "T1", "queue": True}},
+        }
+    )
+    mcp = json.loads(reply["result"]["content"][0]["text"])
+    cli.pop("schema", None)
+    mcp.pop("schema", None)
+    assert mcp == cli and mcp["queued"] is True
+
+
+def test_merge_queue_refuses_landing_flags_and_unready_items(repo):
+    _ready(repo)
+    for flag in (["--keep"], ["--model", "m"]):
+        code, out, err = run_cli(repo, "merge", "T1", "--queue", *flag)
+        assert code == 3 and flag[0][2:] in out + err, flag
+    run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "b.py")
+    run_cli(repo, "claim", "T2")
+    code, out, err = run_cli(repo, "merge", "T2", "--queue")
+    assert code == 3 and "gates" in out + err
+
+
+def test_merge_queue_refusal_over_mcp_names_the_landing_flag(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _ready(repo)
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_merge",
+                "arguments": {"id": "T1", "queue": True, "keep": True},
+            },
+        }
+    )
+    text = json.dumps(reply)
+    assert "keep" in text and "only enqueues" in text, text
+    assert _state(repo).items["T1"].state != "done"

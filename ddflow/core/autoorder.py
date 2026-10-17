@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .graph import closure
+from .records import WORK_KINDS
 
 OPT_OUT = "no-auto-order"
 DECIDE_TAGS = frozenset({"decide", "decision"})
@@ -67,7 +68,7 @@ def eligible(c: Cand | None) -> str:
     """Why ``c`` may not be ordered ('' when it may)."""
     if c is None:
         return "unknown item"
-    if c.kind != "task":
+    if c.kind not in WORK_KINDS:
         return "not a task"
     if c.terminal:
         return "settled"

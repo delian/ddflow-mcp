@@ -33,6 +33,15 @@ from surface import surface
 from ddflow.core.events import version_key
 from ddflow.services import upgrade_manifest as UM
 
+#: It compares what the code exposes (read at run time from the registries, not imported), so
+#: a change to any of these is one no import reaches: it selects this test.
+GOVERNS = (
+    "ddflow/api/**",
+    "ddflow/surfaces/**",
+    "ddflow/config_sections/**",
+    "ddflow/core/events.py",
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 SURFACES = Path(__file__).resolve().parent / "surfaces"
 VERSIONS = sorted((p.stem for p in SURFACES.glob("*.json")), key=version_key)
@@ -45,6 +54,8 @@ DECLARED: dict[tuple[str, str, str], str] = {
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.json"): "Bf84a50bce3",
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.limit"): "Bf84a50bce3",
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_remove.reason"): "Bf84a50bce3",
+    # integer -> string so a digest prefix fits; a JSON integer is still read as the number.
+    ("0.1.18", "current", "tool argument retyped: ddflow_review_triage.finding"): "B8b2e487a13",
 }
 
 
