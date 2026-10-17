@@ -1386,6 +1386,34 @@ def _without_new_files(
     return [p for p in uncovered if p not in cand or p not in fresh]
 
 
+def _without_branch_changed(
+    repo: Path, uncovered: list[str], stolen: dict[str, str]
+) -> tuple[list[str], dict[str, str]]:
+    """Drop the held-by-another paths this merge-concluding commit's branch itself changed.
+
+    A rival's lease taken after the branch committed a path must not strand the merge of
+    main into it (B01ce0f1283): the branch's commits since the merge-base were judged when
+    made, and the rival's lease cannot be widened around. Outside a merge, or when git
+    cannot say, nothing is dropped."""
+    if not stolen:
+        return uncovered, stolen
+    tree = _index_tree(repo)
+    other = _merged_in(tree)
+    if not other:
+        return uncovered, stolen
+    base = W.git(tree, "merge-base", "HEAD", other)
+    if not (base.ok and base.out):
+        return uncovered, stolen
+    own = W.git_paths(tree, "diff", "--no-renames", "--name-only", base.out.split()[0], "HEAD")
+    if own is None:
+        return uncovered, stolen
+    mine = set(own)
+    drop = {p for p in stolen if p in mine}
+    return [p for p in uncovered if p not in drop], {
+        p: o for p, o in stolen.items() if p not in drop
+    }
+
+
 def _uncovered_paths(paths: list[str], mine: list[str], shared: list[str]) -> list[str]:
     """The staged paths neither shared nor inside a glob I hold."""
     return [
@@ -1548,6 +1576,9 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
+    uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
+    if not uncovered:
+        return Verdict(OK, "")
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
     if not uncovered:
