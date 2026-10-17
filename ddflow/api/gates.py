@@ -469,10 +469,14 @@ def _superseded_run(
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
     recorded = rec.evidence.get("tree_sha", "") if rec and rec.outcome else ""
+    # `merge` removes the item's worktree under a run still going; the commits live on in the
+    # repository, so ancestry is asked there (git cannot answer from a missing directory, and
+    # "could not tell" keeps the record: Bcf22c7f7c8).
+    asked = cwd if cwd.is_dir() else repo
     if (
         recorded
         and clock.epoch(rec.at) > clock.epoch(started_at)
-        and G.moved_past(started_on, recorded, cwd)
+        and G.moved_past(started_on, recorded, asked)
     ):
         # Recorded since this run began, on another commit (an amend or a rebase has no
         # ancestry to compare): newer work by construction.
@@ -485,7 +489,7 @@ def _superseded_run(
         (G.tree_identity(cwd), "the tree is now at"),
         (recorded, "a newer outcome is recorded on"),
     ):
-        if newer and G.superseded_by(started_on, newer, cwd):
+        if newer and G.superseded_by(started_on, newer, asked):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
                 f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
