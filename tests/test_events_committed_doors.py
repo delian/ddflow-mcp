@@ -240,3 +240,29 @@ def test_a_commit_that_lands_just_before_ours_begins_is_kept(repo, monkeypatch):
     assert _git(repo, "log", "-2", "--format=%s").splitlines()[1] == "other v2"
     assert eventcommit.uncommitted_shards(repo) == []
     assert _git(repo, "diff", "--cached", "--name-only") == ""
+
+
+def test_a_commit_that_lands_right_after_ours_is_left_alone(repo, monkeypatch):
+    """The remaking is for the commit this door made only: a foreign commit that lands on top
+    of it stays, with its file and its subject, and the note says nothing about it."""
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    real = eventcommit.W.git
+
+    def foreign_commit_after(root, *args, **kw):
+        out = real(root, *args, **kw)
+        if args and args[0] == "commit":
+            (root / "extra.txt").write_text("x\n")
+            _git(root, "add", "extra.txt")
+            _git(root, "commit", "-qm", "foreign work", "--no-verify")
+        return out
+
+    monkeypatch.setattr(eventcommit.W, "git", foreign_commit_after)
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" not in note and "HEAD moved" not in note, (sha, note)
+    assert _git(repo, "log", "-1", "--format=%s") == "foreign work"
+    assert _git(repo, "show", "HEAD:extra.txt") == "x"

@@ -130,30 +130,33 @@ def commit_shards(
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            parent = W.rev(repo, "HEAD^")
-            if parent != base:  # someone's commit landed before this one began
+            head = W.rev(repo, "HEAD")
+            ours = W.git(repo, "write-tree", env=env)
+            made_here = (
+                ours.ok and W.git(repo, "rev-parse", f"{head}^{{tree}}").out == ours.out.strip()
+            )
+            if made_here and W.rev(repo, f"{head}^") != base:  # a commit landed just before ours
                 skipped = "; ".join(
-                    filter(None, [skipped, _rebuild_on(repo, taken, private, parent)])
+                    filter(None, [skipped, _rebuild_on(repo, taken, private, head)])
                 )
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
 
 
-def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, parent: str) -> str:
-    """The event-log commit was made on HEAD after a commit it did not know: its tree is the old
-    HEAD's, so it would undo that commit. Make it again on ``parent`` (its real parent): a note
-    saying so, or saying it could not."""
-    head = W.rev(repo, "HEAD")
-    made, why = _private_index(repo, taken, index, onto=parent)
+def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
+    """``head`` is the event-log commit this door made, and it was made on a HEAD that was no
+    longer the current one: its tree is the old HEAD's, so it undoes the commit that landed in
+    between. Make it again on its real parent (replacing HEAD only if HEAD is still ``head``):
+    a note saying what was done."""
+    parent = W.rev(repo, f"{head}^")
+    _, why = _private_index(repo, taken, index, onto=parent)
     msg = W.git(repo, "log", "-1", "--format=%B", head)
     tree = W.git(repo, "write-tree", env={"GIT_INDEX_FILE": str(index)})
     new = W.git(repo, "commit-tree", tree.out.strip(), "-p", parent, input=msg.out + "\n")
-    ok = not why and made == parent and tree.ok and new.ok and msg.ok
-    if ok and W.git(repo, "update-ref", "HEAD", new.out.strip(), head).ok:
-        return (
-            "a commit landed just before the event-log commit began: it was made again on top of it"
-        )
+    if not why and msg.ok and tree.ok and new.ok:
+        if W.git(repo, "update-ref", "HEAD", new.out.strip(), head).ok:
+            return "a commit landed just before the event-log commit began: it was made again on top of it"
     return (
         f"HEAD moved while the event log was committed (was {parent[:12]}) and the commit could "
         f"not be remade on it: it may undo that commit, check `git log` ({why or new.err})"
