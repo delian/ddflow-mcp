@@ -383,7 +383,7 @@ def _command_lines(lines: list[str]) -> dict[int, list[tuple[int, int]]]:
     try:
         values = list(_command_values(read_precommit_yaml("\n".join(lines))))
     except UnreadableYaml:
-        return {i: [(col, len(lines[i]))] for i, col in candidates.items() if col}
+        return {i: [(col, len(lines[i]))] for i, col in candidates.items()}
     out: dict[int, list[tuple[int, int]]] = {}
     at = 0
     for value in values:

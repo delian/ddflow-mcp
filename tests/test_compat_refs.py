@@ -194,6 +194,18 @@ def test_a_flow_mapping_hook_name_beside_its_entry_is_not_scanned(tmp_path):
     assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [(5, "gate bogus")]
 
 
+def test_a_config_the_reader_cannot_parse_still_has_its_entries_read(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "anchor: &a 1\nrepos:\n- repo: local\n  hooks:\n  - id: a\n    name: ddflow lease\n"
+        "    entry: >-\n      ddflow gate bogus\n"
+        "  - id: b\n    name: x\n    entry: ddflow gate bogus2\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [
+        (8, "gate bogus"),
+        (11, "gate bogus2"),
+    ]
+
+
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
     (tmp_path / "AGENTS.md").write_text(
         _managed_md("rules/work-queue", "Run `ddflow nosuch` and `ddflow doc show`.\n")
