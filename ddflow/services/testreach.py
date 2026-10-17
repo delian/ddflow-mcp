@@ -100,7 +100,9 @@ def _bare(name: str, importer: str, homes: dict[tuple[str, str], str]) -> str:
     of one above it that is not a package. It comes BEFORE the repository's top-level modules:
     pytest puts the test's directory first on ``sys.path``, so ``tests/conftest.py`` wins over
     a root ``conftest.py`` and ``tests/queue.py`` over the library's."""
-    head = name.split(".", maxsplit=1)[0]
+    if "." in name:  # `a.b` is a package's module; `from helpers import x` also names `helpers`
+        return ""
+    head = name
     for d in PurePosixPath(importer).parents:
         if mod := homes.get((str(d), head)):
             return mod
