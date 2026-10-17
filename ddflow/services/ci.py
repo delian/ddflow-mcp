@@ -94,10 +94,10 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
-_HOOK_START = re.compile(r"^\s*-\s+id:\s*[\"']?(?P<id>[^\s\"'#]+)")
 _REPO_START = re.compile(r"^\s*-\s+repo:")
-_FAIL_LANGUAGE = re.compile(r"^\s+language:\s*[\"']?fail[\"']?\s*(#.*)?$")
-_STAGES = re.compile(r"^\s+(?P<key>default_stages|stages):\s*(?P<inline>\[[^\]]*\])?")
+_HOOKS_KEY = re.compile(r"^(?P<ind>\s*)hooks:\s*(#.*)?$")
+_HOOK_ID = re.compile(r"^\s*(?:-\s+)?id:\s*[\"']?(?P<id>[^\s\"'#]+)")
+_FAIL_LANGUAGE = re.compile(r"^\s*(?:-\s+)?language:\s*[\"']?fail[\"']?\s*(#.*)?$")
 _LIST_ITEM = re.compile(r"^\s*-\s*[\"']?(?P<v>[\w-]+)[\"']?\s*(#.*)?$")
 #: The names pre-commit gives the pre-push stage (the old and the new).
 _PUSH_STAGES = ("pre-push", "push")
@@ -105,6 +105,31 @@ _PUSH_STAGES = ("pre-push", "push")
 
 def _runs_at_pre_push(stages: list[str] | None) -> bool:
     return stages is None or any(s in _PUSH_STAGES for s in stages)
+
+
+def _hook_blocks(lines: list[str]) -> list[list[str]]:
+    """The lines of each hook of the config: every list item under a ``hooks:`` key, whatever
+    key it starts with (YAML mappings are unordered) -- a line of its own ends the block when it
+    is as shallow as the item before it."""
+    blocks: list[list[str]] = []
+    hooks_indent: int | None = None
+    item_indent: int | None = None
+    for line in lines:
+        text = line.lstrip()
+        indent = len(line) - len(text)
+        if m := _HOOKS_KEY.match(line):
+            hooks_indent, item_indent = len(m["ind"]), None
+        elif _REPO_START.match(line):
+            hooks_indent = item_indent = None
+        elif hooks_indent is not None and text and not text.startswith("#"):
+            if indent <= hooks_indent and not text.startswith("-"):
+                hooks_indent = item_indent = None  # a key of the enclosing mapping again
+            elif text.startswith("-") and (item_indent in (None, indent)):
+                item_indent = indent
+                blocks.append([line])
+            elif blocks:
+                blocks[-1].append(line)
+    return blocks
 
 
 def tripwire_ids(tree: Path) -> list[str]:
@@ -118,27 +143,20 @@ def tripwire_ids(tree: Path) -> list[str]:
     except OSError:
         return []
     default_stages = _stage_list(lines, "default_stages", top=True)
-    blocks: list[tuple[str, list[str]]] = []
-    for line in lines:
-        if _REPO_START.match(line):
-            blocks.append(("", []))
-        elif m := _HOOK_START.match(line):
-            blocks.append((m["id"], [line]))
-        elif blocks:
-            blocks[-1][1].append(line)
     found: list[str] = []
-    for hook, body in blocks:
-        if not hook or hook in found or not any(_FAIL_LANGUAGE.match(ln) for ln in body):
+    for body in _hook_blocks(lines):
+        ident = next((m["id"] for ln in body if (m := _HOOK_ID.match(ln))), "")
+        if not ident or ident in found or not any(_FAIL_LANGUAGE.match(ln) for ln in body):
             continue
         if _runs_at_pre_push(_stage_list(body, "stages", top=False) or default_stages):
-            found.append(hook)
+            found.append(ident)
     return found
 
 
 def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     """The stages a ``key:`` line (inline list or block list) names; None when it is absent."""
     for i, line in enumerate(lines):
-        indent = "" if top else r"\s+"
+        indent = "" if top else r"\s*(?:-\s+)?"
         m = re.match(rf"^{indent}{key}:\s*(?P<inline>\[[^\]]*\])?", line)
         if not m:
             continue

@@ -175,3 +175,24 @@ def test_the_after_merge_check_without_a_range_still_checks_the_last_commit(repo
     cmd, _ = CI.main_command(repo, cfg)
     res = CI.run(repo, cfg, ref="HEAD", command=cmd)
     assert res.status == "failed" and [c.id for c in res.checks if not c.ok], res
+
+
+def test_a_hook_item_may_start_with_any_key(tmp_path):
+    """YAML mappings are unordered: `- name:` first, `id:` later, `language:` before it."""
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n"
+        "  - repo: local\n"
+        "    hooks:\n"
+        "      - id: lint\n"
+        "        language: system\n"
+        "        entry: flake8\n"
+        "      - name: guard\n"
+        "        language: fail\n"
+        "        id: guard\n"
+        "        files: ^forbidden/\n"
+        "      - language: fail\n"
+        "        id: other-guard\n"
+        "        entry: nope\n"
+        "default_stages: [pre-push]\n"
+    )
+    assert CI.tripwire_ids(tmp_path) == ["guard", "other-guard"]
