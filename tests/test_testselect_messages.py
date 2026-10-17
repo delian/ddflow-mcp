@@ -1,0 +1,119 @@
+"""Bb5b8b17161: a reworded message and a bare-imported helper reach the tests that rely on them.
+
+``claim_text`` reworded a CLI message (f94fd1f1); ``test_asagent_tree.py`` asserts on it, and
+reached the change only through the data model (a hub) and the api facade, so the precise
+selection dropped it and the recall replay failed on main. Two routes the import graph misses:
+
+* a test that holds the TEXT a source line gained or lost (a run of words from a string
+  literal), however far its imports are from that file;
+* a test that says ``from _wait import x`` imports ``tests/_wait.py``, a module of a directory
+  pytest puts on ``sys.path`` and not of a package.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from helpers import git_quiet as _git
+
+from ddflow.services import testidents as TI
+from ddflow.services import testreach as TR
+from ddflow.services import testselect as T
+
+USERS = 12
+OLD = '    return f"not adopted: the tree you are in is {owner}\'s working tree"\n'
+NEW = '    return f"leased to {agent}: the tree you are in is {owner}\'s, so it was not adopted"\n'
+
+
+def _write(repo: Path, files: dict[str, str]) -> None:
+    for path, text in files.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "fixture")
+
+
+@pytest.fixture
+def messaged(repo):
+    """pkg.cli.claim_text <- pkg.hub <- {USERS tests}; test_message imports only the hub and
+    asserts on the message's text."""
+    files = {
+        "pkg/__init__.py": "",
+        "pkg/cli.py": "def claim_text(owner):\n" + OLD,
+        "pkg/hub.py": "from pkg import cli\n\nTEXT = cli.claim_text\n",
+        "tests/conftest.py": "",
+        "tests/test_message.py": (
+            "from pkg import hub\n\ndef test_m():\n"
+            "    assert 'the tree you are in is' in str(hub.TEXT)\n"
+        ),
+    }
+    for i in range(USERS):
+        files[f"tests/test_user_{i}.py"] = (
+            f"from pkg import hub\n\ndef test_u{i}():\n    assert hub\n"
+        )
+    _write(repo, files)
+    return repo
+
+
+def test_a_test_that_holds_the_text_a_message_lost_is_selected_through_a_hub(messaged):
+    (messaged / "pkg/cli.py").write_text("def claim_text(owner):\n" + NEW)
+    sel = T.select(messaged, "main", hub_importers=USERS)
+    assert sel is not None and sel.full == ""
+    got = {t.path: t.reason for t in sel.tests}
+    assert set(got) == {"tests/test_message.py"}, got
+    assert "the tree you are" in got["tests/test_message.py"], got
+
+
+def test_a_phrase_that_many_tests_say_is_not_a_message(messaged):
+    _write(
+        messaged,
+        {
+            f"tests/test_user_{i}.py": (messaged / f"tests/test_user_{i}.py").read_text()
+            + "# the tree you are in\n"
+            for i in range(USERS)
+        },
+    )
+    (messaged / "pkg/cli.py").write_text("def claim_text(owner):\n" + NEW)
+    sel = T.select(messaged, "main", hub_importers=USERS, name_max_tests=5)
+    assert sel is not None and sel.tests == [], sel.tests
+
+
+def test_phrases_are_the_words_of_the_string_literals_a_line_gains_or_loses():
+    got = TI._phrases([OLD, NEW, "    x = a_function_name(1, 2, 3)  # not a literal at all\n"])
+    assert "the tree you are" in got and "it was not adopted" in got
+    assert not any("function" in p for p in got), got
+    assert all(len(p) >= TI._PHRASE_MIN for p in got)
+
+
+@pytest.fixture
+def barely(repo):
+    _write(
+        repo,
+        {
+            "pkg/__init__.py": "",
+            "pkg/core.py": "X = 1\n",
+            "tests/conftest.py": "",
+            "tests/_wait.py": "def wait_until(f):\n    return f()\n",
+            "tests/test_poll.py": "from _wait import wait_until\n\ndef test_w():\n    assert wait_until(int)\n",
+            "tests/test_core.py": "from pkg import core\n\ndef test_c():\n    assert core.X\n",
+        },
+    )
+    return repo
+
+
+def test_a_bare_import_of_a_tests_directory_helper_reaches_its_importers(barely):
+    (barely / "tests/_wait.py").write_text("def wait_until(f):\n    return f() or 1\n")
+    sel = T.select(barely, "main")
+    assert sel is not None
+    assert {t.path for t in sel.tests} == {"tests/test_poll.py"}, sel.tests
+
+
+def test_a_bare_name_that_is_no_file_of_the_repository_resolves_to_nothing():
+    homes = TR._bare_homes(["tests/_wait.py", "tests/test_a.py", "pkg/__init__.py", "pkg/m.py"])
+    assert TR._bare("_wait", "tests/test_a.py", homes) == "tests._wait"
+    assert TR._bare("json", "tests/test_a.py", homes) == ""
+    assert TR._bare("m", "tests/test_a.py", homes) == "", "pkg is a package, not on sys.path"

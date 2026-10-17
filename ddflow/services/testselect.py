@@ -186,7 +186,7 @@ def _bounded(sel: Selection, picks: _Picks, max_files: int) -> None:
     sel.tests = [Selected(t, *picks.by[t]) for t in sorted(keep)]
 
 
-def select(
+def select(  # noqa: PLR0913 -- the knobs and the stand-ins for git's answers
     tree: Path,
     base: str,
     *,
@@ -198,6 +198,7 @@ def select(
     listed: list[str] | None = None,
     idents: dict[str, str] | None = None,
     membership: list[str] | None = None,
+    phrases: dict[str, str] | None = None,
 ) -> Selection | None:
     """The tests ``tree``'s change reaches since ``base``, each with why and how near. None
     when git could not say what changed.
@@ -209,7 +210,8 @@ def select(
     selection: the farthest tests are moved to ``cut`` until it fits, never a changed test.
     ``changed``, ``listed`` and ``idents`` stand in for git's answers (and
     `testidents.changed_identifiers`; ``membership`` the added and removed paths), to select over a checkout of an older commit that
-    has no history of its own (the recall replay)."""
+    has no history of its own (the recall replay; ``phrases`` likewise stands in for
+    `testidents.changed_phrases`)."""
     changed = changed_files(tree, base) if changed is None else changed
     listed = _listed(tree) if listed is None else listed
     if changed is None or listed is None:
@@ -246,10 +248,13 @@ def select(
                 sel.full or f"git could not say which files were added or removed since {base}"
             )
     packages = TI.listed_packages(membership or [])
-    if idents or packages:  # no changed name or listing, nothing to read the tests for
+    if phrases is None:
+        phrases = TI.changed_phrases(tree, base, [c for c in changed if c in py])
+    if idents or packages or phrases:  # no changed name or listing, nothing to read the tests for
         texts = {t: _read(tree / t) for t in tests}
         pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
         pick.many(TI.listing_tests(packages, texts, name_max_tests), RANK_DECLARED)
+        pick.many(TI.phrase_tests(phrases, texts, name_max_tests), RANK_DECLARED)
     _bounded(sel, pick, max_files)
     return sel
 
