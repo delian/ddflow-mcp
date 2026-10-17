@@ -314,11 +314,7 @@ def run(
             status = "failed" if NOT_MERGEABLE in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        if not cfg.ci.command.strip() and DEFAULT_COMMAND in cmd:
-            # The diff the check is about. On the base itself (the after-merge check) there is
-            # no branch to compare with: the commit that was just made, against its first parent.
-            since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
-            cmd = with_tripwires_on_the_diff(cmd, tree, since)
+        cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
@@ -341,6 +337,19 @@ def run(
                 scope=scope.evidence(sha) if scope is not None else {},
             )
     return _result(p, out_prefix, cmd, sha, base, scope)
+
+
+def _default_with_tripwires(
+    repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
+) -> str:
+    """``cmd`` with the tripwire hooks on the diff, when it is the default command (an operator's
+    own `[ci].command` is run as written). The diff is the one the check is about: on the base
+    itself (the after-merge check) there is no branch to compare with, so the commit just made
+    against its first parent."""
+    if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
+        return cmd
+    since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
+    return with_tripwires_on_the_diff(cmd, tree, since)
 
 
 def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
