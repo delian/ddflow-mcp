@@ -268,4 +268,4 @@ def test_files_that_cannot_be_put_back_are_reported_as_possibly_half_written(
     (tmp_path / "snap.txt").write_text("orig\n")
     monkeypatch.setattr(PN, "_restore", lambda *a, **k: False)
     rep = PN.regenerate(tmp_path, Config())
-    assert "half written" in rep.problem and "t" in rep.problem, rep.problem
+    assert "files of t could not" in rep.problem and "half written" in rep.problem, rep.problem
