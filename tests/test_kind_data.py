@@ -116,9 +116,10 @@ def test_rule_is_data_and_declared():
 
 def test_every_packaged_descriptor_loads():
     names = [n for n, _ in KDA.packaged()]
-    assert "rule.toml" in names
+    assert "rule" in names
     for name, text in KDA.packaged():
-        assert KDA.parse_kind(text, source=name).name == name.removesuffix(".toml")
+        assert KDA.parse_kind(text, source=name).name == name
+        assert KDA.load_packaged(name).name == name
 
 
 def test_register_kind_never_redefines_a_builtin():

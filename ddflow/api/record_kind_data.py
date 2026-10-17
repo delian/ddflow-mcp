@@ -61,9 +61,9 @@ def parse_kind(text: str, *, source: str = "", records: ModuleType | None = None
 
 
 def packaged() -> Iterator[tuple[str, str]]:
-    """``(file name, text)`` of every packaged descriptor, by name."""
+    """``(kind name, text)`` of every packaged descriptor, by name: ``load_packaged`` takes the name."""
     for entry in sorted(KINDS_DIR.glob("*.toml")):
-        yield entry.name, entry.read_text(encoding="utf-8")
+        yield entry.stem, entry.read_text(encoding="utf-8")
 
 
 def load_packaged(name: str, records: ModuleType | None = None) -> Any:
