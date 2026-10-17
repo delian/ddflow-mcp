@@ -1,6 +1,6 @@
 """The refusal of a bare pass names the flags that supply evidence (gate-record-evidence-message-omits-flags).
 
-`gate record <id> research --outcome passed --reason ...` was refused with "Attach the command,
+`gate record <id> <an evidence gate> --outcome passed` was refused with "Attach the command,
 its exit code and its output", but the flags that do (`--evidence`, `--command`, `--exit-code`,
 `--output-file`) appeared only in `--help`.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-REFUSED = 3
+FAIL = 1
 
 
 def test_a_bare_pass_of_an_evidence_gate_names_the_flags_that_give_evidence(repo):
@@ -22,7 +22,7 @@ def test_a_bare_pass_of_an_evidence_gate_names_the_flags_that_give_evidence(repo
     assert run_cli(repo, "claim", "T1")[0] == 0
     code, out, err = run_cli(repo, "gate", "record", "T1", "unit_tests", "--outcome", "passed")
     text = out + err
-    assert code != 0 and "requires evidence" in text, text
+    assert code == FAIL and "requires evidence" in text, text
     for flag in ("--evidence", "--command", "--exit-code", "--output-file"):
         assert flag in text, f"{flag} not named in: {text}"
     assert "--outcome unavailable --reason" in text
