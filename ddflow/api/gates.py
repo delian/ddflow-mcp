@@ -953,11 +953,13 @@ def _evidence_fields(
     return ev, None
 
 
-def _agent_skip_refusal(it, gdef, gate: str, item: str, agent: str) -> O.Outcome | None:
+def _agent_skip_refusal(
+    it, gdef, gate: str, item: str, agent: str, skipping: bool
+) -> O.Outcome | None:
     """D-failed-review-gate (B85841c0846): setting a FAILED review gate aside while its
     confirmed findings were never re-reviewed is the operator's override. An agent
     (`--agent`, DDFLOW_AGENT, a harness's shell) is refused; the person records the reason."""
-    if gdef is None or not gdef.reviewer:
+    if not skipping or gdef is None or not gdef.reviewer:
         return None
     why = GO.unresolved_review_failure(it, gate)
     marker = agent_marker(agent) if why else ""
@@ -1003,9 +1005,7 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    refused = (
-        _agent_skip_refusal(it, gdef, gate, item, agent) if skip or outcome == "skipped" else None
-    )
+    refused = _agent_skip_refusal(it, gdef, gate, item, agent, skip or outcome == "skipped")
     if refused is not None:
         return refused
 
