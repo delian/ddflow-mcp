@@ -10,6 +10,7 @@ from ..infra import git as G
 from ..services import leasekeep as LK
 from ..services import pins as PN
 from ..services import pins_merge as PM
+from ..services import pins_written as PW
 from ._base import _load
 
 
@@ -46,7 +47,13 @@ def pins_regenerate(
         note = PM.after_merge(repo, cfg)
         return O.ok("pins", note=note)
     tick = _lease_tick(primary, agent)
+    files = PN.pin_files(repo, cfg)
+    before = PW.snapshot(repo, files) if not check else {}
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
+    if not check:
+        # The lease-free commit of what was just re-recorded (B1579b8a1a9). The record sits in
+        # the primary checkout, which is where the commit hook reads it from.
+        PW.record(primary, PW.written(repo, before, files))
     if rep.problem:
         return O.failed("pins", rep.problem)
     return _regenerate_outcome(rep, check)
