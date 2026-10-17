@@ -155,6 +155,8 @@ from .handlers.waiting import WAITING_HANDLERS
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
 # here, so `from ddflow.core.model import State, Item, fold, HANDLERS, ...` keeps working.
 from .records import (  # noqa: F401
+    WORK_KINDS,
+    work_kind,
     ABANDONED,
     ADD_RELATIONS,
     BLOCKED,
@@ -205,7 +207,7 @@ from .upcasters import NewerPayload, upcast
 
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
-    "task.added": _linking(lambda st, ev: _h_added(st, ev, "task")),
+    "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
     "phase.updated": lambda st, ev: _h_updated(st, ev, "phase"),
     "task.updated": lambda st, ev: _h_updated(st, ev, "task"),
     "phase.removed": lambda st, ev: _h_removed(st, ev, "phase"),

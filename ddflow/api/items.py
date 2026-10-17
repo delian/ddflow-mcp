@@ -531,6 +531,11 @@ def _add_ports(
     return ports, ""
 
 
+def _kind_field(kind: str) -> str | None:
+    """The payload's `kind`: None (not written) for a plain task."""
+    return kind if kind and kind != "task" else None
+
+
 def _csv_none_when_empty(v: str) -> list[str] | None:
     """A comma list, or None (field not written) when empty."""
     return csv_list(v) or None
@@ -551,6 +556,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     lines: str = "",
     port_of: str = "",
     resources: str = "",
+    kind: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -585,6 +591,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         tags=csv_list(tags),
         priority=priority,
         resources=_csv_none_when_empty(resources),
+        kind=_kind_field(kind),
     )
     bad = IT.problem_of(base)
     if bad:

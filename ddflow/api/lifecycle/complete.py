@@ -227,7 +227,7 @@ def _umbrella_children(st: State, it) -> list[str]:
 
     Its work is its sub-tasks', each of which ran its own pipeline (B651a63e574). All of
     them abandoned is not the work finished, and a phase keeps its own close."""
-    if it.kind != "task" or it.state in (DONE, ABANDONED):
+    if not it.is_work or it.state in (DONE, ABANDONED):
         return []
     below = sorted(st.descendants(it.id))
     if not below or st.open_descendants(it.id):
