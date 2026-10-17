@@ -847,22 +847,7 @@ COMMANDS: tuple[Command, ...] = (
         "instead, releases your lease and parks the item in REVIEW — take the next "
         "item; `ddflow_pr_sync` completes it once a person merges it.",
         wants_progress=True,
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None, on_progress=None: (
-            _api().merge_item(
-                repo,
-                a["id"],
-                message=a.get("message", "") or "",
-                allow_dirty=bool(a.get("allow_dirty")),
-                allow_empty=bool(a.get("allow_empty")),
-                keep=bool(a.get("keep")),
-                model=a.get("model", "") or "",
-                branch=a.get("branch", "") or "",
-                called_from=called_from,
-                shell_cwd=shell_cwd,
-                agent=agent,
-                on_progress=on_progress,
-            )
-        ),
+        call=L.merge_call,
         payload=L.MERGE_PAYLOAD,
         render=L.merge_text,
         cli=CliPolicy(
@@ -877,6 +862,12 @@ COMMANDS: tuple[Command, ...] = (
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("message", help="Merge commit message.", cli_help="", default=""),
             Param(
+                "queue",
+                type="boolean",
+                help="Enqueue (ddflow_queue add) instead of landing.",
+                cli_help="enqueue the item in the merge queue instead of landing it (`ddflow queue add`)",
+            ),
+            Param(
                 "keep",
                 type="boolean",
                 help="Keep the worktree after merging, for inspection.",
@@ -885,29 +876,29 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "allow_dirty",
                 type="boolean",
-                help="Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output.",
+                help="Merge although the worktree is dirty; uncommitted changes are NOT included. Only once you know it is build output.",
                 cli_help="",
             ),
             Param(
                 "allow_empty",
                 type="boolean",
-                help="Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree).",
+                help="Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree).",
                 cli_help="land a branch with no commits ahead of its target (refused by default: it would record the item merged with nothing landed)",
             ),
             Param(
                 "branch",
-                help="For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs.",
+                help="no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs.",
                 cli_help="for an item claimed without a worktree: the branch to land (default: the one checked out in the worktree you are standing in)",
                 default="",
             ),
             Param(
                 "model",
-                help="The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then.",
+                help="The AUTHOR's model. In PR mode the item completes at `ddflow_pr_sync`, which needs it for reviewer independence.",
                 cli_help="the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and the reviewer-independence check needs it then",
                 default="",
             ),
         ),
-        tool_order=("id", "message", "keep", "model", "allow_dirty", "allow_empty", "branch"),
+        tool_order=("id", "message", "queue", "keep", "model", "allow_dirty", "allow_empty", "branch"),
     ),
 )
 

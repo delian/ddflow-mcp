@@ -9,9 +9,10 @@ queued, where it stood, or that the queue had ejected it.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from conftest import run_cli
-from test_flow import AUTHOR, _state, _work, pr_repo  # noqa: F401
+from test_flow import AUTHOR, _git, _state, _work, pr_repo  # noqa: F401
 
 GREEN = [{"status": "COMPLETED", "conclusion": "SUCCESS"}]
 
@@ -478,3 +479,66 @@ def test_removing_an_entry_and_taking_it_never_both_succeed(proj):
     assert MQ.remove(proj, "T2") is not None
     assert MQ.take(proj, second) is None  # removed after the integrator looked: not resurrected
     assert MQ.get(proj, "T2") is None
+
+
+# -- `ddflow merge --queue`: the merge verb enqueues instead of landing (DX-merge-queue-flag) --
+
+
+def _ready(repo):
+    """T1 with a commit on its branch and every gate but ci and merge settled."""
+    from conftest import pass_pipeline
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "a.py").write_text("a\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "feat: T1")
+    pass_pipeline(repo, "T1", omit=("merge", "ci"))
+
+
+def test_merge_queue_enqueues_instead_of_landing(repo):
+    _ready(repo)
+    head = _git(repo, "rev-parse", "main")
+    code, out, err = run_cli(repo, "--json", "merge", "T1", "--queue")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert body["queued"] is True and body["state"] == "queued" and body["position"] == 1
+    assert _git(repo, "rev-parse", "main") == head, "--queue must not land anything"
+    assert _state(repo).items["T1"].state != "done"
+    code, out, _err = run_cli(repo, "--json", "queue", "status")
+    assert [r["item"] for r in json.loads(out)["entries"]] == ["T1"]
+
+
+def test_merge_queue_cli_and_mcp_bodies_are_equal(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _ready(repo)
+    _code, out, _err = run_cli(repo, "--json", "merge", "T1", "--queue")
+    cli = json.loads(out)
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_merge", "arguments": {"id": "T1", "queue": True}},
+        }
+    )
+    mcp = json.loads(reply["result"]["content"][0]["text"])
+    cli.pop("schema", None)
+    mcp.pop("schema", None)
+    assert mcp == cli and mcp["queued"] is True
+
+
+def test_merge_queue_refuses_landing_flags_and_unready_items(repo):
+    _ready(repo)
+    code, out, err = run_cli(repo, "merge", "T1", "--queue", "--keep")
+    assert code == 3 and "keep" in out + err
+    run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "b.py")
+    run_cli(repo, "claim", "T2")
+    code, out, err = run_cli(repo, "merge", "T2", "--queue")
+    assert code == 3 and "gates" in out + err
