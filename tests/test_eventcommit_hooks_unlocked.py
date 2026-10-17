@@ -72,14 +72,18 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
     second.join()
     for name, out in outs.items():
         note = out.data.get("events_note", "")
+        # each door committed for itself: no sweep after them is needed or run
+        assert out.data.get("events_committed"), (name, out.data)
         assert "nothing to commit" not in note and "index.lock" not in note, (name, note)
-    EC.commit_shards(repo, "last")  # whatever a door left for the next one
     assert EC.uncommitted_shards(repo) == []
-    # Every line both doors wrote is in a commit, none is only in the working tree.
     shard = next((repo / ".ddflow" / "events").glob("*.jsonl")).relative_to(repo)
     committed = _git(repo, "show", f"HEAD:{shard}")
-    assert committed == (repo / shard).read_text().strip()
     assert '"s1"' in committed and '"s2"' in committed, committed
+    # and the second door's own commit is the one that holds its line, not the first's
+    first, second = (outs[n].data["events_committed"] for n in ("s1", "s2"))
+    assert first != second
+    held = _git(repo, "show", f"{second}:{shard}")
+    assert '"s2"' in held
 
 
 def test_the_commit_holds_exactly_the_bytes_that_were_checked(repo, monkeypatch):
