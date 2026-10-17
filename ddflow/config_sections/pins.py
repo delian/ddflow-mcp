@@ -26,6 +26,11 @@ class PinsConfig:
         doc="Seconds one recipe's check or regeneration may run before it is stopped and reported as failed.",
         check=int_at_least(1),
     )
+    after_merge_timeout_s: int = knob(
+        120,
+        doc="Seconds one recipe command may run when the post-merge hook runs it. A merge must not wait for a test suite: a recipe that does not finish in this time is reported as UNAVAILABLE (never failed, never stale) and the hook exits cleanly. A recipe table with `after_merge = false` is not run by the hook at all (the golden-snapshot suites are those in this repository); `ddflow pins regenerate` runs every recipe, bounded by `timeout_s`.",
+        check=int_at_least(1),
+    )
     after_merge: str = knob(
         "amend",
         doc="What the post-merge hook installed by `ddflow pins regenerate --install` does after a merge: 'amend' (regenerate the stale pins and fold them into the merge commit when nothing else is dirty), 'leave' (regenerate and leave the files changed for you to commit) or 'off' (do nothing).",
