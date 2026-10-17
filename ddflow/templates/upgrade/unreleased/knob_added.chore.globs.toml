@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "chore.globs"
+new = '[".ddflow/rules/**", ".mailmap", "DDFLOW.md", "docs/ddflow/decisions/**", "docs/ddflow/QUEUE.md", "docs/ddflow/LESSONS.md", "docs/ddflow/LESSONS-SUMMARY.md"]'
+why = "The files `ddflow chore commit` may land with no reviewer; a person approves the list (`ddflow chore approve`)."
+impact = "additive"
