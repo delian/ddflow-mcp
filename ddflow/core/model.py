@@ -166,6 +166,7 @@ from .records import (  # noqa: F401
     OUTCOME_MARK,
     REVIEW,
     RUNNING,
+    WORK_KINDS,
     Bug,
     Decision,
     FoldProblem,
@@ -188,6 +189,7 @@ from .records import (  # noqa: F401
     _clashing,
     _overlaps,
     _span,
+    work_kind,
 )
 from .upcasters import NewerPayload, upcast
 
@@ -205,7 +207,7 @@ from .upcasters import NewerPayload, upcast
 
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
-    "task.added": _linking(lambda st, ev: _h_added(st, ev, "task")),
+    "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
     "phase.updated": lambda st, ev: _h_updated(st, ev, "phase"),
     "task.updated": lambda st, ev: _h_updated(st, ev, "task"),
     "phase.removed": lambda st, ev: _h_removed(st, ev, "phase"),
