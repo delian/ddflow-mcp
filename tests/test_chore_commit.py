@@ -216,3 +216,18 @@ def test_a_failed_merge_puts_a_deleted_file_back_as_deleted(proj, monkeypatch):
     out = A.chore_commit(proj, [".mailmap"], message="drop")
     assert out.exit != 0 and out.data["stage"] == "merge"
     assert not (proj / ".mailmap").exists(), "the user's deletion was undone by the failure"
+
+
+def test_a_directory_argument_lands_the_chore_files_changed_in_it(proj):
+    _approve(proj)
+    d = proj / "docs" / "ddflow" / "decisions"
+    d.mkdir(parents=True)
+    (d / "a.md").write_text("a\n")
+    (d / "b.md").write_text("b\n")
+    code, out, err = run_cli(proj, "chore", "commit", "docs/ddflow/decisions", "-m", "dir")
+    assert code == 0, (out, err)
+    assert _git(proj, "show", "HEAD:docs/ddflow/decisions/b.md") == "b\n"
+    (proj / "app").mkdir()
+    (proj / "app" / "x.py").write_text("x\n")
+    code, out, err = run_cli(proj, "chore", "commit", "app", "-m", "code dir")
+    assert code == 3 and "app/x.py" in out + err

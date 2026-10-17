@@ -88,7 +88,8 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
     if not rels:
         return O.refused(KIND, "no files named")
     todo = list(dict.fromkeys(_changes(repo, rels)))  # a directory stands for what changed in it
-    if bad := CO.outside(cfg, [*rels, *todo]):
+    named_files = [r for r in rels if not (repo / r).is_dir()]  # a directory is judged by its files
+    if bad := CO.outside(cfg, [*named_files, *todo]):
         return O.refused(
             KIND,
             f"not a chore: {', '.join(bad)} match no [chore].globs ({', '.join(cfg.chore.globs)})."
