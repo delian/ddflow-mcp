@@ -342,7 +342,7 @@ def apply(
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     lags = _lags(results, plan, frm, to)
-    wrote = UW.written(repo, before, [repo / rel for rel in before])
+    wrote = UW.written(repo, before)
     _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags, wrote)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
 

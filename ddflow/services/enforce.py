@@ -29,7 +29,6 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import difflib
-import hashlib
 import itertools
 import os
 import re
@@ -64,6 +63,7 @@ from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
 from . import docsync
+from . import upgrade_written as UW
 from .backups import make_backup
 from .enforce_committed import committed_log
 from .export import frame as F
@@ -1569,7 +1569,7 @@ def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
     out = []
     for p in paths:
         data = staged_bytes(repo, p) if p in wrote else None
-        if data is None or hashlib.sha256(data).hexdigest() not in wrote[p]:
+        if data is None or UW.digest(data) not in wrote[p]:
             out.append(p)
     return out
 
