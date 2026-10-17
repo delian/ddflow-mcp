@@ -16,6 +16,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
+from ..core import unidiff
 from ..infra import worktree as W
 from .testreach import module_name
 
@@ -166,29 +167,22 @@ def _phrases(lines: Iterable[str]) -> set[str]:
     return out
 
 
-_FILE_HEAD = re.compile(r"^diff --git a/.* b/(.*)$")
 _BATCH = 200  #: files per git call, so the command line stays short
 
 
 def _added_removed(diff: str) -> dict[str, list[str]]:
-    """File -> the lines a ``-U0`` diff of several files adds or removes. Only lines after a
-    file's first hunk header count: the ``---`` / ``+++`` headers come before it, and a
-    content line that begins ``--`` is not one."""
+    """File -> the lines a ``-U0`` diff of several files adds or removes. The file is read by
+    `core.unidiff` (the one reader of a diff's headers: a quoted name, a name with a space);
+    only lines after its first hunk header count, so a content line that begins ``--`` is
+    never taken for a header."""
     out: dict[str, list[str]] = {}
-    current: list[str] | None = None
-    for line in diff.splitlines():
-        if line.startswith("diff --git "):
-            # A quoted path (a `"` or a control character in it) is not matched: its lines
-            # are dropped, never given to the file before it.
-            m = _FILE_HEAD.match(line)
-            current = out.setdefault(m.group(1), []) if m else None
-            started = False
-        elif current is None:
-            continue
-        elif line.startswith("@@"):
-            started = True
-        elif started and line[:1] in "+-":
-            current.append(line[1:])
+    for section in unidiff.sections(diff):
+        path = unidiff.parse_section(section).path
+        rows = out.setdefault(path, [])
+        _head, _, hunks = section.partition("\n@@")
+        for line in hunks.splitlines()[1:] if hunks else ():
+            if line[:1] in "+-":
+                rows.append(line[1:])
     return out
 
 
