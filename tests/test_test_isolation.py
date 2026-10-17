@@ -119,6 +119,36 @@ def test_the_guard_fails_the_session_when_the_real_repo_changed(monkeypatch) -> 
     assert session.exitstatus == 1
 
 
+def test_a_session_that_re_records_pins_may_change_tracked_files(monkeypatch) -> None:
+    """Bug Be44261a7ad: `pins regenerate` failed for every test-based recipe because the
+    guard counted the rewritten snapshot as damage to the real repository."""
+    monkeypatch.setattr(ISO, "_BASELINE", {"config": [], "bare": [], "status": []})
+
+    def snap(status=True):
+        return {"config": [], "bare": [], **({"status": [" M snap.ambr"]} if status else {})}
+
+    monkeypatch.setattr(ISO, "snapshot", snap)
+    monkeypatch.delenv("DDFLOW_UPDATE_GOLDEN", raising=False)
+    plain = SimpleNamespace(exitstatus=0)
+    ISO.pytest_sessionfinish(plain, 0)
+    assert plain.exitstatus == 1  # a normal session still may not touch tracked files
+    monkeypatch.setenv("DDFLOW_UPDATE_GOLDEN", "1")
+    env_update = SimpleNamespace(exitstatus=0)
+    ISO.pytest_sessionfinish(env_update, 0)
+    assert env_update.exitstatus == 0
+    monkeypatch.delenv("DDFLOW_UPDATE_GOLDEN")
+    flag = SimpleNamespace(exitstatus=0, config=SimpleNamespace(getoption=lambda *_a: True))
+    ISO.pytest_sessionfinish(flag, 0)
+    assert flag.exitstatus == 0
+    # an updating session still may not change the repository's config
+    monkeypatch.setattr(ISO, "_BASELINE", {"config": [], "bare": [], "status": []})
+    monkeypatch.setattr(
+        ISO, "snapshot", lambda status=True: {"config": ["user.name=Test"], "bare": []}
+    )
+    ISO.pytest_sessionfinish(flag, 0)
+    assert flag.exitstatus == 1
+
+
 def test_a_gate_command_never_inherits_the_callers_git_repository_variables() -> None:
     base = {"GIT_DIR": "/real/.git", "GIT_INDEX_FILE": "/real/.git/index", "PATH": "/bin"}
     assert child_env(Config(), base) == {"PATH": "/bin"}
