@@ -185,6 +185,15 @@ def test_a_hook_name_that_quotes_its_own_command_is_not_scanned(tmp_path):
     assert [f.line for f in C.scan(tmp_path, VOCAB)] == [6]
 
 
+def test_a_flow_mapping_hook_name_beside_its_entry_is_not_scanned(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n"
+        "  - {id: a, name: ddflow lease covers it, entry: scripts/hook.sh check}\n"
+        "  - {id: b, name: ddflow lease, entry: ddflow gate bogus}\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [(5, "gate bogus")]
+
+
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
     (tmp_path / "AGENTS.md").write_text(
         _managed_md("rules/work-queue", "Run `ddflow nosuch` and `ddflow doc show`.\n")
