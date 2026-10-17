@@ -85,8 +85,7 @@ def test_an_empty_set_leaves_only_the_selection(project, stubs):  # noqa: F811
 def test_a_failing_guard_is_named_in_the_checks_and_the_selection_still_passed(project, stubs):  # noqa: F811
     import stat
 
-    bad = next(p for p in __import__("os").environ["PATH"].split(":") if p.endswith("/bin"))
-    pytest_stub = __import__("pathlib").Path(bad) / "pytest"
+    pytest_stub = stubs.parent / "bin" / "pytest"  # the fixture's own shim
     pytest_stub.write_text(
         f'#!/bin/sh\necho "$@" >> {stubs}/pytest\ncase "$*" in *ratchet*) exit 1;; esac\n'
     )
