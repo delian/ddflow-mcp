@@ -80,6 +80,7 @@ from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
+from .healthwatch import health
 from .items import (
     DEFAULT_PRIORITY,
     ItemEdit,
@@ -279,6 +280,7 @@ __all__ = [
     "gate_run",
     "gate_status",
     "gate_verify",
+    "health",
     "heartbeat",
     "help_topic",
     "history",

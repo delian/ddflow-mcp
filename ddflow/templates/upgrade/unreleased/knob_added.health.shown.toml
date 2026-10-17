@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.shown"
+new = '10'
+why = "How many watchdog findings doctor prints in full."
+impact = "additive"

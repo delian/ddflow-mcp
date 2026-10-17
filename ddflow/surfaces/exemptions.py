@@ -23,6 +23,7 @@ from .declared.decide import COMMANDS as _DECIDE
 from .declared.docs import COMMANDS as _DOCS
 from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
+from .declared.health import COMMANDS as _HEALTH
 from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lanes import COMMANDS as _LANES
@@ -97,6 +98,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_FLOW,
     *_HOOKS,
     *_LANES,
+    *_HEALTH,
     *_DECIDE,
     *_DOCS,
     *_METRICS,

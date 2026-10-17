@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=56f7a2a0419b -->
-<details><summary>All 80 commands</summary>
+<!-- ddflow:begin README/commands sha=b9c80cd743d2 -->
+<details><summary>All 81 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -610,6 +610,7 @@ needs a line written by hand here.
 | `ddflow tests` | the tests your change reaches, and a parallel command to run them (exit 2 = none) |
 | `ddflow precommit` | propose a .pre-commit-config.yaml for this repository's stacks (writes nothing without --write) |
 | `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise` |
+| `ddflow health` | idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass |
 | `ddflow decide` | close a decide task: write its decision document from the record, land, complete |
 | `ddflow docs` | the mechanical documentation check: `docs check [--diff BASE]` |
 | `ddflow metrics` | metrics from the log: cycle time, review rounds, waits; `forecast`, `retro <id>`, `skips` |
@@ -1092,7 +1093,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 324 knobs.
+cadences, and the rest of the 338 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5257,7 +5258,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 324): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 338): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5515,8 +5516,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=37a3f2f8ec73 -->
-<details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=4c7baecf972e -->
+<details><summary>All 118 MCP tools: 32 in the `core` tier, 48 more in `standard`, 38 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5619,6 +5620,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
 | Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
+| Looking at it | `ddflow_health` | all | Watchdog: idle, stalled, unresponsive, locked, crashed, runaway lanes and their fixes; run=true corrects per… |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
 | Looking at it | `ddflow_list` | standard | Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. |
@@ -5772,7 +5774,7 @@ declared once and persists — see
 
 ## Configuration
 
-324 knobs across 37 sections, every one documented in place and listed, with its default
+338 knobs across 38 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5839,8 +5841,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=5891b9553c4e -->
-<details><summary>All 324 knobs across 37 sections</summary>
+<!-- ddflow:begin README/knobs sha=61faea8c9f7f -->
+<details><summary>All 338 knobs across 38 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6044,6 +6046,20 @@ long default is left to `ddflow config --explain`.
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
+| `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
+| `health.stall_s` | `3600` |  |
+| `health.runaway_s` | `14400` |  |
+| `health.interval_s` | `900` |  |
+| `health.shown` | `10` |  |
+| `health.idle_s` | `900` |  |
+| `health.reply_s` | `600` |  |
+| `health.crash_s` | `300` |  |
+| `health.mode_idle` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_stalled` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_unresponsive` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `metrics.min_samples` | `10` |  |
 | `metrics.top` | `5` |  |
 | `metrics.forecast_runs` | `1000` |  |

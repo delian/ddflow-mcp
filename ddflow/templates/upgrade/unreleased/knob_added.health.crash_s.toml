@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.crash_s"
+new = '300'
+why = "Seconds after its process is gone that a lane with a live lease is reported crashed (0 = off)."
+impact = "additive"

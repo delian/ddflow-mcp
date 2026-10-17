@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.stall_s"
+new = '3600'
+why = "Seconds without progress after which a lane with a current lease is reported stalled (0 = off)."
+impact = "additive"
