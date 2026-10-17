@@ -31,7 +31,9 @@ def commands() -> list[tuple[str, str]]:
                 # A command registered without `help=` has none in the parent's listing: its
                 # own description stands in, so that none is left out of the list.
                 text = " ".join((helps.get(name) or sub.description or "").split())
-                text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
+                text = (
+                    re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0] or f"see `ddflow {name} --help`"
+                )
                 if len(text) > SUMMARY_MAX:
                     text = text[: SUMMARY_MAX - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
                 rows.append((name, text.replace("|", "\\|")))
