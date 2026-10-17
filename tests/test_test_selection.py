@@ -439,3 +439,25 @@ def test_the_repos_guards_are_selected_by_the_packages_they_govern(changed, want
     contracts, each by its own declaration."""
     root = Path(__file__).resolve().parents[1]
     assert set(T.governed(root, [changed], GUARDS)) == want
+
+
+def test_a_named_slow_test_is_not_deselected_by_the_projects_marker_filter(tmp_path):
+    """Bug Bc332daa185: `addopts = -m 'not slow'` deselected a named @pytest.mark.slow
+    regression test (exit 5, 'no tests ran'), so the bug could never be closed."""
+    import shlex
+    import subprocess
+    import sys
+
+    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = -m 'not slow'\nmarkers = slow\n")
+    (tmp_path / "test_s.py").write_text(
+        "import pytest\n\n@pytest.mark.slow\ndef test_slow():\n    pass\n"
+    )
+    cmd = T.run_command(f"{sys.executable} -m pytest -q", ["test_s.py::test_slow"], tmp_path)
+    ran = subprocess.run(shlex.split(cmd), cwd=tmp_path, capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stdout
+
+
+def test_a_file_among_the_selection_keeps_the_marker_filter(tmp_path):
+    (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest"]\n')
+    got = T.run_command("pytest -q", ["a.py", "b.py::test_x"], tmp_path)
+    assert "-m" not in got.split()

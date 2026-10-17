@@ -172,6 +172,17 @@ class Lease:
     def remaining_s(self, now: float) -> float:
         return (self.renewed_at + self.ttl_s) - now
 
+    def left_text(self, now: float, grace_s: int = 0, *, unit: str = "left") -> str:
+        """The countdown as words. Past the TTL but inside the grace the lease is still
+        live and `remaining_s` is negative; say it ran out, never a negative countdown
+        (Bc99060b8ca, Ba3425a7aa8). Past the grace too, it simply ran out."""
+        left = self.remaining_s(now)
+        if left >= 0:
+            return f"for another {left:.0f}s" if unit == "another" else f"{left:.0f}s left"
+        if -left <= grace_s:
+            return f"ran out {-left:.0f}s ago, in its grace period"
+        return f"ran out {-left:.0f}s ago"
+
 
 @dataclass
 class PullRequest:
