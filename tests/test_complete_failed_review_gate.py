@@ -134,3 +134,17 @@ def test_a_gate_whose_findings_were_all_refuted_is_not_blocked(repo, tmp_path, v
     t = api.triage(repo, "T1", gate="critic", finding=1, verdict=verdict, probe="ran it: fine")
     assert t.exit == 0, t.reason
     assert BLOCKER not in _complete(repo)[1]
+
+
+def test_a_clearing_delta_before_a_full_round_that_raises_the_finding_again_clears_nothing(
+    repo, tmp_path
+):
+    """The rubber_duck's finding on this fix: R1 raises #1, R2 (delta) does not, R3 (full)
+    raises it again -- the latest failure is unanswered."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    _commit(repo, "z.py", "z = 1\n")  # a delta round that does not raise #1 (still failed: held)
+    api.review(repo, gate="critic", item="T1", branch="feat")
+    out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)
+    assert out.data["outcome"] == "failed", out.data
+    assert BLOCKER in _complete(repo)[1]

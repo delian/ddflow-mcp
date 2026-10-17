@@ -26,23 +26,29 @@ def _digests_of(evidence: Mapping[str, Any]) -> set[str]:
     return {f["digest"] for f in found}
 
 
+def _is_delta_round(ev: Mapping[str, Any]) -> bool:
+    """A delta round that reached a reviewer in full and recorded what it raised itself."""
+    return (
+        ev.get("review_kind") == "delta" and ev.get("status") == "REVIEWED" and "delta_raised" in ev
+    )
+
+
 def _cleared_after_delta(runs: list, digest: str) -> bool:
-    """Is ``digest`` followed by a later, complete delta round that did NOT raise it again?
-    A delta records the digests it raised itself (`delta_raised`); a run without that key
-    is no delta round (a hand record, a full round), so it clears nothing."""
+    """Is ``digest`` answered: after the LAST round that raised it, did a complete delta
+    round run that did not raise it again? A delta records the digests it raised itself
+    (`delta_raised`); any other round that carries the finding (a full round, a hand
+    record) raises it afresh and undoes an earlier clearing."""
     first = next((i for i, r in enumerate(runs) if digest in _digests_of(r.evidence)), None)
     if first is None:
         return False
+    cleared = False
     for run in runs[first + 1 :]:
         ev = run.evidence or {}
-        if (
-            ev.get("review_kind") == "delta"
-            and ev.get("status") == "REVIEWED"
-            and "delta_raised" in ev
-            and digest not in set(ev["delta_raised"] or [])
-        ):
-            return True
-    return False
+        if _is_delta_round(ev):
+            cleared = digest not in set(ev["delta_raised"] or [])
+        elif digest in _digests_of(ev):
+            cleared = False
+    return cleared
 
 
 def unresolved_review_failure(it, gate: str) -> str:
