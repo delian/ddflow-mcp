@@ -2043,6 +2043,25 @@
           matched globs and the approval). A gate of the item's pipeline that is
           neither listed here nor `merge` (which the merge itself records) is left for
           you to run, and the chore does not complete until it carries an outcome.
+      hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
+          Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
+          Bash tool call, naming the safe alternative. Each entry is a word sequence
+          matched, in order, against every command of a pipeline or `;`/`&&` list:
+          `git stash` matches `git -C x stash push`, `--force` matches that flag
+          anywhere, `rm -rf .ddflow` matches `rm -fr ./.ddflow`. A trailing `@primary`
+          makes the entry apply only in the primary checkout, not in an item's
+          worktree. Anything in allowed_commands is exempt. An instruction in a prompt
+          is not enforcement: three subagents ran pkill against the brief that said
+          never. The operator lifts an entry for ONE session with the environment
+          variable DDFLOW_HOOKS_ALLOW (comma-separated entries, or `all`), and for the
+          project by editing this list; [] turns the guard off. Every refusal is
+          recorded as a session note (source forbidden-command) that `ddflow report`
+          lists.
+      hooks.allowed_commands = ['ddflow review --force --reason']   [default]
+          Commands exempt from forbidden_commands, in the same word-sequence form: the
+          one `--force` ddflow itself documents, `ddflow review --force --reason
+          "..."` for an extra review round. A command matching an entry here is
+          allowed even when it also matches a forbidden one.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest

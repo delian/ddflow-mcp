@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "hooks.forbidden_commands"
+new = '["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]'
+why = "Commands the PreToolUse hook refuses (pkill, git stash, git push, force flags)."
+impact = "additive"
