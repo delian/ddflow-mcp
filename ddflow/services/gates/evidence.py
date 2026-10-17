@@ -275,6 +275,17 @@ def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
     return W.git(cwd, "merge-base", "--is-ancestor", a, b).ok
 
 
+def moved_past(started_on: str, recorded: str, cwd: Path) -> bool:
+    """Is ``recorded`` (a tree recorded since a run began on ``started_on``) on another
+    commit that is NOT an ancestor of the run's own? An amended or rebased commit has no
+    ancestry with the run's; a recorded ancestor means the run is the newer work, and it
+    must still record (B27a236a534)."""
+    a, b = head_of(started_on), head_of(recorded)
+    if not a or not b or a == b:
+        return False
+    return not W.git(cwd, "merge-base", "--is-ancestor", b, a).ok
+
+
 def is_tree(tree_sha: str, cwd: Path) -> bool:
     """Does the recorded ``tree_sha`` name the tree ``cwd`` holds now? Either spelling: a
     `tree_identity`, or the fingerprint (clean or the pre-fix clean) an earlier ddflow
