@@ -431,7 +431,7 @@ def doctor(
     found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
-    notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg)
+    notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
