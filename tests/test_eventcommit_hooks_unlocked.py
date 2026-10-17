@@ -52,7 +52,8 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "adopt", "--no-verify")
     hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text("#!/bin/sh\nsleep 1\n")
+    started = repo / "hook-started"
+    hook.write_text(f"#!/bin/sh\ntouch {started}\nsleep 1\n")
     hook.chmod(0o755)
     outs: dict[str, object] = {}
 
@@ -61,7 +62,10 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
 
     first = threading.Thread(target=door, args=("s1",))
     first.start()
-    time.sleep(0.4)  # the first door is inside its slow commit now
+    deadline = time.monotonic() + 60  # the first door is inside its slow commit when this ends
+    while not started.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert started.exists()
     second = threading.Thread(target=door, args=("s2",))
     second.start()
     first.join()
