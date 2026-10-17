@@ -14,6 +14,7 @@ from ..core import flow as F
 from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
+from ..core import schedule as SCH
 from ..core.defaults import DEFAULT_PRIORITY
 from ..core.flow import line_order
 from ..core.records import ADD_RELATIONS, record_pools
@@ -89,7 +90,7 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     unchanged = _nothing_to_change(it, edit, fields)
     if unchanged:
         return O.nothing("item.updated", unchanged, id=item)
-    bad = GS.problem(fields.get("globs", []))
+    bad = GS.problem(fields.get("globs", [])) or SCH.problem(fields.get("resources", []))
     if bad:
         return O.failed("item.updated", f"{item}: {bad}", id=item)
     if not fields and edit.worktree is None:
