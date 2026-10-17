@@ -64,14 +64,9 @@ def pins_regenerate(
 
 
 def _linked_worktree(repo: Path) -> bool:
-    """True when ``repo`` is a linked worktree (its git dir is not the common one)."""
-    gd = G.run(repo, "rev-parse", "--absolute-git-dir")
-    cd = G.run(repo, "rev-parse", "--git-common-dir")
-    if not (gd.ok and cd.ok):
-        return False
-    common = Path(cd.out.strip())
-    common = common if common.is_absolute() else repo / common
-    return Path(gd.out.strip()).resolve() != common.resolve()
+    """True when ``repo`` is a linked worktree: its ``.git`` is a file, not a directory. Read
+    from the path, not from git, so a stray GIT_DIR in the environment cannot change the answer."""
+    return (repo / ".git").is_file()
 
 
 def _record_written(primary: Path, repo: Path, before, files) -> None:
