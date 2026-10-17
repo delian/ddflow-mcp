@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "chore.skip_gates"
+new = '["research", "rules", "implement", "rubber_duck", "critic", "verify", "standards", "ci", "unit_tests", "bug_hunt", "dedupe"]'
+why = "The gates a chore skips, each with its reason recorded."
+impact = "additive"

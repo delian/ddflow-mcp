@@ -150,6 +150,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_apply, plan_check, plan_confirm
+from .records import record_resource_listing, record_resource_read
 from .report import item_report, show_report
 from .reporting import (
     DEFAULT_RENDER_DIR,
@@ -324,6 +325,8 @@ __all__ = [
     "queue_status",
     "rebuild",
     "recall",
+    "record_resource_listing",
+    "record_resource_read",
     "recover",
     "refuse_sweep_args",
     "release_item",

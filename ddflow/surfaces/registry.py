@@ -327,6 +327,8 @@ class Param:
     #: What an old name should be replaced by when that is not simply this parameter; shown
     #: verbatim in the notice (spell a flag's as the flag, ``--name``).
     replacement: str = ""
+    #: A one-letter CLI spelling of the flag (``-m`` for ``--message``), CLI only.
+    short: str = ""
 
     def __post_init__(self) -> None:
         if self.positional and any(a.startswith("-") for a in self.aliases):
@@ -447,12 +449,12 @@ class Param:
             if self.nargs is not None:
                 kwargs["nargs"] = self.nargs
         else:
-            args = (self.option,)
+            args = (self.short, self.option) if self.short else (self.option,)
             if self.nargs is not None:
                 kwargs["nargs"] = self.nargs
             if self.required:
                 kwargs["required"] = True
-            if self.flag is not None:
+            if self.flag is not None or self.short:
                 kwargs["dest"] = self.name  # a custom flag must still land on the param's name
         target: Any = parser
         if self.exclusive is not None:
