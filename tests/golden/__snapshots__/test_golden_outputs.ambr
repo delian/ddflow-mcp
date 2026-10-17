@@ -2016,6 +2016,19 @@
       merge_queue.keep_history = 50   [default]
           How many finished (merged or parked) entries the queue keeps for `ddflow
           queue status` and the ETA; older ones are deleted when an entry is added.
+      chore.globs = ['.ddflow/rules/**', '.mailmap', 'DDFLOW.md', 'docs/ddflow/decisions/**', 'docs/ddflow/QUEUE.md', 'docs/ddflow/LESSONS.md', 'docs/ddflow/LESSONS-SUMMARY.md']   [default]
+          The chore class: files `ddflow chore commit FILES -m MSG` may commit, merge
+          and COMPLETE with no reviewer (rules, .mailmap, DDFLOW.md, decision records,
+          generated views). A change to any file outside the list is refused and takes
+          the normal pipeline. The list is approved by a person: `ddflow chore
+          approve` records the approval of THIS list and of `skip_gates` (an agent
+          identity cannot), so a changed list needs approving again before a chore may
+          use it, whoever edited it.
+      chore.skip_gates = ['research', 'rules', 'implement', 'rubber_duck', 'critic', 'verify', 'standards', 'ci', 'unit_tests', 'bug_hunt', 'dedupe']   [default]
+          The gates a chore skips, each recorded with its reason (the chore, the
+          matched globs and the approval). A gate of the item's pipeline that is
+          neither listed here nor `merge` (which the merge itself records) is left for
+          you to run, and the chore does not complete until it carries an outcome.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest
