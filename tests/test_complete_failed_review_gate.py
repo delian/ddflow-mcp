@@ -232,3 +232,33 @@ def test_an_agent_cannot_replace_the_failure_by_a_hand_record_either(repo, tmp_p
     assert code == 3 and "operator" in out + err, out + err
     assert BLOCKER in _complete(repo)[1]
     assert "--force does not lift" in _complete(repo)[1]
+
+
+@pytest.mark.parametrize("outcome", ["unavailable", "partial"])
+def test_unavailable_or_partial_over_untriaged_findings_is_refused_too(repo, tmp_path, outcome):
+    """roborev: only a real `passed` hand record may settle findings nobody has triaged."""
+    _setup(repo, tmp_path)
+    assert api.review(repo, gate="critic", item="T1", branch="feat").data["outcome"] == "failed"
+    code, out, err = run_cli(
+        repo, "gate", "record", "T1", "critic", "--outcome", outcome, "--reason", "x", agent="coder"
+    )
+    assert code == 3 and "operator" in out + err, out + err
+
+
+def test_recording_failed_again_over_a_failed_gate_is_not_refused(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--outcome",
+        "failed",
+        "--reason",
+        "x",
+        agent="coder",
+    )
+    assert code in (0, 1), out + err
+    assert "operator" not in out + err, out + err
