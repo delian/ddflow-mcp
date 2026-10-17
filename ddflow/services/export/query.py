@@ -94,19 +94,17 @@ class Query:
 
     def tasks_of(self, parent: str) -> list[Item]:
         """DIRECT task children of ``parent`` (a phase, or a task for its sub-tasks)."""
-        return [c for c in self.children.get(parent, ()) if c.kind == "task"]
+        return [c for c in self.children.get(parent, ()) if c.is_work]
 
     def tasks_under(self, parent: str) -> list[Item]:
         """Tasks nested any depth below ``parent``, ``item_key`` order, each once."""
         below = closure(parent, lambda n: [c.id for c in self.children.get(n, ())])
         items = self.state.items
-        return sorted(
-            (items[i] for i in below if i != parent and items[i].kind == "task"), key=item_key
-        )
+        return sorted((items[i] for i in below if i != parent and items[i].is_work), key=item_key)
 
     def tasks(self, state: str = "") -> list[Item]:
         """Every live task (optionally in one ``state``), ``item_key`` order."""
-        out = [i for i in self.state.items.values() if i.kind == "task" and not i.removed]
+        out = [i for i in self.state.items.values() if i.is_work and not i.removed]
         if state:
             out = [i for i in out if i.state == state]
         return sorted(out, key=item_key)

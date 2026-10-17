@@ -99,10 +99,7 @@ def verify_sweep(
     items = [
         i.id
         for i in st.items.values()
-        if i.kind == "task"
-        and i.state == "done"
-        and not i.removed
-        and (scope is None or i.id in scope)
+        if i.is_work and i.state == "done" and not i.removed and (scope is None or i.id in scope)
     ]
     sw = V.sweep(repo, cfg, st, log.read_all(), items)
     data = sw.as_data(max(1, limit))

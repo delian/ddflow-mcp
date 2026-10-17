@@ -57,6 +57,7 @@ def cmd_task_add(a, c: Ctx) -> int:
             lines=a.lines or "",
             port_of=a.port_of or "",
             resources=getattr(a, "resources", None) or "",
+            kind=getattr(a, "kind", None) or "",
             readd=a.readd,
             answer=answer,
             agent=c.requested_agent,
