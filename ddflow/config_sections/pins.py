@@ -54,10 +54,10 @@ class PinsConfig:
     )
     merge_check: str = knob(
         "fast",
-        doc="What `ddflow merge` says about the pin files once a merge has landed. 'fast' (default): it CHECKS the pins the post-merge hook may run (read-only, each bounded by after_merge_timeout_s), reports the stale ones, and NAMES the pins the hook never runs (a recipe with `after_merge = false` runs a test suite) so a stale golden pin is never silent. 'all': it also checks those suite recipes, which makes the merge wait for them (a check that times out reads as stale). 'off': it says nothing about pins.",
+        doc="What `ddflow merge` says about the pin files once a merge has landed. 'fast' (default): it CHECKS the pins the post-merge hook may run (read-only, each bounded by after_merge_timeout_s), reports the stale ones, and NAMES the pins the hook never runs (a recipe with `after_merge = false` runs a test suite) so a stale golden pin is never silent. 'all': it also checks those suite recipes, which makes the merge wait for them (each bounded by after_merge_timeout_s; a check that times out is reported as not finished, never as stale). 'off': it says nothing about pins.",
         choices=PINS_MERGE_CHECK,
         strictest=(
-            "all",
-            "checks every pin, the suite recipes included, so a stale one is never left unsaid",
+            "fast",
+            "checks the pins the hook may run and names the rest, without making a merge wait for a test suite",
         ),
     )

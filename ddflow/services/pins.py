@@ -190,6 +190,7 @@ def regenerate(
     tick: Tick | None = None,
     on_progress: Callable[[str], None] | None = None,
     after_merge: bool = False,
+    bounded: bool = False,
 ) -> Report:
     """Check every pin (or `only`), and unless `check`, re-record the stale ones.
 
@@ -223,9 +224,11 @@ def regenerate(
         if not chosen:
             return rep
     limit = cfg.pins.timeout_s
-    if after_merge:
+    if after_merge or bounded:
         limit = min(limit, cfg.pins.after_merge_timeout_s)
-    soft = after_merge  # only the hook reports a timeout as unavailable; a run asked for fails
+    # only the hook (and a bounded merge-time check) reports a timeout as unavailable; a run
+    # asked for on the command line fails
+    soft = after_merge or bounded
     held = contextlib.ExitStack()
     try:
         held.enter_context(_exclusive(repo, write=not check))
