@@ -139,6 +139,7 @@ def _pin_the_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
+    scrub_git_env(monkeypatch)  # before any git command: a stray GIT_DIR must not redirect them
     repo = tmp_path / "proj"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
@@ -147,7 +148,6 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
     (repo / "README.md").write_text("# p\n")
     subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
-    scrub_git_env(monkeypatch)
     assert_sandboxed(repo, tmp_path)
     monkeypatch.chdir(repo)
     for key in [k for k in __import__("os").environ if k.startswith("DDFLOW_")]:
