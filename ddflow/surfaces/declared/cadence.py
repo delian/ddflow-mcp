@@ -7,7 +7,6 @@ B-uni-cmd-migrate.6g-memory). Their handlers stay in `surfaces/commands/operatio
 
 from __future__ import annotations
 
-from ...api import pin_files as PF  # not re-exported by `api`: `_api().pins_regenerate` raised
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
@@ -45,7 +44,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         wants_progress=True,
         call=lambda repo, a, agent, on_progress=None: (
-            PF.pins_regenerate(
+            _api().operations.pins_regenerate(
                 repo,
                 on_progress=on_progress,
                 only=a.get("only") or "",

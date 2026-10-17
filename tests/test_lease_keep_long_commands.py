@@ -154,7 +154,7 @@ def test_the_mcp_pins_tool_hands_the_caller_to_regenerate(repo, monkeypatch):
 
     seen: dict = {}
     monkeypatch.setattr(
-        "ddflow.api.pin_files.pins_regenerate", lambda r, **kw: seen.update(kw) or "ran"
+        "ddflow.api.operations.pins_regenerate", lambda r, **kw: seen.update(kw) or "ran"
     )
     cmd = next(c for c in COMMANDS if c.tool == "ddflow_pins")
     assert cmd.call(repo, {"document": "regenerate"}, "me") == "ran"
