@@ -108,8 +108,13 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
             return
         tree = s.path
         if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
+            # No hook of the repository runs in the scratch merge (core.hooksPath): the
+            # post-merge hook regenerated pins by running the golden suite, which outlived
+            # the git timeout and was reported as a conflict (B36c484af97).
             m = W.git(
                 tree,
+                "-c",
+                "core.hooksPath=/dev/null",
                 "-c",
                 "user.name=ddflow",
                 "-c",
@@ -119,6 +124,10 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
                 "--no-ff",
                 base,
             )
+            if m.timed_out or m.unavailable:
+                # git did not answer: the gate could not say, which is not a conflict.
+                yield None, f"could not merge {base} into {ref}: {m.err or m.out}"[-400:]
+                return
             if not m.ok:
                 yield None, f"{ref} does not merge with {base}: {(m.out or m.err)[-400:]}"
                 return
