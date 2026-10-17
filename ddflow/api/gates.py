@@ -421,7 +421,7 @@ def _superseded_run(
         # Recorded since this run began, on another commit (an amend or a rebase has no
         # ancestry to compare): newer work by construction.
         return (
-            f"{gate} ran on {started_on.split('+', maxsplit=1)[0]}, but an outcome for "
+            f"{gate} ran on {G.head_of(started_on)}, but an outcome for "
             f"{G.head_of(recorded)} was recorded while it ran: its outcome is superseded "
             f"and was not recorded. Re-run `ddflow gate run {item} {gate}` on the current commit."
         )
@@ -431,7 +431,7 @@ def _superseded_run(
     ):
         if newer and G.superseded_by(started_on, newer, cwd):
             return (
-                f"{gate} ran on {started_on.split('+', maxsplit=1)[0]}, but {what} {G.head_of(newer)}: "
+                f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
                 f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
                 f"{item} {gate}` on the current commit."
             )
