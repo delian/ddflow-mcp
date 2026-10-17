@@ -6,8 +6,10 @@ text now lives once (ddflow_identify, ddflow_help and the handshake instructions
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
+from ddflow.config import MCP_TOOL_TIERS
 from ddflow.surfaces import mcp as mcp_module
 from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 
@@ -38,6 +40,7 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # bytes free, so the tool had to be paid for; its description is already down to the essentials.
 # 97_400 (raised, B-gap-lanes): ddflow_lanes is the MCP face of `ddflow lanes` (~0.6 KB: one
 # tool, three arguments, a short description); the list measures 97,394 with it and phase_close.
+# Since D-mcp-budget-report this line is REPORTED (a warning), not enforced; only core is ratcheted.
 # 100_000 (RAISED BY THE OPERATOR, 2026-10-12, mcp-tools-budget-100k): the list sat at 97,394
 # with 6 bytes free, so every new tool cost a reasoned raise of its own -- 96_000 to 96_800 to
 # 97_400 in two days. The operator asked for headroom instead of that round per tool. This is
@@ -52,12 +55,47 @@ def _tools_list(repo) -> list[dict]:
     return reply["result"]["tools"]
 
 
-def test_compact_tools_list_stays_within_budget(repo):
-    size = len(json.dumps({"tools": _tools_list(repo)}, separators=(",", ":")))
-    assert size <= TOOLS_LIST_BUDGET, (
-        f"tools/list is {size} bytes (budget {TOOLS_LIST_BUDGET}): shorten a description "
-        "instead of raising the budget"
-    )
+#: The one tier a session pays for at start, so the one that keeps a ratchet (D-mcp-budget-report).
+CORE_BUDGET = 40_000
+
+
+def tier_sizes(repo, monkeypatch) -> dict[str, int]:
+    """Compact `tools/list` bytes of every tier."""
+    sizes = {}
+    for tier in MCP_TOOL_TIERS:
+        monkeypatch.setenv("DDFLOW_MCP_TOOLS", tier)
+        sizes[tier] = len(json.dumps({"tools": _tools_list(repo)}, separators=(",", ":")))
+    return sizes
+
+
+def budget_findings(sizes: dict[str, int]) -> tuple[list[str], list[str]]:
+    """(failures, warnings): only the core tier over its ratchet fails; a tier or the full list
+    over `TOOLS_LIST_BUDGET` is a reported number (D-mcp-budget-report)."""
+    report = ", ".join(f"{t}={n}" for t, n in sizes.items())
+    fails = [f"core tools/list is {sizes['core']} bytes (ratchet {CORE_BUDGET}); {report}"]
+    fails = fails if sizes["core"] > CORE_BUDGET else []
+    warns = [
+        f"{t} tools/list is {n} bytes, over the {TOOLS_LIST_BUDGET} report line ({report})"
+        for t, n in sizes.items()
+        if n > TOOLS_LIST_BUDGET
+    ]
+    return fails, warns
+
+
+def test_over_budget_is_reported_not_failed_and_only_core_has_a_ratchet():
+    fails, warns = budget_findings({"core": 30_000, "standard": 60_000, "all": 130_000})
+    assert fails == [] and len(warns) == 1 and "all tools/list" in warns[0]
+    fails, _ = budget_findings({"core": CORE_BUDGET + 1, "standard": 60_000, "all": 70_000})
+    assert len(fails) == 1 and "core" in fails[0]
+
+
+def test_tools_list_bytes_per_tier_are_reported(repo, monkeypatch):
+    sizes = tier_sizes(repo, monkeypatch)
+    fails, warns = budget_findings(sizes)
+    print("tools/list bytes per tier:", sizes)  # shown by `pytest -s` and on any failure
+    for w in warns:
+        warnings.warn(w, stacklevel=1)
+    assert not fails, fails
 
 
 def test_shared_parameter_descriptions_are_not_repeated_in_full():
