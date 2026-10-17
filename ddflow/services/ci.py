@@ -94,6 +94,109 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
+_REPO_START = re.compile(r"^\s*-\s+repo:")
+_HOOKS_KEY = re.compile(r"^(?P<ind>\s*)hooks:\s*(#.*)?$")
+_HOOK_ID = re.compile(r"^\s*(?:-\s+)?id:\s*[\"']?(?P<id>[^\s\"'#]+)")
+_FAIL_LANGUAGE = re.compile(r"^\s*(?:-\s+)?language:\s*[\"']?fail[\"']?\s*(#.*)?$")
+_LIST_ITEM = re.compile(r"^\s*-\s*[\"']?(?P<v>[\w-]+)[\"']?\s*(#.*)?$")
+#: The names pre-commit gives the pre-push stage (the old and the new).
+_PUSH_STAGES = ("pre-push", "push")
+
+
+def _runs_at_pre_push(stages: list[str] | None) -> bool:
+    return stages is None or any(s in _PUSH_STAGES for s in stages)
+
+
+def _hook_blocks(lines: list[str]) -> list[list[str]]:
+    """The lines of each hook of the config: every list item under a ``hooks:`` key, whatever
+    key it starts with (YAML mappings are unordered) -- a line of its own ends the block when it
+    is as shallow as the item before it."""
+    blocks: list[list[str]] = []
+    hooks_indent: int | None = None
+    item_indent: int | None = None
+    for line in lines:
+        text = line.lstrip()
+        indent = len(line) - len(text)
+        if m := _HOOKS_KEY.match(line):
+            hooks_indent, item_indent = len(m["ind"]), None
+        elif _REPO_START.match(line):
+            hooks_indent = item_indent = None
+        elif hooks_indent is not None and text and not text.startswith("#"):
+            if indent <= hooks_indent and not text.startswith("-"):
+                hooks_indent = item_indent = None  # a key of the enclosing mapping again
+            elif text.startswith("-") and (item_indent in (None, indent)):
+                item_indent = indent
+                blocks.append([line])
+            elif blocks:
+                blocks[-1].append(line)
+    return blocks
+
+
+def tripwire_ids(tree: Path) -> list[str]:
+    """The hooks of the project's pre-commit config that are tripwires (`language: fail`) and
+    run at the pre-push stage: they fire when a changed path matches their `files:`, which is a
+    statement about a DIFF, and over every tracked file they fail whenever the paths they guard
+    exist at all. A tripwire kept to another stage (`stages: [pre-commit]`) is not one the
+    pre-push run has, so it is not named."""
+    try:
+        lines = (Path(tree) / PRE_COMMIT_CONFIG).read_text("utf-8").splitlines()
+    except OSError:
+        return []
+    default_stages = _stage_list(lines, "default_stages", top=True)
+    found: list[str] = []
+    for body in _hook_blocks(lines):
+        ident = next((m["id"] for ln in body if (m := _HOOK_ID.match(ln))), "")
+        if not ident or ident in found or not any(_FAIL_LANGUAGE.match(ln) for ln in body):
+            continue
+        if _runs_at_pre_push(_stage_list(body, "stages", top=False) or default_stages):
+            found.append(ident)
+    return found
+
+
+def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
+    """The stages a ``key:`` line (inline list or block list) names; None when it is absent."""
+    for i, line in enumerate(lines):
+        indent = "" if top else r"\s*(?:-\s+)?"
+        m = re.match(rf"^{indent}{key}:\s*(?P<inline>\[[^\]]*\])?", line)
+        if not m:
+            continue
+        if m["inline"]:
+            return [x.strip(" \"'") for x in m["inline"].strip("[]").split(",") if x.strip()]
+        out = []
+        for nxt in lines[i + 1 :]:
+            if not nxt.strip() or nxt.lstrip().startswith("#"):
+                continue  # a comment or a blank line inside the list is not its end
+            item = _LIST_ITEM.match(nxt)
+            if not item:
+                break
+            out.append(item["v"])
+        return out
+    return None
+
+
+_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
+
+
+def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
+    """``command`` (the default pre-push command, maybe after `SKIP=...`) with the tripwire
+    hooks taken out of its all-files run and run once on the diff ``since``..HEAD instead; the
+    command as it is when the project has no tripwire or ``since`` is not a commit there."""
+    ids = tripwire_ids(tree)
+    if not ids or not since or not W.rev(tree, since):
+        return command
+    lead = _LEADING_SKIP.match(command)
+    rest = command[lead.end() :] if lead else command
+    skip = ",".join([*([lead["ids"]] if lead else []), *ids])
+    # The environment's own SKIP (the selected-tests plan sets one) stays in front.
+    first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
+    base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
+    # The command's own SKIP= is the operator's skip: it applies to the named runs as well.
+    mine = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
+    ranged = [f"{mine}{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
+    steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
+    return "rc=0; " + "; ".join(steps) + "; exit $rc"
+
+
 def tool_missing(command: str) -> str:
     """The executable the command starts with, when it is not installed ("" when it is)."""
     return executable_missing(command)
@@ -182,13 +285,17 @@ def run(
     timeout_s: int = 0,
     for_item: bool = False,
     full: bool = False,
+    changed_from: str = "",
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
-    (`ci run --full`, the merge queue's batch) always runs the whole suite."""
+    (`ci run --full`, the merge queue's batch) always runs the whole suite.
+
+    ``changed_from`` is the commit the change being checked began at, for the tripwire hooks of
+    the default command (they run on that diff, not over every file): default ``base``."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -211,6 +318,7 @@ def run(
             status = "failed" if NOT_MERGEABLE in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
+        cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
@@ -233,6 +341,20 @@ def run(
                 scope=scope.evidence(sha) if scope is not None else {},
             )
     return _result(p, out_prefix, cmd, sha, base, scope)
+
+
+def _default_with_tripwires(
+    repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
+) -> str:
+    """``cmd`` with the tripwire hooks on the diff, when it is the default command (an operator's
+    own `[ci].command` is run as written). The diff is the one the check is about: on the base
+    itself (the after-merge check) there is no branch to compare with, so the commit just made
+    against its first parent."""
+    if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
+        return cmd
+    # (`merge` always says where its range began; this is for a caller that does not.)
+    since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
+    return with_tripwires_on_the_diff(cmd, tree, since)
 
 
 def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
