@@ -112,28 +112,42 @@ def commit_shards(
             return "", "event log not committed: not a git repository"
         try:
             with hold():
-                early, message, paths, skipped = _snapshot(repo, reason, template, private)
+                early, message, taken, skipped = _read_plan(repo, reason, template)
             if early is not None:
                 return early
+            # The index is built on HEAD as it is NOW, just before the commit, so the commit
+            # rewrites nothing a commit made since the shards were read had changed.
+            base, built = _private_index(repo, taken, private)
+            if built:
+                return "", f"event log not committed: {built}"
             env = {"GIT_INDEX_FILE": str(private)}
             done = W.git(repo, "commit", "-q", "-m", message, env=env)
             if not done.ok:
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
-            W.git(repo, "reset", "-q", "--", *paths)
+            W.git(repo, "reset", "-q", "--", *taken)
+            if W.rev(repo, "HEAD^") != base:
+                skipped = "; ".join(
+                    filter(
+                        None,
+                        [
+                            skipped,
+                            f"HEAD moved while the event log was committed (was {base[:12]}): check `git log`",
+                        ],
+                    )
+                )
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
 
 
-def _snapshot(repo: Path, reason: str, template: str, index: Path):
-    """(early answer, message, the paths committed, the note): the shards and blobs read once,
-    the whole-line shards written into the private ``index`` on top of HEAD. The early answer
-    is the finished ``("", why)`` when there is nothing to commit or it must not be, else
-    None."""
+def _read_plan(repo: Path, reason: str, template: str):
+    """(early answer, message, {path: bytes}, the note): the shards and blobs read once, each
+    shard checked to hold whole lines. The early answer is the finished ``("", why)`` when
+    there is nothing to commit or it must not be, else None."""
 
     def stop(why: str):
-        return ("", why), "", [], ""
+        return ("", why), "", {}, ""
 
     listed = uncommitted_shards(repo)
     if listed is None:
@@ -146,10 +160,12 @@ def _snapshot(repo: Path, reason: str, template: str, index: Path):
             left.append(rel)
         else:
             taken[rel] = data
-    skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
     for rel in uncommitted_blobs(repo):
-        with contextlib.suppress(OSError):
+        try:
             taken[rel] = (repo / rel).read_bytes()
+        except OSError:
+            left.append(rel)
+    skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
     if not taken:
         return stop(f"event log not committed: {skipped}" if skipped else "")
     busy = _busy(repo)
@@ -159,19 +175,25 @@ def _snapshot(repo: Path, reason: str, template: str, index: Path):
         message = template.format(reason=reason)
     except (KeyError, IndexError, ValueError):
         message = f"events: {reason}"
+    return None, message, taken, skipped
+
+
+def _private_index(repo: Path, taken: dict[str, bytes], index: Path) -> tuple[str, str]:
+    """(the commit it is built on, why not): ``taken`` written into the private ``index`` on top
+    of the commit HEAD names at this moment ("" for an unborn branch)."""
     env = {"GIT_INDEX_FILE": str(index)}
-    has_head = W.git(repo, "rev-parse", "-q", "--verify", "HEAD").ok
-    loaded = W.git(repo, "read-tree", *(["HEAD"] if has_head else ["--empty"]), env=env)
+    base = W.rev(repo, "HEAD")
+    loaded = W.git(repo, "read-tree", *([base] if base else ["--empty"]), env=env)
     if not loaded.ok:
-        return stop(f"event log not committed: git read-tree failed: {loaded.err[-200:]}")
+        return base, f"git read-tree failed: {loaded.err[-200:]}"
     for rel, data in taken.items():
         blob = W.git(repo, "hash-object", "-w", "--stdin", input=data)
         if not blob.ok:
-            return stop(f"event log not committed: git could not store {rel}")
+            return base, f"git could not store {rel}"
         spec = f"100644,{blob.out.strip()},{rel}"
         if not W.git(repo, "update-index", "--add", "--cacheinfo", spec, env=env).ok:
-            return stop(f"event log not committed: git could not stage {rel}")
-    return None, message, sorted(taken), skipped
+            return base, f"git could not stage {rel}"
+    return base, ""
 
 
 def _read_whole(repo: Path, rel: str) -> bytes | None:
