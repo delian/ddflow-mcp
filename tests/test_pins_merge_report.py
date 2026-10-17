@@ -8,12 +8,21 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git as _git
 
 from ddflow.config import Config
 from ddflow.services import pins_merge as PM
+
+
+@pytest.fixture(autouse=True)
+def _outside_xdist(monkeypatch):
+    """A pins check refuses to run in an xdist worker; these tests run one."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+
 
 RECIPES = """\
 [[pin]]
