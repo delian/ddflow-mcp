@@ -59,3 +59,10 @@ def test_slash_words_in_prose_are_not_file_names():
         "either/or.",
     ):
         assert inherit_globs(SRC, text) == SRC, text
+
+
+def test_a_named_path_does_not_match_the_same_basename_elsewhere():
+    assert inherit_globs(["ddflow/services/config.py"], "scripts/config.py is slow") == []
+    assert inherit_globs(["ddflow/services/config.py"], "config.py is slow") == [
+        "ddflow/services/config.py"
+    ]
