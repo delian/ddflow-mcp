@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=769bd0082780 -->
-<details><summary>All 80 commands</summary>
+<!-- ddflow:begin README/commands sha=f0c1b140d133 -->
+<details><summary>All 81 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -611,6 +611,7 @@ needs a line written by hand here.
 | `ddflow precommit` | propose a .pre-commit-config.yaml for this repository's stacks (writes nothing without --write) |
 | `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise` |
 | `ddflow health` | stalled, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass |
+| `ddflow decide` | close a decide task: write its decision document from the record, land, complete |
 | `ddflow docs` | the mechanical documentation check: `docs check [--diff BASE]` |
 | `ddflow metrics` | metrics from the log: cycle time, review rounds, waits; `forecast`, `retro <id>`, `skips` |
 | `ddflow reviewers` | find, list and test cross-family reviewers |
