@@ -94,7 +94,7 @@ def failed_review_blockers(
     defs: Mapping[str, GateDef] | None,
     skip: Iterable[str] = (),
 ) -> list[str]:
-    """One blocker for the review gates (`reviewer = "different_family"`) of ``item_id``'s
+    """One blocker for the review gates (any gate with a `reviewer`) of ``item_id``'s
     pipeline that are FAILED and unanswered (`unresolved_review_failure`). ``skip`` are the
     gates the actual diff excused. The operator's way past is `gate skip --reason`."""
     it = state.items.get(item_id)
@@ -104,7 +104,7 @@ def failed_review_blockers(
     rows = []
     for g in pipeline_for(it, cfg):
         gd = (defs or {}).get(g) or DEFAULT_GATES.get(g)
-        if g in excused or gd is None or gd.reviewer != "different_family":
+        if g in excused or gd is None or not gd.reviewer:
             continue
         if why := unresolved_review_failure(it, g):
             rows.append(f"{g} ({why})")
