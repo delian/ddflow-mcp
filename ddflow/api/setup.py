@@ -39,6 +39,7 @@ from ..services import compaction as CP
 from ..services import companions as CO
 from ..services import configwrite as CW
 from ..services import enforce as E
+from ..services import forbidden as FB
 from ..services import help as H
 from ..services import hookio as HI
 from ..services import identity as ID
@@ -821,6 +822,15 @@ def _precompact_line(repo: Path) -> str:
     )
 
 
+def _pretool_line(repo: Path) -> str:
+
+    return _state_line(
+        CH.state_spec(repo, CH.spec("claude", "pre-tool")),
+        "not installed (`ddflow hooks install --claude` refuses pkill, git stash, git push and "
+        "force flags before they run)",
+    )
+
+
 def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list[str]:
     """Install or remove every table hook of the named harnesses (`claudehooks.HOOKS`)."""
 
@@ -887,6 +897,7 @@ class _HookResult:
     context: str = ""  #: text the agent should see, shaped by its emitter ("" for none)
     note: str = ""  #: a diagnostic for stderr; never a decision
     result: str = ""  #: what the handler did, for tests and `--json`
+    deny: str = ""  #: pre_tool only: refuse the tool call, showing the agent this reason
 
 
 def _synth_stdin(p) -> str:
@@ -933,6 +944,36 @@ def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result=result, note=note and f"ddflow pre-compact: {note}")
 
 
+def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
+    """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
+    else (another tool, no command, any problem) is allowed: a guard that fails closed on its
+    own bug would stop every command the agent runs."""
+    tool_input = p.raw.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):
+        return _HookResult(result="allowed")
+    cfg = Config.load(repo)
+    refusal = FB.check(command, cfg, cwd=p.cwd or Path.cwd())
+    if refusal is None:
+        return _HookResult(result="allowed")
+    try:
+        holds = (
+            HI.emit_deny(plan, "pre_tool", "") is not None
+        )  # only a refusal that holds is recorded
+    except Exception:
+        holds = True
+    if holds:
+        try:
+            log, _who = ID.open_log(
+                repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
+            )
+            FB.record(log, cfg, refusal, p.session_id, p.harness)
+        except Exception:  # an unrecorded refusal is still a refusal
+            pass
+    msg = refusal.message()
+    return _HookResult(result="denied", deny=msg, note=msg)
+
+
 def _on_nothing(repo: Path, agent: str, p, plan) -> _HookResult:
     """pre_tool, post_tool, stop and session_end: the entry point accepts them so an agent's
     hook can be wired to every event today; the handlers (heartbeat, stop protocol, session
@@ -945,7 +986,7 @@ _HOOK_HANDLERS = {
     "session_start": _on_session_start,
     "prompt": _on_prompt,
     "pre_compact": _on_pre_compact,
-    "pre_tool": _on_nothing,
+    "pre_tool": _on_pre_tool,
     "post_tool": _on_nothing,
     "stop": _on_nothing,
     "session_end": _on_nothing,
@@ -973,6 +1014,15 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
             )
         res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan)
         out = HI.emit(plan, event, res.context)
+        if res.deny:
+            denied = HI.emit_deny(plan, event, res.deny)
+            if denied is None:
+                res = _HookResult(
+                    result="not enforceable",
+                    note=f"{harness} has no deny reply for ddflow to use; not refused: {res.deny}",
+                )
+            else:
+                out = denied
     except Exception as exc:  # a hook must never stand between the operator and their agent
         return O.ok(
             "hooks",
@@ -1032,6 +1082,7 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"{trailer_line}\n"
         f"Claude Code SessionStart hook: {session_line}\n"
         f"Claude Code PreCompact hook: {_precompact_line(repo)}\n"
+        f"Claude Code PreToolUse hook: {_pretool_line(repo)}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
 

@@ -79,7 +79,9 @@ def test_the_operators_own_hooks_and_settings_survive_install_AND_uninstall(repo
     assert code == OK, err
     data = _settings(repo)
     assert data["permissions"] == EXISTING["permissions"] and data["model"] == "opus[1m]"
-    assert data["hooks"]["PreToolUse"] == EXISTING["hooks"]["PreToolUse"]
+    # theirs stays first and untouched; ours (the forbidden-commands guard) is added beside it
+    n = len(EXISTING["hooks"]["PreToolUse"])
+    assert data["hooks"]["PreToolUse"][:n] == EXISTING["hooks"]["PreToolUse"]
     theirs = data["hooks"]["SessionStart"][0]["hooks"]
     assert theirs == EXISTING["hooks"]["SessionStart"][0]["hooks"], "their hooks were edited"
     assert len(_ours(data)) == 1
