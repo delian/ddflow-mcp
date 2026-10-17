@@ -120,7 +120,14 @@ def test_an_explicit_delta_is_still_only_the_new_commits(repo, tmp_path):
     out = got["out"]
     assert "delta review of 1 commit since" in out.data["text"], out.data["text"]
     assert "ok = 1" in prompt and "x = 1  # FINDME" not in prompt
-    assert "Previous findings" not in prompt  # a delta merges into the record instead
+    # B64ed3cae18: the delta still carries the earlier findings and their triage, or the
+    # reviewer contradicts a fix it cannot see; the whole diff stays out.
+    assert "Previous findings" in prompt and "bad line" in prompt
+    assert (
+        "triage: untriaged" in prompt
+        and "only the commits since" in prompt
+        and "cannot be verified from a delta" in prompt
+    )
 
 
 def test_the_cli_help_and_the_tool_schema_say_a_plain_re_review_is_full(repo):
