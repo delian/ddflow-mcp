@@ -1563,8 +1563,8 @@ def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
     recorded as written (`upgrade.applied` ``written``): the tool's own output needs no lease,
     but a file edited after the upgrade has another digest and does."""
     wrote: dict[str, set[str]] = {}
-    for up in state.upgrades:
-        for rel, digest in (up.get("written") or {}).items():
+    for run in state.upgrade_runs.values():
+        for rel, digest in (run.get("written") or {}).items():
             wrote.setdefault(rel, set()).add(digest)
     out = []
     for p in paths:
