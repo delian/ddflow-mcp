@@ -377,7 +377,7 @@ def remove(
     stranded = stuck_edges_to(st, item)
     if it.lease:
         L.release(log, item, note="removed from the queue")
-    log.append("phase.removed" if it.kind == "phase" else "task.removed", item, {"reason": reason})
+    log.append(f"{it.family}.removed", item, {"reason": reason})
     return O.ok(
         "item.removed",
         id=item,

@@ -370,8 +370,9 @@ class Item:
     @property
     def family(self) -> str:
         """The event family this item's definition events are written under: `phase`, or
-        `task` for every work kind (`task.added` / `task.updated` carry the kind in their
-        payload, so a doc needs no `doc.*` events of its own)."""
+        `task` for every work kind (`task.added` carries the kind in its payload and the
+        other `task.*` events take it from the item's definition, so a doc needs no `doc.*`
+        events of its own)."""
         return "phase" if self.kind == "phase" else "task"
 
     @property
