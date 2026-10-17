@@ -559,6 +559,13 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
     """
     out: dict[str, int] = {}
     for spec in specs:
+        if "=" in spec:
+            name_, _, cap_ = spec.partition("=")
+            raise ValueError(
+                f"resource {spec!r}: an item names its resources as name:count "
+                f"(`{name_.strip()}:{cap_.strip() or 1}`); name=count is the "
+                "[schedule] resources capacity form"
+            )
         name, _, count = spec.strip().partition(":")
         name = name.strip()
         if not name:
@@ -568,6 +575,15 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
             raise ValueError(f"resource {spec!r}: the count must be a positive integer")
         out[name] = out.get(name, 0) + n
     return out
+
+
+def problem(specs: list[str]) -> str:
+    """Why ``specs`` cannot be an item's resources, or ""."""
+    try:
+        parse_resources(specs)
+    except ValueError as exc:
+        return str(exc)
+    return ""
 
 
 def capacities(cfg: Config) -> dict[str, int]:
