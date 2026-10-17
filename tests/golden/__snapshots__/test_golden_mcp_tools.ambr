@@ -3381,7 +3381,7 @@
          },
          "priority": {
           "type": "integer",
-          "description": "Lower is offered first (default 100)."
+          "description": "Lower is offered first (default 100; a DX or bug-fix task: its band)."
          },
          "line": {
           "type": "string",
