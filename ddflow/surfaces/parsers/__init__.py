@@ -8,6 +8,7 @@ the subcommands, so it is part of the interface.
 from __future__ import annotations
 
 from . import (
+    chore,
     docs,
     flow,
     jobs,
@@ -29,6 +30,7 @@ from . import (
 #: Each command group's `register`, in `ddflow --help` order.
 REGISTER_ORDER = (
     queue.register,
+    chore.register,
     plan.register,
     lifecycle.register,
     flow.register,

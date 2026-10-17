@@ -938,14 +938,18 @@ class Server:
         return _ok(mid, out)
 
     def _m_resources_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
-        return _ok(msg.get("id"), {"resources": [r.listing() for r in RESOURCES]})
+        declared = _api().record_resource_listing()  # the kinds that declare a resource
+        return _ok(msg.get("id"), {"resources": [r.listing() for r in RESOURCES] + declared})
 
     def _m_resources_read(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
         mid = msg.get("id")
         uri = (msg.get("params") or {}).get("uri", "")
         resource = RESOURCE_BY_URI.get(uri)
         if resource is None:
-            return _err(mid, -32602, f"unknown resource {uri!r}")
+            text = _api().record_resource_read(self.repo, uri)
+            if text is None:
+                return _err(mid, -32602, f"unknown resource {uri!r}")
+            return _ok(mid, {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": text}]})
         return _ok(
             mid,
             {
