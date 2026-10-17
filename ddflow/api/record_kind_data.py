@@ -6,7 +6,7 @@ Python. A kind whose ``def_kind`` is not yet a definition kind gets one of its o
 
 Python is for kinds with behaviour (``ops``, ``weakening``); a descriptor naming either is
 refused. This module does not import `api.records` (which loads its own data kinds while it
-is being imported): the module is passed in, or found when it is already loaded.
+is being imported): the module is passed in, or imported on demand.
 """
 
 from __future__ import annotations
@@ -56,7 +56,8 @@ def kind_from_data(desc: dict[str, Any], records: ModuleType | None = None) -> A
 
 
 def parse_kind(text: str, *, source: str = "", records: ModuleType | None = None) -> Any:
-    """The kind a descriptor's TOML text declares (not yet registered)."""
+    """The kind a descriptor's TOML text declares (not yet declared; its definition kind is registered,
+    so `api.defs` accepts records of it)."""
     return kind_from_data(KD.parse(text, source=source), records)
 
 
