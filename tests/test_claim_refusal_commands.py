@@ -67,4 +67,24 @@ def test_another_agents_expired_lease_names_the_one_line_takeover(repo, monkeypa
     code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="b")
     text = out + err
     assert code == 3, text
-    assert "ddflow recover --item T1; ddflow claim T1 --force" in text, text
+    assert "ddflow recover --item T1`, then `ddflow claim T1 --force" in text, text
+
+
+def test_the_same_agent_reclaims_its_own_live_or_expired_lease_without_force(repo, monkeypatch):
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(re.sub(r"(?m)^\[lease\]$", "[lease]\ngrace_s = 0", cfg.read_text(), count=1))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="a")[0] == 0
+    monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="a")
+    assert code == 0 and "waiting" not in out + err, out + err  # live: renewed, no self-wait
+    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="a")[0] == 0
+    monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
+    time.sleep(2.5)
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="a")
+    assert code == 0 and "--force" not in out + err, out + err  # lapsed and its own: resumed
