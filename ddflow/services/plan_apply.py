@@ -10,11 +10,10 @@ Pure: no I/O. The api writes what this decides.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from typing import Any
 
+from ..core import digest as DG
 from ..core.handlers.items import PROPOSED_PREFIX
 from ..core.records import BLOCKED, State
 from . import items as IT
@@ -28,8 +27,7 @@ def plan_hash(plan: Mapping[str, Any]) -> str:
     Key order and the order of the items do not matter; a changed glob, dependency or body
     does. `apply` refuses a hash that is not this one -- a plan edited after it was read.
     """
-    canon = json.dumps(plan, sort_keys=True, default=str, separators=(",", ":"))
-    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+    return DG.of_obj(plan, "sha256", size=None)
 
 
 def default_plan_id(digest: str) -> str:
@@ -74,7 +72,12 @@ def draft_of(iid: str, item: Mapping[str, Any], plan_id: str) -> IT.TaskDraft:
 def filed_by(st: State, plan_id: str) -> list[str]:
     """The live items carrying the label of plan ``plan_id``."""
     label = f"{LABEL}{plan_id}"
-    return sorted(i.id for i in st.items.values() if not i.removed and label in i.tags)
+    return sorted(i.id for i in st.live_items() if label in i.tags)
+
+
+def live_ids(st: State) -> list[str]:
+    """The ids in the queue that have not been removed."""
+    return sorted(i.id for i in st.live_items())
 
 
 def proposed_by(st: State, plan_id: str) -> list[str]:
