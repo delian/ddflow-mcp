@@ -78,25 +78,32 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
     assert '"s1"' in committed and '"s2"' in committed, committed
 
 
-def test_a_door_whose_lines_another_door_committed_is_not_a_failure(repo, monkeypatch):
-    """B stages, A's slow commit (started before B's append) reads the working tree and takes
-    B's line too; B's own commit then has nothing to commit, which is success, not an error."""
+def test_the_commit_holds_exactly_the_bytes_that_were_checked(repo, monkeypatch):
+    """A line appended after the snapshot (while the commit's hooks run) is not in that
+    commit, whole or torn: it is left for the next door, uncommitted and intact."""
     from ddflow.services import eventcommit as EC
 
     run_cli(repo, "init")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "adopt", "--no-verify")
-    K.session_end(repo, "s1")  # leaves committed lines behind
+    K.session_end(repo, "s1")
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    line = shard.read_text().splitlines()[-1]
+    with shard.open("a") as f:
+        f.write(line + "\n")  # the door's own whole line
+    snapshot = shard.read_text()
     real = EC.W.git
 
-    def someone_commits_first(root, *args, **kw):
+    def append_during_commit(root, *args, **kw):
         if args and args[0] == "commit":
-            real(root, "commit", "-q", "-m", "other door", "--", ".ddflow/events")
+            with shard.open("a") as f:
+                f.write(line[:20])  # a writer mid-line while the hooks run
         return real(root, *args, **kw)
 
-    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
-    with shard.open("a") as f:  # a new, whole line that this door has to commit
-        f.write(shard.read_text().splitlines()[-1] + "\n")
-    monkeypatch.setattr(EC.W, "git", someone_commits_first)
+    monkeypatch.setattr(EC.W, "git", append_during_commit)
     sha, note = EC.commit_shards(repo, "mine")
-    assert sha and "nothing to commit" not in note and "not committed" not in note, (sha, note)
+    assert sha, note
+    assert _git(repo, "show", f"HEAD:{shard.relative_to(repo)}") == snapshot.strip()
+    # the half line is still only in the working tree, and the shared index is not left staged
+    assert shard.read_text() == snapshot + line[:20]
+    assert _git(repo, "diff", "--cached", "--name-only") == ""
