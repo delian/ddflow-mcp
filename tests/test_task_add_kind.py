@@ -70,3 +70,17 @@ def test_work_kinds_are_registered_kinds():
     from ddflow.core.records import WORK_KINDS
 
     assert set(WORK_KINDS) <= set(KINDS)
+
+
+def test_a_doc_item_owes_no_readme_with_code(repo):
+    """`readme_with_code` couples CODE changes to the README: it stays a task rule."""
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services.completion import readme_report
+
+    assert _doc(repo)[0] == 0
+    st = fold(EventLog(repo, "probe").read_all(), strict=False)
+    cfg = Config()
+    cfg.enforce.readme_with_code = "block"
+    assert readme_report(st, cfg, "D1", repo=repo) == ""

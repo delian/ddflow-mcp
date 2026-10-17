@@ -326,7 +326,7 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     """
     mode = cfg.enforce.readme_with_code
     it = state.items.get(item_id)
-    if mode == "off" or it is None or it.removed or not it.is_work or it.promote_to:
+    if mode == "off" or it is None or it.removed or it.kind != "task" or it.promote_to:
         return ""
     docs = it.gates.get("docs")
     if docs and (
