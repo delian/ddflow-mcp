@@ -25,9 +25,6 @@ from ..infra.fsio import LockTimeout, file_lock
 EVENTS = ".ddflow/events"
 #: Out-of-line gate evidence (B-gap-log-scale): committed with the shards that name it.
 BLOBS = ".ddflow/blobs"
-#: How long a door waits for another door's event-log commit before it leaves its own for the
-#: next door: under the 30 s an append waits, so one slow hook never blocks a writer.
-COMMIT_WAIT_S = 20.0
 
 
 def uncommitted_shards(repo: Path) -> list[str] | None:
@@ -73,7 +70,12 @@ def whole(repo: Path, rel: str) -> bool:
 
 
 def commit_shards(
-    repo: Path, reason: str, template: str = "events: {reason}", *, hold=None
+    repo: Path,
+    reason: str,
+    template: str = "events: {reason}",
+    *,
+    hold=None,
+    wait_s: float = 20.0,
 ) -> tuple[str, str]:
     """(commit sha, note): the sha when shards were committed; the note says why not, or which
     shards were left out as half-written, or that HEAD moved ("" when there was nothing to say).
@@ -93,7 +95,7 @@ def commit_shards(
 
     Two doors would still move HEAD together, so the commit and the resetting of the shared
     index sit under a lock of their own (in the git directory) that only event-log commits
-    wait for, `COMMIT_WAIT_S` at most: a door that cannot get it leaves its lines, committed
+    wait for, ``wait_s`` seconds at most (20: under the 30 an append waits): a door that cannot get it leaves its lines, committed
     by whichever door comes next."""
     repo = Path(repo)
     hold = hold or contextlib.nullcontext
@@ -104,12 +106,12 @@ def commit_shards(
         private = Path(git_dir.out.strip()) / "ddflow-eventcommit.index"
         try:  # only the wait for another door's commit is this note's; the append lock's is not
             held.enter_context(
-                file_lock(Path(git_dir.out.strip()) / "ddflow-eventcommit.lock", COMMIT_WAIT_S)
+                file_lock(Path(git_dir.out.strip()) / "ddflow-eventcommit.lock", wait_s)
             )
         except LockTimeout:
             return (
                 "",
-                f"event log not committed: another event-log commit ran for over {COMMIT_WAIT_S}s",
+                f"event log not committed: another event-log commit ran for over {wait_s}s",
             )
     with held:
         if private is None:
@@ -131,17 +133,39 @@ def commit_shards(
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
             head = W.rev(repo, "HEAD")
-            ours = W.git(repo, "write-tree", env=env)
-            made_here = (
-                ours.ok and W.git(repo, "rev-parse", f"{head}^{{tree}}").out == ours.out.strip()
-            )
-            if made_here and W.rev(repo, f"{head}^") != base:  # a commit landed just before ours
+            verdict = _is_ours(repo, head, message, env)
+            if verdict is None:
                 skipped = "; ".join(
-                    filter(None, [skipped, _rebuild_on(repo, taken, private, head)])
+                    filter(
+                        None,
+                        [
+                            skipped,
+                            "could not check HEAD against the event-log commit: see `git log`",
+                        ],
+                    )
                 )
+            elif verdict:
+                if W.rev(repo, f"{head}^") != base:  # a commit landed just before ours began
+                    skipped = "; ".join(
+                        filter(None, [skipped, _rebuild_on(repo, taken, private, head)])
+                    )
+                return W.rev(repo, "HEAD"), skipped
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
+
+
+def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool | None:
+    """Whether ``head`` is the event-log commit this door just made: one parent, the subject it
+    was given and the tree of the private index. None when git could not say."""
+    ours = W.git(repo, "write-tree", env=env)
+    info = W.git(repo, "log", "-1", "--format=%T%n%P%n%s", head)
+    if not (ours.ok and info.ok):
+        return None
+    tree, _, rest = info.out.partition("\n")
+    parents, _, subject = rest.partition("\n")
+    first = message.splitlines()[0] if message.strip() else ""
+    return tree == ours.out.strip() and len(parents.split()) == 1 and subject == first
 
 
 def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
