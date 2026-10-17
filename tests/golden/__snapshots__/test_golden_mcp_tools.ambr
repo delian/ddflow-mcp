@@ -1235,9 +1235,6 @@
           "description": "A subagent's own name, this call only."
          }
         },
-        "required": [
-         "id"
-        ],
         "additionalProperties": false
        }
       }
