@@ -31,3 +31,14 @@ def test_every_top_level_command_has_a_row():
 def test_a_cell_never_breaks_the_table():
     for _name, text in CT.commands():
         assert "\n" not in text and not re.search(r"(?<!\\)\|", text)
+
+
+def test_a_command_registered_without_help_is_still_listed():
+    """The parent parser's listing omits a subcommand added without `help=`; the list must not."""
+    import argparse
+
+    from ddflow.surfaces import cli
+
+    parser = cli.build_parser()
+    (sub,) = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
+    assert len(CT.commands()) == len(sub.choices)

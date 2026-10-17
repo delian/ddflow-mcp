@@ -25,12 +25,16 @@ def commands() -> list[tuple[str, str]]:
     parser = cli.build_parser()
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
+            helps = {c.dest: c.help or "" for c in action._choices_actions}
             rows = []
-            for choice in action._choices_actions:
-                text = " ".join((choice.help or "").split())
+            for name, sub in action.choices.items():
+                # A command registered without `help=` has none in the parent's listing: its
+                # own description stands in, so that none is left out of the list.
+                text = " ".join((helps.get(name) or sub.description or "").split())
+                text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
                 if len(text) > SUMMARY_MAX:
                     text = text[: SUMMARY_MAX - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
-                rows.append((choice.dest, text.replace("|", "\\|")))
+                rows.append((name, text.replace("|", "\\|")))
             return rows
     return []
 

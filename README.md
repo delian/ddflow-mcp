@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=e6d82be16531 -->
-<details><summary>All 71 commands</summary>
+<!-- ddflow:begin README/commands sha=550b271be1fb -->
+<details><summary>All 78 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -563,6 +563,7 @@ needs a line written by hand here.
 | `ddflow complete` | finish an item (exit 3 = gates not satisfied) |
 | `ddflow abandon` | stop work on an item without completing it |
 | `ddflow remove` | take an item out of the queue (recorded, not erased) |
+| `ddflow block` |  |
 | `ddflow unblock` | release a blocked item back into the queue (exit 2 = not blocked) |
 | `ddflow merge` | merge an item's branch from the primary checkout |
 | `ddflow pr` | pull/merge requests: what reviewers did ([flow].integration = pr) |
@@ -573,6 +574,7 @@ needs a line written by hand here.
 | `ddflow external` | dependencies on items in sibling repositories |
 | `ddflow job` | long-running processes an item waits on: run, add, list, end |
 | `ddflow memory` | operational facts about this machine/repo, shown at session start |
+| `ddflow lesson` |  |
 | `ddflow recall` | 'have we been here before?' — search decisions, lessons, research, bugs, tasks and past prompts at once |
 | `ddflow similar` | 'is this already filed?' -- the existing bugs, tasks, lessons and other records most like a text, before you… |
 | `ddflow dupes` | 'is anything filed twice?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or… |
@@ -583,6 +585,9 @@ needs a line written by hand here.
 | `ddflow ci` | the CI parity gate: run the pre-push checks on the merge result |
 | `ddflow onboard` | run an onboarding stage: one report, propose by default (status\|preflight\|legacy\|memory\|test-gate\|verify) |
 | `ddflow status` | one answer to 'what is the state of this project?' |
+| `ddflow research` |  |
+| `ddflow bug` |  |
+| `ddflow session` |  |
 | `ddflow replay` | reconstruct the decision history from the log |
 | `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
 | `ddflow progress` | work actually done, aggregated from the log |
@@ -591,6 +596,8 @@ needs a line written by hand here.
 | `ddflow doctor` | integrity + health check |
 | `ddflow rebuild` | re-derive the index from the log |
 | `ddflow render` | regenerate the human-readable views |
+| `ddflow board` |  |
+| `ddflow show` |  |
 | `ddflow report` | the completion report of an item, from the log (shas, tests, gates, overrides) |
 | `ddflow config` | print every knob, its value and its source |
 | `ddflow upgrade` | what upgrading this project to the running ddflow would change (the plan; writes nothing; exit 0 up to date… |
