@@ -35,6 +35,8 @@ WATCHDOG = (
     "surfaces/parsers/health.py",
     "infra/harness_identity.py",
 )
+#: the one place a watchdog module may unlink: a harness's own identity record
+IDENTITY_RECORD_WRITE = ("infra/harness_identity.py", "declare")
 KILLERS = {"kill_group", "killpg", "terminate", "kill", "send_signal", "system"}
 DELETERS = {"remove", "unlink", "rmtree", "rmdir", "removedirs", "move", "rename", "replace"}
 
@@ -47,6 +49,18 @@ def _calls(path: Path):
         named = isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
         if named:
             stack.append(node.name)
+        if isinstance(node, ast.ImportFrom) and node.module in {"os", "signal", "subprocess"}:
+            for alias in node.names:  # `from os import killpg as _kp` hides the call name
+                if alias.name in KILLERS and alias.asname:
+                    yield (
+                        alias.name,
+                        ast.Call(ast.Name(alias.name), [], []),
+                        (stack[-1] if stack else ""),
+                    )
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "getattr":
+            arg = node.args[1] if len(node.args) > 1 else None
+            if isinstance(arg, ast.Constant) and arg.value in KILLERS:  # getattr(os, "kill")
+                yield str(arg.value), node, (stack[-1] if stack else "")
         if isinstance(node, ast.Call):
             f = node.func
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
@@ -95,7 +109,7 @@ def test_the_watchdog_modules_signal_nothing_and_delete_nothing():
         for name, call, fn in _calls(ROOT / rel):
             if name in KILLERS and not _is_probe(name, call):
                 bad.append(f"{rel}:{call.lineno} {name}() in {fn}")
-            if fn != "declare" and _deletes(name, call):  # declare: its own identity record
+            if _deletes(name, call) and (rel, fn) != IDENTITY_RECORD_WRITE:
                 bad.append(f"{rel}:{call.lineno} {name}() in {fn}")
     assert not bad, bad
 

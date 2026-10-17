@@ -206,7 +206,7 @@ def liveness(repo: Path | str, agent: str) -> tuple[bool | None, list[int]]:
         return None, []
     for f in entries:
         try:
-            name = f.read_text().strip()
+            name = f.read_text(errors="replace").strip()
         except OSError:
             continue
         if name != agent:
