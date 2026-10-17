@@ -81,11 +81,12 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
-    unchanged = (
-        _adjust_list(it, edit, fields, "needs")
-        or _adjust_list(it, edit, fields, "tags")
-        or _adjust_globs(it, edit, fields)
-    )
+    # Every fold runs (no short-circuit: a no-op needs fold must not swallow a tags edit);
+    # it is "nothing to change" only when nothing else was edited and no fold moved a list.
+    _adjust_list(it, edit, fields, "needs")
+    _adjust_list(it, edit, fields, "tags")
+    _adjust_globs(it, edit, fields)
+    unchanged = _nothing_to_change(it, edit, fields)
     if unchanged:
         return O.nothing("item.updated", unchanged, id=item)
     bad = GS.problem(fields.get("globs", []))
@@ -108,42 +109,50 @@ def _held_globs(it) -> list[str]:
     return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
 
 
-def _adjust_list(it, edit: ItemEdit, fields: dict[str, Any], name: str) -> str:
+def _adjust_list(it, edit: ItemEdit, fields: dict[str, Any], name: str) -> None:
     """Fold ``--add-<name>`` / ``--remove-<name>`` (needs, tags) into ``fields[name]``: onto
-    ``--<name>`` when given, else onto the item's current list. Returns why there is nothing
-    to change when that is all the edit was, else ""."""
+    ``--<name>`` when given, else onto the item's current list."""
     add, rem = getattr(edit, f"add_{name}"), getattr(edit, f"remove_{name}")
     if add is None and rem is None:
-        return ""
+        return
     held = fields.get(name)
     if held is None:
         held = list(getattr(it, name))
     gone = set(rem or [])
     fields[name] = [n for n in dict.fromkeys([*held, *(add or [])]) if n not in gone]
-    if fields[name] == list(getattr(it, name)) and len(fields) == 1:
-        return (
-            f"nothing to change: --add-{name} are all held already and --remove-{name} name "
-            f"none of {', '.join(held) or f'(no {name})'}."
-        )
-    return ""
 
 
-def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
-    """Fold ``--add-globs`` / ``--remove-globs`` into ``fields["globs"]``: onto ``--globs``
-    when that was given, else onto the item's held globs (its own and its lease's).
-    Returns why there is nothing to change when that is all the edit was, else ""."""
-    if edit.add_globs is None and edit.remove_globs is None:
+def _nothing_to_change(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
+    """Why the edit is a no-op when it only asked to add/remove what changed no list."""
+    folded = [
+        n
+        for n in ("needs", "tags", "globs")
+        if getattr(edit, f"add_{n}") is not None or getattr(edit, f"remove_{n}") is not None
+    ]
+    if not folded or set(fields) != set(folded):
         return ""
+    for n in folded:
+        if getattr(edit, n) is not None:
+            return ""
+        held = _held_globs(it) if n == "globs" else list(getattr(it, n))
+        if fields[n] != held:
+            return ""
+    return (
+        "nothing to change: "
+        + " and ".join(f"--add-{n}/--remove-{n}" for n in folded)
+        + " add nothing new and remove nothing held."
+    )
+
+
+def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> None:
+    """Fold ``--add-globs`` / ``--remove-globs`` into ``fields["globs"]``: onto ``--globs``
+    when that was given, else onto the item's held globs (its own and its lease's)."""
+    if edit.add_globs is None and edit.remove_globs is None:
+        return
     held = fields.get("globs")
     if held is None:
         held = _held_globs(it)
     fields["globs"] = GS.adjust(held, edit.add_globs, edit.remove_globs)
-    if fields["globs"] == held and edit.globs is None and len(fields) == 1:
-        return (
-            f"nothing to change: --add-globs are all held already and --remove-globs name "
-            f"none of {', '.join(held) or '(no globs)'}."
-        )
-    return ""
 
 
 def _update_and_rebind(
