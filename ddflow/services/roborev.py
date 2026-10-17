@@ -62,7 +62,7 @@ def _unfinished_note(jobs: list, sha: str) -> str:
     """Why a covering job is not yet a review, when it is queued or running ('' if none)."""
     pending = [
         j for j in jobs
-        if isinstance(j, dict) and j.get("status") in _UNFINISHED
+        if isinstance(j, dict)
         and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
     ]  # fmt: skip
     if not pending:
@@ -70,6 +70,12 @@ def _unfinished_note(jobs: list, sha: str) -> str:
     # `roborev show --job N` of an unfinished job says "no review found", which reads as a
     # vanished job (B08da521f70); the job is there, just not done.
     j = max(pending, key=lambda x: _job_id(x) or 0)
+    if j.get("status") not in _UNFINISHED:
+        return (
+            f"roborev job {_job_id(j)} for {sha[:10]} ended {j.get('status') or 'unfinished'}, "
+            f"so it holds no review of it: re-run `roborev review {sha[:10]}`; "
+            "the reviewer is unchecked"
+        )
     return (
         f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status')}, not done: "
         f"`roborev wait {_job_id(j)}` first (`roborev show --job` of an unfinished job "
