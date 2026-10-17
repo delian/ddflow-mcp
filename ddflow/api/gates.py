@@ -58,6 +58,11 @@ from .lifecycle.complete import _session_model
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
 
 
+def _recorded_since(rec, started_at: str) -> bool:
+    """Does the gate record ``rec`` hold an outcome written at or after ``started_at``?"""
+    return bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at))
+
+
 def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     """Record `unavailable` for every gate run whose process died before it recorded
     (B58842554a7): a killed shell, a tool timeout, a SIGKILL. The run's started-marker
@@ -73,7 +78,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     for m in dead:
         it = st.items.get(m.item)
         rec = it.gates.get(m.gate) if it else None
-        newer = bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(m.at))
+        newer = _recorded_since(rec, m.at)
         if it is None or it.removed or it.terminal or m.gate not in known or newer:
             RUN.clear_started(m)  # nothing to record, now or ever
             continue
@@ -620,7 +625,7 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
         reason = f"the run was terminated by {stop.signame} before its command finished"
         _log, _cfg, now = _load(repo, agent)
         rec = now.items[item].gates.get(gate) if item in now.items else None
-        if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
+        if _recorded_since(rec, started_at):
             # Something was recorded while the run lived: that stands, as in the sweep.
             return O.nothing("gate.run", reason, gate=gate, outcome="", evidence={}, id=item)
         R.record_measured(
