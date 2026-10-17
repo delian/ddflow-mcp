@@ -14,13 +14,15 @@ what only one caller has (``fixes``, ``promote_to``, ``source`` ...).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from ..core import globspec as GS
 from ..core import schedule as SCH
+from ..core.defaults import DEFAULT_PRIORITY
 from ..core.model import WORK_KINDS, Item
 from . import leases as L
+from . import priority as P
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -202,6 +204,10 @@ def add_task(
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)
+    if draft.priority is None:  # filed with none: a DX or fix task takes its band
+        banded = P.band(cfg, draft.id, draft.tags or [])
+        if banded != DEFAULT_PRIORITY:
+            draft = replace(draft, priority=banded)
     data = draft.data()
     if not isinstance(dedupe, str):
         data.update(dedupe.fields)
@@ -216,7 +222,7 @@ def add_task(
         resources=list(draft.resources or []),
         body=draft.body or "",
         tags=list(draft.tags or []),
-        priority=100 if draft.priority is None else draft.priority,
+        priority=DEFAULT_PRIORITY if draft.priority is None else draft.priority,
         line=draft.line or "",
         fixes=list(draft.extra.get("fixes", [])),
     )
