@@ -499,8 +499,10 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
     if outcome == "passed" and gdef and gdef.evidence and not evidence:
         raise ValueError(
             f"gate {gate!r} requires evidence to pass (it is in gates.evidence_required). "
-            f"Attach the command, its exit code and its output — or record "
-            f"`unavailable` with a reason, which is an honest result."
+            f"Attach what you observed: --evidence '<what you ran / what it said>', and/or "
+            f"--command '<the command>' --exit-code N --output-file <its saved output> "
+            f"(over MCP: evidence, command, exit_code, output_file) — or record "
+            f"`--outcome unavailable --reason '<why>'`, which is an honest result."
         )
     if outcome == "passed" and (why := evidence_problems(gdef, evidence or {}, item_id, owner_of)):
         raise ValueError(
