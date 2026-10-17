@@ -240,6 +240,19 @@ class GateRun:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
+#: The item kinds that are units of work, claimed and merged like a task. They differ in
+#: the gate pipeline `[gates].kind_pipelines` gives them; a subset of the registry in
+#: `config_sections._kinds`. `task add --kind` writes one into `task.added`'s payload.
+WORK_KINDS = ("task", "doc", "research", "job")
+
+
+def work_kind(data: dict) -> str:
+    """The kind a `task.added` payload names: a work kind, else a plain task (an older or
+    newer writer's unknown kind folds as a task rather than breaking the fold)."""
+    k = data.get("kind")
+    return k if k in WORK_KINDS else "task"
+
+
 @dataclass
 class Item:
     """A phase or a task. One class, because every rule about scheduling,
@@ -247,7 +260,7 @@ class Item:
     Two near-identical classes would drift; this repo's own history is full of that."""
 
     id: str
-    kind: str  # "phase" | "task"
+    kind: str  # "phase" | one of WORK_KINDS
     title: str = ""
     parent: str = ""  # a task's phase; "" for a phase
     needs: list[str] = field(default_factory=list)
@@ -353,6 +366,20 @@ class Item:
     #: only evidence that it was live when the other claimed. `_late_renewal` weighs them
     #: against the entry. Unbounded: see `_displace`.
     displaced: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def family(self) -> str:
+        """The event family this item's definition events are written under: `phase`, or
+        `task` for every work kind (`task.added` carries the kind in its payload and the
+        other `task.*` events take it from the item's definition, so a doc needs no `doc.*`
+        events of its own)."""
+        return "phase" if self.kind == "phase" else "task"
+
+    @property
+    def is_work(self) -> bool:
+        """A unit of work with its own claim, worktree and gates: a task, or an item of a
+        kind that runs like one (`WORK_KINDS`). A phase is a container."""
+        return self.kind in WORK_KINDS
 
     @property
     def terminal(self) -> bool:
@@ -1025,13 +1052,13 @@ class State:
         siblings when nothing links them.
         """
         if not phase:
-            return [i for i in self.items.values() if i.kind == "task" and not i.removed]
+            return [i for i in self.items.values() if i.is_work and not i.removed]
         # Only the items below ``phase``, put back in definition order: scanning every item
         # for each of the thousand phase dependencies a plan weighs was the cost of `next`.
         pos = self._positions()
         below = [self.items[n] for n in self.descendants(phase) if n in self.items and n in pos]
         below.sort(key=lambda i: pos[i.id])
-        return [i for i in below if i.kind == "task" and not i.removed]
+        return [i for i in below if i.is_work and not i.removed]
 
     def _positions(self) -> dict[str, int]:
         """`item id -> definition order`. Items are only ever added (a removal sets a flag), so

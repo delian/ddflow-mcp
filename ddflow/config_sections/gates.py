@@ -30,6 +30,10 @@ class GatesConfig:
         ],
         doc="Ordered gate ids every TASK passes through. Reorder or trim per project; ids must exist in [gate.*] definitions.",
     )
+    doc_pipeline: list[str] = knob(
+        factory=lambda: ["rules", "implement", "standards", "dedupe", "merge"],
+        doc="Ordered gate ids a DOC item passes through (`task add --kind doc`): documents and generated output, so no unit_tests, critic or bug hunt. `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when they appear here.",
+    )
     phase_pipeline: list[str] = knob(
         factory=lambda: [
             "research",
@@ -46,7 +50,7 @@ class GatesConfig:
     )
     kind_pipelines: dict[str, list[str]] = knob(
         factory=dict,
-        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default, so every kind runs as before. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
+        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default; a `doc` item (`task add --kind doc`) runs `doc_pipeline` unless this names it. `ddflow workflow` lists each kind that differs, and `--json` every kind\'s effective pipeline.',
         check=kind_pipelines_problem,
     )
     required: list[str] = knob(

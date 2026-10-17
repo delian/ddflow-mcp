@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.doc_pipeline"
+new = "[\"rules\", \"implement\", \"standards\", \"dedupe\", \"merge\"]"
+why = "The gates a DOC item (task add --kind doc) passes through: documents and generated output, with no unit_tests, critic or bug hunt. Existing items are tasks and keep the task pipeline."
+impact = "additive"
