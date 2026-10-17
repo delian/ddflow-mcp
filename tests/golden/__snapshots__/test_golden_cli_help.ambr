@@ -2672,7 +2672,7 @@
                           record
       update              change an item's fields
       chore               commit or approve chore files (no reviewer)
-      plan                check a plan before filing it
+      plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
