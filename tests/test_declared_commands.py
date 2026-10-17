@@ -212,7 +212,8 @@ def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
     assert api_lifecycle.DEFAULT_NEXT_KIND is defaults.DEFAULT_NEXT_KIND
     assert api_lifecycle.DEFAULT_WAIT_TIMEOUT_S is defaults.DEFAULT_WAIT_TIMEOUT_S
     ns = build_parser().parse_args(["task", "add", "T"])
-    assert ns.priority == defaults.DEFAULT_PRIORITY
+    # none given: the task takes its DX or bug band, else DEFAULT_PRIORITY (services.priority)
+    assert ns.priority is None
     assert build_parser().parse_args(["next"]).kind == defaults.DEFAULT_NEXT_KIND
     wait = next(c for c in lifecycle.COMMANDS if c.path == ("wait",))
     timeout = next(p for p in wait.params if p.name == "timeout")

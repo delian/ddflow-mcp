@@ -82,3 +82,29 @@ def test_plan_check_warns_about_a_dx_task_left_at_100(repo: Path, tmp_path: Path
     _code, out, _err = run_cli(repo, "--json", "plan", "check", str(plan))
     warned = [w["id"] for w in json.loads(out)["warnings"] if "generic priority" in w["detail"]]
     assert warned == ["DX-a"]
+
+
+def test_the_band_is_a_fallback_not_a_clamp_and_dx_wins_over_bug(repo: Path):
+    from ddflow.config import Config
+    from ddflow.services import priority as PRI
+
+    cfg = Config()
+    assert PRI.band(cfg, "x", ["dx", "bugfix"]) == cfg.schedule.dx_priority
+    cfg.schedule.dx_priority = 100
+    assert PRI.left_generic(cfg, "DX-a", [], 100) == "", "the band is the generic default"
+    cfg.schedule.dx_id_prefix = ""
+    assert PRI.kind_of(cfg, "DX-a", []) == ""
+
+
+def test_a_fix_task_keeps_a_priority_its_item_set(repo: Path):
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "p")
+    for tid, extra in (("T-late", ["--priority", "200"]), ("T-generic", [])):
+        code, _o, err = run_cli(
+            repo, "task", "add", tid, "--phase", "P1", "--title", "t", "--new", *extra
+        )
+        assert code == 0, err
+        code, _o, err = run_cli(repo, "bug", "found", "--summary", f"bug in {tid}", "--item", tid)
+        assert code == 0, err
+    fixes = [v for k, v in _priorities(repo).items() if k.startswith("fix-")]
+    assert sorted(fixes) == [10, 200], fixes
