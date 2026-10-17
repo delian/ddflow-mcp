@@ -96,7 +96,7 @@ def test_the_tool_schema_has_the_verb_enum_and_every_field_but_no_cli_flag():
 
 
 def test_the_tool_listing_is_small_enough_to_be_one_tool_per_kind():
-    assert len(json.dumps(_tool().tool_listing(), separators=(",", ":"))) < 2500
+    assert len(json.dumps(_tool().tool_listing(), separators=(",", ":"))) < 3000  # +5 lifecycle verbs, 10 params
 
 
 def test_a_verb_command_carries_only_the_parameters_its_verb_takes():
@@ -129,6 +129,7 @@ def test_a_kind_offering_fewer_verbs_generates_fewer_commands():
         summary="s",
         fields=(R.FieldSpec("title"),),
         verbs=("list", "show"),
+        declined={v: "read-only" for v in R.VERBS if v not in ("list", "show")},
     )
     cmds = S.record_commands(ro)
     assert [c.path for c in cmds[1:]] == [("ro", "list"), ("ro", "show")]

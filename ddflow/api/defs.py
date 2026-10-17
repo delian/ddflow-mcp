@@ -29,6 +29,7 @@ import ddflow.api._dedupe as DD
 from ..config import id_problem
 from ..core import defs as D
 from ..core import outcome as O
+from ..services import sessions as SE
 from ..services.guidance import deffields as DF
 from ._base import _load
 
@@ -55,11 +56,34 @@ def _fields_problem(fields: Any, *, nulls: bool = False) -> str:
     return ""
 
 
-def _envelope(cfg, kind: str, rid: str, source: str | None, provenance: dict | None) -> dict:
+#: Provenance keys the writer stamps itself on every write (RC3): not part of what a caller
+#: asks to keep, and never carried over from an earlier revision.
+STAMPED = ("by", "session", "prompt")
+
+
+def evidence(log) -> dict[str, str]:
+    """Where a write came from (RC3): ``session`` is the writing agent's open session (the one
+    most recently active) and ``prompt`` the id of that session's latest operator prompt,
+    each only when there is one. A write never opens a session of its own."""
+    events = log.read_all()
+    live = SE.open_sessions(events, log.agent_id)
+    if not live:
+        return {}
+    out = {"session": live[0]}
+    prompts = [e for e in events if e.kind == "session.prompt" and e.subject == live[0]]
+    if prompts:
+        out["prompt"] = max(prompts, key=lambda e: (e.lamport, e.ts)).id
+    return out
+
+
+def _envelope(
+    cfg, kind: str, rid: str, source: str | None, provenance: dict | None, log=None
+) -> dict:
     data: dict[str, Any] = {"kind": kind, "id": rid}
     if source is not None:
         data["source"] = source
-    data["provenance"] = {"by": cfg.agent.id, **(provenance or {})}
+    stamp = evidence(log) if log is not None else {}
+    data["provenance"] = {"by": cfg.agent.id, **(provenance or {}), **stamp}
     return data
 
 
@@ -72,7 +96,7 @@ def _text(rid: str, fields: dict[str, Any], title: str, body: str) -> tuple[str,
     return rid, " ".join(words)
 
 
-def def_record(
+def def_record(  # noqa: PLR0913 -- one keyword per facet of a definition, all keyword-only
     repo: Path,
     kind: str,
     rid: str,
@@ -83,10 +107,12 @@ def def_record(
     title: str = "",
     body: str = "",
     answer: DD.Answer | None = None,
+    reason: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Record a WHOLE definition (`def.recorded`). Recording an id again replaces its
-    fields and brings a retired, superseded or merged definition back."""
+    fields and brings a retired, superseded or merged definition back. ``reason`` is kept
+    on the event (a restore says why)."""
     if bad := _bad(kind, rid) or _fields_problem(fields):
         return O.failed("def.recorded", bad, def_kind=kind, id=rid)
     log, cfg, st = _load(repo, agent)
@@ -103,7 +129,16 @@ def def_record(
         if chk.extension:
             return DD.extend(log, cfg, chk, "def.recorded")
     return _write_record(
-        log, cfg, kind, rid, fields, source, provenance, chk, replaced=prev is not None
+        log,
+        cfg,
+        kind,
+        rid,
+        fields,
+        source,
+        provenance,
+        chk,
+        replaced=prev is not None,
+        reason=reason,
     )
 
 
@@ -129,12 +164,24 @@ def def_record_unchecked(
 
 
 def _write_record(
-    log, cfg, kind, rid, fields, source, provenance, chk: DD.Checked, *, replaced: bool
+    log,
+    cfg,
+    kind,
+    rid,
+    fields,
+    source,
+    provenance,
+    chk: DD.Checked,
+    *,
+    replaced: bool,
+    reason: str = "",
 ) -> O.Outcome:
     fields = DF.logged(fields, cfg)
     digest = D.digest(fields)
-    data = _envelope(cfg, kind, rid, source, provenance)
+    data = _envelope(cfg, kind, rid, source, provenance, log)
     data.update(fields=dict(fields), digest=digest, **chk.fields)
+    if reason.strip():
+        data["reason"] = reason.strip()
     with log.transaction():
         log.append("def.recorded", D.key(kind, rid), data)
         DD.after_add(log, cfg, D.key(kind, rid), chk)
@@ -165,6 +212,34 @@ def _live(st, kind: str, rid: str, event_kind: str) -> tuple[Any, O.Outcome | No
     return rec, None
 
 
+def _core(prov: dict[str, Any]) -> dict[str, Any]:
+    """``prov`` without what the writer stamps itself (`STAMPED`)."""
+    return {k: v for k, v in prov.items() if k not in STAMPED}
+
+
+def _update_data(
+    log, cfg, rec, fields: dict[str, Any], source: str | None, provenance: dict | None, reason: str
+) -> dict[str, Any] | None:
+    """The `def.updated` payload that applies ``fields`` to ``rec``, or None when the result
+    is what is already recorded."""
+    merged = DF.logged({**rec.fields, **fields}, cfg)
+    merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
+    digest = D.digest(merged)
+    # None keeps the recorded provenance (under this author); a mapping replaces it.
+    prov = _core(rec.provenance) if provenance is None else provenance
+    # Unnamed, it is no change of its own: an update that changes nothing else is exit 2
+    # whoever asks. Written, `by` is the author of this revision.
+    unstamped = {k: v for k, v in rec.provenance.items() if k not in STAMPED[1:]}
+    same_prov = provenance is None or {"by": cfg.agent.id, **prov} == unstamped
+    if D.same(merged, rec.digest) and (source is None or source == rec.source) and same_prov:
+        return None
+    data = _envelope(cfg, rec.kind, rec.id, rec.source if source is None else source, prov, log)
+    data.update(fields=dict(fields), digest=digest)
+    if reason.strip():
+        data["reason"] = reason.strip()
+    return data
+
+
 def def_update(
     repo: Path,
     kind: str,
@@ -173,6 +248,7 @@ def def_update(
     *,
     source: str | None = None,
     provenance: dict[str, Any] | None = None,
+    reason: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Change some fields of an ACTIVE definition (`def.updated`); a field set to None is
@@ -183,28 +259,25 @@ def def_update(
     rec, refusal = _live(st, kind, rid, "def.updated")
     if refusal is not None:
         return refusal
-    merged = DF.logged({**rec.fields, **fields}, cfg)
-    merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
-    digest = D.digest(merged)
-    # None keeps the recorded provenance (under this author); a mapping replaces it.
-    prov = (
-        {k: v for k, v in rec.provenance.items() if k != "by"} if provenance is None else provenance
-    )
-    # Unnamed, it is no change of its own: an update that changes nothing else is exit 2
-    # whoever asks. Written, `by` is the author of this revision.
-    same_prov = provenance is None or {"by": cfg.agent.id, **prov} == rec.provenance
-    if D.same(merged, rec.digest) and (source is None or source == rec.source) and same_prov:
+    data = _update_data(log, cfg, rec, fields, source, provenance, reason)
+    if data is None:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
-    data = _envelope(cfg, kind, rid, rec.source if source is None else source, prov)
-    data.update(fields=dict(fields), digest=digest)
     log.append("def.updated", D.key(kind, rid), data)
     changed = sorted(k for k in fields if rec.fields.get(k) != fields[k])
-    return O.ok("def.updated", def_kind=kind, id=rid, digest=digest, changed=changed)
+    return O.ok("def.updated", def_kind=kind, id=rid, digest=data["digest"], changed=changed)
 
 
-def def_retire(repo: Path, kind: str, rid: str, *, reason: str, agent: str = "") -> O.Outcome:
+def def_retire(
+    repo: Path,
+    kind: str,
+    rid: str,
+    *,
+    reason: str,
+    split_into: list[str] | None = None,
+    agent: str = "",
+) -> O.Outcome:
     """Retire an ACTIVE definition (`def.retired`): kept, with its history, but no longer
-    in force. Needs a reason."""
+    in force. Needs a reason. ``split_into`` names the parts a split replaced it with."""
     if not (reason or "").strip():
         return O.failed(
             "def.retired", "retiring a definition needs a reason", def_kind=kind, id=rid
@@ -213,8 +286,10 @@ def def_retire(repo: Path, kind: str, rid: str, *, reason: str, agent: str = "")
     rec, refusal = _live(st, kind, rid, "def.retired")
     if refusal is not None:
         return refusal
-    data = _envelope(cfg, kind, rid, rec.source, None)
+    data = _envelope(cfg, kind, rid, rec.source, None, log)
     data.update(digest=rec.digest, reason=reason.strip())
+    if split_into:
+        data["split_into"] = list(split_into)
     log.append("def.retired", D.key(kind, rid), data)
     return O.ok("def.retired", def_kind=kind, id=rid)
 
@@ -232,7 +307,7 @@ def _replace(
         _succ, refusal = _live(st, kind, by, event_kind)
     if refusal is not None:
         return refusal
-    data = _envelope(cfg, kind, rid, rec.source, None)
+    data = _envelope(cfg, kind, rid, rec.source, None, log)
     data.update(digest=rec.digest, successor=by)
     if reason.strip():
         data["reason"] = reason.strip()

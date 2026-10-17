@@ -1,10 +1,10 @@
 """One record surface, the generated half: the CLI verbs and the MCP tool of a `RecordKind`.
 
-`api.records` answers seven verbs for any family of records. This module turns a
+`api.records` answers its verbs (seven, then the five of `api.record_lifecycle`) for any family of records. This module turns a
 `RecordKind` into the commands that offer them (D-unify 4, B-uni-record-surface), so a
 family declares its fields once and gets, with nothing hand-written on either surface:
 
-* ``ddflow <name> list|show|add|edit|remove|search|revise`` -- one `Command` per verb
+* ``ddflow <name> list|show|add|edit|remove|search|revise|history|supersede|merge|split|restore`` -- one `Command` per verb
   the kind offers, each carrying only the parameters its verb takes;
 * one MCP tool, ``ddflow_<name>``, with a ``verb`` argument -- the budget for ~8 more
   tools does not exist (`tests/test_mcp_tool_budget.py`), and the per-verb CLI commands
@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..api import _dedupe as DD
+from ..api import record_lifecycle as LC
 from ..api import records as R
 from ..core import outcome as O
 from . import dedupe_flags
@@ -58,6 +60,16 @@ RESERVED = frozenset(
         "duplicate_of",
         "related",
         "check",
+        "diff",
+        "ids",
+        "into",
+        "take",
+        "part",
+        "from_file",
+        "superseded_by",
+        "merged_text",
+        "allow_weaken",
+        "to_version",
         AS_AGENT,
     }
 )
@@ -73,10 +85,24 @@ _TAKES: dict[str, tuple[str, ...]] = {
     "remove": ("id", "reason"),
     "search": ("query", "mode", "where", "all", "limit"),
     "revise": ("id", "reason"),
+    "history": ("id", "diff", "limit"),
+    "supersede": ("id", "superseded_by", "reason"),
+    "merge": ("ids", "into", "reason", "merged_text", "take", "allow_weaken"),
+    "split": ("id", "part", "from_file", "reason"),
+    "restore": ("id", "to_version", "reason"),
 }
 #: Verbs that carry the kind's fields.
 _WITH_FIELDS = frozenset({"add", "edit", "revise"})
-_DONE = {"add": "added", "edit": "edited", "remove": "removed", "revise": "revised"}
+_DONE = {
+    "add": "added",
+    "edit": "edited",
+    "remove": "removed",
+    "revise": "revised",
+    "supersede": "superseded",
+    "merge": "merged into",
+    "split": "split",
+    "restore": "restored",
+}
 _HELP = {
     "list": "List the {n} records, narrowed by --where field=value.",
     "show": "Show one {n} whole, with its history.",
@@ -85,6 +111,11 @@ _HELP = {
     "remove": "Retire a {n}: kept with its history, no longer in force. Needs a reason.",
     "search": "Search the {n} records by their text: ranked, exact or regex.",
     "revise": "Replace a {n} whole, with a reason; a retired one comes back.",
+    "history": "The whole chain of a {n}: who, when, why, session; --diff shows before and after.",
+    "supersede": "Replace a {n} by another; both stay and each names the other.",
+    "merge": "Fold {n}s into one: lists unioned, one unit, sources point at the target.",
+    "split": "Replace a {n} by two or more parts, in one unit; the original is retired.",
+    "restore": "Bring back a retired, superseded or merged {n} as an earlier version.",
 }
 
 
@@ -123,6 +154,39 @@ def _common(name: str, kind: R.RecordKind) -> Param:
         ),
         "reason": Param("reason", help="Why; kept in the history.", required=True),
         "unset": Param("unset", type="array", help="Fields to remove.", repeat=True),
+        "diff": Param("diff", type="boolean", help="Show each field's before and after."),
+        "ids": Param(
+            "ids",
+            type="array",
+            help="Records to merge.",
+            positional=True,
+            nargs="*",
+        ),
+        "into": Param("into", help="Target; it stays.", required=True),
+        "take": Param(
+            "take",
+            type="array",
+            repeat=True,
+            help="Keep field=id's scalar.",
+        ),
+        "merged_text": Param("merged_text", flag="--text", help="Merged text."),
+        "allow_weaken": Param("allow_weaken", type="boolean", help="Allow a weaker target."),
+        "superseded_by": Param(
+            "superseded_by", flag="--by", required=True, help="The replacing record."
+        ),
+        "part": Param(
+            "part",
+            type="array",
+            repeat=True,
+            help="newid:field=value[,..] (a|b: array); repeat.",
+        ),
+        "from_file": Param("from_file", help="TOML file of [[part]] tables."),
+        "to_version": Param(
+            "to_version",
+            type="integer",
+            flag="--to",
+            help="Version number or lamport.",
+        ),
         "relation": Param(
             "relation",
             help="Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | "
@@ -170,7 +234,10 @@ def _tool_params(kind: R.RecordKind) -> tuple[Param, ...]:
     for verb in kind.verbs:
         for name in _TAKES[verb]:
             seen.setdefault(
-                name, dataclasses.replace(_common(name, kind), required=False, positional=False)
+                name,
+                dataclasses.replace(
+                    _common(name, kind), required=False, positional=False, nargs=None
+                ),
             )
     for spec in kind.fields:
         seen.setdefault(spec.name, _field_param(spec, required=False))
@@ -221,6 +288,11 @@ _NEEDS: dict[str, tuple[str, ...]] = {
     "remove": ("id", "reason"),
     "revise": ("id", "reason"),
     "search": ("query",),
+    "history": ("id",),
+    "supersede": ("id", "superseded_by", "reason"),
+    "merge": ("ids", "into", "reason"),
+    "split": ("id", "reason"),
+    "restore": ("id", "reason"),
 }
 
 
@@ -274,7 +346,71 @@ def _call_edit(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: st
     return R.record_edit(repo, kind, str(args["id"]), fields, agent=agent)
 
 
+def _call_history(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return LC.record_history(
+        repo,
+        kind,
+        str(args["id"]),
+        diff=bool(args.get("diff")),
+        limit=args.get("limit"),
+        agent=agent,
+    )
+
+
+def _call_supersede(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return LC.record_supersede(
+        repo,
+        kind,
+        str(args["id"]),
+        by=str(args["superseded_by"]),
+        reason=str(args["reason"]),
+        agent=agent,
+    )
+
+
+def _call_merge(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return LC.record_merge(
+        repo,
+        kind,
+        [str(i) for i in args["ids"]],
+        into=str(args["into"]),
+        reason=str(args["reason"]),
+        text=str(args.get("merged_text") or ""),
+        take=args.get("take"),
+        allow_weaken=bool(args.get("allow_weaken")),
+        agent=agent,
+    )
+
+
+def _call_split(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return LC.record_split(
+        repo,
+        kind,
+        str(args["id"]),
+        parts=args.get("part") or (),
+        from_file=str(args.get("from_file") or ""),
+        reason=str(args["reason"]),
+        agent=agent,
+    )
+
+
+def _call_restore(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return LC.record_restore(
+        repo,
+        kind,
+        str(args["id"]),
+        to=args.get("to_version"),
+        reason=str(args["reason"]),
+        agent=agent,
+    )
+
+
 _CALLS: dict[str, Callable[..., O.Outcome]] = {
+    "history": _call_history,
+    "supersede": _call_supersede,
+    "merge": _call_merge,
+    "split": _call_split,
+    "restore": _call_restore,
     "list": _call_list,
     "search": _call_search,
     "show": _call_show,
@@ -326,6 +462,9 @@ def _human(kind: R.RecordKind, verb: str, out: O.Outcome) -> str:
         return "\n".join(lines)
     if verb == "show":
         head = f"{data.get('id', '')}  [{data.get('status', '')}]"
+        prov = data.get("provenance") or {}
+        seen = [f"{k} {prov[k]}" for k in ("session", "prompt") if prov.get(k)]
+        head += f"  ({', '.join(seen)})" if seen else ""
         body = [f"  {k}: {v}" for k, v in (data.get("fields") or {}).items()]
         hist = [
             f"  {h.get('at', '')}  {h.get('event', '')}  {h.get('by', '')}"
@@ -334,7 +473,38 @@ def _human(kind: R.RecordKind, verb: str, out: O.Outcome) -> str:
         more = data.get("history_total", 0) - len(data.get("history", []))
         tail = [f"  ... {more} earlier entries"] if more > 0 else []
         return "\n".join([head, *body, "history:", *tail, *hist])
+    if verb == "history":
+        return _history_text(data)
+    if verb == "merge":
+        return f"merged {', '.join(data.get('merged', []))} into {kind.name} {data.get('id', '')}"
+    if verb == "split":
+        return f"split {kind.name} {data.get('id', '')} into {', '.join(data.get('parts', []))}"
+    if verb == "restore" and data.get("parts_stay"):
+        return (
+            f"restored {kind.name} {data.get('id', '')}; "
+            f"its parts stay: {', '.join(data['parts_stay'])}"
+        )
     return f"{_DONE[verb]} {kind.name} {data.get('id', '')}"
+
+
+def _history_text(data: Mapping[str, Any]) -> str:
+    """One line per entry (who, when, why, session), then its field changes: values quoted,
+    since they are the record's text and not ours."""
+    lines = [f"{data.get('id', '')}: {data.get('total', 0)} entries"]
+    if data.get("truncated"):
+        lines.append(f"  ... {data['total'] - len(data['entries'])} earlier entries")
+    for h in data.get("entries", []):
+        v = f" v{h['version']}" if "version" in h else ""
+        head = f"  {h['at']}  {h['event']}{v}  {h['by']}"
+        for key in ("session", "reason", "successor", "split_into", "split_from", "restored_from"):
+            if h.get(key):
+                head += f"  {key}={h[key]}"
+        lines.append(head)
+        for name, ch in (h.get("changes") or {}).items():
+            before = json.dumps(ch["before"]) if "before" in ch else "(none)"
+            after = json.dumps(ch["after"]) if "after" in ch else "(removed)"
+            lines.append(f"      {name}: {before} -> {after}")
+    return "\n".join(lines)
 
 
 def _emit(c: Ctx, kind: R.RecordKind, verb: str, out: O.Outcome) -> int:

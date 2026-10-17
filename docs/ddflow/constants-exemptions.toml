@@ -139,6 +139,8 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
+"ddflow/api/record_lifecycle.py:VALUE_MAX" = "the cut of one field value shown in a history diff, a presentation width (the full text stays in the log)"
+"ddflow/api/record_lifecycle.py:MIN_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/config_sections/bugs.py:_MIN_BUNDLE" = "the floor [bugs] repro_max_bytes accepts: below it not even the bundle's skeleton fits"
 "ddflow/services/repro_facts.py:_VALUE_MAX" = "the cut of one recorded value, a structural bound on a single environment or config value in a bundle (the bundle as a whole is capped by repro_max_bytes)"
 "ddflow/services/reprobundle.py:_MIN_LEAF" = "the length under which the bundle's cap stops halving a string and drops it instead"
