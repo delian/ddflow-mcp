@@ -268,3 +268,24 @@ def emit(plan: Plan, event: str, text: str) -> str:
     """The stdout for ``event`` under ``plan``: ``text`` shaped for the agent, or its neutral reply."""
     fn = EMITTERS.get(plan.emitter, _silent)
     return fn(event, text, event in plan.inject, plan.events.get(event, ""))
+
+
+#: The dialects whose PreToolUse hook takes `permissionDecision: deny` as JSON on stdout (exit 0).
+DENY_EMITTERS = frozenset({"claude", "codex"})
+
+
+def emit_deny(plan: Plan, event: str, reason: str) -> str | None:
+    """The stdout that makes the agent refuse the tool call it is about to run, with ``reason``
+    shown to the model; None when this agent's hook dialect has no such reply (ddflow then
+    cannot enforce, and says so on stderr rather than pretend)."""
+    if plan.emitter not in DENY_EMITTERS:
+        return None
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": plan.events.get(event) or "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+    )

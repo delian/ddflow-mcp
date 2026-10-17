@@ -49,6 +49,7 @@ SECTION_NAMES = (
     "plan",
     "merge_queue",
     "chore",
+    "hooks",
 )
 
 SECTION_MODULES = tuple(importlib.import_module(f"{__name__}.{n}") for n in SECTION_NAMES)
