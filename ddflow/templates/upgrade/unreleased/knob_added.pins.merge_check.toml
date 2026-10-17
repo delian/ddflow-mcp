@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "pins.merge_check"
-new = "fast"
+new = "\"fast\""
 why = "`ddflow merge` checks the pin files the post-merge hook may run, reports the stale ones and names the pins the hook never runs; `all` also checks the suite recipes, `off` says nothing."
 impact = "additive"
