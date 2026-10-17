@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from pathlib import Path
 
 from ..infra import git as G
@@ -127,14 +128,15 @@ def commit_shards(
             if built:
                 return "", f"event log not committed: {built}"
             env = {"GIT_INDEX_FILE": str(private)}
-            done = W.git(repo, "commit", "-q", "-m", message, env=env)
+            # the tree is read before the hooks run: a hook that stages something would change it
+            built_tree = W.git(repo, "write-tree", env=env)
+            done = W.git(repo, "commit", "-m", message, env=env)
             if not done.ok:
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            head = W.rev(repo, "HEAD")
-            verdict = _is_ours(repo, head, message, env)
-            if verdict is None:
+            ours = _printed_sha(repo, done.out, built_tree.out.strip()) if built_tree.ok else None
+            if ours is None:
                 skipped = "; ".join(
                     filter(
                         None,
@@ -144,30 +146,37 @@ def commit_shards(
                         ],
                     )
                 )
-            elif verdict:
-                if W.rev(repo, f"{head}^") != base:  # a commit landed just before ours began
+            else:
+                parent = W.rev(repo, f"{ours}^")
+                if parent and parent != base:  # a commit landed just before ours began
                     skipped = "; ".join(
-                        filter(None, [skipped, _rebuild_on(repo, taken, private, head)])
+                        filter(None, [skipped, _rebuild_on(repo, taken, private, ours)])
                     )
-                return W.rev(repo, "HEAD"), skipped
             return W.rev(repo, "HEAD"), skipped
         finally:
             private.unlink(missing_ok=True)
 
 
-def _is_ours(repo: Path, head: str, message: str, env: dict[str, str]) -> bool | None:
-    """Whether ``head`` is the event-log commit this door just made: one parent, the message it
-    was given (whitespace as git folds it, trailers a hook adds allowed) and the tree of the private index. None when git
-    could not say."""
-    ours = W.git(repo, "write-tree", env=env)
-    info = W.git(repo, "log", "-1", "--format=%T%n%P%n%B", head)
-    if not (ours.ok and info.ok):
-        return None
-    tree, _, rest = info.out.partition("\n")
-    parents, _, body = rest.partition("\n")
-    # a commit-msg hook may append trailers: the message it was given still starts the body
-    same = " ".join(body.split()).startswith(" ".join(message.split()))
-    return tree == ours.out.strip() and len(parents.split()) == 1 and same
+#: The summary line `git commit` prints: "[branch sha] subject" (the sha is as long as
+#: core.abbrev says, 4 and up). The subject is whatever a commit-msg hook made of it, so only the
+#: bracket is read.
+_SUMMARY = re.compile(r"^\[[^\]]*?([0-9a-f]{4,64})\]", re.MULTILINE)
+
+
+def _printed_sha(repo: Path, printed: str, tree: str) -> str | None:
+    """The full sha of the commit ``git commit`` says it made, read from what it printed, never
+    from HEAD or from a message: HEAD may have moved since, and a hook may have rewritten the
+    message. Hooks print too (a post-commit hook after the summary), so a candidate counts only
+    when it is a one-parent commit holding ``tree``, the tree this door built; the last such one
+    wins. None when none is."""
+    for short in reversed(_SUMMARY.findall(printed)):
+        info = W.git(repo, "log", "-1", "--format=%H%n%T%n%P", f"{short}^{{commit}}", "--")
+        if not info.ok:
+            continue
+        sha, found_tree, parents = [*info.out.split("\n"), "", "", ""][:3]
+        if found_tree.strip() == tree and len(parents.split()) == 1:
+            return sha.strip()
+    return None
 
 
 def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
