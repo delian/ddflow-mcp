@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 from ..core import outcome as O
-from ..core.autoorder import DECIDE_TAGS
+from ..core.autoorder import is_decide
 from ..core.globs import inside
 from ..infra import worktree as W
 from ..services import chore as CO
@@ -83,7 +83,7 @@ def decide(
     it = st.items.get(item)
     if it is None or it.removed:
         return O.failed(KIND, f"no such item {item!r}", item=item)
-    if not DECIDE_TAGS & set(it.tags):
+    if not is_decide(it.tags):
         return O.refused(
             KIND,
             f"{item} is not a decide task (tag it `decide`): other work takes the normal pipeline",
@@ -109,13 +109,6 @@ def decide(
             f'"{",".join([*it.globs, rel])}"` first, or pass --path',
             item=item,
         )
-    wt = W.Worktree(item=item, path=W.load_path(repo, it.worktree), branch=it.branch, base=it.base)
-    target = wt.path / rel
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render(item, d), encoding="utf-8")
-    made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
-    if not made.ok and "nothing to commit" not in (made.out + made.err):
-        return O.failed(KIND, (made.err or made.out).strip(), item=item)
     approved = CO.standing(st, cfg)
     if not approved.ok:
         return O.refused(
@@ -124,6 +117,13 @@ def decide(
             f"([chore].globs); a person runs `ddflow chore approve`",
             item=item,
         )
+    wt = W.Worktree(item=item, path=W.load_path(repo, it.worktree), branch=it.branch, base=it.base)
+    target = wt.path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render(item, d), encoding="utf-8")
+    made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
+    if not made.ok and "nothing to commit" not in (made.out + made.err):
+        return O.failed(KIND, (made.err or made.out).strip(), item=item)
     note = (
         f"chore: decide {decision_id}; {rel} restates the record; standing approval "
         f"{CO.SUBJECT}@{CO.approval_digest(cfg)[:12]}"

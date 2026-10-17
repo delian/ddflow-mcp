@@ -96,3 +96,20 @@ def test_decide_refuses_a_task_that_is_not_a_decide_task(proj):
     _queue(proj, "docs")
     code, _out, err = run_cli(proj, "decide", "X-decide", "--decision-id", "D-none")
     assert code == 3 and "not a decide task" in err
+
+
+def test_decide_tag_is_matched_ignoring_case_and_padding(proj):
+    _queue(proj, "Decide")
+    st = _state(proj)
+    assert inherited_deps(st, st.items["X-decide"]) == []
+
+
+def test_an_unapproved_chore_list_commits_nothing(proj):
+    _queue(proj, "decide")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, _out, err = run_cli(proj, "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 3 and "chore approve" in err
+    wt = Path(_state(proj).items["X-decide"].worktree)
+    wt = wt if wt.is_absolute() else (proj / wt).resolve()
+    assert not (wt / "docs/ddflow/decisions/x.md").exists()
