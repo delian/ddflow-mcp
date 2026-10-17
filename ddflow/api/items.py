@@ -545,6 +545,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     line: str = "",
     lines: str = "",
     port_of: str = "",
+    resources: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -578,6 +579,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         body=body,
         tags=csv_list(tags),
         priority=priority,
+        resources=csv_list(resources) or None,
     )
     bad = IT.problem_of(base)
     if bad:
