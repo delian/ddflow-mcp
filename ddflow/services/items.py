@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ..core import globspec as GS
+from ..core import schedule as SCH
 from ..core.model import WORK_KINDS, Item
 from . import leases as L
 
@@ -127,7 +128,12 @@ class Added:
 
 def problem_of(draft: TaskDraft) -> str:
     """Why the draft's id, globs or kind cannot be recorded, or "" (needs no state)."""
-    return bad_id(draft.id) or GS.problem(draft.globs or []) or _bad_kind(draft.kind)
+    return (
+        bad_id(draft.id)
+        or GS.problem(draft.globs or [])
+        or SCH.problem(draft.resources or [])
+        or _bad_kind(draft.kind)
+    )
 
 
 def _bad_kind(kind: str | None) -> str:

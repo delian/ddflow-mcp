@@ -29,6 +29,7 @@ import ddflow
 from ddflow.infra import hostinfo
 from ddflow.surfaces.cli import main
 from tests.pin_norm import rerecord, stable
+from tests.sandbox import assert_sandboxed, scrub_git_env
 
 SCRIPT: tuple[tuple[str, ...], ...] = (
 # setup of the sandbox
@@ -138,6 +139,7 @@ def _pin_the_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
+    scrub_git_env(monkeypatch)  # before any git command: a stray GIT_DIR must not redirect them
     repo = tmp_path / "proj"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
@@ -146,6 +148,7 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
     (repo / "README.md").write_text("# p\n")
     subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
+    assert_sandboxed(repo, tmp_path)
     monkeypatch.chdir(repo)
     for key in [k for k in __import__("os").environ if k.startswith("DDFLOW_")]:
         monkeypatch.delenv(key)
@@ -164,6 +167,7 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
+                assert_sandboxed(repo, tmp_path)
                 code = main(["--repo", str(repo), "--agent", "tx", *argv])
             except SystemExit as exc:
                 code = exc.code if isinstance(exc.code, int) else 1

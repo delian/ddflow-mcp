@@ -1,0 +1,2 @@
+{"agent":"fleet-recover","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"e08100e50be2011fd76273577","kind":"ddflow.seen","lamport":76054,"schema":1,"subject":"ddflow","ts":"2026-10-17T17:06:18.032082Z"}
+{"agent":"fleet-recover","data":{"by":"fleet-recover","event":"e91746ec5b6b9a2f0b0149fc5","holder":"fleet-failedgate","note":"salvaged"},"id":"e50ac800d59fbb618324e8ec2","kind":"lease.released","lamport":76055,"schema":1,"subject":"fix-B09da3e0b13","ts":"2026-10-17T17:06:18.064654Z"}
