@@ -94,7 +94,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
                     gates=known,
                 )
                 swept.append(f"{m.item}.{m.gate}")
-        RUN.clear(m)
+        RUN.clear_started(m)
     return swept
 
 
@@ -566,7 +566,7 @@ def run(
     started_on = G.tree_identity(cwd)
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
-    marker = RUN.mark(repo, item, gate)
+    marker = RUN.mark_started(repo, item, gate)
     try:
         with RUN.terminating():
             done = _execute(
@@ -602,7 +602,7 @@ def run(
         )
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     finally:
-        RUN.clear(marker)
+        RUN.clear_started(marker)
     if isinstance(done, O.Outcome):
         return done
     result, ev, reason = done
