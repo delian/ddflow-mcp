@@ -14,7 +14,7 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,10 +24,12 @@ from ..core import ids as IDS
 from ..core.digest import content_digest
 from ..core.slug import ascii_slug
 from ..infra import worktree as W
+from . import ci_conflict as CC
 from . import ci_scope as CS
 from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
+from .pins import pin_files
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
@@ -221,7 +223,9 @@ def tool_missing(command: str) -> str:
 
 
 @contextmanager
-def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, str]]:
+def merge_tree(
+    repo: Path, ref: str, base: str, pins: Callable[[], Iterable[str]] | None = None
+) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
     The "why" is a ``Failure`` (a str) whose ``kind`` is "ok", "conflict" or "cannot-merge".
@@ -277,7 +281,11 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
             if not m.ok:
                 yield (
                     None,
-                    Failure(f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}", CONFLICT),
+                    Failure(
+                        f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
+                        + CC.cause(tree, base, pins),
+                        CONFLICT,
+                    ),
                 )
                 return
         yield tree, Failure("", "ok")
@@ -356,7 +364,7 @@ def run(
     base, refused = _merge_base(repo, cfg, base, cmd, sha)
     if refused is not None:
         return refused
-    with merge_tree(repo, sha, base) as (tree, failure):
+    with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
         if tree is None:
             status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
