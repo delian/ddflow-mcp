@@ -112,3 +112,13 @@ def test_any_failure_loading_the_recipes_is_said_not_raised(repo, monkeypatch):
 
     monkeypatch.setattr(PM, "load_recipes", boom)
     assert PM.merge_report(repo, Config.load(repo)) == {"unknown": ["pins.toml: permission denied"]}
+
+
+def test_a_check_that_cannot_start_is_unknown_not_stale(repo):
+    """roborev on this fix: a recipe tool that is not installed is not a drifted pin."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "missing-tool"\nfiles = ["g.json"]\n'
+        'check = ["no-such-tool-for-pins-xyz"]\nregen = ["{python}", "-c", "pass"]\n'
+    )
+    assert PM.merge_report(repo, Config.load(repo)) == {"unknown": ["missing-tool"]}
