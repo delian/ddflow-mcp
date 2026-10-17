@@ -224,7 +224,7 @@ class ScheduleConfig:
     )
     bug_priority: int = knob(
         10,
-        doc="The priority a task gets when filed with none and it is a bug fix: tagged one of `[flow] bugfix_tags` or `hotfix_tags` (default 10, lower is offered first). The fix task `bug found` files takes the item's own priority when it set one, else this. An explicit `--priority` is never changed; `plan check` warns about one filed at the generic 100.",
+        doc="The priority a task gets when filed with none and it is a bug fix: tagged one of `[flow] bugfix_tags` or `hotfix_tags` (default 10, lower is offered first). The fix task `bug found` files takes the item's priority when it is not the generic 100, else this. An explicit `--priority` is never changed; `plan check` warns about one filed at the generic 100.",
         check=int_at_least(0),
     )
     dx_tags: list[str] = knob(
