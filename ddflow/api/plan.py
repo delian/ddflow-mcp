@@ -126,6 +126,11 @@ def _report(repo: Path, plan: dict[str, Any], queue) -> tuple[PC.Report, Config]
     return PC.check(plan, tracked=tracked, similar=similar, known=PA.live_ids(st)), cfg
 
 
+def _count(report: PC.Report, source: str) -> str:
+    kinds = ", ".join(sorted({f.kind for f in report.findings}))
+    return f"{len(report.findings)} finding(s) in {source}: {kinds}"
+
+
 def plan_check(repo: Path, source: str) -> O.Outcome:
     """Check the plan at ``source`` ("-" for stdin) and report what to fix before filing."""
     plan, bad = _read(source)
@@ -148,16 +153,12 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
     data: dict[str, Any] = {
         "source": source,
         "clean": report.clean,
-        "findings": [f.as_dict() for f in report.findings],
-        "waves": dict(sorted(report.waves.items(), key=lambda kv: (kv[1], kv[0]))),
+        **report.as_dict(),
         "items": len(plan),
         "warnings": warnings,
     }
     if report.findings:
-        kinds = ", ".join(sorted({f.kind for f in report.findings}))
-        return O.failed(
-            "plan.check", f"{len(report.findings)} finding(s) in {source}: {kinds}", **data
-        )
+        return O.failed("plan.check", _count(report, source), **data)
     return O.ok("plan.check", **data)
 
 
@@ -250,7 +251,7 @@ def plan_apply(
     if no is not None:
         return no
     live = set(PA.live_ids(st))
-    waves = dict(sorted(report.waves.items(), key=lambda kv: (kv[1], kv[0])))
+    waves = report.as_dict()["waves"]
     if not apply:
         return O.ok(
             "plan.apply",
@@ -273,11 +274,9 @@ def plan_apply(
 def _refusal(source, plan, pid, st, report, base) -> O.Outcome | None:
     """Why the plan cannot be filed into ``st`` (nothing is written), or None."""
     if report.findings:
-        kinds = ", ".join(sorted({f.kind for f in report.findings}))
         return O.failed(
             "plan.apply",
-            f"{len(report.findings)} finding(s) in {source}: {kinds}; fix the plan "
-            f"(`ddflow plan check {source}`)",
+            f"{_count(report, source)}; fix the plan (`ddflow plan check {source}`)",
             findings=[f.as_dict() for f in report.findings],
             **base,
         )
