@@ -323,7 +323,7 @@ def test_when_git_cannot_say_whether_head_is_ours_the_note_says_so(repo, monkeyp
     real = eventcommit.W.git
 
     def cannot_log(root, *args, **kw):
-        if args and args[0] == "log" and "--format=%P" in args:
+        if args and args[0] == "log" and "--format=%H%n%T%n%P" in args:
             return eventcommit.G.GitResult(1, "", "boom")
         return real(root, *args, **kw)
 
@@ -387,3 +387,18 @@ def test_a_commit_msg_hook_that_rewrites_the_subject_still_leaves_our_commit_kno
     sha, note = eventcommit.commit_shards(repo, "mine")
     assert sha and "made again" in note, (sha, note)
     assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was undone"
+    assert _git(repo, "log", "-1", "--format=%s").startswith("JIRA-1: events:"), "hook did not run"
+
+
+def test_a_post_commit_hook_printing_a_bracketed_hex_is_not_taken_for_our_commit(repo):
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    hook = repo / ".git" / "hooks" / "post-commit"
+    hook.write_text('#!/bin/sh\necho "[$(git rev-parse --short HEAD~1)] previous"\n')
+    hook.chmod(0o755)
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    with shard.open("a") as f:
+        f.write(shard.read_text().splitlines()[-1] + "\n")
+    sha, note = eventcommit.commit_shards(repo, "mine")
+    assert sha and "made again" not in note and "could not check" not in note, (sha, note)

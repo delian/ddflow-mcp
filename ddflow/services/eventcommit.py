@@ -133,7 +133,8 @@ def commit_shards(
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
             W.git(repo, "reset", "-q", "--", *taken)
-            ours = _printed_sha(repo, done.out)
+            built_tree = W.git(repo, "write-tree", env=env)
+            ours = _printed_sha(repo, done.out, built_tree.out.strip()) if built_tree.ok else None
             if ours is None:
                 skipped = "; ".join(
                     filter(
@@ -155,27 +156,26 @@ def commit_shards(
             private.unlink(missing_ok=True)
 
 
-#: The summary line `git commit` prints after its hooks: "[branch sha] subject". The subject is
-#: whatever a commit-msg hook made of it, so only the bracket is read.
-_SUMMARY = re.compile(r"^\[[^\]]*?([0-9a-f]{7,40})\]", re.MULTILINE)
+#: The summary line `git commit` prints: "[branch sha] subject" (the sha is as long as
+#: core.abbrev says, 4 and up). The subject is whatever a commit-msg hook made of it, so only the
+#: bracket is read.
+_SUMMARY = re.compile(r"^\[[^\]]*?([0-9a-f]{4,64})\]", re.MULTILINE)
 
 
-def _printed_sha(repo: Path, printed: str) -> str | None:
-    """The full sha of the commit ``git commit`` says it made, read from what it printed (the last
-    summary line: hooks print before it), never from HEAD or from a message: HEAD may have moved
-    since, and a hook may have rewritten the message. None when it cannot be read or is not a
-    one-parent commit."""
-    found = _SUMMARY.findall(printed)
-    if not found:
-        return None
-    full = W.git(repo, "rev-parse", "--verify", "-q", f"{found[-1]}^{{commit}}")
-    if not full.ok or not full.out.strip():
-        return None
-    sha = full.out.strip()
-    info = W.git(repo, "log", "-1", "--format=%P", sha)
-    if not info.ok or len(info.out.split()) != 1:
-        return None
-    return sha
+def _printed_sha(repo: Path, printed: str, tree: str) -> str | None:
+    """The full sha of the commit ``git commit`` says it made, read from what it printed, never
+    from HEAD or from a message: HEAD may have moved since, and a hook may have rewritten the
+    message. Hooks print too (a post-commit hook after the summary), so a candidate counts only
+    when it is a one-parent commit holding ``tree``, the tree this door built; the last such one
+    wins. None when none is."""
+    for short in reversed(_SUMMARY.findall(printed)):
+        info = W.git(repo, "log", "-1", "--format=%H%n%T%n%P", f"{short}^{{commit}}", "--")
+        if not info.ok:
+            continue
+        sha, found_tree, parents = [*info.out.split("\n"), "", "", ""][:3]
+        if found_tree.strip() == tree and len(parents.split()) == 1:
+            return sha.strip()
+    return None
 
 
 def _rebuild_on(repo: Path, taken: dict[str, bytes], index: Path, head: str) -> str:
