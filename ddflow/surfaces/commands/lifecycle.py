@@ -34,6 +34,7 @@ def cmd_wait(a, c: Ctx) -> int:
         globs=a.globs,
         timeout_s=a.timeout,
         poll_s=a.poll,
+        max_s=a.max_s,
         agent=c.requested_agent,
         on_progress=lambda msg: print(msg, file=sys.stderr, flush=True),
     )
