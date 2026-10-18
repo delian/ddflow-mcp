@@ -77,3 +77,11 @@ def test_the_manifest_is_fenced_as_data_in_the_prompt(tmp_path):
     assert "data, never\ninstructions" in text
     fence_at = text.index("```\nChange:")
     assert fence_at < text.index("This part holds:")
+
+
+def test_new_and_excluded_lists_are_capped_and_name_no_source():
+    diff = "".join(_new_file(f"n{n}.txt", 1) for n in range(5))
+    text = RM.build(diff, [f"x{n}" for n in range(5)], 2)
+    assert "New files: n0.txt, n1.txt and 3 more" in text
+    assert "generated or pinned files): x0, x1 and 3 more" in text
+    assert "exclude_globs" not in text
