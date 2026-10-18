@@ -63,10 +63,11 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
     installed event, generated from the descriptor."""
     if unsupported(h):  # the descriptor is authoritative, the table included
         return ()
-    if table := tuple(s for s in CH.HOOKS if s.agent == h.id):
-        return table
     hk = h.hooks
     assert hk is not None
+    # The table's rows only while they agree with the descriptor on where they live.
+    if table := tuple(s for s in CH.HOOKS if s.agent == h.id and s.file == hk.file):
+        return table
     return tuple(
         CH.HookSpec(
             h.id,

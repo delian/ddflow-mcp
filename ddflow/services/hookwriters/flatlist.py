@@ -60,7 +60,9 @@ def install(repo: Path, h: CH.HookSpec, style: str) -> str:
             CH._write(path, data)
             return f"updated the ddflow {h.event} hook in {path}"
     data.setdefault("version", 1)
-    hooks = data.setdefault("hooks", {})
+    if data.get("hooks") is None:  # absent or null: both mean no hooks yet
+        data["hooks"] = {}
+    hooks = data["hooks"]
     hooks.setdefault(h.event, []).append({**const, key: region.render(command)})
     CH._write(path, data)
     return f"added a {h.event} hook to {path}: {h.purpose}"
