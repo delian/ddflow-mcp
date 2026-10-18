@@ -113,9 +113,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
-    if it.kind == "phase" and cfg.schedule.phase_full_suite != "off":
-        if why := _phase_suite(repo, cfg, log, st, item, agent):
-            v.blockers.append(why)
+    if why := _phase_suite(repo, cfg, log, st, it, agent):
+        v.blockers.append(why)
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
@@ -228,9 +227,12 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
-def _phase_suite(repo: Path, cfg, log, st: State, phase: str, agent: str) -> str:
-    """"" when the full suite has passed on the phase's merged tree (D-gate-economy-r3),
+def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
+    """ "" when the full suite has passed on the phase's merged tree (D-gate-economy-r3),
     else the blocker. [schedule].phase_full_suite = run runs `ci run --full` first."""
+    phase = it.id
+    if it.kind != "phase" or cfg.schedule.phase_full_suite == "off":
+        return ""
     why = PS.missing(log.read_all(), st, phase)
     if not why or cfg.schedule.phase_full_suite != "run":
         return why

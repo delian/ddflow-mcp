@@ -15,7 +15,9 @@ CADENCE = "integration_tests"
 def last_merge_ts(events: list, st: State, phase: str) -> str:
     """The newest `worktree.merged` timestamp among the tasks under ``phase`` ("" if none)."""
     below = st.descendants(phase)
-    return max((e.ts for e in events if e.kind == "worktree.merged" and e.subject in below), default="")
+    return max(
+        (e.ts for e in events if e.kind == "worktree.merged" and e.subject in below), default=""
+    )
 
 
 def last_pass_ts(st: State) -> str:
@@ -23,7 +25,7 @@ def last_pass_ts(st: State) -> str:
 
 
 def missing(events: list, st: State, phase: str) -> str:
-    """"" when a full-suite pass newer than the phase's last merge exists, else why not."""
+    """ "" when a full-suite pass newer than the phase's last merge exists, else why not."""
     merged, passed = last_merge_ts(events, st, phase), last_pass_ts(st)
     if not merged or passed > merged:  # nothing merged under it: no tree to test
         return ""

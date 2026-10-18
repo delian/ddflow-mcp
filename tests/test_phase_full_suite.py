@@ -66,7 +66,10 @@ def test_a_pass_stamped_with_the_merge_instant_is_not_newer():
 
     from ddflow.services import phase_suite as PS
 
-    st = NS(descendants=lambda _p: {"T"}, cadences={"integration_tests": [{"at": "2026-01-01T00:00:00.5Z"}]})
+    st = NS(
+        descendants=lambda _p: {"T"},
+        cadences={"integration_tests": [{"at": "2026-01-01T00:00:00.5Z"}]},
+    )
     merged = [NS(kind="worktree.merged", subject="T", ts="2026-01-01T00:00:00.5Z")]
     assert "has not passed" in PS.missing(merged, st, "P")
     st.cadences["integration_tests"][0]["at"] = "2026-01-01T00:00:00.6Z"
