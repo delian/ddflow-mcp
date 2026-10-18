@@ -35,11 +35,14 @@ def _data(arg: str, ctx: Context) -> dict[str, Any]:
     run = CommandRunner(max_output=ctx.max_bytes).run(
         Declared(line, f"doc command {arg}"), cwd=ctx.repo, timeout_s=ctx.command_timeout_s
     )
+    redact = ctx.redactor or (lambda t: t)
     if not run.ran:
-        raise SourceUnavailable(f"command {arg!r} did not run: {run.reason}")
+        raise SourceUnavailable(f"command {arg!r} did not run: {redact(str(run.reason))}")
     if run.code != 0:
-        raise SourceUnavailable(f"command {arg!r} exited {run.code}: {run.err.strip()[:200]}")
-    text = ctx.redactor(run.out) if ctx.redactor else run.out
+        raise SourceUnavailable(
+            f"command {arg!r} exited {run.code}: {redact(run.err.strip())[:200]}"
+        )
+    text = redact(run.out)
     return {"text": text, "command": arg}
 
 

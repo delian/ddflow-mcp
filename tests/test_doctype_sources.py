@@ -318,3 +318,33 @@ def test_the_log_is_needed_for_log_sources():
 
 def test_filters_object_default():
     assert S.Context().filters == Filters()
+
+
+def test_cmd_failure_message_is_redacted(tmp_path):
+    script = tmp_path / "fail.sh"
+    script.write_text("#!/bin/sh\necho secret-token >&2\nexit 3\n")
+    script.chmod(0o755)
+    ctx = S.Context(
+        repo=tmp_path,
+        commands={"f": str(script)},
+        redactor=lambda t: t.replace("secret-token", "XXX"),
+    )
+    with pytest.raises(ExportError) as e:
+        S.render_type(_dt("cmd:f"), ctx)
+    assert "XXX" in str(e.value) and "secret-token" not in str(e.value)
+
+
+def test_read_capped_stays_in_the_repo(tmp_path):
+    (tmp_path / "ok.txt").write_text("fine")
+    assert S.read_capped(S.Context(repo=tmp_path), "ok.txt") == "fine"
+    with pytest.raises(S.SourceUnavailable):
+        S.read_capped(S.Context(), "ok.txt")
+    with pytest.raises(S.SourceError):
+        S.read_capped(S.Context(repo=tmp_path), "../outside.txt")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "s.txt").write_text("x")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "link.txt").symlink_to(tmp_path / "out" / "s.txt")
+    with pytest.raises(S.SourceError):
+        S.read_capped(S.Context(repo=repo), "link.txt")
