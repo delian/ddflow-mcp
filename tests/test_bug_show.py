@@ -43,3 +43,10 @@ def test_bug_show_refuses_what_is_not_a_bug(repo):
 def test_bug_help_lists_show(repo):
     code, out, _ = run_cli(repo, "bug", "--help")
     assert code == 0 and re.search(r"^\s+show\s", out, re.M)
+
+
+def test_a_task_whose_text_mentions_a_bug_is_still_not_a_bug(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "the bug in f returns 1")
+    code, _, err = run_cli(repo, "bug", "show", "fix-B2")
+    assert code != 0 and "not a bug" in err
