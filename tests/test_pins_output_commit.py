@@ -125,3 +125,15 @@ def test_the_attributes_line_a_regeneration_adds_commits_without_a_lease(repo: P
     git(repo, "add", ".gitattributes")
     verdict = _verdict(repo)
     assert verdict.exit == OK, verdict.message
+
+
+def test_a_later_edit_of_the_attributes_still_needs_a_lease(repo: Path) -> None:
+    (repo / ".gitattributes").write_text("README.md merge=pinsregen\n")
+    git(repo, "add", ".gitattributes")
+    git(repo, "commit", "-qm", "attrs")
+    assert ddflow_cli(repo, "pins", "regenerate").returncode == 0
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("*.json -diff\n")
+    git(repo, "add", ".gitattributes")
+    verdict = _verdict(repo)
+    assert verdict.exit == FAIL and ".gitattributes" in verdict.message
