@@ -548,6 +548,18 @@ def hook_items(repo: Path) -> list[dict[str, Any]]:
                     "fix": "ddflow hooks status",
                 }
             )
+        elif on and CH.stale(repo, h):
+            out.append(
+                {
+                    "category": "hooks",
+                    "id": f"hooks:stale:{h.agent}:{h.name}",
+                    "summary": f"{h.agent} {h.event} hook runs an old command line; "
+                    f"`hooks {h.run or h.name}` is the one every agent shares",
+                    "paths": [h.file],
+                    "action": AGENT,
+                    "fix": f"ddflow hooks install {h.flag}",
+                }
+            )
         elif on is False:
             out.append(
                 {

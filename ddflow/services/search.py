@@ -275,7 +275,7 @@ def _agent_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     out = _def_docs(c.st, "agent", "agent")
     have = {d.id for d in out}
     if c.repo is not None:
-        for p in sorted((c.repo / ".claude" / "agents").glob("*.md")):
+        for p in SK.subagent_files(c.repo):
             try:
                 body = p.read_text("utf-8", errors="replace")
             except OSError:
