@@ -1769,6 +1769,31 @@
   
   '''
 # ---
+# name: test_help[ddflow record]
+  '''
+  usage: ddflow record [-h] [--set SET] [--query QUERY] [--reason REASON] [--unset UNSET] [--mode MODE] [--where WHERE] [--all] [--limit LIMIT] [--relation RELATION] [--check-only] kind {list,show,add,edit,remove,search,revise,history} [id]
+  
+  positional arguments:
+    kind                  The record kind.
+    {list,show,add,edit,remove,search,revise,history}
+                          One of list, show, add, edit, remove, search, revise, history.
+    id                    The record's id.
+  
+  options:
+    -h, --help            show this help message and exit
+    --set SET             field=value; repeat.
+    --query QUERY         search: what to look for.
+    --reason REASON       remove, revise: why; kept in the history.
+    --unset UNSET         Fields to remove (edit).
+    --mode MODE           search: ranked | exact | regex.
+    --where WHERE         list, search: field=value.
+    --all                 Include retired records.
+    --limit LIMIT         Rows shown (0 = the most).
+    --relation RELATION   add: new | extends:ID | duplicate_of:ID | related:ID.
+    --check-only          add: dry run, return the candidates.
+  
+  '''
+# ---
 # name: test_help[ddflow recover]
   '''
   usage: ddflow recover [-h] [--item ITEM] [--apply]
@@ -2687,13 +2712,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2740,6 +2765,8 @@
       onboard             run an onboarding stage: one report, propose by default
                           (status|preflight|legacy|memory|test-gate|verify)
       status              one answer to 'what is the state of this project?'
+      record              records of a data-declared kind: `record <kind> <verb> [id] [--set
+                          field=value]`
       replay              reconstruct the decision history from the log
       recover             find crashed agents' work (exit 2 = nothing)
       progress            work actually done, aggregated from the log
@@ -2929,6 +2956,7 @@
     'ddflow queue',
     'ddflow rebuild',
     'ddflow recall',
+    'ddflow record',
     'ddflow recover',
     'ddflow release',
     'ddflow remove',

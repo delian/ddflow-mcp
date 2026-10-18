@@ -26,25 +26,30 @@ from typing import Any
 
 from . import digest as _digest
 from .events import canonical_digest
+from .registry import Registry
 
 #: The definition kinds, and what each is. A family starts writing its definitions here
 #: by name; a kind not listed is refused at the write path (`api.defs`), so a typo cannot
 #: start a family of its own.
-DEF_KINDS: dict[str, str] = {
-    "doctype": "a document type: what a generated or checked document is made of",
-    "schedule": "a scheduled job: what runs, how often, on what",
-    "trigger": "a trigger: the condition that files remediation work",
-    "skill": "an agent skill: instructions an agent loads on demand",
-    "agent": "a subagent definition: a role, its prompt and its tools",
-    "claim": "a research claim: a falsifiable statement and its probe",
-    "rule": "a project rule: a constraint agents are held to",
-}
+DEF_KINDS: Registry[str] = Registry("definition kind", order="registered")
+for _name, _what in (
+    ("doctype", "a document type: what a generated or checked document is made of"),
+    ("schedule", "a scheduled job: what runs, how often, on what"),
+    ("trigger", "a trigger: the condition that files remediation work"),
+    ("skill", "an agent skill: instructions an agent loads on demand"),
+    ("agent", "a subagent definition: a role, its prompt and its tools"),
+    ("claim", "a research claim: a falsifiable statement and its probe"),
+    ("rule", "a project rule: a constraint agents are held to"),
+):
+    DEF_KINDS.register(_what, _name)
+del _name, _what
 
 
-def register_kind(name: str, summary: str) -> None:
+def add_kind(name: str, summary: str) -> None:
     """Add a definition kind a data-declared record kind (`core.kinddata`) files under. A name
     already there is left as it is, so a built-in cannot be redefined by a descriptor."""
-    DEF_KINDS.setdefault(name, summary)
+    if name not in DEF_KINDS:
+        DEF_KINDS.register(summary, name)
 
 
 ACTIVE = "active"

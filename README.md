@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=b9c80cd743d2 -->
-<details><summary>All 81 commands</summary>
+<!-- ddflow:begin README/commands sha=7bfae216946d -->
+<details><summary>All 82 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -589,6 +589,7 @@ needs a line written by hand here.
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |
 | `ddflow session` | see `ddflow session --help` |
+| `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
 | `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
 | `ddflow progress` | work actually done, aggregated from the log |
@@ -5516,8 +5517,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=4c7baecf972e -->
-<details><summary>All 118 MCP tools: 32 in the `core` tier, 48 more in `standard`, 38 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=a2ba0ab4ddbc -->
+<details><summary>All 119 MCP tools: 32 in the `core` tier, 48 more in `standard`, 39 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5610,6 +5611,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_memory_forget` | all | Stop believing a memory that is no longer true. |
 | What the project remembers | `ddflow_memory_list` | standard | The project's operational memories, newest first -- or ranked against `query`. |
 | What the project remembers | `ddflow_recall` | core | 'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons… |
+| What the project remembers | `ddflow_record` | all | Records of a data kind (risk, vendor ...). |
 | What the project remembers | `ddflow_research_add` | standard | Record a research finding. |
 | What the project remembers | `ddflow_session_end` | core | Close a session with a summary of what it achieved. |
 | What the project remembers | `ddflow_session_note` | core | Record something that happened during a session which is neither an operator prompt nor a decision — a… |
