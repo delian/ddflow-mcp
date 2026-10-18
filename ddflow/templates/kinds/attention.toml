@@ -1,0 +1,34 @@
+# An attention item: something that needs a human, until it is handled.
+name = "attention"
+summary = "an attention item: something that needs a human until it is handled"
+text = ["detail", "tags"]
+columns = ["title", "state", "urgency"]
+filters = ["state", "urgency", "tags"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "waiting"
+[lifecycle.transitions]
+waiting = ["seen", "handled", "dismissed"]
+seen = ["handled", "dismissed"]
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "detail"
+default = ""
+[[field]]
+name = "state"
+choices = ["waiting", "seen", "handled", "dismissed"]
+[[field]]
+name = "urgency"
+choices = ["low", "normal", "high"]
+default = "normal"
+[[field]]
+name = "about"
+default = ""
+help = "The item, record or file it concerns."
+[[field]]
+name = "tags"
+type = "array"
+default = []

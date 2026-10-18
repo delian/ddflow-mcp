@@ -293,10 +293,10 @@ def forget(name: str) -> None:
     PA.forget(name)
 
 
-from .record_kind_data import load_packaged  # noqa: E402  (needs RecordKind above)
+from .record_kind_data import load_all  # noqa: E402  (needs RecordKind above)
 
-#: The rule kind is data: ``ddflow/templates/kinds/rule.toml``.
-RULE = load_packaged("rule", sys.modules[__name__])
+#: The shipped kinds are data: ``ddflow/templates/kinds/*.toml`` (the rule kind first).
+RULE = load_all(sys.modules[__name__])[0]
 
 
 # -- shared helpers ------------------------------------------------------------------

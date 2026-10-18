@@ -1,0 +1,37 @@
+# A proposal: a change someone suggests, decided later. Never removed: reject and expire
+# are its tombstones. The types (rule, decision, task, kind, gate) are rows of the type field.
+name = "proposal"
+summary = "a proposal: a suggested change of one type, decided later (accepted, rejected or expired)"
+text = ["body", "tags"]
+columns = ["title", "type", "state"]
+filters = ["type", "state", "tags"]
+verbs = ["list", "show", "add", "edit", "search", "revise"]
+stamp = 1
+[declined]
+remove = "a proposal is never removed: reject or expire it"
+[lifecycle]
+field = "state"
+initial = "open"
+[lifecycle.transitions]
+open = ["accepted", "rejected", "expired"]
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "type"
+choices = ["rule", "decision", "task", "kind", "gate", "other"]
+default = "other"
+[[field]]
+name = "state"
+choices = ["open", "accepted", "rejected", "expired"]
+[[field]]
+name = "body"
+default = ""
+[[field]]
+name = "target"
+default = ""
+help = "The record or item it would change."
+[[field]]
+name = "tags"
+type = "array"
+default = []

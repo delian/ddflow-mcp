@@ -1,0 +1,49 @@
+# A requirement: something the product must do or be, with where it came from.
+name = "requirement"
+summary = "a requirement: what the product must do or be, and where it came from"
+text = ["statement", "rationale", "tags"]
+columns = ["title", "state", "priority", "tags"]
+filters = ["state", "priority", "tags"]
+sources = ["source"]
+render = "{id} [{state}/{priority}] {title}: {statement}"
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "proposed"
+[lifecycle.transitions]
+proposed = ["approved", "rejected"]
+approved = ["implemented", "dropped"]
+implemented = ["verified", "dropped"]
+[[link]]
+field = "stakeholders"
+to = "stakeholder"
+many = true
+[[field]]
+name = "title"
+required = true
+help = "One line naming the requirement."
+[[field]]
+name = "statement"
+default = ""
+help = "What must hold, testable."
+[[field]]
+name = "rationale"
+default = ""
+[[field]]
+name = "state"
+choices = ["proposed", "approved", "implemented", "verified", "rejected", "dropped"]
+[[field]]
+name = "priority"
+choices = ["must", "should", "could"]
+default = "should"
+[[field]]
+name = "source"
+help = "Where it came from: a person, a document, a URL."
+[[field]]
+name = "stakeholders"
+type = "array"
+default = []
+[[field]]
+name = "tags"
+type = "array"
+default = []
