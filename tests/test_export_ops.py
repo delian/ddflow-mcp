@@ -128,7 +128,7 @@ def test_print_any_kind_without_selection_and_writes_nothing(proj):
 
 def test_print_is_capped_with_an_explicit_truncation_field(proj):
     for i in range(30):
-        run_cli(proj, "task", "add", f"P1.X{i}", "--phase", "P1", "--title", f"Task number {i}")
+        run_cli(proj, "phase", "add", f"PX{i}", "--title", f"Phase number {i}", "--globs", "x/**")
     full = _results(api.export_documents(proj, "roadmap", max_bytes=0))[0]
     cut = _results(api.export_documents(proj, "roadmap", max_bytes=900))[0]
     assert full["truncated"] is False

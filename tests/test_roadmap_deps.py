@@ -26,7 +26,7 @@ def _review_dep(tmp_path: Path, config: str):
     (tmp_path / ".ddflow").mkdir()
     (tmp_path / ".ddflow" / "config.toml").write_text(config)
     q.repo = tmp_path
-    return next(ln for ln in _body("roadmap", q).splitlines() if "`T8`" in ln)
+    return next(ln for ln in _body("roadmap", q).splitlines() if ln.startswith("- `T8`"))
 
 
 def test_without_stacking_a_dependency_in_review_blocks(tmp_path):
@@ -44,7 +44,7 @@ def test_an_unknown_dependency_follows_the_policy(tmp_path):
     (tmp_path / ".ddflow").mkdir()
     (tmp_path / ".ddflow" / "config.toml").write_text('[schedule]\nunknown_dep_policy = "warn"\n')
     q.repo = tmp_path
-    t7 = next(ln for ln in _body("roadmap", q).splitlines() if "`T7`" in ln)
+    t7 = next(ln for ln in _body("roadmap", q).splitlines() if ln.startswith("- `T7`"))
     assert "blocked" not in t7, t7  # `next` ignores the unknown id under "warn"
 
 
