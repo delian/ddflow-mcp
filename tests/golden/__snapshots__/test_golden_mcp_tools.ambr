@@ -3391,6 +3391,30 @@
        }
       }
     ''',
+    'ddflow_sync': '''
+      {
+       "name": "ddflow_sync",
+       "description": "Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with uncommitted changes, aborts on a conflict and names the files, reports how many merged commits touch the item's globs and which recorded gates stay valid. check=true measures only.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "item": {
+          "type": "string",
+          "description": "The item (default: the item whose worktree this is)."
+         },
+         "check": {
+          "type": "boolean",
+          "description": "Only measure the drift; merge nothing."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_task_add': '''
       {
        "name": "ddflow_task_add",
@@ -4090,6 +4114,7 @@
     'ddflow_similar',
     'ddflow_split',
     'ddflow_status',
+    'ddflow_sync',
     'ddflow_task_add',
     'ddflow_tests',
     'ddflow_unblock',
