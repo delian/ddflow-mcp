@@ -26,6 +26,7 @@ from ..declared import mergequeue as _mergequeue
 from ..declared import metrics as _metrics
 from ..declared import plan as plan
 from ..declared import queue as _queue
+from ..declared import recordkinds as _recordkinds
 from ..declared import records as _records
 from ..declared import reporting as _reporting
 from ..declared import review as _review
@@ -43,7 +44,7 @@ DECLARED = by_tool(
         f.COMMANDS
         for f in (
             _knowledge, _records, _queue, _lifecycle, _rules, _review, _setup, _reporting,
-            _hooks, _flow, _memory, _export, _cadence, _lanes, _docs, _metrics, _mergequeue, _health,
+            _hooks, _flow, _recordkinds, _memory, _export, _cadence, _lanes, _docs, _metrics, _mergequeue, _health,
         )
     )
 )  # fmt: skip
