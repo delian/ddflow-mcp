@@ -404,7 +404,9 @@ class Param:
     def schema(self) -> dict[str, Any]:
         """The JSON Schema (2020-12) property for this parameter. Key order is the order
         `tools/list` has always served: type, description, then items / enum."""
-        out: dict[str, Any] = {"type": self.type, "description": self.help}
+        out: dict[str, Any] = {"type": self.type}
+        if self.help:  # an empty description is bytes every session pays for and says nothing
+            out["description"] = self.help
         if self.type == "array":
             # A schema without `items` is refused by some clients' validators.
             out["items"] = {"type": "string"}

@@ -1771,7 +1771,7 @@
 # ---
 # name: test_help[ddflow record]
   '''
-  usage: ddflow record [-h] [--set SET] [--unset UNSET] [--query QUERY] [--mode {ranked,exact,regex}] [--where WHERE] [--all] [--limit LIMIT] [--reason REASON] [--relation RELATION] [--check-only] kind {list,show,add,edit,remove,search,revise,history} [id]
+  usage: ddflow record [-h] [--set SET] [--query QUERY] [--reason REASON] [--unset UNSET] [--mode MODE] [--where WHERE] [--all] [--limit LIMIT] [--relation RELATION] [--check-only] kind {list,show,add,edit,remove,search,revise,history} [id]
   
   positional arguments:
     kind                  The record kind.
@@ -1782,14 +1782,13 @@
   options:
     -h, --help            show this help message and exit
     --set SET             field=value; repeat.
-    --unset UNSET         Fields to remove (edit).
     --query QUERY         search: what to look for.
-    --mode {ranked,exact,regex}
-                          search: ranked | exact | regex.
+    --reason REASON       remove, revise: why; kept in the history.
+    --unset UNSET         Fields to remove (edit).
+    --mode MODE           search: ranked | exact | regex.
     --where WHERE         list, search: field=value.
     --all                 Include retired records.
     --limit LIMIT         Rows shown (0 = the most).
-    --reason REASON       remove, revise: why; kept in the history.
     --relation RELATION   add: new | extends:ID | duplicate_of:ID | related:ID.
     --check-only          add: dry run, return the candidates.
   

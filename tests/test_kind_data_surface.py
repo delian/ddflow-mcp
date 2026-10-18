@@ -56,7 +56,9 @@ def test_the_same_through_the_tool(repo):
     assert not res.get("isError"), res
     listed = _body(_tool(repo, kind="stakeholder", verb="list"))
     assert [r["id"] for r in listed["rows"]] == ["s1"]
-    found = _body(_tool(repo, kind="stakeholder", verb="search", query="sponsor"))
+    found = _body(
+        _tool(repo, kind="stakeholder", verb="search", set=["@query=sponsor", "@limit=5"])
+    )
     assert found["total"] == 1
 
 
@@ -162,3 +164,30 @@ def test_a_project_kind_is_seen_by_search_resources_and_a_fresh_cli(repo):
     finally:
         R.forget("ticketx")
         D.DEF_KINDS.unregister("ticketx")
+
+
+@pytest.mark.parametrize(
+    ("items", "want"),
+    [
+        (["@limit=3", "title=t"], {"limit": 3, "set": ["title=t"]}),
+        (["@all"], {"all": True, "set": []}),
+        (["@where=a=b", "@where=c=d"], {"where": ["a=b", "c=d"], "set": []}),
+        (["@relation=extends:x1"], {"relation": "extends:x1", "set": []}),
+    ],
+)
+def test_the_tool_carries_options_as_at_items(items, want):
+    got = RK.split_options({"set": items})
+    assert {k: got[k] for k in want} == want
+
+
+def test_a_bad_at_option_is_refused(repo):
+    out = RK.call(repo, {"kind": "risk", "verb": "list", "set": ["@nope=1"]}, "a")
+    assert out.exit != 0 and "unknown option @nope" in out.reason
+    out = RK.call(repo, {"kind": "risk", "verb": "list", "set": ["@limit=x"]}, "a")
+    assert out.exit != 0 and "whole number" in out.reason
+
+
+def test_the_tools_list_stays_under_its_budget_with_the_record_tool():
+    reply = Server(".").handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    size = len(json.dumps(reply["result"]["tools"], separators=(",", ":")))
+    assert size < 100_000
