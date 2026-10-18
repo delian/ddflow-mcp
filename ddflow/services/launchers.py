@@ -26,7 +26,9 @@ from ..infra import git as G
 from ..infra.fsio import Unreadable, read_json
 from . import enforce as E
 from .adopt import AGENT_TARGETS, get_server, has_been_adopted
-from .claudehooks import HOOKS, _ours
+from . import hookwriters as HW
+from .claudehooks import _ours
+from .harnessreg import load as _harnesses
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
 _PROBE = re.compile(r'\[ -([xf]) "([^"]+)" \]')
@@ -115,18 +117,19 @@ def check_settings(repo: Path) -> list[Dangling]:
 
     # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
     # is the list, so a hook added to it is checked here without anyone remembering to.
-    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    rows = [(hs, s) for hs in _harnesses() for s in HW.specs(hs)]
+    ours = tuple(dict.fromkeys(s.marker for _h, s in rows))
+    fix_for = {s.file: f"ddflow hooks install {s.flag}" for _h, s in rows}
 
     out: list[Dangling] = []
-    for rel in dict.fromkeys(h.file for h in HOOKS):
+    for rel in dict.fromkeys(s.file for _h, s in rows):
         path = Path(repo) / rel
         data = read_json(path)
         if isinstance(data, Unreadable):
             continue
         for cmd in _commands(data):
             if any(_ours({"command": cmd}, m) for m in ours):
-                fix = "ddflow hooks install --claude" + (" --gemini" if "gemini" in rel else "")
-                if d := check_command(f"the hook command in {rel}", cmd, fix, rel):
+                if d := check_command(f"the hook command in {rel}", cmd, fix_for[rel], rel):
                     out.append(d)
     return out
 

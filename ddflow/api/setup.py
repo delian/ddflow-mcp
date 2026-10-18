@@ -35,6 +35,8 @@ from ..infra import worktree as W
 from ..infra.log import EventLog, running_version
 from ..services import backups as BK
 from ..services import claudehooks as CH
+from ..services import harnessreg as HR
+from ..services import hookwriters as HW
 from ..services import compaction as CP
 from ..services import companions as CO
 from ..services import configwrite as CW
@@ -849,6 +851,23 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
     return msgs
 
 
+def _harness_hooks(repo: Path, action: str, harness: str) -> O.Outcome:
+    """`hooks install|uninstall --harness <id>` for an agent the descriptor names: the writer
+    its hook style selects (`services.hookwriters`); a style with no writer is refused."""
+    h = HR.get(harness)
+    if h is None:
+        return O.failed("hooks", f"no harness {harness!r}; known: {', '.join(HR.ids())}")
+    try:
+        msgs = HW.apply(repo, h, action)
+    except HW.Unsupported as exc:
+        return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    except CH.NewerSettings as exc:
+        return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    except CH.SettingsError as exc:
+        return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    return O.ok("hooks", message="\n".join(msgs), installed=E.installed(repo))
+
+
 def _prompt_core(repo: Path, agent: str, session_id: str, text: str, model: str) -> O.Outcome:
     """Record one operator prompt (redacted inside `sessions.capture_prompt`). Raises on a
     problem; both callers turn that into a quiet `skipped`."""
@@ -1155,6 +1174,8 @@ def hooks(
 
         return _check_msg(repo, Config.load(repo), msg_file)
     _log, cfg, _st = _load(repo, agent)
+    if harness and not (claude or gemini) and action in ("install", "uninstall"):
+        return _harness_hooks(repo, action, harness)
     if (claude or gemini) and action in ("install", "uninstall"):
         try:
             msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
