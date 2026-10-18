@@ -26,8 +26,6 @@ from ..infra import proc
 from ..infra import worktree as W
 from . import roborev as RR
 
-_STEP_TIMEOUT_S = 60
-
 
 @dataclass
 class Result:
@@ -51,7 +49,7 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
     m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
     if m:
         return int(m.group(1))
-    p = proc.capture([exe, "list", "--json", "--limit", "50"], cwd=where, timeout=_STEP_TIMEOUT_S)
+    p = proc.capture([exe, "list", "--json", "--limit", "50"], cwd=where, timeout=RR._TIMEOUT_S)
     try:
         jobs = json.loads(p.stdout or "[]") or []
     except ValueError:
@@ -65,7 +63,7 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
 
 def _job_status(exe: str, where: Path, job: int) -> str:
     """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
-    p = proc.capture([exe, "list", "--json", "--limit", "100"], cwd=where, timeout=_STEP_TIMEOUT_S)
+    p = proc.capture([exe, "list", "--json", "--limit", "100"], cwd=where, timeout=RR._TIMEOUT_S)
     try:
         jobs = json.loads(p.stdout or "[]") or []
     except ValueError:
@@ -86,7 +84,7 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("unavailable", f"no merge-base of {base!r} and HEAD in {where}")
     if mb == head:
         return Result("unavailable", f"the branch has no commit ahead of {base!r}", sha=head)
-    q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=_STEP_TIMEOUT_S)
+    q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
     if q.error is not None or q.returncode != 0:
         why = q.error or (q.stderr or q.stdout).strip()[-200:] or f"exit {q.returncode}"
         return Result("unavailable", f"roborev could not enqueue the range review: {why}", sha=head)
@@ -105,7 +103,7 @@ def run(where: Path, base: str, wait_s: int) -> Result:
             f"queued or running: `roborev wait --job {job}`, or raise [gates].standards_wait_s",
             job, head,
         )  # fmt: skip
-    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=_STEP_TIMEOUT_S)
+    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=RR._TIMEOUT_S)
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.returncode == 0:
         return Result("clean", job=job, sha=head, text=text)
