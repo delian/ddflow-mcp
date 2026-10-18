@@ -2374,6 +2374,16 @@
           The fewest workers `[ci].workers = auto` may compute, at least 1.
       ci.max_workers = 48   [default]
           The most workers `[ci].workers = auto` may compute, however idle the host.
+      ci.max_concurrent_suites = 1   [default]
+          How many full test suites (the CI-parity run of `ddflow ci run --full`, the
+          merge queue and the after-merge check) may run at once on this host, counted
+          across every project and agent of the user through a lock in the user's
+          state directory. A run over the limit waits `suite_wait_s`, then is
+          UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-
+          scope runs are not limited.
+      ci.suite_wait_s = 1800   [default]
+          Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
+          before it reports who holds it.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity
