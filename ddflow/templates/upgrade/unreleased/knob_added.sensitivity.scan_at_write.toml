@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "sensitivity.scan_at_write"
+new = "true"
+why = "A record is scanned for secrets and personal data when written, and its sensitivity label is raised to match; off leaves only the label given."
+impact = "additive"

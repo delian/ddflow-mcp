@@ -99,19 +99,31 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     if it.kind == "phase" or it.promote_to:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
-    if why := _ci_not_passed_here(cfg, it, tree):
+    failed_sel = _ci_failed_selected(it)
+    if not failed_sel and (why := _ci_not_passed_here(cfg, it, tree)):
         return Scope("full", why)
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
-    if ran := (it.gates["ci"].evidence or {}).get("ci_scope"):
+    if not failed_sel and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
     kind = _selectable(cfg, it, lines)
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
-    return _selected(cfg, st, it, command, tree, base, kind, lines)
+    return _selected(cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel)
+
+
+def _ci_failed_selected(it) -> bool:
+    """Whether the item's ci gate FAILED on a selected run: the failure is a verdict on the
+    tests its change reaches, so this gate runs its own selection and does not widen it to the
+    whole suite behind the failure (a second full run for a red selected one). The item still
+    cannot complete: its ci gate stays failed."""
+    ci = it.gates.get("ci")
+    if ci is None or ci.outcome != "failed":
+        return False
+    return ((ci.evidence or {}).get("ci_scope") or {}).get("scope") == "selected"
 
 
 def _ci_not_passed_here(cfg, it, tree: Path) -> str:
@@ -158,8 +170,9 @@ def _selectable(cfg, it, lines: int | None) -> str:
 
 
 def _selected(
-    cfg, st, it, command: str, tree: Path, base: str, kind: str, lines: int | None
-) -> Scope:
+    cfg, st, it, command: str, tree: Path, base: str, kind: str, lines: int | None,
+    ci_failed: bool = False,
+) -> Scope:  # fmt: skip
     """The selection for a selectable item, or the whole suite when none can be made."""
     sel = select(tree, base, **limits(cfg))
     if sel is None:
@@ -195,7 +208,12 @@ def _selected(
             if sel.cut
             else ""
         )
-        + "; the ci gate passed the whole suite on this tree",
+        + (
+            "; the ci gate failed on its selected scope (it must pass before the item completes), "
+            "so this gate does not widen it to the whole suite"
+            if ci_failed
+            else "; the ci gate passed the whole suite on this tree"
+        ),
         command=cmd,
         tests=tests,
         changed_lines=lines,

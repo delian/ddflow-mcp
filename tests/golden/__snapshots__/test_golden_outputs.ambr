@@ -1343,6 +1343,23 @@
           Fixtures with at least one planted fault that a workflow needs before its
           miss rate counts as evidence. A clean fixture (nothing planted) measures
           false positives and does not count.
+      sensitivity.scan_at_write = True   [default]
+          Scan a record's text for secrets and personal data when it is added or
+          edited, and raise its `sensitivity` label to the level the finding needs
+          (secret: confidential; email, name or host name: restricted). A label is
+          only ever raised by the scan; lowering one is an explicit edit. Off: a
+          record carries only the label it was given.
+      sensitivity.model_allowed = []   [default]
+          Sensitivity levels that may be sent to a model although the vocabulary marks
+          them not to be (restricted and confidential are not, by default). A level
+          named here is shown at the doors in `egress_doors`; empty (default) keeps
+          the vocabulary's rule.
+      sensitivity.egress_doors = ['search', 'recall', 'brief', 'export']   [default]
+          The doors that feed a model, where a record whose sensitivity may not go to
+          a model is withheld: search, recall, brief, export (search and recall are
+          wired now; brief and export apply as they carry labelled records; hub
+          publish and notifications are added to the list when they exist). Empty
+          turns the filter off.
       companions.probe_cache_ttl_s = 300   [default]
           How long a companion detection result stays good, in seconds. Each probe
           shells out and an npx-based one takes seconds on a cold cache, so a session-

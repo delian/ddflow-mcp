@@ -103,7 +103,7 @@ def test_the_tool_listing_is_small_enough_to_be_one_tool_per_kind():
 
 def test_a_verb_command_carries_only_the_parameters_its_verb_takes():
     by = {c.path[1]: {p.name for p in c.params} for c in S.record_commands(NOTE)[1:]}
-    fields = {f.name for f in NOTE.fields}
+    fields = {f.name for f in NOTE.all_fields}
     assert by["list"] == {"where", "all", "limit"}
     assert by["show"] == {"id"}
     assert by["add"] == {"id", *fields, "new", "extends", "duplicate_of", "related", "check"}

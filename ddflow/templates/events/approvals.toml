@@ -1,0 +1,9 @@
+# Event kinds owned by approvals (core/handlers/approvals.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "approval.granted"
+doc = "A person approved a digest, so one action covered by it may run."
+
+[[kind]]
+name = "approval.used"
+doc = "A single-use approval was spent by the action it covered."
