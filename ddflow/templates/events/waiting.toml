@@ -1,0 +1,5 @@
+# Event kinds owned by waiting (core/handlers/waiting.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "lease.waiting"
+doc = "An agent was refused files another lease holds, and who it waits for."

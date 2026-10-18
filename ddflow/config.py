@@ -33,16 +33,10 @@ from .config_sections.agent import (  # noqa: F401
     family_for,
     router_set,
 )
-from .config_sections.bugs import (
-    BugsConfig,
-)
-from .config_sections.cadence import (
-    CadenceConfig,
-)
-from .config_sections.chore import (
-    ChoreConfig,
-)
-from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
+from .config_sections.bugs import BugsConfig
+from .config_sections.cadence import CadenceConfig
+from .config_sections.chore import ChoreConfig
+from .config_sections.ci import (  # noqa: F401 -- services/ci imports them here
     CI_ON_MERGE_MODES,
     CI_TESTS_SCOPES,
     CiConfig,
@@ -58,9 +52,7 @@ from .config_sections.docs import (  # noqa: F401
     EXTRACT_KINDS,
     DocsConfig,
 )
-from .config_sections.enforce import (
-    EnforceConfig,
-)
+from .config_sections.enforce import EnforceConfig
 from .config_sections.evaluation import EvaluationConfig
 from .config_sections.export import (  # noqa: F401
     EXPORT_DEFAULT_TARGETS,
@@ -91,62 +83,30 @@ from .config_sections.ids import (  # noqa: F401
     id_problem,
     id_template_problem,
 )
-from .config_sections.imports import (
-    ImportConfig,
-)
-from .config_sections.lanes import (
-    LanesConfig,
-)
-from .config_sections.lease import (
-    LeaseConfig,
-)
-from .config_sections.lessons import (
-    LessonsConfig,
-)
-from .config_sections.log import (
-    LogConfig,
-)
-from .config_sections.loops import (
-    LoopsConfig,
-)
+from .config_sections.imports import ImportConfig
+from .config_sections.lanes import LanesConfig
+from .config_sections.lease import LeaseConfig
+from .config_sections.lessons import LessonsConfig
+from .config_sections.log import LogConfig
+from .config_sections.loops import LoopsConfig
 from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the move
     MCP_TOOL_TIERS,
     McpConfig,
 )
-from .config_sections.memory import (
-    MemoryConfig,
-)
-from .config_sections.merge_queue import (
-    MergeQueueConfig,
-)
-from .config_sections.metrics import (
-    MetricsConfig,
-)
-from .config_sections.pins import (
-    PinsConfig,
-)
-from .config_sections.plan import (
-    PlanConfig,
-)
-from .config_sections.prompts import (
-    PromptsConfig,
-)
-from .config_sections.rag import (
-    RagConfig,
-)
-from .config_sections.reinstruct import (
-    ReinstructConfig,
-)
+from .config_sections.memory import MemoryConfig
+from .config_sections.merge_queue import MergeQueueConfig
+from .config_sections.metrics import MetricsConfig
+from .config_sections.pins import PinsConfig
+from .config_sections.plan import PlanConfig
+from .config_sections.prompts import PromptsConfig
+from .config_sections.rag import RagConfig
+from .config_sections.reinstruct import ReinstructConfig
 from .config_sections.release import (
     RELEASE_LINT_POLICIES,  # noqa: F401
     ReleaseConfig,
 )
-from .config_sections.review import (
-    ReviewConfig,
-)
-from .config_sections.rules import (
-    RulesConfig,
-)
+from .config_sections.review import ReviewConfig
+from .config_sections.rules import RulesConfig
 from .config_sections.schedule import (  # noqa: F401
     FLOW_SIGNALS,
     SIGNAL_MARKS,
@@ -158,6 +118,7 @@ from .config_sections.schedule import (  # noqa: F401
     merge_signals,
     strictest_signals,
 )
+from .config_sections.sensitivity import SensitivityConfig
 from .config_sections.session import (
     PROGRESS_MODES,  # noqa: F401 -- re-exported (services/progress_line)
     SessionConfig,
@@ -171,9 +132,7 @@ from .config_sections.upgrade import (
     UPGRADE_SKEW_POLICIES,  # noqa: F401 -- re-exported
     UpgradeConfig,
 )
-from .config_sections.worktree import (
-    WorktreeConfig,
-)
+from .config_sections.worktree import WorktreeConfig
 
 
 class InvalidValue(ValueError):
@@ -243,6 +202,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     dedupe: DedupeConfig = field(default_factory=DedupeConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
+    sensitivity: SensitivityConfig = field(default_factory=SensitivityConfig)
     companions: CompanionsConfig = field(default_factory=CompanionsConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
