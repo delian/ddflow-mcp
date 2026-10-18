@@ -32,7 +32,7 @@ def write_shim(tree: Path) -> Path | None:
     shim = tree / SHIM_REL
     body = (
         "#!/bin/sh\n# runs the ddflow code of the tree this file lives in\n"
-        f'PYTHONPATH={shlex.quote(str(tree))}"${{PYTHONPATH:+:$PYTHONPATH}}" '
+        f'PYTHONSAFEPATH=1 PYTHONPATH={shlex.quote(str(tree))}"${{PYTHONPATH:+:$PYTHONPATH}}" '
         f'exec {shlex.quote(sys.executable)} -m ddflow "$@"\n'
     )
     try:
