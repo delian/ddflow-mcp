@@ -351,9 +351,9 @@ def _no_tree_reason(it, item: str, gate: str, held: str) -> tuple[str, str]:
             )
         return (
             f"{item} merged ({sha}) and the merge removed its worktree, so {gate} cannot run "
-            f"now; gates are run before `ddflow merge {item}`. Recording UNAVAILABLE: "
-            f"re-run it on the merged tree, or record the real outcome with `ddflow gate "
-            f"record {item} {gate} --outcome ... --evidence ...`.",
+            f"now; gates are run before `ddflow merge {item}`. Recording UNAVAILABLE; "
+            f"if it did pass on the merged tree, say so with `ddflow gate record {item} "
+            f"{gate} --outcome passed --evidence ...`.",
             "",
         )
     why = (

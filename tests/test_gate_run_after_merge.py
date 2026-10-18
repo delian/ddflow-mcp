@@ -16,7 +16,7 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 
-def _merged(repo: Path) -> None:
+def _merged(repo: Path, *, passed_before: bool = False) -> None:
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
@@ -29,6 +29,10 @@ def _merged(repo: Path) -> None:
     (tree / "t.txt").write_text("x\n")
     _git(tree, "add", ".")
     _git(tree, "commit", "-qm", "work")
+    if passed_before:
+        run_cli(
+            repo, "gate", "record", "T1", "unit_tests", "--outcome", "passed", "--evidence", "e"
+        )
     assert run_cli(repo, "merge", "T1")[0] == 0
 
 
@@ -37,18 +41,19 @@ def _gate(repo: Path, name: str):
 
 
 def test_a_gate_run_after_merge_keeps_the_pre_merge_pass(repo):
-    _merged(repo)
-    run_cli(repo, "gate", "record", "T1", "unit_tests", "--outcome", "passed", "--evidence", "e")
-    _, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    _merged(repo, passed_before=True)
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
+    assert code == 2, text  # nothing ran: the exit says so
     assert "merged" in text and "recorded" in text and "passed" in text, text
     assert _gate(repo, "unit_tests").outcome == "passed"
 
 
 def test_a_gate_run_after_merge_with_no_pass_says_why(repo):
     _merged(repo)
-    _, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
+    assert code == 2, text
     assert "merged" in text and "before `ddflow merge T1`" in text, text
     assert "claimed without a worktree" not in text
     rec = _gate(repo, "unit_tests")
