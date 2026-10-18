@@ -220,10 +220,28 @@ def test_the_prompt_alias_and_the_entry_point_behave_the_same(repo, harness):
 def test_the_session_start_alias_and_the_entry_point_print_the_same_brief(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "the next thing", "--globs", "a.py")
+    # The brief's "parallel: N (auto ...)" line follows the machine's load, which moves
+    # between the two calls on a busy host (B6983363359): pin it.
+    assert run_cli(repo, "config", "--set", "schedule.parallel", "fixed")[0] == 0
     a = _run(repo, "hooks", "session-start", stdin="{}")
     b = _run(repo, "hooks", "run", "session_start", "--harness", "claude", stdin="{}")
     assert a[0] == b[0] == 0
     assert a[1] == b[1] and "the next thing" in a[1]
+
+
+def test_the_pinned_session_start_brief_carries_no_machine_dependent_line(repo):
+    """B6983363359: the brief's "parallel: N (auto ...)" line is computed from the host's
+    load and memory, so two briefs a moment apart can differ on a busy host. Auto is
+    machine-dependent; a fixed limit is a constant line, which is what the same-brief
+    test pins."""
+    from ddflow.api import setup as S
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "the next thing", "--globs", "a.py")
+    assert "(auto" in S._session_start(repo, "t", "{}").data["message"]
+    assert run_cli(repo, "config", "--set", "schedule.parallel", "fixed")[0] == 0
+    text = S._session_start(repo, "t", "{}").data["message"]
+    assert "(fixed)" in text and "(auto" not in text
 
 
 def test_session_start_is_shaped_for_the_agent_and_skipped_where_it_cannot_show(repo):
