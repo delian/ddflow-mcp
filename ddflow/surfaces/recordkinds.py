@@ -64,10 +64,47 @@ def _kind(name: str) -> R.RecordKind:
     return kind
 
 
+#: Options the MCP tool carries as ``@name=value`` items of ``set`` (its schema stays small: the
+#: tools list is paid for in every session). The CLI has them as flags.
+_AT = {
+    "limit": int, "all": bool, "check_only": bool, "relation": str, "mode": str,
+    "query": str, "reason": str,
+}  # fmt: skip
+_AT_LISTS = ("where", "unset")
+
+
+def split_options(a: dict[str, Any]) -> dict[str, Any]:
+    """``a`` with its ``@name=value`` set items moved to the argument they stand for."""
+    items = list(a.get("set") or ())
+    out = {**a, "set": [i for i in items if not str(i).startswith("@")]}
+    for item in items:
+        if not str(item).startswith("@"):
+            continue
+        name, _, raw = str(item)[1:].partition("=")
+        if name in _AT_LISTS:
+            out[name] = [*out.get(name, ()), raw]
+        elif name in _AT:
+            if _AT[name] is bool:
+                out[name] = raw.lower() in ("", "1", "true", "yes")
+            elif _AT[name] is int:
+                try:
+                    out[name] = int(raw)
+                except ValueError:
+                    raise ValueError(f"@{name} is a whole number; got {raw!r}") from None
+            else:
+                out[name] = raw
+        else:
+            raise ValueError(
+                f"unknown option @{name}; the options are {', '.join(_AT_LISTS + tuple(_AT))}"
+            )
+    return out
+
+
 def call(repo: Any, a: dict[str, Any], agent: str) -> O.Outcome:
     """One verb of one data kind; a malformed call is a failure with its reason."""
     verb = a.get("verb") or ""
     try:
+        a = split_options(a)
         KDA.load_project(repo)
         kind = _kind(str(a.get("kind") or ""))
         if verb not in VERBS or verb not in kind.verbs:
