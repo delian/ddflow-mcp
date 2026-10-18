@@ -81,7 +81,9 @@ def test_order_is_keyword_only_so_a_number_is_not_taken_for_the_guard(clean):
 
 
 def test_a_note_before_a_refusal_rides_on_the_refusal():
-    from ddflow.api.lifecycle import claim as C
+    import importlib
+
+    C = importlib.import_module("ddflow.api.lifecycle.claim")
 
     refused = O.refused("item.claimed", "no", id="T1")
     out = C._refused_early(None, None, "T1", None, False, refused, [G.Note("g", "heads up")])
