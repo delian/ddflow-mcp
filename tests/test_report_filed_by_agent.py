@@ -124,4 +124,4 @@ def test_a_record_with_two_recorded_events_is_listed_once():
         NS(kind="lesson.recorded", subject="L1", ts="2", agent="a", data={}),
         NS(kind="lesson.recorded", subject="L1", ts="3", agent="a", data={}),
     ]
-    assert [n["id"] for n in R._filed(ev, st, "T1", "a")["notes"]] == ["L1"]
+    assert [n["id"] for n in R._filed(ev, st, "T1", "a", 100)["notes"]] == ["L1"]
