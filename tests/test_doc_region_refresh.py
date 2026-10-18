@@ -167,3 +167,21 @@ def test_a_real_region_beside_a_stamped_block_is_still_read():
     assert RC.problem(stamped + ok) == "" and RC.edited(stamped + ok) == []
     assert RC.edited(stamped + bad) == ["d/a"]
     assert RC.mask(stamped + ok).startswith(stamped) and "A" not in RC.mask(stamped + ok)
+
+
+def test_a_readme_view_region_is_not_read_as_hand_edited():
+    from ddflow.views.readme_region import Region
+
+    view = Region("README/toc", "table of contents", lambda t: "")
+    text = "# R\n\n" + view.block("- one\n- two") + "\n"
+    assert RC.edited(text) == [] and RC.problem(text) == ""
+    assert RC.edited(text.replace("- two", "- edited")) == ["README/toc"]
+
+
+def test_ops_reads_a_region_beside_a_stamped_block():
+    from ddflow.services.export import ops
+
+    stamped = "<!-- ddflow:begin rules/q ddflow=1 fmt=1 sha=f60922c1c1f6 -->\nx\n<!-- ddflow:end rules/q -->\n"
+    ok = RG.render_region("d", "a", "A\n")
+    assert ops._region_edit(stamped + ok, "d") == "ok"
+    assert ops._region_edit(stamped + ok.replace("A\n", "B\n"), "d") == "edited"
