@@ -1,0 +1,23 @@
+[doctype]
+name = "runbook"
+title = "Runbook"
+pattern = "docs/runbooks/{slug}.md"
+multi = true
+genre = "howto"
+
+[[doctype.section]]
+id = "when"
+heading = "When to use"
+required = true
+order = 1
+
+[[doctype.section]]
+id = "steps"
+heading = "Steps"
+required = true
+order = 2
+
+[[doctype.section]]
+id = "rollback"
+heading = "Rollback"
+order = 3
