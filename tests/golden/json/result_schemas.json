@@ -2662,6 +2662,7 @@
    "repointed",
    "dry_run",
    "edits",
+   "unchanged",
    "abandoned"
   ],
   "output_schema": {
@@ -2675,6 +2676,7 @@
     "repointed": {},
     "dry_run": {},
     "edits": {},
+    "unchanged": {},
     "abandoned": {},
     "export_refresh": {},
     "ci": {},
