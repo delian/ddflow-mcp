@@ -339,6 +339,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("prompts", "show"), reason=_COVERED.format("ddflow_prompts")),
     Command(path=("prompts", "eject"), reason=_COVERED.format("ddflow_prompts")),
     Command(path=("prompts", "get"), reason=_COVERED.format("ddflow_prompts")),
+    Command(path=("harness",), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "list"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "doctor"), reason=_COVERED.format("ddflow_hooks")),
