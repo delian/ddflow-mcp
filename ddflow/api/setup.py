@@ -854,18 +854,27 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
 def _agent_hooks_outcome(
     repo: Path, action: str, claude: bool, gemini: bool, harness: str
 ) -> O.Outcome:
-    """`hooks install|uninstall` for the agents' own hooks: the Claude/Gemini flags, or any
-    harness the descriptors name."""
-    if not (claude or gemini):
-        return _harness_hooks(repo, action, harness)
-    try:
-        msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
-    except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
-        return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
-    except CH.SettingsError as exc:
-        return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    """`hooks install|uninstall` for the agents' own hooks: the Claude/Gemini flags and any
+    harness the descriptors name, all of them when given together (the first problem
+    stops the rest and is the answer)."""
+    msgs: list[str] = []
+    if claude or gemini:
+        try:
+            msgs += _agent_hooks(repo, action, claude=claude, gemini=gemini)
+        except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
+            return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+        except CH.SettingsError as exc:
+            return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    if harness:
+        got = _harness_hooks(repo, action, harness)
+        if got.exit != O.OK:
+            return got
+        msgs.append(got.data["message"])
     return O.ok(
-        "hooks", message="\n".join(msgs), installed=E.installed(repo), session_hook=CH.installed(repo)
+        "hooks",
+        message="\n".join(msgs),
+        installed=E.installed(repo),
+        **({"session_hook": CH.installed(repo)} if claude or gemini else {}),
     )
 
 
