@@ -50,6 +50,18 @@
   
   '''
 # ---
+# name: test_help[ddflow batch]
+  '''
+  usage: ddflow batch [-h] [--edits EDITS] [--file FILE] [--dry-run]
+  
+  options:
+    -h, --help     show this help message and exit
+    --edits EDITS  the edits as JSON text (or use --file)
+    --file FILE    read the edits from this JSON file ('-' for stdin)
+    --dry-run      plan and show what would change; record nothing
+  
+  '''
+# ---
 # name: test_help[ddflow bisect]
   '''
   usage: ddflow bisect [-h] --cmd CMD [--candidates CANDIDATES] [--glob GLOB] [--timeout TIMEOUT] [--repeat REPEAT] [--max-runs MAX_RUNS] victim
@@ -2463,6 +2475,21 @@
   
   '''
 # ---
+# name: test_help[ddflow task fold]
+  '''
+  usage: ddflow task fold [-h] [--reason REASON] [--dry-run] dup keep
+  
+  positional arguments:
+    dup
+    keep
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON
+    --dry-run        plan and show what would change; record nothing
+  
+  '''
+# ---
 # name: test_help[ddflow task list]
   '''
   usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all]
@@ -2481,14 +2508,15 @@
 # ---
 # name: test_help[ddflow task]
   '''
-  usage: ddflow task [-h] {add,list} ...
+  usage: ddflow task [-h] {add,fold,list} ...
   
   positional arguments:
-    {add,list}
-      list      list tasks (and sub-tasks), newest change first
+    {add,fold,list}
+      fold           fold a duplicate task into a survivor, re-pointing its dependents
+      list           list tasks (and sub-tasks), newest change first
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
   
   '''
 # ---
@@ -2781,13 +2809,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,batch,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2795,6 +2823,7 @@
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
       update              change an item's fields
+      batch               apply many item edits in one all-or-nothing transaction
       chore               commit or approve chore files (no reviewer)
       plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
@@ -2913,6 +2942,7 @@
     'ddflow abandon',
     'ddflow adopt',
     'ddflow approve',
+    'ddflow batch',
     'ddflow bisect',
     'ddflow block',
     'ddflow board',
@@ -3071,6 +3101,7 @@
     'ddflow status',
     'ddflow task',
     'ddflow task add',
+    'ddflow task fold',
     'ddflow task list',
     'ddflow tests',
     'ddflow unblock',

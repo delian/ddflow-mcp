@@ -97,6 +97,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="apply many item edits in one all-or-nothing transaction",
         tool="ddflow_batch",
         tier="all",
+        help_group="Shaping the work",
         description="Apply many field edits in ONE locked transaction: a JSON array of "
         "{id, needs, add_needs, remove_needs, tags, add_tags, remove_tags, globs, add_globs, "
         "remove_globs, priority, title, body, append_body, line, resources} objects, the fields "
@@ -129,6 +130,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="fold a duplicate task into a survivor, re-pointing its dependents",
         tool="ddflow_task_fold",
         tier="all",
+        help_group="Shaping the work",
         description="Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's "
         "body is appended to keep's, its globs unioned in, every live item that needs dup now "
         "needs keep, and dup is abandoned with the reason. Refused when dup is claimed, either "
