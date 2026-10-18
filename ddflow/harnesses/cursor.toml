@@ -8,7 +8,7 @@ path = ".cursor/mcp.json"
 shape = "mcpServers"
 
 [instructions]
-reads = [".cursor/rules/*.mdc", "AGENTS.md"]
+reads = [".cursor/rules/*.mdc", ".cursor/rules/*.md", "AGENTS.md"]
 agents_md = "yes"
 claude_md = "nv"
 native_rank = 0
