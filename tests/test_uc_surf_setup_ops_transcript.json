@@ -1305,8 +1305,8 @@
    "upgrade"
   ],
   1,
-  "",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  ""
  ],
  [
   [
@@ -1314,8 +1314,8 @@
    "upgrade"
   ],
   1,
-  "{\n  \"refusal\": {\n    \"reason\": \"ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"upgrade@1\"\n}\n",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "{\n  \"schema\": \"upgrade@1\",\n  \"running\": \"<VERSION>\",\n  \"project_version\": \"<VERSION>\",\n  \"up_to_date\": false,\n  \"total\": 1,\n  \"categories\": {\n    \"repairs\": [\n      {\n        \"category\": \"repairs\",\n        \"id\": \"repair:unknown-author-shards\",\n        \"repair\": \"unknown-author-shards\",\n        \"summary\": \"event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\",\n        \"findings\": [\n          {\n            \"key\": \"pinhost-proj-<h6>.jsonl\",\n            \"detail\": \"pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\"\n          }\n        ],\n        \"finding_count\": 1,\n        \"unavailable\": \"\",\n        \"action\": \"needs operator confirmation\",\n        \"fix\": \"ddflow upgrade --apply\"\n      }\n    ],\n    \"migrations\": [],\n    \"records\": [],\n    \"config\": [],\n    \"instructions\": [],\n    \"hooks\": [],\n    \"mcp\": [],\n    \"features\": []\n  }\n}\n",
+  ""
  ],
  [
   [
@@ -1323,17 +1323,17 @@
    "--plan"
   ],
   1,
-  "",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  ""
  ],
  [
   [
    "upgrade",
    "--apply"
   ],
-  1,
-  "",
-  "unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  3,
+  "[refused] repair:unknown-author-shards: needs the operator's confirmation: ddflow upgrade --apply --confirm unknown-author-shards --reason '<why>'\n1 item(s) remain in the plan.\n",
+  "1 upgrade item(s) need the operator's confirmation: ddflow upgrade --apply --confirm KEY --reason WHY\n"
  ],
  [
   [
@@ -1341,9 +1341,9 @@
    "--apply",
    "hooks"
   ],
-  1,
-  "",
-  "unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  0,
+  "Up to date: nothing to apply.\n1 item(s) remain in the plan.\n",
+  ""
  ],
  [
   [
@@ -1353,7 +1353,7 @@
   ],
   1,
   "",
-  "unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "unknown upgrade category nosuch; known: repairs, migrations, records, config, instructions, hooks, mcp, features, all\n"
  ],
  [
   [
@@ -1362,8 +1362,8 @@
    "k"
   ],
   1,
-  "",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  ""
  ],
  [
   [
@@ -1374,8 +1374,8 @@
    "r"
   ],
   1,
-  "",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  ""
  ],
  [
   [
@@ -1413,8 +1413,8 @@
    "bogus"
   ],
   1,
-  "",
-  "ManifestError: unreleased fragment knob_added.schedule.phase_full_suite.toml change #1: impact 'behavior' is not one of additive, deprecating, breaking\n"
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  ""
  ],
  [
   [

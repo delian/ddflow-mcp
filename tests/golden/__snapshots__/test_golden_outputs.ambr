@@ -220,6 +220,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -274,6 +276,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -329,6 +333,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.

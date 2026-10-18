@@ -25,7 +25,7 @@ def last_pass_ts(st: State) -> str:
 def missing(events: list, st: State, phase: str) -> str:
     """"" when a full-suite pass newer than the phase's last merge exists, else why not."""
     merged, passed = last_merge_ts(events, st, phase), last_pass_ts(st)
-    if not merged or passed >= merged:  # nothing merged under it: no tree to test
+    if not merged or passed > merged:  # nothing merged under it: no tree to test
         return ""
     since = f" since its last merge ({merged})"
     seen = f"last recorded pass {passed}" if passed else "none recorded"
