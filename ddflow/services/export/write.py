@@ -79,6 +79,7 @@ class WriteResult:
     code: int = 0  # `--check`: 0 fresh, 1 stale; always 0 otherwise
     diff: str = ""
     registered: bool = False  # append mode: the target was added to append_only_globs
+    notes: tuple[str, ...] = ()  # named regions: what was missing, migrated or left alone
 
 
 # -- path safety ----------------------------------------------------------------------

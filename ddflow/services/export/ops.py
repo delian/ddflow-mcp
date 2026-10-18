@@ -35,6 +35,7 @@ from ...config import Config
 from ..prompts import Template
 from . import frame as F
 from . import query as Q
+from . import regions as RG
 from . import registry as R
 from . import safe as S
 from . import write as W
@@ -335,6 +336,8 @@ def write_doc(
         return W.write_whole(repo, path, doc, check=check, diff=diff, force=force)
     if spec.mode == R.REGION:
         body = _body(repo, cfg, q, spec, template)
+        if RG.extract(body, spec.doc):  # a template that names its regions (whole-line markers)
+            return RG.write_named(repo, path, spec.doc, body, check=check, diff=diff, force=force)
         return W.write_region(repo, path, spec.doc, body, check=check, diff=diff, force=force)
     if template is not None or spec.template:
         raise ExportError(
