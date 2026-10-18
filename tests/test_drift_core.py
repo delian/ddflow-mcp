@@ -143,3 +143,15 @@ def test_a_merge_commit_lists_the_paths_it_brought(repo):
 
 def test_moved_or_gone_is_none_when_git_cannot_say(repo):
     assert D.moved_or_gone(repo, ["README.md"], "0" * 40) is None
+
+
+def test_a_merge_is_not_relevant_to_globs_only_the_mainline_touched(repo):
+    wt = _tree(repo, "feat", "main", "T7")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "src/s.py")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "docs/d.md")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side")
+    r = D.measure(repo, wt, globs=["docs/"])
+    merge = next(c for c in r.commits if c.subject == "merge side")
+    assert merge.paths == ("src/s.py",) and merge not in r.relevant
