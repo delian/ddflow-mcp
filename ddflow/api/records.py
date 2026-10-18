@@ -51,6 +51,7 @@ from ..core import outcome as O
 from ..core import participation as PA
 from ..core import provenance as PV
 from ..core import rank, textsim
+from ..core.sensitivity import LABEL_FIELD
 from ..core.textcut import clip
 from ..services.export.safe import redact_text
 from ..services.searchcore import SearchError, check_regex
@@ -258,6 +259,15 @@ class RecordKind:
         """Whether its records are definitions (`core.defs`), so search, recall and resources
         can read them; a family whose records live elsewhere supplies its own."""
         return self.def_kind in D.DEF_KINDS
+
+    @property
+    def all_fields(self) -> tuple[FieldSpec, ...]:
+        """The declared fields and the label every kind may carry (what a surface offers)."""
+        return (
+            self.fields
+            if any(f.name == LABEL_FIELD for f in self.fields)
+            else (*self.fields, SENSITIVITY_FIELD)
+        )
 
     def field(self, name: str) -> FieldSpec | None:
         """A declared field; ``sensitivity`` is on every kind (SE-sensitivity.2)."""

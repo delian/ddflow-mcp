@@ -219,7 +219,7 @@ def _verb_params(kind: R.RecordKind, verb: str) -> tuple[Param, ...]:
     own = tuple(_common(n, kind) for n in _TAKES[verb] if n not in _ANSWER_TOOL)
     if verb in _WITH_FIELDS:
         need = verb != "edit"
-        own += tuple(_field_param(f, required=need and f.required) for f in kind.fields)
+        own += tuple(_field_param(f, required=need and f.required) for f in kind.all_fields)
     if verb == "add":
         own += _answer_params()
     return own
@@ -245,7 +245,7 @@ def _tool_params(kind: R.RecordKind) -> tuple[Param, ...]:
                     _common(name, kind), required=False, positional=False, nargs=None
                 ),
             )
-    for spec in kind.fields:
+    for spec in kind.all_fields:
         seen.setdefault(spec.name, _field_param(spec, required=False))
     return tuple(p for p in seen.values() if not p.cli_only)
 
@@ -264,12 +264,14 @@ def _where(raw: Any) -> dict[str, str]:
 
 
 def _fields(kind: R.RecordKind, args: Mapping[str, Any]) -> dict[str, Any]:
-    return {f.name: args[f.name] for f in kind.fields if args.get(f.name) is not None}
+    return {f.name: args[f.name] for f in kind.all_fields if args.get(f.name) is not None}
 
 
 def _stray(kind: R.RecordKind, verb: str, args: Mapping[str, Any]) -> str:
     """The arguments given that ``verb`` does not take, as a refusal sentence, or ""."""
-    takes = set(_TAKES[verb]) | ({f.name for f in kind.fields} if verb in _WITH_FIELDS else set())
+    takes = set(_TAKES[verb]) | (
+        {f.name for f in kind.all_fields} if verb in _WITH_FIELDS else set()
+    )
     # An absent argument is None, False or empty; a 0 is a value (`limit`).
     given = {
         k
@@ -545,7 +547,7 @@ def _emit(c: Ctx, kind: R.RecordKind, verb: str, out: O.Outcome) -> int:
 
 
 def _args_of(a: argparse.Namespace, kind: R.RecordKind, verb: str) -> dict[str, Any]:
-    names = {*_TAKES[verb], *(f.name for f in kind.fields if verb in _WITH_FIELDS)}
+    names = {*_TAKES[verb], *(f.name for f in kind.all_fields if verb in _WITH_FIELDS)}
     args = {n: getattr(a, n) for n in names if getattr(a, n, None) is not None}
     return {**args, "verb": verb}
 

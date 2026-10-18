@@ -48,7 +48,8 @@ def checked(
     prior = (held.fields.get(FIELD) if held is not None else None) or None
     stale = prior is not None and prior not in vocab.levels
     if stale:
-        prior = None  # a label the vocabulary no longer has is no floor (and is rewritten below)
+        # a label the vocabulary no longer has fails CLOSED: the highest level, until a write says otherwise
+        prior = vocab.ordered()[-1].name
     if not cfg.sensitivity.scan_at_write:
         # a whole-record write (revise) that names no label keeps the one held
         return ({**stored, FIELD: prior} if prior and declared is None else stored), ""
