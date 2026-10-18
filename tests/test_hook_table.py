@@ -35,15 +35,18 @@ GUARD = (
 
 
 def _old_lines() -> dict[str, str]:
-    """The command lines exactly as api/setup and adopt built them before the table."""
+    """The command lines the table installs: the shared `hooks run <event> --harness <id>`
+    (the per-event subcommands they replaced stay as aliases; see test_hook_lines_migrate)."""
     return {
         "session-start": E.command_line(
-            "hooks session-start", refresh="ddflow hooks install --claude"
+            "hooks run session_start --harness claude", refresh="ddflow hooks install --claude"
         ),
-        "pre-compact": E.command_line("hooks pre-compact", refresh="ddflow hooks install --claude")
+        "pre-compact": E.command_line(
+            "hooks run pre_compact --harness claude", refresh="ddflow hooks install --claude"
+        )
         + " || true",
         "prompt-claude": E.command_line(
-            "hooks prompt", extra="", refresh="ddflow hooks install --claude"
+            "hooks run prompt --harness claude", refresh="ddflow hooks install --claude"
         )
         + " || true",
         "pre-tool": E.command_line(
@@ -51,7 +54,7 @@ def _old_lines() -> dict[str, str]:
         )
         + " || true",
         "prompt-gemini": E.command_line(
-            "hooks prompt", extra="--gemini", refresh="ddflow hooks install --gemini"
+            "hooks run prompt --harness gemini", refresh="ddflow hooks install --gemini"
         )
         + " || true",
     }

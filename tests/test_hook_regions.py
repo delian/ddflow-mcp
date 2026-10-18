@@ -16,6 +16,7 @@ from ddflow.services import claudehooks as CH
 from ddflow.services import enforce as E
 from ddflow.services import legacy as L
 from ddflow.services.adopt import Refused
+from ddflow.services.enforce import command_line
 
 
 def _hook(repo: Path, name: str = "pre-commit") -> Path:
@@ -148,13 +149,17 @@ def _entries(repo: Path) -> list[dict]:
     return [h for g in data["hooks"]["SessionStart"] for h in g["hooks"] if CH._ours(h)]
 
 
+#: The unstamped line an older ddflow wrote (the per-event subcommand, no region).
+_OLD_START = command_line("hooks session-start", refresh="ddflow hooks install --claude")
+
+
 def test_a_harness_hook_command_is_a_stamped_region_that_still_runs_the_subcommand(repo):
     _install_session_hook(repo)
     (entry,) = _entries(repo)
     cmd = entry["command"]
     assert cmd.startswith("# ddflow:begin hooks/session-start ddflow=")
     assert cmd.rstrip().endswith("# ddflow:end hooks/session-start")
-    assert "hooks session-start" in cmd
+    assert "hooks run session_start --harness claude" in cmd
 
 
 def test_an_unchanged_harness_hook_is_left_alone(repo):
@@ -167,7 +172,7 @@ def test_a_harness_hook_from_before_the_stamp_is_upgraded_keeping_its_other_keys
     p.parent.mkdir(parents=True)
     old = {
         "type": "command",
-        "command": CH.command(CH.spec("claude", "session-start")),
+        "command": _OLD_START,
         "timeout": 9,
     }
     p.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [old]}]}}))
@@ -182,7 +187,9 @@ def test_a_hand_edited_harness_hook_is_backed_up_before_it_is_rewritten(repo):
     data = json.loads(p.read_text())
     hook = data["hooks"]["SessionStart"][0]["hooks"][0]
     hook["command"] = hook["command"].replace(
-        "hooks session-start", "hooks session-start --mine", 1
+        "hooks run session_start --harness claude",
+        "hooks run session_start --harness claude --mine",
+        1,
     )
     p.write_text(json.dumps(data))
     edited = p.read_text()
@@ -195,7 +202,7 @@ def test_a_hand_edited_harness_hook_is_backed_up_before_it_is_rewritten(repo):
 def test_a_harness_hook_with_a_lone_marker_is_refused_not_a_crash(repo):
     p = repo / ".claude" / "settings.json"
     p.parent.mkdir(parents=True)
-    cmd = CH.command(CH.spec("claude", "session-start")) + "\n# ddflow:end hooks/session-start\n"
+    cmd = _OLD_START + "\n# ddflow:end hooks/session-start\n"
     p.write_text(
         json.dumps({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": cmd}]}]}})
     )

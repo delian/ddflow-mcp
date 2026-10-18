@@ -321,7 +321,7 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
     if stopped is not None:
         return stopped
     by_id = {st.companion.id: st for st in statuses}
-    agents = csv_list(reg.agents) or ["claude"]
+    agents = csv_list(reg.agents) or [HR.default_id()]
     results = [
         CO.register(repo, by_id[w].companion, ag, dry_run=reg.dry_run)
         for w in wanted
@@ -808,27 +808,24 @@ def _state_line(known: tuple[bool | None, str], missing: str) -> str:
 
 def _prompt_hook_line(repo: Path) -> str:
 
-    names = {"claude": "Claude Code", "gemini": "Gemini CLI"}
     return "; ".join(
-        f"{names[h.agent]}: {_state_line(CH.state_spec(repo, h), 'not installed')}"
+        f"{HR.title_of(h.agent)}: {_state_line(CH.state_spec(repo, h), 'not installed')}"
         for h in CH.HOOKS
         if h.name == "prompt"
     )
 
 
 def _precompact_line(repo: Path) -> str:
-
-    return _state_line(
-        CH.state_spec(repo, CH.spec("claude", "pre-compact")),
-        "not installed (`ddflow hooks install --claude`)",
-    )
+    h = CH.spec(HR.default_id(), "pre-compact")
+    return _state_line(CH.state_spec(repo, h), f"not installed (`ddflow hooks install {h.flag}`)")
 
 
 def _pretool_line(repo: Path) -> str:
 
+    h = CH.spec(HR.default_id(), "pre-tool")
     return _state_line(
-        CH.state_spec(repo, CH.spec("claude", "pre-tool")),
-        "not installed (`ddflow hooks install --claude` refuses pkill, git stash, git push and "
+        CH.state_spec(repo, h),
+        f"not installed (`ddflow hooks install {h.flag}` refuses pkill, git stash, git push and "
         "force flags before they run)",
     )
 
@@ -1108,10 +1105,12 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
             f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
-    known = CH.state_spec(repo, CH.spec("claude", "session-start"))
+    start = CH.spec(HR.default_id(), "session-start")
+    known = CH.state_spec(repo, start)
     session = known[0]
     session_line = _state_line(
-        known, "not installed (`ddflow hooks install --claude` puts the brief in every session)"
+        known,
+        f"not installed (`ddflow hooks install {start.flag}` puts the brief in every session)",
     )
     msg_armed = E.armed(repo, "commit-msg")
     msg_hook = bool(msg_armed.via)
