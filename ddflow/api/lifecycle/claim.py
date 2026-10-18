@@ -20,6 +20,7 @@ from ...services import flow as FS
 from ...services import leases as L
 from ...services import pins_merge as PM
 from ...services import ports as PT
+from ...services import tree_bin as TB
 from ...services import waiting as WG
 from ...services.bug_globs import bug_globs_of
 from ...services.guidance import inject as GI
@@ -274,9 +275,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     if wt is not None:  # a pin file merges through its driver in the tree an agent works in
         PM.ensure_driver(Path(wt.path), cfg)
     log.append("item.started", item, {})
-    # The first branch made is where the branching model starts to matter. An unmade
+    # The first branch made is where the branching model starts to matter: an unmade
     # choice is defaulted here, on the record, and followed from now on.
-
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
@@ -302,7 +302,7 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
         # Only when something governs the item: the key is absent otherwise, as it always was.
         **({"guidance": guidance} if guidance else {}),
         port=port,
-        port_advice=PT.advice(port, item) if port else "",
+        port_advice=TB.with_advice(PT.advice(port, item) if port else "", wt),
         item=item,
         holder=lz.holder,
         worktree=str(wt.path) if wt else "",
