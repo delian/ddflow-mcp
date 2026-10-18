@@ -33,6 +33,14 @@ def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_first_call_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``[session].first_call`` (default on) appends a session start to the first MCP tool
+    call of a connection; the suite's many tests that read a call's content blocks would each
+    see one extra. tests/test_mcp_first_call.py turns it back on."""
+    monkeypatch.setenv("DDFLOW_SESSION_FIRST_CALL", "false")
+
+
+@pytest.fixture(autouse=True)
 def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     """The release check (``[upgrade].release_check``, default on) must never reach a network
     from the suite; ``run_cli`` subprocesses inherit this. tests/test_upgrade_release_check.py
