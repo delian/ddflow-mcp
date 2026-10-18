@@ -105,9 +105,15 @@ def test_write_skips_a_half_written_shard(tmp_path: Path, capsys) -> None:
 
 def test_a_refused_add_writes_nothing(tree: Path) -> None:
     before = {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
-    for bad in (["--exempt", "too short"], ["--lookup", "nowhy"], ["--field", "a=bogus"]):
+    cases = (
+        ("x.new", ["--exempt", "too short"]),
+        ("x.new", ["--lookup", "nowhy"]),
+        ("x.new", ["--field", "a=bogus"]),
+        ("bug.found", ["--text", "detail"]),
+    )
+    for kind, bad in cases:
         with pytest.raises(SystemExit):
-            EK.main(["add", "x.new", "--why", "w", "--field", "n=int", *bad])
+            EK.main(["add", kind, "--why", "w", "--field", "n=int", *bad])
     assert before == {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
 
 
