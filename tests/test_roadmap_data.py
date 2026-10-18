@@ -86,7 +86,7 @@ def test_critical_path_is_named_and_marks_its_phases():
     chain = [s["id"] for s in d["critical_path"]]
     assert len(chain) >= 2
     on = {pid for pid, p in phases(d).items() if p["on_critical_path"]}
-    assert on and "P1" not in on or chain[0] in {"T2", "T3"}
+    assert (on and "P1" not in on) or chain[0] in {"T2", "T3"}
 
 
 def test_release_lines_group_phases_only_when_there_are_several():
