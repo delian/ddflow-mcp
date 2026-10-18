@@ -21,7 +21,7 @@ Note from the coordinator: {{ note }}
 <!-- section: start -->
 ## Start
 
-1. `ddflow claim {{ item }}` (this brief replaces `ddflow brief`). Work ONLY in the worktree it prints.
+1. `ddflow claim {{ item }}` (this brief replaces `ddflow brief`). Work ONLY in the worktree it prints. If the project is ddflow itself, manual checks there use the `ddflow` shim the claim prints (the one on PATH may run the primary's code).
 2. To write outside the globs, first `ddflow update {{ item }} --globs "<every glob, old and new>"` (it REPLACES the list). Heartbeat during long runs: `ddflow heartbeat {{ item }}` (lease {{ lease_s }}s, renew every {{ heartbeat_s }}s).
 3. `git merge {{ base }}` before you start and again before you merge. Pin files are regenerated with `ddflow pins regenerate`, never by hand and never hand-merged.
 <!-- section: tests -->
