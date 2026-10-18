@@ -557,8 +557,8 @@ class Command:
     surfaces print; ``prose`` says the MCP body is text, not JSON; ``tier`` is the MCP
     tool tier (`tools/tiers.py` reads it for every tool outside its legacy sets),
     ``help_group`` the `ddflow_help` inventory heading when no legacy prefix claims the tool,
-    and ``render`` the optional human renderer. `tool_entry` carries neither tier nor group:
-    the engine reads tiers from the tier table, not from the entry.
+    and ``render`` the optional human renderer. `tool_entry` carries the group (for
+    `services/help.py`) but not the tier: the engine reads tiers from the tier table.
     """
 
     path: tuple[str, ...]

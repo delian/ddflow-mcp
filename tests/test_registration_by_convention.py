@@ -72,3 +72,11 @@ def test_the_constants_register_reads_fragments_beside_it(tmp_path: Path):
     reg = ca.load_register(tmp_path)
     assert reg.knob == {"a.py:A_MAX": "a.max", "b.py:B_LIMIT": "b.limit"}
     assert reg.exempt == {"b.py:B_MAX": "structural"}
+
+
+def test_a_docstring_line_starting_with_commands_does_not_register_a_module():
+    from ddflow.surfaces.declared import _HAS_COMMANDS
+
+    assert not _HAS_COMMANDS.search('"""Helpers.\n\nCOMMANDS that use these.\n"""\n')
+    assert _HAS_COMMANDS.search("COMMANDS: tuple[Command, ...] = (\n")
+    assert _HAS_COMMANDS.search("COMMANDS = ()\n")

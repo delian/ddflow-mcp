@@ -35,11 +35,16 @@ ORDER: tuple[str, ...] = (
     *LEGACY_ORDER,
     *(n for n in (*DECLARED, *HAND_WRITTEN) if n not in LEGACY_ORDER),
 )
+_unknown = [n for n in LEGACY_ORDER if n not in DECLARED and n not in HAND_WRITTEN]
+if len(LEGACY_ORDER) != len(set(LEGACY_ORDER)) or _unknown:
+    raise RuntimeError(
+        f"tools/order.py lists a tool twice, or names one nothing declares: {_unknown}"
+    )
 TOOLS: dict[str, dict[str, Any]] = {
     name: DECLARED[name].tool_entry() if name in DECLARED else HAND_WRITTEN[name] for name in ORDER
 }
-if len(LEGACY_ORDER) != len(set(LEGACY_ORDER)) or len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
-    raise RuntimeError("tools/order.py lists a tool twice, or names one nothing declares")
+if len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
+    raise RuntimeError("a tool is both declared and hand-written")
 
 #: The add tools: each takes the answer to the duplicate check (`api/_dedupe.py`).
 ADD_TOOLS = (
