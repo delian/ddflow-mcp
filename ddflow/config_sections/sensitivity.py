@@ -29,8 +29,8 @@ class SensitivityConfig:
         ),
     )
     egress_doors: list[str] = knob(
-        factory=lambda: ["search", "recall"],
-        doc="The doors that feed a model, where a record whose sensitivity may not go to a model is withheld: search, recall (brief, export, hub publish and notifications follow when they carry labelled records). Empty turns the filter off.",
+        factory=lambda: ["search", "recall", "brief", "export"],
+        doc="The doors that feed a model, where a record whose sensitivity may not go to a model is withheld: search, recall, brief, export (search and recall are wired now; brief and export apply as they carry labelled records; hub publish and notifications are added to the list when they exist). Empty turns the filter off.",
         check=lambda v: (
             ""
             if isinstance(v, list) and all(isinstance(x, str) for x in v)

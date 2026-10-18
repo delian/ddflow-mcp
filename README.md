@@ -5843,7 +5843,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=50022d2d6dde -->
+<!-- ddflow:begin README/knobs sha=2d2670a56e10 -->
 <details><summary>All 347 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
@@ -6008,7 +6008,7 @@ long default is left to `ddflow config --explain`.
 | `evaluation.min_fixtures` | `1` |  |
 | `sensitivity.scan_at_write` | `true` |  |
 | `sensitivity.model_allowed` | `[]` |  |
-| `sensitivity.egress_doors` | `["search", "recall"]` |  |
+| `sensitivity.egress_doors` | `["search", "recall", "brief", "export"]` |  |
 | `companions.probe_cache_ttl_s` | `300` |  |
 | `cadence.integration_tests_every_tasks` | `5` |  |
 | `cadence.architecture_review_every_phases` | `2` |  |

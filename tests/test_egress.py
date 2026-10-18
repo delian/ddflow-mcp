@@ -69,3 +69,14 @@ def test_an_unknown_label_fails_closed(repo):
     assert gate.withholds("search", {"sensitivity": "gone"})
     assert not gate.withholds("search", {})
     assert not gate.withholds("elsewhere", {"sensitivity": "confidential"})
+
+
+def test_a_hit_the_state_cannot_resolve_is_withheld(repo):
+    _log, cfg, st = _load(repo)
+    gate = Egress(repo, cfg)
+    assert gate.withholds_def("recall", st, "risk", "no-such-id")
+    assert not gate.withholds_def("elsewhere", st, "risk", "no-such-id")
+
+
+def test_every_model_door_is_on_by_default():
+    assert set(Config().sensitivity.egress_doors) == {"search", "recall", "brief", "export"}
