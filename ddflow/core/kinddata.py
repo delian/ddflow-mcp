@@ -17,8 +17,6 @@ from typing import Any
 
 from . import kindrules as KR
 
-#: Keep in step with `api.records.FIELD_TYPES`, which a field is finally checked against.
-FIELD_TYPES = ("string", "integer", "boolean", "array")
 _FIELD_KEYS = {"name", "type", "help", "required", "choices", "default"}
 _LISTS = ("text", "columns", "filters", "verbs", "aliases", "applies")
 _BOOLS = ("search", "recall", "resource")
@@ -52,8 +50,8 @@ def _field(n: int, raw: Any) -> dict[str, Any]:
         raise KindDataError(f"{where} needs a name")
     where = f"field {name!r}"
     ftype = raw.get("type", "string")
-    if ftype not in FIELD_TYPES:
-        raise KindDataError(f"{where}: type {ftype!r} is not one of {', '.join(FIELD_TYPES)}")
+    if not isinstance(ftype, str):
+        raise KindDataError(f"{where}: type must be a string")  # FieldSpec checks the name
     out: dict[str, Any] = {"name": name, "type": ftype}
     if "help" in raw:
         out["help"] = str(raw["help"])
