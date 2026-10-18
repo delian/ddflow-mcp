@@ -15,7 +15,11 @@ def test_the_brief_names_the_identify_argument(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "x", "--globs", "a.py")
     out = run_cli(repo, "brief", "--for-agent", "w1", "T1")[1]
-    assert '`ddflow_identify` with the argument `agent="w1"`, not `name`' in out
+    assert (
+        '`ddflow_identify` only on a connection of your own, with the argument `agent="w1"`, not `name`'
+        in out
+    )
+    assert "`as_agent` on each call" in out
     assert "DDFLOW_AGENT=w1" in out
 
 

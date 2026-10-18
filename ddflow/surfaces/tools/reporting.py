@@ -48,7 +48,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
         },
         "identify": True,
-        # Callers lost calls to `name`; it still works (D-compat), the first use says so.
+        # Callers lost calls to `name`; it still works (D-compat).
         "arg_aliases": {"name": Alias("argument", "name", "agent", "0.2.3")},
     },
 }
