@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ...core.bookkeeping import STATE_EXCLUDE, is_state
 from ...core.digest import content_digest
@@ -372,12 +372,24 @@ _ours = is_state  # `.ddflow/` is ddflow's bookkeeping, not the work -- see FING
 TreeEntries = dict[str, tuple[str, str]]
 
 
-def _row(row: str) -> tuple[tuple[str, str, str], str] | None:
-    """``((a, b, c), path)`` of an `ls-tree` row (mode type id) or an `ls-files -s` row (mode
-    id stage), the same shape; None when it is neither."""
+class _Row(NamedTuple):
+    mode: str
+    oid: str  #: the blob id, whichever field the command put it in
+    extra: str  #: the field that is not the id: the object type (ls-tree) or the stage (ls-files)
+    path: str
+
+
+def _row(row: str, *, index: bool) -> _Row | None:
+    """An `ls-tree` row (``mode type id\\tpath``) or, with ``index``, an `ls-files -s` row
+    (``mode id stage\\tpath``) read into one shape with the id in ``oid``; None when it is
+    neither. Where the id sits differs, and taking the stage for it is a fingerprint that
+    never changes with content."""
     meta, _, path = row.partition("\t")
     parts = meta.split()
-    return ((parts[0], parts[1], parts[2]), path) if len(parts) == 3 and path else None  # noqa: PLR2004
+    if len(parts) != 3 or not path:  # noqa: PLR2004 -- three fields
+        return None
+    mode, a, b = parts
+    return _Row(mode, a, b, path) if index else _Row(mode, b, a, path)
 
 
 def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
@@ -387,10 +399,9 @@ def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
         return None
     out: TreeEntries = {}
     for row in rows:
-        parsed = _row(row)
-        if parsed and not _ours(parsed[1]):
-            (mode, _type, oid), path = parsed
-            out[path] = (mode, oid)
+        parsed = _row(row, index=False)
+        if parsed and not _ours(parsed.path):
+            out[parsed.path] = (parsed.mode, parsed.oid)
     return out
 
 
@@ -478,12 +489,11 @@ def _index_entries(rows: list[str]) -> TreeEntries | None:
     """`git ls-files -s -z` rows as entries; None for an unmerged index (no one tree)."""
     out: TreeEntries = {}
     for row in rows:
-        parsed = _row(row)
-        if parsed is None or parsed[0][2] != "0":
+        parsed = _row(row, index=True)
+        if parsed is None or parsed.extra != "0":
             return None
-        (mode, oid, _stage), path = parsed
-        if not _ours(path):
-            out[path] = (mode, oid)
+        if not _ours(parsed.path):
+            out[parsed.path] = (parsed.mode, parsed.oid)
     return out
 
 
