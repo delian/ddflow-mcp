@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra.fsio import Unreadable, read_json
+from . import hookwriters as HW
 from .adopt import SHAPE_MCP_SERVERS, SHAPE_TOML, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
 
@@ -217,8 +218,6 @@ def _approval(repo: Path, h: Any, registered: bool | None, apply: bool) -> dict[
 
 
 def _hooks(repo: Path, h: Any, apply: bool) -> dict[str, str]:
-    from . import hookwriters as HW
-
     if h.hooks is None:
         return _step("hooks", "unknown", "hooks are NOT VERIFIED in the descriptor")
     why = HW.unsupported(h)
