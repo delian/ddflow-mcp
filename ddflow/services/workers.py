@@ -42,11 +42,13 @@ def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None
     ci = cfg.ci
     lo, hi = max(1, int(ci.min_workers)), max(1, int(ci.max_workers))
     hi = max(lo, hi)
-    setting = str(ci.workers).strip().lower() or "auto"
+    setting = str(ci.workers or "").strip().lower() or "auto"
     inputs: dict[str, Any] = {"setting": setting, "min": lo, "max": hi, "files": files}
     if setting != "auto":
         n = int(setting) if setting.isdigit() and int(setting) > 0 else 1
-        return Workers(n, {**inputs, "rule": "fixed by [ci].workers"})
+        if files is not None:
+            n = min(n, files)
+        return Workers(max(1, n), {**inputs, "rule": "fixed by [ci].workers"})
     cores = cores or os.cpu_count() or 1
     values = (source or S.HostSignals()).sample()
     load, free = values.get("load"), values.get("memory_free_frac")
