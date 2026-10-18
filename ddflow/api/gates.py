@@ -778,6 +778,25 @@ class _Vetted:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
+def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) -> str:
+    """A refusal when `implement` is passed for an item whose own worktree has no commit
+    ahead of its base, else "" (bug B31c0109012: a commit the lease hook refused was
+    silenced by the driver, and the gate passed over an empty branch). An item with no
+    worktree of its own, or whose tree was removed, is not judged; a tree whose range cannot
+    be measured is refused, not passed."""
+    if gate != "implement" or result != "passed" or not it.worktree or wt is None:
+        return ""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
+    if not (r.ok and r.out.strip() == "0"):
+        return ""
+    return (
+        f"{it.id}'s branch has no commit ahead of {base}: there is nothing implemented to "
+        f"pass. Commit the work (a commit the lease hook refused leaves nothing behind), "
+        f"or --force with a --reason if the item truly changes nothing."
+    )
+
+
 def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip: bool) -> _Vetted:
     """Check the caller's ``--model`` and ``--reviewed-sha`` claims against the project."""
     if skip:
@@ -921,10 +940,14 @@ def _roborev_reviewer(
     )
 
 
-def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
+def _docs_gate_export(
+    repo: Path, cfg, ev: dict[str, Any], warning: str, *, applies: bool = True
+) -> str:
     """`[export].refresh = docs_gate`: the docs gate's export step. Regenerates and verifies
     the selected documents and records them with their body digests in ``ev``; returns the
     warning, extended when a document was skipped, failed or is not fresh. Never fails."""
+    if not applies:
+        return warning
 
     rr = RF.refresh_selected(repo, "docs_gate", cfg=cfg)
     if not rr.outcomes:
@@ -1052,8 +1075,13 @@ def record(
     if bad is not None:
         return bad
 
-    if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
-        warning = _docs_gate_export(repo, cfg, ev, warning)
+    warning = _docs_gate_export(
+        repo,
+        cfg,
+        ev,
+        warning,
+        applies=not skip and (gate, it.kind, result) == ("docs", "phase", "passed"),
+    )
 
     wt: Path | None = None
     if not skip:
@@ -1085,6 +1113,8 @@ def record(
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
+    if not force and (why := _implement_without_commits(repo, cfg, it, gate, result, wt)):
+        return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
     ev.update(vetted.evidence)
     warning = " ".join(filter(None, [warning, vetted.note]))
     by, note = _roborev_reviewer(repo, wt, gate, ev, evidence.model, skip=skip, gdef=gdef)
