@@ -62,3 +62,8 @@ def test_clean_fixtures_do_not_count_toward_the_minimum():
     )
     assert rows["wf"]["fixtures"] == 3 and rows["wf"]["planted_fixtures"] == 1
     assert not rows["wf"]["enabled"] and "has 1" in rows["wf"]["why"]
+
+
+def test_a_missing_row_is_a_refusal_even_with_no_minimum():
+    assert E.enable_by_default(None, max_miss_rate=0.0, min_fixtures=0)[0] is False
+    assert E.enable_by_default({}, max_miss_rate=0.0, min_fixtures=0)[0] is False
