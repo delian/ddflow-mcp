@@ -37,6 +37,10 @@ BOOKKEEPING = frozenset(
     {"lease.acquired", "lease.renewed", "lease.waiting", "lease.expired", "lease.released"}
 )
 
+#: Seconds a pre-lock read of a worktree's activity may be used under the lock; older, the
+#: claim asks git again (slower, never wrong).
+FRESH_S = 5.0
+
 #: `(lease) -> epoch seconds of the newest work in its tree`; 0.0 for none.
 Activity = Callable[[Lease], float]
 
@@ -209,6 +213,12 @@ class Prejudged:
     mark: Any = None
     events: list[Any] = field(default_factory=list)
     seen: dict[tuple[str, str, str], float] = field(default_factory=dict)
+    at: float = 0.0  #: when the activity was read; worktree activity is not in the log's mark
+
+    def fresh(self, now: float) -> bool:
+        """Whether the worktree watermarks are young enough to judge from: a holder that
+        resumed while this claim waited for the lock is not visible in the log."""
+        return now - self.at <= FRESH_S
 
     @staticmethod
     def key(lease: Lease) -> tuple[str, str, str]:

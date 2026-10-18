@@ -84,3 +84,39 @@ def test_a_log_that_moved_before_the_lock_is_rejudged_from_a_fresh_read(repo):
             raise AssertionError("a holder with fresh progress must not be broken")
     finally:
         leases._prejudge = real
+
+
+def _claim_with_a_late_event(repo: Path, monkeypatch, fresh_s: float | None = None):
+    """Claim T2 --break with an unrelated event landing between the pre-lock read and the lock;
+    return whether the activity probe ever ran with the lock held."""
+    _setup(repo)
+    log, cfg = EventLog(repo, B), Config.load(repo)
+    held_during: list[bool] = []
+    real = leases._prejudge
+
+    def probe(_lease) -> float:
+        held_during.append(bool(LG._HELD.get(LG._held_key(log.lock_path), 0)))
+        return 0.0
+
+    def moving(*args, **kw):
+        pre = real(*args, **kw)
+        EventLog(repo, A).append("session.note", "T9", {"text": "elsewhere"})
+        return pre
+
+    monkeypatch.setattr(leases, "_prejudge", moving)
+    if fresh_s is not None:
+        monkeypatch.setattr("ddflow.services.leasebreak.FRESH_S", fresh_s)
+    leases.acquire(log, cfg, "T2", holder=B, break_lease=True, activity=probe, broke=[])
+    return held_during
+
+
+def test_an_unrelated_append_in_the_wait_still_keeps_git_out_of_the_lock(repo, monkeypatch):
+    held = _claim_with_a_late_event(repo, monkeypatch)
+    assert held and not any(held)
+
+
+def test_a_stale_worktree_reading_is_probed_again_rather_than_trusted(repo, monkeypatch):
+    """A holder that resumed while the claim waited for the lock must not be broken on a
+    reading from before: it asks git again (under the lock, slower, never wrong)."""
+    held = _claim_with_a_late_event(repo, monkeypatch, fresh_s=-1.0)
+    assert any(held)
