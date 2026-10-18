@@ -5,4 +5,4 @@ kind = "knob_added"
 key = "schedule.phase_full_suite"
 new = '"require"'
 why = "A phase cannot complete until the full test suite has passed on its merged tree: a recorded integration_tests pass newer than the last merge of its tasks."
-impact = "behavior"
+impact = "additive"
