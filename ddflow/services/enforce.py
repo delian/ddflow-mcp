@@ -50,7 +50,7 @@ from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
 from ..core.globs import overlap as globs_overlap
-from ..core.model import ABANDONED, DONE, Lease, fold
+from ..core.model import Lease, fold
 from ..core.outcome import FAIL, NOTHING, OK, Verdict
 from ..core.schedule import is_shared, shared_globs
 from ..infra import git as G
@@ -63,6 +63,7 @@ from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
 from . import docsync
+from . import drift as D
 from . import pins_written as PW
 from . import upgrade_written as UW
 from .backups import make_backup
@@ -2104,93 +2105,17 @@ class Drift:
     detail: str = ""
 
 
-def _item_base(repo: Path, here: Path, cfg: Config | None) -> str:
-    """The recorded `Item.base` of the item whose worktree IS ``here``, or "".
-
-    Found by where the item's worktree resolves -- the `same_tree` test `check_commit`
-    uses for leases: the tree is the robust key, whichever identity string made it. A
-    live item wins over a finished one whose tree still happens to sit at the path. A
-    log that cannot be read is "" -- the caller then measures against the default
-    branch, which is still a check, not a pass.
-    """
-
-    try:
-        cfg = cfg or Config.load(repo)
-        state = fold(EventLog(repo, cfg.agent.id or "", log_cfg=cfg.log).read_all(), strict=False)
-    except Exception:
-        return ""
-    here = here.resolve()
-    found = [
-        it
-        for it in state.items.values()
-        if it.worktree and it.base and not it.removed
-        if W.load_path(repo, it.worktree).resolve() == here
-    ]
-    found.sort(key=lambda it: it.state in (DONE, ABANDONED))
-    return found[0].base if found else ""
-
-
 def drift_base(repo: Path, here: Path, cfg: Config | None = None) -> str:
-    """The branch ``here``'s work merges into: its item's recorded base, else the
-    repository's default branch.
-
-    Not simply the default branch: under stacking or gitflow a task forks from its
-    dependency's branch or from a release line, and measuring it against `main` would
-    report everything that line has not taken yet as drift -- and tell the agent to
-    merge a branch its work must not carry. `Item.base` is what the merge itself checks
-    against. A recorded base that no longer resolves (a stacked dependency's branch
-    deleted after it landed) falls back to the default branch rather than leaving the
-    tree at "could not tell" forever.
-    """
-    base = _item_base(repo, here, cfg)
-    if base and W.git(here, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
-        return base
-    return W.default_branch(repo)
+    """The branch ``here``'s work merges into (`drift.base_of`)."""
+    return D.base_of(repo, here, cfg)
 
 
 def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> Drift:
     """How far ``here``'s HEAD is behind ``base`` (default: `drift_base`), and which
-    rulebooks changed there since the fork.
-
-    Any checkout, the primary included: a primary left on a stale branch works to old
-    rules just the same, and the primary ON the base branch is simply 0 behind.
-    """
-    base = base or drift_base(repo, here, cfg)
-    n = W.git(here, "rev-list", "--count", f"HEAD..{base}")
-    if not n.ok or not n.out.isdigit():
-        # "Could not tell" is not "not behind" (roborev 826): an unborn HEAD, an
-        # unrelated history or an unresolvable base all land here.
-        return Drift(base, None, detail=n.err or n.out or "git rev-list failed")
-    if int(n.out) == 0:
-        return Drift(base, 0)
-    # Three dots: what changed on `base` since the merge base -- NOT this branch's own
-    # edits, which are the new rules rather than stale ones.
-    changed = CH.changed_paths(
-        here, "HEAD", tip=base, include=("committed",), renames=True, pathspec=rulebooks()
-    )
-    if changed is None:
-        return Drift(base, None, detail=f"git could not diff HEAD...{base}")
-    if changed:
-        # ...AND still different here. "Changed on base since the fork" alone refused a
-        # branch that had already taken the change by `cherry-pick -x` or by hand, its
-        # rulebook byte-identical to base's, and told it to `git merge` for nothing
-        # (reviewer, reproduced). Content is the question: a rulebook this branch ALSO
-        # changed, differently, still differs and still must merge. Only the paths
-        # already flagged are compared, literally -- they are names, not globs.
-        differ = CH.changed_paths(
-            here,
-            "HEAD",
-            tip=base,
-            include=("committed",),
-            fork=False,
-            renames=True,
-            pathspec=changed,
-            literal=True,
-        )
-        if differ is None:
-            return Drift(base, None, detail=f"git could not diff HEAD {base}")
-        changed = [p for p in changed if p in set(differ)]
-    return Drift(base, int(n.out), tuple(changed))
+    rulebooks changed there since the fork. Any checkout, the primary included: the
+    primary ON the base branch is simply 0 behind. The calculation is `drift.measure`."""
+    r = D.measure(repo, here, base, cfg=cfg, rulebooks=rulebooks())
+    return Drift(r.base, r.behind, r.rules, r.detail)
 
 
 def _concludes_merge_of(here: Path, base: str) -> bool:
