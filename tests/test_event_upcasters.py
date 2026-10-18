@@ -94,13 +94,21 @@ def load(path: Path = FIXTURE) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def read_log(paths: Iterable[Path]) -> list[Event]:
-    return [
-        Event.from_json(line)
-        for p in paths
-        for line in p.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+def read_log(paths: Iterable[Path], *, lenient: bool = False) -> list[Event]:
+    """Every event of the shards. ``lenient`` skips a line that does not decode (a shard
+    another process is still writing) and says so on stderr, instead of dying on it."""
+    out: list[Event] = []
+    for p in paths:
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                out.append(Event.from_json(line))
+            except (ValueError, KeyError, TypeError) as exc:
+                if not lenient:
+                    raise
+                print(f"skipped {p.name}:{n}, not an event ({exc})", file=sys.stderr)
+    return out
 
 
 def merged(snapshot: Mapping[str, Any], seen: Mapping[str, Mapping[str, set[str]]]) -> dict:
@@ -649,7 +657,7 @@ def dump(snapshot: Mapping[str, Any]) -> str:
 def _write(repo: Path) -> None:
     logs = sorted((repo / ".ddflow" / "events").glob("*.jsonl")) + REAL_LOGS
     snap = load() if FIXTURE.exists() else {"format": 1, "kinds": {}}
-    out = merged(snap, observe(read_log(logs)))
+    out = merged(snap, observe(read_log(logs, lenient=True)))
     FIXTURE.write_text(dump(out), encoding="utf-8")
     print(f"wrote {FIXTURE.relative_to(ROOT)}: {len(out['kinds'])} kinds")
 
