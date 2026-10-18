@@ -31,17 +31,17 @@ def test_an_unregistered_kind_fails_the_ratchet() -> None:
 
 
 def test_a_declaration_with_no_handler_fails_the_ratchet() -> None:
-    extra = [*DECLARED, EK.EventKind("x.ghost", "waiting", "a kind nothing folds")]
+    extra = [*DECLARED, EK.EventKind("x.ghost", "waiting", "A kind nothing folds.")]
     assert EK.problems(extra, HANDLERS) == ["x.ghost: declared by waiting but nothing folds it"]
 
 
 def test_a_kind_declared_twice_names_both_owners() -> None:
-    dup = [*DECLARED, EK.EventKind("lease.waiting", "other", "the same kind again")]
+    dup = [*DECLARED, EK.EventKind("lease.waiting", "other", "The same kind again.")]
     assert any("declared twice, by waiting and other" in p for p in EK.problems(dup, HANDLERS))
 
 
 def test_a_bad_doc_retention_or_version_is_named() -> None:
-    k = EK.EventKind("lease.waiting", "waiting", "short", retention="forever", v=3)
+    k = EK.EventKind("lease.waiting", "waiting", "no stop", retention="forever", v=3)
     got = EK.problems([k], ["lease.waiting"])
     assert len(got) == 3, got
     assert any("doc" in p for p in got) and any("retention" in p for p in got)
@@ -49,7 +49,7 @@ def test_a_bad_doc_retention_or_version_is_named() -> None:
 
 
 def test_a_payload_version_bump_must_be_declared() -> None:
-    k = EK.EventKind("lease.waiting", "waiting", "a record of who waits for whom")
+    k = EK.EventKind("lease.waiting", "waiting", "Who waits for whom.")
     assert EK.problems([k], ["lease.waiting"], versions={"lease.waiting": 2})
 
 

@@ -44,6 +44,7 @@ COHERENCE = ROOT / "tests" / "test_coherence_coverage.py"
 EVENTS = ROOT / "ddflow" / "templates" / "events"
 FRAGMENTS = ROOT / "ddflow" / "templates" / "upgrade" / "unreleased"
 MIN_REASON = 20
+MIN_DOC = 10
 TEXT_TYPES = {"str", "dict", "list"}
 TYPES = {"str", "int", "float", "bool", "null", "list", "dict"}
 
@@ -190,8 +191,9 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
     owner = args.owner or kind.partition(".")[0]
     if not re.fullmatch(r"[a-z][a-z0-9_]*", owner):
         raise SystemExit(f"--owner {owner!r}: lower-case letters, digits and _ only")
-    if len(args.why.strip()) < EK.MIN_DOC:
-        raise SystemExit(f"--why: at least {EK.MIN_DOC} characters (it is the kind's doc)")
+    if len(args.why.strip()) < MIN_DOC:
+        raise SystemExit(f"--why: at least {MIN_DOC} characters (it is the kind's doc)")
+    args.why = args.why.strip().rstrip(".") + "."
     done: list[str] = []
     if kind not in snap["kinds"]:
         snap["kinds"][kind] = {"v": 1, "fields": dict(sorted(fields.items()))}
