@@ -28,6 +28,8 @@ def _decision_lines(cfg, st, item: str) -> tuple[list[str], int]:
     pins = [i for i in cfg.session.agent_brief_pin_decisions if i in st.decisions]
     lines = []
     for did in AB.decision_order(applied, pins, operator):
+        if did not in st.decisions:
+            continue
         d = st.decisions[did]
         text = d.decision
         if len(text) > BRIEF_DECISION_CHARS:
@@ -89,7 +91,8 @@ def agent_brief(
                 cfg.session.agent_brief_lessons,
             ),
         )
-        shown = max(cfg.session.agent_brief_decisions, len(cfg.session.agent_brief_pin_decisions))
+        pinned = sum(1 for i in cfg.session.agent_brief_pin_decisions if i in st.decisions)
+        shown = max(cfg.session.agent_brief_decisions, pinned)
         facts.decisions = decisions[: max(0, shown)]
         got = AB.render(
             tmpl,
