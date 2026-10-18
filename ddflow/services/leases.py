@@ -455,7 +455,7 @@ def _prejudge(
     if it is None:
         return None
     mine = list(globs if globs is not None else it.globs)
-    pre, act = LB.Prejudged(mark=mark), activity or LB.tree_activity(log.root)
+    pre, act = LB.Prejudged(mark=mark, at=time.time()), activity or LB.tree_activity(log.root)
     stamp = clock.iso_at(now)
     clash = glob_clash(state, cfg, it, holder, mine, now)
     while clash:
@@ -491,11 +491,11 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     if not (asked or cfg.lease.break_on_timeout) or not cfg.lease.hold_max_s:
         return clash
     act = activity or LB.tree_activity(log.root)
-    # Judged from what was read before the lock; re-read only if the log has moved since.
-    if pre is not None and pre.mark == log.mark(clock=False):
-        events, act = pre.events, pre.activity(act)
-    else:
-        events = log.read_all()
+    # Judged from what was read before the lock. The events are reused while the log has not
+    # moved (else re-read: a fold, no git); the worktree watermarks while they are young.
+    if pre is not None and pre.fresh(time.time()):
+        act = pre.activity(act)
+    events = pre.events if pre and pre.mark == log.mark(clock=False) else log.read_all()
     plan: list[tuple[str, Lease, tuple[str, str], LB.Verdict]] = []
     stamp = clock.iso_at(now)
     try:
