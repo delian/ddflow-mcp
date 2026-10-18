@@ -299,6 +299,17 @@ def probe_problem(roots: list[Path], probe: str) -> str:
     return ""
 
 
+def _probe_refusal(repo: Path, it, probe: str) -> str:
+    """`probe_problem` over the item's worktree and the repo, as a refusal sentence or ""."""
+    roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
+    problem = probe_problem(roots, probe)
+    return (
+        f"{problem}: a probe must name an existing test or a command that was run"
+        if problem
+        else ""
+    )
+
+
 def triage(
     repo: Path,
     item: str,
@@ -343,9 +354,8 @@ def triage(
             "--probe is required: for --refuted the run that shows the finding false, for "
             "--confirmed the fix or test that answers it"
         )
-    roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
-    if problem := probe_problem(roots, probe):
-        return bad(f"{problem}: a probe must name an existing test or a command that was run")
+    if problem := _probe_refusal(repo, it, probe):
+        return bad(problem)
     if not gate:
         withf = sorted(g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings"))
         if len(withf) > 1:
