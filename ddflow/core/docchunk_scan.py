@@ -39,38 +39,59 @@ class Scan:
     table: list[tuple[int, int]] = field(default_factory=list)
 
 
+_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s*[>|]")
+_DELIM = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
+
+
+def _opens_block(ln: str) -> bool:
+    return bool(_FENCE.match(ln) or _ATX.match(ln))
+
+
 def _scan_md(lines: list[str], start: int) -> Scan:
     sc, i, n = Scan(), start, len(lines)
+    fresh = True  # a paragraph can start here: after a blank line, a heading, a fence, a table
     while i < n:
         ln = lines[i]
-        if m := _FENCE.match(ln):
+        if not ln.strip():
+            fresh, i = True, i + 1
+        elif m := _FENCE.match(ln):
             ch, size, j = m.group(1)[0], len(m.group(1)), i + 1
             close = re.compile(rf"^ {{0,3}}{re.escape(ch)}{{{size},}}[ \t]*$")
             while j < n and not close.match(lines[j]):
                 j += 1
             sc.code.append((i, min(j, n - 1)))
-            i = j + 1
+            fresh, i = True, j + 1
         elif m := _ATX.match(ln):
             sc.heads.append((i, len(m.group(1)), (m.group(2) or "").strip()))
-            i += 1
-        elif (
-            ln.strip()
-            and i + 1 < n
-            and (i == start or not lines[i - 1].strip())
-            and (s := _SETEXT.match(lines[i + 1]))
-            and not ln.lstrip().startswith(("|", ">", "-", "*", "+"))
-        ):
-            sc.heads.append((i, 1 if s.group(1)[0] == "=" else 2, ln.strip()))
-            i += 2
-        elif ln.lstrip().startswith("|") and i + 1 < n and lines[i + 1].lstrip().startswith("|"):
-            j = i
-            while j + 1 < n and lines[j + 1].lstrip().startswith("|"):
+            fresh, i = True, i + 1
+        elif "|" in ln and i + 1 < n and _DELIM.match(lines[i + 1]) and "|" in lines[i + 1] + ln:
+            j = i + 1  # a GFM table: a header row, a delimiter row, then rows to a blank line
+            while j + 1 < n and lines[j + 1].strip() and "|" in lines[j + 1]:
                 j += 1
             sc.table.append((i, j))
-            i = j + 1
+            fresh, i = True, j + 1
+        elif fresh and not _LIST.match(ln) and (k := _setext_end(lines, i, n)):
+            sc.heads.append(
+                (
+                    i,
+                    1 if lines[k].strip()[0] == "=" else 2,
+                    " ".join(row.strip() for row in lines[i:k]),
+                )
+            )
+            fresh, i = True, k + 1
         else:
-            i += 1
+            fresh, i = False, i + 1
     return sc
+
+
+def _setext_end(lines: list[str], i: int, n: int) -> int:
+    """The underline's line when the paragraph starting at ``i`` is a setext heading, else 0."""
+    for k in range(i + 1, n):
+        if not lines[k].strip() or _opens_block(lines[k]):
+            return 0
+        if _SETEXT.match(lines[k]):
+            return k
+    return 0
 
 
 def _scan_rst(lines: list[str], start: int) -> Scan:
