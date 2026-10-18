@@ -21,7 +21,7 @@ code, and the reader who finds a wrong answer trusts it.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from .overlay import OverlayError, OverlayLoader
@@ -197,7 +197,15 @@ def grouped_tools(tools: Iterable[str]) -> list[tuple[str, list[str]]]:
     `tests/test_layering.py` caught the first time this was written the easy way. The
     surface owns its registry; this renders whatever it is handed.
     """
-    tools = list(tools)
+    names = list(tools)
+    declared = {
+        t: g
+        for t in names
+        if isinstance(tools, Mapping)
+        and isinstance(tools[t], Mapping)
+        and (g := tools[t].get("help_group"))
+    }
+    tools = names
     out: list[tuple[str, list[str]]] = []
     claimed: set[str] = set()
     for title, prefixes in _GROUPS:
@@ -211,6 +219,17 @@ def grouped_tools(tools: Iterable[str]) -> list[tuple[str, list[str]]]:
                 claimed.add(tool)
         if members:
             out.append((title, members))
+    # A tool that names its own group (`Command.help_group`) joins that heading, new or existing,
+    # when no legacy prefix claimed it.
+    for tool in sorted(set(declared) - claimed):
+        title = declared[tool]
+        for heading, members in out:
+            if heading == title:
+                members.append(tool)
+                break
+        else:
+            out.append((title, [tool]))
+        claimed.add(tool)
     unmapped = sorted(set(tools) - claimed)
     if unmapped:
         out.append(("Unmapped — add a prefix to `_GROUPS`", unmapped))
