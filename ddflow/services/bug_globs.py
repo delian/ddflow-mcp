@@ -45,10 +45,12 @@ def inherit_globs(source_globs: list[str], text: str, *, tool_bug: bool = False)
     bug found beside ``claim.py`` but about ``merge.py`` is not given ``claim.py``.
 
     ``tool_bug``: the bug is in ddflow itself (`--scope ddflow`), noticed while working on the
-    item, not in what the item touched, so text naming no file inherits NOTHING: the globs of
-    an unrelated item made a fix task wait for, or write over, files it had no business with
-    (Bc0b26248e3)."""
+    item, not in what the item touched, and the files its text quotes are as often the symptom
+    as the cause, so NOTHING is inherited: the globs of an unrelated item made a fix task wait
+    for, or write over, files it had no business with (Bc0b26248e3). `--globs` names its files."""
+    if tool_bug:
+        return []
     named = _PATHISH.findall(text)
     if not named:
-        return [] if tool_bug else list(source_globs)
+        return list(source_globs)
     return [g for g in source_globs if any(_names(p, g) for p in named)]

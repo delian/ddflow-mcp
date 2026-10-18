@@ -30,9 +30,10 @@ def test_a_tool_bug_naming_no_file_inherits_nothing():
     assert inherit_globs(SRC, "the parser drops a line") == SRC  # a project bug still does
 
 
-def test_a_tool_bug_naming_a_source_file_keeps_only_that_one():
-    got = inherit_globs(SRC, "claim.py refuses a lease", tool_bug=True)
-    assert got == ["ddflow/api/lifecycle/claim.py"]
+def test_a_tool_bug_quoting_a_source_file_inherits_nothing_either():
+    """The files a report quotes are as often the symptom as the cause (Bc0b26248e3 itself)."""
+    assert inherit_globs(SRC, "the brief lists claim.py of another fix", tool_bug=True) == []
+    assert inherit_globs(SRC, "the brief lists claim.py of another fix") == [SRC[0]]
 
 
 def test_bug_found_scope_ddflow_files_a_fix_task_without_the_items_globs(repo):
