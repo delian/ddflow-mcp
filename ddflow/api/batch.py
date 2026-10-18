@@ -164,6 +164,23 @@ def apply(
     return _record(log, cfg, st, plans, abandon, kind, result)
 
 
+def _fold_entries(st, a, b, why: str) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """The batch entries that fold ``a`` into ``b``, and the dependents it re-points."""
+    dup, keep = a.id, b.id
+    note = f"Folded {dup} ({a.title}): {why}." + (f"\n\n{a.body}" if a.body else "")
+    entries: dict[str, dict[str, Any]] = {keep: {"id": keep, "append_body": note}}
+    if a.globs:
+        entries[keep]["add_globs"] = list(a.globs)
+    repointed: list[str] = []
+    for it in st.live_items():
+        if it.id == dup or it.terminal or dup not in it.needs:
+            continue
+        moved = [n for n in dict.fromkeys(keep if n == dup else n for n in it.needs) if n != it.id]
+        entries.setdefault(it.id, {"id": it.id})["needs"] = moved
+        repointed.append(it.id)
+    return entries, repointed
+
+
 def fold(
     repo: Path, dup: str, keep: str, *, reason: str = "", dry_run: bool = False, agent: str = ""
 ) -> O.Outcome:
@@ -190,17 +207,7 @@ def fold(
             id=dup,
         )
     why = reason or f"duplicate of {keep}"
-    note = f"Folded {dup} ({a.title}): {why}." + (f"\n\n{a.body}" if a.body else "")
-    entries: dict[str, dict[str, Any]] = {keep: {"id": keep, "append_body": note}}
-    if a.globs:
-        entries[keep]["add_globs"] = list(a.globs)
-    repointed: list[str] = []
-    for it in st.live_items():
-        if it.id == dup or it.terminal or dup not in it.needs:
-            continue
-        moved = [n for n in dict.fromkeys(keep if n == dup else n for n in it.needs) if n != it.id]
-        entries.setdefault(it.id, {"id": it.id})["needs"] = moved
-        repointed.append(it.id)
+    entries, repointed = _fold_entries(st, a, b, why)
     out = apply(
         repo,
         list(entries.values()),
