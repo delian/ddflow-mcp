@@ -8,11 +8,12 @@ from pathlib import Path
 
 from ddflow.services import roborev_branch as RB
 
-FAKE = """#!/bin/sh
+FAKE = r"""#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
 case "$1" in
   review) echo "Enqueued job 7 for range" ;;
   wait) [ -n "$FAKE_HANG" ] && sleep 30; exit "${FAKE_WAIT_EXIT:-0}" ;;
+  list) echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS:-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
   show) echo "Review for job 7: ${FAKE_VERDICT:-no issues}" ;;
 esac
 """
@@ -73,6 +74,23 @@ def test_a_fail_verdict_is_findings_not_unavailable(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_VERDICT", "a bug")
     r = RB.run(repo, "main", 20)
     assert r.outcome == "findings" and r.exit == 1 and "a bug" in r.text
+
+
+def test_a_job_that_errored_is_unavailable_not_findings(tmp_path, monkeypatch):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_STATUS", "failed")
+    monkeypatch.setenv("FAKE_VERDICT", "worker error")  # show prints the job record anyway
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "unavailable" and r.exit == 2 and "ended failed" in r.reason
+
+
+def test_a_fail_verdict_whose_show_gives_nothing_is_still_findings(tmp_path, monkeypatch):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_VERDICT", "")
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
 
 
 def test_the_wait_is_a_knob():
