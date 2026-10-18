@@ -43,10 +43,21 @@ def _note(directory: Path, index: int) -> Path:
     return directory / f"{NAME}.{index}.holder"
 
 
+def _held(directory: Path, index: int) -> bool:
+    try:
+        with fsio.file_lock(directory / f"{NAME}.{index}.lock", 0):
+            return False
+    except fsio.LockTimeout:
+        return True
+
+
 def _holders(directory: Path, limit: int) -> dict[str, Any]:
-    """The note of the oldest slot's holder (they are only read while the slot is held)."""
+    """The note of the oldest holder among the slots held right now (a crashed holder's note
+    outlives it, so a note of a free slot is not read)."""
     notes = []
     for i in range(limit):
+        if not _held(directory, i):
+            continue
         with contextlib.suppress(OSError, ValueError):
             notes.append(json.loads(_note(directory, i).read_text()))
     return min(notes, key=lambda n: n.get("at", 0), default={})
