@@ -311,6 +311,14 @@ def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(
     _git(tree, "add", "a.py")
     _git(tree, "commit", "-qm", "T1")
     assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    # implement is recorded while the branch is still ahead of main: once it has landed in a
+    # kept tree nothing is ahead, and the gate (fix-B31c0109012) rightly refuses to pass it.
+    assert (
+        run_cli(
+            repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "x"
+        )[0]
+        == OK
+    )
     (tree / "scratch.txt").write_text("never committed, never landed\n")
     code, out, err = run_cli(repo, "merge", "T1", "--allow-dirty")
     assert code == OK, out + err
