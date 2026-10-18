@@ -104,8 +104,10 @@ def problems(
         if k.name in seen:
             out.append(f"{k.name}: declared twice, by {seen[k.name]} and {k.owner}")
         seen[k.name] = k.owner
-        if not k.doc.strip().endswith("."):
-            out.append(f"{k.name}: doc must be a sentence ending in a full stop (owner {k.owner})")
+        if " " not in k.doc.strip() or not k.doc.strip().endswith("."):
+            out.append(
+                f"{k.name}: doc must be a sentence (two words, a full stop; owner {k.owner})"
+            )
         if "|" in k.doc or k.doc != k.doc.strip() or any(c in k.doc for c in "\r\n"):
             out.append(f"{k.name}: doc must be one trimmed line with no '|' (it is a table cell)")
         if k.retention not in RETENTIONS:
