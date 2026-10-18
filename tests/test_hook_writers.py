@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -81,8 +82,7 @@ def test_the_dangling_check_reads_a_non_claude_hook_file(repo):
     path = repo / ".codex" / "hooks.json"
     data = json.loads(path.read_text())
     ev = HR.get("codex").hooks.events["prompt"]
-    data["hooks"][ev][0]["hooks"][0]["command"] = (
-        data["hooks"][ev][0]["hooks"][0]["command"].replace("ddflow", "/gone/bin/ddflow")
-    )
+    entry = data["hooks"][ev][0]["hooks"][0]
+    entry["command"] = re.sub(r'(\[ -x )"[^"]+"', r'\1"/gone/python"', entry["command"])
     path.write_text(json.dumps(data))
     assert any(".codex/hooks.json" in d.where for d in launchers.check_settings(repo))
