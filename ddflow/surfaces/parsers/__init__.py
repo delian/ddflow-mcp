@@ -8,6 +8,7 @@ the subcommands, so it is part of the interface.
 from __future__ import annotations
 
 from . import (
+    by_convention,
     chore,
     decide,
     docs,
@@ -52,4 +53,5 @@ REGISTER_ORDER = (
     metrics.register,
     review.register,
     workflow.register,
+    by_convention.register,
 )
