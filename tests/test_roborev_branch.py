@@ -99,13 +99,19 @@ def test_the_wait_is_a_knob():
     assert Config().gates.standards_wait_s == 900
 
 
-def test_a_job_missing_from_the_list_with_a_printed_review_is_findings(tmp_path, monkeypatch):
+def test_a_job_missing_from_the_list_is_unavailable_and_keeps_the_text(tmp_path, monkeypatch):
+    """No readable status: never `findings` on the strength of printed text alone."""
     repo, _log = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv("FAKE_LIST_EMPTY", "1")  # `roborev list` no longer names the job
     monkeypatch.setenv("FAKE_VERDICT", "a bug")
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "findings" and "a bug" in r.text
+    assert r.outcome == "unavailable" and "unjudged" in r.reason and "a bug" in r.text
+
+
+def test_the_job_id_is_the_number_after_the_word_job_not_any_digit(tmp_path, monkeypatch):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    assert RB._find_job("roborev", repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
 
 
 def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monkeypatch):

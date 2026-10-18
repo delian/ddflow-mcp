@@ -48,7 +48,7 @@ def _git(where: Path, *argv: str) -> str:
 
 
 def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
-    m = re.search(r"\bjob\b\D{0,6}(\d+)", enqueue_out, re.IGNORECASE)
+    m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
     if m:
         return int(m.group(1))
     p = proc.capture([exe, "list", "--json", "--limit", "50"], cwd=where, timeout=_STEP_TIMEOUT_S)
@@ -111,11 +111,11 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("clean", job=job, sha=head, text=text)
     # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
     status = _job_status(exe, where, job)
-    if status == "done" or (not status and text.strip()):  # unknown status: trust a printed review
+    if status == "done":
         return Result("findings", f"roborev wait exited {w.returncode}", job, head, text)
     return Result(
         "unavailable",
-        f"roborev job {job} ended {status or 'in an unknown state'} with no review (wait exit {w.returncode})",
+        f"roborev job {job} ended {status or 'in an unknown state (its status could not be read; the text below, if any, is unjudged)'} with no review (wait exit {w.returncode})",
         job, head, text,
     )  # fmt: skip
 
