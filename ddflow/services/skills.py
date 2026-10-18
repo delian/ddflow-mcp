@@ -101,6 +101,11 @@ def _project_dirs(section: str) -> list[str]:
     return list(out)
 
 
+def subagent_files(repo: Path) -> list[Path]:
+    """Every subagent definition in the project, from each descriptor's ``subagents.dir``."""
+    return [p for d in _project_dirs("subagents") for p in sorted((Path(repo) / d).glob("*.md"))]
+
+
 def _rule_globs() -> tuple[list[str], list[str]]:
     """(rule globs, top-level instruction files) from every descriptor's ``instructions.reads``.
 

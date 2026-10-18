@@ -56,6 +56,10 @@ BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/services/mcpconfig.py": (2, "the MCP file shapes named after their first user"),
     "ddflow/surfaces/declared/hooks.py": (2, "the MCP `claude` flag argument of ddflow_hooks"),
     "ddflow/core/bookkeeping.py": (1, "bookkeeping paths ddflow itself never writes"),
+    "ddflow/services/importer_harness.py": (
+        1,
+        "Claude Code's per-user project store, the source of a memory import",
+    ),
     "ddflow/services/harness.py": (1, "Claude-only onboarding, replaced by B-hx-onboard-generic"),
     "ddflow/services/legacy.py": (1, "the legacy command-file glob an import reads"),
     "ddflow/surfaces/parsers/workflow.py": (1, "the default of `hooks run --harness` (compat)"),
@@ -94,7 +98,7 @@ def sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
     for n in ast.walk(tree):
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:
             v = n.value
-            if v in ids or any(v.startswith(r) or "/" + r in v for r in roots):
+            if v in ids or any(v.startswith(r) or "/" + r in v or v == r[:-1] for r in roots):
                 found.append(n.lineno)
     return found
 
@@ -139,4 +143,6 @@ def test_the_detector_can_fail():
     ids, roots = {"claude"}, {".claude/"}
     assert sites('x = "claude"\n', ids, roots) == [1]
     assert sites('x = ".claude/settings.json"\n', ids, roots) == [1]
+    assert sites('D = ".claude"\n', ids, roots) == [1]
+    assert sites('D = "x/.claude"\n', ids, roots) == []  # a path component, not a root
     assert sites('"""claude"""\ndef f():\n    """.claude/x"""\n', ids, roots) == []
