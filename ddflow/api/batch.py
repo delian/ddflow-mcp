@@ -85,6 +85,13 @@ def _plan(cfg, st, entries, abandon, kind):
             return O.failed(kind, f"cannot abandon {iid!r}: no such item", id=iid)
         if gone.terminal:
             return O.refused(kind, f"{iid} is already {gone.state}; nothing to abandon", id=iid)
+        if gone.lease or gone.worktree or gone.branch or gone.pr:
+            return O.refused(
+                kind,
+                f"{iid} is claimed or has a branch or request; `ddflow abandon {iid}` disposes "
+                f"of those, a batch does not",
+                id=iid,
+            )
     return plans, unchanged
 
 
@@ -113,9 +120,20 @@ def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
         globs, res = fields.get("globs"), fields.get("resources")
         if globs is None and res is None:
             continue
+        if retargets:
+            # Each retarget is checked against the leases as they are NOW; a second one in
+            # the same batch would not see the first's new globs (roborev).
+            return O.refused(
+                kind,
+                f"{it.id}: the batch retargets more than one lease ({retargets[0][0].id} "
+                f"already); change one claimed item's globs or resources per batch",
+                id=it.id,
+            )
         lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
         if refusal:
-            return O.refused(kind, refusal, id=it.id, **result)
+            # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
+            refusal = refusal.split(" The globs were not changed")[0].rstrip()
+            return O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
         retargets.append((it, lease, globs, res))
     for it, fields in plans:
         log.append(f"{it.family}.updated", it.id, fields)
