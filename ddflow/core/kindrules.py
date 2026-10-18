@@ -92,9 +92,16 @@ class KindRules:
         for link in self.links:
             need("link", link.field, "array" if link.many else "string")
         for name in self.sources:
-            need("sources", name)
+            need("sources", name, "string")
         for v in self.validators:
-            want = ("integer",) if v.min is not None or v.max is not None else ()
+            numeric = v.min is not None or v.max is not None
+            want = (
+                ("integer",)
+                if numeric
+                else ("string", "array")
+                if (v.pattern or v.max_length)
+                else ()
+            )
             need("validator", v.field, *want)
             if v.pattern:
                 try:
@@ -115,23 +122,33 @@ class KindRules:
         return bad
 
 
-def _value_problem(v: Validator, value: Any) -> str:
-    label = v.message
-    if isinstance(value, int) and not isinstance(value, bool):
-        if v.min is not None and value < v.min:
-            return label or f"{v.field} must be at least {v.min}"
-        if v.max is not None and value > v.max:
-            return label or f"{v.field} must be at most {v.max}"
-    for item in value if isinstance(value, list | tuple) else [value]:
-        if not isinstance(item, str):
-            continue
-        if v.max_length is not None and len(item) > v.max_length:
-            return label or f"{v.field} is longer than {v.max_length} characters"
-        if v.pattern and len(item) > MAX_VALUE:
-            return label or f"{v.field} is longer than {MAX_VALUE} characters: too long to match"
-        if v.pattern and not re.search(v.pattern, item):
-            return label or f"{v.field} {item[:40]!r} does not match {v.pattern!r}"
+def _bounds_problem(v: Validator, value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return ""
+    if v.min is not None and value < v.min:
+        return v.message or f"{v.field} must be at least {v.min}"
+    if v.max is not None and value > v.max:
+        return v.message or f"{v.field} must be at most {v.max}"
     return ""
+
+
+def _text_problem(v: Validator, item: str) -> str:
+    if v.max_length is not None and len(item) > v.max_length:
+        return v.message or f"{v.field} is longer than {v.max_length} characters"
+    if not v.pattern:
+        return ""
+    if len(item) > MAX_VALUE:
+        return v.message or f"{v.field} is longer than {MAX_VALUE} characters: too long to match"
+    if not re.search(v.pattern, item):
+        return v.message or f"{v.field} {item[:40]!r} does not match {v.pattern!r}"
+    return ""
+
+
+def _value_problem(v: Validator, value: Any) -> str:
+    if why := _bounds_problem(v, value):
+        return why
+    items = value if isinstance(value, list | tuple) else [value]
+    return next((w for i in items if isinstance(i, str) and (w := _text_problem(v, i))), "")
 
 
 def _lifecycle_problem(
@@ -229,9 +246,9 @@ def from_raw(raw: dict[str, Any]) -> KindRules | None:
         t = _tab("lifecycle", raw["lifecycle"], {"field", "initial", "transitions"})
         if not isinstance(t.get("field"), str) or not isinstance(t.get("initial"), str):
             raise RulesError("lifecycle needs field and initial (strings)")
-        moves = _tab(
-            "lifecycle.transitions", t.get("transitions", {}), set(t.get("transitions", {}))
-        )
+        moves = t.get("transitions", {})
+        if not isinstance(moves, dict):
+            raise RulesError("lifecycle.transitions must be a table of state = [states]")
         for src, dests in moves.items():
             if not isinstance(dests, list) or not all(isinstance(d, str) for d in dests):
                 raise RulesError(f"lifecycle.transitions.{src} must be a list of states")
