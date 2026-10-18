@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..infra import fsio
 from . import slots as SLOTS
 
 NAME = "suites"
@@ -64,7 +65,7 @@ def hold(cfg: Any, holder: str, directory: Path | str | None = None) -> Iterator
             now = time.time()
             body = {"holder": holder, "pid": os.getpid(), "at": now,
                     "at_iso": datetime.fromtimestamp(now).astimezone().strftime("%H:%M:%S")}  # fmt: skip
-            note.write_text(json.dumps(body))
+            fsio.replace_text(note, json.dumps(body), fsync=False)
             try:
                 yield
             finally:

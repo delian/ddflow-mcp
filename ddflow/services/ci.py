@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import tempfile
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -26,6 +25,7 @@ from ..config import CI_ON_MERGE_MODES, Config
 from ..core import ids as IDS
 from ..core.digest import content_digest
 from ..core.slug import ascii_slug
+from ..infra import fsio
 from ..infra import worktree as W
 from . import ci_conflict as CC
 from . import ci_scope as CS
@@ -451,24 +451,24 @@ def _holder(repo: Path, ref: str) -> str:
     return os.environ.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
 
 
+@contextmanager
 def localize_hooks(
     tree: Path, cfg: Config, cmd: str, used: dict[str, dict], *, source=None, cores=None
-) -> tuple[str, str | None]:
-    """(``cmd``, a temp file to delete): when the pre-commit config of ``tree`` says
-    ``-n auto`` (one pytest worker per core), the command reads a copy that says the count
-    this host can afford now (`workers.compute`; its inputs go to ``used``). The committed
-    file is untouched: GitHub CI keeps ``auto``."""
+) -> Iterator[str]:
+    """``cmd``, or -- when the pre-commit config of ``tree`` says ``-n auto`` (one pytest worker
+    per core) -- ``cmd`` reading a temporary copy that says the count this host can afford now
+    (`workers.compute`; its inputs go to ``used``). The committed file is untouched: GitHub CI
+    keeps ``auto``."""
     config = tree / PRE_COMMIT_CONFIG
-    if "pre-commit run" not in cmd or not config.is_file():
-        return cmd, None
-    text, w = WK.localize_auto(config.read_text(), cfg, source=source, cores=cores)
+    w = None
+    if "pre-commit run" in cmd and config.is_file():
+        text, w = WK.localize_auto(config.read_text(), cfg, source=source, cores=cores)
     if w is None:
-        return cmd, None
-    fd, name = tempfile.mkstemp(prefix="ddflow-precommit.", suffix=".yaml")
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
+        yield cmd
+        return
     used["hooks"] = {"n": w.n, "replaces": "-n auto", **w.inputs}
-    return cmd.replace("pre-commit run", f"pre-commit run -c {shlex.quote(name)}"), name
+    with fsio.temp_text(text, ".yaml") as name:
+        yield cmd.replace("pre-commit run", f"pre-commit run -c {shlex.quote(str(name))}")
 
 
 def _execute(
@@ -480,14 +480,8 @@ def _execute(
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
     cmd = _with_workers(cmd, cfg, used, "command")
-    tmp = None
-    if local:
-        cmd, tmp = localize_hooks(tree, cfg, cmd, used)
-    try:
+    with localize_hooks(tree, cfg, cmd, used) if local else nullcontext(cmd) as cmd:
         return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
-    finally:
-        if tmp:
-            Path(tmp).unlink(missing_ok=True)
 
 
 def _run_stages(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected):
