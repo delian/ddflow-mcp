@@ -276,3 +276,16 @@ def test_a_bound_and_a_text_check_on_one_field_cannot_both_work():
             KDA.parse_kind('name = "zz"\nsummary = "s"\n' + extra)
     finally:
         D.DEF_KINDS.pop("zz", None)
+
+
+def test_lifecycle_states_must_be_choices_of_the_state_field():
+    text = (
+        'name = "zz"\nsummary = "s"\n[lifecycle]\nfield = "s"\ninitial = "a"\n'
+        '[lifecycle.transitions]\na = ["b"]\n[[field]]\nname = "title"\n'
+        '[[field]]\nname = "s"\nchoices = ["a"]\n'
+    )
+    try:
+        with pytest.raises(ValueError, match="states b are not choices of 's'"):
+            KDA.parse_kind(text)
+    finally:
+        D.DEF_KINDS.pop("zz", None)
