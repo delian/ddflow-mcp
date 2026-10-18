@@ -35,7 +35,9 @@ def _summary(fd: unidiff.FileDiff, section: str) -> str:
         if m:
             names.append(m.group(m.lastindex).strip())
     uniq = list(dict.fromkeys(names))
-    shown = ", ".join(uniq[:_NAMES]) + (f" and {len(uniq) - _NAMES} more" if len(uniq) > _NAMES else "")
+    shown = ", ".join(uniq[:_NAMES]) + (
+        f" and {len(uniq) - _NAMES} more" if len(uniq) > _NAMES else ""
+    )
     return f"{kind}; adds {shown}" if shown else kind
 
 
