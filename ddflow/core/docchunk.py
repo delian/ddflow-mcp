@@ -180,7 +180,7 @@ _SCANNERS = {"md": _scan_md, "rst": _scan_rst, "adoc": _scan_adoc}
 
 def _sections(lines: list[str], start: int, sc: _Scan):
     """``(heading_path, anchor, first, stop)`` per section; text before a heading has no anchor."""
-    out, stack, seen = [], [], {}
+    out, stack, seen, used = [], [], {}, set()
     first = start
     cur: tuple[tuple[str, ...], str] = ((), "")
     for at, level, title in sc.heads:
@@ -190,8 +190,12 @@ def _sections(lines: list[str], start: int, sc: _Scan):
             stack.pop()
         stack.append((level, title))
         slug = github_anchor(title) or "section"
-        seen[slug] = seen.get(slug, -1) + 1
-        anchor = slug if not seen[slug] else f"{slug}-{seen[slug]}"
+        anchor, n = slug, seen.get(slug, 0)
+        while anchor in used:  # GitHub's slugger: bump until the anchor is free
+            n += 1
+            anchor = f"{slug}-{n}"
+        seen[slug] = n
+        used.add(anchor)
         cur = (tuple(t for _, t in stack), anchor)
         first = at
     if first < len(lines) and any(ln.strip() for ln in lines[first:]):
