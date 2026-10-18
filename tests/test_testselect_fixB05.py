@@ -15,10 +15,16 @@ def test_a_three_word_fragment_a_test_quotes_selects_the_test():
 
 
 def test_a_quoted_phrase_drops_the_comma_the_source_puts_after_it():
-    phrases = {p: "ddflow/api/gates.py" for p in TI._phrases(['"was claimed without a worktree, so"'])}
+    phrases = {
+        p: "ddflow/api/gates.py" for p in TI._phrases(['"was claimed without a worktree, so"'])
+    }
     tests = {"tests/test_a.py": 'assert "claimed without a worktree" not in text'}
     assert set(TI.phrase_tests(phrases, tests)) == {"tests/test_a.py"}
 
 
 def test_three_short_words_are_not_a_phrase():
     assert not any(len(p) < 15 for p in TI._phrases(['"it is a of the"']))
+
+
+def test_the_stripped_form_keeps_the_floor_too():
+    assert not any(len(p) < 15 for p in TI._phrases(['"value is wrong"', "'abc def ghi jk'"]))
