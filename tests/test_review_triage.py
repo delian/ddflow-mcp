@@ -94,7 +94,7 @@ def test_gate_status_and_show_say_how_the_findings_stand(repo, tmp_path):
     _setup(repo, tmp_path)
     _full_review(repo)
     _triage(repo, 1, "refuted")
-    _triage(repo, 2, "confirmed", "fixed in abc123, tests/test_x.py::t")
+    _triage(repo, 2, "confirmed", "fixed in abc123, ran the suite")
     line = "2 finding(s): 1 refuted, 1 confirmed, 0 untriaged"
     st = fold(EventLog(repo).read_all(), strict=False)
     from ddflow.config import Config

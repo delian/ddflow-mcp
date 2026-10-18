@@ -14,8 +14,8 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
-import re
 import json
+import re
 import secrets
 import threading
 import time
