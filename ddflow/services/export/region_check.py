@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 
+from . import frame as F
 from . import regions as RG
 
 _MARKS = ("ddflow:begin", "ddflow:end")  # an orphaned end marker is unbalanced, not "no regions"
@@ -39,6 +40,24 @@ def _parsed(text: str) -> list[RG.Region]:
     return RG.parse(_blank(text) if _STAMPED.search(text) else text)
 
 
+def regions(text: str) -> list[RG.Region]:
+    """Every named region of ``text`` (adopt's stamped blocks left out); `RegionError` when the
+    markers cannot be read."""
+    return _parsed(text)
+
+
+def is_edited(r: RG.Region) -> bool:
+    """Does the body of ``r`` no longer match the digest in its begin marker? Two writers
+    share the marker grammar: the exporter digests the body with one trailing newline, the
+    README views (`views.readme_region`) the body without the newlines around it; either
+    one's digest is a match."""
+    if not r.sha:
+        return False
+    body = r.content.replace("\r\n", "\n")
+    trimmed = body.removeprefix("\n").removesuffix("\n")
+    return r.sha not in (F.body_digest(body), F.body_digest(trimmed))
+
+
 def problem(text: str) -> str:
     """Why the markers of ``text`` cannot be read, or ``""``."""
     try:
@@ -51,7 +70,7 @@ def problem(text: str) -> str:
 def edited(text: str) -> list[str]:
     """``doc/name`` of each region hand-edited since ddflow wrote it, in file order."""
     try:
-        return [f"{r.doc}/{r.name}" for r in _parsed(text) if r.edited]
+        return [f"{r.doc}/{r.name}" for r in _parsed(text) if is_edited(r)]
     except RG.RegionError:
         return []  # reported by `problem`, not here
 
