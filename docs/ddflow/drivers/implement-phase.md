@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=75274d338a7d -->
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=22a1e3969b70 -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -218,13 +218,15 @@ ddflow tests --item <ID>                         # [ddflow_tests] after EACH cha
   the derivation is cheaper than being wrong. A regression test you are writing is in the
   set as soon as its file exists.
 - **At the gate**, commit first (`git add <paths> && git commit -m "<ID>: ..."`: ci tests the
-  committed HEAD), run `ci` -- it runs the **whole** suite on the branch merged with the
-  base -- then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of
-  your own. Once ci has passed on the clean commit the tree holds, a bug fix or a small
-  task runs only the selection there (decision D-gate-economy 1; the evidence lists the
-  tests and why); anything else, or an edit after ci, runs the whole suite. A targeted run says your
-  change is fine and nothing about what was already broken; the full run is where
-  standing breakage surfaces.
+  committed HEAD), run `ci` -- with `[ci].tests_scope = selected` (default, D-test-economy-r2)
+  it runs the pre-push stage on the branch merged with the base, and only the tests the
+  change reaches plus the always-run guards; the whole suite when the selector says so --
+  then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of your own.
+  Once ci has passed on the clean commit the tree holds, unit_tests is covered by that
+  run (the evidence names its scope) or runs only the difference; an edit after ci runs
+  ci again. The whole suite is the merge queue's, the cadence's and the phase end's, not
+  an item's: a targeted run says your change is fine and nothing about what was already
+  broken, and that is where standing breakage surfaces.
 - **Always in parallel.** Run pytest with `-n auto` (pytest-xdist) or the project's
   configured worker count; a serial run of a large suite is the slowest step in this
   loop. If `ddflow workflow` says the test command runs on ONE core, fix the command
@@ -313,7 +315,7 @@ When `ddflow next --phase <NAME>` reports no remaining tasks:
 ddflow cadence                                   # run every phase-counted pass that is due,
                                                  # then `cadence --ran <name>` (or record a
                                                  # skip: `--ran <name> --note "skipped: ..."`)
-ddflow gate run <NAME> unit_tests                # the WHOLE suite, in parallel, not a slice
+ddflow gate run <NAME> unit_tests                # covered by ci's selected run, or the difference
 ddflow gate record <NAME> bug_hunt   --outcome passed --evidence "..."
 ddflow gate record <NAME> dedupe     --outcome passed --evidence "..."
 ddflow gate record <NAME> live_test  --outcome passed --evidence "<real run output>"
