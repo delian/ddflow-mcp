@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.suite_wait_s"
+new = '1800'
+why = "A full-suite run is limited host-wide (bug B26b5951f2b)."
+impact = "additive"

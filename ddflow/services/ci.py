@@ -13,9 +13,12 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 
 from __future__ import annotations
 
+import os
 import re
+import shlex
+import tempfile
 from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,6 +29,7 @@ from ..core.slug import ascii_slug
 from ..infra import worktree as W
 from . import ci_conflict as CC
 from . import ci_scope as CS
+from . import suitelock as SL
 from . import workers as WK
 from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
@@ -375,7 +379,15 @@ def run(
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
             scope = CS.plan(cfg, tree, base, requested=asked)
-        p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick)
+        used: dict[str, dict] = {}
+        full_suite = not command.strip() and _runs_whole_suite(cmd, scope)
+        try:
+            with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+                p, out_prefix = _execute(
+                    cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used
+                )
+        except SL.SuiteBusy as busy:
+            return Result("unavailable", command=cmd, sha=sha, reason=str(busy))
         if p.kind == TIMEOUT:
             return Result(
                 "unavailable",
@@ -392,7 +404,10 @@ def run(
                 reason=p.reason,
                 scope=_scope_evidence(scope, sha),
             )
-    return _result(p, out_prefix, cmd, sha, base, scope)
+    res = _result(p, out_prefix, cmd, sha, base, scope)
+    if scope is None and used:
+        res.scope = {"workers": used}
+    return res
 
 
 def _default_with_tripwires(
@@ -425,14 +440,58 @@ def _with_workers(cmd: str, cfg: Config, used: dict[str, dict], stage: str) -> s
     return cmd
 
 
-def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
+def _runs_whole_suite(cmd: str, scope) -> bool:
+    """The default pre-push command with its test hooks on, not narrowed to a selection."""
+    if DEFAULT_COMMAND not in cmd or "SKIP=" in cmd:
+        return False
+    return scope is None or scope.scope != "selected"
+
+
+def _holder(repo: Path, ref: str) -> str:
+    return os.environ.get("DDFLOW_AGENT") or f"{ref} of {repo} (pid {os.getpid()})"
+
+
+def localize_hooks(
+    tree: Path, cfg: Config, cmd: str, used: dict[str, dict], *, source=None, cores=None
+) -> tuple[str, str | None]:
+    """(``cmd``, a temp file to delete): when the pre-commit config of ``tree`` says
+    ``-n auto`` (one pytest worker per core), the command reads a copy that says the count
+    this host can afford now (`workers.compute`; its inputs go to ``used``). The committed
+    file is untouched: GitHub CI keeps ``auto``."""
+    config = tree / PRE_COMMIT_CONFIG
+    if "pre-commit run" not in cmd or not config.is_file():
+        return cmd, None
+    text, w = WK.localize_auto(config.read_text(), cfg, source=source, cores=cores)
+    if w is None:
+        return cmd, None
+    fd, name = tempfile.mkstemp(prefix="ddflow-precommit.", suffix=".yaml")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    used["hooks"] = {"n": w.n, "replaces": "-n auto", **w.inputs}
+    return cmd.replace("pre-commit run", f"pre-commit run -c {shlex.quote(name)}"), name
+
+
+def _execute(
+    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, local=False, used=None
+):
     """(the run that decided the verdict, the output of the run before it): the command as
     written, or -- for a selected scope -- the hooks without the suite, then the selected
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
-    on_tick, tick_s = tick or (None, 0)
-    used = _worker_log(scope)
+    used = _worker_log(scope) if scope is not None else (used if used is not None else {})
     cmd = _with_workers(cmd, cfg, used, "command")
+    tmp = None
+    if local:
+        cmd, tmp = localize_hooks(tree, cfg, cmd, used)
+    try:
+        return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
+    finally:
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)
+
+
+def _run_stages(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected):
+    on_tick, tick_s = tick or (None, 0)
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
