@@ -52,3 +52,11 @@ def test_shim_wins_over_a_ddflow_in_the_callers_directory(tmp_path):
     (other / "ddflow" / "__init__.py").write_text("MARK = 'primary'\n")
     r = subprocess.run([str(TB.write_shim(tree))], capture_output=True, text=True, cwd=other)
     assert r.stdout.strip() == "tree", r.stderr
+
+
+def test_advice_falls_back_to_pythonpath_when_the_shim_cannot_be_written(tmp_path, monkeypatch):
+    tree = _tree(tmp_path)
+    monkeypatch.setattr(
+        TB.fsio, "atomic_write", lambda *a, **k: (_ for _ in ()).throw(OSError("ro"))
+    )
+    assert "export PYTHONPATH=" in TB.advice(tree)
