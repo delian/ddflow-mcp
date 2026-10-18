@@ -66,6 +66,7 @@ from .evidence import (  # noqa: F401
     normal_fingerprint,
     recorded_content,
     source_tree,
+    split_identity,
     superseded_by,
     tree_being_completed,
     tree_fingerprint,

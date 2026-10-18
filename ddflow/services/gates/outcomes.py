@@ -23,6 +23,7 @@ from .evidence import (
     differing_paths,
     normal_fingerprint,
     recorded_content,
+    split_identity,
     tree_fingerprint,
     worktree_entries,
 )
@@ -403,7 +404,7 @@ def stale_evidence_detail(
             continue
         ev = rec.evidence or {}
         was_sha = normal_fingerprint(ev.get("tree_sha", "") or "")
-        base, _, dirt = was_sha.partition("+")
+        base, _, dirt = split_identity(was_sha)
         was_id = recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
         if was_id:
             if not now_id:
