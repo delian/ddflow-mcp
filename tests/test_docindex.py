@@ -212,7 +212,23 @@ def test_no_fts5_falls_back_to_like_and_says_so(tmp_path, repo):
     with sqlite3.connect(plain.path) as con:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master")}
     assert "chunks_fts" not in names and "chunks_tri" not in names
-    assert plain.search("100%_").hits == ()  # LIKE wildcards are literal
+    (repo / "docs/wild.md").write_text("# Wild\n\nsnake_case and a --> b\n")
+    (repo / "docs/wild2.md").write_text("# Wild\n\nsnakexcase\n")
+    _git(repo, "add", "-A")
+    _sync(plain, repo)
+    # `_` is a LIKE wildcard: unescaped, "snake_case" would also match docs/wild2.md
+    assert [h.path for h in plain.search("snake_case").hits] == ["docs/wild.md"]
+    assert len(plain.search("-->", mode="substring").hits) == 1
+
+
+def test_substring_of_punctuation_only(idx, repo):
+    (repo / "docs/arrow.md").write_text("# Arrow\n\na --> b and c ... d\n")
+    _git(repo, "add", "-A")
+    _sync(idx, repo)
+    for q in ("-->", "..."):
+        res = idx.search(q, mode="substring")
+        assert res.mode == "substring" and [h.path for h in res.hits] == ["docs/arrow.md"]
+    assert idx.search("   ", mode="substring").hits == ()
 
 
 def test_no_trigram_degrades_substring_search(tmp_path, repo):

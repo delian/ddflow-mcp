@@ -321,8 +321,8 @@ class DocIndex:
         if mode not in MODES:
             raise ValueError(f"mode is one of {', '.join(MODES)}; got {mode!r}")
         words = re.findall(r"\w+", query)
-        if not words:
-            return SearchResult(mode=mode)
+        if not words and (mode != "substring" or not query.strip()):
+            return SearchResult(mode=mode)  # a substring may be all punctuation: `-->`
         with closing(self._open()) as con:
             meta = dict(con.execute("SELECT key, value FROM meta"))
             used, note = mode, ""
@@ -373,9 +373,10 @@ class DocIndex:
                 "ORDER BY bm25(chunks_tri), c.chunk_id LIMIT ?"
             )
             return con.execute(sql, [match, *args, limit]).fetchall()
-        like = " AND ".join("lower(c.text) LIKE ? ESCAPE '\\'" for _ in words)
+        terms = words or [raw]
+        like = " AND ".join("lower(c.text) LIKE ? ESCAPE '\\'" for _ in terms)
         pats = ["%" + w.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-                for w in words]  # fmt: skip
+                for w in terms]  # fmt: skip
         sql = (
             f"SELECT {cols.format(score='0.0')} FROM chunks c WHERE {like}{extra} "
             "ORDER BY c.path, c.line_start LIMIT ?"
