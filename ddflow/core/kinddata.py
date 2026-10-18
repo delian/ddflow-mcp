@@ -15,15 +15,15 @@ from __future__ import annotations
 import tomllib
 from typing import Any
 
-#: Keep in step with `api.records.FIELD_TYPES`, which a field is finally checked against.
-FIELD_TYPES = ("string", "integer", "boolean", "array")
+from . import kindrules as KR
+
 _FIELD_KEYS = {"name", "type", "help", "required", "choices", "default"}
 _LISTS = ("text", "columns", "filters", "verbs", "aliases", "applies")
 _BOOLS = ("search", "recall", "resource")
 _STRINGS = ("recall_hint", "declined_other")
 _KEYS = {
     "name", "def_kind", "summary", "title", "recall_cap", "declined", "field", "export",
-    "feed", *_LISTS, *_BOOLS, *_STRINGS,
+    "feed", "lifecycle", "link", "validator", "sources", "render", "stamp", *_LISTS, *_BOOLS, *_STRINGS,
 }  # fmt: skip
 #: Keys that are code, not data: a kind that needs one is written in Python.
 CODE_KEYS = ("ops", "weakening")
@@ -50,8 +50,8 @@ def _field(n: int, raw: Any) -> dict[str, Any]:
         raise KindDataError(f"{where} needs a name")
     where = f"field {name!r}"
     ftype = raw.get("type", "string")
-    if ftype not in FIELD_TYPES:
-        raise KindDataError(f"{where}: type {ftype!r} is not one of {', '.join(FIELD_TYPES)}")
+    if not isinstance(ftype, str):
+        raise KindDataError(f"{where}: type must be a string")  # FieldSpec checks the name
     out: dict[str, Any] = {"name": name, "type": ftype}
     if "help" in raw:
         out["help"] = str(raw["help"])
@@ -128,6 +128,12 @@ def from_mapping(raw: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {"name": raw["name"], "summary": raw["summary"]}
     out["def_kind"] = str(raw.get("def_kind") or raw["name"])
     _scalars(raw, out)
+    try:
+        rules = KR.from_raw(raw)
+    except KR.RulesError as exc:
+        raise KindDataError(str(exc)) from None
+    if rules is not None:
+        out["rules"] = rules
     fields = raw.get("field")
     if not isinstance(fields, list) or not fields:
         raise KindDataError("at least one [[field]] is required")
