@@ -14,6 +14,11 @@ def _bullets(lines: list[str]) -> str:
     return "\n".join(f"- {x}" for x in lines) if lines else "none"
 
 
+def _unlinked(rec: dict[str, Any]) -> str:
+    """A filed record that no `--item` ties to the item: it is here by who filed it and when."""
+    return "" if rec.get("linked", True) else ", not linked to the item"
+
+
 def _gate_line(g: dict[str, Any]) -> str:
     who = g["model"] or g["by"]
     line = f"{g['gate']}: {g['outcome']}"
@@ -72,11 +77,14 @@ def variables(d: dict[str, Any], test_files: int = 12) -> dict[str, str]:
     hand = [f"{g['gate']}: {g['note'] or 'no evidence text'}" for g in d["gates"] if g["by_hand"]]
     f = d["filed"]
     filed = [
-        f"{b['id']} (bug{', open' if b['open'] else ', closed'}): {b['title']}" for b in f["bugs"]
+        f"{b['id']} (bug{', open' if b['open'] else ', closed'}{_unlinked(b)}): {b['title']}"
+        for b in f["bugs"]
     ]
     filed += [
-        f"{t['id']} (task{', open' if t['open'] else ', closed'}): {t['title']}" for t in f["tasks"]
+        f"{t['id']} (task{', open' if t['open'] else ', closed'}{_unlinked(t)}): {t['title']}"
+        for t in f["tasks"]
     ]
+    filed += [f"{n['id']} ({n['kind']}{_unlinked(n)}): {n['title']}" for n in f.get("notes", [])]
     return {
         "item": it["id"],
         "title": it["title"],
