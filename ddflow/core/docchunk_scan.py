@@ -111,6 +111,8 @@ def _rst_title(lines: list[str], i: int, n: int) -> tuple[int, str, str, bool] |
     longest line, and an overline (when there is one) is the same character."""
     over = bool(_RST_ADORN.match(lines[i]))
     first = i + 1 if over else i
+    if first >= n or not lines[first].strip():
+        return None  # an adornment alone is a transition
     for k in range(first + 1, n):
         if not lines[k].strip():
             return None
