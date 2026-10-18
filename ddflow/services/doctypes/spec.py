@@ -112,6 +112,23 @@ class DocType:
             return self.path
         return self.pattern.format(seq=seq, slug=slug, date=date)
 
+    def to_mapping(self) -> dict[str, Any]:
+        """The ``[doctype]`` table of a type, for the round trip tests and ``ddflow doc types``."""
+        out: dict[str, Any] = {}
+        for k in ("name", "title", "path", "pattern", "genre", "owner", "skeleton", "extends", "contract"):
+            if getattr(self, k):
+                out[k] = getattr(self, k)
+        out["multi"], out["schema_version"] = self.multi, self.schema_version
+        if self.triggers:
+            out["triggers"] = list(self.triggers)
+        for k in ("validate", "review"):
+            if getattr(self, k):
+                out[k] = dict(getattr(self, k))
+        out["section"] = [
+            {k: (list(v) if isinstance(v, tuple) else v) for k, v in s.__dict__.items()} for s in self.sections
+        ]
+        return out
+
     def section(self, sid: str) -> Section:
         for s in self.sections:
             if s.id == sid:
@@ -369,21 +386,3 @@ def registry(layers: Sequence[Layer] | None = None) -> Registry[DocType]:
     """A registry of the resolved types; by default only the shipped ones."""
     use = list(layers) if layers is not None else [read_layer("shipped", SHIPPED_DIR)]
     return Registry("document type", key=lambda d: d.name, loader=lambda: resolve(use).values())
-
-
-def to_mapping(dt: DocType) -> dict[str, Any]:
-    """The ``[doctype]`` table of a type, for the round trip tests and ``ddflow doc types``."""
-    out: dict[str, Any] = {}
-    for k in ("name", "title", "path", "pattern", "genre", "owner", "skeleton", "extends", "contract"):
-        if getattr(dt, k):
-            out[k] = getattr(dt, k)
-    out["multi"], out["schema_version"] = dt.multi, dt.schema_version
-    if dt.triggers:
-        out["triggers"] = list(dt.triggers)
-    for k in ("validate", "review"):
-        if getattr(dt, k):
-            out[k] = dict(getattr(dt, k))
-    out["section"] = [
-        {k: (list(v) if isinstance(v, tuple) else v) for k, v in s.__dict__.items()} for s in dt.sections
-    ]
-    return out

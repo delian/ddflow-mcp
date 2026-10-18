@@ -64,7 +64,7 @@ order = 2
 
 def test_every_field_round_trips():
     dt = S.parse(FULL, source="p.toml")
-    again = S.build(S.to_mapping(dt), S._Src(dt.source, ""))
+    again = S.build(dt.to_mapping(), S._Src(dt.source, ""))
     assert again == dt
     assert dt.sections[1].match == "regex" and dt.sections[0].rules == ("no-todo",)
     assert dt.review["full_review_every_days"] == 90 and dt.contract == "generated"
