@@ -50,3 +50,15 @@ def test_an_implicit_session_records_the_detected_tool(repo, log, monkeypatch):
     assert how == "implicit"
     started = [e for e in log.read_all() if e.kind == "session.started" and e.subject == sid]
     assert started[0].data["tool"] == "qwen"
+
+
+def test_both_claude_variables_are_one_harness_not_an_ambiguity():
+    assert HR.detect({"CLAUDE_CODE_SESSION_ID": "a"}) == "claude"
+    assert HR.detect({"CLAUDE_CODE_SESSION_ID": "a", "CLAUDE_SESSION_ID": "b"}) == "claude"
+
+
+def test_the_claude_code_variable_still_selects_its_session(repo, log, monkeypatch):
+    sid = S.harness_session_id("c-1")
+    log.append("session.started", sid, {"model": "", "tool": ""})
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "c-1")
+    assert S.resolve(log) == (sid, "harness")

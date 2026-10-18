@@ -347,7 +347,7 @@ def ids() -> list[str]:
 
 #: Environment variables an older ddflow or another tool already set for a session id; kept
 #: after the descriptors' so nothing that worked stops working (D-compat-r2).
-LEGACY_SESSION_ENV = ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID")
+LEGACY_SESSION_ENV = ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
 
 
 def session_env_vars() -> tuple[str, ...]:
