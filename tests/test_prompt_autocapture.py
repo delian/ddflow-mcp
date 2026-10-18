@@ -167,12 +167,12 @@ def test_install_claude_adds_the_prompt_hook_beside_the_operators_own(repo):
     assert code == 0, err
     data = json.loads((repo / ".claude" / "settings.json").read_text())
     cmds = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
-    assert "echo hi" in cmds and sum("hooks prompt" in c for c in cmds) == 1
+    assert "echo hi" in cmds and sum("hooks run prompt --harness claude" in c for c in cmds) == 1
     run_cli(repo, "hooks", "install", "--claude")
     data = json.loads((repo / ".claude" / "settings.json").read_text())
     assert (
         sum(
-            "hooks prompt" in h["command"]
+            "hooks run prompt --harness claude" in h["command"]
             for g in data["hooks"]["UserPromptSubmit"]
             for h in g["hooks"]
         )
@@ -194,7 +194,10 @@ def test_gemini_hook_prints_json_and_installs_into_gemini_settings(repo):
     code, _o, err = run_cli(repo, "hooks", "install", "--gemini")
     assert code == 0, err
     data = json.loads((repo / ".gemini" / "settings.json").read_text())
-    assert "hooks prompt --gemini" in data["hooks"]["BeforeAgent"][0]["hooks"][0]["command"]
+    assert (
+        "hooks run prompt --harness gemini"
+        in data["hooks"]["BeforeAgent"][0]["hooks"][0]["command"]
+    )
 
 
 def test_adopt_installs_the_prompt_hook_for_claude(repo):
@@ -202,7 +205,7 @@ def test_adopt_installs_the_prompt_hook_for_claude(repo):
     assert code == 0, err
     data = json.loads((repo / ".claude" / "settings.json").read_text())
     assert any(
-        "hooks prompt" in h["command"]
+        "hooks run prompt --harness claude" in h["command"]
         for g in data["hooks"]["UserPromptSubmit"]
         for h in g["hooks"]
     )
