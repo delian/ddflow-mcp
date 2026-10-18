@@ -131,22 +131,7 @@ def call(repo: Any, a: dict[str, Any], agent: str) -> O.Outcome:
             raise ValueError(
                 f"verb must be one of {', '.join(v for v in VERBS if v in kind.verbs)}"
             )
-        args = {
-            k: a[k]
-            for k in (
-                "id",
-                "query",
-                "mode",
-                "where",
-                "all",
-                "limit",
-                "reason",
-                "unset",
-                "relation",
-                "check_only",
-            )
-            if a.get(k) not in (None, "")
-        }
+        args = {k: a[k] for k in SR.CONTROL_ARGS if a.get(k) not in (None, "")}
         args |= {"verb": verb, **coerce(kind, a.get("set") or ())}
         answer = SR.answer_of(a) if verb == "add" else None
         return SR.dispatch(repo, kind, args, agent, answer=answer)

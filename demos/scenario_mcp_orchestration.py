@@ -653,6 +653,9 @@ def run(sc: Scenario) -> None:
             reason="Documentation work is outside the scope of this lifecycle scenario.",
         )
         sc.check("the docs gate is explicitly skipped", code == 0, out[:200])
+        # phase_full_suite defaults to "require": record a full-suite pass on the merged tree
+        # so the default close check stays exercised end to end (B7f54dbf1e3).
+        sc.ddflow("ci", "run", "--full", "--command", "python3 -m pytest tests/ -q")
         out, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
         sc.check("phase P1 completes once every task is done", code == 0, out[:300])
 
