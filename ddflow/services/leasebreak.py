@@ -195,3 +195,25 @@ def break_hint(cfg) -> str:
         f"for [lease].hold_max_s ({cfg.lease.hold_max_s}s; 0 = never); this one is not "
         f"breakable now."
     )
+
+
+@dataclass
+class Prejudged:
+    """What a claim read BEFORE it took the append lock, so judging idleness under the lock
+    costs `stat` calls, not a read of the log or a `git` subprocess (DX-lease-break-lock-scope).
+
+    ``mark`` is the log's fingerprint taken before ``events`` were read: while it still holds
+    under the lock ``events`` are current; when it moved the claim re-reads (the lock-free
+    fold's contract). ``seen`` is the newest worktree activity of each lease that clashed."""
+
+    mark: Any = None
+    events: list[Any] = field(default_factory=list)
+    seen: dict[tuple[str, str, str], float] = field(default_factory=dict)
+
+    @staticmethod
+    def key(lease: Lease) -> tuple[str, str, str]:
+        return (lease.holder, lease.event, lease.worktree)
+
+    def activity(self, real: Activity) -> Activity:
+        """``real``, answering from the pre-read watermarks where it has them."""
+        return lambda lease: self.seen[k] if (k := self.key(lease)) in self.seen else real(lease)
