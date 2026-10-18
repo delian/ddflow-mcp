@@ -977,7 +977,14 @@
           only for a project whose own instruction file already says it.
       session.agent_brief_decisions = 6   [default]
           How many of the decisions that govern the item's files the launch brief
-          quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.
+          quotes (the pinned ones first, then those whose own globs overlap the
+          item's, operators' before agents'); `ddflow decision applicable ITEM` lists
+          all.
+      session.agent_brief_pin_decisions = []   [default]
+          Decision ids every launch brief (`ddflow brief --for-agent`) quotes first,
+          whatever files the item declares: the project's standing decisions. They are
+          never cut by the decision count; the character ceiling cuts them last.
+          Unknown ids are ignored.
       session.report_commits = 20   [default]
           How many commit shas `ddflow report ITEM` lists for the landing before it
           says how many more there were.
