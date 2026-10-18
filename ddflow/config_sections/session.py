@@ -102,7 +102,11 @@ class SessionConfig:
     )
     agent_brief_decisions: int = knob(
         6,
-        doc="How many of the decisions that govern the item's files the launch brief quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.",
+        doc="How many of the decisions that govern the item's files the launch brief quotes (the pinned ones first, then those whose own globs overlap the item's, operators' before agents'); `ddflow decision applicable ITEM` lists all.",
+    )
+    agent_brief_pin_decisions: list[str] = knob(
+        factory=list,
+        doc="Decision ids every launch brief (`ddflow brief --for-agent`) quotes first, whatever files the item declares: the project's standing decisions. They are never cut by the decision count; the character ceiling cuts them last. Unknown ids are ignored.",
     )
     report_commits: int = knob(
         20,

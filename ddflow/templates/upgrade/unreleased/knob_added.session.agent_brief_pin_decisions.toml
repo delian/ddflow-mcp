@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_brief_pin_decisions"
+new = "[]"
+why = "Decisions every subagent launch brief quotes first."
+impact = "additive"

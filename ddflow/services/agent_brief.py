@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass, field
 
 from . import prompts as P
+from .guidance import inject as GI
+from .guidance.resolve import GLOBS
 
 SECTION = re.compile(r"^<!--\s*section:\s*([a-z_]+)\s*-->[ \t]*\n?", re.M)
 AGENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
@@ -131,3 +133,32 @@ def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: i
         "lessons_shown": n_les,
         "over": bool(max_chars and len(text) > max_chars),
     }
+
+
+#: Globs that match every file: a decision scoped only by these says nothing about THESE files.
+BROAD_GLOBS = frozenset({"*", "**", "**/*", "./**"})
+
+
+def decision_order(applied, pins=(), operator=frozenset()) -> list[str]:
+    """Ids of the decisions in ``applied`` (`Applies` records), most relevant first: those the
+    config pins (in the order pinned), then those whose own globs overlap the item's (a broad
+    `**` last of them), operator decisions ahead of agents', then the rest by enforcement and
+    id. A pinned id that governs nothing here is still listed: pinning is the operator's word."""
+    pinned = [*dict.fromkeys(pins)]
+
+    def key(a):
+        rec = a.record
+        broad = bool(rec.scope.globs) and all(g in BROAD_GLOBS for g in rec.scope.globs)
+        return (
+            2 if a.reason != GLOBS else int(broad),
+            rec.id not in operator,
+            GI.ENFORCEMENT_RANK.get(rec.enforcement, 9),
+            -rec.priority,
+            rec.id,
+        )
+
+    ranked = [
+        a.record.id for a in sorted((a for a in applied if a.record.kind == "decision"), key=key)
+    ]
+    head = pinned
+    return [*head, *(i for i in ranked if i not in head)]

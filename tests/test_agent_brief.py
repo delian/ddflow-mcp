@@ -182,3 +182,72 @@ def test_flags_of_the_other_form_are_refused_not_ignored(proj):
     assert run_cli(proj, "brief", "--note", "x")[0] == 1
     assert run_cli(proj, "brief", "--for-agent", "a")[0] == 1
     assert run_cli(proj, "brief", "--for-agent", "a", "T1", "--phase", "P1")[0] == 1
+
+
+def _decide(repo, did, globs, by="operator"):
+    run_cli(
+        repo,
+        "decision",
+        "add",
+        "--id",
+        did,
+        "--title",
+        f"title {did}",
+        "--decision",
+        f"text {did}",
+        "--by",
+        by,
+        *(["--globs", globs] if globs else []),
+    )
+
+
+def _decision_ids(out):
+    import re
+
+    return re.findall(r'kind="decision" id="([^"]+)"', out)
+
+
+def test_decisions_rank_glob_matches_before_unscoped_and_operator_before_agent(proj):
+    _decide(proj, "D-unscoped", "")
+    _decide(proj, "D-broad", "**")
+    _decide(proj, "D-a-agent", "src/widget.py", by="agent")
+    _decide(proj, "D-z-operator", "src/widget.py")
+    ids = _decision_ids(brief(proj)[1])
+    order = ["D-z-operator", "D-a-agent", "D-broad", "D-unscoped"]
+    assert [i for i in ids if i in order] == order
+
+
+def test_pinned_decisions_come_first_whatever_the_cap(proj):
+    _decide(proj, "D-op-match", "src/widget.py")
+    _decide(proj, "D-standing", "docs/x.md")
+    run_cli(proj, "config", "session.agent_brief_pin_decisions", "D-standing")
+    run_cli(proj, "config", "session.agent_brief_decisions", "1")
+    ids = _decision_ids(brief(proj)[1])
+    assert ids[0] == "D-standing" and "D-op-match" not in ids
+    assert "1 more not shown" in brief(proj)[1]
+
+
+def test_unknown_pinned_ids_do_not_widen_the_cap(proj):
+    for n in ("D-a", "D-b", "D-c"):
+        _decide(proj, n, "src/widget.py")
+    run_cli(proj, "config", "session.agent_brief_pin_decisions", "D-x,D-y,D-z,D-w")
+    run_cli(proj, "config", "session.agent_brief_decisions", "2")
+    assert len(_decision_ids(brief(proj)[1])) == 2
+
+
+def _applied(did, reason, globs):
+    from types import SimpleNamespace as NS
+
+    rec = NS(id=did, kind="decision", scope=NS(globs=globs), enforcement="warn", priority=0)
+    return NS(record=rec, reason=reason)
+
+
+def test_a_broad_glob_match_ranks_before_a_decision_that_does_not_match_the_files():
+    from ddflow.services.guidance.resolve import GLOBS
+
+    applied = [
+        _applied("D-aaa-other", "tag", ["docs/**"]),
+        _applied("D-zzz-broad", GLOBS, ["**"]),
+        _applied("D-mmm-narrow", GLOBS, ["src/x.py"]),
+    ]
+    assert AB.decision_order(applied) == ["D-mmm-narrow", "D-zzz-broad", "D-aaa-other"]
