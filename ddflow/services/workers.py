@@ -53,7 +53,7 @@ def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None
     high = _mark(cfg, "load_per_core", "high", 0.75) or 0.75
     inputs.update(cores=cores, load_high=high, load_per_core=load, memory_free_frac=free)
     if load is None:
-        n = min(hi, UNKNOWN_LOAD_WORKERS)
+        n = max(lo, min(hi, UNKNOWN_LOAD_WORKERS))
         inputs["rule"] = f"load unavailable: at most {UNKNOWN_LOAD_WORKERS}"
     else:
         loadavg = load * cores
@@ -74,14 +74,25 @@ def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None
     return Workers(n, inputs)
 
 
+#: Options whose value is a path to leave OUT or look at, never a test to run.
+_NOT_SELECTED = frozenset({"--ignore", "--ignore-glob", "--deselect", "-c", "--rootdir",
+                           "--confcutdir", "-p", "-o", "-k", "-m", "--junitxml"})  # fmt: skip
+
+
 def count_test_files(command: str) -> int | None:
-    """How many test files ``command`` names; None when it names none (a directory run)."""
+    """How many distinct test files ``command`` selects; None when it names none (a
+    directory run). An option's value (`--ignore=tests/test_x.py`) is not a selection."""
     try:
         tokens = shlex.split(command)
     except ValueError:
         return None
-    found = sum(1 for t in tokens if _TEST_FILE.search(t))
-    return found or None
+    found: set[str] = set()
+    for i, t in enumerate(tokens):
+        if t.startswith("-") or (i > 0 and tokens[i - 1] in _NOT_SELECTED):
+            continue
+        if _TEST_FILE.search(t):
+            found.add(t.partition("::")[0])
+    return len(found) or None
 
 
 def uses(command: str) -> bool:

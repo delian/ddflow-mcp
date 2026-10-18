@@ -53,9 +53,21 @@ def test_unknown_load_is_bounded():
 
 def test_resolve_substitutes_every_form_and_logs_inputs():
     src = FakeSource({"load": 0.0, "memory_free_frac": 0.9})
-    cmd, w = WK.resolve("pytest -n '{workers}' tests/test_a.py tests/test_b.py", cfg(), source=src)
+    cmd, w = WK.resolve(
+        "pytest -n '{workers}' tests/test_a.py tests/test_b.py", cfg(), source=src, cores=192
+    )
     assert cmd == "pytest -n 2 tests/test_a.py tests/test_b.py" and w.inputs["files"] == 2
 
 
 def test_command_without_placeholder_is_untouched():
     assert WK.resolve("pytest -n 4", cfg()) == ("pytest -n 4", None)
+
+
+def test_ignored_and_deselected_paths_are_not_a_selection():
+    c = "pytest -n {workers} --ignore=tests/test_slow.py --deselect tests/test_a.py::t tests/"
+    assert WK.count_test_files(c) is None
+    assert WK.count_test_files("pytest tests/test_a.py::x tests/test_a.py tests/test_b.py") == 2
+
+
+def test_unknown_load_respects_the_floor():
+    assert WK.compute(cfg(lo=24), None, source=FakeSource({}), cores=192).n == 24
