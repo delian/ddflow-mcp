@@ -7,6 +7,7 @@ import pytest
 import ddflow.api.records as R
 import ddflow.core.evalharness as E
 
+K = {"max_miss_rate": 0.0, "min_fixtures": 1}
 FIX = {"id": "F1", "workflow": "wf", "planted": ["sql=injection|concat", "race=lock"]}
 
 
@@ -39,12 +40,12 @@ def test_report_and_enable_gate():
     )
     assert rows["wf"]["miss_rate"] == 0 and rows["bad"]["miss_rate"] == 1
     assert rows["wf"]["enabled"] and not rows["bad"]["enabled"] and "2 of 2" in rows["bad"]["why"]
-    assert E.enable_by_default(rows["wf"])[0]
-    ok, why = E.enable_by_default(rows["bad"])
+    assert E.enable_by_default(rows["wf"], **K)[0]
+    ok, why = E.enable_by_default(rows["bad"], **K)
     assert not ok and "2 of 2" in why
-    assert E.enable_by_default(rows["bad"], max_miss_rate=1.0)[0]
-    assert not E.enable_by_default(None)[0]
-    assert not E.enable_by_default(rows["wf"], min_fixtures=2)[0]
+    assert E.enable_by_default(rows["bad"], max_miss_rate=1.0, min_fixtures=1)[0]
+    assert not E.enable_by_default(None, **K)[0]
+    assert not E.enable_by_default(rows["wf"], max_miss_rate=0.0, min_fixtures=2)[0]
 
 
 def test_fixture_kind_is_a_record_kind():
