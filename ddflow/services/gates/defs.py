@@ -231,7 +231,9 @@ DEFAULT_GATES: dict[str, GateDef] = {
         prompt=(
             "Run `ddflow ci run`: it merges your branch with the base in a scratch worktree "
             "and runs the project's pre-push stage there (ruff check, ruff format --check, "
-            "bandit, the build probe, the tests ...). Exit 2 means it could not run "
+            "bandit, the build probe, and the tests: with `[ci].tests_scope = selected` (default) "
+            "only the ones your change reaches plus the `[ci].always_tests` guards, the whole "
+            "suite when the selector says so or `--full`; the scope is in the evidence). Exit 2 means it could not run "
             "(pre-commit missing, nothing configured) and is recorded unavailable, never a "
             "pass. Not part of the default pipeline: add it with `ddflow workflow pipeline "
             "task ...` or `[gates].task_pipeline`, between standards and unit_tests."
@@ -246,16 +248,19 @@ DEFAULT_GATES: dict[str, GateDef] = {
         command="",
         timeout_s=3600,
         description=(
-            "The project's tests must pass, run in parallel: the WHOLE suite, or, for a bug "
-            "fix or small task whose ci gate passed on its clean commit, the tests its change reaches."
+            "The project's tests must pass, run in parallel: covered by the item's ci run when it "
+            "passed on this commit (its recorded scope: selected tests, or the whole suite), "
+            "otherwise only the tests the change reaches; the whole suite runs in the merge "
+            "queue, on cadence and at phase end."
         ),
         prompt=(
-            "Run it with `ddflow gate run <ID> unit_tests`, never from a run of your own. It "
-            "runs the WHOLE suite -- a targeted run hides standing breakage -- except for a "
-            "bug fix or small task once ci runs the WHOLE suite on the merge result and passes "
-            "on this clean commit: then the selection (D-gate-economy 1; the evidence lists it and "
-            "why). Run it in parallel -- pytest with `-n auto` (pytest-xdist) or a fixed worker "
-            "count; `ddflow workflow` says when the command uses ONE core. While you work, "
+            "Run it with `ddflow gate run <ID> unit_tests`, never from a run of your own. With "
+            "`[ci].tests_scope = selected` (D-test-economy-r2) the item's ci run covers the "
+            "affected tests, so this gate is `covered by ci selected run <sha>` or runs only "
+            "the difference; the whole suite is the merge queue's, the cadence's and the "
+            "phase end's (`ddflow ci run --full`), not an item's. Run it in parallel -- pytest "
+            "with `-n auto` (pytest-xdist) or a fixed worker count; `ddflow workflow` says "
+            "when the command uses ONE core. While you work, "
             "`ddflow tests --item <ID>` lists the tests your change reaches and a parallel "
             "command for them: fast feedback, not this gate. Set `[gate.unit_tests].command` "
             "in .ddflow/config.toml so this gate runs itself, e.g. `pytest -q -n auto`."
