@@ -1,6 +1,7 @@
 id = "claude"
 rank = 0
 family = "claude-code"
+title = "Claude Code"
 delta = "claude-code.md"
 
 [mcp]

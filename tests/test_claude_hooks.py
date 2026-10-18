@@ -55,7 +55,7 @@ def _ours(data: dict) -> list[dict]:
         h
         for g in data.get("hooks", {}).get("SessionStart", [])
         for h in g.get("hooks", [])
-        if "hooks session-start" in h.get("command", "")
+        if "hooks run session_start" in h.get("command", "")
     ]
 
 

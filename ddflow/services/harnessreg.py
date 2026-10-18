@@ -181,6 +181,7 @@ class Harness:
     delta: str  #: filename under `templates/drivers/deltas/`
     mcp: Mcp
     verified: Verified
+    title: str = ""  #: the product's display name; the id when a descriptor gives none
     instructions: Instructions | None = None
     hooks: Hooks | None = None
     plugin: Plugin | None = None
@@ -301,7 +302,7 @@ def parse(text: str, name: str) -> Harness:
         raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise DescriptorError(f"{where}: {exc}") from exc
-    top = {k: raw.pop(k) for k in ("id", "rank", "family", "delta") if k in raw}
+    top = {k: raw.pop(k) for k in ("id", "rank", "family", "delta", "title") if k in raw}
     mcp = _build(Mcp, raw.pop("mcp", None), f"{where}[mcp]")
     verified = _build(Verified, raw.pop("verified", None), f"{where}[verified]")
     sections = {}
@@ -310,8 +311,10 @@ def parse(text: str, name: str) -> Harness:
             sections[key] = _build(cls, raw.pop(key), f"{where}[{key}]")
     if raw:
         raise DescriptorError(f"{where}: unknown top-level key(s) {', '.join(sorted(raw))}")
-    for key, want in (("id", str), ("rank", int), ("family", str), ("delta", str)):
+    for key, want in (("id", str), ("rank", int), ("family", str), ("delta", str), ("title", str)):
         if key not in top:
+            if key == "title":  # optional
+                continue
             raise DescriptorError(f"{where}: missing top-level key {key!r}")
         _check_type(top[key], want, f"{where}.{key}")
     h = Harness(**top, mcp=mcp, verified=verified, **sections)
@@ -351,6 +354,17 @@ def get(agent: str) -> Harness | None:
 
 def ids() -> list[str]:
     return HARNESSES.names()
+
+
+def default_id() -> str:
+    """The agent a command that is not told one acts for: the first by rank."""
+    return load()[0].id
+
+
+def title_of(agent: str) -> str:
+    """The display name of ``agent``: its descriptor's ``title``, else its id."""
+    h = get(agent)
+    return (h.title or h.id) if h else agent
 
 
 #: Environment variables an older ddflow or another tool already set for a session id; kept
