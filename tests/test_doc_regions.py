@@ -143,3 +143,9 @@ def test_crlf_region_written_by_ddflow_is_not_a_hand_edit(repo):
 def test_quoted_marker_text_does_not_select_named_mode():
     quoted = "see `<!-- ddflow:begin d/x sha=000000000000 -->` for the grammar\n"
     assert RG.extract(quoted, "d") == {}
+
+
+def test_marker_examples_inside_code_fences_are_text():
+    doc = "```markdown\n" + rr("x", "example\n") + "```\n"
+    assert RG.parse(doc) == [] and RG.extract(doc, "d") == {}
+    assert [r.name for r in RG.parse(doc + rr("y", "real\n"))] == ["y"]
