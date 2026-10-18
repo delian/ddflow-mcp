@@ -138,3 +138,19 @@ def test_the_descriptor_outranks_the_table():
         HW.specs(replace(h, hooks=replace(h.hooks, style="none", events={}, inject=(), file="")))
         == ()
     )
+
+
+def test_a_null_hooks_key_is_filled_not_a_crash(repo):
+    path = repo / ".cursor" / "hooks.json"
+    path.parent.mkdir()
+    path.write_text('{"version": 1, "hooks": null}')
+    assert run_cli(repo, "hooks", "install", "--harness", "cursor")[0] == 0
+    assert HR.get("cursor").hooks.events["prompt"] in _doc(repo, ".cursor/hooks.json")["hooks"]
+
+
+def test_table_rows_do_not_outlive_a_descriptor_that_moved_the_file():
+    from dataclasses import replace
+
+    h = HR.get("claude")
+    moved = replace(h, hooks=replace(h.hooks, file=".claude/other.json"))
+    assert {s.file for s in HW.specs(moved)} == {".claude/other.json"}
