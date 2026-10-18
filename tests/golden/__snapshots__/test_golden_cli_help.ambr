@@ -1433,10 +1433,10 @@
 # ---
 # name: test_help[ddflow onboard]
   '''
-  usage: ddflow onboard [-h] [--apply] [--accept NAME] [{status,preflight,legacy,memory,test-gate,verify}]
+  usage: ddflow onboard [-h] [--apply] [--accept NAME] [{status,preflight,legacy,memory,test-gate,verify,harness}]
   
   positional arguments:
-    {status,preflight,legacy,memory,test-gate,verify}
+    {status,preflight,legacy,memory,test-gate,verify,harness}
                           which stage (default status: the standing drift report)
   
   options:

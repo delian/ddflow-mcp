@@ -2013,13 +2013,13 @@
     'ddflow_onboard': '''
       {
        "name": "ddflow_onboard",
-       "description": "The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate, verify. Propose by default; apply=true acts on the safe/approved items and accepts names.",
+       "description": "The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate, verify, harness (per-agent: register, approve, hooks, best ladder level). Propose by default; apply=true acts on the safe/approved items and accepts names.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "stage": {
           "type": "string",
-          "description": "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate or verify."
+          "description": "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate, verify or harness (accept = agent ids)."
          },
          "apply": {
           "type": "boolean",

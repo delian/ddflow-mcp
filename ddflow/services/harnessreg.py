@@ -91,6 +91,12 @@ class Mcp:
     path: str  #: project MCP config relative to the repo root; "" when none exists
     shape: str  #: one of the mcpconfig SHAPE_* constants
     note: str = ""  #: why this path and shape (what a probe or the docs showed)
+    #: Where the agent records that a project MCP server is TRUSTED, for agents that start
+    #: none they were not told to trust: the repo-relative settings file, the list that
+    #: approves a server and the list that rejects one. All empty = NOT VERIFIED / none.
+    approve_file: str = ""
+    approve_key: str = ""
+    deny_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -264,6 +270,8 @@ def _validate_hooks(hk: Hooks, where: str) -> None:
 def _validate(h: Harness, where: str) -> None:
     if h.mcp.shape not in SHAPES:
         raise DescriptorError(f"{where}: mcp.shape {h.mcp.shape!r} is not one of {sorted(SHAPES)}")
+    if bool(h.mcp.approve_file) != bool(h.mcp.approve_key):
+        raise DescriptorError(f"{where}: mcp.approve_file and mcp.approve_key go together")
     if (h.mcp.shape == SHAPE_NONE) != (h.mcp.path == ""):
         raise DescriptorError(f"{where}: mcp.path is empty exactly when mcp.shape is 'none'")
     if not h.verified.sources:
