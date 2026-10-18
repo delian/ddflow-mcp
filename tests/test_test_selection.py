@@ -166,8 +166,8 @@ def test_the_agent_is_told_to_run_relevant_tests_in_parallel_and_all_at_the_gate
         Path(__file__).resolve().parents[1] / "ddflow/templates/drivers/implement-phase.md"
     ).read_text()
     assert "ddflow tests --item <ID>" in driver
-    assert "never record unit_tests from a run of\n  your own" in driver
-    assert "it runs the **whole** suite on the branch merged with the\n  base" in driver
+    assert "never record unit_tests from a run of your own" in driver
+    assert "tests_scope = selected" in driver and "**whole** suite on the branch" not in driver
     prompt = G.DEFAULT_GATES["unit_tests"].prompt
     assert "-n auto" in prompt and "ddflow tests" in prompt
     # DX-gate-prompts-scoped-ci: ci runs the selected tests, so neither prompt says an
