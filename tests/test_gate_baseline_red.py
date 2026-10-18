@@ -79,3 +79,9 @@ def test_unattributable_failures_stay_failed(repo) -> None:
     assert BR.candidate_ids("unit_tests", "pytest -x", {"failed_tests": [ID]}, True) == []
     assert BR.candidate_ids("critic", "pytest", {"failed_tests": [ID]}, False) == []
     assert BR.candidate_ids("ci", "pytest", {"failed_tests": [ID]}, False) == [ID]
+
+
+def test_no_ids_is_never_baseline_red(repo) -> None:
+    from ddflow.services.gates import baseline_red as BR
+
+    assert BR.on_base(repo, "main", None, [], lambda g, c: ("failed", {}))["red"] is False

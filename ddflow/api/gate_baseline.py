@@ -25,7 +25,7 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
         return result, ""
     bug = _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
-    return "partial", BR.reason(ids, bug)
+    return "partial", BR.reason_text(ids, bug)
 
 
 def _file(
