@@ -210,11 +210,11 @@ def _decision_ids(out):
 def test_decisions_rank_glob_matches_before_unscoped_and_operator_before_agent(proj):
     _decide(proj, "D-unscoped", "")
     _decide(proj, "D-broad", "**")
-    _decide(proj, "D-agent-match", "src/**", by="agent")
-    _decide(proj, "D-op-match", "src/widget.py")
+    _decide(proj, "D-a-agent", "src/widget.py", by="agent")
+    _decide(proj, "D-z-operator", "src/widget.py")
     ids = _decision_ids(brief(proj)[1])
-    assert ids.index("D-op-match") < ids.index("D-agent-match") < ids.index("D-broad")
-    assert ids.index("D-broad") < ids.index("D-unscoped")
+    order = ["D-z-operator", "D-a-agent", "D-broad", "D-unscoped"]
+    assert [i for i in ids if i in order] == order
 
 
 def test_pinned_decisions_come_first_whatever_the_cap(proj):
@@ -224,6 +224,7 @@ def test_pinned_decisions_come_first_whatever_the_cap(proj):
     run_cli(proj, "config", "session.agent_brief_decisions", "1")
     ids = _decision_ids(brief(proj)[1])
     assert ids[0] == "D-standing" and "D-op-match" not in ids
+    assert "1 more not shown" in brief(proj)[1]
 
 
 def test_unknown_pinned_ids_do_not_widen_the_cap(proj):
