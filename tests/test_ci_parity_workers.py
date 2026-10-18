@@ -44,22 +44,20 @@ def test_local_runner_command_has_the_computed_count_not_auto(tmp_path: Path):
     (tmp_path / CI.PRE_COMMIT_CONFIG).write_text(HOOK)
     used: dict = {}
     src = FakeSource({"load": 0.5, "memory_free_frac": 0.9})  # 192 cores: 48 free
-    cmd, tmp = CI.localize_hooks(tmp_path, cfg(), CI.DEFAULT_COMMAND, used, source=src, cores=192)
-    try:
-        assert cmd != CI.DEFAULT_COMMAND and tmp is not None
-        text = Path(tmp).read_text()
+    with CI.localize_hooks(tmp_path, cfg(), CI.DEFAULT_COMMAND, used, source=src, cores=192) as cmd:
+        assert cmd != CI.DEFAULT_COMMAND
+        tmp = Path(cmd.split("-c ")[1].split()[0].strip("'"))
+        text = tmp.read_text()
         assert "-n 48" in text and "-n auto" not in text
-        assert str(tmp) in cmd
         assert used["hooks"]["n"] == 48 and used["hooks"]["loadavg"] == 96.0
         assert "-n auto" in (tmp_path / CI.PRE_COMMIT_CONFIG).read_text()  # committed file kept
-    finally:
-        Path(tmp).unlink()
+    assert not tmp.exists()
 
 
 def test_a_config_without_auto_is_run_as_it_is(tmp_path: Path):
     (tmp_path / CI.PRE_COMMIT_CONFIG).write_text(HOOK.replace("-n auto", "-n 4"))
-    cmd, tmp = CI.localize_hooks(tmp_path, cfg(), CI.DEFAULT_COMMAND, {})
-    assert cmd == CI.DEFAULT_COMMAND and tmp is None
+    with CI.localize_hooks(tmp_path, cfg(), CI.DEFAULT_COMMAND, {}) as cmd:
+        assert cmd == CI.DEFAULT_COMMAND
 
 
 def test_workers_substitution_leaves_other_text_alone():
