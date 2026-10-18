@@ -1449,6 +1449,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 60,
     on_chunk: Callable[[int, str], None] | None = None,
+    manifest: str = "",
 ) -> ReviewResult:
     """Run one reviewer over one diff. Never raises; encodes everything in the status.
 
@@ -1459,6 +1460,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     caller can keep the finding bodies even if the run is cut short (bug B206).
     ``tree`` is the working tree under review: a command reviewer must leave it as it
     found it, and only it is watched (B708761957b).
+    ``manifest`` (``review_manifest.build``) lists the whole change; every chunk's prompt
+    carries it, so a reviewer can check what a sibling chunk adds.
     ``only`` names the chunks (1-based, as a full run numbers them) to send; the rest
     are neither sent nor counted as lost -- `merge_rerun` folds such a run into the
     record of the full one.
@@ -1507,6 +1510,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
             fence=diff_fence(chunk),
             chunk_index=i,
             chunk_total=len(chunks),
+            manifest=manifest,
+            chunk_files=", ".join(chunk_files(chunk)),
         )
 
     try:

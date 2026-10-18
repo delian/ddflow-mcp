@@ -25,7 +25,7 @@ class PromptsConfig:
     )
     review_user: str = knob(
         "",
-        doc="Path to the per-chunk review message template. Variables: intent, context, diff, fence (the backtick fence that safely holds the diff), chunk_index, chunk_total.",
+        doc="Path to the per-chunk review message template. Variables: intent, context, diff, fence (the backtick fence that safely holds the diff), chunk_index, chunk_total, manifest (every changed file of the whole change with +/- counts and a one-line summary, the new files and the files left out of review; empty when [review].manifest_max_files is 0), chunk_files (the files this part holds).",
     )
     gate_instruction: str = knob(
         "",
