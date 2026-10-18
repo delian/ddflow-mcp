@@ -8,7 +8,6 @@ is never silent.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,27 +45,32 @@ class Excluded:
         }
 
 
-def patterns(cfg: Any, repo: Path) -> list[str]:
-    """The configured globs, plus (when `[review].exclude_pin_files`) the pin files."""
-    out = list(cfg.review.exclude_globs or [])
-    if cfg.review.exclude_pin_files:
-        out += [f + "**" if f.endswith("/") else f for f in pins.pin_files(repo, cfg)]
-    return out
+def patterns(cfg: Any, repo: Path) -> tuple[list[str], list[str]]:
+    """(globs, pinned paths): the configured globs, and (when `[review].exclude_pin_files`)
+    the exact repo-relative files and directories `pins.toml` owns."""
+    pinned = pins.pin_files(repo, cfg) if cfg.review.exclude_pin_files else []
+    return list(cfg.review.exclude_globs or []), pinned
 
 
-def _hit(paths: Iterable[str], pats: list[str]) -> bool:
-    return any(globs.match(p, g, bare_any_depth=True) for p in paths for g in pats)
+def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
+    if any(globs.match(path, g, bare_any_depth=True) for g in pats):
+        return True
+    # A pin file is an exact path (or a directory), never an any-depth pattern.
+    return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
-def filter_diff(diff: str, pats: list[str]) -> tuple[str, Excluded]:
+def filter_diff(diff: str, pats: list[str], pinned: list[str] | None = None) -> tuple[str, Excluded]:
     """``diff`` without the sections whose file matches a pattern, and what was dropped."""
     gone = Excluded()
-    if not pats:
+    pinned = pinned or []
+    if not pats and not pinned:
         return diff, gone
     kept: list[str] = []
     for section in unidiff.sections(diff):
         fd = unidiff.parse_section(section)
-        if _hit(fd.paths, pats):
+        # A rename out of a pinned tree still has a side worth reading: only a section
+        # whose every path is excluded goes.
+        if all(_hit(p, pats, pinned) for p in fd.paths):
             gone.files.append((fd.path, len(section.encode("utf-8", "replace"))))
         else:
             kept.append(section)
@@ -80,7 +84,7 @@ def apply(diff, cfg, repo, say, evidence):
     and the exclusions; one line says so when anything was."""
     if not diff.strip():
         return diff, evidence, Excluded()
-    kept, gone = filter_diff(diff, patterns(cfg, repo))
+    kept, gone = filter_diff(diff, *patterns(cfg, repo))
     if gone.files:
         say(gone.line())
         evidence = {**(evidence or {}), **gone.evidence()}

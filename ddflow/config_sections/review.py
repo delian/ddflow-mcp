@@ -43,7 +43,7 @@ class ReviewConfig:
     )
     exclude_globs: list[str] = knob(
         factory=lambda: ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"],
-        doc="Globs of generated and pinned files (golden snapshots, transcripts, lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a re-pinned transcript turned a 3 KB change into an 11-chunk review that took 7 minutes and judged generated text. A bare pattern matches at any depth. The review output and the gate's evidence say how many files and bytes were left out and name them, so a skipped file is never silent. Change it for the project (`ddflow config review.exclude_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`; an empty list sends every file.",
+        doc="Globs of generated and pinned files (golden snapshots, transcripts, lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a re-pinned transcript turned a 3 KB change into an 11-chunk review that took 7 minutes and judged generated text. A bare pattern matches at any depth. The review output and the gate's evidence say how many files and bytes were left out and name them, so a skipped file is never silent. Change it for the project (`ddflow config review.exclude_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`; an empty list leaves out no glob-matched file (the files pins.toml owns are governed by [review].exclude_pin_files, which must be turned off as well to send every file).",
     )
     exclude_pin_files: bool = knob(
         True,
