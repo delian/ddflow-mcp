@@ -202,10 +202,8 @@ def test_the_tool_args_are_kind_verb_id_then_fields():
 def test_check_only_reaches_dispatch_and_is_refused_where_it_means_nothing(repo):
     add = {"kind": "stakeholder", "verb": "add", "id": "s9", "set": ["title=Ann", "@check_only"]}
     out = RK.call(repo, add, "a")
-    assert (
-        out.exit == 0
-        and RK.call(repo, {"kind": "stakeholder", "verb": "list"}, "a").data["total"] == 0
-    )
+    assert out.data["check_only"]  # a dry run: nothing was written
+    assert RK.call(repo, {"kind": "stakeholder", "verb": "list"}, "a").data["total"] == 0
     edit = {"kind": "stakeholder", "verb": "edit", "id": "s9", "set": ["title=B", "@check_only"]}
     out = RK.call(repo, edit, "a")
     assert out.exit != 0 and "does not take check_only" in out.reason
