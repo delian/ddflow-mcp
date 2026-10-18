@@ -144,3 +144,38 @@ def test_the_help_index_files_sync_under_its_declared_group_not_unmapped():
 
     text = render_index(tools=tools.TOOLS)
     assert "ddflow_sync" in text and "Unmapped" not in text
+
+
+def test_a_gate_that_was_never_green_is_not_reported_as_still_valid(repo):
+    _claimed(repo)
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "research",
+        "--outcome",
+        "unavailable",
+        "--reason",
+        "no net",
+        "--agent",
+        ME,
+    )
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "rules",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "read",
+        "--agent",
+        ME,
+    )
+    _land(repo, "src/a.py")
+    out = sync(repo, item="T1", agent=ME)
+    assert out.ok, out.reason
+    assert "research" not in out.data["gates_valid"]
+    assert "research" in out.data["gates_not_passing"]
