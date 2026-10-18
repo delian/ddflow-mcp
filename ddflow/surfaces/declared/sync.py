@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from ...api.lifecycle.sync import sync
 from ..registry import Command, Param, by_tool
+from ..tools._common import _api
 
 
 def _call(repo, a, agent):
-    return sync(repo, item=a.get("item") or "", check=bool(a.get("check")), agent=agent)
+    return _api().lifecycle.sync(
+        repo, item=a.get("item") or "", check=bool(a.get("check")), agent=agent
+    )
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -22,9 +24,10 @@ COMMANDS: tuple[Command, ...] = (
             "refuses with uncommitted changes, aborts on a conflict and names the files, reports how many "
             "merged commits touch the item's globs and which recorded gates stay valid. check=true measures only."
         ),
+        wire_shape=(["sync", "NOPE", "--check"], {"item": "NOPE", "check": True}),
         call=_call,
         payload=(
-            "id",
+            "item",
             "base",
             "status",
             "behind",

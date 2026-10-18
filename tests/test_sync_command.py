@@ -124,7 +124,7 @@ def test_without_an_item_it_syncs_the_worktree_the_caller_stands_in(repo, monkey
     _land(repo, "src/a.py")
     monkeypatch.chdir(wt)
     out = sync(repo, agent=ME)
-    assert out.ok and out.data["id"] == "T1" and (wt / "src" / "a.py").exists()
+    assert out.ok and out.data["item"] == "T1" and (wt / "src" / "a.py").exists()
 
 
 def test_a_base_that_cannot_be_measured_is_could_not_tell_not_a_failure(repo, monkeypatch):
