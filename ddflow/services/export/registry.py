@@ -24,6 +24,7 @@ from ...infra.paths import templates_dir
 from ..prompts import Template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, one_line, truncate
 from .query import EXIT_REFUSED, ExportError, Query
+from .region_marks import DOC_KEY, region
 
 #: How a kind is written to its target (the writer, B-export-write, implements these).
 WHOLE = "whole"  # the file is entirely generated
@@ -365,6 +366,7 @@ def _environment() -> SandboxedEnvironment:
     env.filters["center"] = _center  # the built-ins allocate `width` bytes unchecked
     env.filters["indent"] = _indent
     env.filters["format"] = _format
+    env.globals["region"] = region  # {% call region("name") %}: a named region's markers
     return env
 
 
@@ -427,6 +429,7 @@ def render(
     *,
     schema_version: int = 1,
     timeout_s: float = RENDER_TIMEOUT_S,
+    doc: str = "",
 ) -> str:
     """Render ``template`` (a ``Template`` or its text) over plain ``data``, sandboxed.
 
@@ -447,6 +450,7 @@ def render(
             f"{where}: template data is nested too deeply or refers to itself"
         ) from None
     ctx["schema_version"] = schema_version
+    ctx[DOC_KEY] = doc
     try:
         env = _environment()
         return normalize(_run_limited(lambda: _render_capped(env, text, ctx), timeout_s))
@@ -523,7 +527,9 @@ def render_body(
             EXIT_REFUSED,
         )
     tmpl = template if template is not None else resolve_template(k.name, repo, overrides, builtin)
-    return render(tmpl, k.data(query, f), schema_version=k.schema_version, timeout_s=timeout_s)
+    return render(
+        tmpl, k.data(query, f), schema_version=k.schema_version, timeout_s=timeout_s, doc=k.name
+    )
 
 
 def render_document(  # noqa: PLR0913 -- the document kind's whole vocabulary: filters, cap, frame and the body hook
