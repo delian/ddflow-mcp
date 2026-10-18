@@ -11,6 +11,7 @@ verbs = ["list", "show", "add", "edit", "remove", "search", "revise"]
 declined_other = "offered when the rules move onto the record surface (B-rules-onto-record-surface)"
 # rules keep their own search source, and are not yet recalled or served as resources
 # (their output is pinned); B-rules-onto-record-surface turns these on
+surfaced = true
 recall = false
 resource = false
 

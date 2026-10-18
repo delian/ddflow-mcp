@@ -188,6 +188,10 @@ class RecordKind:
     #: Lifecycle, links, sources, validators, render template and stamp, declared as data
     #: (`core.kindrules`); enforced by `api.record_rules` on add, edit and revise.
     rules: KR.KindRules | None = None
+    #: Whether the kind has CLI words and an MCP tool of its own (the rule kind has, by hand).
+    #: A data kind is reached through the API, search, recall and resources until the generic
+    #: record surface (SE-kind-data.4) carries it; B-rc-conformance reads this.
+    surfaced: bool = True
 
     def __post_init__(self) -> None:
         names = [f.name for f in self.fields]
@@ -200,7 +204,9 @@ class RecordKind:
             raise ValueError(f"record kind {self.name!r}: unknown verb {bad[0]!r}")
         self._check_declarations(set(names))
         if self.rules is not None and (
-            bad := self.rules.declaration_problems({f.name: f.type for f in self.fields})
+            bad := self.rules.declaration_problems(
+                {f.name: f.type for f in self.fields}, {f.name: f.choices for f in self.fields}
+            )
         ):
             raise ValueError(f"record kind {self.name!r}: {bad[0]}")
         if self.ops and not self.ops.keys() <= set(self.verbs):
@@ -293,10 +299,10 @@ def forget(name: str) -> None:
     PA.forget(name)
 
 
-from .record_kind_data import load_packaged  # noqa: E402  (needs RecordKind above)
+from .record_kind_data import load_all  # noqa: E402  (needs RecordKind above)
 
-#: The rule kind is data: ``ddflow/templates/kinds/rule.toml``.
-RULE = load_packaged("rule", sys.modules[__name__])
+#: The shipped kinds are data: ``ddflow/templates/kinds/*.toml`` (the rule kind first).
+RULE = load_all(sys.modules[__name__])[0]
 
 
 # -- shared helpers ------------------------------------------------------------------

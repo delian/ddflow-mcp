@@ -73,8 +73,11 @@ class KindRules:
     #: The descriptor schema version the kind was written for (0: not stamped).
     stamp: int = 0
 
-    def declaration_problems(self, types: Mapping[str, str]) -> list[str]:
-        """Why this does not fit a kind whose fields have ``types`` (name -> JSON type)."""
+    def declaration_problems(
+        self, types: Mapping[str, str], choices: Mapping[str, tuple[str, ...] | None] | None = None
+    ) -> list[str]:
+        """Why this does not fit a kind whose fields have ``types`` (name -> JSON type) and
+        ``choices`` (name -> the values a string may take, if limited)."""
         bad: list[str] = []
 
         def need(what: str, name: str, *want: str) -> None:
@@ -85,32 +88,39 @@ class KindRules:
 
         if (lc := self.lifecycle) is not None:
             need("lifecycle", lc.field, "string")
+            allowed = (choices or {}).get(lc.field)
+            if allowed is not None and (out := [x for x in lc.states if x not in allowed]):
+                bad.append(f"lifecycle states {', '.join(out)} are not choices of {lc.field!r}")
         for link in self.links:
             need("link", link.field, "array" if link.many else "string")
         for name in self.sources:
             need("sources", name, "string")
         for v in self.validators:
-            if v.min is not None or v.max is not None:
-                need("validator bounds", v.field, "integer")
-            if v.pattern or v.max_length is not None:
-                need("validator text check", v.field, "string", "array")
-            if v.pattern:
-                try:
-                    re.compile(v.pattern)
-                except re.error as exc:
-                    bad.append(f"validator on {v.field!r}: bad pattern: {exc}")
+            bad += _validator_declaration(v, need)
         if self.render:
-            try:
-                used = {
-                    n for _l, n, _s, _c in string.Formatter().parse(self.render) if n is not None
-                }
-            except ValueError as exc:
-                return [*bad, f"render is not a template: {exc}"]
-            bad += [
-                f"render names no such field {n!r}"
-                for n in sorted(used - set(types) - {"id", "status"})
-            ]
+            bad += _render_declaration(self.render, set(types))
         return bad
+
+
+def _validator_declaration(v: Validator, need: Callable[..., None]) -> list[str]:
+    if v.min is not None or v.max is not None:
+        need("validator bounds", v.field, "integer")
+    if v.pattern or v.max_length is not None:
+        need("validator text check", v.field, "string", "array")
+    if v.pattern:
+        try:
+            re.compile(v.pattern)
+        except re.error as exc:
+            return [f"validator on {v.field!r}: bad pattern: {exc}"]
+    return []
+
+
+def _render_declaration(template: str, names: set[str]) -> list[str]:
+    try:
+        used = {n for _l, n, _s, _c in string.Formatter().parse(template) if n is not None}
+    except ValueError as exc:
+        return [f"render is not a template: {exc}"]
+    return [f"render names no such field {n!r}" for n in sorted(used - names - {"id", "status"})]
 
 
 def _bounds_problem(v: Validator, value: Any) -> str:

@@ -32,7 +32,7 @@ def kind_from_data(desc: dict[str, Any], records: ModuleType | None = None) -> A
     R = _records(records)
     if code := [k for k in KD.CODE_KEYS if k in desc]:
         raise KD.KindDataError(f"{code[0]} is code; a kind with behaviour is written in Python")
-    args = dict(desc)
+    args = {"surfaced": False, **desc}  # a data kind has no hand-written commands
     args["fields"] = tuple(R.FieldSpec(**f) for f in args["fields"])
     rest = args.pop("declined_other", "")
     verbs = tuple(args.get("verbs", R.VERBS))
@@ -72,3 +72,9 @@ def load_packaged(name: str, records: ModuleType | None = None) -> Any:
     R = _records(records)
     text = (KINDS_DIR / f"{name}.toml").read_text(encoding="utf-8")
     return R.declare(parse_kind(text, source=f"{name}.toml", records=R))
+
+
+def load_all(records: ModuleType | None = None) -> list[Any]:
+    """Declare every packaged kind, ``rule`` first; the kinds it declares, in that order."""
+    names = sorted((n for n, _ in packaged()), key=lambda n: (n != "rule", n))
+    return [load_packaged(n, records) for n in names]

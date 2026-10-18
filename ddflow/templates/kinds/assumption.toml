@@ -1,0 +1,38 @@
+# An assumption: something taken as true that the plan depends on.
+name = "assumption"
+summary = "an assumption: something taken as true that the plan depends on"
+text = ["statement", "evidence", "tags"]
+columns = ["title", "state", "confidence"]
+filters = ["state", "tags"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "open"
+[lifecycle.transitions]
+open = ["confirmed", "refuted", "stale"]
+stale = ["open", "confirmed", "refuted"]
+[[validator]]
+field = "confidence"
+min = 0
+max = 100
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "statement"
+default = ""
+[[field]]
+name = "state"
+choices = ["open", "confirmed", "refuted", "stale"]
+[[field]]
+name = "confidence"
+type = "integer"
+default = 50
+help = "Percent."
+[[field]]
+name = "evidence"
+default = ""
+[[field]]
+name = "tags"
+type = "array"
+default = []

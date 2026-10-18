@@ -155,3 +155,14 @@ def test_declined_must_be_a_table_and_a_typo_verb_is_refused():
         KD.parse(MINIMAL.replace('name = "gizmo"', 'name = "gizmo"\ndeclined = 3'))
     with pytest.raises(ValueError, match="unknown verb 'histroy'"):
         KDA.parse_kind(MINIMAL + '\n[declined]\nhistroy = "x"\n')
+
+
+def test_a_data_kind_is_not_surfaced_unless_it_says_so():
+    kind = KDA.parse_kind(MINIMAL)
+    try:
+        assert kind.surfaced is False
+        assert KDA.parse_kind(
+            MINIMAL.replace('name = "gizmo"', 'name = "gizmo"\nsurfaced = true')
+        ).surfaced
+    finally:
+        D.DEF_KINDS.pop("gizmo", None)
