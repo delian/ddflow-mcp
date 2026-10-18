@@ -111,3 +111,29 @@ def test_the_post_merge_regeneration_records_its_output_too(repo: Path) -> None:
     assert "2 knobs" in (repo / "pin.txt").read_text()
     git(repo, "add", "pin.txt")
     assert _verdict(repo).exit == OK
+
+
+def test_the_attributes_line_a_regeneration_adds_commits_without_a_lease(repo: Path) -> None:
+    """DX-pins-gitattributes-dirty: `pins regenerate` adds a recipe's `merge=pinsregen` line to
+    `.gitattributes`; committing that needed a lease, and merge refused the dirty tree."""
+    (repo / ".gitattributes").write_text("README.md merge=pinsregen\n")
+    git(repo, "add", ".gitattributes")
+    git(repo, "commit", "-qm", "attrs")
+    done = ddflow_cli(repo, "pins", "regenerate")
+    assert done.returncode == 0, done.stderr
+    assert "pin.txt merge=pinsregen" in (repo / ".gitattributes").read_text()
+    git(repo, "add", ".gitattributes")
+    verdict = _verdict(repo)
+    assert verdict.exit == OK, verdict.message
+
+
+def test_a_later_edit_of_the_attributes_still_needs_a_lease(repo: Path) -> None:
+    (repo / ".gitattributes").write_text("README.md merge=pinsregen\n")
+    git(repo, "add", ".gitattributes")
+    git(repo, "commit", "-qm", "attrs")
+    assert ddflow_cli(repo, "pins", "regenerate").returncode == 0
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("*.json -diff\n")
+    git(repo, "add", ".gitattributes")
+    verdict = _verdict(repo)
+    assert verdict.exit == FAIL and ".gitattributes" in verdict.message
