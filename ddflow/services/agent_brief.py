@@ -151,7 +151,7 @@ def decision_order(applied, pins=(), operator=frozenset()) -> list[str]:
         rec = a.record
         broad = bool(rec.scope.globs) and all(g in BROAD_GLOBS for g in rec.scope.globs)
         return (
-            a.reason != GLOBS or broad,
+            2 if a.reason != GLOBS else int(broad),
             rec.id not in operator,
             GI.ENFORCEMENT_RANK.get(rec.enforcement, 9),
             -rec.priority,
