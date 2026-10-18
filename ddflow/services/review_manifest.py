@@ -52,6 +52,12 @@ def _counts(section: str) -> tuple[int, int]:
     )
 
 
+def _names(paths: list[str], cap: int) -> str:
+    """The first ``cap`` names, then how many more."""
+    more = f" and {len(paths) - cap} more" if len(paths) > cap else ""
+    return ", ".join(paths[:cap]) + more
+
+
 def build(
     diff: str,
     excluded: list[str] | None = None,
@@ -72,18 +78,10 @@ def build(
     if len(rows) > max_files:
         out.append(f"- ... and {len(rows) - max_files} more file(s)")
     new = [fd.path for fd, _s in rows if fd.old is None]
-    out.append("New files: " + (", ".join(new) if new else "none"))
+    out.append("New files: " + (_names(new, max_files) if new else "none"))
     if excluded:
-        out.append(
-            "Left out of review (generated or pinned, [review].exclude_globs): "
-            + ", ".join(excluded)
-        )
+        out.append("Left out of review (generated or pinned files): " + _names(excluded, max_files))
     return "\n".join(out)
-
-
-def held(chunk: str) -> str:
-    """The files this chunk's diff holds, for the prompt's 'this part' line."""
-    return ", ".join(dict.fromkeys(fd.path for fd in unidiff.files(chunk)))
 
 
 def for_review(diff: str, skipped, cfg) -> str:
