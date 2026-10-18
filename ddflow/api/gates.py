@@ -50,8 +50,8 @@ from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
 from ..services.identity import agent_marker
 from ..views.markdown import new_reports_line
-from . import gate_baseline as GB
 from ._base import _load
+from .gate_baseline import apply as baseline_apply
 from .gate_guard import guard_record
 from .lifecycle import callers_tree
 from .lifecycle.claim import _new_report_count
@@ -747,7 +747,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
         )
 
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
-    result, red = GB.apply(
+    result, red = baseline_apply(
         repo, cfg, agent, it, gate, gdef, result, ev, rerun, _fail_fast(gdef.command)
     )
     reason = red or _failure_reason(gdef, result, ev)
