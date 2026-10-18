@@ -63,7 +63,7 @@ class FakeAgent(_Scripted):
     instance in the script is raised, to stand for a refusal or a crash."""
 
     def __call__(self, prompt: str, **kw: Any) -> Any:
-        out = self._next(prompt, **kw)
+        out = self._next(prompt, **kw)  # positional whichever way the caller spelled it
         if isinstance(out, BaseException):
             raise out
         return out
