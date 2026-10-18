@@ -238,7 +238,8 @@ def grouped_tools(tools: Iterable[str]) -> list[tuple[str, list[str]]]:
 
 def render_index(repo: Path | None = None, *, tools: Iterable[str] = ()) -> str:
     """The front page: what this is, the loop, the topics, the inventory."""
-    tools = list(tools)
+    # A Mapping stays one: `grouped_tools` reads each tool's `help_group` from its values.
+    tools = tools if isinstance(tools, Mapping) else list(tools)
     topics = "\n".join(f"  {name:<10} {desc}" for name, desc in TOPICS.items())
     inventory = "\n".join(
         f"{title}\n" + "\n".join(f"  {t}" for t in members)

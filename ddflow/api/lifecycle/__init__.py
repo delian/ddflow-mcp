@@ -37,6 +37,7 @@ from .merge import dispose_tree, merge, record_item_removed  # noqa: F401
 from .planning import PURPOSES, alternatives_offer, plan_for  # noqa: F401
 from .ready import DEFAULT_CHECK_RECOVERY, DEFAULT_NEXT_KIND, next_
 from .reservations import WAITABLE
+from .sync import sync
 from .wait import DEFAULT_WAIT_TIMEOUT_S, WAIT_MAX_S, wait  # noqa: F401
 
 #: The public operations and constants, as the single module exposed them.
@@ -56,6 +57,7 @@ __all__ = [
     "next_",
     "release",
     "remove",
+    "sync",
     "unblock",
     "wait",
 ]
