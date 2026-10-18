@@ -653,6 +653,9 @@ def run(sc: Scenario) -> None:
             reason="Documentation work is outside the scope of this lifecycle scenario.",
         )
         sc.check("the docs gate is explicitly skipped", code == 0, out[:200])
+        # The full-suite close check (phase_full_suite, default 'require') has its own
+        # tests; this scenario is about the lifecycle (B7f54dbf1e3).
+        alpha.tool("ddflow_configure", set="schedule.phase_full_suite", value="off")
         out, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
         sc.check("phase P1 completes once every task is done", code == 0, out[:300])
 
