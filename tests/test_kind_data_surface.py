@@ -101,7 +101,7 @@ def test_a_project_kind_is_carried_and_can_override_a_shipped_one(repo):
         assert "ticketx" in D.DEF_KINDS  # a project kind is a definition kind too
     finally:
         R.forget("ticketx")
-        D.DEF_KINDS.pop("ticketx", None)
+        D.DEF_KINDS.unregister("ticketx")
         R.forget("vendor")
         R.declare(shipped)
 
@@ -121,7 +121,7 @@ def test_a_bad_project_kind_names_the_file_and_spares_the_rest(repo):
         assert out.exit != 0 and "bad.toml" in out.reason
     finally:
         R.forget("goodx")
-        D.DEF_KINDS.pop("goodx", None)
+        D.DEF_KINDS.unregister("goodx")
 
 
 def test_no_project_dir_is_no_kinds(repo):
@@ -138,7 +138,7 @@ def test_a_field_named_like_a_control_argument_is_refused(repo):
         assert out.exit != 0 and "query" in out.reason
     finally:
         R.forget("srch")
-        D.DEF_KINDS.pop("srch", None)
+        D.DEF_KINDS.unregister("srch")
 
 
 def test_a_project_kind_is_seen_by_search_resources_and_a_fresh_cli(repo):
@@ -161,4 +161,4 @@ def test_a_project_kind_is_seen_by_search_resources_and_a_fresh_cli(repo):
         assert "ddflow://records/ticketx" in [r["uri"] for r in listed["result"]["resources"]]
     finally:
         R.forget("ticketx")
-        D.DEF_KINDS.pop("ticketx", None)
+        D.DEF_KINDS.unregister("ticketx")
