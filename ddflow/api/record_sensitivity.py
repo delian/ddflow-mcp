@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from ..core import defs as D
-from ..core.redact import redact_text
-from ..services.redact_report import session_patterns
+from ..core.sensitivity import LABEL_FIELD
+from ..services.redact_report import redactor
 from ..services.sensitivity import load
 from ._base import _load
 
-FIELD = "sensitivity"
+FIELD = LABEL_FIELD
 
 
 def _text(fields: dict[str, Any]) -> str:
@@ -44,12 +44,16 @@ def checked(
             f"sensitivity {declared!r} is not a level; the levels are {', '.join(vocab.levels)}",
         )
     _log, cfg, st = _load(repo, agent)
-    if not cfg.sensitivity.scan_at_write:
-        return stored, ""
     held = st.defs.get(D.key(kind.def_kind, rid))
     prior = (held.fields.get(FIELD) if held is not None else None) or None
-    found = redact_text(_text(stored), secret_patterns=session_patterns(cfg)).counts
+    stale = prior is not None and prior not in vocab.levels
+    if stale:
+        prior = None  # a label the vocabulary no longer has is no floor (and is rewritten below)
+    if not cfg.sensitivity.scan_at_write:
+        # a whole-record write (revise) that names no label keeps the one held
+        return ({**stored, FIELD: prior} if prior and declared is None else stored), ""
+    found = redactor("upstream", cfg).text(_text(stored)).counts
     level = vocab.scan_level(found, floor=declared or prior or "")
-    if declared is None and level == vocab.unlabelled and prior is None:
+    if declared is None and level == vocab.unlabelled and prior is None and not stale:
         return stored, ""  # nothing to say: an unlabelled record is at the default
     return {**stored, FIELD: level}, ""

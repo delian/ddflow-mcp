@@ -20,6 +20,9 @@ from typing import Any
 
 from .registry import Registry
 
+#: The name of the label field a record carries, whatever its kind (one literal for every module).
+LABEL_FIELD = "sensitivity"
+
 
 class SensitivityError(ValueError):
     """A vocabulary that is not one."""
