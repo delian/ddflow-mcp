@@ -809,7 +809,9 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
-def _order_refusal(log, cfg, st, item: str, gate: str, say, defs=None, repo=None) -> O.Outcome | None:
+def _order_refusal(
+    log, cfg, st, item: str, gate: str, say, defs=None, repo=None
+) -> O.Outcome | None:
     """The pipeline-order check, asked BEFORE the review is paid for (one run before
     `implement` reviews an empty diff): a refusal under `block`, else a note said."""
     if not item:
@@ -1689,14 +1691,14 @@ def _say_selection(selected, say) -> None:
         say(f"→ route: {selected.agent}")
 
 
-def _early_refusal(
-    full, force, delta, log, cfg, st, item: str, gate: str, say, defs=None, repo=None
-):
+def _early_refusal(flags, log, cfg, st, item: str, gate: str, say, defs=None, repo=None):
     """The first reason to refuse before any work: contradicting flags, then the order. (Not
     `a or b`: a refusal is falsy.)"""
-    conflict = _flag_conflict(full, force, delta, item, gate)
-    return conflict if conflict is not None else _order_refusal(
-        log, cfg, st, item, gate, say, defs, repo
+    conflict = _flag_conflict(*flags, item, gate)
+    return (
+        conflict
+        if conflict is not None
+        else _order_refusal(log, cfg, st, item, gate, say, defs, repo)
     )
 
 
@@ -1807,9 +1809,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             **extra,
         )
 
-    refused = _early_refusal(
-        full, force, delta, log, cfg, st, item, gate, say, gates, repo
-    )
+    refused = _early_refusal((full, force, delta), log, cfg, st, item, gate, say, gates, repo)
     if refused is not None:
         return refused
 
