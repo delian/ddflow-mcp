@@ -13,7 +13,7 @@ echo "$@" >> "$FAKE_LOG"
 case "$1" in
   review) echo "Enqueued job 7 for range" ;;
   wait) [ -n "$FAKE_HANG" ] && sleep 30; exit "${FAKE_WAIT_EXIT:-0}" ;;
-  list) echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS:-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
+  list) [ -n "$FAKE_LIST_EMPTY" ] && { echo "[]"; exit 0; }; echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS:-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
   show) [ -n "$FAKE_SHOW_FAIL" ] && exit 1; echo "Review for job 7: ${FAKE_VERDICT:-no issues}" ;;
 esac
 """
@@ -97,3 +97,21 @@ def test_the_wait_is_a_knob():
     from ddflow.config import Config
 
     assert Config().gates.standards_wait_s == 900
+
+
+def test_a_job_missing_from_the_list_with_a_printed_review_is_findings(tmp_path, monkeypatch):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_LIST_EMPTY", "1")  # `roborev list` no longer names the job
+    monkeypatch.setenv("FAKE_VERDICT", "a bug")
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and "a bug" in r.text
+
+
+def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monkeypatch):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_LIST_EMPTY", "1")
+    monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "unavailable" and "unknown state" in r.reason
