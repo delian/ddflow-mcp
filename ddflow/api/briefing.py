@@ -91,7 +91,7 @@ def agent_brief(
                 cfg.session.agent_brief_lessons,
             ),
         )
-        pinned = sum(1 for i in cfg.session.agent_brief_pin_decisions if i in st.decisions)
+        pinned = len({i for i in cfg.session.agent_brief_pin_decisions if i in st.decisions})
         shown = max(cfg.session.agent_brief_decisions, pinned)
         facts.decisions = decisions[: max(0, shown)]
         got = AB.render(
