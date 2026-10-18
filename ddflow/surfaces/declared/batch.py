@@ -138,7 +138,7 @@ COMMANDS: tuple[Command, ...] = (
         "needs keep, and dup is abandoned with the reason. Refused when dup is claimed, either "
         "is finished, or the re-pointing would create a cycle. `dry_run` lists what it would do.",
         call=_fold,
-        payload=("dup", "keep", "repointed", "dry_run", "edits", "abandoned"),
+        payload=("dup", "keep", "repointed", "dry_run", "edits", "unchanged", "abandoned"),
         render=fold_text,
         cli=CliPolicy(shown=(OK,)),
         params=(
