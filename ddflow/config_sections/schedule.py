@@ -207,6 +207,12 @@ class ScheduleConfig:
         choices=("note", "problem", "off"),
         strictest=("problem", "an open phase with no task fails doctor"),
     )
+    phase_full_suite: str = knob(
+        "require",
+        doc="Whether a PHASE can complete before the FULL test suite has passed on its merged tree (D-gate-economy-r3: items run only the tests they reach). 'require' (default): `complete <phase>` is refused unless the `integration_tests` cadence (`ddflow cadence --ran integration_tests`, recorded by every passing `ddflow ci run --full`, including the merge queue's batch run) was recorded after the last merge of the phase's tasks. 'run': ddflow runs `ci run --full` itself when there is no such pass, and records it. 'off': not checked. `--force` overrides a refusal and the override is recorded.",
+        choices=("off", "require", "run"),
+        strictest=("require", "a phase closes only on a full-suite pass"),
+    )
     auto_order: str = knob(
         "propose",
         doc="What ddflow does about a lease deadlock (a cycle of agents waiting on each other's files) that nothing declared: 'propose' (default) reports the `needs` edge it would add; 'apply' adds it, as a logged task.updated event marked auto-order, so the circle cannot recur (`ddflow update --needs` drops it); 'off' does nothing. It never touches a done, abandoned or decide item, an item tagged no-auto-order, or adds an edge that would close a needs cycle.",
