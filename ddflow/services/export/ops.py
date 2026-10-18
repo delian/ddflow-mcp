@@ -336,7 +336,7 @@ def write_doc(
         return W.write_whole(repo, path, doc, check=check, diff=diff, force=force)
     if spec.mode == R.REGION:
         body = _body(repo, cfg, q, spec, template)
-        if f"ddflow:begin {spec.doc}/" in body:  # a template that names its regions
+        if RG.extract(body, spec.doc):  # a template that names its regions (whole-line markers)
             return RG.write_named(repo, path, spec.doc, body, check=check, diff=diff, force=force)
         return W.write_region(repo, path, spec.doc, body, check=check, diff=diff, force=force)
     if template is not None or spec.template:

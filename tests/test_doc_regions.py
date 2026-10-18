@@ -49,9 +49,9 @@ def test_bad_markers_are_refused(text):
 def test_splice_replaces_by_name_and_keeps_the_rest_byte_identical():
     sp = RG.splice(SKELETON, "d", {"a": "A2\n", "b": "B1\n"})
     assert sp.updated == ("a",) and sp.unchanged == ("b",)
-    assert sp.text == SKELETON.replace("A1\n", "A2\n").replace(
-        RG.parse(SKELETON)[0].sha, RG.parse(sp.text)[0].sha
-    )
+    assert sp.text == SKELETON.replace(rr("a", "A1\n"), rr("a", "A2\n"))  # built independently
+    new_a = RG.parse(sp.text)[0]
+    assert new_a.sha != RG.parse(SKELETON)[0].sha and not new_a.edited
     again = RG.splice(sp.text, "d", {"a": "A2\n", "b": "B1\n"})
     assert again.text == sp.text and again.updated == ()
 
@@ -129,3 +129,17 @@ def test_region_macro_emits_markers_with_the_body_hash():
     assert not RG.parse(out)[0].edited
     with pytest.raises(ExportError):
         R.render(tmpl, {"x": "hi"})  # no document kind: nothing to name the region by
+
+
+def test_crlf_region_written_by_ddflow_is_not_a_hand_edit(repo):
+    p = repo / "DOC.md"
+    p.write_bytes(SKELETON.replace("\n", "\r\n").encode())
+    RG.write_named(repo, "DOC.md", "d", SKELETON.replace("A1", "A2"))
+    assert not any(r.edited for r in RG.parse(p.read_bytes().decode()))
+    again = RG.write_named(repo, "DOC.md", "d", SKELETON.replace("A1", "A3"))  # no refusal
+    assert again.action == "updated"
+
+
+def test_quoted_marker_text_does_not_select_named_mode():
+    quoted = "see `<!-- ddflow:begin d/x sha=000000000000 -->` for the grammar\n"
+    assert RG.extract(quoted, "d") == {}
