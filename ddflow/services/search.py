@@ -161,13 +161,20 @@ def _session_docs(events: list, kinds: set[str]) -> list[Doc]:
     return out
 
 
-def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()) -> list[Doc]:
+def _log_docs(
+    events: list,
+    kinds: set[str],
+    names: frozenset[str] = frozenset(),
+    egress: Egress | None = None,
+    st: State | None = None,
+) -> list[Doc]:
     """The log rows. `names` is the selected sources (empty: all): a family's events are left
     out only when the source that holds them is searched too."""
 
     def held(kind: str) -> bool:
         return kind in kinds and (not names or _OWNER[kind] in names)
 
+    declared = {d.def_kind for d in PA.DECLARED.values()}
     out = []
     for ev in events:
         head = ev.kind.split(".")[0]
@@ -181,7 +188,11 @@ def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()
             if held(head):
                 continue  # the jobs and schedules sources do too
         elif head == "def":
-            kind = ev.subject.partition(":")[0]
+            kind, _, rid = ev.subject.partition(":")
+            if egress is not None and st is not None and kind in declared:
+                # the raw event carries the whole record: it follows the record's label
+                if egress.withholds_def("search", st, kind, rid):
+                    continue
             if kind in _DEF_KINDS and held(kind):
                 continue  # and the rules, skills, agents and schedules ones, which are definitions
             if any(
@@ -377,7 +388,13 @@ register(
 register(
     FuncSource("prompts", ("prompt",), lambda c, kinds: _session_docs(c.events, kinds & {"prompt"}))
 )
-register(FuncSource("log", ("log",), lambda c, kinds: _log_docs(c.events, kinds, c.names)))
+register(
+    FuncSource(
+        "log",
+        ("log",),
+        lambda c, kinds: _log_docs(c.events, kinds, c.names, Egress(c.repo, c.cfg), c.st),
+    )
+)
 register(FuncSource("rules", ("rule",), _rule_docs))
 register(FuncSource("skills", ("skill", "command"), _skill_docs))
 register(FuncSource("agents", ("agent",), _agent_docs))
