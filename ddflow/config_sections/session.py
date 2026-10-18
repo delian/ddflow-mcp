@@ -75,6 +75,14 @@ class SessionConfig:
         4,
         doc="How many task-relevant lessons the brief carries. Retrieved by relevance to the active task text, not by recency.",
     )
+    first_call: bool = knob(
+        True,
+        doc="Append a compact session start to the first MCP tool call of a connection, for agents whose hooks and instructions do not deliver one. Off when a native hook already delivers it for the agent's harness.",
+    )
+    first_call_max_tokens: int = knob(
+        600,
+        doc="Ceiling on the session-start text the first MCP call carries. Small by default: it rides on every new connection.",
+    )
     replay_verify_diffs: bool = knob(
         True,
         doc="During `ddflow replay --verify`, check that each recorded commit still exists and its diff still applies. Catches a log that has drifted from the tree it claims to describe.",
