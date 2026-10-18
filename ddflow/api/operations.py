@@ -313,6 +313,7 @@ def relevant_tests(
     base: str = "",
     agent: str = "",
     flakes: bool = False,
+    full: bool = False,
 ) -> O.Outcome:
     """B16: the tests the current change reaches, and a PARALLEL command to run them.
 
@@ -352,9 +353,11 @@ def relevant_tests(
     if sel is None:
         return O.failed("tests", f"git could not say what changed in {tree} since {base}")
     gate = load_gates(repo, cfg).get("unit_tests")
-    full = gate.command if gate else ""
+    show_full, full = full, gate.command if gate else ""
     files = [t.path for t in sel.tests]
     data = _selection_data(sel, tree, base, full, files)
+    if not show_full:  # the whole-suite command is the merge queue's and the phase end's
+        data["full_suite"], data["advice"] = "", ""
     if item and gate is not None:
         data["unit_tests_gate"] = _scope_data(
             TSC.unit_tests_scope(cfg, st, st.items[item], full, tree)
@@ -393,6 +396,7 @@ def _selection_data(sel: TS.Selection, tree: Path, base: str, full: str, files: 
         "tests": _rows(sel.tests),
         "command": TS.run_command(full, files, tree),
         "full_suite": full,
+        "full_suite_known": bool(full),
         "advice": parallel_test_advice(full, tree) if full else "",
         "unparsed": sel.unparsed,
         "cut": _rows(sel.cut),

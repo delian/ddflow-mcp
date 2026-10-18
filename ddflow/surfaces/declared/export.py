@@ -55,6 +55,13 @@ def _bound_notes(d: dict) -> list[str]:
     return notes
 
 
+def _full_suite_lines(d) -> list[str]:
+    """The whole-suite command, only behind `--full`, and marked as not the agent's to run."""
+    if d["full_suite"]:
+        return [f"  MERGE QUEUE / PHASE END ONLY -- do not run this yourself:\n  {d['full_suite']}"]
+    return ["  (the whole-suite command is for the merge queue and phase end; `ddflow tests --full` shows it)"]
+
+
 def _tests_text(out, a) -> str:
     """`tests`: what the change reaches, the command to run it, and the unit_tests gate's mode."""
     d = out.data
@@ -78,12 +85,11 @@ def _tests_text(out, a) -> str:
     elif g.get("scope") == "covered":
         lines.append(f"\nThe unit_tests gate runs nothing: {g['why']}")
     elif g:
-        lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
-    elif d["full_suite"]:
-        lines.append(
-            "\nThe unit_tests gate may run the whole suite; pass --item <id> to see which "
-            f"mode it would use for that item:\n  {d['full_suite']}"
-        )
+        lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}")
+        lines += _full_suite_lines(d)
+    elif d.get("full_suite_known"):
+        lines.append("\nThe unit_tests gate may run the whole suite; pass --item <id> to see which mode it would use for that item.")
+        lines += _full_suite_lines(d)
     if d["advice"]:
         lines.append(f"  NOTE: that command {d['advice']}")
     return "\n".join(lines)
@@ -348,6 +354,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="compare against this ref (default: the base)",
             ),
             Param(
+                "full",
+                type="boolean",
+                cli_only=True,
+                cli_help="also show the whole-suite command (merge queue and phase end only; agents run the selected tests)",
+            ),
+            Param(
                 "flakes",
                 type="boolean",
                 cli_only=True,
@@ -355,11 +367,13 @@ COMMANDS: tuple[Command, ...] = (
             ),
         ),
         flag_exempt={
+            "--full": "the whole-suite command is the merge queue's, never an agent's (tools/list byte budget)",
             "--flakes": "the flake log is machine-local history for the operator's terminal; an agent reads `failed_tests` in the gate evidence (tools/list byte budget)",
         },
         call=lambda repo, a, agent, called_from=None: _api().relevant_tests(
             repo,
             flakes=bool(a.get("flakes")),
+            full=bool(a.get("full")),
             item=a.get("item", "") or "",
             where=called_from,
             base=a.get("base", "") or "",

@@ -2429,12 +2429,14 @@
 # ---
 # name: test_help[ddflow tests]
   '''
-  usage: ddflow tests [-h] [--item ITEM] [--base BASE] [--flakes]
+  usage: ddflow tests [-h] [--item ITEM] [--base BASE] [--full] [--flakes]
   
   options:
     -h, --help   show this help message and exit
     --item ITEM  an item id: use its worktree and base
     --base BASE  compare against this ref (default: the base)
+    --full       also show the whole-suite command (merge queue and phase end only; agents run the
+                 selected tests)
     --flakes     show the flake log instead: every test that failed and then passed on the same tree
                  through ddflow on this machine (.ddflow/local/flakes.jsonl)
   
