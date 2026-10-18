@@ -21,11 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..infra.fsio import Unreadable, read_json
 from ..services import adopt as AD
 from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harnessreg import Harness
-from ..infra.fsio import Unreadable, read_json
 from ..services.mcpconfig import SHAPE_TOML, get_servers
 
 NATIVE = "native hook"
@@ -180,7 +180,9 @@ def _findings(repo: Path, h: Harness) -> list[dict[str, str]]:
         )
     for rel in h.commands.files if h.commands else {}:
         if not (Path(repo) / rel).is_file():
-            out.append(_finding(h.id, "commands", f"{rel} is missing", f"ddflow adopt --agents {h.id}"))
+            out.append(
+                _finding(h.id, "commands", f"{rel} is missing", f"ddflow adopt --agents {h.id}")
+            )
     return out + _hook_findings(repo, h)
 
 
@@ -198,7 +200,10 @@ def harness_doctor(repo: Path, which: str = "") -> O.Outcome:
     if not found:
         msg = f"{len(targets)} harness(es) checked: nothing is broken"
         return O.ok("harness_doctor", findings=[], message=msg)
-    lines = [f"{f['harness']}: {f['what']}" + (f"  -> {f['remedy']}" if f["remedy"] else "") for f in found]
+    lines = [
+        f"{f['harness']}: {f['what']}" + (f"  -> {f['remedy']}" if f["remedy"] else "")
+        for f in found
+    ]
     return O.Outcome(
         kind="harness_doctor",
         data={"findings": found, "message": "\n".join(lines)},

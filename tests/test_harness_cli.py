@@ -81,7 +81,11 @@ def test_an_unreadable_mcp_file_is_unknown_not_absent_and_has_no_remedy(repo):
     claude = HR.get("claude")
     (repo / claude.mcp.path).write_text("{not json")
     assert H.mcp_registered(repo, claude) is None
-    found = [f for f in harness_view(repo, what="doctor", id="claude").data["findings"] if f["area"] == "mcp"]
+    found = [
+        f
+        for f in harness_view(repo, what="doctor", id="claude").data["findings"]
+        if f["area"] == "mcp"
+    ]
     assert found and "cannot be read" in found[0]["what"] and found[0]["remedy"] == ""
 
 
