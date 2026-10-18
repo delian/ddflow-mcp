@@ -340,7 +340,8 @@ class DocIndex:
                     if meta.get("trigram") != "1"
                     else "a substring under 3 characters is searched with LIKE"
                 )
-            rows = self._query(con, used, query.strip(), words, limit, doctype)
+            terms = [query.strip()] if mode == "substring" else words  # LIKE: literal, or each word
+            rows = self._query(con, used, query.strip(), terms, limit, doctype)
         return SearchResult(tuple(Hit(*r) for r in rows), used, note)
 
     def _query(
@@ -373,10 +374,9 @@ class DocIndex:
                 "ORDER BY bm25(chunks_tri), c.chunk_id LIMIT ?"
             )
             return con.execute(sql, [match, *args, limit]).fetchall()
-        terms = words or [raw]
-        like = " AND ".join("lower(c.text) LIKE ? ESCAPE '\\'" for _ in terms)
+        like = " AND ".join("lower(c.text) LIKE ? ESCAPE '\\'" for _ in words)
         pats = ["%" + w.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-                for w in terms]  # fmt: skip
+                for w in words]  # fmt: skip
         sql = (
             f"SELECT {cols.format(score='0.0')} FROM chunks c WHERE {like}{extra} "
             "ORDER BY c.path, c.line_start LIMIT ?"

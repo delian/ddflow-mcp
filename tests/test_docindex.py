@@ -219,6 +219,12 @@ def test_no_fts5_falls_back_to_like_and_says_so(tmp_path, repo):
     # `_` is a LIKE wildcard: unescaped, "snake_case" would also match docs/wild2.md
     assert [h.path for h in plain.search("snake_case").hits] == ["docs/wild.md"]
     assert len(plain.search("-->", mode="substring").hits) == 1
+    (repo / "docs/ab.md").write_text("# Ab\n\nhello world\n")
+    (repo / "docs/ba.md").write_text("# Ba\n\nworld hello\n")
+    _git(repo, "add", "-A")
+    _sync(plain, repo)
+    assert [h.path for h in plain.search("hello world", mode="substring").hits] == ["docs/ab.md"]
+    assert len(plain.search("hello world").hits) == 2  # words: each word, any order
 
 
 def test_substring_of_punctuation_only(idx, repo):
