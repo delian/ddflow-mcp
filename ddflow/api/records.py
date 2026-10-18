@@ -51,6 +51,7 @@ from ..core import outcome as O
 from ..core import participation as PA
 from ..core import provenance as PV
 from ..core import rank, textsim
+from ..core.sensitivity import LABEL_FIELD
 from ..core.textcut import clip
 from ..services.export.safe import redact_text
 from ..services.searchcore import SearchError, check_regex
@@ -133,6 +134,12 @@ class FeedSpec:
 
 def _placeholders(template: str) -> list[str]:
     return [name for _lit, name, _spec, _conv in string.Formatter().parse(template) if name]
+
+
+#: The label every record may carry, whatever its kind declares; `api.record_sensitivity` checks it.
+SENSITIVITY_FIELD = FieldSpec(
+    "sensitivity", help="How guarded this record is (the sensitivity vocabulary)."
+)
 
 
 @dataclass(frozen=True)
@@ -253,8 +260,19 @@ class RecordKind:
         can read them; a family whose records live elsewhere supplies its own."""
         return self.def_kind in D.DEF_KINDS
 
+    @property
+    def all_fields(self) -> tuple[FieldSpec, ...]:
+        """The declared fields and the label every kind may carry (what a surface offers)."""
+        return (
+            self.fields
+            if any(f.name == LABEL_FIELD for f in self.fields)
+            else (*self.fields, SENSITIVITY_FIELD)
+        )
+
     def field(self, name: str) -> FieldSpec | None:
-        return next((f for f in self.fields if f.name == name), None)
+        """A declared field; ``sensitivity`` is on every kind (SE-sensitivity.2)."""
+        found = next((f for f in self.fields if f.name == name), None)
+        return found or (SENSITIVITY_FIELD if name == SENSITIVITY_FIELD.name else None)
 
     def stored(self, verb: str) -> bool:
         """Whether ``verb`` runs on definition records (no family function replaces it)."""
