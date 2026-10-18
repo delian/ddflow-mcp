@@ -34,3 +34,6 @@
 {"agent":"fleet-unblock-c","data":{"gate":"rubber_duck"},"id":"e4a797b0701ed734820109645","kind":"gate.started","lamport":80130,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:05:06.838169Z"}
 {"agent":"fleet-unblock-c","data":{"at":1792314368.5497375,"holder":"fleet-unblock-c"},"id":"ec420a63e5961eede4d16721d","kind":"lease.renewed","lamport":80132,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:06:08.579908Z"}
 {"agent":"fleet-unblock-c","data":{"at":1792314607.3014638,"holder":"fleet-unblock-c"},"id":"eb1cf5b0199d095bc4926eed4","kind":"lease.renewed","lamport":80146,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:10:07.314923Z"}
+{"agent":"fleet-unblock-c","data":{"at":1792314847.5586379,"holder":"fleet-unblock-c"},"id":"e4746b79ff1c6b36f29ad54b8","kind":"lease.renewed","lamport":80164,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:14:07.584155Z"}
+{"agent":"fleet-unblock-c","data":{"gate":"rubber_duck"},"id":"efbcaf29297ca6da0b3146c2b","kind":"gate.started","lamport":80173,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:15:00.779506Z"}
+{"agent":"fleet-unblock-c","data":{"at":1792315141.6575224,"holder":"fleet-unblock-c"},"id":"ed53d671d57ae233b7cdbfe2e","kind":"lease.renewed","lamport":80204,"schema":1,"subject":"B-tpl-regions","ts":"2026-10-18T09:19:01.686518Z"}
