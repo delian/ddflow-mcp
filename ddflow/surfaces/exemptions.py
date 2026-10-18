@@ -17,29 +17,7 @@ from __future__ import annotations
 from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
-from .declared.cadence import COMMANDS as _CADENCE
-from .declared.chore import COMMANDS as _CHORE
-from .declared.decide import COMMANDS as _DECIDE
-from .declared.docs import COMMANDS as _DOCS
-from .declared.export import COMMANDS as _EXPORT
-from .declared.flow import COMMANDS as _FLOW
-from .declared.health import COMMANDS as _HEALTH
-from .declared.hooks import COMMANDS as _HOOKS
-from .declared.knowledge import COMMANDS as _KNOWLEDGE
-from .declared.lanes import COMMANDS as _LANES
-from .declared.lifecycle import COMMANDS as _LIFECYCLE
-from .declared.memory import COMMANDS as _MEMORY
-from .declared.mergequeue import COMMANDS as _MERGEQUEUE
-from .declared.metrics import COMMANDS as _METRICS
-from .declared.plan import COMMANDS as _PLAN
-from .declared.queue import COMMANDS as _QUEUE
-from .declared.recordkinds import COMMANDS as _RECORDKINDS
-from .declared.records import COMMANDS as _RECORDS
-from .declared.report import COMMANDS as _REPORT
-from .declared.reporting import COMMANDS as _REPORTING
-from .declared.review import COMMANDS as _REVIEW
-from .declared.rules import COMMANDS as _RULES
-from .declared.setup import COMMANDS as _SETUP
+from .declared import all_commands
 from .registry import (
     Command,
     covering_tools,
@@ -81,29 +59,7 @@ EXEMPTIONS: tuple[Command, ...] = (
 #: carries itself (D-unify 4: a command moved onto the registry moves its exemption with it).
 DECLARATIONS: tuple[Command, ...] = (
     *EXEMPTIONS,
-    *_KNOWLEDGE,
-    *_RECORDS,
-    *_RECORDKINDS,
-    *_QUEUE,
-    *_LIFECYCLE,
-    *_RULES,
-    *_REVIEW,
-    *_SETUP,
-    *_REPORTING,
-    *_REPORT,
-    *_EXPORT,
-    *_CADENCE,
-    *_MERGEQUEUE,
-    *_MEMORY,
-    *_PLAN,
-    *_CHORE,
-    *_FLOW,
-    *_HOOKS,
-    *_LANES,
-    *_HEALTH,
-    *_DECIDE,
-    *_DOCS,
-    *_METRICS,
+    *all_commands(),
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

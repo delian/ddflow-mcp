@@ -14,6 +14,7 @@ from ddflow.surfaces.declared.queue import item_edit
 SAMPLE = {
     "title": "t",
     "body": "b",
+    "append_body": "n",
     "needs": ["a"],
     "add_needs": ["b"],
     "remove_needs": ["c"],
@@ -50,7 +51,7 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.A_ITEMS, "update", fake)
     monkeypatch.chdir(tmp_path)
     argv = [
-        "update", "T1", "--title", "t", "--body", "b", "--needs", "a",
+        "update", "T1", "--title", "t", "--body", "b", "--append-body", "n", "--needs", "a",
         "--add-needs", "b", "--remove-needs", "c", "--add-tags", "x",
         "--remove-tags", "y", "--globs", "g/**", "--add-globs", "h/**",
         "--remove-globs", "i/**", "--tags", "z", "--priority", "7",

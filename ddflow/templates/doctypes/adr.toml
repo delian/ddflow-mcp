@@ -1,0 +1,34 @@
+[doctype]
+name = "adr"
+title = "Architecture decision record"
+pattern = "docs/adr/{seq:04}-{slug}.md"
+multi = true
+genre = "decision"
+contract = "point_in_time"
+
+[[doctype.section]]
+id = "status"
+heading = "Status"
+required = true
+order = 1
+
+[[doctype.section]]
+id = "context"
+heading = "Context"
+required = true
+order = 2
+prompt = "What forces led to this decision?"
+
+[[doctype.section]]
+id = "decision"
+heading = "Decision"
+required = true
+order = 3
+
+[[doctype.section]]
+id = "consequences"
+heading = "Consequences"
+order = 4
+
+[doctype.validate]
+rules = [{ kind = "required_sections" }, { kind = "heading_order" }]
