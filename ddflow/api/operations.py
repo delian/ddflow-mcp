@@ -360,12 +360,14 @@ def relevant_tests(
     data["command"], auto = WK.resolve(data["command"], cfg, len(files))
     if auto:
         data["workers"] = {"n": auto.n, **auto.inputs}
+    data["full_suite"] = WK.resolve(data["full_suite"], cfg)[0]
     if not show_full:  # the whole-suite command is the merge queue's and the phase end's
         data["full_suite"], data["advice"] = "", ""
     if item and gate is not None:
         data["unit_tests_gate"] = _scope_data(
             TSC.unit_tests_scope(cfg, st, st.items[item], full, tree)
         )
+        data["unit_tests_gate"]["command"] = WK.resolve(data["unit_tests_gate"]["command"], cfg)[0]
     if not files:
         return O.nothing(
             "tests",

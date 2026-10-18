@@ -445,8 +445,8 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     before, spent = p.output, p.elapsed_s
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
-    for at, (cmd_, label) in enumerate(todo):
-        cmd_, auto = WK.resolve(cmd_, cfg)
+    for at, (raw, label) in enumerate(todo):
+        cmd_, auto = WK.resolve(raw, cfg)
         if auto:
             used[label] = {"n": auto.n, **auto.inputs}
         before += f"\n$ {cmd_}\n"
