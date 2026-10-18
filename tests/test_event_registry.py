@@ -94,7 +94,9 @@ def test_every_owner_file_is_a_whole_file_of_kinds() -> None:
         assert p.stat().st_size < 20_000, f"{p.name} is over 20 KB (D-small-files)"
 
 
-@pytest.mark.parametrize("doc", ["Has a | bar.", "Two\nlines."])
+@pytest.mark.parametrize(
+    "doc", ["Has a | bar.", "Two\nlines.", "Trailing newline.\n", " Leading space.", "Cr\rin it."]
+)
 def test_a_doc_that_would_break_the_table_is_refused(doc: str) -> None:
     k = EK.EventKind("lease.waiting", "waiting", doc)
     assert any("table cell" in p for p in EK.problems([k], ["lease.waiting"]))
