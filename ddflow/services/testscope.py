@@ -209,7 +209,8 @@ def _selected(
             else ""
         )
         + (
-            "; the ci gate FAILED its selected run, so this gate does not widen it to the whole suite"
+            "; the ci gate failed on its selected scope (it must pass before the item completes), "
+            "so this gate does not widen it to the whole suite"
             if ci_failed
             else "; the ci gate passed the whole suite on this tree"
         ),

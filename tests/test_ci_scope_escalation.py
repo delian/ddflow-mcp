@@ -140,3 +140,4 @@ def test_a_hook_stage_that_could_not_start_is_not_called_failed(branch, stubs, m
     res = CI.run(branch, Config.load(branch), base="main", for_item=True)
     assert res.status == "unavailable"
     assert "could not run" in res.scope["why"] and "failed" not in res.scope["why"]
+    assert res.scope["ran"] == {"hooks": "unavailable"}  # not False: that is "ran and failed"

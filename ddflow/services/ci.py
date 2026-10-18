@@ -427,6 +427,7 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     )
     unran: set[str] = set()  # stages whose process never started: not a failure of the checks
     if selected:
+        scope.unran = unran
         scope.ok["hooks"] = p.ran and p.code == 0
         if not p.ran:
             unran.add("hooks")
@@ -497,7 +498,9 @@ def _scope_evidence(scope, sha: str) -> dict:
         return {}
     ev = scope.evidence(sha)
     if scope.scope == "selected":
-        ev["ran"] = dict(scope.ok)
+        # stage -> True (passed) | False (ran and failed) | "unavailable" (never started)
+        unran = getattr(scope, "unran", set())
+        ev["ran"] = {k: ("unavailable" if k in unran else v) for k, v in scope.ok.items()}
     return ev
 
 
