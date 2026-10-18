@@ -50,6 +50,42 @@ def _last_author(tree: Path, base: str, path: str) -> str:
     return r.out if r.ok and r.out else "unknown"
 
 
+def _unsafe(out: SyncResult, tree: Path) -> SyncResult | None:
+    """The refusal that stops a merge before it starts, or None when the tree is safe."""
+    if W.merging(tree) is not False:
+        return _stop(
+            out, "refused", detail="a merge is already in progress here (or git could not say)"
+        )
+    st = G.status(tree, untracked="no")
+    if st is None:
+        return _stop(out, "refused", detail="git could not read the working tree status")
+    if st:
+        dirty = [e.path for e in st]
+        return _stop(out, "refused", dirty=dirty, detail="uncommitted changes; commit them first")
+    return None
+
+
+def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
+    """Classify a merge git refused: a pre-merge refusal, or a real conflict (aborted)."""
+    files = G.unmerged(tree)
+    if files is None:
+        return _stop(out, "refused", detail=f"git could not list the conflicts: {r.err or r.out}")
+    if not files and W.merging(tree) is False:
+        # Git refused before it began (an untracked file the base adds, say): not a
+        # conflict, and there is nothing to abort.
+        return _stop(out, "refused", detail=r.err or r.out)
+    aborted = W.git(tree, "merge", "--abort")
+    out.conflicts = {f: _last_author(tree, base, f) for f in files}
+    out.aborted = aborted.ok
+    detail = r.err or r.out
+    if not aborted.ok:
+        detail += (
+            f"\n\nAborting the merge ALSO failed ({aborted.err or aborted.out}): {tree} may be "
+            f"left mid-merge; run `git -C {tree} merge --abort` by hand."
+        )
+    return _stop(out, "conflict", detail=detail)
+
+
 def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: bool) -> SyncResult:
     rep = D.measure(repo, tree, base, cfg=cfg, globs=globs)
     if rep.behind is None:
@@ -59,41 +95,16 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
     out = SyncResult(rep.base, "behind", rep.behind, len(rep.relevant))
     if check:
         return out
-    pins = set(pin_files(repo, cfg))
-    if W.merging(tree) is not False:
-        return _stop(
-            out, "refused", detail="a merge is already in progress here (or git could not say)"
-        )
-    st = G.status(tree, untracked="no")
-    dirty = [e.path for e in st] if st is not None else None
-    if dirty is None:
-        return _stop(out, "refused", detail="git could not read the working tree status")
-    if dirty:
-        return _stop(out, "refused", dirty=dirty, detail="uncommitted changes; commit them first")
+    if (refusal := _unsafe(out, tree)) is not None:
+        return refusal
     r = W.git(tree, "merge", "--no-edit", rep.base)
     if not r.ok:
-        files = G.unmerged(tree)
-        if files is None:
-            return _stop(
-                out, "refused", detail=f"git could not list the conflicts: {r.err or r.out}"
-            )
-        if not files and W.merging(tree) is False:
-            # Git refused before it began (an untracked file the base adds, say): not a
-            # conflict, and there is nothing to abort.
-            return _stop(out, "refused", detail=r.err or r.out)
-        aborted = W.git(tree, "merge", "--abort")
-        out.conflicts = {f: _last_author(tree, rep.base, f) for f in files}
-        out.aborted = aborted.ok
-        detail = r.err or r.out
-        if not aborted.ok:
-            detail += (
-                f"\n\nAborting the merge ALSO failed ({aborted.err or aborted.out}): {tree} may be "
-                f"left mid-merge; run `git -C {tree} merge --abort` by hand."
-            )
-        return _stop(out, "conflict", detail=detail)
+        return _failed_merge(out, tree, rep.base, r)
     out.status = "merged"
     moved = {p for c in rep.commits for p in c.paths}
-    out.merged_pins = sorted(f for f in pins if f in moved or _inside_dir(f, moved))
+    out.merged_pins = sorted(
+        f for f in set(pin_files(repo, cfg)) if f in moved or _inside_dir(f, moved)
+    )
     return out
 
 
