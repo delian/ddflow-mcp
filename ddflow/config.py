@@ -47,9 +47,7 @@ from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/c
     CI_TESTS_SCOPES,
     CiConfig,
 )
-from .config_sections.companions import (
-    CompanionsConfig,
-)
+from .config_sections.companions import CompanionsConfig
 from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before the move
     DEDUPE_KINDS,
     DEDUPE_ON_MATCH,
@@ -63,6 +61,7 @@ from .config_sections.docs import (  # noqa: F401
 from .config_sections.enforce import (
     EnforceConfig,
 )
+from .config_sections.evaluation import EvaluationConfig
 from .config_sections.export import (  # noqa: F401
     EXPORT_DEFAULT_TARGETS,
     EXPORT_MODES,
@@ -243,6 +242,7 @@ class Config:
     importer: ImportConfig = field(default_factory=ImportConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     dedupe: DedupeConfig = field(default_factory=DedupeConfig)
+    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     companions: CompanionsConfig = field(default_factory=CompanionsConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
