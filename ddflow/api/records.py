@@ -135,6 +135,12 @@ def _placeholders(template: str) -> list[str]:
     return [name for _lit, name, _spec, _conv in string.Formatter().parse(template) if name]
 
 
+#: The label every record may carry, whatever its kind declares; `api.record_sensitivity` checks it.
+SENSITIVITY_FIELD = FieldSpec(
+    "sensitivity", help="How guarded this record is (the sensitivity vocabulary)."
+)
+
+
 @dataclass(frozen=True)
 class RecordKind:
     """What one family of records is, declared once.
@@ -254,7 +260,9 @@ class RecordKind:
         return self.def_kind in D.DEF_KINDS
 
     def field(self, name: str) -> FieldSpec | None:
-        return next((f for f in self.fields if f.name == name), None)
+        """A declared field; ``sensitivity`` is on every kind (SE-sensitivity.2)."""
+        found = next((f for f in self.fields if f.name == name), None)
+        return found or (SENSITIVITY_FIELD if name == SENSITIVITY_FIELD.name else None)
 
     def stored(self, verb: str) -> bool:
         """Whether ``verb`` runs on definition records (no family function replaces it)."""

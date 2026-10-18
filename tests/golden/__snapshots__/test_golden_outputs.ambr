@@ -1343,6 +1343,12 @@
           Fixtures with at least one planted fault that a workflow needs before its
           miss rate counts as evidence. A clean fixture (nothing planted) measures
           false positives and does not count.
+      sensitivity.scan_at_write = True   [default]
+          Scan a record's text for secrets and personal data when it is added or
+          edited, and raise its `sensitivity` label to the level the finding needs
+          (secret: confidential; email, name or host name: restricted). A label is
+          only ever raised by the scan; lowering one is an explicit edit. Off: a
+          record carries only the label it was given.
       companions.probe_cache_ttl_s = 300   [default]
           How long a companion detection result stays good, in seconds. Each probe
           shells out and an npx-based one takes seconds on a cold cache, so a session-
