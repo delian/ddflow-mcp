@@ -204,7 +204,9 @@ class RecordKind:
             raise ValueError(f"record kind {self.name!r}: unknown verb {bad[0]!r}")
         self._check_declarations(set(names))
         if self.rules is not None and (
-            bad := self.rules.declaration_problems({f.name: f.type for f in self.fields})
+            bad := self.rules.declaration_problems(
+                {f.name: f.type for f in self.fields}, {f.name: f.choices for f in self.fields}
+            )
         ):
             raise ValueError(f"record kind {self.name!r}: {bad[0]}")
         if self.ops and not self.ops.keys() <= set(self.verbs):

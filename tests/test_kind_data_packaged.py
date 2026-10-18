@@ -1,4 +1,4 @@
-"""SE-kind-data.3: the shipped data kinds, and kinds a project defines for itself."""
+"""SE-kind-data.3: the shipped data kinds (project-defined kinds follow in SE-kind-data.4)."""
 
 from __future__ import annotations
 
