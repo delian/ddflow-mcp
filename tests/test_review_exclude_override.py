@@ -59,8 +59,9 @@ def test_an_item_tag_and_include_pinned_reach_the_reviewer(repo, tmp_path):
 
 
 def test_include_pinned_reaches_the_reviewer(repo, tmp_path):
-    import ddflow.api.review as api
     from test_review_exclude import _setup
+
+    import ddflow.api.review as api
 
     seen = _setup(repo, tmp_path, "[review]\nexclude_globs = []\n")
     (repo / ".ddflow" / "pins.toml").write_text(
