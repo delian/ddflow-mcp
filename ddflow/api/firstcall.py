@@ -62,9 +62,10 @@ def clip(text: str, max_tokens: int) -> str:
     return text[:limit].rstrip() + "\n...(clipped; call ddflow_brief for the rest)"
 
 
-def preamble(repo: Path, agent: str, tool: str, client_info: Mapping[str, Any]) -> str:
-    """The text to append to the first call's reply, or "" when none is due. Never raises:
-    a failing preamble must not fail the call it rides on."""
+def preamble(repo: Path, agent: str, tool: str, client_info: Mapping[str, Any]) -> str | None:
+    """The text to append to the first call's reply, "" when none is due, or None when it
+    could not be built (the caller tries again on a later call). Never raises: a failing
+    preamble must not fail the call it rides on."""
     try:
         cfg = Config.load(repo)
         if not cfg.session.first_call or tool in CARRIES_START:
@@ -72,7 +73,13 @@ def preamble(repo: Path, agent: str, tool: str, client_info: Mapping[str, Any]) 
         harness = harness_of(client_info)
         if not harness and not client_info:
             return ""  # a connection that never said who it is (no initialize) gets no start
-        if harness and hook_delivers(repo, harness):
+        # An agent that could not be told apart from its family is covered if ANY native
+        # session hook of this project delivers the start: a duplicate costs more than a gap.
+        if (
+            hook_delivers(repo, harness)
+            if harness
+            else any(hook_delivers(repo, h.id) for h in HR.load())
+        ):
             return ""
         S.resolve(
             EventLog(repo, agent, log_cfg=cfg.log), tool=harness
@@ -80,4 +87,4 @@ def preamble(repo: Path, agent: str, tool: str, client_info: Mapping[str, Any]) 
         body = _session_start(repo, agent).data.get("message", "")
         return clip(body, cfg.session.first_call_max_tokens) if body else ""
     except Exception:
-        return ""
+        return None

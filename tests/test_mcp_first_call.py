@@ -113,3 +113,30 @@ def test_a_failing_start_degrades_to_no_note_and_never_fails_the_call(repo, monk
     srv.client_info = {"name": "some-client"}
     res = _call(srv)
     assert not res.get("isError") and "ddflow session start" not in "".join(_texts(res))
+
+
+def test_a_start_that_could_not_be_built_is_tried_on_the_next_call(repo, monkeypatch):
+    calls = {"n": 0}
+    real = firstcall._session_start
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError("transient")
+        return real(*a, **k)
+
+    monkeypatch.setattr(firstcall, "_session_start", flaky)
+    srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
+    assert "ddflow session start" not in "".join(_texts(_call(srv)))
+    assert "ddflow session start" in "".join(_texts(_call(srv)))
+    assert "ddflow session start" not in "".join(_texts(_call(srv)))
+
+
+def test_an_unidentified_client_gets_nothing_when_any_native_hook_delivers(repo):
+    from ddflow.services import hookwriters as HW
+
+    HW.apply(repo, HR.get("claude"), "install")
+    srv = Server(repo)
+    srv.client_info = {"name": "claude-gemini-bridge"}
+    assert "ddflow session start" not in "".join(_texts(_call(srv)))
