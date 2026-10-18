@@ -80,3 +80,18 @@ def test_a_docstring_line_starting_with_commands_does_not_register_a_module():
     assert not _HAS_COMMANDS.search('"""Helpers.\n\nCOMMANDS that use these.\n"""\n')
     assert _HAS_COMMANDS.search("COMMANDS: tuple[Command, ...] = (\n")
     assert _HAS_COMMANDS.search("COMMANDS = ()\n")
+
+
+def test_a_module_the_text_match_fools_is_skipped_not_crashed_on(tmp_path, monkeypatch):
+    import ddflow.surfaces.declared as D
+
+    (tmp_path / "zz_fake.py").write_text('X = """\nCOMMANDS = 1\n"""\n')
+    monkeypatch.setattr(D, "__file__", str(tmp_path / "__init__.py"))
+    monkeypatch.setattr(D, "__path__", [str(tmp_path)])
+    import sys
+
+    sys.path.insert(0, str(tmp_path.parent))
+    try:
+        assert all(m.__name__ != f"{D.__name__}.zz_fake" for m in D.family_modules())
+    finally:
+        sys.path.remove(str(tmp_path.parent))
