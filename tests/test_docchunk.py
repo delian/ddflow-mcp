@@ -199,3 +199,15 @@ def test_rst_multi_line_title_and_short_underline():
 def test_rst_transition_before_a_title_is_not_an_overline():
     res = C.chunk("t.rst", "=====\n\nTitle\n=====\n\nbody\n")
     assert res.chunks[-1].heading_path == ("Title",)
+
+
+def test_rst_title_after_an_indented_block_or_a_target_line():
+    for before in ("Example::\n\n    x = 1\n", ".. _install:\n"):
+        res = C.chunk("t.rst", before + "Usage\n=====\n\nbody\n")
+        assert res.chunks[-1].heading_path == ("Usage",), before
+
+
+def test_escaped_pipes_do_not_split_table_cells():
+    table = "| `cat \\| wc -l` | lines |\n| --- | --- |\n| `a` | 1 |\n"
+    assert [c.kind for c in C.chunk("t.md", "# T\n\n" + table).chunks] == ["prose", "table"]
+    assert [c.kind for c in C.chunk("t.md", "a | b\n--|--\nx | y\n").chunks] == ["table"]
