@@ -20,7 +20,10 @@ MIN = {
 
 
 def test_every_data_kind_is_declared_and_searchable():
-    for name in DATA_KINDS:
+    shipped = {n for n, _ in KDA.packaged()} - {"rule"}
+    assert shipped == set(DATA_KINDS)  # a new packaged kind joins the list below
+    assert R.RULE.surfaced and not any(R.KINDS[n].surfaced for n in shipped)
+    for name in shipped:
         kind = R.KINDS[name]
         assert kind.def_kind == name and name in D.DEF_KINDS
         assert kind.search and kind.recall and kind.resource

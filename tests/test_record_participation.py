@@ -226,8 +226,10 @@ def test_the_fixed_sources_are_unchanged_and_come_first(proj, run_cli):
     shipped = {n for n, _ in KDA.packaged()}  # data kinds the package declares
     extra = [t for t, _, _ in recall_sources()[len(RECALL_SOURCES) :] if t not in shipped]
     assert extra == ["toy"]
+    kept = [x for x in recall_sources() if x[0] in shipped]
     R.forget("toy")
     assert [x for x in recall_sources() if x[0] not in shipped] == list(RECALL_SOURCES)
+    assert [x for x in recall_sources() if x[0] in shipped] == kept  # forgetting toy keeps them
 
 
 # -- resources -------------------------------------------------------------------------
