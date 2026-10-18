@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core.model import ABANDONED, DONE
 from ..infra import git as G
 from ..infra import worktree as W
 from . import drift as D
@@ -28,6 +29,8 @@ class SyncResult:
     conflicts: dict[str, str] = field(default_factory=dict)  # path -> who last changed it on base
     dirty: list[str] = field(default_factory=list)
     detail: str = ""
+    #: False only when `git merge --abort` itself failed after a conflict.
+    aborted: bool = True
 
 
 def tree_item(st, repo: Path, tree: Path):
@@ -38,6 +41,7 @@ def tree_item(st, repo: Path, tree: Path):
         for it in st.items.values()
         if it.worktree and not it.removed and W.load_path(repo, it.worktree).resolve() == tree
     ]
+    found.sort(key=lambda it: it.state in (DONE, ABANDONED))  # a live item wins (drift.item_base)
     return found[0] if found else None
 
 
@@ -77,9 +81,16 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
             # Git refused before it began (an untracked file the base adds, say): not a
             # conflict, and there is nothing to abort.
             return _stop(out, "refused", detail=r.err or r.out)
-        W.git(tree, "merge", "--abort")
+        aborted = W.git(tree, "merge", "--abort")
         out.conflicts = {f: _last_author(tree, rep.base, f) for f in files}
-        return _stop(out, "conflict", detail=r.err or r.out)
+        out.aborted = aborted.ok
+        detail = r.err or r.out
+        if not aborted.ok:
+            detail += (
+                f"\n\nAborting the merge ALSO failed ({aborted.err or aborted.out}): {tree} may be "
+                f"left mid-merge; run `git -C {tree} merge --abort` by hand."
+            )
+        return _stop(out, "conflict", detail=detail)
     out.status = "merged"
     moved = {p for c in rep.commits for p in c.paths}
     out.merged_pins = sorted(f for f in pins if f in moved or _inside_dir(f, moved))
