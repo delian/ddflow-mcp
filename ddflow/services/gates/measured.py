@@ -26,7 +26,6 @@ from ...config import Config
 from ...core.model import Item, State
 from ...infra.log import EventLog
 from .defs import GateDef
-from .kinds import DiffPaths
 from .evidence import (
     _untracked_paths,
     commit_source_tree,
@@ -37,6 +36,7 @@ from .evidence import (
     tree_identity,
     worktree_entries,
 )
+from .kinds import DiffPaths
 from .outcomes import record, status
 
 
