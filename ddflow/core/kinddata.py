@@ -15,6 +15,8 @@ from __future__ import annotations
 import tomllib
 from typing import Any
 
+from . import kindrules as KR
+
 #: Keep in step with `api.records.FIELD_TYPES`, which a field is finally checked against.
 FIELD_TYPES = ("string", "integer", "boolean", "array")
 _FIELD_KEYS = {"name", "type", "help", "required", "choices", "default"}
@@ -23,7 +25,7 @@ _BOOLS = ("search", "recall", "resource")
 _STRINGS = ("recall_hint", "declined_other")
 _KEYS = {
     "name", "def_kind", "summary", "title", "recall_cap", "declined", "field", "export",
-    "feed", *_LISTS, *_BOOLS, *_STRINGS,
+    "feed", "lifecycle", "link", "validator", "sources", "render", "stamp", *_LISTS, *_BOOLS, *_STRINGS,
 }  # fmt: skip
 #: Keys that are code, not data: a kind that needs one is written in Python.
 CODE_KEYS = ("ops", "weakening")
@@ -128,6 +130,12 @@ def from_mapping(raw: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {"name": raw["name"], "summary": raw["summary"]}
     out["def_kind"] = str(raw.get("def_kind") or raw["name"])
     _scalars(raw, out)
+    try:
+        rules = KR.from_raw(raw)
+    except KR.RulesError as exc:
+        raise KindDataError(str(exc)) from None
+    if rules is not None:
+        out["rules"] = rules
     fields = raw.get("field")
     if not isinstance(fields, list) or not fields:
         raise KindDataError("at least one [[field]] is required")
