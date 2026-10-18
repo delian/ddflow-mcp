@@ -83,3 +83,11 @@ def test_an_unreadable_mcp_file_is_unknown_not_absent_and_has_no_remedy(repo):
     assert H.mcp_registered(repo, claude) is None
     found = [f for f in harness_view(repo, what="doctor", id="claude").data["findings"] if f["area"] == "mcp"]
     assert found and "cannot be read" in found[0]["what"] and found[0]["remedy"] == ""
+
+
+def test_a_non_utf8_toml_mcp_file_is_unknown_not_a_crash(repo):
+    codex = HR.get("codex")
+    path = repo / codex.mcp.path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\xff\xfe[mcp_servers.ddflow]\n")
+    assert H.mcp_registered(repo, codex) is None

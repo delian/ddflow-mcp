@@ -120,7 +120,7 @@ def mcp_registered(repo: Path, h: Harness) -> bool | None:
     if h.mcp.shape == SHAPE_TOML:
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError):
+        except (OSError, ValueError):  # TOMLDecodeError and UnicodeDecodeError are ValueErrors
             return None
         servers = data.get("mcp_servers")
         return isinstance(servers, dict) and "ddflow" in servers
