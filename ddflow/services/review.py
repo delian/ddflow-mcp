@@ -1511,6 +1511,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
             chunk_index=i,
             chunk_total=len(chunks),
             manifest=manifest,
+            manifest_fence=diff_fence(manifest),
             chunk_files=", ".join(chunk_files(chunk)),
         )
 
