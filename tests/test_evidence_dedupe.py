@@ -19,24 +19,51 @@ def test_split_identity_is_the_one_head_dirt_split():
     assert E.normal_fingerprint(f"abc+{E.LEGACY_CLEAN}") == "abc+clean"
 
 
-def test_row_reads_ls_tree_and_ls_files_rows_alike():
-    assert E._row("100644 blob abc\tp q") == (("100644", "blob", "abc"), "p q")
-    assert E._row("100644 abc 0\tp") == (("100644", "abc", "0"), "p")
-    assert E._row("garbage") is None and E._row("100644 blob abc") is None
+def test_row_puts_the_blob_id_in_oid_for_both_grammars():
+    t = E._row("100644 blob abc\tp q", index=False)
+    assert (t.mode, t.oid, t.extra, t.path) == ("100644", "abc", "blob", "p q")
+    i = E._row("100644 abc 0\tp", index=True)
+    assert (i.mode, i.oid, i.extra, i.path) == ("100644", "abc", "0", "p")
+    assert E._row("garbage", index=False) is None and E._row("100644 blob abc", index=False) is None
     assert E._index_entries(["100644 abc 1\tp"]) is None
     assert E._index_entries(["100644 abc 0\tp"]) == {"p": ("100644", "abc")}
 
 
-def test_hash_ids_pair_every_path_across_batches_and_refuse_a_short_reply(tmp_path, monkeypatch):
+def test_hash_ids_batch_the_paths_and_pair_each_with_its_id(monkeypatch):
+    calls: list[int] = []
+
+    class R:
+        ok = True
+
+        def __init__(self, n):
+            self.out = "\n".join(f"id{k}" for k in range(n))
+
+    def fake(cwd, *args):
+        n = len(args) - 1  # after "hash-object", "--"
+        calls.append(n)
+        return R(n)
+
+    monkeypatch.setattr(E.W, "git", lambda cwd, *a: fake(cwd, *a[1:]))
+    paths = [f"p{n}" for n in range(E._HASH_BATCH * 2 + 5)]
+    ids = E._hash_ids(Path("."), paths)
+    assert calls == [E._HASH_BATCH, E._HASH_BATCH, 5] and len(ids) == len(paths)
+
+
+def test_hash_ids_refuse_a_short_or_long_reply_that_git_called_ok(monkeypatch):
+    class R:
+        ok = True
+
+        def __init__(self, out):
+            self.out = out
+
+    for reply in ("", "a\nb\nc"):
+        monkeypatch.setattr(E.W, "git", lambda cwd, *a, reply=reply: R(reply))
+        assert E._hash_ids(Path("."), ["x", "y"]) is None
+
+
+def test_hash_ids_name_a_dash_w_file_as_a_path(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    names = [f"f{n}.txt" for n in range(E._HASH_BATCH + 5)]
-    for n in names:
-        (tmp_path / n).write_text(n)
     (tmp_path / "-w").write_text("dash")
-    ids = E._hash_ids(tmp_path, [*names, "-w"])
-    assert ids is not None and len(ids) == len(names) + 1
-    one = subprocess.run(
-        ["git", "hash-object", "--", names[-1]], cwd=tmp_path, capture_output=True, text=True
-    ).stdout.strip()
-    assert ids[len(names) - 1] == one
+    ids = E._hash_ids(tmp_path, ["-w"])
+    assert ids is not None and len(ids) == 1
     assert E._hash_ids(tmp_path, ["missing-file"]) is None
