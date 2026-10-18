@@ -7,14 +7,19 @@ parser registration (`parsers/queue.py`) names it.
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 
-from ...api import batch as B
 from ...core import outcome as O
 from ..registry import CliPolicy, Command, Param
 
 OK = O.OK
+
+
+def _engine():
+    """`api/batch.py`, loaded at call time: the tool table must import without the api."""
+    return importlib.import_module("ddflow.api.batch")
 
 
 def _entries(a: dict) -> list | O.Outcome:
@@ -42,11 +47,11 @@ def _batch(repo, a, agent):
     entries = _entries(a)
     if isinstance(entries, O.Outcome):
         return entries
-    return B.apply(repo, entries, dry_run=bool(a.get("dry_run")), agent=agent)
+    return _engine().apply(repo, entries, dry_run=bool(a.get("dry_run")), agent=agent)
 
 
 def _fold(repo, a, agent):
-    return B.fold(
+    return _engine().fold(
         repo,
         a["dup"],
         a["keep"],
