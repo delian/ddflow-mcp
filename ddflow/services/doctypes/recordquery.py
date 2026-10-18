@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from dataclasses import fields as dc_fields
 from typing import Any
 
+from ...core import records
 from ...core.plain import plain
 from ..export.query import ExportError, Query, since_filter
 
@@ -144,15 +146,11 @@ def parse(text: str) -> RecordQuery:
 
 
 def _columns(kind: str) -> tuple[str, ...]:
-    from ...core import records
-
     cls = {
         "task": records.Item, "phase": records.Item, "item": records.Item, "bug": records.Bug,
         "decision": records.Decision, "lesson": records.Lesson, "research": records.ResearchNote,
         "session": records.Session, "memory": records.Memory,
     }[kind]  # fmt: skip
-    from dataclasses import fields as dc_fields
-
     names = [f.name for f in dc_fields(cls) if not f.metadata.get("internal")]
     return tuple(dict.fromkeys([*names, "state", "owner"]))
 
