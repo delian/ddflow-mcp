@@ -41,20 +41,25 @@ from .declared.answer import ANSWER_CLI_PARAMS
 from .registry import AS_AGENT, Alias, Command, Param, add_commands
 from .render import emit_json
 
+#: The control arguments a verb takes beside a kind's fields (one list, for the generated
+#: commands and for the generic `record` tool).
+CONTROL_ARGS = (
+    "id",
+    "query",
+    "mode",
+    "where",
+    "all",
+    "limit",
+    "reason",
+    "unset",
+    "relation",
+    "check_only",
+)
 #: Parameter names the surface itself uses; a field may not take one.
 RESERVED = frozenset(
     {
         "verb",
-        "id",
-        "query",
-        "mode",
-        "where",
-        "all",
-        "limit",
-        "reason",
-        "unset",
-        "relation",
-        "check_only",
+        *CONTROL_ARGS,
         "new",
         "extends",
         "duplicate_of",
