@@ -201,7 +201,12 @@ def tracked_in(ctx: Context, rel: str) -> list[str]:
 def read_capped(ctx: Context, rel: str) -> str:
     """The text of one tracked file, `SourceError` past ``ctx.max_bytes`` (never truncated
     silently), `SourceUnavailable` when it cannot be read."""
-    path = (ctx.repo or Path()) / rel
+    if ctx.repo is None:
+        raise SourceUnavailable("a file source needs the repository, and none was given")
+    root = ctx.repo.resolve()
+    path = (root / check_relative(rel, "file")).resolve()
+    if not path.is_relative_to(root):  # a symlink out of the repo
+        raise SourceError(f"{rel!r} resolves outside the repo")
     try:
         if path.stat().st_size > ctx.max_bytes:
             raise SourceError(f"{rel} is {path.stat().st_size} bytes, over the {ctx.max_bytes} cap")
