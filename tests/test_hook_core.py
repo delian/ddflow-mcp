@@ -31,6 +31,10 @@ def _run(repo: Path, *argv: str, stdin: str = "") -> tuple[int, str, str]:
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": root},
+        # In the project repo, not in whichever worktree pytest was started from: session
+        # start warns when ITS cwd is behind main, so the brief differed between two calls
+        # whenever main moved meanwhile (B6983363359).
+        cwd=repo,
         timeout=120,
     )
     return p.returncode, p.stdout, p.stderr
@@ -220,49 +224,31 @@ def test_the_prompt_alias_and_the_entry_point_behave_the_same(repo, harness):
 def test_the_session_start_alias_and_the_entry_point_print_the_same_brief(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "the next thing", "--globs", "a.py")
-    # The brief's "parallel: N (auto ...)" line follows the machine's load, which moves
-    # between the two calls on a busy host (B6983363359): pin it.
-    assert run_cli(repo, "config", "--set", "schedule.parallel", "fixed")[0] == 0
     a = _run(repo, "hooks", "session-start", stdin="{}")
     b = _run(repo, "hooks", "run", "session_start", "--harness", "claude", stdin="{}")
     assert a[0] == b[0] == 0
     assert a[1] == b[1] and "the next thing" in a[1]
 
 
-def _brief_around_a_loaded_sample(repo) -> tuple[str, str]:
-    """The brief, a host sample taken (as any ddflow command's tick does) while the host
-    is loaded, and the brief again."""
-    import time
-
-    from ddflow.api import setup as S
-    from ddflow.config import Config
-    from ddflow.core.model import State
-    from ddflow.infra import signals
-    from ddflow.services import flowstate as F
-
-    first = S._session_start(repo, "t", "{}").data["message"]
-    busy = signals.FakeSource({"load": 0.0, "memory_free_frac": 0.9, "disk_free_frac": 0.9})
-    ctx = F.FlowCtx(repo=repo, cfg=Config.load(repo), state=State())
-    # Each tick samples at most once per `signal_interval_s`: step past the newest row.
-    step = ctx.cfg.schedule.signal_interval_s + 1
-    now = time.time()
-    for k in range(1, 40):
-        F.sample_if_due(ctx, busy, clock=lambda k=k: now + step * k)
-    return first, S._session_start(repo, "t", "{}").data["message"]
-
-
-def _three_tasks(repo) -> None:
+def test_the_hook_runs_in_the_project_repo_not_the_callers_worktree(repo, monkeypatch, tmp_path):
+    """B6983363359: the session-start brief warns "This worktree is N commit(s) behind
+    `main`" about the cwd it runs in. The tests ran it in pytest's own worktree, so the two
+    briefs compared by the same-brief test differed whenever main moved between the calls
+    on a busy shared host. Run from elsewhere, no such line can appear."""
     run_cli(repo, "init")
-    for n in range(1, 13):
-        run_cli(repo, "task", "add", f"T{n}", "--title", f"thing {n}", "--globs", f"f{n}.py")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    seen = {}
+    real = subprocess.run
 
+    def spy(*a, **kw):
+        seen["cwd"] = kw.get("cwd")
+        return real(*a, **kw)
 
-def test_a_fixed_limit_makes_the_brief_independent_of_host_samples(repo):
-    """The fix the same-brief test relies on: pin `schedule.parallel = fixed`."""
-    _three_tasks(repo)
-    run_cli(repo, "config", "--set", "schedule.parallel", "fixed")
-    a, b = _brief_around_a_loaded_sample(repo)
-    assert a == b and "(fixed)" in a
+    monkeypatch.setattr(subprocess, "run", spy)
+    code, out, _err = _run(repo, "hooks", "session-start", stdin="{}")
+    assert code == 0 and seen["cwd"] == repo and "commit(s) behind" not in out
 
 
 def test_session_start_is_shaped_for_the_agent_and_skipped_where_it_cannot_show(repo):
