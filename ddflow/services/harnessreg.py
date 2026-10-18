@@ -273,6 +273,8 @@ def _validate(h: Harness, where: str) -> None:
         raise DescriptorError(f"{where}: mcp.shape {h.mcp.shape!r} is not one of {sorted(SHAPES)}")
     if bool(h.mcp.approve_file) != bool(h.mcp.approve_key):
         raise DescriptorError(f"{where}: mcp.approve_file and mcp.approve_key go together")
+    if h.mcp.deny_key and not h.mcp.approve_file:
+        raise DescriptorError(f"{where}: mcp.deny_key needs mcp.approve_file and mcp.approve_key")
     if (h.mcp.shape == SHAPE_NONE) != (h.mcp.path == ""):
         raise DescriptorError(f"{where}: mcp.path is empty exactly when mcp.shape is 'none'")
     if not h.verified.sources:

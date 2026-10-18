@@ -20,7 +20,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate, verify or harness (accept = agent ids).",
                 False,
             ),
-            "apply": ("boolean", "Act on the proposal (preflight/legacy/memory).", False),
+            "apply": (
+                "boolean",
+                "Act on the proposal (preflight/legacy/memory/harness: register, approve, hooks).",
+                False,
+            ),
             "accept": (
                 "array",
                 "Names to approve (preflight leftovers, memory facts); empty = everything the report marked safe.",
