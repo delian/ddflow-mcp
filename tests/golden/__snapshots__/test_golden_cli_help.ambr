@@ -1926,7 +1926,7 @@
 # ---
 # name: test_help[ddflow review]
   '''
-  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
+  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
   
   positional arguments:
     id                 the item; or `triage <item>`
@@ -1950,6 +1950,10 @@
                        findings; [review].delta_default = true makes it a delta instead
     --full             review the item's WHOLE diff even when [review].delta_default would make it a
                        delta: a full round, counted against [review].max_rounds
+    --exclude EXCLUDE  globs left out of this review instead of [review].exclude_globs and the
+                       item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
+                       out)
+    --include-pinned   send the files pins.toml owns too, for this review
     --force            run a full round past [review].max_rounds; needs --reason, recorded in the
                        evidence
     --reason REASON    why --force
