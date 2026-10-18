@@ -2688,5 +2688,58 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_sync": {
+  "command": "sync",
+  "schema": "sync@1",
+  "shape": "object",
+  "payload": [
+   "item",
+   "base",
+   "status",
+   "behind",
+   "touching_globs",
+   "pin_files",
+   "conflicts",
+   "dirty",
+   "detail",
+   "aborted",
+   "gates_valid",
+   "gates_stale",
+   "gates_unverified",
+   "gates_not_passing",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "sync@1"
+    },
+    "item": {},
+    "base": {},
+    "status": {},
+    "behind": {},
+    "touching_globs": {},
+    "pin_files": {},
+    "conflicts": {},
+    "dirty": {},
+    "detail": {},
+    "aborted": {},
+    "gates_valid": {},
+    "gates_stale": {},
+    "gates_unverified": {},
+    "gates_not_passing": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }
