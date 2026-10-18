@@ -224,3 +224,11 @@ def test_pinned_decisions_come_first_whatever_the_cap(proj):
     run_cli(proj, "config", "session.agent_brief_decisions", "1")
     ids = _decision_ids(brief(proj)[1])
     assert ids[0] == "D-standing" and "D-op-match" not in ids
+
+
+def test_unknown_pinned_ids_do_not_widen_the_cap(proj):
+    for n in ("D-a", "D-b", "D-c"):
+        _decide(proj, n, "src/widget.py")
+    run_cli(proj, "config", "session.agent_brief_pin_decisions", "D-x,D-y,D-z,D-w")
+    run_cli(proj, "config", "session.agent_brief_decisions", "2")
+    assert len(_decision_ids(brief(proj)[1])) == 2
