@@ -39,6 +39,9 @@ class ItemEdit:
 
     title: str | None = None
     body: str | None = None
+    #: Text added after the item's current body (or after ``body`` when given too), so a
+    #: note never means re-sending, and risking dropping, the original (`--append-body`).
+    append_body: str | None = None
     needs: list[str] | None = None
     #: Ids added to / taken from the item's current needs (or from ``needs`` when given too).
     add_needs: list[str] | None = None
@@ -82,6 +85,9 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
+    if edit.append_body:
+        base = it.body if edit.body is None else edit.body
+        fields["body"] = (base + "\n\n" if base else "") + edit.append_body
     # Every fold runs (no short-circuit: a no-op needs fold must not swallow a tags edit);
     # it is "nothing to change" only when nothing else was edited and no fold moved a list.
     _adjust_list(it, edit, fields, "needs")

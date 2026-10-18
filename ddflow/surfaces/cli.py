@@ -38,9 +38,9 @@ from .context import (
     OK,
     REFUSED,
     Ctx,
-    _csv,
     _require_item,
 )
+from .declared.queue import item_edit
 from .exemptions import COVERING_TOOLS, ROUTED_PATHS
 from .parsers import REGISTER_ORDER
 from .parsers._common import GLOBS_HELP, _Globs, _positive_int  # noqa: F401
@@ -59,7 +59,6 @@ from .render import (
     set_command,
 )
 from .tools import TOOLS
-from .update_message import csv_or_none as _csv_or_none
 from .update_message import update_message
 from .vocabulary import provide
 
@@ -70,27 +69,13 @@ def cmd_item_update(a, c: Ctx) -> int:
     out = A_ITEMS.update(
         c.repo,
         a.id,
-        A_ITEMS.ItemEdit(
-            title=a.title,
-            body=a.body,
-            needs=None if a.needs is None else _csv(a.needs),
-            # The raw values: the api reads them once. Parsed here as well, a JSON
-            # array's element holding a comma was split by the second read (roborev).
-            add_needs=_csv_or_none(getattr(a, "add_needs", None)),
-            remove_needs=_csv_or_none(getattr(a, "remove_needs", None)),
-            add_tags=_csv_or_none(getattr(a, "add_tags", None)),
-            remove_tags=_csv_or_none(getattr(a, "remove_tags", None)),
-            globs=a.globs,
-            add_globs=getattr(a, "add_globs", None),
-            remove_globs=getattr(a, "remove_globs", None),
-            tags=None if a.tags is None else _csv(a.tags),
-            priority=a.priority,
-            line=a.line,
-            resources=None if a.resources is None else _csv(a.resources),
-            # Relative to where the caller stands, like any path typed in a shell.
-            # An empty value stays empty, for the api to refuse: abspath("") is the cwd.
-            worktree=a.worktree and os.path.abspath(a.worktree),
-            queue=bool(getattr(a, "queue", False)),
+        item_edit(
+            {
+                **vars(a),
+                # Relative to where the caller stands, like any path typed in a shell.
+                # An empty value stays empty, for the api to refuse: abspath("") is the cwd.
+                "worktree": a.worktree and os.path.abspath(a.worktree),
+            }
         ),
         agent=c.requested_agent,
     )
