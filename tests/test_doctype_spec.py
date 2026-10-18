@@ -104,20 +104,21 @@ def test_bad_values_name_the_file(bad, msg):
 
 
 def test_unknown_placeholder_is_refused():
-    with pytest.raises(S.DocTypeError, match="x.toml.*placeholder"):
+    with pytest.raises(S.DocTypeError, match=r"x\.toml.*placeholder"):
         S.parse(ADR.replace("{slug}", "{nope}"), source="x.toml")
 
 
-def test_not_toml_and_unknown_rule_kind():
-    with pytest.raises(S.DocTypeError, match="y.toml: not TOML"):
+def test_not_toml():
+    with pytest.raises(S.DocTypeError, match=r"y\.toml: not TOML"):
         S.parse("[doctype", source="y.toml")
-    bad = ADR + '[doctype.validate]\nrules = [{ kind = "each_item_matches" }]\n'
-    with pytest.raises(S.DocTypeError, match="unknown validate rule kind"):
-        S.parse(bad.replace("[[doctype.section]]", "[[doctype.section]]", 1))  # pragma: no cover
 
 
 def test_rule_kind_added_as_data():
-    text = ADR.replace("[[doctype.section]]", '[doctype.validate]\nrules = [{ kind = "each_item_matches" }]\n[[doctype.section]]', 1)
+    text = ADR.replace(
+        "[[doctype.section]]",
+        '[doctype.validate]\nrules = [{ kind = "each_item_matches" }]\n[[doctype.section]]',
+        1,
+    )
     with pytest.raises(S.DocTypeError, match="each_item_matches"):
         S.parse(text)
     S.RULE_KINDS.register(S.RuleKind("each_item_matches"))
