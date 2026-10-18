@@ -144,19 +144,44 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
         assert old is not None
         before = {t.path for t in old.tests}
         lost = [f"{sha[:8]} {c}" for c in missed if c in before]  # blind ones too: pins stay honest
-        blind = [c for c in missed if drives_subprocess((raw / c).read_text("utf-8", "replace"))]
+        blind = [
+            c for c in missed if drives_subprocess((raw / c).read_text("utf-8", "replace"), src)
+        ]
         scored = [c for c in co if c not in blind]
         causes = [
             f"{sha[:8]} {c} ({'cut at the budget' if c in cut else 'no route reaches it'})"
             for c in missed
             if c not in blind
         ]
-        return len(scored), len(scored) - len(causes), lost, causes
+        listed_blind = [f"{sha[:8]} {c} (blind: drives a subprocess, not scored)" for c in blind]
+        return len(scored), len(scored) - len(causes), lost, [*causes, *listed_blind]
 
 
-def drives_subprocess(text: str) -> bool:
-    """Whether a test module's source drives the program in a subprocess (the selector's blind spot)."""
-    return bool(DRIVES_SUBPROCESS.search(text))
+def _code(text: str) -> str:
+    """``text`` without its comment lines (a mention in a comment is not a call)."""
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def imports_changed(text: str, src: list[str]) -> bool:
+    """Whether a test module imports one of the changed source modules directly (a route the
+    selector draws, so a miss of it is a real one, whatever else the test does)."""
+    code = _code(text)
+    for path in src:
+        if not path.endswith(".py"):
+            continue
+        module = path[:-3].replace("/", ".")
+        parent, _, stem = module.rpartition(".")
+        if re.search(rf"\b(?:from|import)\s+{re.escape(module)}\b", code) or (
+            parent and re.search(rf"\bfrom\s+{re.escape(parent)}\s+import\s[^\n]*\b{stem}\b", code)
+        ):
+            return True
+    return False
+
+
+def drives_subprocess(text: str, src: list[str] = ()) -> bool:
+    """Whether a test module drives the program in a subprocess (the selector's blind spot) and
+    imports none of the changed ``src`` modules itself."""
+    return bool(DRIVES_SUBPROCESS.search(_code(text))) and not imports_changed(text, list(src))
 
 
 def _one(sha: str) -> tuple[int, int, list[str], list[str]] | None:
@@ -193,7 +218,12 @@ def test_a_subprocess_driving_test_is_a_blind_spot_not_a_scored_miss():
     assert drives_subprocess("code, out, err = run_cli(repo, 'bug', 'show', 'B1')")
     assert drives_subprocess("import subprocess\nsubprocess.run(['ddflow', 'show'])")
     assert not drives_subprocess("from ddflow.services import ci\nci.run(repo)")
-    assert not drives_subprocess("# run_cli is the helper for this\nresult = run_cli_like")
+    assert not drives_subprocess("# run_cli(repo) is the helper for this\nresult = run_cli_like")
+    # a test that imports a changed module AND drives a subprocess is routable: its miss counts
+    both = "from ddflow.services import ci\nrun_cli(repo, 'x')"
+    assert not drives_subprocess(both, ["ddflow/services/ci.py"])
+    assert drives_subprocess(both, ["ddflow/services/gates.py"])
+    assert drives_subprocess("import ddflow.api.review\nrun_cli(r)", ["ddflow/api/cirun.py"])
 
 
 def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
