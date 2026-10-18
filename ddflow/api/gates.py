@@ -623,10 +623,6 @@ def run(
     if repeated is not None:
         return repeated
     scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
-    if scope is not None and scope.needs_ci and not forced:  # never the whole suite unasked
-        return O.refused(
-            "gate.run", scope.why, id=item, gate=gate, outcome="", evidence=scope.evidence()
-        )
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)
@@ -778,6 +774,11 @@ def _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced):
     scope = TSC.unit_tests_scope(cfg, st, it, gdef.command, cwd)
     if scope.scope == "covered" and forced:  # forcing a gate asks for it to run
         scope = TSC.Scope("full", "forced: this gate ran although the ci gate covered it")
+    if scope.needs_ci and not forced:  # never the whole suite unasked: refuse, say rerun ci
+        refusal = O.refused(
+            "gate.run", scope.why, id=it.id, gate=gdef.id, outcome="", evidence=scope.evidence()
+        )
+        return scope, gdef, refusal
     if scope.scope == "covered":
         return scope, gdef, _covered_by_ci(log, cfg, repo, it, gdef.id, cwd, scope, gates, forced)
     return scope, replace(gdef, command=scope.command) if scope.command else gdef, None
