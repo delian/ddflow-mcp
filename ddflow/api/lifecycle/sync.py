@@ -42,10 +42,13 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
         "detail": r.detail,
     }
     if r.status == "merged":
-        stale = {n.gate for n in GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")}
-        recorded = [g for g in it.gates if it.gates[g].outcome]
-        data["gates_valid"] = sorted(set(recorded) - stale)
-        data["gates_stale"] = sorted(set(recorded) & stale)
+        notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
+        stale = {n.gate for n in notes if not n.unverified}
+        unverified = {n.gate for n in notes if n.unverified}
+        recorded = {g for g in it.gates if it.gates[g].outcome}
+        data["gates_valid"] = sorted(recorded - stale - unverified)
+        data["gates_stale"] = sorted(recorded & stale)
+        data["gates_unverified"] = sorted(recorded & unverified)
     text = _text(r, data)
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
@@ -81,7 +84,9 @@ def _text(r: BS.SyncResult, d: dict) -> str:
         return head + f" `ddflow sync {d['item']}` merges them."
     pins = f" Pin files settled: {', '.join(r.merged_pins)}." if r.merged_pins else ""
     valid, stale = d.get("gates_valid", []), d.get("gates_stale", [])
+    unver = d.get("gates_unverified", [])
+    extra = f"; could not be checked: {', '.join(unver)}" if unver else ""
     return (
         f"merged `{r.base}` into {d['item']}: {r.behind} commit(s), {r.relevant} touching its globs."
-        f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}."
+        f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}{extra}."
     )

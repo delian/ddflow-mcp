@@ -38,6 +38,7 @@ COMMANDS: tuple[Command, ...] = (
             "detail",
             "gates_valid",
             "gates_stale",
+            "gates_unverified",
             "text",
         ),
         render=lambda out, a: out.data.get("text") or out.reason,
