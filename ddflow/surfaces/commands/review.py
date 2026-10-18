@@ -159,6 +159,8 @@ def cmd_review(a, c: Ctx) -> int:
         chunks=a.chunk or None,
         delta=bool(a.delta),
         full=bool(getattr(a, "full", False)),
+        exclude=getattr(a, "exclude", "") or "",
+        include_pinned=bool(getattr(a, "include_pinned", False)),
         force=bool(a.force),
         reason=a.reason or "",
     )

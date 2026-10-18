@@ -37,12 +37,19 @@ def _names(path: str, glob: str) -> bool:
     )
 
 
-def inherit_globs(source_globs: list[str], text: str) -> list[str]:
+def inherit_globs(source_globs: list[str], text: str, *, tool_bug: bool = False) -> list[str]:
     """The source item's globs a fix task for a bug described by ``text`` inherits.
 
     Text naming no file inherits them all (the bug is in what the item touched). Text that
     names files (a known extension, or a path) keeps only the source globs it names -- none, when it names others -- so a
-    bug found beside ``claim.py`` but about ``merge.py`` is not given ``claim.py``."""
+    bug found beside ``claim.py`` but about ``merge.py`` is not given ``claim.py``.
+
+    ``tool_bug``: the bug is in ddflow itself (`--scope ddflow`), noticed while working on the
+    item, not in what the item touched, and the files its text quotes are as often the symptom
+    as the cause, so NOTHING is inherited: the globs of an unrelated item made a fix task wait
+    for, or write over, files it had no business with (Bc0b26248e3). `--globs` names its files."""
+    if tool_bug:
+        return []
     named = _PATHISH.findall(text)
     if not named:
         return list(source_globs)
