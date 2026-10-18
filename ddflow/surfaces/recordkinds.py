@@ -60,6 +60,7 @@ def _kind(name: str) -> R.RecordKind:
         if kind is not None:
             raise ValueError(f"{name} has commands of its own (ddflow {name} ...)")
         raise ValueError(f"unknown record kind {name!r}; the data kinds are {data}")
+    SR._check(kind)  # a field may not take a name the surface uses (id, query, limit ...)
     return kind
 
 

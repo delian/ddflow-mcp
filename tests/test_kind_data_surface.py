@@ -121,3 +121,16 @@ def test_a_bad_project_kind_names_the_file_and_spares_the_rest(repo):
 
 def test_no_project_dir_is_no_kinds(repo):
     assert KDA.load_project(repo) == []
+
+
+def test_a_field_named_like_a_control_argument_is_refused(repo):
+    kind = KDA.parse_kind(
+        'name = "srch"\nsummary = "s"\n[[field]]\nname = "title"\n[[field]]\nname = "query"\n'
+    )
+    R.declare(kind)
+    try:
+        out = RK.call(repo, {"kind": "srch", "verb": "list"}, "a")
+        assert out.exit != 0 and "query" in out.reason
+    finally:
+        R.forget("srch")
+        D.DEF_KINDS.pop("srch", None)
