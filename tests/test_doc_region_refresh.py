@@ -142,3 +142,11 @@ def test_docscheck_ignores_text_inside_a_generated_region(proj):
     rep = docscheck.check_docs(proj, docs=["GUIDE.md"], commands=[])
     refs = {f.ref for f in rep.findings}
     assert "another_missing_name_zz" in refs and "no_such_identifier_zz" not in refs
+
+
+def test_adopts_stamped_blocks_are_not_read_as_regions():
+    stamped = (
+        "<!-- ddflow:begin rules/work-queue ddflow=0.2.0 fmt=1 sha=f60922c1c1f6 -->\nx\n"
+        "<!-- ddflow:end rules/work-queue -->\n"
+    )
+    assert RC.problem(stamped) == "" and RC.edited(stamped) == [] and RC.mask(stamped) == stamped

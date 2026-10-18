@@ -9,13 +9,18 @@ and left unmasked: "could not tell" is never read as clean or as generated.
 
 from __future__ import annotations
 
+import re
+
 from . import regions as RG
 
 _MARK = "ddflow:begin"
+# adopt's stamped blocks (`ddflow:begin NAME ddflow=V fmt=N sha=H`) are another grammar, owned
+# by pins and adopt: a text holding one is not read here, so its end marker is not "unbalanced"
+_STAMPED = re.compile(r"^<!-- ddflow:begin \S+ [^\n]*\bfmt=\d+", re.M)
 
 
 def _parsed(text: str) -> list[RG.Region]:
-    return RG.parse(text) if _MARK in text else []
+    return RG.parse(text) if _MARK in text and not _STAMPED.search(text) else []
 
 
 def problem(text: str) -> str:
