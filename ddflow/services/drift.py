@@ -94,18 +94,20 @@ def base_of(repo: Path, tree: Path, cfg: Config | None = None) -> str:
 
 
 def _commits(tree: Path, rng: str) -> tuple[Commit, ...] | None:
-    r = git(tree, "-c", "core.quotepath=off", "log", "--no-renames", "--name-only",
+    # -m: a merge commit lists the paths it brought (against each parent), not nothing.
+    r = git(tree, "-c", "core.quotepath=off", "log", "-m", "--no-renames", "--name-only",
             "--format=%x01%H%x1f%s", rng)  # fmt: skip
     if not r.ok:
         return None
-    out = []
+    seen: dict[str, tuple[str, list[str]]] = {}
     for chunk in r.out.split("\x01"):
         if not chunk.strip():
             continue
         head, _, rest = chunk.partition("\n")
         sha, _, subject = head.partition("\x1f")
-        out.append(Commit(sha, subject, tuple(p for p in rest.splitlines() if p)))
-    return tuple(out)
+        paths = seen.setdefault(sha, (subject, []))[1]
+        paths.extend(p for p in rest.splitlines() if p and p not in paths)
+    return tuple(Commit(sha, subj, tuple(ps)) for sha, (subj, ps) in seen.items())
 
 
 def _touches(c: Commit, globs: Iterable[str]) -> bool:
@@ -172,13 +174,14 @@ def measure(
 
 def moved_or_gone(
     tree: Path, paths: Iterable[str], since_sha: str, tip: str = "HEAD"
-) -> dict[str, str | None]:
+) -> dict[str, str | None] | None:
     """Which of ``paths`` were renamed (-> new path) or deleted (-> None) between
-    ``since_sha`` and ``tip``. A path not in the result is where it was."""
+    ``since_sha`` and ``tip``. A path not in the result is where it was; None = git could
+    not say, which is NOT "nothing moved"."""
     want = set(paths)
     r = git(tree, "-c", "core.quotepath=off", "diff", "--name-status", "-M", since_sha, tip)
     if not r.ok:
-        return {}
+        return None
     out: dict[str, str | None] = {}
     for line in r.out.splitlines():
         kind, *names = line.split("\t")
