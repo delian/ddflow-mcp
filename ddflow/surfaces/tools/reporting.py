@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..registry import Alias
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -47,5 +48,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
         },
         "identify": True,
+        # Callers lost calls to `name`; it still works (D-compat), the first use says so.
+        "arg_aliases": {"name": Alias("argument", "name", "agent", "0.2.3")},
     },
 }
