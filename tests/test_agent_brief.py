@@ -233,3 +233,21 @@ def test_unknown_pinned_ids_do_not_widen_the_cap(proj):
     run_cli(proj, "config", "session.agent_brief_pin_decisions", "D-x,D-y,D-z,D-w")
     run_cli(proj, "config", "session.agent_brief_decisions", "2")
     assert len(_decision_ids(brief(proj)[1])) == 2
+
+
+def _applied(did, reason, globs):
+    from types import SimpleNamespace as NS
+
+    rec = NS(id=did, kind="decision", scope=NS(globs=globs), enforcement="warn", priority=0)
+    return NS(record=rec, reason=reason)
+
+
+def test_a_broad_glob_match_ranks_before_a_decision_that_does_not_match_the_files():
+    from ddflow.services.guidance.resolve import GLOBS
+
+    applied = [
+        _applied("D-aaa-other", "tag", ["docs/**"]),
+        _applied("D-zzz-broad", GLOBS, ["**"]),
+        _applied("D-mmm-narrow", GLOBS, ["src/x.py"]),
+    ]
+    assert AB.decision_order(applied) == ["D-mmm-narrow", "D-zzz-broad", "D-aaa-other"]

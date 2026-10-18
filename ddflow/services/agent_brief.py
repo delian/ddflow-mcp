@@ -144,7 +144,6 @@ def decision_order(applied, pins=(), operator=frozenset()) -> list[str]:
     config pins (in the order pinned), then those whose own globs overlap the item's (a broad
     `**` last of them), operator decisions ahead of agents', then the rest by enforcement and
     id. A pinned id that governs nothing here is still listed: pinning is the operator's word."""
-    seen = {a.record.id for a in applied}
     pinned = [*dict.fromkeys(pins)]
 
     def key(a):
@@ -161,5 +160,5 @@ def decision_order(applied, pins=(), operator=frozenset()) -> list[str]:
     ranked = [
         a.record.id for a in sorted((a for a in applied if a.record.kind == "decision"), key=key)
     ]
-    head = [i for i in pinned if i in seen or i not in ranked]
+    head = pinned
     return [*head, *(i for i in ranked if i not in head)]
