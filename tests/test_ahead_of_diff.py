@@ -33,7 +33,18 @@ def test_block_policy_does_not_refuse_on_an_excused_gate(repo):
         code, out, err = run_cli(repo, "gate", "skip", "T1", g, "--reason", "t", agent="a1")
         assert code == 0, out + err
     code, out, err = run_cli(
+        repo, "gate", "record", "T1", "bug_hunt", "--outcome", "passed", "--evidence", "x",
+        agent="a1",
+    )
+    assert code == 0 and "comes after" not in out + err, out + err
+
+
+def test_block_policy_still_refuses_on_a_gate_the_diff_does_not_excuse(repo):
+    _setup(repo)
+    run_cli(repo, "config", "--set", "gates.enforce_order", "block")
+    _worktree_with_change(repo, "docs/x.md")
+    code, out, err = run_cli(
         repo, "gate", "record", "T1", "bug_hunt", "--outcome", "skipped", "--evidence", "x",
         agent="a1",
     )
-    assert "comes after" not in out + err, out + err
+    assert code != 0 and "comes after" in out + err and "rubber_duck" in out + err, out + err
