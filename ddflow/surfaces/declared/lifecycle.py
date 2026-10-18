@@ -287,6 +287,7 @@ COMMANDS: tuple[Command, ...] = (
             globs=a.get("globs") or None,
             timeout_s=_wait_timeout(a),
             poll_s=a.get("poll"),
+            max_s=a.get("max_s"),
             agent=agent,
         ),
         payload="",
@@ -330,6 +331,13 @@ COMMANDS: tuple[Command, ...] = (
                 type="number",
                 help="Seconds between log checks (default 2).",
                 cli_help="seconds between log checks",
+            ),
+            Param(
+                "max_s",
+                type="number",
+                cli_only=True,
+                cli_help="never wait longer than this many seconds: exit 2 naming the live holder "
+                "and how long it has held (a holder that keeps renewing is not a reason to wait on)",
             ),
         ),
     ),
