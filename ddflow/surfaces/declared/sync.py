@@ -17,6 +17,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="merge the item's recorded base into its branch when that is safe; --check only measures",
         tool="ddflow_sync",
         tier="standard",
+        help_group="Doing the work",
         description=(
             "Merge the item's recorded base branch into its worktree branch (never rebase) when safe: "
             "refuses with uncommitted changes, aborts on a conflict and names the files, reports how many "
