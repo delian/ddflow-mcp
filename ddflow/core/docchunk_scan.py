@@ -39,8 +39,19 @@ class Scan:
     table: list[tuple[int, int]] = field(default_factory=list)
 
 
-_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s*[>|]")
+_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s*>")
 _DELIM = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
+
+
+def _cells(row: str) -> int:
+    return len(row.strip().strip("|").split("|"))
+
+
+def _is_table_head(head: str, delim: str) -> bool:
+    """GFM: a header row and a delimiter row with a pipe and the same number of cells."""
+    return (
+        "|" in head and "|" in delim and bool(_DELIM.match(delim)) and _cells(head) == _cells(delim)
+    )
 
 
 def _opens_block(ln: str) -> bool:
@@ -64,7 +75,7 @@ def _scan_md(lines: list[str], start: int) -> Scan:
         elif m := _ATX.match(ln):
             sc.heads.append((i, len(m.group(1)), (m.group(2) or "").strip()))
             fresh, i = True, i + 1
-        elif "|" in ln and i + 1 < n and _DELIM.match(lines[i + 1]) and "|" in lines[i + 1] + ln:
+        elif _is_table_head(ln, lines[i + 1] if i + 1 < n else ""):
             j = i + 1  # a GFM table: a header row, a delimiter row, then rows to a blank line
             while j + 1 < n and lines[j + 1].strip() and "|" in lines[j + 1]:
                 j += 1
@@ -94,33 +105,40 @@ def _setext_end(lines: list[str], i: int, n: int) -> int:
     return 0
 
 
+def _rst_title(lines: list[str], i: int, n: int) -> tuple[int, str, str, bool] | None:
+    """``(stop, title, adornment char, has overline)`` of a title starting at line ``i``: the
+    title may span several lines, ends at the first adornment line at least as long as its
+    longest line, and an overline (when there is one) is the same character."""
+    over = bool(_RST_ADORN.match(lines[i]))
+    first = i + 1 if over else i
+    for k in range(first + 1, n):
+        if not lines[k].strip():
+            return None
+        if _RST_ADORN.match(lines[k]):
+            rows = [r.strip() for r in lines[first:k]]
+            long_enough = len(lines[k].rstrip()) >= max(len(r) for r in rows)
+            if over and (
+                lines[k][0] != lines[i][0] or len(lines[i].rstrip()) != len(lines[k].rstrip())
+            ):
+                return None
+            return (k + 1, " ".join(rows), lines[k][0], over) if long_enough else None
+    return None
+
+
 def _scan_rst(lines: list[str], start: int) -> Scan:
     sc, styles, i, n = Scan(), [], start, len(lines)
+    fresh = True  # a title can start here: after a blank line or another title
     while i < n:
-        a, over = lines[i], False
-        if (
-            _RST_ADORN.match(a)
-            and i + 2 < n
-            and lines[i + 1].strip()
-            and lines[i + 2].startswith(a[0])
-        ):
-            over, i0, text, under = True, i, lines[i + 1].strip(), lines[i + 2]
-        elif a.strip() and not _RST_ADORN.match(a) and i + 1 < n and _RST_ADORN.match(lines[i + 1]):
-            i0, text, under = i, a.strip(), lines[i + 1]
+        if not lines[i].strip():
+            fresh, i = True, i + 1
+        elif fresh and (hit := _rst_title(lines, i, n)):
+            stop, text, char, over = hit
+            if (char, over) not in styles:
+                styles.append((char, over))
+            sc.heads.append((i, styles.index((char, over)) + 1, text))
+            i = stop
         else:
-            i += 1
-            continue
-        if under[0] != (a[0] if over else lines[i + 1][0]) and over:
-            i += 1
-            continue
-        if len(under.rstrip()) >= len(text):
-            style = (under[0], over)
-            if style not in styles:
-                styles.append(style)
-            sc.heads.append((i0, styles.index(style) + 1, text))
-            i += 3 if over else 2
-        else:
-            i += 1
+            fresh, i = False, i + 1
     return sc
 
 
