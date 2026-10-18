@@ -18,20 +18,13 @@ from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
 
-#: A title in the report is cut to this many characters.
-TITLE_CAP = 100
 
-
-#: A fixed bug's one-line summary keeps more (it is the regression row's only text).
-BUG_SUMMARY_CAP = 120
-
-
-def _title(*texts: str | None, cap: int = TITLE_CAP) -> str:
-    """The first non-empty of ``texts``, cut to ``cap``: one cutter for every record kind."""
+def _title(*texts: str | None, cap: int) -> str:
+    """The first non-empty of ``texts``, cut to ``cap``: one cutter for every record kind ([session].report_title_chars / report_summary_chars)."""
     return next((t for t in texts if t), "")[:cap]
 
 
-def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
+def _bug_tests(events, st: State, item_id: str, cap: int) -> list[dict[str, Any]]:
     """The bugs this item fixed, with their regression tests and what `complete`/`bug fixed`
     made of them: ``verified`` (failed on the unfixed code), ``overridden`` (with the reason),
     ``could-not-run`` or ``not-applicable``."""
@@ -51,7 +44,7 @@ def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
         rows.append(
             {
                 "bug": bid,
-                "summary": (_title(bug.title, bug.summary, cap=BUG_SUMMARY_CAP) if bug else ""),
+                "summary": (_title(bug.title, bug.summary, cap=cap) if bug else ""),
                 "tests": list(
                     data.get("regression_tests") or (bug.regression_tests if bug else [])
                 ),
@@ -101,7 +94,7 @@ _NOTE_KINDS = {
 }
 
 
-def _note(st: State, ev, item_id: str) -> dict[str, Any] | None:
+def _note(st: State, ev, item_id: str, cap: int) -> dict[str, Any] | None:
     noun, table, title = _NOTE_KINDS[ev.kind]
     rec = getattr(st, table).get(ev.subject)
     if rec is None:
@@ -109,12 +102,12 @@ def _note(st: State, ev, item_id: str) -> dict[str, Any] | None:
     return {
         "id": rec.id,
         "kind": noun,
-        "title": _title(title(rec)),
+        "title": _title(title(rec), cap=cap),
         "linked": getattr(rec, "item", "") == item_id or item_id in getattr(rec, "seen_in", []),
     }
 
 
-def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str, Any]]]:
+def _filed(events, st: State, item_id: str, who: str, cap: int) -> dict[str, list[dict[str, Any]]]:
     """Bugs, tasks, lessons, research and decisions recorded while the item was worked: linked to
     it, or by ``who`` from its claim to the end of the run (see `_window`). Each with whether it is still open."""
     start, end = _window(events, item_id, who)
@@ -141,7 +134,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         ):
             tasks[ev.subject] = st.items[ev.subject]
         elif ev.kind in _NOTE_KINDS:
-            note = _note(st, ev, item_id)
+            note = _note(st, ev, item_id, cap)
             if note and (note["linked"] or inside(ev)):
                 notes[ev.subject] = note  # once per record: a merge records it again
     return {
@@ -149,7 +142,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         "bugs": [
             {
                 "id": b.id,
-                "title": _title(b.title, b.summary),
+                "title": _title(b.title, b.summary, cap=cap),
                 "open": b.open,
                 "fix_task": b.fix_task,
                 "linked": b.item == item_id,
@@ -159,7 +152,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         "tasks": [
             {
                 "id": t.id,
-                "title": _title(t.title),
+                "title": _title(t.title, cap=cap),
                 "open": t.state not in ("done", "abandoned"),
                 "linked": False,  # `task add` has no --item: the window is the only link
             }
@@ -216,8 +209,9 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     stale = RG.earlier_tree(st, cfg, item_id, repo, landed)
     for r in rows:
         r["earlier_tree"] = stale.get(r["gate"], "")
-    filed = _filed(events, st, item_id, who)
-    tests = _bug_tests(events, st, item_id)
+    sc = cfg.session
+    filed = _filed(events, st, item_id, who, sc.report_title_chars)
+    tests = _bug_tests(events, st, item_id, sc.report_summary_chars)
     overrides = RG.overrides(it, led, tests, rows) + _refusals(events, item_id, who)
     pipeline = G.pipeline_for(it, cfg)
     not_done = RG.not_done(it, led, rows, pipeline, tests)
