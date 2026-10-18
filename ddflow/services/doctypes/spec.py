@@ -272,6 +272,11 @@ def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
         raise src.err("the file is one [doctype] table", "doctype")
     raw = top["doctype"]
     src.unknown(raw, _TOP, "doctype")
+    for k in ("validate", "review"):
+        if k in raw and not isinstance(raw[k], dict):
+            raise src.err(f"{k} must be a table", k)
+    if not isinstance(raw.get("section", []), list):
+        raise src.err("section must be an array of tables ([[doctype.section]])", "section")
     name = raw.get("name")
     if not isinstance(name, str) or not _NAME.match(name):
         raise src.err("name is required (lowercase letters, digits, - _)", "name")

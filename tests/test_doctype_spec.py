@@ -222,3 +222,11 @@ def test_extending_type_refuses_bad_tables_and_duplicate_sections():
         text = "[doctype]\n" + child + body
         with pytest.raises(S.DocTypeError, match=msg):
             S.resolve([base, ("project", [("c.toml", text)])])
+
+
+@pytest.mark.parametrize("bad", ["section = 5", "section = true", "review = 1"])
+def test_wrong_shaped_tables_are_file_errors_in_every_layer(bad):
+    base = ("shipped", [("adr.toml", ADR)])
+    text = '[doctype]\nname = "c"\nextends = "adr"\n' + bad + "\n"
+    with pytest.raises(S.DocTypeError, match=r"project/c\.toml:\d+:"):
+        S.resolve([base, ("project", [("c.toml", text)])])
