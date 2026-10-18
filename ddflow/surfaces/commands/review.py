@@ -119,6 +119,10 @@ def _report_refusal(a, c: Ctx, out) -> None:
         )
 
 
+#: `review <id> <gate>`: the item and the gate, both positional.
+_ITEM_AND_GATE = 2
+
+
 def cmd_review(a, c: Ctx) -> int:
     ids = list(a.id or [])
     if ids[:1] == ["triage"]:
@@ -129,7 +133,7 @@ def cmd_review(a, c: Ctx) -> int:
     if ids[:1] == ["show"]:
         return _show_verb(a, c, ids)
     gate = a.gate or ""
-    if len(ids) == 2:  # `review <id> <gate>`, as every other gate command spells it
+    if len(ids) == _ITEM_AND_GATE:  # `review <id> <gate>`, as every other gate command spells it
         if gate and gate != ids[1]:
             print(f"the gate is given twice: {ids[1]!r} and --gate {gate!r}", file=sys.stderr)
             return FAIL

@@ -12,7 +12,7 @@ from conftest import run_cli
 
 def test_the_gate_may_follow_the_item_positionally(repo):
     assert run_cli(repo, "init")[0] == 0
-    code, out, err = run_cli(repo, "review", "NOPE", "rubber_duck")
+    _code, out, err = run_cli(repo, "review", "NOPE", "rubber_duck")
     assert "takes one item id" not in out + err, out + err
 
 
