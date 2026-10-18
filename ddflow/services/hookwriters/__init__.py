@@ -25,8 +25,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import claudehooks as CH
-from . import flatlist
 from ..harnessreg import Harness
+from . import flatlist
 
 #: Descriptor styles written as ``json-groups``.
 JSON_GROUPS = frozenset({"claude", "gemini"})

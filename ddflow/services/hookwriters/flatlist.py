@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .. import claudehooks as CH
 from ...infra.fsio import NewerContent, RegionError
+from .. import claudehooks as CH
 
 #: Descriptor style -> (the key holding the command line, constant keys of every entry).
 LAYOUTS: dict[str, tuple[str, dict[str, str]]] = {
