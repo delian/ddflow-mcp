@@ -94,8 +94,8 @@ def base_of(repo: Path, tree: Path, cfg: Config | None = None) -> str:
 
 
 def _commits(tree: Path, rng: str) -> tuple[Commit, ...] | None:
-    # -m: a merge commit lists the paths it brought (against each parent), not nothing.
-    r = git(tree, "-c", "core.quotepath=off", "log", "-m", "--no-renames", "--name-only",
+    # A merge lists the paths it brought (against its first parent), not nothing.
+    r = git(tree, "-c", "core.quotepath=off", "log", "--diff-merges=first-parent", "--no-renames", "--name-only",
             "--format=%x01%H%x1f%s", rng)  # fmt: skip
     if not r.ok:
         return None
