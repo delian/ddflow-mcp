@@ -161,6 +161,31 @@ def _session_docs(events: list, kinds: set[str]) -> list[Doc]:
     return out
 
 
+def _withheld_def_event(
+    egress: Egress | None, st: State | None, declared: set[str], kind: str, rid: str
+) -> bool:
+    return (
+        egress is not None
+        and st is not None
+        and kind in declared
+        and egress.withholds_def("search", st, kind, rid)
+    )
+
+
+def _def_event_held(ev, kinds, names, declared, held, egress, st) -> bool:
+    """Is this definition event left out of the log source: withheld by the record's label (the
+    raw event carries the whole record), or already held by the source of its family."""
+    kind, _, rid = ev.subject.partition(":")
+    if _withheld_def_event(egress, st, declared, kind, rid):
+        return True
+    if kind in _DEF_KINDS and held(kind):
+        return True  # the rules, skills, agents and schedules sources hold these
+    return any(  # the declared kinds' (the records source)
+        d.searched and d.def_kind == kind and d.name in kinds and (not names or "records" in names)
+        for d in PA.DECLARED.values()
+    )
+
+
 def _log_docs(
     events: list,
     kinds: set[str],
@@ -188,21 +213,8 @@ def _log_docs(
             if held(head):
                 continue  # the jobs and schedules sources do too
         elif head == "def":
-            kind, _, rid = ev.subject.partition(":")
-            if egress is not None and st is not None and kind in declared:
-                # the raw event carries the whole record: it follows the record's label
-                if egress.withholds_def("search", st, kind, rid):
-                    continue
-            if kind in _DEF_KINDS and held(kind):
-                continue  # and the rules, skills, agents and schedules ones, which are definitions
-            if any(
-                d.searched
-                and d.def_kind == kind
-                and d.name in kinds
-                and (not names or "records" in names)
-                for d in PA.DECLARED.values()
-            ):
-                continue  # and the declared kinds' (the records source)
+            if _def_event_held(ev, kinds, names, declared, held, egress, st):
+                continue
         payload = json.dumps(ev.data or {}, ensure_ascii=False, sort_keys=True)
         out.append(
             Doc("log", ev.id, ev.kind, ev.ts, ev.agent, "", f"{ev.kind} {ev.subject} {payload}")
