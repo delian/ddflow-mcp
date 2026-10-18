@@ -409,18 +409,30 @@ def _default_with_tripwires(
     return with_tripwires_on_the_diff(cmd, tree, since)
 
 
+def _worker_log(scope) -> dict[str, dict]:
+    """The scope's record of the worker counts used, stage -> the count and its inputs."""
+    used: dict[str, dict] = {}
+    if scope is not None:
+        scope.workers = used
+    return used
+
+
+def _with_workers(cmd: str, cfg: Config, used: dict[str, dict], stage: str) -> str:
+    """``cmd`` with ``{workers}`` replaced, the count and its inputs noted under ``stage``."""
+    cmd, auto = WK.resolve(cmd, cfg)
+    if auto:
+        used[stage] = {"n": auto.n, **auto.inputs}
+    return cmd
+
+
 def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     """(the run that decided the verdict, the output of the run before it): the command as
     written, or -- for a selected scope -- the hooks without the suite, then the selected
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     on_tick, tick_s = tick or (None, 0)
-    used: dict[str, dict] = {}  # stage -> the worker count and the inputs it came from
-    if scope is not None:
-        scope.workers = used
-    cmd, auto = WK.resolve(cmd, cfg)
-    if auto:
-        used["command"] = {"n": auto.n, **auto.inputs}
+    used = _worker_log(scope)
+    cmd = _with_workers(cmd, cfg, used, "command")
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
@@ -446,9 +458,7 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
     for at, (raw, label) in enumerate(todo):
-        cmd_, auto = WK.resolve(raw, cfg)
-        if auto:
-            used[label] = {"n": auto.n, **auto.inputs}
+        cmd_ = _with_workers(raw, cfg, used, label)
         before += f"\n$ {cmd_}\n"
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
