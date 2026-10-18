@@ -218,6 +218,39 @@ def _judge_any(
     }
 
 
+def _bounded(timeout_s: float | None, max_s: float | None) -> tuple[float, bool]:
+    """(seconds to wait, whether the request was cut to ``WAIT_MAX_S``). ``max_s`` is a hard
+    bound: the wait never outlasts it, whatever ``timeout_s`` says."""
+    timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
+    if max_s is not None:
+        timeout = min(timeout, max(0.0, float(max_s)))
+    return min(timeout, float(WAIT_MAX_S)), timeout > WAIT_MAX_S
+
+
+def _holders(st, cfg, ids: list[str]) -> list[dict[str, Any]]:
+    """Who holds each live item the caller waits on, for how long, and when it last renewed:
+    a wait that ends blocked must name the holder, not just say "still blocked"."""
+    now = time.time()
+    live = st.active_leases(now, cfg.lease.grace_s)
+    return [
+        {
+            "item": i,
+            "holder": lz.holder,
+            "held_s": round(now - lz.acquired_at),
+            "renewed_ago_s": round(now - lz.renewed_at),
+        }
+        for i in ids
+        if (lz := live.get(i)) is not None
+    ]
+
+
+def _holders_text(holders: list[dict[str, Any]]) -> str:
+    return "; ".join(
+        f"{h['item']} held by {h['holder']} for {h['held_s']}s (renewed {h['renewed_ago_s']}s ago)"
+        for h in holders
+    )
+
+
 def _freed(st, cfg, was: list[str], me: str) -> list[str]:
     """What happened to each item the caller was waiting on -- the answer to "why did
     I wake?", in the words an agent can relay."""
@@ -259,6 +292,7 @@ def wait(
     kind: str = DEFAULT_NEXT_KIND,
     timeout_s: float | None = None,
     poll_s: float | None = None,
+    max_s: float | None = None,
     agent: str = "",
     on_progress=None,
     globs: str | list[str] | None = None,
@@ -279,9 +313,7 @@ def wait(
     the reservation, which is the crash-recovery problem leases already solve.
     """
 
-    timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
-    capped = timeout > WAIT_MAX_S
-    timeout = min(timeout, float(WAIT_MAX_S))
+    timeout, capped = _bounded(timeout_s, max_s)
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     empty: dict[str, Any] = {
         "item": item,
@@ -293,6 +325,7 @@ def wait(
         "freed_by": [],
         "blocked": [],
         "waited_s": 0,
+        "holders": [],
     }
     if timeout < 0 or poll <= 0:
         return O.failed("wait", "timeout must be >= 0 and poll > 0 seconds", **empty)
@@ -326,10 +359,13 @@ def wait(
             return O.ok("wait", **data)
         if v["status"] == "hopeless":
             return O.nothing("wait", f"Not waiting: {v['why']}", **data)
+        holders = _holders(st, cfg, v["waiting_on"])
+        data["holders"] = holders
+        who = f" Held: {_holders_text(holders)}." if holders else ""
         return O.nothing(
             "wait",
-            f"Still blocked after {round(waited)}s: {v['why']}. `ddflow wait` again to "
-            f"keep waiting.",
+            f"Still blocked after {round(waited)}s: {v['why']}.{who} Try later; `ddflow wait` "
+            f"again to keep waiting.",
             **data,
         )
 
