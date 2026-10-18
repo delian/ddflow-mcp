@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from ...api.lifecycle.sync import sync
 from ..registry import Command, Param, by_tool
 
 
 def _call(repo, a, agent):
-    from ...api.lifecycle.sync import sync
-
     return sync(repo, item=a.get("item") or "", check=bool(a.get("check")), agent=agent)
 
 

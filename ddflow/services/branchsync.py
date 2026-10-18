@@ -14,6 +14,7 @@ from pathlib import Path
 from ..infra import git as G
 from ..infra import worktree as W
 from . import drift as D
+from .pins import pin_files
 
 
 @dataclass
@@ -54,8 +55,6 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
     out = SyncResult(rep.base, "behind", rep.behind, len(rep.relevant))
     if check:
         return out
-    from .pins import pin_files  # deferred: pins imports a long chain
-
     pins = set(pin_files(repo, cfg))
     if W.merging(tree) is not False:
         return _stop(
