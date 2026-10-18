@@ -166,9 +166,12 @@ def _phrases(lines: Iterable[str]) -> set[str]:
                 for n, floor in ((_PHRASE_WORDS, _PHRASE_MIN), (_SHORT_WORDS, _SHORT_MIN)):
                     for i in range(len(words) - n + 1):
                         phrase = " ".join(words[i : i + n])
-                        if len(phrase) >= floor:
-                            out.add(phrase)
-                            out.add(phrase.strip(_EDGE))  # a test quotes it without the comma
+                        for form in (
+                            phrase,
+                            phrase.strip(_EDGE),
+                        ):  # a test quotes it without the comma
+                            if len(form) >= floor:
+                                out.add(form)
     return out
 
 
