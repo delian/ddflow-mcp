@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.standards_wait_s"
+new = "900"
+why = "Seconds the standards gate's roborev run on the combined branch diff waits for the job before reporting it unavailable with the reason."
+impact = "additive"
