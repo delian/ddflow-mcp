@@ -53,7 +53,8 @@ def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
 
 def _window(events, item_id: str, who: str) -> tuple[str, str]:
     """(start, end) of the work: the first claim by ``who`` when they held the item, else the
-    item's first claim, and its completion ("" for the open end). Only the window is widened by
+    item's first claim, and the end of the run: the agent's next claim of another item after the
+    completion, else the open end ("" before completion). Only the window is widened by
     the fallback: ``_filed`` still keeps just the records ``who`` wrote.
     """
     claims = [ev for ev in events if ev.kind == "lease.acquired" and ev.subject == item_id]
@@ -65,7 +66,40 @@ def _window(events, item_id: str, who: str) -> tuple[str, str]:
         (ev.ts for ev in events if ev.kind == "item.completed" and ev.subject == item_id),
         default="",
     )
+    # The run goes on after `complete` (the lesson written last, the follow-up task): it ends
+    # when ``who`` claims another item, not at the completion.
+    if who and mine and end:
+        later = [
+            ev.ts
+            for ev in events
+            if ev.kind == "lease.acquired"
+            and ev.subject != item_id
+            and ev.data.get("holder") == who
+            and ev.ts > end
+        ]
+        end = min(later, default="")
     return start, end
+
+
+#: The records besides bugs and tasks an agent files: event kind -> (noun, State table, title).
+_NOTE_KINDS = {
+    "lesson.recorded": ("lesson", "lessons", lambda r: r.title),
+    "research.recorded": ("research", "research", lambda r: r.claim or r.question),
+    "decision.recorded": ("decision", "decisions", lambda r: r.title),
+}
+
+
+def _note(st: State, ev, item_id: str) -> dict[str, Any] | None:
+    noun, table, title = _NOTE_KINDS[ev.kind]
+    rec = getattr(st, table).get(ev.subject)
+    if rec is None:
+        return None
+    return {
+        "id": rec.id,
+        "kind": noun,
+        "title": (title(rec) or "")[:100],
+        "linked": getattr(rec, "item", "") == item_id or item_id in getattr(rec, "seen_in", []),
+    }
 
 
 def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str, Any]]]:
@@ -82,6 +116,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         )
 
     bugs, tasks = {}, {}
+    notes: list[dict[str, Any]] = []
     for ev in events:
         if ev.kind == "bug.found" and ev.subject in st.bugs:
             if st.bugs[ev.subject].item == item_id or inside(ev):
@@ -93,18 +128,29 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
             and inside(ev)
         ):
             tasks[ev.subject] = st.items[ev.subject]
+        elif ev.kind in _NOTE_KINDS and inside(ev):
+            note = _note(st, ev, item_id)
+            if note:
+                notes.append(note)
     return {
+        "notes": notes,
         "bugs": [
             {
                 "id": b.id,
                 "title": (b.title or b.summary)[:100],
                 "open": b.open,
                 "fix_task": b.fix_task,
+                "linked": b.item == item_id,
             }
             for b in bugs.values()
         ],
         "tasks": [
-            {"id": t.id, "title": t.title[:100], "open": t.state not in ("done", "abandoned")}
+            {
+                "id": t.id,
+                "title": t.title[:100],
+                "open": t.state not in ("done", "abandoned"),
+                "linked": False,  # `task add` has no --item: the window is the only link
+            }
             for t in tasks.values()
         ],
     }
