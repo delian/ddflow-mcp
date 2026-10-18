@@ -48,11 +48,30 @@ class Excluded:
         }
 
 
-def patterns(cfg: Any, repo: Path) -> tuple[list[str], list[str]]:
-    """(globs, pinned paths): the configured globs, and (when `[review].exclude_pin_files`)
-    the exact repo-relative files and directories `pins.toml` owns."""
-    pinned = pins.pin_files(repo, cfg) if cfg.review.exclude_pin_files else []
-    return list(cfg.review.exclude_globs or []), pinned
+TAG = "review-exclude:"
+NONE = "none"
+
+
+def patterns(
+    cfg: Any,
+    repo: Path,
+    tags: list[str] | None = None,
+    exclude: str = "",
+    include_pinned: bool = False,
+) -> tuple[list[str], list[str]]:
+    """(globs, pinned paths) for one review. The globs come from, in order: this run's
+    ``exclude`` (comma-separated; ``none`` leaves out nothing), the item's
+    ``review-exclude:<glob>`` tags, else `[review].exclude_globs`. The pinned paths are
+    the files `pins.toml` owns, unless `[review].exclude_pin_files` is off or this run
+    asked for ``include_pinned``."""
+    pinned = []
+    if cfg.review.exclude_pin_files and not include_pinned:
+        pinned = pins.pin_files(repo, cfg)
+    if exclude.strip():
+        given = [g.strip() for g in exclude.split(",") if g.strip()]
+        return ([] if given == [NONE] else given), pinned
+    tagged = [t[len(TAG) :] for t in tags or [] if t.startswith(TAG) and t[len(TAG) :]]
+    return (tagged or list(cfg.review.exclude_globs or [])), pinned
 
 
 def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
@@ -84,12 +103,12 @@ def filter_diff(
     return "".join(kept), gone
 
 
-def apply(diff, cfg, repo, say, evidence):
+def apply(diff, cfg, repo, say, evidence, tags=None, exclude="", include_pinned=False):
     """(diff, evidence, gone): the diff reviewers get, the evidence with what was left out,
     and the exclusions; one line says so when anything was."""
     if not diff.strip():
         return diff, evidence, Excluded()
-    kept, gone = filter_diff(diff, *patterns(cfg, repo))
+    kept, gone = filter_diff(diff, *patterns(cfg, repo, tags, exclude, include_pinned))
     if gone.files:
         say(gone.line())
         evidence = {**(evidence or {}), **gone.evidence()}
