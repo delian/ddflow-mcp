@@ -224,7 +224,7 @@ def test_extending_type_refuses_bad_tables_and_duplicate_sections():
             S.resolve([base, ("project", [("c.toml", text)])])
 
 
-@pytest.mark.parametrize("bad", ["section = 5", "section = true", "review = 1"])
+@pytest.mark.parametrize("bad", ["section = 5", "section = true", "review = 1", "validate = 1"])
 def test_wrong_shaped_tables_are_file_errors_in_every_layer(bad):
     base = ("shipped", [("adr.toml", ADR)])
     text = '[doctype]\nname = "c"\nextends = "adr"\n' + bad + "\n"

@@ -290,8 +290,6 @@ def _merge(parent: dict[str, Any], child: dict[str, Any], src: _Src) -> dict[str
     }
     for k in ("validate", "review"):
         if k in child:
-            if not isinstance(child[k], dict):
-                raise src.err(f"{k} must be a table", k)
             out[k] = {**parent.get(k, {}), **child[k]}
     secs = {
         s["id"]: dict(s) for s in parent.get("section", []) if isinstance(s, dict) and "id" in s
