@@ -14,6 +14,13 @@ from ..tools._common import _all_tools, _api
 
 _COVERED = "covered by {}, whose action argument selects it"
 
+#: What each read-only `ddflow_hooks` harness action answers with (the others: the hook facts).
+_HARNESS_PAYLOAD = {
+    "harness_list": ("harnesses",),
+    "harness_show": ("id", "levels", "features"),
+    "harness_doctor": ("findings",),
+}
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
@@ -271,10 +278,8 @@ COMMANDS: tuple[Command, ...] = (
         # body. `session_hook` was ADDED deliberately with the SessionStart hook -- a
         # wire change of its own, not part of the migration this comment once guarded
         # -- and is `null` when the settings file could not be read.
-        payload=lambda a: (
-            ("harnesses", "id", "levels", "features", "findings")
-            if str(a.get("action", "")).startswith("harness_")
-            else ("installed", "policy", "session_hook", "trailer_hook")
+        payload=lambda a: _HARNESS_PAYLOAD.get(
+            str(a.get("action", "")), ("installed", "policy", "session_hook", "trailer_hook")
         ),
     ),
     Command(

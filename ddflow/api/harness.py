@@ -16,6 +16,7 @@ reported as ``nv``, never as an absence (see ``harnessreg``).
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -110,15 +111,23 @@ def harness_show(repo: Path, which: str) -> O.Outcome:
     return O.ok("harness_show", id=h.id, levels=lv, features=feats, message="\n".join(lines))
 
 
-def mcp_registered(repo: Path, h: Harness) -> bool:
-    """Is a ``ddflow`` server in the agent's project MCP file? Read in the shape it was written."""
+def mcp_registered(repo: Path, h: Harness) -> bool | None:
+    """Is a ``ddflow`` server in the agent's project MCP file? None when the file exists and
+    cannot be read: unknown is not absent."""
     path = Path(repo) / h.mcp.path
     if not path.is_file():
         return False
     if h.mcp.shape == SHAPE_TOML:
-        return "ddflow" in path.read_text(encoding="utf-8", errors="replace")
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            return None
+        servers = data.get("mcp_servers")
+        return isinstance(servers, dict) and "ddflow" in servers
     data = read_json(path)
-    return not isinstance(data, Unreadable) and "ddflow" in get_servers(data, h.mcp.shape)
+    if isinstance(data, Unreadable):
+        return None
+    return "ddflow" in get_servers(data, h.mcp.shape)
 
 
 def _hook_findings(repo: Path, h: Harness) -> list[dict[str, str]]:
@@ -157,7 +166,10 @@ def _finding(hid: str, area: str, what: str, remedy: str) -> dict[str, str]:
 
 def _findings(repo: Path, h: Harness) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
-    if h.mcp.path and not mcp_registered(repo, h):
+    registered = mcp_registered(repo, h) if h.mcp.path else True
+    if registered is None:
+        out.append(_finding(h.id, "mcp", f"{h.mcp.path} cannot be read", ""))
+    elif not registered:
         out.append(
             _finding(
                 h.id,
