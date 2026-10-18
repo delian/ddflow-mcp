@@ -18,6 +18,14 @@ from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
 
+#: A title in the report is cut to this many characters.
+TITLE_CAP = 100
+
+
+def _title(*texts: str | None) -> str:
+    """The first non-empty of ``texts``, cut to `TITLE_CAP`: one cut for every record kind."""
+    return next((t for t in texts if t), "")[:TITLE_CAP]
+
 
 def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
     """The bugs this item fixed, with their regression tests and what `complete`/`bug fixed`
@@ -39,7 +47,7 @@ def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
         rows.append(
             {
                 "bug": bid,
-                "summary": ((bug.title or bug.summary)[:120] if bug else ""),
+                "summary": (_title(bug.title, bug.summary) if bug else ""),
                 "tests": list(
                     data.get("regression_tests") or (bug.regression_tests if bug else [])
                 ),
@@ -97,7 +105,7 @@ def _note(st: State, ev, item_id: str) -> dict[str, Any] | None:
     return {
         "id": rec.id,
         "kind": noun,
-        "title": (title(rec) or "")[:100],
+        "title": _title(title(rec)),
         "linked": getattr(rec, "item", "") == item_id or item_id in getattr(rec, "seen_in", []),
     }
 
@@ -137,7 +145,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         "bugs": [
             {
                 "id": b.id,
-                "title": (b.title or b.summary)[:100],
+                "title": _title(b.title, b.summary),
                 "open": b.open,
                 "fix_task": b.fix_task,
                 "linked": b.item == item_id,
@@ -147,7 +155,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         "tasks": [
             {
                 "id": t.id,
-                "title": t.title[:100],
+                "title": _title(t.title),
                 "open": t.state not in ("done", "abandoned"),
                 "linked": False,  # `task add` has no --item: the window is the only link
             }
