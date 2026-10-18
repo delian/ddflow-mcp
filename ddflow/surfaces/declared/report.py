@@ -20,7 +20,11 @@ COMMANDS: tuple[Command, ...] = (
             "tools/list is at its byte budget: over MCP the same report is ddflow_show with report=true"
         ),
         call=lambda repo, a, agent: _api().item_report(
-            repo, item=a["item"], by_agent=a.get("by_agent") or "", agent=agent
+            repo,
+            item=a["item"],
+            by_agent=a.get("by_agent") or "",
+            agent=agent,
+            brief=bool(a.get("brief")),
         ),
         payload=(
             "item",
@@ -42,6 +46,13 @@ COMMANDS: tuple[Command, ...] = (
                 help="",
                 cli_help="count as filed by this agent only (default: the agent that completed it)",
                 default="",
+            ),
+            Param(
+                "brief",
+                type="boolean",
+                help="",
+                cli_help="the 8-line form: landing sha, regression test, forced or skipped gates, filed ids, follow-ups, not done",
+                default=False,
             ),
         ),
     ),
