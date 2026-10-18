@@ -128,12 +128,19 @@ def cmd_review(a, c: Ctx) -> int:
         return FAIL
     if ids[:1] == ["show"]:
         return _show_verb(a, c, ids)
+    gate = a.gate or ""
+    if len(ids) == 2:  # `review <id> <gate>`, as every other gate command spells it
+        if gate and gate != ids[1]:
+            print(f"the gate is given twice: {ids[1]!r} and --gate {gate!r}", file=sys.stderr)
+            return FAIL
+        ids, gate = ids[:1], ids[1]
     if len(ids) > 1:
-        print(f"review takes one item id; got {ids}", file=sys.stderr)
+        print(f"review takes one item id (and an optional gate); got {ids}", file=sys.stderr)
         return FAIL
+    a.gate = gate  # _report_refusal names it
     out = A.review(
         c.repo,
-        gate=a.gate or "critic",
+        gate=gate or "critic",
         item=ids[0] if ids else "",
         intent=a.intent or "",
         context=a.context or "",

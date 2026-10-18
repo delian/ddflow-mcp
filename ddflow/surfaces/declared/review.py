@@ -15,7 +15,7 @@ from ..tools._common import _api
 
 _REVIEW_EPILOG = (
     "two commands share this parser:\n"
-    "  ddflow review <id> --gate G [--chunk N | --delta]   run the reviewer(s) (slow, shared);\n"
+    "  ddflow review <id> [G | --gate G] [--chunk N | --delta]   run the reviewer(s) (slow, shared);\n"
     "                  a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage\n"
     "  ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...\n"
     "                                            record what became of one finding\n"

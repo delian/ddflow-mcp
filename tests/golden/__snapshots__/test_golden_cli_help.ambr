@@ -1934,7 +1934,7 @@
     --probe PROBE      triage: the evidence for the verdict
   
   two commands share this parser:
-    ddflow review <id> --gate G [--chunk N | --delta]   run the reviewer(s) (slow, shared);
+    ddflow review <id> [G | --gate G] [--chunk N | --delta]   run the reviewer(s) (slow, shared);
                     a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage
     ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...
                                               record what became of one finding
