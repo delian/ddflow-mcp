@@ -2626,7 +2626,7 @@
   "schema": "sync@1",
   "shape": "object",
   "payload": [
-   "id",
+   "item",
    "base",
    "status",
    "behind",
@@ -2645,7 +2645,7 @@
     "schema": {
      "const": "sync@1"
     },
-    "id": {},
+    "item": {},
     "base": {},
     "status": {},
     "behind": {},
