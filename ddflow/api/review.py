@@ -14,6 +14,7 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import secrets
@@ -262,13 +263,56 @@ def _finding_listing(it, gate: str) -> str:
 
 _NODE = re.compile(r"([\w./-]+\.py)::([\w:.\[\]-]+)")
 _PY_PATH = re.compile(r"[\w./-]+\.py\b(?:::[\w:.\[\]-]+)?")
+_RUN_ARG = re.compile(r"(?:-k\s+|\./|make\s+)\S+")  # an expression or script run, not a test name
 _BARE_TEST = re.compile(r"\btest_\w+")
 
 
-def _defines(text: str, name: str) -> bool:
+def _defines(text: str, parts: list[str]) -> bool:
+    """Whether ``parts`` (`Class`, `method`, ...) resolve as nested definitions in ``text``.
+    A class with bases may inherit a name it does not define, which is not resolved here: a
+    missing part under such a class is given the benefit of the doubt."""
+    try:
+        body = ast.parse(text).body
+    except SyntaxError:
+        return all(re.search(rf"\b{re.escape(x)}\b", text) for x in parts)
+    for part in parts:
+        hit = next(
+            (
+                n
+                for n in body
+                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+                and n.name == part
+            ),
+            None,
+        )
+        if hit is None:
+            return False
+        body = hit.body if isinstance(hit, ast.ClassDef) else []
+        if not body and part != parts[-1]:
+            return False
+    return True
+
+
+def _defined_anywhere(text: str, name: str) -> bool:
     return (
         re.search(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b", text, re.M) is not None
     )
+
+
+def _inherits(text: str, parts: list[str]) -> bool:
+    """The class holding the last part has bases the file does not resolve (it may inherit)."""
+    try:
+        body = ast.parse(text).body
+    except SyntaxError:
+        return False
+    for part in parts[:-1]:
+        hit = next((n for n in body if isinstance(n, ast.ClassDef) and n.name == part), None)
+        if hit is None:
+            return False
+        if hit.bases and part == parts[-2]:
+            return True
+        body = hit.body
+    return False
 
 
 def probe_problem(roots: list[Path], probe: str) -> str:
@@ -285,10 +329,10 @@ def probe_problem(roots: list[Path], probe: str) -> str:
         if not files:
             return f"probe names {path}::{node}, but {path} does not exist"
         text = files[0].read_text(errors="replace")
-        for part in (x for x in re.sub(r"\[.*", "", node).split("::") if x):
-            if not _defines(text, part):
-                return f"probe names {path}::{node}, but {path} defines no {part!r}"
-    prose = _PY_PATH.sub(" ", probe)  # a file's own name is not a test name
+        parts = [x for x in re.sub(r"\[.*", "", node).split("::") if x]
+        if not _defines(text, parts) and not _inherits(text, parts):
+            return f"probe names {path}::{node}, but {path} does not define it"
+    prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
     bare = {m for m in _BARE_TEST.findall(prose) if m not in covered}
     if bare:
         texts = [
@@ -297,7 +341,7 @@ def probe_problem(roots: list[Path], probe: str) -> str:
             for f in sorted((r / "tests").rglob("*.py"))
         ]
         for name in sorted(bare):
-            if not any(_defines(t, name) for t in texts):
+            if not any(_defined_anywhere(t, name) for t in texts):
                 return f"probe names test {name!r}, but no file under tests/ defines it"
     return ""
 
