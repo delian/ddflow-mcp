@@ -1,9 +1,10 @@
 """Claim preflight guards: every reason a claim is refused before it asks for the lease.
 
-A guard is a function ``(ClaimContext) -> Outcome | None`` registered under a name with an
-``order``; `first_refusal` runs them in ``(order, name)`` order and returns the first refusal
-(an `Outcome` is falsy when refused, so a result is compared to None, never chained with
-``or``). A feature adds its refusal as a new ``claim_guard_<name>.py`` in `ddflow/api/lifecycle/` that
+A guard is a function ``(ClaimContext) -> Outcome | Note | None`` registered under a name
+with an ``order``. `run` calls them in ``(order, name)`` order: the first refused `Outcome`
+stops the claim (an `Outcome` is falsy when refused, so a result is compared to None, never
+chained with ``or``); a `Note` is collected and the guards after it still run, to be added to
+the claim's answer (guidance, a suggestion). A feature adds its refusal as a new ``claim_guard_<name>.py`` in `ddflow/api/lifecycle/` that
 calls `register` at import: `claim.py` is not edited, and no two features touch one line.
 Built-ins sit at orders 10, 20, 30; leave gaps.
 
@@ -14,7 +15,7 @@ refusal already makes (`_join_line`). A guard that cannot decide returns None.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,19 @@ class ClaimContext:
         return self.force or self.held_before
 
 
-Check = Callable[[ClaimContext], "O.Outcome | None"]
+@dataclass(frozen=True)
+class Note:
+    """Something a guard wants said about a claim that goes ahead (not a refusal)."""
+
+    guard: str
+    text: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"guard": self.guard, "text": self.text, **self.data}
+
+
+Check = Callable[[ClaimContext], "O.Outcome | Note | None"]
 
 
 @dataclass(frozen=True)
@@ -64,14 +77,14 @@ GUARDS: Registry[Guard] = Registry(
 )
 
 
-def register(name: str, order: int = 50) -> Callable[[Check], Check]:
-    """Decorator: register ``check`` as claim guard ``name`` at ``order``."""
+def register(name: str, fn: Check | None = None, order: int = 50) -> Any:
+    """Register ``fn`` as claim guard ``name`` at ``order``; with no ``fn``, a decorator."""
 
-    def deco(check: Check) -> Check:
+    def add(check: Check) -> Check:
         GUARDS.register(Guard(name, check, order, (check.__doc__ or "").strip()))
         return check
 
-    return deco
+    return add if fn is None else add(fn)
 
 
 def ordered() -> list[Guard]:
@@ -79,10 +92,13 @@ def ordered() -> list[Guard]:
     return sorted(GUARDS.values_list(), key=lambda g: (g.order, g.name))
 
 
-def first_refusal(ctx: ClaimContext) -> O.Outcome | None:
-    """The first guard's refusal, or None when every guard lets the claim through."""
+def run(ctx: ClaimContext) -> tuple[O.Outcome | None, list[Note]]:
+    """``(the first refusal or None, the notes of the guards that ran before it)``."""
+    notes: list[Note] = []
     for guard in ordered():
-        refused = guard.check(ctx)
-        if refused is not None:
-            return refused
-    return None
+        result = guard.check(ctx)
+        if isinstance(result, Note):
+            notes.append(result)
+        elif result is not None:
+            return result, notes
+    return None, notes

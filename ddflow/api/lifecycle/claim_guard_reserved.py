@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from ...core import outcome as O
-from ...services.claim_guards import ClaimContext, register
+from ...services.claimguards import ClaimContext, register
 from .claim_line import _join_line
 from .reservations import _reserved_for, _reserved_msg
 
@@ -35,4 +35,4 @@ def _refuse_if_reserved(ctx: ClaimContext) -> O.Outcome | None:
     )
 
 
-register("reserved", order=30)(_refuse_if_reserved)
+register("reserved", _refuse_if_reserved, order=30)

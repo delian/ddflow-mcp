@@ -15,7 +15,7 @@ from ...core.model import ABANDONED, DONE, REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import choices as CHO
-from ...services import claim_guards as GD
+from ...services import claimguards as GD
 from ...services import flow as FS
 from ...services import leases as L
 from ...services import pins_merge as PM
@@ -240,13 +240,11 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
-    early = _early_refusal(
+    early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
     if early is not None:
-        if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
-            _record_waiting(log, cfg, item, want, queue)
-        return early
+        return _refused_early(log, cfg, item, want, queue, early)
     broke: list = []
     lz = _acquire(
         repo,
@@ -282,7 +280,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
-    return out
+    return _with_notes(out, notes)
 
 
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
@@ -501,13 +499,27 @@ def _new_report_count(st, item: str) -> int:
     return new_reports(st, item, it.lease.acquired_at)["count"]
 
 
+def _refused_early(log, cfg, item: str, want, queue: bool, early: O.Outcome) -> O.Outcome:
+    """A guard's refusal; in line behind a waiter is a wait too."""
+    if early.data.get("queued_behind"):
+        _record_waiting(log, cfg, item, want, queue)
+    return early
+
+
+def _with_notes(out: O.Outcome, notes: list) -> O.Outcome:
+    """What claim guards want said about a claim that went ahead, on its answer."""
+    if notes:
+        out.data["claim_notes"] = [n.as_dict() for n in notes]
+    return out
+
+
 def _early_refusal(
     repo: Path, cfg, events, st, item: str, want, me: str, *, force: bool, held_before: bool
-) -> O.Outcome | None:
-    """A claim turned away before it asks for the lease: the first claim guard that refuses
-    (`claim_guards`: looping, queued behind a waiter, files reserved for one in line, and
+) -> tuple[O.Outcome | None, list]:
+    """``(refusal, notes)``: a claim turned away before it asks for the lease: the first claim guard that refuses
+    (`services/claimguards`: looping, queued behind a waiter, files reserved for one in line, and
     whatever a feature registers in its own `claim_guard_*.py`)."""
-    return GD.first_refusal(
+    return GD.run(
         GD.ClaimContext(repo, cfg, events, st, item, want, me, force=force, held_before=held_before)
     )
 
