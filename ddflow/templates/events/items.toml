@@ -1,0 +1,25 @@
+# Event kinds owned by items (core/handlers/items.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "item.abandoned"
+doc = "A task or phase was given up."
+
+[[kind]]
+name = "item.blocked"
+doc = "An item was blocked, with the reason."
+
+[[kind]]
+name = "item.completed"
+doc = "An item was completed."
+
+[[kind]]
+name = "item.reopened"
+doc = "A completed item was reopened."
+
+[[kind]]
+name = "item.started"
+doc = "An item was started."
+
+[[kind]]
+name = "item.unblocked"
+doc = "A blocked item was unblocked."
