@@ -267,28 +267,59 @@ _RUN_ARG = re.compile(r"(?:-k\s+|\./|make\s+)\S+")  # an expression or script ru
 _BARE_TEST = re.compile(r"\btest_\w+")
 
 
-def _defines(text: str, parts: list[str]) -> bool:
-    """Whether ``parts`` (`Class`, `method`, ...) resolve as nested definitions in ``text``.
-    A class with bases may inherit a name it does not define, which is not resolved here: a
-    missing part under such a class is given the benefit of the doubt."""
+_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _classes(roots: list[Path]) -> dict[str, list[ast.ClassDef]]:
+    """Every class defined under the roots' `tests/`, by name -- where a base is looked up."""
+    found: dict[str, list[ast.ClassDef]] = {}
+    for r in roots:
+        for f in sorted((r / "tests").rglob("*.py")):
+            try:
+                tree = ast.parse(f.read_text(errors="replace"))
+            except (SyntaxError, OSError):
+                continue
+            for n in ast.walk(tree):
+                if isinstance(n, ast.ClassDef):
+                    found.setdefault(n.name, []).append(n)
+    return found
+
+
+def _member(
+    cls: ast.ClassDef, name: str, known: dict[str, list[ast.ClassDef]], seen: set[int]
+) -> ast.AST | None:
+    """``name`` defined in ``cls`` or in a base class found under tests/ (a base that is not,
+    such as `unittest.TestCase`, contributes no test)."""
+    if id(cls) in seen:
+        return None
+    seen.add(id(cls))
+    hit = next((n for n in cls.body if isinstance(n, _DEFS) and n.name == name), None)
+    if hit is not None:
+        return hit
+    for base in cls.bases:
+        bname = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+        for b in known.get(bname, []):
+            if (hit := _member(b, name, known, seen)) is not None:
+                return hit
+    return None
+
+
+def _defines(text: str, parts: list[str], known: dict[str, list[ast.ClassDef]]) -> bool:
+    """Whether ``parts`` (`Class`, `method`, ...) resolve as nested definitions in ``text``,
+    methods inherited from a base class under tests/ included."""
     try:
-        body = ast.parse(text).body
+        body: list[ast.stmt] = ast.parse(text).body
     except SyntaxError:
         return all(re.search(rf"\b{re.escape(x)}\b", text) for x in parts)
-    for part in parts:
-        hit = next(
-            (
-                n
-                for n in body
-                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
-                and n.name == part
-            ),
-            None,
-        )
-        if hit is None:
+    node: ast.AST | None = None
+    for k, part in enumerate(parts):
+        if k == 0:
+            node = next((n for n in body if isinstance(n, _DEFS) and n.name == part), None)
+        elif isinstance(node, ast.ClassDef):
+            node = _member(node, part, known, set())
+        else:
             return False
-        body = hit.body if isinstance(hit, ast.ClassDef) else []
-        if not body and part != parts[-1]:
+        if node is None:
             return False
     return True
 
@@ -299,22 +330,6 @@ def _defined_anywhere(text: str, name: str) -> bool:
     )
 
 
-def _inherits(text: str, parts: list[str]) -> bool:
-    """The class holding the last part has bases the file does not resolve (it may inherit)."""
-    try:
-        body = ast.parse(text).body
-    except SyntaxError:
-        return False
-    for part in parts[:-1]:
-        hit = next((n for n in body if isinstance(n, ast.ClassDef) and n.name == part), None)
-        if hit is None:
-            return False
-        if hit.bases and part == parts[-2]:
-            return True
-        body = hit.body
-    return False
-
-
 def probe_problem(roots: list[Path], probe: str) -> str:
     """Why a triage probe names a test that does not exist, or "" (bug Bb049f0ae06).
 
@@ -323,6 +338,7 @@ def probe_problem(roots: list[Path], probe: str) -> str:
     existing file defining each part, and a bare `test_name` must be defined somewhere under
     `tests/`. A node that resolves nowhere was never run, so the verdict rests on nothing."""
     covered: set[str] = set()
+    known = _classes(roots)
     for path, node in _NODE.findall(probe):
         covered.update(re.split(r"::", re.sub(r"\[.*", "", node)))
         files = [r / path for r in roots if (r / path).is_file()]
@@ -330,7 +346,7 @@ def probe_problem(roots: list[Path], probe: str) -> str:
             return f"probe names {path}::{node}, but {path} does not exist"
         text = files[0].read_text(errors="replace")
         parts = [x for x in re.sub(r"\[.*", "", node).split("::") if x]
-        if not _defines(text, parts) and not _inherits(text, parts):
+        if not _defines(text, parts, known):
             return f"probe names {path}::{node}, but {path} does not define it"
     prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
     bare = {m for m in _BARE_TEST.findall(prose) if m not in covered}

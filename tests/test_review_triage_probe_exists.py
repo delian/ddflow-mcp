@@ -20,12 +20,15 @@ def test_a_confirmed_probe_naming_a_missing_test_node_is_refused(repo, tmp_path)
     _full_review(repo)
     (repo / "tests").mkdir()
     (repo / "tests" / "test_real.py").write_text(
-        "class TestA:\n    def test_real(self):\n        pass\n\nclass TestB:\n    pass\n"
+        "import unittest\n\nclass TestA:\n    def test_real(self):\n        pass\n\n"
+        "class TestB:\n    pass\n\nclass TestC(unittest.TestCase):\n    pass\n"
     )
     for probe in (
         "tests/test_real.py::test_no_such_test_exists",
         "tests/test_nowhere_at_all.py::test_x",
         "tests/test_real.py::TestB::test_real",
+        "tests/test_real.py::TestC::test_real",
+        "tests/test_real.py::TestA::test_from_nowhere",
         "test_no_such_test_exists passes",
     ):
         out = _triage(repo, 1, "confirmed", probe)
@@ -46,7 +49,10 @@ def test_a_probe_naming_an_existing_test_or_plain_command_is_accepted(repo, tmp_
         "class TestA:\n    def test_real(self):\n        pass\n"
     )
     (repo / "tests" / "test_other_module.py").write_text(
-        "from base import Base\n\ndef test_fn():\n    pass\n\nclass TestKid(Base):\n    pass\n"
+        "from tests.base_mod import Base\n\ndef test_fn():\n    pass\n\nclass TestKid(Base):\n    pass\n"
+    )
+    (repo / "tests" / "base_mod.py").write_text(
+        "class Base:\n    def test_from_base(self):\n        pass\n"
     )
     for probe in (
         "pytest tests/test_other_module.py::test_fn",
