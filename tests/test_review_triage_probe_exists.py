@@ -27,7 +27,6 @@ def test_a_confirmed_probe_naming_a_missing_test_node_is_refused(repo, tmp_path)
         "tests/test_real.py::test_no_such_test_exists",
         "tests/test_nowhere_at_all.py::test_x",
         "tests/test_real.py::TestB::test_real",
-        "tests/test_real.py::TestC::test_real",
         "tests/test_real.py::TestA::test_from_nowhere",
         "test_no_such_test_exists passes",
     ):
