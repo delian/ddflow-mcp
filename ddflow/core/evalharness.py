@@ -101,6 +101,7 @@ def report(
     for wf, rows in sorted(by.items()):
         row: dict[str, Any] = {
             "fixtures": len(rows),
+            "planted_fixtures": sum(1 for s in rows if s.planted),
             "planted": sum(s.planted for s in rows),
             "missed": sum(len(s.missed) for s in rows),
             "miss_rate": miss_rate(rows),
@@ -120,11 +121,9 @@ def enable_by_default(
     min_fixtures: int,
 ) -> tuple[bool, str]:
     """May a workflow be enabled by default, given its `report` row? ``(ok, reason)``."""
-    if not row or row["fixtures"] < min_fixtures:
-        return (
-            False,
-            f"needs at least {min_fixtures} planted-fault fixture(s); has {row['fixtures'] if row else 0}",
-        )
+    have = row["planted_fixtures"] if row else 0
+    if have < min_fixtures:
+        return False, f"needs at least {min_fixtures} planted-fault fixture(s); has {have}"
     rate = row["miss_rate"]
     if rate is None:
         return False, "no fault is planted in its fixtures, so nothing was measured"

@@ -52,3 +52,13 @@ def test_report_and_enable_gate():
 def test_fixture_kind_is_a_record_kind():
     kind = R.KINDS["evalfixture"]
     assert kind.field("planted").type == "array" and kind.field("workflow").required
+
+
+def test_clean_fixtures_do_not_count_toward_the_minimum():
+    clean = {"id": "C", "workflow": "wf", "planted": []}
+    rows = E.report(
+        [E.score(FIX, ["injection", "lock"]), E.score(clean, []), E.score(clean, [])],
+        **{**K, "min_fixtures": 3},
+    )
+    assert rows["wf"]["fixtures"] == 3 and rows["wf"]["planted_fixtures"] == 1
+    assert not rows["wf"]["enabled"] and "has 1" in rows["wf"]["why"]
