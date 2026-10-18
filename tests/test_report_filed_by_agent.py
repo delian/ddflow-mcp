@@ -27,12 +27,14 @@ def _run(repo):
     run_cli(repo, "task", "add", "DX-side", "--title", "A side task", "--new")
     run_cli(repo, "bug", "found", "--id", "BSIDE", "--summary", "a side bug")
     run_cli(repo, "lesson", "add", "--id", "LSIDE", "--title", "A side lesson", "--new")
-    run_cli(
+    code, out, err = run_cli(
         repo,
         "research",
         "add",
         "--id",
         "RSIDE",
+        "--question",
+        "q?",
         "--claim",
         "a side claim",
         "--verdict",
@@ -45,6 +47,8 @@ def _run(repo):
         "add",
         "--id",
         "RLINK",
+        "--question",
+        "q?",
         "--claim",
         "linked claim",
         "--verdict",
@@ -53,6 +57,7 @@ def _run(repo):
         "T1",
         "--new",
     )
+    assert code == 0, out + err
     (tree / "a.py").write_text("a = 1\n")
     _git(tree, "add", "a.py")
     _git(tree, "commit", "-qm", "widen")
