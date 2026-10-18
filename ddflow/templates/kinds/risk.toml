@@ -1,0 +1,63 @@
+# A risk: something that may go wrong, how likely and how bad.
+name = "risk"
+summary = "a risk: something that may go wrong, how likely and how bad"
+text = ["description", "mitigation", "tags"]
+columns = ["title", "state", "likelihood", "impact"]
+filters = ["state", "tags"]
+render = "{id} [{state}] {title} (likelihood {likelihood}, impact {impact})"
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "open"
+[lifecycle.transitions]
+open = ["mitigated", "accepted", "occurred"]
+mitigated = ["open", "closed"]
+accepted = ["open", "closed"]
+occurred = ["closed"]
+[[link]]
+field = "owner"
+to = "stakeholder"
+[[link]]
+field = "assumptions"
+to = "assumption"
+many = true
+[[validator]]
+field = "likelihood"
+min = 1
+max = 5
+[[validator]]
+field = "impact"
+min = 1
+max = 5
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "description"
+default = ""
+[[field]]
+name = "state"
+choices = ["open", "mitigated", "accepted", "occurred", "closed"]
+[[field]]
+name = "likelihood"
+type = "integer"
+default = 3
+help = "1 (rare) to 5 (almost certain)."
+[[field]]
+name = "impact"
+type = "integer"
+default = 3
+help = "1 (minor) to 5 (severe)."
+[[field]]
+name = "mitigation"
+default = ""
+[[field]]
+name = "owner"
+[[field]]
+name = "assumptions"
+type = "array"
+default = []
+[[field]]
+name = "tags"
+type = "array"
+default = []

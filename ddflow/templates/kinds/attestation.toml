@@ -1,0 +1,32 @@
+# An attestation: someone vouches that a claim is true, with evidence.
+name = "attestation"
+summary = "an attestation: someone vouches that a claim holds, citing evidence"
+text = ["claim", "tags"]
+columns = ["title", "attester", "state"]
+filters = ["state", "attester", "tags"]
+sources = ["evidence"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "valid"
+[lifecycle.transitions]
+valid = ["revoked", "expired"]
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "claim"
+default = ""
+[[field]]
+name = "attester"
+required = true
+[[field]]
+name = "state"
+choices = ["valid", "revoked", "expired"]
+[[field]]
+name = "evidence"
+help = "What backs it: a URL, a commit, a document."
+[[field]]
+name = "tags"
+type = "array"
+default = []

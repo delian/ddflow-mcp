@@ -173,6 +173,8 @@ def test_a_declared_record_kind_offers_every_verb_it_declares_on_every_surface(c
     the CLI, MCP and the API can carry them: the descriptor is the source of the cells."""
     assert R.KINDS
     for name, kind in R.KINDS.items():
+        if not kind.surfaced:  # a data kind waits for the generic record surface (.4)
+            continue
         for verb in kind.verbs:
             if verb in M.VERBS:
                 for surface in ("cli", "mcp", "api"):

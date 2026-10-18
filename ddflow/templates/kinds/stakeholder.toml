@@ -1,0 +1,28 @@
+# A stakeholder: a person or group with an interest in the project.
+name = "stakeholder"
+summary = "a stakeholder: a person or group with an interest in the project"
+text = ["role", "interest", "tags"]
+columns = ["title", "role", "influence"]
+filters = ["role", "influence", "tags"]
+stamp = 1
+[[field]]
+name = "title"
+required = true
+help = "Name of the person or group."
+[[field]]
+name = "role"
+default = ""
+[[field]]
+name = "interest"
+default = ""
+[[field]]
+name = "influence"
+choices = ["low", "medium", "high"]
+default = "medium"
+[[field]]
+name = "contact"
+default = ""
+[[field]]
+name = "tags"
+type = "array"
+default = []

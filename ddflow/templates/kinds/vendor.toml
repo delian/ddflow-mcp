@@ -1,0 +1,35 @@
+# A vendor: an outside party the project buys from or depends on.
+name = "vendor"
+summary = "a vendor: an outside party the project buys from or depends on"
+text = ["offering", "notes", "tags"]
+columns = ["title", "offering", "state"]
+filters = ["state", "tags"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "candidate"
+[lifecycle.transitions]
+candidate = ["approved", "rejected"]
+approved = ["suspended", "retired"]
+suspended = ["approved", "retired"]
+[[link]]
+field = "contact"
+to = "stakeholder"
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "offering"
+default = ""
+[[field]]
+name = "state"
+choices = ["candidate", "approved", "suspended", "retired", "rejected"]
+[[field]]
+name = "contact"
+[[field]]
+name = "notes"
+default = ""
+[[field]]
+name = "tags"
+type = "array"
+default = []
