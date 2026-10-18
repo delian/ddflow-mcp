@@ -187,3 +187,24 @@ def test_a_pin_naming_a_directory_is_touched_by_a_path_under_it():
     assert _inside_dir("tests/golden/__snapshots__/", {"tests/golden/__snapshots__/a.ambr"})
     assert not _inside_dir("tests/golden/__snapshots__/", {"tests/golden/b.py"})
     assert not _inside_dir("README.md", {"README.md"})
+
+
+def test_a_failed_abort_is_not_reported_as_an_untouched_branch(repo, monkeypatch):
+    from ddflow.services import branchsync
+
+    wt = _claimed(repo)
+    _land(repo, "src/c.py", "main\n")
+    (wt / "src").mkdir(exist_ok=True)
+    (wt / "src" / "c.py").write_text("branch\n")
+    _git(wt, "add", "src/c.py")
+    _git(wt, "commit", "-qm", "branch c")
+    real = branchsync.W.git
+
+    def git(tree, *a, **k):
+        if a[:2] == ("merge", "--abort"):
+            return branchsync.G.GitResult(1, "", "index.lock exists")
+        return real(tree, *a, **k)
+
+    monkeypatch.setattr(branchsync.W, "git", git)
+    out = sync(repo, item="T1", agent=ME)
+    assert out.data["status"] == "conflict" and "ABORT FAILED" in out.reason

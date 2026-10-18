@@ -81,8 +81,13 @@ def _text(r: BS.SyncResult, d: dict) -> str:
             f"\n  {p}  (last changed on `{r.base}` by {w})" for p, w in r.conflicts.items()
         )
         return (
-            f"merge of `{r.base}` conflicts; aborted, {d['item']}'s branch is as it was. "
-            f"Conflicting files:{lines}"
+            f"merge of `{r.base}` conflicts; "
+            + (
+                f"aborted, {d['item']}'s branch is as it was. "
+                if r.aborted
+                else f"ABORT FAILED, the tree may be mid-merge: {r.detail.splitlines()[-1]} "
+            )
+            + f"Conflicting files:{lines}"
         )
     head = f"{d['item']} is {r.behind} commit(s) behind `{r.base}`; {r.relevant} touch its globs."
     if r.status == "behind":
