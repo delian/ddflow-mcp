@@ -28,6 +28,7 @@ command-hook style.
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, get_type_hints
@@ -342,3 +343,32 @@ def get(agent: str) -> Harness | None:
 
 def ids() -> list[str]:
     return HARNESSES.names()
+
+
+#: Environment variables an older ddflow or another tool already set for a session id; kept
+#: after the descriptors' so nothing that worked stops working (D-compat-r2).
+LEGACY_SESSION_ENV = ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+
+
+def session_env_vars() -> tuple[str, ...]:
+    """Every environment variable that names a session id, in resolution order: ddflow's own,
+    then each descriptor's ``[env] session_id`` (rank order), then the legacy names."""
+    seen: dict[str, None] = {LEGACY_SESSION_ENV[0]: None}
+    for h in load():
+        for var in h.env.session_id if h.env else ():
+            seen.setdefault(var)
+    for var in LEGACY_SESSION_ENV:
+        seen.setdefault(var)
+    return tuple(seen)
+
+
+def detect(environ: Mapping[str, str]) -> str:
+    """The id of the harness whose session variable is set in ``environ``, or "" when none
+    is or two different harnesses claim it (attribution never guesses between them)."""
+    found = {
+        h.id
+        for h in load()
+        for var in (h.env.session_id if h.env else ())
+        if environ.get(var, "").strip()
+    }
+    return found.pop() if len(found) == 1 else ""

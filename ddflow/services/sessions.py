@@ -47,6 +47,7 @@ from ..infra.fsio import replace_text
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 from ..infra.worktree import git
 from ..views.markdown import render_views
+from . import harnessreg as HR
 from .guidance import ruleview as RV
 from .jobs import proc_start
 from .redact_report import redactor
@@ -194,7 +195,7 @@ def resolve(
     literal = os.environ.get("DDFLOW_SESSION_ID", "").strip()
     if literal and literal in live:
         return literal, "harness"
-    for var in ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"):
+    for var in HR.session_env_vars():
         hid = harness_session_id(os.environ.get(var, ""))
         if hid and hid in live:
             return hid, "harness"
@@ -204,7 +205,12 @@ def resolve(
     log.append(
         "session.started",
         sid,
-        {"model": model, "tool": tool, "cwd": str(Path.cwd()), "implicit": True},
+        {
+            "model": model,
+            "tool": tool or HR.detect(os.environ),
+            "cwd": str(Path.cwd()),
+            "implicit": True,
+        },
     )
     return sid, "implicit"
 
