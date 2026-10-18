@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -313,6 +314,7 @@ def abandon(
     *,
     reason: str = "",
     force: bool = False,
+    repoint_to: str = "",
     agent: str = "",
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
@@ -344,6 +346,13 @@ def abandon(
             f"{item} is already done; abandoning it would rewrite finished history. "
             f"--force if you really mean it.",
         )
+    repointed: list[str] = []
+    if repoint_to:
+        moved = _rename().repoint(repo, item, repoint_to, agent=agent)
+        if moved.exit not in (O.OK, O.NOTHING):
+            return moved
+        repointed = [e["id"] for e in moved.data.get("edits", [])]
+        st = fold(log.read_all(), strict=False)
     stranded = stuck_edges_to(st, item)
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     if it.lease:
@@ -355,9 +364,15 @@ def abandon(
             "reason": reason,
             "stranded": [i for i, _ in stranded],
             "drop_edges": [c for _, c in stranded],
+            "repointed": repointed,
             **_dispose(repo, cfg, log, item, (called_from, shell_cwd)),
         },
     )
+
+
+def _rename():
+    """`api/rename.py`, loaded at call time (it imports the batch engine)."""
+    return importlib.import_module("ddflow.api.rename")
 
 
 def _dispose(repo: Path, cfg, log, item: str, callers) -> dict[str, Any]:

@@ -1,15 +1,17 @@
 # serializer version: 1
 # name: test_help[ddflow abandon]
   '''
-  usage: ddflow abandon [-h] --reason REASON [--force] id
+  usage: ddflow abandon [-h] --reason REASON [--force] [--repoint-to REPOINT_TO] id
   
   positional arguments:
     id
   
   options:
-    -h, --help       show this help message and exit
+    -h, --help            show this help message and exit
     --reason REASON
     --force
+    --repoint-to REPOINT_TO
+                          re-point the items that need this one to need ID instead
   
   '''
 # ---
@@ -1908,6 +1910,22 @@
   
   '''
 # ---
+# name: test_help[ddflow rename]
+  '''
+  usage: ddflow rename [-h] [--parent PARENT] [--reason REASON] [--dry-run] old new
+  
+  positional arguments:
+    old
+    new
+  
+  options:
+    -h, --help       show this help message and exit
+    --parent PARENT
+    --reason REASON
+    --dry-run        plan and show what would change; record nothing
+  
+  '''
+# ---
 # name: test_help[ddflow render]
   '''
   usage: ddflow render [-h] [--out OUT] [--show SHOW]
@@ -2825,13 +2843,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list,sync} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list,sync} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list,sync}
+    {init,phase,task,split,resolve,update,batch,rename,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list,sync}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2840,6 +2858,7 @@
                           record
       update              change an item's fields
       batch               apply many item edits in one all-or-nothing transaction
+      rename              move an item to a new id (and phase), re-pointing every needs edge
       chore               commit or approve chore files (no reviewer)
       plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
@@ -3083,6 +3102,7 @@
     'ddflow recover',
     'ddflow release',
     'ddflow remove',
+    'ddflow rename',
     'ddflow render',
     'ddflow replay',
     'ddflow report',
