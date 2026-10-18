@@ -261,6 +261,7 @@ def _finding_listing(it, gate: str) -> str:
 
 
 _NODE = re.compile(r"([\w./-]+\.py)::([\w:.\[\]-]+)")
+_PY_PATH = re.compile(r"[\w./-]+\.py\b(?:::[\w:.\[\]-]+)?")
 _BARE_TEST = re.compile(r"\btest_\w+")
 
 
@@ -287,7 +288,8 @@ def probe_problem(roots: list[Path], probe: str) -> str:
         for part in (x for x in re.sub(r"\[.*", "", node).split("::") if x):
             if not _defines(text, part):
                 return f"probe names {path}::{node}, but {path} defines no {part!r}"
-    bare = {m for m in _BARE_TEST.findall(probe) if m not in covered}
+    prose = _PY_PATH.sub(" ", probe)  # a file's own name is not a test name
+    bare = {m for m in _BARE_TEST.findall(prose) if m not in covered}
     if bare:
         texts = [
             f.read_text(errors="replace")
