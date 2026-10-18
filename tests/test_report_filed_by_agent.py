@@ -80,4 +80,31 @@ def test_everything_the_agent_filed_in_the_run_is_listed_and_marked_unlinked(rep
     out = run_cli(repo, "report", "T1")[1].split("## Filed during the item")[1].split("##")[0]
     assert "DX-side (task, open, not linked to the item)" in out
     assert "LSIDE (lesson, not linked to the item): A side lesson" in out
-    assert "RLINK (research):" in out
+    assert out.count("RLINK (research):") == 1
+    assert [n["id"] for n in data["notes"]].count("RLINK") == 1
+
+
+def test_a_record_linked_by_item_is_listed_even_outside_the_window(repo):
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "Widen the widget", "--globs", "a.py")
+    code, out, err = run_cli(
+        repo,
+        "research",
+        "add",
+        "--id",
+        "RBEFORE",
+        "--question",
+        "q?",
+        "--claim",
+        "early",
+        "--verdict",
+        "THEORETICAL",
+        "--item",
+        "T1",
+        "--new",
+    )
+    assert code == 0, out + err
+    data = json.loads(run_cli(repo, "--json", "report", "T1")[1])["filed"]
+    assert [n["id"] for n in data["notes"]] == ["RBEFORE"]

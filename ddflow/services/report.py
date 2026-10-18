@@ -128,9 +128,9 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
             and inside(ev)
         ):
             tasks[ev.subject] = st.items[ev.subject]
-        elif ev.kind in _NOTE_KINDS and inside(ev):
+        elif ev.kind in _NOTE_KINDS:
             note = _note(st, ev, item_id)
-            if note:
+            if note and (note["linked"] or inside(ev)):
                 notes.append(note)
     return {
         "notes": notes,
