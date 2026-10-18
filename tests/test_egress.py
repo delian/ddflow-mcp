@@ -80,3 +80,14 @@ def test_a_hit_the_state_cannot_resolve_is_withheld(repo):
 
 def test_every_model_door_is_on_by_default():
     assert set(Config().sensitivity.egress_doors) == {"search", "recall", "brief", "export"}
+
+
+def test_the_raw_log_source_does_not_leak_a_withheld_record(repo):
+    _put(repo, "closed", "restricted")
+    _put(repo, "open1", "public")
+    _log, cfg, st = _load(repo)
+    from ddflow.services.search import Filters
+
+    res = SS.search(st, list(_log.read_all()), cfg, "zebrafish", Filters(source="log"), repo=repo)
+    text = " ".join(str(r) for r in res.rows)
+    assert "open1" in text and "closed" not in text
