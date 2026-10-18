@@ -116,3 +116,19 @@ def test_the_tool_pattern_reads_any_spelling_of_a_real_tool_only():
         assert _HAS_TOOL.search(yes), yes
     for no in ('tool=""', "tool=''", 'tool=""'):
         assert not _HAS_TOOL.search(no), no
+
+
+def test_a_family_may_declare_its_commands_as_a_list(tmp_path, monkeypatch):
+    import sys
+
+    import ddflow.surfaces.declared as D
+
+    (tmp_path / "zz_list.py").write_text("COMMANDS = []\n")
+    monkeypatch.setattr(D, "__file__", str(tmp_path / "__init__.py"))
+    monkeypatch.setattr(D, "__path__", [str(tmp_path)])
+    sys.path.insert(0, str(tmp_path.parent))
+    try:
+        assert [m.__name__ for m in D.family_modules()] == [f"{D.__name__}.zz_list"]
+    finally:
+        sys.path.remove(str(tmp_path.parent))
+        sys.modules.pop(f"{D.__name__}.zz_list", None)
