@@ -22,7 +22,7 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
         if isinstance(it, O.Outcome):
             return it
     else:
-        it = BS.tree_item(st, repo, W.repo_root(Path.cwd()))
+        it = BS.tree_item(st, repo, _here())
         if it is None:
             return O.failed(
                 "sync", "this is not an item's worktree: name the item, `ddflow sync ITEM`"
@@ -40,6 +40,7 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
         "pin_files": r.merged_pins,
         "conflicts": r.conflicts,
         "dirty": r.dirty,
+        "detail": r.detail,
     }
     if r.status == "merged":
         stale = {n.gate for n in GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")}
@@ -49,11 +50,15 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
     text = _text(r, data)
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
-    if r.status == "unknown":
-        return O.failed("sync", text, **data)
-    if r.status == "current":
+    if r.status in ("unknown", "current"):
         return O.nothing("sync", text, **data)
     return O.ok("sync", text=text, **data)
+
+
+def _here() -> Path:
+    """The checkout the caller stands in (a linked worktree, not the primary)."""
+    top = W.git(Path.cwd(), "rev-parse", "--show-toplevel")
+    return Path(top.out) if top.ok and top.out else Path.cwd()
 
 
 def _text(r: BS.SyncResult, d: dict) -> str:
