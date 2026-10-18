@@ -45,6 +45,10 @@ class ReviewConfig:
         factory=lambda: ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"],
         doc="Globs of generated and pinned files (golden snapshots, transcripts, lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a re-pinned transcript turned a 3 KB change into an 11-chunk review that took 7 minutes and judged generated text. A bare pattern matches at any depth. The review output and the gate's evidence say how many files and bytes were left out and name them, so a skipped file is never silent. Change it for the project (`ddflow config review.exclude_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`; an empty list leaves out no glob-matched file (the files pins.toml owns are governed by [review].exclude_pin_files, which must be turned off as well to send every file).",
     )
+    manifest_max_files: int = knob(
+        40,
+        doc="How many files the manifest of the whole change lists in every review chunk's prompt (default 40; 0 = no manifest). A chunk is judged alone otherwise, and reviewers reported 'no templates' or 'nothing adds the guard' about facts a sibling chunk answered. Each row gives a file's added/removed lines and a one-line summary; the new files and the files left out by [review].exclude_globs are named; files past the cap are counted. Change it for the project (`ddflow config review.manifest_max_files 80`), for this machine (add --local), per run (DDFLOW_REVIEW_MANIFEST_MAX_FILES), or over MCP with `ddflow_configure`.",
+    )
     exclude_pin_files: bool = knob(
         True,
         doc="Whether the files `.ddflow/pins.toml` owns (README regions, golden snapshots, the setup transcript: regenerated, never read) are left out of review chunks as well as [review].exclude_globs. Default true; false sends them.",
