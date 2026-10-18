@@ -134,7 +134,8 @@ def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
             # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
             refusal = refusal.split(" The globs were not changed")[0].rstrip()
             return O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
-        retargets.append((it, lease, globs, res))
+        if lease is not None:
+            retargets.append((it, lease, globs, res))
     for it, fields in plans:
         log.append(f"{it.family}.updated", it.id, fields)
     for it, lease, globs, res in retargets:
@@ -143,8 +144,6 @@ def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
     for iid, why in abandon.items():
         ab = st.items[iid]
         log.append("item.abandoned", iid, {"reason": why, "kind": ab.kind})
-        if ab.lease:
-            L.release(log, iid, note=f"abandoned: {why}")
     return O.ok(kind, **result)
 
 
@@ -178,6 +177,8 @@ def _decide(log, cfg, st, entries, abandon, kind, *, dry_run: bool) -> O.Outcome
     refusal = _cycle_refusal(st, plans, abandon, kind)
     if refusal is not None:
         return refusal
+    if not plans and not abandon:
+        return O.nothing(kind, "nothing to change: no entry changes anything", unchanged=unchanged)
     result = {
         "dry_run": dry_run,
         "edits": [
