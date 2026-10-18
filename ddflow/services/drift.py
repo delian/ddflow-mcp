@@ -201,12 +201,11 @@ def decisions_changed(state, globs: Iterable[str], since_at: str) -> list[Change
     for d in state.decisions.values():
         if not any(inside(g, dg) or inside(dg, g) for g in gl for dg in d.globs):
             continue
-        if not d.at:
-            continue  # age unknown: neither added nor superseded can be told
-        if d.at > since_at:
+        if d.at and d.at > since_at:
             out.append(Change(d.id, "added"))
         by = state.decisions.get(d.superseded_by) if d.superseded_by else None
-        if by is not None and by.at and by.at > since_at and d.at <= since_at:
+        # Superseded after since_at whatever d.at is: the superseder is newer than the event.
+        if by is not None and by.at and by.at > since_at and not (d.at > since_at):
             out.append(Change(d.id, "superseded"))
     return sorted(out, key=lambda c: (c.id, c.how))
 
