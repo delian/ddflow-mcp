@@ -97,18 +97,21 @@ def check_hook_file(path: Path, fix: str = "ddflow hooks install") -> Dangling |
 
 
 def _commands(data: Any) -> list[str]:
-    """Every hook command string in a harness settings file."""
+    """Every hook command string in a harness hook file: the nested layout's
+    ``{matcher?, hooks: [{command}]}`` groups and the flat layout's ``[{command | bash}]``."""
     out: list[str] = []
     hooks = data.get("hooks") if isinstance(data, dict) else None
     for groups in (hooks or {}).values() if isinstance(hooks, dict) else ():
         for g in groups if isinstance(groups, list) else ():
-            for h in (
-                g.get("hooks", [])
-                if isinstance(g, dict) and isinstance(g.get("hooks"), list)
-                else ()
-            ):
-                if isinstance(h, dict) and isinstance(h.get("command"), str):
-                    out.append(h["command"])
+            if not isinstance(g, dict):
+                continue
+            inner = g.get("hooks")
+            for h in inner if isinstance(inner, list) else [g]:
+                if not isinstance(h, dict):
+                    continue
+                for key in ("command", "bash"):
+                    if isinstance(h.get(key), str):
+                        out.append(h[key])
     return out
 
 
@@ -124,7 +127,12 @@ def check_settings(repo: Path) -> list[Dangling]:
     # is the list, so a hook added to it is checked here without anyone remembering to.
     rows = _hook_specs()
     ours = tuple(dict.fromkeys(s.marker for s in rows))
-    fix_for = {s.file: f"ddflow hooks install {s.flag}" for s in rows}
+    flags: dict[str, list[str]] = {}
+    for s in rows:
+        flags.setdefault(s.file, [])
+        if s.flag not in flags[s.file]:
+            flags[s.file].append(s.flag)
+    fix_for = {rel: "ddflow hooks install " + " ".join(fl) for rel, fl in flags.items()}
 
     out: list[Dangling] = []
     for rel in dict.fromkeys(s.file for s in rows):
