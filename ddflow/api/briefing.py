@@ -22,11 +22,13 @@ from ._base import _load
 
 def _decision_lines(cfg, st, item: str) -> tuple[list[str], int]:
     """The decisions that govern the item, one fenced line each (cut as `brief` cuts them),
-    and how many there are."""
-    found = [d for d in GI.for_item(cfg, st, item).records("decision") if d.id in st.decisions]
+    ranked by `agent_brief.decision_order`, and how many there are."""
+    applied = GI.for_item(cfg, st, item).applied
+    operator = {d.id for d in st.decisions.values() if PV.decision_origin(d).trust == PV.OPERATOR}
+    pins = [i for i in cfg.session.agent_brief_pin_decisions if i in st.decisions]
     lines = []
-    for rec in found:
-        d = st.decisions[rec.id]
+    for did in AB.decision_order(applied, pins, operator):
+        d = st.decisions[did]
         text = d.decision
         if len(text) > BRIEF_DECISION_CHARS:
             text = text[:BRIEF_DECISION_CHARS].rsplit(" ", 1)[0] + " …"
@@ -87,7 +89,8 @@ def agent_brief(
                 cfg.session.agent_brief_lessons,
             ),
         )
-        facts.decisions = decisions[: max(0, cfg.session.agent_brief_decisions)]
+        shown = max(cfg.session.agent_brief_decisions, len(cfg.session.agent_brief_pin_decisions))
+        facts.decisions = decisions[: max(0, shown)]
         got = AB.render(
             tmpl,
             facts,
