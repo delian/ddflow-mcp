@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from types import ModuleType
 
-_HAS_COMMANDS = re.compile(r"^COMMANDS\b", re.MULTILINE)
+_HAS_COMMANDS = re.compile(r"^COMMANDS\s*(?::[^=\n]+)?=", re.MULTILINE)
 _HAS_TOOL = re.compile(r'\btool\s*=\s*"ddflow_')
 
 
