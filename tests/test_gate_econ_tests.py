@@ -16,7 +16,9 @@ from helpers import git_quiet as _git
 
 from ddflow.config import KNOB_CHOICES, KNOB_DOCS, KNOB_STRICTEST, Config
 
-OK, FAIL = 0, 1
+# The unrelated red test is red on the base as well, so the gate that runs it is recorded
+# `partial` as baseline-red (exit 2) -- still the proof that it ran (DX-gate-baseline-red).
+OK, FAIL = 0, 2
 
 #: A test of `src.f` that passes once the fix makes it return 2.
 REACHES_F = (
