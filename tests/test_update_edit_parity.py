@@ -35,8 +35,9 @@ def test_every_item_edit_field_is_encoded():
     fields = {f.name for f in dataclasses.fields(api.ItemEdit)}
     assert fields == set(SAMPLE), "add the new ItemEdit field to item_edit and to SAMPLE"
     edit = item_edit(SAMPLE)
-    for name in fields:
-        assert getattr(edit, name) not in (None, False), f"item_edit drops {name}"
+    defaults = api.ItemEdit()
+    for f in dataclasses.fields(api.ItemEdit):
+        assert getattr(edit, f.name) != getattr(defaults, f.name), f"item_edit drops {f.name}"
 
 
 def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
@@ -58,3 +59,22 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
     cli.main(argv)
     assert seen, "the CLI never reached the api"
     assert seen[0] == item_edit(SAMPLE)
+
+
+def test_declared_call_builds_the_same_edit(monkeypatch):
+    from ddflow.surfaces.declared.queue import COMMANDS
+    from ddflow.surfaces.registry import by_tool
+
+    seen = []
+
+    def fake(repo, item, edit, *, agent=""):
+        seen.append(edit)
+        return O.refused("test", "stop here")
+
+    monkeypatch.setattr(api, "update", fake)
+    by_tool(COMMANDS)["ddflow_update"].call(None, {"id": "T1", **SAMPLE}, "a")
+    assert seen == [item_edit(SAMPLE)]
+
+
+def test_cli_splits_comma_lists():
+    assert item_edit({"needs": "a,b"}).needs == ["a", "b"]
