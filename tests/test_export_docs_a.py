@@ -111,7 +111,7 @@ def test_roadmap_lanes_follow_state_and_dependencies():
     assert (
         "Blocked by P2." in lanes["Later"] and "1 more open tasks not listed" in lanes["Later"]
     )  # Later is counts only (B-rm-data)
-    assert "waits on NOPE" in lanes["Later"]
+    assert "Blocked by NOPE" in lanes["Later"]
     assert "1 phases complete (not listed)" in body  # P4
     assert "P4" not in body.split("(not listed)", 1)[1]
 
