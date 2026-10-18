@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=b9c80cd743d2 -->
-<details><summary>All 81 commands</summary>
+<!-- ddflow:begin README/commands sha=7bfae216946d -->
+<details><summary>All 82 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -589,6 +589,7 @@ needs a line written by hand here.
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |
 | `ddflow session` | see `ddflow session --help` |
+| `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
 | `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
 | `ddflow progress` | work actually done, aggregated from the log |
@@ -5516,8 +5517,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=4c7baecf972e -->
-<details><summary>All 118 MCP tools: 32 in the `core` tier, 48 more in `standard`, 38 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=0167f2c6e79b -->
+<details><summary>All 119 MCP tools: 32 in the `core` tier, 48 more in `standard`, 39 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5639,6 +5640,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
+| Unmapped — add a prefix to `_GROUPS` | `ddflow_record` | all | Records of any data-declared kind (risk, requirement, vendor ...; project kinds in .ddflow/kinds/). |
 
 </details>
 <!-- ddflow:end README/tools -->

@@ -2486,6 +2486,87 @@
        }
       }
     ''',
+    'ddflow_record': '''
+      {
+       "name": "ddflow_record",
+       "description": "Records of any data-declared kind (risk, requirement, vendor ...; project kinds in .ddflow/kinds/). verb: list, show, add, edit, remove, search, revise, history. set: field=value, repeat for an array. add answers the duplicate check like every add.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "kind": {
+          "type": "string",
+          "description": "The record kind."
+         },
+         "verb": {
+          "type": "string",
+          "description": "One of list, show, add, edit, remove, search, revise, history."
+         },
+         "id": {
+          "type": "string",
+          "description": "The record's id."
+         },
+         "set": {
+          "type": "array",
+          "description": "field=value; repeat.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "unset": {
+          "type": "array",
+          "description": "Fields to remove (edit).",
+          "items": {
+           "type": "string"
+          }
+         },
+         "query": {
+          "type": "string",
+          "description": "search: what to look for."
+         },
+         "mode": {
+          "type": "string",
+          "description": "search: ranked | exact | regex."
+         },
+         "where": {
+          "type": "array",
+          "description": "list, search: field=value.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "all": {
+          "type": "boolean",
+          "description": "Include retired records."
+         },
+         "limit": {
+          "type": "integer",
+          "description": "Rows shown (0 = the most)."
+         },
+         "reason": {
+          "type": "string",
+          "description": "remove, revise: why; kept in the history."
+         },
+         "relation": {
+          "type": "string",
+          "description": "add: new | extends:ID | duplicate_of:ID | related:ID."
+         },
+         "check_only": {
+          "type": "boolean",
+          "description": "add: dry run, return the candidates."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "required": [
+         "kind",
+         "verb"
+        ],
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_recover': '''
       {
        "name": "ddflow_recover",
@@ -4023,6 +4104,7 @@
     'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
+    'ddflow_record',
     'ddflow_recover',
     'ddflow_release',
     'ddflow_remove',
