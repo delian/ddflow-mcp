@@ -32,11 +32,11 @@ def coerce(kind: R.RecordKind, items: Iterable[str]) -> dict[str, Any]:
     for item in items or ():
         name, sep, raw = str(item).partition("=")
         spec = kind.field(name.strip())
-        if not sep or spec is None:
+        if not sep:
+            raise ValueError(f"set takes field=value; got {item!r}")
+        if spec is None:
             known = ", ".join(f.name for f in kind.fields)
-            raise ValueError(
-                f"set takes field=value for a field of {kind.name} ({known}): {item!r}"
-            )
+            raise ValueError(f"{kind.name} has no field {name.strip()!r}; the fields are {known}")
         if spec.type == "array":
             out.setdefault(spec.name, []).append(raw)
         elif spec.type == "integer":
