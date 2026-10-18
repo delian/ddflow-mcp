@@ -120,7 +120,7 @@ def _rst_title(
     first = i + 1 if over else i
     if first >= n or not lines[first].strip():
         return None  # an adornment alone is a transition
-    for k in range(first + 1, n if multi else min(n, first + 2)):
+    for k in range(first + 1, n):
         if not lines[k].strip():
             return None
         if _RST_ADORN.match(lines[k]):
@@ -138,18 +138,15 @@ def _rst_title(
 
 def _scan_rst(lines: list[str], start: int) -> Scan:
     sc, styles, i, n = Scan(), [], start, len(lines)
-    fresh = True  # a title can start here: after a blank line or another title
     while i < n:
-        if not lines[i].strip():
-            fresh, i = True, i + 1
-        elif hit := _rst_title(lines, i, n, multi=fresh):
+        if lines[i].strip() and (hit := _rst_title(lines, i, n)):
             stop, text, char, over = hit
             if (char, over) not in styles:
                 styles.append((char, over))
             sc.heads.append((i, styles.index((char, over)) + 1, text))
             i = stop
         else:
-            fresh, i = False, i + 1
+            i += 1
     return sc
 
 

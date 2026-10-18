@@ -211,3 +211,8 @@ def test_escaped_pipes_do_not_split_table_cells():
     table = "| `cat \\| wc -l` | lines |\n| --- | --- |\n| `a` | 1 |\n"
     assert [c.kind for c in C.chunk("t.md", "# T\n\n" + table).chunks] == ["prose", "table"]
     assert [c.kind for c in C.chunk("t.md", "a | b\n--|--\nx | y\n").chunks] == ["table"]
+
+
+def test_rst_multi_line_title_after_a_target_line():
+    res = C.chunk("t.rst", ".. _install:\nInstall\nthe thing\n=========\n\nbody\n")
+    assert res.chunks[-1].heading_path == ("Install the thing",)
