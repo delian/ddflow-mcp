@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "sensitivity.model_allowed"
+new = "[]"
+why = "Levels sent to a model although the vocabulary says not to; empty keeps restricted and confidential away from the doors that feed models."
+impact = "additive"

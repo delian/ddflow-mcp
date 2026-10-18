@@ -17,6 +17,7 @@ from ...infra.store import recall_sources
 from ...services import contextpack as CP
 from ...services import searchcore as SC
 from ...services import similar as sim
+from ...services.egress import Egress
 from .._base import _load
 from .lessons import _store
 
@@ -65,6 +66,18 @@ def recall(
     sources_now = recall_sources()
     results = SC.search_sources(_store(repo, log, cfg), query, sources, limit)
     labels = {table: label for table, label, _ in sources_now}
+    # a record whose sensitivity may not go to a model is withheld (services/egress.py)
+    gate = Egress(repo, cfg)
+    for table in list(results):
+        dk = PA.DECLARED[table].def_kind if table in PA.DECLARED else ""
+        kept = [
+            r
+            for r in results[table]
+            if not (dk and gate.withholds_def("recall", _st, dk, r.get("id")))
+        ]
+        results[table] = kept
+        if not kept:
+            del results[table]
     # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
     # somebody's words, and a hit shown without its author reads as the tool's own.
     # Looked up in the folded state by id -- the index holds no author column.

@@ -1,0 +1,17 @@
+# Event kinds owned by model (core/model.py). One [[kind]] per kind.
+
+[[kind]]
+name = "phase.removed"
+doc = "A phase was removed."
+
+[[kind]]
+name = "phase.updated"
+doc = "A phase's title or body changed."
+
+[[kind]]
+name = "task.removed"
+doc = "A task was removed."
+
+[[kind]]
+name = "task.updated"
+doc = "A task's fields changed."

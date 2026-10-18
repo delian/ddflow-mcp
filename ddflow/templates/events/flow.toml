@@ -1,0 +1,65 @@
+# Event kinds owned by flow (core/handlers/flow.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "backmerge.recorded"
+doc = "A branch was merged back into another and the forge reference kept."
+
+[[kind]]
+name = "deploy.recorded"
+doc = "A commit was deployed to an environment."
+
+[[kind]]
+name = "flow.chosen"
+doc = "A flow knob was chosen for the project."
+
+[[kind]]
+name = "port.applied"
+doc = "A change was ported to another branch."
+
+[[kind]]
+name = "pr.changes_requested"
+doc = "A pull request got a change request."
+
+[[kind]]
+name = "pr.closed"
+doc = "A pull request was closed unmerged."
+
+[[kind]]
+name = "pr.merged"
+doc = "A pull request was merged."
+
+[[kind]]
+name = "pr.opened"
+doc = "A pull request was opened."
+
+[[kind]]
+name = "pr.synced"
+doc = "A pull request's state was read from the forge."
+
+[[kind]]
+name = "release.closed"
+doc = "A release was closed."
+
+[[kind]]
+name = "release.opened"
+doc = "A release was opened."
+
+[[kind]]
+name = "release.tagged"
+doc = "A release was tagged."
+
+[[kind]]
+name = "worktree.adopted"
+doc = "An existing worktree was adopted by an item."
+
+[[kind]]
+name = "worktree.created"
+doc = "A worktree was created for an item."
+
+[[kind]]
+name = "worktree.merged"
+doc = "An item's branch was merged."
+
+[[kind]]
+name = "worktree.removed"
+doc = "A worktree was removed."

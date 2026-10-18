@@ -24,6 +24,7 @@ SECTION_NAMES = (
     "memory",
     "dedupe",
     "evaluation",
+    "sensitivity",
     "imports",
     "companions",
     "reinstruct",

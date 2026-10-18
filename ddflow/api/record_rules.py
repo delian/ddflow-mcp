@@ -13,13 +13,16 @@ from typing import Any
 
 from ..core import defs as D
 from ..core import kindrules as KR
+from . import record_sensitivity as RS
 from ._base import _load
 
 
 def checked(
     repo: Path, kind: Any, rid: str, stored: dict[str, Any], why: str, *, agent: str = ""
 ) -> tuple[dict[str, Any], str]:
-    """``(fields, "")`` or ``({}, why)``; a ``why`` from the earlier check is passed on."""
+    """``(fields, "")`` or ``({}, why)``; a ``why`` from the earlier check is passed on. The
+    sensitivity label (every kind) is settled first."""
+    stored, why = RS.checked(repo, kind, rid, stored, why, agent=agent)
     rules = getattr(kind, "rules", None)
     if why or rules is None or not kind.stored_kind:
         return stored, why

@@ -1,0 +1,25 @@
+# Event kinds owned by knowledge (core/handlers/knowledge.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "bug.fixed"
+doc = "A bug was closed as fixed, with its regression test and lesson."
+
+[[kind]]
+name = "bug.invalid"
+doc = "A bug was closed as not a bug, with the evidence."
+
+[[kind]]
+name = "bug.reopened"
+doc = "A closed bug was reopened."
+
+[[kind]]
+name = "bug.reported_upstream"
+doc = "A ddflow-scoped bug was reported, or prepared for reporting, upstream."
+
+[[kind]]
+name = "decision.superseded"
+doc = "A decision was replaced by a later one."
+
+[[kind]]
+name = "memory.forgotten"
+doc = "A memory was forgotten."

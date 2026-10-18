@@ -1,0 +1,41 @@
+# The one sensitivity vocabulary (SE-sensitivity, D-shared-engines-r2 7): how guarded a record or
+# an artifact is, lowest to highest rank. A project overrides it with .ddflow/sensitivity.toml
+# (same shape; a level with the same name replaces this one, a new name is added).
+
+# The level a record with no label is at.
+unlabelled = "internal"
+
+[[level]]
+name = "public"
+rank = 0
+to_model = true
+summary = "may be shared outside the project"
+
+[[level]]
+name = "internal"
+rank = 1
+to_model = true
+summary = "the project's own; the default for a record with no label"
+
+[[level]]
+name = "restricted"
+rank = 2
+to_model = false
+summary = "named people or hosts; never sent to a model unless the project allows it"
+
+[[level]]
+name = "confidential"
+rank = 3
+to_model = false
+summary = "secrets and credentials; never sent to a model unless the project allows it"
+
+# What the write-time scan found (the kinds core.redact counts) -> the level that text is at least.
+[scan]
+secret = "confidential"
+email = "restricted"
+name = "restricted"
+hostname = "restricted"
+ipv4 = "internal"
+ipv6 = "internal"
+host = "internal"
+path = "internal"

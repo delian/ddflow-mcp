@@ -1,0 +1,21 @@
+# Event kinds owned by leases (core/handlers/leases.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "item.resolved"
+doc = "An item's definition or lease was resolved."
+
+[[kind]]
+name = "lease.acquired"
+doc = "An agent leased an item and its files."
+
+[[kind]]
+name = "lease.expired"
+doc = "A lease lapsed or was broken."
+
+[[kind]]
+name = "lease.released"
+doc = "A lease was given up or handed over."
+
+[[kind]]
+name = "lease.renewed"
+doc = "A lease was extended."

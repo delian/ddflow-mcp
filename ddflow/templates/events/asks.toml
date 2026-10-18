@@ -1,0 +1,17 @@
+# Event kinds owned by asks (core/handlers/asks.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "ask.answered"
+doc = "A question put to a person was answered."
+
+[[kind]]
+name = "ask.expired"
+doc = "A question went unanswered past its expiry."
+
+[[kind]]
+name = "ask.requested"
+doc = "A question or approval was put to a person."
+
+[[kind]]
+name = "ask.withdrawn"
+doc = "The asker withdrew a question before it was answered."

@@ -1,0 +1,37 @@
+# Event kinds owned by links (core/handlers/links.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "bug.found"
+doc = "A bug was filed."
+
+[[kind]]
+name = "decision.recorded"
+doc = "A decision was recorded."
+
+[[kind]]
+name = "lesson.recorded"
+doc = "A lesson was recorded."
+
+[[kind]]
+name = "link.recorded"
+doc = "Two records were linked as related, duplicate or extension."
+
+[[kind]]
+name = "memory.recorded"
+doc = "A memory was recorded."
+
+[[kind]]
+name = "phase.added"
+doc = "A phase was added to the queue."
+
+[[kind]]
+name = "record.extended"
+doc = "Text was added onto a record the duplicate check judged the same."
+
+[[kind]]
+name = "research.recorded"
+doc = "A research note with its claim and verdict was recorded."
+
+[[kind]]
+name = "task.added"
+doc = "A task was added to the queue."
