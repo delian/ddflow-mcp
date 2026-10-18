@@ -17,6 +17,7 @@ from pathlib import Path
 from ..core.bookkeeping import STATE_DIR
 from ..infra import git as G
 from ..infra import paths as PA
+from . import tree_bin as TB
 
 #: Paths a merge from a worktree is allowed to leave staged in the primary: the event log
 #: and the other ddflow bookkeeping commit and merge on their own schedule.
@@ -120,4 +121,9 @@ def stale_primary_notes(repo: Path) -> list[str]:
 
 def doctor_notes(repo: Path) -> list[str]:
     """Identity, core.bare and stale-primary notes for the repository at ``repo``."""
-    return [*identity_notes(repo), *bare_notes(repo), *stale_primary_notes(repo)]
+    return [
+        *identity_notes(repo),
+        *bare_notes(repo),
+        *stale_primary_notes(repo),
+        *TB.stale_notes(Path.cwd()),  # the ddflow running is not the tree's own
+    ]
