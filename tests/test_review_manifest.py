@@ -19,9 +19,7 @@ DEL = (
     "diff --git a/shard.py b/shard.py\ndeleted file mode 100644\n--- a/shard.py\n+++ /dev/null\n"
     "@@ -1,2 +0,0 @@\n-a\n-b\n"
 )
-MOD = (
-    "diff --git a/m.py b/m.py\n--- a/m.py\n+++ b/m.py\n@@ -1 +1,2 @@\n-old\n+def guard():\n+    pass\n"
-)
+MOD = "diff --git a/m.py b/m.py\n--- a/m.py\n+++ b/m.py\n@@ -1 +1,2 @@\n-old\n+def guard():\n+    pass\n"
 
 
 def test_manifest_lists_every_file_counts_new_and_excluded():
@@ -41,9 +39,7 @@ def test_manifest_cap_counts_the_rest_and_zero_turns_it_off():
 
 
 def test_every_chunk_prompt_names_the_files_of_its_siblings(tmp_path):
-    rev, seen = _command_reviewer(
-        tmp_path, "echo 'STATUS: NO FINDINGS'", max_chunk_chars=300
-    )
+    rev, seen = _command_reviewer(tmp_path, "echo 'STATUS: NO FINDINGS'", max_chunk_chars=300)
     diff = _new_file("a_guard.py", 4) + DEL + MOD
     res = review(rev, diff, "i", manifest=RM.build(diff, None, 40))
     assert res.chunks_total >= 2
