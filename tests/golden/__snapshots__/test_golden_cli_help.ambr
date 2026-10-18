@@ -2687,7 +2687,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--timeout TIMEOUT] [--poll POLL]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -2699,6 +2699,9 @@
                          the flag to add more -- every value is kept
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
+    --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
+                         how long it has held (a holder that keeps renewing is not a reason to wait
+                         on)
   
   '''
 # ---
