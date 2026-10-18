@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.min_workers"
+new = '1'
+why = "The fewest workers an auto count may compute."
+impact = "additive"

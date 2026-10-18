@@ -872,6 +872,13 @@
           `["DDFLOW_AGENT"]` for a gate whose command runs ddflow as the calling
           agent. Empty by default. `[ci].keep_env` does the same for the CI command
           alone.
+      gates.standards_wait_s = 900   [default]
+          Seconds `python -m ddflow.services.roborev_branch` (the standards gate's
+          roborev run on the item's COMBINED branch diff) waits for the roborev job
+          before it gives up (default 900; 0 = enqueue and return). A job still
+          running at the limit is left running and reported with its id and `roborev
+          wait <id>`: the gate is recorded `unavailable` with that reason, never
+          passed.
       lessons.search_backend = 'fts5'   [default]
           'fts5' uses SQLite full-text BM25 ranking; 'like' is a portable fallback for
           a SQLite built without FTS5. Detected automatically at init; this knob
@@ -1891,6 +1898,16 @@
           glob-matched file (the files pins.toml owns are governed by
           [review].exclude_pin_files, which must be turned off as well to send every
           file).
+      review.manifest_max_files = 40   [default]
+          How many files the manifest of the whole change lists in every review
+          chunk's prompt (default 40; 0 = no manifest). A chunk is judged alone
+          otherwise, and reviewers reported 'no templates' or 'nothing adds the guard'
+          about facts a sibling chunk answered. Each row gives a file's added/removed
+          lines and a one-line summary; the new files and the files left out by
+          [review].exclude_globs are named; files past the cap are counted. Change it
+          for the project (`ddflow config review.manifest_max_files 80`), for this
+          machine (add --local), per run (DDFLOW_REVIEW_MANIFEST_MAX_FILES), or over
+          MCP with `ddflow_configure`.
       review.exclude_pin_files = True   [default]
           Whether the files `.ddflow/pins.toml` owns (README regions, golden
           snapshots, the setup transcript: regenerated, never read) are left out of
@@ -2345,6 +2362,18 @@
           Seconds the CI command may run before the gate records UNAVAILABLE. Default
           3600: sized for the whole test suite (`ci run --full`, the merge queue's
           batch); an item's selected run is far shorter.
+      ci.workers = 'auto'   [default]
+          The pytest-xdist worker count that replaces `{workers}` in the gate commands
+          and in `ddflow tests` output: `auto` (default) computes it when the tests
+          run, clamp(floor(cores * [schedule.signals.load_per_core].high - current
+          load average), min_workers, max_workers), halved above the memory_pressure
+          high mark, minimum at its critical mark, and never above the number of test
+          files the command names; a number fixes it. The inputs are logged in the
+          gate evidence (D-agent-test-etiquette).
+      ci.min_workers = 1   [default]
+          The fewest workers `[ci].workers = auto` may compute, at least 1.
+      ci.max_workers = 48   [default]
+          The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity
@@ -2398,7 +2427,11 @@
       prompts.review_user = ''   [default]
           Path to the per-chunk review message template. Variables: intent, context,
           diff, fence (the backtick fence that safely holds the diff), chunk_index,
-          chunk_total.
+          chunk_total, manifest (every changed file of the whole change with +/-
+          counts and a one-line summary, the new files and the files left out of
+          review; empty when [review].manifest_max_files is 0), manifest_fence (the
+          fence that safely holds the manifest), chunk_files (the files this part
+          holds).
       prompts.gate_instruction = ''   [default]
           Path to the template rendered when an agent asks what a gate requires.
           Variables: gate, item.

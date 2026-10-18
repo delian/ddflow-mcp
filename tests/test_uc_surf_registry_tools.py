@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ddflow.surfaces import tools
-from ddflow.surfaces.tools.order import TOOL_ORDER
+from ddflow.surfaces.tools import ORDER as TOOL_ORDER
 
 
 def test_the_order_names_every_declared_and_hand_written_tool_exactly_once():

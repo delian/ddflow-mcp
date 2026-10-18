@@ -928,3 +928,10 @@ key = "gates.merge_blocked_by_failed"
 new = "[\"ci\"]"
 why = "Gates whose latest outcome failed, or was skipped over a failed run, make ddflow merge refuse the item; empty turns it off."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.manifest_max_files"
+new = "40"
+why = "How many files the manifest of the whole change lists in every review chunk's prompt, so a chunk is not judged alone; 0 = no manifest."
+impact = "additive"

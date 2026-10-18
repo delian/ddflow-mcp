@@ -555,10 +555,10 @@ class Command:
     not exposed, with ``reason`` saying why -- the parity test's exemption as a field).
     ``call(repo, args, agent)`` returns an `Outcome`; ``payload`` is the field tuple both
     surfaces print; ``prose`` says the MCP body is text, not JSON; ``tier`` is the MCP
-    tool tier and ``render`` the optional human renderer. ``tier`` and ``render`` are
-    declared here for the slices that generate the tier table (`tools/tiers.py`) and the
-    CLI's human output; `tool_entry` does not carry them because the engine reads tiers
-    from the tier table, not from the entry.
+    tool tier (`tools/tiers.py` reads it for every tool outside its legacy sets),
+    ``help_group`` the `ddflow_help` inventory heading when no legacy prefix claims the tool,
+    and ``render`` the optional human renderer. `tool_entry` carries the group (for
+    `services/help.py`) but not the tier: the engine reads tiers from the tier table.
     """
 
     path: tuple[str, ...]
@@ -570,8 +570,15 @@ class Command:
     payload: str | tuple[str, ...] = ""
     #: True, or a predicate over the call's arguments (``render``: text only with ``show``).
     prose: bool | Callable[..., bool] = False
-    tier: str = "standard"
+    #: The MCP tool tier (``core`` | ``standard`` | ``all``) of a tool NOT in the legacy sets of
+    #: `tools/tiers.py`; "" there is a registration error, so a tool cannot land unplaced.
+    tier: str = ""
     render: Callable[..., Any] | None = None
+    #: The `ddflow_help` inventory heading for this tool (see `services/help.py`).
+    help_group: str = ""
+    #: ``(argv, arguments)``: the CLI call whose `--json` body this tool must reproduce, for
+    #: `tests/test_api_layer.py`'s wire-shape check (the same row `MIGRATED_WIRE_SHAPES` holds).
+    wire_shape: tuple[list[str], dict[str, Any]] | tuple[()] = ()
     #: How the CLI executor differs from its default for this command (`CliPolicy`).
     cli: CliPolicy | None = None
     handler: Callable[..., Any] | None = None
@@ -704,6 +711,8 @@ class Command:
             entry["kind"] = self.kind
         if self.identify:
             entry["identify"] = True
+        if self.help_group:
+            entry["help_group"] = self.help_group
         if self.wants_called_from:
             entry["wants_called_from"] = True
         if self.wants_progress:

@@ -378,7 +378,7 @@
    "1"
   ],
   0,
-  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T3\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T3\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"advice\": \"`ddflow claim T3` now: anyone else waiting on the same release woke too.\"\n}\n",
+  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T3\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T3\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"advice\": \"`ddflow claim T3` now: anyone else waiting on the same release woke too.\"\n}\n",
   ""
  ],
  [
@@ -393,7 +393,7 @@
    "1"
   ],
   0,
-  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T1\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T1\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"advice\": \"`ddflow claim T1` now: anyone else waiting on the same release woke too.\"\n}\n",
+  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T1\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T1\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"advice\": \"`ddflow claim T1` now: anyone else waiting on the same release woke too.\"\n}\n",
   ""
  ],
  [
@@ -633,7 +633,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...\nddflow: error: unrecognized arguments: --item T1\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list} ...\nddflow: error: unrecognized arguments: --item T1\n"
  ],
  [
   [
