@@ -35,6 +35,7 @@ PUBLIC = [
     "next_",
     "release",
     "remove",
+    "sync",
     "unblock",
     "wait",
 ]

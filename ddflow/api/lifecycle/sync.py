@@ -12,15 +12,14 @@ from ...infra import worktree as W
 from ...services import branchsync as BS
 from ...services.gates import outcomes as GO
 from .._base import _load
-from ._common import _require
 
 
 def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     if item:
-        it = _require(st, item, "sync", cfg.lease.grace_s)
-        if isinstance(it, O.Outcome):
-            return it
+        it = st.items.get(item)
+        if it is None or it.removed:
+            return O.failed("sync", f"no such item {item!r}")
     else:
         it = BS.tree_item(st, repo, _here())
         if it is None:
@@ -28,11 +27,11 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
                 "sync", "this is not an item's worktree: name the item, `ddflow sync ITEM`"
             )
     if not it.worktree:
-        return O.failed("sync", f"{it.id} has no worktree to bring up to date", id=it.id)
+        return O.failed("sync", f"{it.id} has no worktree to bring up to date")
     tree = W.load_path(repo, it.worktree)
     r = BS.sync(repo, cfg, tree, it.base, list(it.globs), check=check)
     data = {
-        "id": it.id,
+        "item": it.id,
         "base": r.base,
         "status": r.status,
         "behind": r.behind,
@@ -63,9 +62,9 @@ def _here() -> Path:
 
 def _text(r: BS.SyncResult, d: dict) -> str:
     if r.status == "current":
-        return f"{d['id']} is up to date with `{r.base}`."
+        return f"{d['item']} is up to date with `{r.base}`."
     if r.status == "unknown":
-        return f"could not tell how far {d['id']} is behind `{r.base}`: {r.detail}"
+        return f"could not tell how far {d['item']} is behind `{r.base}`: {r.detail}"
     if r.status == "refused":
         files = "".join(f"\n  {p}" for p in r.dirty[:20])
         return f"not synced: {r.detail}{files}"
@@ -74,15 +73,15 @@ def _text(r: BS.SyncResult, d: dict) -> str:
             f"\n  {p}  (last changed on `{r.base}` by {w})" for p, w in r.conflicts.items()
         )
         return (
-            f"merge of `{r.base}` conflicts; aborted, {d['id']}'s branch is as it was. "
+            f"merge of `{r.base}` conflicts; aborted, {d['item']}'s branch is as it was. "
             f"Conflicting files:{lines}"
         )
-    head = f"{d['id']} is {r.behind} commit(s) behind `{r.base}`; {r.relevant} touch its globs."
+    head = f"{d['item']} is {r.behind} commit(s) behind `{r.base}`; {r.relevant} touch its globs."
     if r.status == "behind":
-        return head + f" `ddflow sync {d['id']}` merges them."
+        return head + f" `ddflow sync {d['item']}` merges them."
     pins = f" Pin files settled: {', '.join(r.merged_pins)}." if r.merged_pins else ""
     valid, stale = d.get("gates_valid", []), d.get("gates_stale", [])
     return (
-        f"merged `{r.base}` into {d['id']}: {r.behind} commit(s), {r.relevant} touching its globs."
+        f"merged `{r.base}` into {d['item']}: {r.behind} commit(s), {r.relevant} touching its globs."
         f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}."
     )
