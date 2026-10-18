@@ -152,7 +152,7 @@ def _declare(kind: str, owner: str, why: str) -> list[str]:
         reg.write_text((reg.read_text(encoding="utf-8") if reg.exists() else head) + row, "utf-8")
         done.append(f"registry: {reg.relative_to(ROOT)}")
     frag = FRAGMENTS / f"event_kind_added.{kind}.toml"
-    if not frag.exists():
+    if not frag.exists() and not _released(kind):
         frag.write_text(
             "# One unreleased change; cutting a version folds it into that release.\n\n"
             f'[[change]]\nkind = "event_kind_added"\nkey = {_q(kind)}\nwhy = {_q(why)}\n'
@@ -191,9 +191,9 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
     owner = args.owner or kind.partition(".")[0]
     if not re.fullmatch(r"[a-z][a-z0-9_]*", owner):
         raise SystemExit(f"--owner {owner!r}: lower-case letters, digits and _ only")
-    if len(args.why.strip()) < MIN_DOC:
-        raise SystemExit(f"--why: at least {MIN_DOC} characters (it is the kind's doc)")
     args.why = args.why.strip().rstrip(".") + "."
+    if len(args.why) < MIN_DOC or "|" in args.why or "\n" in args.why:
+        raise SystemExit(f"--why: one line, no '|', at least {MIN_DOC} characters (the kind's doc)")
     done: list[str] = []
     if kind not in snap["kinds"]:
         snap["kinds"][kind] = {"v": 1, "fields": dict(sorted(fields.items()))}

@@ -144,3 +144,13 @@ def test_write_survives_a_cut_multibyte_character(tmp_path: Path) -> None:
     shard = tmp_path / "a.jsonl"
     shard.write_bytes(b'{"id": "\xe2\x82')
     assert up.read_log([shard], lenient=True) == []
+
+
+def test_a_dotted_why_cannot_shrink_below_the_minimum(tree: Path) -> None:
+    with pytest.raises(SystemExit):
+        EK.main(["add", "x.new", "--why", "." * 30])
+
+
+def test_a_released_kind_gets_no_new_fragment(tree: Path) -> None:
+    EK.main(["add", "task.added", "--why", "A task was added to the queue."])
+    assert not (tree / "frag/event_kind_added.task.added.toml").exists()
