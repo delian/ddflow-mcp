@@ -11,6 +11,7 @@ from ddflow.surfaces.mcp import Server
 
 @pytest.fixture(autouse=True)
 def _no_harness_env(monkeypatch):
+    monkeypatch.setenv("DDFLOW_SESSION_FIRST_CALL", "true")
     for var in HR.session_env_vars():
         monkeypatch.delenv(var, raising=False)
 
@@ -32,34 +33,43 @@ def _texts(res: dict) -> list[str]:
 
 def test_the_first_call_gets_a_second_block_and_the_second_call_does_not(repo):
     srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
     first = _texts(_call(srv))
-    assert len(first) >= 2 and "ddflow session start" in first[-1]
+    assert len(first) >= 2 and "ddflow session start" in first[1]
     assert "ddflow session start" not in "".join(_texts(_call(srv)))
 
 
 def test_the_answer_stays_content_zero(repo):
     import json
 
-    first = _call(Server(repo))["content"]
+    srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
+    first = _call(srv)["content"]
     assert isinstance(json.loads(first[0]["text"]), dict)
-    assert "ddflow session start" in first[-1]["text"]
+    assert "ddflow session start" in first[1]["text"]
 
 
 def test_the_brief_itself_carries_its_own_start(repo):
-    assert "ddflow session start" not in "".join(_texts(_call(Server(repo), "ddflow_brief")))
+    srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
+    assert "ddflow session start" not in "".join(_texts(_call(srv, "ddflow_brief")))
 
 
-def test_it_is_off_when_the_knob_is_off(repo):
-    (repo / ".ddflow").mkdir(exist_ok=True)
-    cfg = repo / ".ddflow" / "config.toml"
-    cfg.write_text((cfg.read_text() if cfg.exists() else "") + "\n[session]\nfirst_call = false\n")
+def test_it_is_off_when_the_knob_is_off(repo, monkeypatch):
+    monkeypatch.setenv("DDFLOW_SESSION_FIRST_CALL", "false")
+    srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
+    assert "ddflow session start" not in "".join(_texts(_call(srv)))
+
+
+def test_a_connection_that_never_said_who_it_is_gets_nothing(repo):
     assert "ddflow session start" not in "".join(_texts(_call(Server(repo))))
 
 
 def test_it_is_clipped_to_the_token_ceiling():
     text = "x" * 10_000
     out = firstcall.clip(text, 100)
-    assert len(out) < 100 * firstcall.CHARS_PER_TOKEN + 100 and "clipped" in out
+    assert len(out) < 100 * 4 + 100 and "clipped" in out
 
 
 def test_a_native_hook_that_injects_the_start_turns_it_off(repo, monkeypatch):
@@ -70,7 +80,9 @@ def test_a_native_hook_that_injects_the_start_turns_it_off(repo, monkeypatch):
     assert firstcall.hook_delivers(repo, "claude") is True
     assert firstcall.hook_delivers(repo, "aider") is False
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s")
-    assert "ddflow session start" not in "".join(_texts(_call(Server(repo))))
+    srv = Server(repo)
+    srv.client_info = {"name": "claude-code"}
+    assert "ddflow session start" not in "".join(_texts(_call(srv)))
 
 
 def test_the_harness_is_found_from_the_client_name():

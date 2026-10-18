@@ -21,9 +21,8 @@ from ..infra.log import EventLog
 from ..services import harnessreg as HR
 from ..services import hookwriters as HW
 from ..services import sessions as S
+from .setup import _session_start
 
-#: Characters per token for the clip; a ceiling, not a measurement.
-CHARS_PER_TOKEN = 4
 #: Tools that already carry the start of a session in their own answer.
 CARRIES_START = frozenset({"ddflow_brief"})
 
@@ -50,7 +49,7 @@ def hook_delivers(repo: Path, harness: str) -> bool:
 
 
 def clip(text: str, max_tokens: int) -> str:
-    limit = max(1, max_tokens) * CHARS_PER_TOKEN
+    limit = max(1, max_tokens) * 4  # about four characters a token: a ceiling, not a measure
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "\n...(clipped; call ddflow_brief for the rest)"
@@ -64,11 +63,13 @@ def preamble(repo: Path, agent: str, tool: str, client_info: Mapping[str, Any]) 
         if not cfg.session.first_call or tool in CARRIES_START:
             return ""
         harness = harness_of(client_info)
+        if not harness and not client_info:
+            return ""  # a connection that never said who it is (no initialize) gets no start
         if harness and hook_delivers(repo, harness):
             return ""
-        from .setup import _session_start
-
-        S.resolve(EventLog(repo, agent), tool=harness)  # records the start with the harness name
+        S.resolve(
+            EventLog(repo, agent, log_cfg=cfg.log), tool=harness
+        )  # records the start with the harness name
         body = _session_start(repo, agent).data.get("message", "")
         return clip(body, cfg.session.first_call_max_tokens) if body else ""
     except Exception:

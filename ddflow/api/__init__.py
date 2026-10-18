@@ -61,6 +61,7 @@ from .docs import run_docs
 from .export import export as export_documents
 from .export import export_list as export_list_documents
 from .export import export_tool
+from .firstcall import preamble as first_call_preamble
 from .flow import (
     flow_choose,
     flow_show,
@@ -274,6 +275,7 @@ __all__ = [
     "export_list_documents",
     "export_tool",
     "external_sync",
+    "first_call_preamble",
     "flow_choose",
     "flow_show",
     "gate_list",

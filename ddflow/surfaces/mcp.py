@@ -817,9 +817,7 @@ class Server:
         if self._first_call_done:
             return ""
         self._first_call_done = True
-        from ..api import firstcall
-
-        return firstcall.preamble(self.repo, agent, tool, self.client_info)
+        return _api().first_call_preamble(self.repo, agent, tool, self.client_info)
 
     @staticmethod
     def _check_call(name: str, spec: Any, args: dict[str, Any], clash: Any) -> str:
