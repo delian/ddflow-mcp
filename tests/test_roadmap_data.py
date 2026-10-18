@@ -52,8 +52,9 @@ def test_phases_follow_dependency_order_then_priority():
     g.phase("A", "late but first", 90)
     g.phase("B", "early but waits", 10, needs=["A"])
     g.phase("C", "no deps", 50)
-    order = RC.order(["A", "B", "C"], lambda i: {"B": ["A"]}.get(i, []), lambda i: (1, i))
-    assert order.index("A") < order.index("B")
+    prio = {"A": 90, "B": 10, "C": 50}
+    order = RC.order(["A", "B", "C"], lambda i: {"B": ["A"]}.get(i, []), lambda i: (prio[i], i))
+    assert order == ["C", "A", "B"]
     assert RC.order(["B", "A"], lambda i: {"A": ["B"], "B": ["A"]}[i], str) == ["A", "B"]  # cycle
 
 
@@ -108,3 +109,16 @@ def test_schema_version_is_bumped_and_limit_still_counts():
     assert registry.get("roadmap").schema_version == 2
     d = data(road_log(), limit=1)
     assert d["hidden_phases"] >= 0 and d["open_tasks"] == 5
+
+
+def test_a_zero_cap_lists_no_tasks_and_counts_them():
+    rows = [{"id": "T1", "status": "ready"}, {"id": "T2", "status": "ready"}]
+    assert RC.cap_tasks(rows, 0) == ([], 2)
+    assert RC.cap_tasks(rows, -1) == ([], 2)
+
+
+def test_the_roadmap_keys_belong_to_the_roadmap_table_only():
+    from ddflow.config_sections.export import export_table_keys
+
+    assert {"hide", "next", "tasks", "show_hidden"} <= export_table_keys("roadmap")
+    assert not {"hide", "next", "tasks", "show_hidden"} & export_table_keys("changelog")
