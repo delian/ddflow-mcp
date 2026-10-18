@@ -38,6 +38,7 @@ heartbeat_s = 300
 shared_globs = [
   "README.md",
   "tests/golden/__snapshots__/**",
+  "tests/guard_baselines/**",
   "tests/golden/json/result_schemas.json",
   "tests/test_uc_surf_setup_ops_transcript.json",
 ]
