@@ -182,3 +182,21 @@ def test_read_layer_missing_dir(tmp_path):
     assert S.read_layer("project", tmp_path / "none") == ("project", [])
     (tmp_path / "a.toml").write_text(ADR)
     assert S.read_layer("project", tmp_path)[1][0][0] == "a.toml"
+
+
+@pytest.mark.parametrize("pat", ["docs/{}.md", "docs/{a-b}.md", "docs/{seq:{w}}.md", "docs/{seq"])
+def test_unexpandable_pattern_is_refused(pat):
+    with pytest.raises(S.DocTypeError, match="placeholder"):
+        S.parse(ADR.replace("docs/adr/{seq:04}-{slug}.md", pat))
+
+
+def test_same_layer_duplicate_name_is_refused_not_recursed():
+    b = ADR.replace('name = "adr"', 'name = "adr"\nextends = "adr"')
+    with pytest.raises(S.DocTypeError, match="defined twice"):
+        S.resolve([("l", [("a.toml", ADR), ("b.toml", b)])])
+
+
+def test_section_type_error_points_at_its_own_section():
+    text = ADR.replace("order = 2", 'order = 2\nlevel = "2"')
+    with pytest.raises(S.DocTypeError, match=r"x\.toml:13: .*level"):
+        S.parse(text, source="x.toml")

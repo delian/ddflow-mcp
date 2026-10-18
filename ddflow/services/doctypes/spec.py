@@ -22,6 +22,7 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from string import Formatter
 from typing import Any
 
 from ...core.registry import Registry
@@ -34,7 +35,7 @@ CONTRACTS = ("evergreen", "point_in_time", "generated")
 OWNERSHIPS = ("human", "generated", "shared")
 MATCHES = ("literal", "regex")
 PLACEHOLDERS = ("seq", "slug", "date")
-SCHEMA_VERSION = 1
+CURRENT_SCHEMA = 1
 
 _TOP = {
     "name", "title", "path", "pattern", "multi", "genre", "owner", "skeleton", "triggers",
@@ -46,7 +47,6 @@ _SECTION = {
 }  # fmt: skip
 _REVIEW = {"review_requires", "full_review_every_days", "stamp"}
 _NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
-_PLACE = re.compile(r"\{(\w+)(?::[^{}]*)?\}")
 
 
 class DocTypeError(ValueError):
@@ -100,7 +100,7 @@ class DocType:
     sections: tuple[Section, ...] = ()
     triggers: tuple[str, ...] = ()
     validate: Mapping[str, Any] = field(default_factory=dict)
-    schema_version: int = SCHEMA_VERSION
+    schema_version: int = CURRENT_SCHEMA
     extends: str = ""
     contract: str = "evergreen"
     review: Mapping[str, Any] = field(default_factory=dict)
@@ -161,9 +161,10 @@ class _Src:
 
     def __init__(self, source: str, text: str) -> None:
         self.source, self.text = source, text
+        self.at = 0  # 0-based line the current section starts on; keys are searched from here
 
     def err(self, msg: str, key: str = "", start: int = 0) -> DocTypeError:
-        line = _line(self.text, key, start) if key else 0
+        line = _line(self.text, key, start or self.at) if key else 0
         return DocTypeError(f"{self.source}{f':{line}' if line else ''}: {msg}")
 
     def unknown(
@@ -235,6 +236,7 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
     if not isinstance(sid, str) or not _NAME.match(sid):
         raise src.err("a section needs an id (lowercase letters, digits, - _)", "section", after)
     where = f"section {sid!r}"
+    src.at = max(start - 1, 0)
     src.unknown(raw, _SECTION, where, max(start - 1, 0))
     out = {
         "id": sid,
@@ -255,6 +257,7 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
             re.compile(out["heading"])
         except re.error as exc:
             raise src.err(f"{where}: heading is not a regex: {exc}", "heading", start) from None
+    src.at = 0
     return Section(**out), start
 
 
@@ -311,12 +314,18 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
             f"{where}: a single document has a path and no pattern",
             "pattern" if pattern else "name",
         )
-    for p in re.findall(_PLACE, pattern):
-        if p not in PLACEHOLDERS:
-            raise src.err(
-                f"{where}: pattern placeholder {{{p}}} is not one of {', '.join(PLACEHOLDERS)}",
-                "pattern",
-            )
+    try:
+        fields = [f for _, f, _, _ in Formatter().parse(pattern) if f is not None]
+        bad = [f for f in fields if f not in PLACEHOLDERS]
+        if pattern and not bad:
+            pattern.format(seq=1, slug="s", date="d")
+    except (ValueError, KeyError, IndexError):
+        bad = ["(malformed)"]
+    if bad:
+        raise src.err(
+            f"{where}: pattern placeholder {{{bad[0]}}} is not one of {', '.join(PLACEHOLDERS)}",
+            "pattern",
+        )
     sections, seen = [], {}
     cursor = 0
     for rs in raw.get("section", []):
@@ -347,7 +356,7 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
         sections=tuple(sections),
         triggers=_strs(src, f"{where}.triggers", raw.get("triggers", [])),
         validate=_validate(src, raw.get("validate", {})),
-        schema_version=_typed(src, raw, "schema_version", int, where, SCHEMA_VERSION),
+        schema_version=_typed(src, raw, "schema_version", int, where, CURRENT_SCHEMA),
         extends=_typed(src, raw, "extends", str, where, ""),
         contract=_choice(src, raw, "contract", CONTRACTS, where, "evergreen"),
         review=_review(src, raw.get("review", {})),
@@ -374,7 +383,10 @@ def resolve(layers: Sequence[Layer]) -> dict[str, DocType]:
     for i, (label, files) in enumerate(layers):
         for fname, text in files:
             raw, src = read_raw(text, f"{label}/{fname}" if label else fname)
-            defs.setdefault(raw["name"], []).append((raw, src, i))
+            have = defs.setdefault(raw["name"], [])
+            if any(d[2] == i for d in have):
+                raise src.err(f"document type {raw['name']!r} is defined twice in {label}", "name")
+            have.append((raw, src, i))
 
     def merged(name: str, upto: int, trail: tuple[str, ...]) -> tuple[dict[str, Any], _Src]:
         cands = [d for d in defs.get(name, []) if d[2] <= upto]
