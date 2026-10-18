@@ -150,3 +150,8 @@ def test_adopts_stamped_blocks_are_not_read_as_regions():
         "<!-- ddflow:end rules/work-queue -->\n"
     )
     assert RC.problem(stamped) == "" and RC.edited(stamped) == [] and RC.mask(stamped) == stamped
+
+
+def test_an_orphaned_end_marker_is_a_problem_not_silence():
+    orphan = "top\nbody\n<!-- ddflow:end d/a -->\n"
+    assert RC.problem(orphan) and RC.mask(orphan) == orphan
