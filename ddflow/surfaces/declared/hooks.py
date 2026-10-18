@@ -14,6 +14,13 @@ from ..tools._common import _all_tools, _api
 
 _COVERED = "covered by {}, whose action argument selects it"
 
+#: What each read-only `ddflow_hooks` harness action answers with (the others: the hook facts).
+_HARNESS_PAYLOAD = {
+    "harness_list": ("harnesses",),
+    "harness_show": ("id", "levels", "features"),
+    "harness_doctor": ("findings",),
+}
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
@@ -244,24 +251,36 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_hooks",
         description="Inspect or install the enforcement git hook — the one layer of this workflow that does not depend on the agent agreeing. It refuses a commit touching paths no live lease of yours covers. `status` reports whether it is installed AND whether the policy actually blocks, since a block policy with no hook installed enforces nothing.",
         params=(
-            Param("action", help="status (default), install, uninstall."),
+            Param(
+                "action",
+                help="status (default), install, uninstall; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken (read-only).",
+            ),
+            Param("harness", help="harness_show / harness_doctor: the agent's descriptor id."),
             Param(
                 "claude",
                 type="boolean",
                 help="Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, even after compaction, starts with the ddflow brief. Other hooks there are untouched.",
             ),
         ),
-        call=lambda repo, a, agent: _api().hooks(
-            repo,
-            action=a.get("action", "status") or "status",
-            claude=bool(a.get("claude")),
-            agent=agent,
+        call=lambda repo, a, agent: (
+            _api().harness_view(
+                repo, what=a["action"].removeprefix("harness_"), id=a.get("harness", "") or ""
+            )
+            if str(a.get("action", "")).startswith("harness_")
+            else _api().hooks(
+                repo,
+                action=a.get("action", "status") or "status",
+                claude=bool(a.get("claude")),
+                agent=agent,
+            )
         ),
         # The FACTS. `message` is the prose rendering of them and stays OUT of the JSON
         # body. `session_hook` was ADDED deliberately with the SessionStart hook -- a
         # wire change of its own, not part of the migration this comment once guarded
         # -- and is `null` when the settings file could not be read.
-        payload=("installed", "policy", "session_hook", "trailer_hook"),
+        payload=lambda a: _HARNESS_PAYLOAD.get(
+            str(a.get("action", "")), ("installed", "policy", "session_hook", "trailer_hook")
+        ),
     ),
     Command(
         path=(),
@@ -320,6 +339,10 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("prompts", "show"), reason=_COVERED.format("ddflow_prompts")),
     Command(path=("prompts", "eject"), reason=_COVERED.format("ddflow_prompts")),
     Command(path=("prompts", "get"), reason=_COVERED.format("ddflow_prompts")),
+    Command(path=("harness",), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "list"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "show"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "doctor"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),
     Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
     Command(

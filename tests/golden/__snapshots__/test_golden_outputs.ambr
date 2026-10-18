@@ -1898,6 +1898,16 @@
           glob-matched file (the files pins.toml owns are governed by
           [review].exclude_pin_files, which must be turned off as well to send every
           file).
+      review.manifest_max_files = 40   [default]
+          How many files the manifest of the whole change lists in every review
+          chunk's prompt (default 40; 0 = no manifest). A chunk is judged alone
+          otherwise, and reviewers reported 'no templates' or 'nothing adds the guard'
+          about facts a sibling chunk answered. Each row gives a file's added/removed
+          lines and a one-line summary; the new files and the files left out by
+          [review].exclude_globs are named; files past the cap are counted. Change it
+          for the project (`ddflow config review.manifest_max_files 80`), for this
+          machine (add --local), per run (DDFLOW_REVIEW_MANIFEST_MAX_FILES), or over
+          MCP with `ddflow_configure`.
       review.exclude_pin_files = True   [default]
           Whether the files `.ddflow/pins.toml` owns (README regions, golden
           snapshots, the setup transcript: regenerated, never read) are left out of
@@ -2405,7 +2415,11 @@
       prompts.review_user = ''   [default]
           Path to the per-chunk review message template. Variables: intent, context,
           diff, fence (the backtick fence that safely holds the diff), chunk_index,
-          chunk_total.
+          chunk_total, manifest (every changed file of the whole change with +/-
+          counts and a one-line summary, the new files and the files left out of
+          review; empty when [review].manifest_max_files is 0), manifest_fence (the
+          fence that safely holds the manifest), chunk_files (the files this part
+          holds).
       prompts.gate_instruction = ''   [default]
           Path to the template rendered when an agent asks what a gate requires.
           Variables: gate, item.
