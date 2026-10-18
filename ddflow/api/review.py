@@ -15,6 +15,7 @@ reviewer has actually answered.
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import threading
 import time
@@ -45,6 +46,7 @@ from ..views import human
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import item_tree
+from .knowledge.regression import _unresolved_tests
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
 from .review_supersede import carry, round_evidence, superseded_digests
@@ -259,6 +261,55 @@ def _finding_listing(it, gate: str) -> str:
     return "\nfindings:\n" + "\n".join(lines) if lines else ""
 
 
+_NODE = re.compile(r"[\w./-]+\.py::\S+")
+_PY_PATH = re.compile(r"[\w./-]+\.py\b(?:::[\w:.\[\]-]+)?")
+_RUN_ARG = re.compile(r"(?:-k\s+|\./|make\s+)\S+")  # an expression or script run, not a test name
+_BARE_TEST = re.compile(r"\btest_\w+")
+
+
+def _defined_anywhere(text: str, name: str) -> bool:
+    return (
+        re.search(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b", text, re.M) is not None
+    )
+
+
+def probe_problem(roots: list[Path], probe: str) -> str:
+    """Why a triage probe names a test that does not exist, or "" (bug Bb049f0ae06).
+
+    A probe is free text -- the command run, the fix made -- so only what it CLAIMS to be a
+    test is checked: a pytest node id (`tests/x.py::test_y`, `::Class::test_y`) must name an
+    existing file defining each part, and a bare `test_name` must be defined somewhere under
+    `tests/`. A node that resolves nowhere was never run, so the verdict rests on nothing."""
+    nodes = [m.group(0).rstrip(".,;:)\"'") for m in _NODE.finditer(probe)]
+    # The resolver `bug fixed --regression-test` uses: every worktree, bases, parametrize ids.
+    missing, _unchecked = _unresolved_tests(roots[-1], ",".join(nodes)) if nodes else ([], [])
+    if missing:
+        return f"probe names {', '.join(missing)}, which no worktree defines"
+    prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
+    bare = set(_BARE_TEST.findall(prose))
+    if bare:
+        texts = [
+            f.read_text(errors="replace")
+            for r in roots
+            for f in sorted((r / "tests").rglob("*.py"))
+        ]
+        for name in sorted(bare):
+            if not any(_defined_anywhere(t, name) for t in texts):
+                return f"probe names test {name!r}, but no file under tests/ defines it"
+    return ""
+
+
+def _probe_refusal(repo: Path, it, probe: str) -> str:
+    """`probe_problem` over the item's worktree and the repo, as a refusal sentence or ""."""
+    roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
+    problem = probe_problem(roots, probe)
+    return (
+        f"{problem}: a probe must name an existing test or a command that was run"
+        if problem
+        else ""
+    )
+
+
 def triage(
     repo: Path,
     item: str,
@@ -303,6 +354,8 @@ def triage(
             "--probe is required: for --refuted the run that shows the finding false, for "
             "--confirmed the fix or test that answers it"
         )
+    if problem := _probe_refusal(repo, it, probe):
+        return bad(problem)
     if not gate:
         withf = sorted(g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings"))
         if len(withf) > 1:
