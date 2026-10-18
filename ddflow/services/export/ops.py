@@ -416,6 +416,13 @@ def state_of(repo: Path, cfg: Config, q: Q.Query, spec: Spec) -> tuple[str, str]
 
 def _region_edit(text: str, doc: str) -> str:
     """ok | none (no markers) | edited (digest mismatch) | broken (duplicate/unbalanced)."""
+    if "ddflow:begin" in text:  # named regions (<doc>/<name>) and the legacy dialects
+        try:
+            mine = [r for r in RG.parse(text) if r.doc == doc]
+        except RG.RegionError:
+            return "broken"
+        if mine:
+            return "edited" if any(r.edited for r in mine) else "ok"
     begins = list(W._region_pattern(doc, "begin").finditer(text))
     ends = list(W._region_pattern(doc, "end").finditer(text))
     if not begins and not ends:
