@@ -44,7 +44,12 @@ _DELIM = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
 
 
 def _cells(row: str) -> int:
-    return len(row.strip().strip("|").split("|"))
+    """Cells of a GFM row: split on pipes that are not escaped, one border pipe off each end."""
+    body = row.strip()
+    body = body.removeprefix("|")
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    return len(re.split(r"(?<!\\)\|", body))
 
 
 def _is_table_head(head: str, delim: str) -> bool:
@@ -105,7 +110,9 @@ def _setext_end(lines: list[str], i: int, n: int) -> int:
     return 0
 
 
-def _rst_title(lines: list[str], i: int, n: int) -> tuple[int, str, str, bool] | None:
+def _rst_title(
+    lines: list[str], i: int, n: int, multi: bool = True
+) -> tuple[int, str, str, bool] | None:
     """``(stop, title, adornment char, has overline)`` of a title starting at line ``i``: the
     title may span several lines, ends at the first adornment line at least as long as its
     longest line, and an overline (when there is one) is the same character."""
@@ -113,10 +120,12 @@ def _rst_title(lines: list[str], i: int, n: int) -> tuple[int, str, str, bool] |
     first = i + 1 if over else i
     if first >= n or not lines[first].strip():
         return None  # an adornment alone is a transition
-    for k in range(first + 1, n):
+    for k in range(first + 1, n if multi else min(n, first + 2)):
         if not lines[k].strip():
             return None
         if _RST_ADORN.match(lines[k]):
+            if len({len(r) - len(r.lstrip()) for r in lines[first:k]}) > 1:
+                return None  # a title's lines share one indentation
             rows = [r.strip() for r in lines[first:k]]
             long_enough = len(lines[k].rstrip()) >= max(len(r) for r in rows)
             if over and (
@@ -133,7 +142,7 @@ def _scan_rst(lines: list[str], start: int) -> Scan:
     while i < n:
         if not lines[i].strip():
             fresh, i = True, i + 1
-        elif fresh and (hit := _rst_title(lines, i, n)):
+        elif hit := _rst_title(lines, i, n, multi=fresh):
             stop, text, char, over = hit
             if (char, over) not in styles:
                 styles.append((char, over))
