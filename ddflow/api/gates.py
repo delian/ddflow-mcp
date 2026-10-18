@@ -624,7 +624,9 @@ def run(
         return repeated
     scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
     if scope is not None and scope.needs_ci and not forced:  # never the whole suite unasked
-        return O.refused("gate.run", scope.why, id=item, gate=gate, outcome="", evidence=scope.evidence())
+        return O.refused(
+            "gate.run", scope.why, id=item, gate=gate, outcome="", evidence=scope.evidence()
+        )
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)

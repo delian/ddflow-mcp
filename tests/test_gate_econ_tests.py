@@ -93,7 +93,10 @@ def _run_unit_tests(repo: Path, item: str) -> tuple[int, dict]:
     code, out, _err = run_cli(repo, "--json", "gate", "run", item, "unit_tests")
     body = json.loads(out)
     # a refusal (exit 3) carries its reason, not an evidence block
-    return code, body.get("evidence") or {"scope_why": (body.get("refusal") or {}).get("reason", ""), "body": body}
+    return code, body.get("evidence") or {
+        "scope_why": (body.get("refusal") or {}).get("reason", ""),
+        "body": body,
+    }
 
 
 def test_a_bug_fix_runs_only_the_tests_its_change_reaches(repo):
@@ -118,7 +121,9 @@ def test_without_a_passing_ci_the_gate_refuses_rather_than_run_the_whole_suite(r
     assert code == 3, ev
     assert "ci gate has no outcome" in ev["scope_why"], ev
     assert "rerun ci" in ev["scope_why"]
-    assert not (ev["body"].get("evidence") or {}).get("selected_tests")  # nothing was selected or run
+    assert not (ev["body"].get("evidence") or {}).get(
+        "selected_tests"
+    )  # nothing was selected or run
     _ci(repo, "fix-B1", "skipped")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == 3 and "ci gate is skipped" in ev["scope_why"], ev
