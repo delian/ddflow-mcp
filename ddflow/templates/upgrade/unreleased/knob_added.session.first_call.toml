@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.first_call"
+new = "true"
+why = "Append a compact session start to the first MCP tool call of a connection (first_call), capped at first_call_max_tokens tokens; off when a native hook already delivers it."
+impact = "additive"
