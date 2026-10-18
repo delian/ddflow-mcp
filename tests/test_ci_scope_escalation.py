@@ -3,6 +3,7 @@ widened to the whole suite by the unit_tests gate (D-gate-economy-r3, [ci].tests
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import stat
 from types import SimpleNamespace as NS
@@ -123,3 +124,19 @@ def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monke
     assert got is picked  # its own selection, not Scope("full", "the ci gate is failed ...")
     full = TSC.unit_tests_scope(cfg, NS(bugs={}), _item("failed", "full"), "pytest", tmp_path)
     assert full.scope == "full" and "ci gate is failed" in full.why
+
+
+def test_a_hook_stage_that_could_not_start_is_not_called_failed(branch, stubs, monkeypatch):
+    from ddflow.services.cmdrunner import CommandRunner
+
+    real = CommandRunner.run
+
+    def run(self, *a, **kw):
+        res = real(self, *a, **kw)
+        # the process "did not start" (runner missing, slots taken)
+        return dataclasses.replace(res, status="unavailable", kind="missing", code=None)
+
+    monkeypatch.setattr(CommandRunner, "run", run)
+    res = CI.run(branch, Config.load(branch), base="main", for_item=True)
+    assert res.status == "unavailable"
+    assert "could not run" in res.scope["why"] and "failed" not in res.scope["why"]
