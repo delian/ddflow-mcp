@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ...core.bookkeeping import STATE_EXCLUDE, is_state
 from ...core.digest import content_digest
@@ -57,6 +57,30 @@ def _untracked_paths(cwd: Path) -> list[str]:
     return _untracked_listing(cwd) or []
 
 
+#: Paths per `git hash-object` call.
+_HASH_BATCH = 200
+
+
+def _hash_ids(cwd: Path, paths: list[str]) -> list[str] | None:
+    """Blob ids of ``paths``, in order, without writing objects; None when git failed or
+    answered with a different count.
+
+    `git hash-object` WITHOUT `-w` computes ids and writes nothing, so this stays an
+    observation. `--`: a file named `-w` is a path, never the option that WRITES the object
+    (Bc63747e0a4). A short or long reply is never zipped: `zip` would truncate it, pairing
+    hashes with the wrong paths into a fingerprint that looks plausible and means nothing.
+    """
+    ids: list[str] = []
+    for i in range(0, len(paths), _HASH_BATCH):
+        chunk = paths[i : i + _HASH_BATCH]
+        r = W.git(cwd, "hash-object", "--", *chunk)
+        got = r.out.splitlines()
+        if not r.ok or len(got) != len(chunk):
+            return None
+        ids += got
+    return ids
+
+
 def _untracked_digest(cwd: Path) -> str:
     """Content ids for untracked files, or their names when there are too many.
 
@@ -76,15 +100,9 @@ def _untracked_digest(cwd: Path) -> str:
         # fingerprint that quietly stopped covering content would make `stale_evidence`
         # go quiet for the repositories that need it most.
         return f"names-only:{len(paths)}:" + digest("\n".join(sorted(paths)))
-    # `--`: an untracked file named `-w` is a path, never the option that WRITES the
-    # object (Bc63747e0a4).
-    hashed = W.git(cwd, "hash-object", "--", *paths)
-    ids = hashed.out.splitlines()
-    # A short or long reply must not be zipped silently: `zip` would truncate to the
-    # shorter list, pairing hashes with the wrong paths and producing a fingerprint
-    # that looks entirely plausible and means nothing. Fall back to names, which is
-    # weaker but honest.
-    if not hashed.ok or len(ids) != len(paths):
+    # Fall back to names when the ids cannot be paired with the paths: weaker but honest.
+    ids = _hash_ids(cwd, paths)
+    if ids is None:
         return digest("\n".join(sorted(paths)))
     return digest("\n".join(f"{h} {p}" for h, p in zip(ids, paths, strict=True)))
 
@@ -260,8 +278,15 @@ def tree_identity(cwd: Path) -> str:
     return f"{head}+{manifest or _dirt(parts)}"
 
 
+def split_identity(tree_sha: str) -> tuple[str, str, str]:
+    """``(head, "+" or "", dirt)`` of a `tree_identity` / fingerprint: the one split of
+    ``<head>+<dirt>`` (the separator is "" when the value has none)."""
+    return tree_sha.partition("+")
+
+
 def head_of(tree_sha: str) -> str:
-    return tree_sha.split("+", 1)[0] if "+" in tree_sha else ""
+    head, sep, _dirt = split_identity(tree_sha)
+    return head if sep else ""
 
 
 def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
@@ -319,7 +344,7 @@ def recorded_content(tree_sha: str, source_tree_field: str = "") -> str:
     """
     if source_tree_field:
         return source_tree_field
-    _base, _sep, dirt = tree_sha.partition("+")
+    _base, _sep, dirt = split_identity(tree_sha)
     return dirt if dirt.startswith("st:") else ""
 
 
@@ -330,7 +355,7 @@ LEGACY_CLEAN = "95e0c70caf8cc336"  # == digest("\x00\x00"), pinned by a test
 
 def normal_fingerprint(fp: str) -> str:
     """``fp`` with the pre-fix spelling of a clean tree read as `clean`."""
-    base, sep, dirt = fp.partition("+")
+    base, sep, dirt = split_identity(fp)
     return f"{base}+clean" if sep and dirt == LEGACY_CLEAN else fp
 
 
@@ -347,6 +372,26 @@ _ours = is_state  # `.ddflow/` is ddflow's bookkeeping, not the work -- see FING
 TreeEntries = dict[str, tuple[str, str]]
 
 
+class _Row(NamedTuple):
+    mode: str
+    oid: str  #: the blob id, whichever field the command put it in
+    extra: str  #: the field that is not the id: the object type (ls-tree) or the stage (ls-files)
+    path: str
+
+
+def _row(row: str, *, index: bool) -> _Row | None:
+    """An `ls-tree` row (``mode type id\\tpath``) or, with ``index``, an `ls-files -s` row
+    (``mode id stage\\tpath``) read into one shape with the id in ``oid``; None when it is
+    neither. Where the id sits differs, and taking the stage for it is a fingerprint that
+    never changes with content."""
+    meta, _, path = row.partition("\t")
+    parts = meta.split()
+    if len(parts) != 3 or not path:  # noqa: PLR2004 -- three fields
+        return None
+    mode, a, b = parts
+    return _Row(mode, a, b, path) if index else _Row(mode, b, a, path)
+
+
 def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
     """Every path of commit ``rev`` with its mode and blob id, `.ddflow/` left out."""
     rows = _git_z(cwd, "ls-tree", "-r", "-z", "--full-tree", rev)
@@ -354,10 +399,9 @@ def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
         return None
     out: TreeEntries = {}
     for row in rows:
-        meta, _, path = row.partition("\t")
-        parts = meta.split()
-        if len(parts) == 3 and path and not _ours(path):  # noqa: PLR2004 -- mode type id
-            out[path] = (parts[0], parts[2])
+        parsed = _row(row, index=False)
+        if parsed and not _ours(parsed.path):
+            out[parsed.path] = (parsed.mode, parsed.oid)
     return out
 
 
@@ -445,26 +489,22 @@ def _index_entries(rows: list[str]) -> TreeEntries | None:
     """`git ls-files -s -z` rows as entries; None for an unmerged index (no one tree)."""
     out: TreeEntries = {}
     for row in rows:
-        meta, _, path = row.partition("\t")
-        parts = meta.split()
-        if len(parts) != 3 or not path or parts[2] != "0":  # noqa: PLR2004 -- mode id stage
+        parsed = _row(row, index=True)
+        if parsed is None or parsed.extra != "0":
             return None
-        if not _ours(path):
-            out[path] = (parts[0], parts[1])
+        if not _ours(parsed.path):
+            out[parsed.path] = (parsed.mode, parsed.oid)
     return out
 
 
 def _hash_into(root: Path, out: TreeEntries, to_hash: list[tuple[str, str]]) -> bool:
     """Blob ids for ``to_hash`` ((path, mode)) into ``out``, without writing objects."""
 
-    for i in range(0, len(to_hash), 200):
-        chunk = to_hash[i : i + 200]
-        r = W.git(root, "hash-object", "--", *(p for p, _ in chunk))
-        ids = r.out.splitlines()
-        if not r.ok or len(ids) != len(chunk):
-            return False
-        for (path, mode), oid in zip(chunk, ids, strict=True):
-            out[path] = (mode, oid)
+    ids = _hash_ids(root, [p for p, _ in to_hash])
+    if ids is None:
+        return False
+    for (path, mode), oid in zip(to_hash, ids, strict=True):
+        out[path] = (mode, oid)
     return True
 
 
