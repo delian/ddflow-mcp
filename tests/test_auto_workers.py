@@ -71,3 +71,23 @@ def test_ignored_and_deselected_paths_are_not_a_selection():
 
 def test_unknown_load_respects_the_floor():
     assert WK.compute(cfg(lo=24), None, source=FakeSource({}), cores=192).n == 24
+
+
+def test_fixed_setting_is_still_capped_by_the_files_and_none_means_auto():
+    assert run(cfg(workers="16"), 0.9, files=1).n == 1
+    assert run(cfg(workers=None), 0.0).n == 48
+
+
+def test_the_gate_runner_substitutes_the_workers(tmp_path):
+    """Every command that runs goes through run_command_gate: the placeholder never
+    reaches the shell, and the inputs are in the evidence."""
+    from ddflow.config import Config
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    c = Config.load(tmp_path)
+    c.ci.workers = "3"
+    g = GateDef(id="probe", command="echo n={workers}", cwd="repo")
+    outcome, ev = run_command_gate(g, tmp_path, cfg=c)
+    assert outcome == "passed" and "n=3" in ev["tail"]
+    assert ev["command"] == "echo n={workers}" and ev["command_run"] == "echo n=3"
+    assert ev["workers"]["n"] == 3 and ev["workers"]["setting"] == "3"

@@ -367,7 +367,10 @@ def relevant_tests(
         data["unit_tests_gate"] = _scope_data(
             TSC.unit_tests_scope(cfg, st, st.items[item], full, tree)
         )
-        data["unit_tests_gate"]["command"] = WK.resolve(data["unit_tests_gate"]["command"], cfg)[0]
+        gate_data = data["unit_tests_gate"]
+        gate_data["command"] = WK.resolve(
+            gate_data["command"], cfg, len(gate_data["tests"]) or None
+        )[0]
     if not files:
         return O.nothing(
             "tests",
