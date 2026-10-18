@@ -73,8 +73,8 @@ def _roots() -> set[str]:
         for name in ("commands", "skills", "subagents", "worktrees"):
             sec = getattr(h, name)
             paths.append(getattr(sec, "dir", "") if sec else "")
-        for p in paths:
-            p = p.removeprefix("~/")
+        for raw in paths:
+            p = raw.removeprefix("~/")
             if p.startswith(".") and "/" in p:
                 roots.add(p.split("/")[0] + "/")
     return roots
