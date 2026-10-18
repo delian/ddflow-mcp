@@ -1,0 +1,30 @@
+# A planted-fault fixture for the shared evaluation harness (SE-eval-harness): the input a
+# workflow is run on, and the faults planted in it that the workflow must find.
+name = "evalfixture"
+summary = "an evaluation fixture: an input with planted faults a workflow must catch"
+text = ["input", "planted", "tags"]
+columns = ["title", "workflow", "tags"]
+filters = ["workflow", "tags"]
+render = "{id} [{workflow}] {title}"
+stamp = 1
+[[field]]
+name = "title"
+required = true
+help = "One line saying what the fixture is."
+[[field]]
+name = "workflow"
+required = true
+help = "The workflow it evaluates (a review gate, a lens, a lint set, an importer ...)."
+[[field]]
+name = "input"
+default = ""
+help = "What the workflow is run on: a diff, a document, a log, as text."
+[[field]]
+name = "planted"
+type = "array"
+default = []
+help = "One entry per planted fault, 'id=word|word': the fault counts as caught when a finding contains any of the words. An empty list is a clean fixture: every finding on it is a false positive."
+[[field]]
+name = "tags"
+type = "array"
+default = []
