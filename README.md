@@ -5843,8 +5843,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=3b79be5d8e2a -->
-<details><summary>All 339 knobs across 38 sections</summary>
+<!-- ddflow:begin README/knobs sha=5e708e1f9752 -->
+<details><summary>All 342 knobs across 38 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5910,6 +5910,7 @@ long default is left to `ddflow config --explain`.
 | `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.kind_pipelines` | `{}` |  |
 | `gates.required` | `["implement", "unit_tests", "merge"]` |  |
+| `gates.merge_blocked_by_failed` | `["ci"]` |  |
 | `gates.unavailable_is_failure` | `false` |  |
 | `gates.allow_skip_with_reason` | `true` |  |
 | `gates.require_outcome` | `true` |  |
@@ -6077,6 +6078,8 @@ long default is left to `ddflow config --explain`.
 | `review.delta_default` | `false` |  |
 | `review.fix_round_free` | `true` |  |
 | `review.combined_under_lines` | `150` |  |
+| `review.exclude_globs` | (long: see `ddflow config --explain`) |  |
+| `review.exclude_pin_files` | `true` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
