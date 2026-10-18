@@ -50,6 +50,7 @@ from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
 from ..services.identity import agent_marker
 from ..views.markdown import new_reports_line
+from . import gate_baseline as GB
 from ._base import _load
 from .gate_guard import guard_record
 from .lifecycle import callers_tree
@@ -736,17 +737,20 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
     if stale:
         return O.refused("gate.run", stale, id=item, gate=gate, outcome="", evidence=ev)
 
-    def rerun(g):
+    def rerun(g, where=None):
         return G.run_command_gate(
             g,
-            cwd,
+            where or cwd,
             on_tick=keeper,
             tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
             cfg=cfg,
         )
 
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
-    reason = _failure_reason(gdef, result, ev)
+    result, red = GB.apply(
+        repo, cfg, agent, it, gate, gdef, result, ev, rerun, _fail_fast(gdef.command)
+    )
+    reason = red or _failure_reason(gdef, result, ev)
     # Unmeasured here: `run_command_gate` measured the tree the command ran on.
     R.record_measured(
         log,
