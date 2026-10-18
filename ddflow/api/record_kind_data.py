@@ -72,3 +72,32 @@ def load_packaged(name: str, records: ModuleType | None = None) -> Any:
     R = _records(records)
     text = (KINDS_DIR / f"{name}.toml").read_text(encoding="utf-8")
     return R.declare(parse_kind(text, source=f"{name}.toml", records=R))
+
+
+def load_all(records: ModuleType | None = None) -> list[Any]:
+    """Declare every packaged kind, ``rule`` first; the kinds it declares, in that order."""
+    names = sorted((n for n, _ in packaged()), key=lambda n: (n != "rule", n))
+    return [load_packaged(n, records) for n in names]
+
+
+#: Where a project keeps kinds of its own, beside its config.
+PROJECT_DIR = ".ddflow/kinds"
+
+
+def load_project(repo: Path | str, records: ModuleType | None = None) -> list[Any]:
+    """Declare the kinds in ``<repo>/.ddflow/kinds/*.toml``. A name a packaged kind has is
+    replaced for this process (a project overrides a shipped default); a file that is not a
+    kind is an error naming the file, and none of the others is affected by it."""
+    R = _records(records)
+    found, errors = [], []
+    for path in sorted((Path(repo) / PROJECT_DIR).glob("*.toml")):
+        try:
+            kind = parse_kind(path.read_text(encoding="utf-8"), source=str(path), records=R)
+        except (ValueError, OSError) as exc:  # KindDataError is a ValueError
+            errors.append(str(exc))
+            continue
+        R.forget(kind.name)
+        found.append(R.declare(kind))
+    if errors:
+        raise KD.KindDataError("; ".join(errors))
+    return found

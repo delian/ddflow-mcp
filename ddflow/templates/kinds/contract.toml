@@ -1,0 +1,51 @@
+# A contract with a vendor: terms, term dates and value.
+name = "contract"
+summary = "a contract: terms agreed with a vendor, its dates and value"
+text = ["terms", "tags"]
+columns = ["title", "vendor", "state", "ends"]
+filters = ["state", "vendor", "tags"]
+sources = ["document"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "draft"
+[lifecycle.transitions]
+draft = ["signed", "abandoned"]
+signed = ["expired", "terminated"]
+[[link]]
+field = "vendor"
+to = "vendor"
+[[validator]]
+field = "value"
+min = 0
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "vendor"
+required = true
+[[field]]
+name = "state"
+choices = ["draft", "signed", "expired", "terminated", "abandoned"]
+[[field]]
+name = "terms"
+default = ""
+[[field]]
+name = "starts"
+default = ""
+help = "ISO date."
+[[field]]
+name = "ends"
+default = ""
+help = "ISO date."
+[[field]]
+name = "value"
+type = "integer"
+help = "Total value in the smallest currency unit."
+[[field]]
+name = "document"
+help = "Where the signed text is kept."
+[[field]]
+name = "tags"
+type = "array"
+default = []
