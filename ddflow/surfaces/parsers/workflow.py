@@ -94,15 +94,21 @@ def register(s: argparse._SubParsersAction) -> None:
     co_list.set_defaults(fn=cmd_companions)
     co_add.set_defaults(fn=cmd_companions)
 
-    hx = s.add_parser("harness", help="what each agent gets, at which fallback level, and what is broken")
-    hx_s = hx.add_subparsers(dest="harness_cmd", required=True)
-    hx_s.add_parser("list", help="every agent and whether this project is adopted for it").set_defaults(
-        fn=cmd_harness
+    hx = s.add_parser(
+        "harness", help="what each agent gets, at which fallback level, and what is broken"
     )
-    hxs = hx_s.add_parser("show", help="per event the ladder level in effect, and per feature the support")
+    hx_s = hx.add_subparsers(dest="harness_cmd", required=True)
+    hx_s.add_parser(
+        "list", help="every agent and whether this project is adopted for it"
+    ).set_defaults(fn=cmd_harness)
+    hxs = hx_s.add_parser(
+        "show", help="per event the ladder level in effect, and per feature the support"
+    )
     hxs.add_argument("id", help="the agent's descriptor id")
     hxs.set_defaults(fn=cmd_harness)
-    hxd = hx_s.add_parser("doctor", help="drift, missing hooks and dangling commands (exit 1 = findings)")
+    hxd = hx_s.add_parser(
+        "doctor", help="drift, missing hooks and dangling commands (exit 1 = findings)"
+    )
     hxd.add_argument("id", nargs="?", default="", help="one agent (default: every adopted one)")
     hxd.set_defaults(fn=cmd_harness)
 

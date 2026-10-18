@@ -281,6 +281,7 @@ __all__ = [
     "gate_run",
     "gate_status",
     "gate_verify",
+    "harness_view",
     "health",
     "heartbeat",
     "help_topic",
