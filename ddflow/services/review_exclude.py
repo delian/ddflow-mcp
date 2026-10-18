@@ -15,6 +15,9 @@ from typing import Any
 from ..core import globs, unidiff
 from . import pins
 
+#: How many excluded paths the one-line summary names.
+NAMED = 5
+
 
 @dataclass
 class Excluded:
@@ -27,8 +30,8 @@ class Excluded:
         return sum(n for _p, n in self.files)
 
     def line(self) -> str:
-        names = ", ".join(p for p, _n in self.files[:5])
-        more = f" and {len(self.files) - 5} more" if len(self.files) > 5 else ""
+        names = ", ".join(p for p, _n in self.files[:NAMED])
+        more = f" and {len(self.files) - NAMED} more" if len(self.files) > NAMED else ""
         return (
             f"excluded from review ([review].exclude_globs / pin files): {len(self.files)} "
             f"file(s), {self.bytes} bytes -- {names}{more}"
