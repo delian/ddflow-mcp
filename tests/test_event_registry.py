@@ -100,3 +100,7 @@ def test_every_owner_file_is_a_whole_file_of_kinds() -> None:
 def test_a_doc_that_would_break_the_table_is_refused(doc: str) -> None:
     k = EK.EventKind("lease.waiting", "waiting", doc)
     assert any("table cell" in p for p in EK.problems([k], ["lease.waiting"]))
+
+
+def test_a_one_word_doc_is_not_a_sentence() -> None:
+    assert EK.problems([EK.EventKind("lease.waiting", "waiting", "x.")], ["lease.waiting"])
