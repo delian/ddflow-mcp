@@ -223,3 +223,10 @@ def test_a_project_override_leaves_the_shipped_definition_kind_alone(repo):
     finally:
         R.forget("vendor")
         R.declare(kept)
+
+
+def test_the_generic_tool_and_the_generated_commands_share_one_control_list():
+    from ddflow.surfaces import records as SR
+
+    assert set(SR.CONTROL_ARGS) <= SR.RESERVED  # a field may not take any of them
+    assert {"id", "query", "limit", "check_only"} <= set(SR.CONTROL_ARGS)
