@@ -760,6 +760,10 @@
           Gates whose failure BLOCKS completion. Everything else records its outcome
           and lets the pipeline continue — advisory vs blocking is an explicit field,
           never a convention.
+      gates.merge_blocked_by_failed = ['ci']   [default]
+          Gates whose latest outcome FAILED, or was skipped over a failed run, makes
+          `ddflow merge` refuse the item: landing it can turn the base red. The way
+          past is a run that passes. Empty turns the check off.
       gates.unavailable_is_failure = False   [default]
           If true, a gate that could not run (tool missing, endpoint down) blocks like
           a failure. Default false, but UNAVAILABLE is always recorded distinctly and
@@ -1841,6 +1845,23 @@
           Change it for the project (`ddflow config review.combined_under_lines 100`),
           for this machine (add --local), per run
           (DDFLOW_REVIEW_COMBINED_UNDER_LINES), or over MCP with `ddflow_configure`.
+      review.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]
+          Globs of generated and pinned files (golden snapshots, transcripts,
+          lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a
+          re-pinned transcript turned a 3 KB change into an 11-chunk review that took
+          7 minutes and judged generated text. A bare pattern matches at any depth.
+          The review output and the gate's evidence say how many files and bytes were
+          left out and name them, so a skipped file is never silent. Change it for the
+          project (`ddflow config review.exclude_globs ...`), for this machine (add
+          --local), or over MCP with `ddflow_configure`; an empty list leaves out no
+          glob-matched file (the files pins.toml owns are governed by
+          [review].exclude_pin_files, which must be turned off as well to send every
+          file).
+      review.exclude_pin_files = True   [default]
+          Whether the files `.ddflow/pins.toml` owns (README regions, golden
+          snapshots, the setup transcript: regenerated, never read) are left out of
+          review chunks as well as [review].exclude_globs. Default true; false sends
+          them.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
