@@ -4,8 +4,8 @@ command shows only behind --full, marked merge-queue / phase-end only."""
 from __future__ import annotations
 
 import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
