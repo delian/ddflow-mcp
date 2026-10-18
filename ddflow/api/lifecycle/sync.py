@@ -14,14 +14,16 @@ from ...services.gates import outcomes as GO
 from .._base import _load
 
 
-def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") -> O.Outcome:
+def sync(
+    repo: Path, *, item: str = "", check: bool = False, agent: str = "", called_from=None
+) -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     if item:
         it = st.items.get(item)
         if it is None or it.removed:
             return O.failed("sync", f"no such item {item!r}")
     else:
-        it = BS.tree_item(st, repo, _here())
+        it = BS.tree_item(st, repo, _here(called_from))
         if it is None:
             return O.failed(
                 "sync", "this is not an item's worktree: name the item, `ddflow sync ITEM`"
@@ -59,10 +61,11 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
     return O.ok("sync", text=text, **data)
 
 
-def _here() -> Path:
+def _here(called_from) -> Path:
     """The checkout the caller stands in (a linked worktree, not the primary)."""
-    top = W.git(Path.cwd(), "rev-parse", "--show-toplevel")
-    return Path(top.out) if top.ok and top.out else Path.cwd()
+    start = Path(called_from) if called_from else Path.cwd()
+    top = W.git(start, "rev-parse", "--show-toplevel")
+    return Path(top.out) if top.ok and top.out else start
 
 
 def _text(r: BS.SyncResult, d: dict) -> str:
