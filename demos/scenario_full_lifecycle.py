@@ -837,9 +837,9 @@ def _act4_close_the_phase(sc, alpha, repo):
         reason="Documentation work is outside the scope of this lifecycle scenario.",
     )
     sc.check("the docs gate is explicitly skipped", code == 0, text[:200])
-    # This is about the lifecycle; the full-suite close check (phase_full_suite, default
-    # 'require') has its own tests, so it is switched off here (B7f54dbf1e3).
-    alpha.tool("ddflow_configure", set="schedule.phase_full_suite", value="off")
+    # phase_full_suite defaults to "require": record a full-suite pass on the merged tree
+    # so the default close check stays exercised end to end (B7f54dbf1e3).
+    sc.ddflow("ci", "run", "--full", "--command", "python3 -m pytest tests/ -q")
     text, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
     sc.check("P1 closes", code == 0, text)
 
