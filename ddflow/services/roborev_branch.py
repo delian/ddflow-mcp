@@ -63,6 +63,19 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
     return max(ids) if ids else None
 
 
+def _job_status(exe: str, where: Path, job: int) -> str:
+    """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
+    p = proc.capture([exe, "list", "--json", "--limit", "100"], cwd=where, timeout=_STEP_TIMEOUT_S)
+    try:
+        jobs = json.loads(p.stdout or "[]") or []
+    except ValueError:
+        return ""
+    for j in jobs:
+        if isinstance(j, dict) and str(j.get("id")) == str(job):
+            return str(j.get("status") or "")
+    return ""
+
+
 def run(where: Path, base: str, wait_s: int) -> Result:
     exe = shutil.which("roborev")
     if not exe:
@@ -94,9 +107,15 @@ def run(where: Path, base: str, wait_s: int) -> Result:
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.returncode == 0:
         return Result("clean", job=job, sha=head, text=text)
-    if text.strip():  # roborev wait exits 1 on a FAIL verdict and on a job error
+    # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
+    status = _job_status(exe, where, job)
+    if status == "done":
         return Result("findings", f"roborev wait exited {w.returncode}", job, head, text)
-    return Result("unavailable", f"roborev job {job} ended with no review (wait exit {w.returncode})", job, head)
+    return Result(
+        "unavailable",
+        f"roborev job {job} ended {status or 'in an unknown state'} with no review (wait exit {w.returncode})",
+        job, head, text,
+    )  # fmt: skip
 
 
 def main(argv: list[str] | None = None) -> int:
