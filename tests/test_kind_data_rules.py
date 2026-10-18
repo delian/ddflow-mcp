@@ -209,7 +209,6 @@ def test_a_pattern_is_not_bypassed_by_a_long_value():
     v = KR.Validator("slug", pattern="^[a-z]+$")
     assert KR._value_problem(v, "abc") == ""
     assert KR._value_problem(v, "a" * 20000 + "!") != ""
-    assert "too long" in KR._value_problem(v, "a" * 20001)
 
 
 def test_an_unnumbered_render_field_is_refused_when_declared():

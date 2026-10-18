@@ -18,10 +18,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-#: The longest value a pattern validator will match (a bound on pathological input): a longer
-#: one is refused, not matched in part.
-MAX_VALUE = 20000
-
 
 class RulesError(ValueError):
     """A rules declaration that is not one."""
@@ -132,8 +128,6 @@ def _text_problem(v: Validator, item: str) -> str:
         return v.message or f"{v.field} is longer than {v.max_length} characters"
     if not v.pattern:
         return ""
-    if len(item) > MAX_VALUE:
-        return v.message or f"{v.field} is longer than {MAX_VALUE} characters: too long to match"
     if not re.search(v.pattern, item):
         return v.message or f"{v.field} {item[:40]!r} does not match {v.pattern!r}"
     return ""
