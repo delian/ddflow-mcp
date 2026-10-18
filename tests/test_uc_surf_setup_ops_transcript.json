@@ -1298,7 +1298,7 @@
   ],
   2,
   "",
-  "usage: ddflow onboard [-h] [--apply] [--accept NAME]\n                      [{status,preflight,legacy,memory,test-gate,verify}]\nddflow onboard: error: argument stage: invalid choice: 'nosuch' (choose from status, preflight, legacy, memory, test-gate, verify)\n"
+  "usage: ddflow onboard [-h] [--apply] [--accept NAME]\n                      [{status,preflight,legacy,memory,test-gate,verify,harness}]\nddflow onboard: error: argument stage: invalid choice: 'nosuch' (choose from status, preflight, legacy, memory, test-gate, verify, harness)\n"
  ],
  [
   [
