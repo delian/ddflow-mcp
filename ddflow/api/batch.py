@@ -79,6 +79,12 @@ def _plan(cfg, st, entries, abandon, kind):
             unchanged.append(iid)
             continue
         plans.append((it, fields))
+    for iid in abandon:
+        gone = st.items.get(iid)
+        if gone is None or gone.removed:
+            return O.failed(kind, f"cannot abandon {iid!r}: no such item", id=iid)
+        if gone.terminal:
+            return O.refused(kind, f"{iid} is already {gone.state}; nothing to abandon", id=iid)
     return plans, unchanged
 
 
@@ -101,27 +107,26 @@ def _cycle_refusal(st, plans, abandon, kind) -> O.Outcome | None:
 
 
 def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
-    """Append the planned events under one lock; a lease refusal records nothing."""
-    with log.transaction():
-        retargets = []
-        for it, fields in plans:
-            globs, res = fields.get("globs"), fields.get("resources")
-            if globs is None and res is None:
-                continue
-            lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
-            if refusal:
-                return O.refused(kind, refusal, id=it.id, **result)
-            retargets.append((it, lease, globs, res))
-        for it, fields in plans:
-            log.append(f"{it.family}.updated", it.id, fields)
-        for it, lease, globs, res in retargets:
-            if lease is not None:
-                L.retarget(log, it.id, lease, globs, res)
-        for iid, why in abandon.items():
-            ab = st.items[iid]
-            log.append("item.abandoned", iid, {"reason": why, "kind": ab.kind})
-            if ab.lease:
-                L.release(log, iid, note=f"abandoned: {why}")
+    """Append the planned events (the caller holds the lock); a lease refusal records nothing."""
+    retargets = []
+    for it, fields in plans:
+        globs, res = fields.get("globs"), fields.get("resources")
+        if globs is None and res is None:
+            continue
+        lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
+        if refusal:
+            return O.refused(kind, refusal, id=it.id, **result)
+        retargets.append((it, lease, globs, res))
+    for it, fields in plans:
+        log.append(f"{it.family}.updated", it.id, fields)
+    for it, lease, globs, res in retargets:
+        if lease is not None:
+            L.retarget(log, it.id, lease, globs, res)
+    for iid, why in abandon.items():
+        ab = st.items[iid]
+        log.append("item.abandoned", iid, {"reason": why, "kind": ab.kind})
+        if ab.lease:
+            L.release(log, iid, note=f"abandoned: {why}")
     return O.ok(kind, **result)
 
 
@@ -137,7 +142,17 @@ def apply(
     """Apply ``entries`` (``{"id": ..., <ItemEdit field>: ...}``) and abandon the items in
     ``abandon`` (id -> reason), all or nothing. ``dry_run`` plans and records nothing."""
     abandon = abandon or {}
-    log, cfg, st = _load(repo, agent)
+    if dry_run:
+        return _decide(*_load(repo, agent), entries, abandon, kind, dry_run=True)
+    log, _cfg, _st = _load(repo, agent)
+    # Planned AGAIN under the lock, from the state read there: two batches racing would
+    # otherwise each pass the cycle check against the same snapshot and both commit.
+    with log.transaction():
+        return _decide(*_load(repo, agent), entries, abandon, kind, dry_run=False)
+
+
+def _decide(log, cfg, st, entries, abandon, kind, *, dry_run: bool) -> O.Outcome:
+    """Plan the batch from ``st``, check it, and record it unless ``dry_run``."""
     planned = _plan(cfg, st, entries, abandon, kind)
     if isinstance(planned, O.Outcome):
         return planned

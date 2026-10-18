@@ -82,3 +82,20 @@ def test_fold_refuses_itself_and_a_claimed_duplicate(repo):
     assert run_cli(repo, "claim", "B", "--agent", "w")[0] == 0
     code, _o, err = run_cli(repo, "task", "fold", "B", "A")
     assert code == 3 and "claimed" in err
+
+
+def test_apply_refuses_an_unknown_abandon_id_and_records_nothing(repo):
+    from ddflow.api import batch
+
+    _setup(repo)
+    out = batch.apply(repo, [{"id": "A", "priority": 5}], abandon={"NOPE": "x"})
+    assert out.exit != 0 and "NOPE" in out.reason
+    assert _items(repo)["A"].priority != 5
+
+
+def test_fold_json_names_the_unchanged_list(repo):
+    import json as J
+
+    _setup(repo)
+    code, out, _e = run_cli(repo, "--json", "task", "fold", "B", "A", "--dry-run")
+    assert code == 0 and "unchanged" in J.loads(out)
