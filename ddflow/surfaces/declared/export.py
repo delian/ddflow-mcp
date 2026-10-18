@@ -59,7 +59,9 @@ def _full_suite_lines(d) -> list[str]:
     """The whole-suite command, only behind `--full`, and marked as not the agent's to run."""
     if d["full_suite"]:
         return [f"  MERGE QUEUE / PHASE END ONLY -- do not run this yourself:\n  {d['full_suite']}"]
-    return ["  (the whole-suite command is for the merge queue and phase end; `ddflow tests --full` shows it)"]
+    return [
+        "  (the whole-suite command is for the merge queue and phase end; `ddflow tests --full` shows it)"
+    ]
 
 
 def _tests_text(out, a) -> str:
@@ -82,13 +84,17 @@ def _tests_text(out, a) -> str:
         lines.append(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
         lines += [f"  {t['path']}  -- {t['reason']}" for t in g["tests"]]
         lines.append(f"  {g['command']}")
+        lines += _full_suite_lines(d) if d["full_suite"] else []
     elif g.get("scope") == "covered":
         lines.append(f"\nThe unit_tests gate runs nothing: {g['why']}")
+        lines += _full_suite_lines(d) if d["full_suite"] else []
     elif g:
         lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}")
         lines += _full_suite_lines(d)
     elif d.get("full_suite_known"):
-        lines.append("\nThe unit_tests gate may run the whole suite; pass --item <id> to see which mode it would use for that item.")
+        lines.append(
+            "\nThe unit_tests gate may run the whole suite; pass --item <id> to see which mode it would use for that item."
+        )
         lines += _full_suite_lines(d)
     if d["advice"]:
         lines.append(f"  NOTE: that command {d['advice']}")
