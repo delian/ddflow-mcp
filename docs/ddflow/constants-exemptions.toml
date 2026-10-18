@@ -139,6 +139,8 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
+"ddflow/services/export/roadmap_calc.py:DEFAULT_NEXT" = "the default of the [export.roadmap] `next` knob, which is already configurable"
+"ddflow/services/export/roadmap_calc.py:DEFAULT_TASKS" = "the default of the [export.roadmap] `tasks` knob, which is already configurable"
 "ddflow/services/leasebreak.py:FRESH_S" = "how long a pre-lock reading of a worktree may be used under the append lock; it only trades a git call for a few seconds of staleness against a hold limit of minutes, and a stale reading re-probes (never wrong)"
 "ddflow/core/participation.py:DEFAULT_RECALL_CAP" = "the default of a declared kind's own `recall_cap` field: a descriptor sets it per kind, it is not a project preference"
 "ddflow/api/record_lifecycle.py:VALUE_MAX" = "the cut of one field value shown in a history diff, a presentation width (the full text stays in the log)"
