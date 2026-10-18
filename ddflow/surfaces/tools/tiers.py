@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import TOOLS
+from . import DECLARED, TOOLS
 
 # -- tool tiers -------------------------------------------------------------------------
 #
@@ -15,15 +15,15 @@ from . import TOOLS
 # false. A client that loads every schema up front pays for what is advertised, so the tier
 # is a context-cost choice and never a permission.
 #
-# ONE data structure, three disjoint sets that together cover `TOOLS` exactly. A new tool
-# therefore has to be placed (`tests/test_mcp_tool_tiers.py` fails until it is), rather
-# than silently landing in whichever tier nobody thought about. Measured on this tree: core
+# ONE data structure, three disjoint sets that together cover `TOOLS` exactly. The legacy
+# tables below are frozen; a new tool places itself with `Command.tier` (import fails on an
+# empty one) rather than silently landing in whichever tier nobody thought about. Measured on this tree: core
 # 39 KB, standard 67 KB, all 92 KB of compact `tools/list`.
 
 #: The daily loop: pick work, claim it, satisfy gates, record what you learn, land it.
 #: `setup` is here because the handshake of an unadopted repository tells the agent to call
 #: it before anything else.
-CORE_TOOLS = frozenset(
+_LEGACY_CORE = frozenset(
     "ddflow_" + n
     for n in (
         "brief next claim heartbeat gate_status gate_run gate_record gate_skip gate_verify "
@@ -34,7 +34,7 @@ CORE_TOOLS = frozenset(
 )
 
 #: Commonly used beyond the loop: reading the queue and memory, reshaping work, config.
-STANDARD_EXTRA_TOOLS = frozenset(
+_LEGACY_STANDARD = frozenset(
     "ddflow_" + n
     for n in (
         "abandon block unblock release board progress doctor recover configure companions "
@@ -47,7 +47,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
 )
 
 #: Administration and rarely used capabilities: only in `all`.
-FULL_ONLY_TOOLS = frozenset(
+_LEGACY_FULL = frozenset(
     "ddflow_" + n
     for n in (
         "external_sync import import_verify job_add job_end job_list job_run promote_add promote_deployed "
@@ -58,6 +58,21 @@ FULL_ONLY_TOOLS = frozenset(
 )
 
 TIERS = ("core", "standard", "all")
+
+
+def _declared(tier: str) -> frozenset[str]:
+    """The tools outside the legacy sets that declare themselves into `tier`."""
+    legacy = _LEGACY_CORE | _LEGACY_STANDARD | _LEGACY_FULL
+    bad = {n: c.tier for n, c in DECLARED.items() if n not in legacy and c.tier not in TIERS}
+    if bad:
+        raise RuntimeError(f"tools with no valid `Command.tier` (one of {TIERS}): {bad}")
+    return frozenset(n for n, c in DECLARED.items() if n not in legacy and c.tier == tier)
+
+
+#: The three disjoint sets: the legacy tables above, plus each tool's own declared tier.
+CORE_TOOLS = _LEGACY_CORE | _declared("core")
+STANDARD_EXTRA_TOOLS = _LEGACY_STANDARD | _declared("standard")
+FULL_ONLY_TOOLS = _LEGACY_FULL | _declared("all")
 DEFAULT_TIER = "all"
 
 
