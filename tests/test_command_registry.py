@@ -174,6 +174,13 @@ WAIT = Command(
             f"waiting)",
         ),
         Param("poll", type="number", default=None, help="seconds between log checks"),
+        Param(
+            "max_s",
+            type="number",
+            default=None,
+            help="never wait longer than this many seconds: exit 2 naming the live holder and "
+            "how long it has held (a holder that keeps renewing is not a reason to wait on)",
+        ),
     ),
 )
 APPROVE = Command(
