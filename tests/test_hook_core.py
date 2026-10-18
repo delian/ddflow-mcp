@@ -241,11 +241,13 @@ def _brief_around_a_loaded_sample(repo) -> tuple[str, str]:
     from ddflow.services import flowstate as F
 
     first = S._session_start(repo, "t", "{}").data["message"]
-    busy = signals.FakeSource({"load": 50.0, "memory_free_frac": 0.01, "disk_free_frac": 0.01})
+    busy = signals.FakeSource({"load": 0.0, "memory_free_frac": 0.9, "disk_free_frac": 0.9})
     ctx = F.FlowCtx(repo=repo, cfg=Config.load(repo), state=State())
+    # Each tick samples at most once per `signal_interval_s`: step past the newest row.
+    step = ctx.cfg.schedule.signal_interval_s + 1
     now = time.time()
-    for k in range(5, 0, -1):
-        F.sample_if_due(ctx, busy, clock=lambda k=k: now - 60 * k)
+    for k in range(1, 40):
+        F.sample_if_due(ctx, busy, clock=lambda k=k: now + step * k)
     return first, S._session_start(repo, "t", "{}").data["message"]
 
 
