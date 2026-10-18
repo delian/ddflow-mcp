@@ -5844,8 +5844,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=567f05138b78 -->
-<details><summary>All 348 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=66e1e86c6502 -->
+<details><summary>All 349 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6086,6 +6086,7 @@ long default is left to `ddflow config --explain`.
 | `review.fix_round_free` | `true` |  |
 | `review.combined_under_lines` | `150` |  |
 | `review.exclude_globs` | (long: see `ddflow config --explain`) |  |
+| `review.manifest_max_files` | `40` |  |
 | `review.exclude_pin_files` | `true` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
