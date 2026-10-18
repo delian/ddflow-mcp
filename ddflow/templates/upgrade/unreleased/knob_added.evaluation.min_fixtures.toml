@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "evaluation.min_fixtures"
+new = "1"
+why = "Fixtures with at least one planted fault that a workflow needs before its miss rate counts as evidence."
+impact = "additive"
