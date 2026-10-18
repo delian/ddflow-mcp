@@ -151,7 +151,7 @@ def test_every_cell_of_every_kind_and_verb_is_answered(cells):
     [
         ("bug", "add", "bug found", "ddflow_bug_found", "bug_found"),
         ("bug", "reopen", "bug reopen", "ddflow_bug_invalid (reopen)", "bug_reopen"),
-        ("bug", "show", "show", "ddflow_show", "show"),
+        ("bug", "show", "bug show", "ddflow_show", "show"),
         ("memory", "remove", "memory forget", "ddflow_memory_forget", "memory_forget"),
         ("task", "split", "split", "ddflow_split", "split"),
         ("lesson", "list", "lesson list", "ddflow_list (lesson)", "view_list"),
