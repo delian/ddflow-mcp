@@ -10,12 +10,13 @@ import ddflow.core.defs as D
 
 DATA_KINDS = (
     "assumption attention attestation commlog contract fitness proposal requirement risk "
-    "stakeholder vendor"
+    "stakeholder vendor evalfixture"
 ).split()
 #: Minimal valid fields, and a record each links to, per kind.
 MIN = {
     "requirement": {"title": "t", "source": "https://x/y"},
     "contract": {"title": "t", "vendor": "acme", "document": "d"},
+    "evalfixture": {"title": "t", "workflow": "wf"},
     "attestation": {"title": "t", "attester": "ann", "evidence": "e"},
 }
 

@@ -146,8 +146,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         DD.after_add(log, cfg, bid, chk)
         if filing:
             fix = _file_fix_task(
-                log, cfg, st, bid, title=title, summary=summary, item=item, globs=globs
-            )
+                log, cfg, st, bid, title=title, summary=summary, item=item, globs=globs,
+                scope=scope or (prior.scope if prior else "project"),
+            )  # fmt: skip
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed
     # vanishes without a word. Only an EXPLICIT `--id` can land on a closed record: an
@@ -232,7 +233,7 @@ def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
 
 
 def _file_fix_task(
-    log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str
+    log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
 ) -> dict[str, Any]:
     """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
 
@@ -294,7 +295,9 @@ def _file_fix_task(
         parent=parent,
         title=full_title,
         needs=[],
-        globs=GS.parse(globs) if globs else inherit_globs(src.globs if src else [], summary),
+        globs=GS.parse(globs)
+        if globs
+        else inherit_globs(src.globs if src else [], summary, tool_bug=scope == "ddflow"),
         body=body,
         tags=[tag],
         # the item's own priority when it set one; the bug band when it sits at the generic default
@@ -373,6 +376,7 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
                 summary=b.summary,
                 item=b.item,
                 globs=",".join(b.globs),
+                scope=b.scope,
             )
             # A partial `bug.found` carries the link: the fold merges and never blanks
             # (`_h_bug_found`), and an older ddflow folds it as the record it already has.
