@@ -35,6 +35,7 @@ treated as "no problem".
 
 from __future__ import annotations
 
+from .baseline_red import bug_id, candidate_ids, on_base, reason_text  # noqa: F401
 from .defs import (  # noqa: F401
     DEFAULT_GATES,
     GateDef,
