@@ -381,7 +381,7 @@ def run(
                 command=cmd,
                 sha=sha,
                 reason=f"{p.reason}: raise [ci].timeout_s",
-                scope=scope.evidence(sha) if scope is not None else {},
+                scope=_scope_evidence(scope, sha),
             )
         if not p.ran:  # the runner is missing, the slots are taken, the process did not start
             return Result(
@@ -389,7 +389,7 @@ def run(
                 command=cmd,
                 sha=sha,
                 reason=p.reason,
-                scope=scope.evidence(sha) if scope is not None else {},
+                scope=_scope_evidence(scope, sha),
             )
     return _result(p, out_prefix, cmd, sha, base, scope)
 
@@ -425,7 +425,11 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
         on_tick=on_tick,
         tick_s=tick_s,
     )
+    if selected:
+        scope.ok["hooks"] = p.ran and p.code == 0
     if not (selected and p.ran and p.code == 0):
+        if selected:
+            _say_what_ran(scope)
         return p, ""
     before, spent = p.output, p.elapsed_s
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
@@ -448,7 +452,47 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
         if not scope.ok[label] or at == len(todo) - 1:
             break
         before += p.output
+    _say_what_ran(scope)
     return p, before
+
+
+_STAGE_NAMES = {
+    "hooks": "the non-test hooks",
+    "selected": "the selected tests",
+    "always": "the always-run guards",
+}
+
+
+def _say_what_ran(scope) -> None:
+    """Make the scope's ``why`` (the line the gate records) say what ran, not what was planned:
+    a failed hook stage or test stage stops the later ones, and a selected scope that ran no
+    test must not read as 'selected N files'."""
+    order = ("hooks", "selected", "always")
+    asked = [
+        "hooks",
+        *(
+            label
+            for label, cmd in (("selected", scope.command), ("always", scope.always_command))
+            if cmd
+        ),
+    ]
+    bad = next((st for st in order if st in scope.ok and not scope.ok[st]), "")
+    if not bad:
+        return
+    notrun = [_STAGE_NAMES[st] for st in asked if st not in scope.ok]
+    scope.why += f"; {_STAGE_NAMES[bad]} failed" + (
+        f", so {' and '.join(notrun)} did not run" if notrun else ""
+    )
+
+
+def _scope_evidence(scope, sha: str) -> dict:
+    """The recorded scope with the stages that actually ran (``ran``: stage -> passed)."""
+    if scope is None:
+        return {}
+    ev = scope.evidence(sha)
+    if scope.scope == "selected":
+        ev["ran"] = dict(scope.ok)
+    return ev
 
 
 def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
@@ -471,7 +515,7 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
         output_tail=out[-TAIL_CHARS:],
         output=out,
         failures=failure_evidence(out) if p.code != 0 else {},
-        scope=scope.evidence(sha) if scope is not None else {},
+        scope=_scope_evidence(scope, sha),
     )
 
 
