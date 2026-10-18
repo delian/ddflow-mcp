@@ -114,6 +114,20 @@ EXPORT_TABLE_KEYS = frozenset(
 EXPORT_MODES = ("whole", "region", "append")
 
 
+def _roadmap_keys_problem(doc: str, t: dict[str, Any]) -> str:
+    """Why the roadmap keys (hide, next, tasks, show_hidden) of `[export.<doc>]` are wrong, or ""."""
+    if "hide" in t and not (
+        isinstance(t["hide"], list) and all(isinstance(x, str) for x in t["hide"])
+    ):
+        return f"[export.{doc}].hide must be a list of id prefixes or tags"
+    for k in ("next", "tasks"):
+        if k in t and (isinstance(t[k], bool) or not isinstance(t[k], int) or t[k] < 0):
+            return f"[export.{doc}].{k} must be an integer >= 0"
+    if "show_hidden" in t and not isinstance(t["show_hidden"], bool):
+        return f"[export.{doc}].show_hidden must be true or false"
+    return ""
+
+
 def _export_table_problem(doc: str, t: Any) -> str:
     """Why `[export.<doc>]` is wrong, or ""."""
     if not isinstance(t, dict):
@@ -125,15 +139,8 @@ def _export_table_problem(doc: str, t: Any) -> str:
         return f"[export.{doc}].mode must be one of {', '.join(EXPORT_MODES)}"
     if "refresh" in t and t["refresh"] not in EXPORT_REFRESH_MODES:
         return f"[export.{doc}].refresh must be one of {', '.join(EXPORT_REFRESH_MODES)}"
-    if "hide" in t and not (
-        isinstance(t["hide"], list) and all(isinstance(x, str) for x in t["hide"])
-    ):
-        return f"[export.{doc}].hide must be a list of id prefixes or tags"
-    for k in ("next", "tasks"):
-        if k in t and (isinstance(t[k], bool) or not isinstance(t[k], int) or t[k] < 0):
-            return f"[export.{doc}].{k} must be an integer >= 0"
-    if "show_hidden" in t and not isinstance(t["show_hidden"], bool):
-        return f"[export.{doc}].show_hidden must be true or false"
+    if why := _roadmap_keys_problem(doc, t):
+        return why
     if "redact" in t and not isinstance(t["redact"], bool):
         return f"[export.{doc}].redact must be true or false"
     if "filters" in t and not (
