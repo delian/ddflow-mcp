@@ -254,6 +254,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
     """
     holder = holder or log.agent_id
     now = time.time()
+    pre = _prejudge(log, cfg, item_id, holder, globs, now, break_lease, activity)
     with log.decide_then_append(lambda: _fold(log)) as state:
         it = state.items.get(item_id)
         if it is None:
@@ -350,7 +351,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         clash = glob_clash(state, cfg, it, holder, mine, now)
         if clash and not (force and existing is None):
             clash = _break_idle(
-                log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke
+                log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke, pre
             )
         # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
         # --force for the expiry alone. It must not also waive the overlap check: expiry
@@ -432,6 +433,42 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         )
 
 
+def _prejudge(
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    holder: str,
+    globs: list[str] | None,
+    now: float,
+    asked: bool,
+    activity: LB.Activity | None,
+) -> LB.Prejudged | None:
+    """Read, OUTSIDE the append lock, what `_break_idle` will judge idleness from: the log's
+    events and the worktree activity of every lease this claim clashes with. The git calls
+    behind that activity are the slow part; made under the lock they stall every other
+    writer. None when breaking is off or nothing clashes."""
+    if not (asked or cfg.lease.break_on_timeout) or not cfg.lease.hold_max_s:
+        return None
+    mark = log.mark(clock=False)
+    state = _fold(log)
+    it = state.items.get(item_id)
+    if it is None:
+        return None
+    mine = list(globs if globs is not None else it.globs)
+    pre, act = LB.Prejudged(mark=mark, at=time.time()), activity or LB.tree_activity(log.root)
+    stamp = clock.iso_at(now)
+    clash = glob_clash(state, cfg, it, holder, mine, now)
+    while clash:
+        lease = clash[1]
+        pre.seen[pre.key(lease)] = act(lease)
+        lease.expired_at = stamp  # this throwaway snapshot no longer sees it live
+        clash = glob_clash(state, cfg, it, holder, mine, now)
+    if not pre.seen:
+        return None
+    pre.events = log.read_all()
+    return pre
+
+
 def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     log: EventLog,
     cfg: Config,
@@ -444,6 +481,7 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     asked: bool,
     activity: LB.Activity | None,
     broke: list[dict[str, Any]] | None,
+    pre: LB.Prejudged | None = None,
 ):
     """Break every clashing lease that is contended (this claim contends it) and has shown no
     progress for `[lease].hold_max_s`, when `[lease].break_on_timeout` or ``asked``
@@ -453,7 +491,11 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     if not (asked or cfg.lease.break_on_timeout) or not cfg.lease.hold_max_s:
         return clash
     act = activity or LB.tree_activity(log.root)
-    events = log.read_all()
+    # Judged from what was read before the lock. The events are reused while the log has not
+    # moved (else re-read: a fold, no git); the worktree watermarks while they are young.
+    if pre is not None and pre.fresh(time.time()):
+        act = pre.activity(act)
+    events = pre.events if pre and pre.mark == log.mark(clock=False) else log.read_all()
     plan: list[tuple[str, Lease, tuple[str, str], LB.Verdict]] = []
     stamp = clock.iso_at(now)
     try:

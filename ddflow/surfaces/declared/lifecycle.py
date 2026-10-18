@@ -278,6 +278,10 @@ COMMANDS: tuple[Command, ...] = (
         path=("wait",),
         summary="sleep until an item (or anything) can be claimed; exit 2 = deadline, or waiting cannot help",
         tool="ddflow_wait",
+        flag_exempt={
+            "--max-s": "a hard cap for a shell caller; over MCP the call is already bounded by "
+            "`timeout` (at most MCP_WAIT_MAX_S) and the client re-asks",
+        },
         description="Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling or asking the operator when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait.",
         call=lambda repo, a, agent: _api().wait_item(
             repo,
@@ -287,6 +291,7 @@ COMMANDS: tuple[Command, ...] = (
             globs=a.get("globs") or None,
             timeout_s=_wait_timeout(a),
             poll_s=a.get("poll"),
+            max_s=a.get("max_s"),
             agent=agent,
         ),
         payload="",
@@ -330,6 +335,13 @@ COMMANDS: tuple[Command, ...] = (
                 type="number",
                 help="Seconds between log checks (default 2).",
                 cli_help="seconds between log checks",
+            ),
+            Param(
+                "max_s",
+                type="number",
+                cli_only=True,
+                cli_help="never wait longer than this many seconds: exit 2 naming the live holder "
+                "and how long it has held (a holder that keeps renewing is not a reason to wait on)",
             ),
         ),
     ),
