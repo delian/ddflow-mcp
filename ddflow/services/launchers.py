@@ -25,8 +25,8 @@ from typing import Any
 from ..infra import git as G
 from ..infra.fsio import Unreadable, read_json
 from . import enforce as E
-from .adopt import AGENT_TARGETS, get_server, has_been_adopted
 from . import hookwriters as HW
+from .adopt import AGENT_TARGETS, get_server, has_been_adopted
 from .claudehooks import _ours
 from .harnessreg import load as _harnesses
 

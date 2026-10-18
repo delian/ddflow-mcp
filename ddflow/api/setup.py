@@ -35,15 +35,15 @@ from ..infra import worktree as W
 from ..infra.log import EventLog, running_version
 from ..services import backups as BK
 from ..services import claudehooks as CH
-from ..services import harnessreg as HR
-from ..services import hookwriters as HW
 from ..services import compaction as CP
 from ..services import companions as CO
 from ..services import configwrite as CW
 from ..services import enforce as E
 from ..services import forbidden as FB
+from ..services import harnessreg as HR
 from ..services import help as H
 from ..services import hookio as HI
+from ..services import hookwriters as HW
 from ..services import identity as ID
 from ..services import launchers as LA
 from ..services import pins_merge as PM

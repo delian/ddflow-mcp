@@ -19,7 +19,7 @@ def _doc(repo: Path, rel: str) -> dict:
 
 
 def test_a_json_groups_agent_gets_one_hook_per_installed_event(repo):
-    code, out, err = run_cli(repo, "hooks", "install", "--harness", "codex")
+    code, _out, err = run_cli(repo, "hooks", "install", "--harness", "codex")
     assert code == 0, err
     hooks = _doc(repo, ".codex/hooks.json")["hooks"]
     h = HR.get("codex")
@@ -115,7 +115,7 @@ def test_copilot_entries_carry_type_and_bash(repo):
 
 
 def test_flags_and_harness_together_apply_both(repo):
-    code, out, err = run_cli(repo, "hooks", "install", "--claude", "--harness", "codex")
+    code, _out, err = run_cli(repo, "hooks", "install", "--claude", "--harness", "codex")
     assert code == 0, err
     assert (repo / ".claude/settings.json").is_file() and (repo / ".codex/hooks.json").is_file()
 
