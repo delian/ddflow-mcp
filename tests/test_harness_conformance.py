@@ -46,11 +46,13 @@ def test_every_mapped_event_is_canonical_and_the_ladder_is_total(hid):
 @pytest.mark.parametrize("hid", C.COMMAND_HOOKED)
 def test_the_normalizer_and_emitter_named_resolve(hid):
     plan = hookio.plan_for(hid)
-    assert plan is not None and plan.normalizer in hookio.NORMALIZERS
+    assert plan is not None
+    assert plan.normalizer in hookio.NORMALIZERS
+    assert plan.emitter in hookio.EMITTERS
 
 
 @pytest.mark.parametrize(("hid", "event", "fx"), C.all_fixtures())
-def test_a_recorded_payload_normalizes_to_what_it_says(hid, event, fx):
+def test_a_payload_fixture_normalizes_to_what_it_says(hid, event, fx):
     plan = hookio.plan_for(hid)
     got = hookio.normalize(plan.normalizer, event, hid, json.dumps(fx["stdin"]))
     assert not got.malformed
@@ -59,9 +61,10 @@ def test_a_recorded_payload_normalizes_to_what_it_says(hid, event, fx):
         assert got.prompt == fx["expect"]["prompt"]
 
 
-def test_every_fixture_says_whether_it_was_recorded():
+def test_every_fixture_says_whether_it_was_recorded_and_for_which_version():
     for hid, event, fx in C.all_fixtures():
         assert isinstance(fx["_meta"]["recorded"], bool), (hid, event)
+        assert fx["_meta"]["version"], (hid, event)  # "unversioned" until a live recording
 
 
 @pytest.mark.parametrize("hid", C.COMMAND_HOOKED)
@@ -73,6 +76,7 @@ def test_a_hooked_agent_without_fixtures_is_a_visible_gap(hid):
 @pytest.mark.parametrize("hid", C.WRITABLE)
 def test_installing_twice_changes_nothing_and_uninstall_restores_the_file(repo, hid):
     h = HR.get(hid)
+    assert not h.hooks.file.startswith("~"), "a writable agent's file is inside the project"
     path = repo / h.hooks.file
     path.parent.mkdir(parents=True, exist_ok=True)
     seed = {"version": 1, "keep": {"me": 1}, "hooks": {"Elsewhere": [{"command": "mine"}]}}

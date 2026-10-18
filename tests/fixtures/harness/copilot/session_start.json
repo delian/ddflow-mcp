@@ -1,7 +1,8 @@
 {
   "_meta": {
     "recorded": false,
-    "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)"
+    "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)",
+    "version": "unversioned"
   },
   "stdin": {
     "sessionId": "s-1",
