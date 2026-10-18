@@ -205,7 +205,7 @@ def _short(v: Any) -> str:
 
 def _apply_hook(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
     iid = item["id"]
-    if iid.startswith("hooks:missing:"):
+    if iid.startswith(("hooks:missing:", "hooks:stale:")):
         _, _, agent, name = iid.split(":", 3)
         try:
             msg = CH.install_spec(repo, CH.spec(agent, name))

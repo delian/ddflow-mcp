@@ -33,6 +33,30 @@
        }
       }
     ''',
+    'ddflow_batch': '''
+      {
+       "name": "ddflow_batch",
+       "description": "Apply many field edits in ONE locked transaction: a JSON array of {id, needs, add_needs, remove_needs, tags, add_tags, remove_tags, globs, add_globs, remove_globs, priority, title, body, append_body, line, resources} objects, the fields of ddflow_update. All or nothing: any refusal, or a dependency cycle the batch would create, records nothing. `dry_run` returns the diff without recording.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "edits": {
+          "type": "string",
+          "description": "JSON array of edit objects, each with an 'id'."
+         },
+         "dry_run": {
+          "type": "boolean",
+          "description": "Plan and show the diff; record nothing."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_bisect': '''
       {
        "name": "ddflow_bisect",
@@ -3498,6 +3522,42 @@
        }
       }
     ''',
+    'ddflow_task_fold': '''
+      {
+       "name": "ddflow_task_fold",
+       "description": "Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's body is appended to keep's, its globs unioned in, every live item that needs dup now needs keep, and dup is abandoned with the reason. Refused when dup is claimed, either is finished, or the re-pointing would create a cycle. `dry_run` lists what it would do.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "dup": {
+          "type": "string",
+          "description": "The duplicate to abandon."
+         },
+         "keep": {
+          "type": "string",
+          "description": "The survivor."
+         },
+         "reason": {
+          "type": "string",
+          "description": "Why (recorded on the abandonment)."
+         },
+         "dry_run": {
+          "type": "boolean",
+          "description": "Plan and show the diff; record nothing."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "required": [
+         "dup",
+         "keep"
+        ],
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_tests': '''
       {
        "name": "ddflow_tests",
@@ -4010,6 +4070,7 @@
 # name: test_the_tool_names_in_order
   list([
     'ddflow_abandon',
+    'ddflow_batch',
     'ddflow_bisect',
     'ddflow_block',
     'ddflow_board',
@@ -4116,6 +4177,7 @@
     'ddflow_status',
     'ddflow_sync',
     'ddflow_task_add',
+    'ddflow_task_fold',
     'ddflow_tests',
     'ddflow_unblock',
     'ddflow_update',
