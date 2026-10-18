@@ -1849,8 +1849,10 @@
           The review output and the gate's evidence say how many files and bytes were
           left out and name them, so a skipped file is never silent. Change it for the
           project (`ddflow config review.exclude_globs ...`), for this machine (add
-          --local), or over MCP with `ddflow_configure`; an empty list sends every
-          file.
+          --local), or over MCP with `ddflow_configure`; an empty list leaves out no
+          glob-matched file (the files pins.toml owns are governed by
+          [review].exclude_pin_files, which must be turned off as well to send every
+          file).
       review.exclude_pin_files = True   [default]
           Whether the files `.ddflow/pins.toml` owns (README regions, golden
           snapshots, the setup transcript: regenerated, never read) are left out of
