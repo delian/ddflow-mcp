@@ -302,18 +302,7 @@ def _merge(parent: dict[str, Any], child: dict[str, Any], src: _Src) -> dict[str
     return out
 
 
-def build(raw: dict[str, Any], src: _Src) -> DocType:
-    """The checked `DocType` of a merged table."""
-    where = f"doctype {raw['name']!r}"
-    path, pattern = raw.get("path", ""), raw.get("pattern", "")
-    multi = _typed(src, raw, "multi", bool, where, bool(pattern))
-    if multi and not pattern:
-        raise src.err(f"{where}: a collection (multi) needs a pattern", "multi")
-    if not multi and (pattern or not path):
-        raise src.err(
-            f"{where}: a single document has a path and no pattern",
-            "pattern" if pattern else "name",
-        )
+def _check_pattern(src: _Src, where: str, pattern: str) -> None:
     try:
         fields = [f for _, f, _, _ in Formatter().parse(pattern) if f is not None]
         bad = [f for f in fields if f not in PLACEHOLDERS]
@@ -326,6 +315,9 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
             f"{where}: pattern placeholder {{{bad[0]}}} is not one of {', '.join(PLACEHOLDERS)}",
             "pattern",
         )
+
+
+def _sections(src: _Src, where: str, raw: dict[str, Any]) -> list[Section]:
     sections, seen = [], {}
     cursor = 0
     for rs in raw.get("section", []):
@@ -344,6 +336,23 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
                 f"{where}: section {sec.id!r} depends_on unknown {missing[0]!r}", "depends_on"
             )
     sections.sort(key=lambda s: s.order)  # stable: file order breaks ties
+    return sections
+
+
+def build(raw: dict[str, Any], src: _Src) -> DocType:
+    """The checked `DocType` of a merged table."""
+    where = f"doctype {raw['name']!r}"
+    path, pattern = raw.get("path", ""), raw.get("pattern", "")
+    multi = _typed(src, raw, "multi", bool, where, bool(pattern))
+    if multi and not pattern:
+        raise src.err(f"{where}: a collection (multi) needs a pattern", "multi")
+    if not multi and (pattern or not path):
+        raise src.err(
+            f"{where}: a single document has a path and no pattern",
+            "pattern" if pattern else "name",
+        )
+    _check_pattern(src, where, pattern)
+    sections = _sections(src, where, raw)
     return DocType(
         name=raw["name"],
         title=_typed(src, raw, "title", str, where, raw["name"]),
