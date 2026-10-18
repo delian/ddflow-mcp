@@ -303,7 +303,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_loops": (["loops"], {}),
     "ddflow_health": (["health"], {}),
     "ddflow_docs": (["docs", "check"], {"verb": "check"}),
-    "ddflow_record": (["record", "risk", "list"], {"kind": "risk", "verb": "list"}),
+    "ddflow_record": (["record", "risk", "list"], {"args": ["risk", "list"]}),
     "ddflow_progress": (["progress"], {}),
     "ddflow_decision_list": (["decision", "list"], {}),
     "ddflow_decision_show": (["decision", "show", "D1"], {"id": "D1"}),

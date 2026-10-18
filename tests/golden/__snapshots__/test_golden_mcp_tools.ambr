@@ -2489,21 +2489,13 @@
     'ddflow_record': '''
       {
        "name": "ddflow_record",
-       "description": "Records of a data kind (risk, vendor). verb: list show add edit remove search revise history. set: field=value; @flag=value gives an option (@reason=why, @query=text).",
+       "description": "Records of a data kind (risk, vendor ...). args: kind, verb (list show add edit remove search revise history), [id], then field=value; @opt=value gives an option.",
        "inputSchema": {
         "type": "object",
         "properties": {
-         "kind": {
-          "type": "string"
-         },
-         "verb": {
-          "type": "string"
-         },
-         "id": {
-          "type": "string"
-         },
-         "set": {
+         "args": {
           "type": "array",
+          "description": "kind verb [id] then field=value or @opt=value.",
           "items": {
            "type": "string"
           }
@@ -2513,10 +2505,6 @@
           "description": "Subagent name, this call only."
          }
         },
-        "required": [
-         "kind",
-         "verb"
-        ],
         "additionalProperties": false
        }
       }

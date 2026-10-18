@@ -100,11 +100,31 @@ def split_options(a: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_HEAD = ("kind", "verb", "id")
+
+
+def from_args(a: dict[str, Any]) -> dict[str, Any]:
+    """The tool's ``args`` (kind, verb, [id], then set items) as the named arguments the CLI
+    parses into; an argument already named wins."""
+    words = list(a.get("args") or ())
+    if not words:
+        return a
+    out = {k: v for k, v in a.items() if k != "args"}
+    head: list[str] = []
+    while words and len(head) < len(_HEAD) and "=" not in words[0] and not words[0].startswith("@"):
+        head.append(words.pop(0))
+    for name, word in zip(_HEAD, head, strict=False):
+        out.setdefault(name, word)
+    out["set"] = [*out.get("set", ()), *words]
+    return out
+
+
 def call(repo: Any, a: dict[str, Any], agent: str) -> O.Outcome:
     """One verb of one data kind; a malformed call is a failure with its reason."""
-    verb = a.get("verb") or ""
+    verb = ""
     try:
-        a = split_options(a)
+        a = split_options(from_args(a))
+        verb = a.get("verb") or ""
         KDA.load_project(repo)
         kind = _kind(str(a.get("kind") or ""))
         if verb not in VERBS or verb not in kind.verbs:

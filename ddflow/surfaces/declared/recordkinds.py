@@ -26,13 +26,14 @@ COMMANDS: tuple[Command, ...] = (
         summary="records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]`",
         tool="ddflow_record",
         description=(
-            "Records of a data kind (risk, vendor). verb: list show add edit remove search "
-            "revise history. set: field=value; @flag=value gives an option (@reason=why, @query=text)."
+            "Records of a data kind (risk, vendor ...). args: kind, verb (list show add edit "
+            "remove search revise history), [id], then field=value; @opt=value gives an option."
         ),
         flag_exempt={
-            f"--{n}": "the tool carries it as an @name=value item of set (its schema stays small)"
+            f"--{n}": "the tool takes it in args (kind, verb, id, field=value and @opt=value items); its schema stays small"
             for n in (
                 "all",
+                "set",
                 "check-only",
                 "limit",
                 "mode",
@@ -46,7 +47,21 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _rk().call(repo, a, agent),
         render=lambda out, a: _rk().text(out, a),
         params=(
-            Param("kind", help="", cli_help="The record kind.", positional=True, required=True),
+            Param(
+                "args",
+                type="array",
+                repeat=True,
+                help="kind verb [id] then field=value or @opt=value.",
+                mcp_only=True,
+            ),
+            Param(
+                "kind",
+                help="",
+                cli_help="The record kind.",
+                positional=True,
+                required=True,
+                cli_only=True,
+            ),
             Param(
                 "verb",
                 help="",
@@ -54,11 +69,25 @@ COMMANDS: tuple[Command, ...] = (
                 positional=True,
                 required=True,
                 choices=VERBS,
+                cli_only=True,
             ),
             Param(
-                "id", help="", cli_help="The record's id.", positional=True, nargs="?", default=None
+                "id",
+                help="",
+                cli_help="The record's id.",
+                positional=True,
+                nargs="?",
+                default=None,
+                cli_only=True,
             ),
-            Param("set", type="array", repeat=True, help="", cli_help="field=value; repeat."),
+            Param(
+                "set",
+                type="array",
+                repeat=True,
+                help="",
+                cli_help="field=value; repeat.",
+                cli_only=True,
+            ),
             *(
                 Param(n, type=t, help="", cli_help=h, repeat=r, cli_only=True)
                 for n, t, h, r in (

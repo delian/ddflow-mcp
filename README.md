@@ -5517,7 +5517,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d30c2a7edff2 -->
+<!-- ddflow:begin README/tools sha=a2ba0ab4ddbc -->
 <details><summary>All 119 MCP tools: 32 in the `core` tier, 48 more in `standard`, 39 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5611,7 +5611,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_memory_forget` | all | Stop believing a memory that is no longer true. |
 | What the project remembers | `ddflow_memory_list` | standard | The project's operational memories, newest first -- or ranked against `query`. |
 | What the project remembers | `ddflow_recall` | core | 'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons… |
-| What the project remembers | `ddflow_record` | all | Records of a data kind (risk, vendor). |
+| What the project remembers | `ddflow_record` | all | Records of a data kind (risk, vendor ...). |
 | What the project remembers | `ddflow_research_add` | standard | Record a research finding. |
 | What the project remembers | `ddflow_session_end` | core | Close a session with a summary of what it achieved. |
 | What the project remembers | `ddflow_session_note` | core | Record something that happened during a session which is neither an operator prompt nor a decision — a… |
