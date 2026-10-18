@@ -120,7 +120,12 @@ def _retargets(log, cfg, plans, kind):
         globs, res = fields.get("globs"), fields.get("resources")
         if globs is None and res is None:
             continue
-        if retargets:
+        lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
+        if refusal:
+            # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
+            refusal = refusal.split(" The globs were not changed")[0].rstrip()
+            return None, O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
+        if lease is not None and retargets:
             # Each retarget is checked against the leases as they are NOW; a second one in
             # the same batch would not see the first's new globs (roborev).
             return None, O.refused(
@@ -129,11 +134,6 @@ def _retargets(log, cfg, plans, kind):
                 f"already); change one claimed item's globs or resources per batch",
                 id=it.id,
             )
-        lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
-        if refusal:
-            # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
-            refusal = refusal.split(" The globs were not changed")[0].rstrip()
-            return None, O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
         if lease is not None:
             retargets.append((it, lease, globs, res))
     return retargets, None

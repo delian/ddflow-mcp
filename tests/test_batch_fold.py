@@ -137,3 +137,12 @@ def test_dry_run_reports_the_lease_refusal_the_real_run_gives(repo):
     dry = _batch(repo, edits, "--dry-run")
     real = _batch(repo, edits)
     assert dry[0] == real[0] == 3
+
+
+def test_a_claimed_then_an_unclaimed_globs_edit_is_one_lease_retarget(repo):
+    _setup(repo)
+    assert run_cli(repo, "claim", "A", "--agent", "w")[0] == 0
+    code, _o, err = _batch(
+        repo, [{"id": "A", "add_globs": ["x1.py"]}, {"id": "C", "add_globs": ["x2.py"]}]
+    )
+    assert code == 0, err
