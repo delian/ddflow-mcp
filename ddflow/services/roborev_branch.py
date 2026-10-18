@@ -21,7 +21,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..config import Config
 from ..infra import proc
+from ..infra import worktree as W
 from . import roborev as RR
 
 _STEP_TIMEOUT_S = 60
@@ -41,8 +43,8 @@ class Result:
 
 
 def _git(where: Path, *argv: str) -> str:
-    p = proc.capture(["git", *argv], cwd=where, timeout=_STEP_TIMEOUT_S)
-    return p.stdout.strip() if p.error is None and p.returncode == 0 else ""
+    r = W.git(where, *argv)
+    return r.out.strip() if r.code == 0 else ""
 
 
 def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
@@ -106,9 +108,6 @@ def main(argv: list[str] | None = None) -> int:
     where = Path(a.repo).resolve()
     wait_s, base = a.wait_s, a.base
     if wait_s is None or not base:
-        from ..config import Config
-        from ..infra import worktree as W
-
         cfg = Config.load(where)
         wait_s = cfg.gates.standards_wait_s if wait_s is None else wait_s
         base = base or cfg.worktree.base_ref or W.default_branch(W.repo_root(where))
