@@ -27,6 +27,7 @@ from ...services.cleanup import (  # noqa: F401  (re-exported)
 from ...services.enforce import SELF_MANAGED
 from ...services.gates import failed_review as GO
 from ...services.gates import measured as GM
+from ...services.gates import outcomes as OC
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
@@ -38,6 +39,12 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
     """Say which pins the merge left stale or never re-recorded."""
     for line in PM.merge_lines(PM.merge_report(repo, cfg)):
         say(line)
+
+
+def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
+    """The first failed-gate blocker that stops ``item`` landing, or ""."""
+    found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
+    return (found or OC.failed_ci_blockers(st, cfg, item) or [""])[0]
 
 
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
@@ -87,15 +94,12 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
-    if failed := GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg)):
+    if blocked := _gate_blockers(repo, cfg, st, item):
         # D-failed-review-gate (B85841c0846): landing work whose review failed and was
-        # never re-reviewed ships it unreviewed. Before any git action.
+        # never re-reviewed ships it unreviewed; DX-skip-failed-gate: nor a failed ci.
+        # Before any git action.
         return O.refused(
-            "worktree.merged",
-            f"cannot merge {item}: {failed[0]}",
-            id=item,
-            sha="",
-            dirty=[],
+            "worktree.merged", f"cannot merge {item}: {blocked}", id=item, sha="", dirty=[]
         )
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
