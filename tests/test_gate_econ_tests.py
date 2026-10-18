@@ -117,7 +117,8 @@ def test_without_a_passing_ci_the_gate_refuses_rather_than_run_the_whole_suite(r
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == 3, ev
     assert "ci gate has no outcome" in ev["scope_why"], ev
-    assert "rerun ci" in ev["scope_why"] and "selected_tests" not in ev
+    assert "rerun ci" in ev["scope_why"]
+    assert not (ev["body"].get("evidence") or {}).get("selected_tests")  # nothing was selected or run
     _ci(repo, "fix-B1", "skipped")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == 3 and "ci gate is skipped" in ev["scope_why"], ev
