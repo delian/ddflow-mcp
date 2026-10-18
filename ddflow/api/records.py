@@ -43,8 +43,10 @@ from typing import Any
 
 import ddflow.api._dedupe as DD
 import ddflow.api.defs as DEFS
+import ddflow.api.record_rules as RR
 
 from ..core import defs as D
+from ..core import kindrules as KR
 from ..core import outcome as O
 from ..core import participation as PA
 from ..core import provenance as PV
@@ -183,6 +185,9 @@ class RecordKind:
     #: enforcement, a widened override, a guard removed), or "". A merge refuses to weaken
     #: without ``--allow-weaken``.
     weakening: Callable[[Mapping[str, Any], Mapping[str, Any]], str] | None = None
+    #: Lifecycle, links, sources, validators, render template and stamp, declared as data
+    #: (`core.kindrules`); enforced by `api.record_rules` on add, edit and revise.
+    rules: KR.KindRules | None = None
 
     def __post_init__(self) -> None:
         names = [f.name for f in self.fields]
@@ -194,6 +199,10 @@ class RecordKind:
         if bad := [v for v in (*self.verbs, *self.ops, *self.declined) if v not in VERBS]:
             raise ValueError(f"record kind {self.name!r}: unknown verb {bad[0]!r}")
         self._check_declarations(set(names))
+        if self.rules is not None and (
+            bad := self.rules.declaration_problems({f.name: f.type for f in self.fields})
+        ):
+            raise ValueError(f"record kind {self.name!r}: {bad[0]}")
         if self.ops and not self.ops.keys() <= set(self.verbs):
             raise ValueError(f"record kind {self.name!r}: ops for a verb that is not offered")
         if bad := [v for v, why in self.declined.items() if not str(why).strip()]:
@@ -485,6 +494,10 @@ def record_show(repo: Path, kind: RecordKind, rid: str, *, agent: str = "") -> O
     data = dict(out.data)
     history = data.get("history") or []
     data.update(history=history[-HISTORY_SHOWN:], history_total=len(history), record_kind=kind.name)
+    if kind.rules is not None and kind.rules.render:
+        data["rendered"] = KR.render(
+            kind.rules, rid, str(data.get("status", "")), data.get("fields") or {}
+        )
     return O.ok(_event(kind, "show"), **data)
 
 
@@ -509,7 +522,7 @@ def record_add(
         pre := _pre(kind, "add", repo, id=rid, fields=fields, answer=answer, agent=agent)
     ) is not None:
         return pre
-    stored, why = _checked(kind, fields, whole=True)
+    stored, why = RR.checked(repo, kind, rid, *_checked(kind, fields, whole=True), agent=agent)
     if why:
         return O.failed(ev, why, record_kind=kind.name, id=rid)
     _log, _cfg, st = _load(repo, agent)
@@ -582,7 +595,7 @@ def record_edit(
         return pre
     if not fields:
         return O.nothing(ev, f"{kind.name} {rid}: no field given to change", id=rid)
-    stored, why = _checked(kind, fields, whole=False)
+    stored, why = RR.checked(repo, kind, rid, *_checked(kind, fields, whole=False), agent=agent)
     if why:
         return O.failed(ev, why, record_kind=kind.name, id=rid)
     return _as(DEFS.def_update(repo, kind.def_kind, rid, stored, agent=agent), kind, "edit", rid)
@@ -618,7 +631,7 @@ def record_revise(
         return pre
     if not (reason or "").strip():
         return O.failed(ev, "revising a record needs a reason", record_kind=kind.name, id=rid)
-    stored, why = _checked(kind, fields, whole=True)
+    stored, why = RR.checked(repo, kind, rid, *_checked(kind, fields, whole=True), agent=agent)
     if why:
         return O.failed(ev, why, record_kind=kind.name, id=rid)
     _log, _cfg, st = _load(repo, agent)
