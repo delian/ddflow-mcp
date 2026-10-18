@@ -57,6 +57,8 @@ class GateStatus:
     #: gate -> "passed with a local-only command (not the committed one)" for a PASS whose
     #: evidence says the command came from the git-ignored local layer (B924bdc92d7).
     local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> "skipped after a failed run" for a skip that replaced a failure.
+    after_failure: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -68,10 +70,57 @@ class GateStatus:
             + (f"  -- {self.triage[g]}" if g in self.triage else "")
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             + (f"  -- {self.local_command[g]}" if g in self.local_command else "")
+            + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
             for g, o in self.rows
         )
 
     rows: list[tuple[str, str]] = field(default_factory=list)
+
+
+def skipped_after_failure(it, gate: str) -> bool:
+    """Is ``gate``'s latest outcome a skip that replaced a FAILED run (DX-skip-failed-gate)?
+    Skips between the failure and now do not clear it; any other outcome does."""
+    if it.gate_outcome(gate) != "skipped":
+        return False
+    for run in reversed(it.runs_of(gate)):
+        if run.outcome != "skipped":
+            return run.outcome == "failed"
+    return False
+
+
+def failed_ci_blockers(state: State, cfg: Config, item_id: str) -> list[str]:
+    """Blockers for each `[gates].merge_blocked_by_failed` gate (default ci) that is FAILED
+    or skipped over a failure: landing that is main going red (B23bd81462d). The way past is
+    a run that passes."""
+    it = state.items.get(item_id)
+    if it is None:
+        return []
+    out = []
+    for gate in cfg.gates.merge_blocked_by_failed:
+        if it.gate_outcome(gate) == "failed":
+            what = "failed"
+        elif skipped_after_failure(it, gate):
+            what = "was skipped after a failed run"
+        else:
+            continue
+        out.append(
+            f"{gate} {what}; landing it can turn the base red. Fix it and re-run "
+            f"`ddflow gate run {item_id} {gate}` so it passes."
+        )
+    return out
+
+
+def skip_over_failure_refusal(it, gate: str, item: str, required: Iterable[str]) -> str:
+    """Why skipping ``gate`` is refused ("" when it is allowed): a REQUIRED gate whose latest
+    outcome is failed is not a skip, it is a failure; record `unavailable` or `partial` with
+    the reason, or fix and re-run."""
+    if gate not in required or it.gate_outcome(gate) != "failed":
+        return ""
+    return (
+        f"{gate} is a required gate and its latest outcome is FAILED; that is not skippable. "
+        f"Fix it and re-run `ddflow gate run {item} {gate}`, or record the real state: "
+        f"`ddflow gate record {item} {gate} --outcome unavailable|partial --reason ...`."
+    )
 
 
 SETTLED_VERDICTS = ("refuted", "confirmed")  # a finding with either has been triaged
@@ -312,6 +361,7 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
+        after_failure={g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)},
     )
 
 

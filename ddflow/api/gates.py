@@ -44,6 +44,7 @@ from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import failed_review as GO
 from ..services.gates import measured as R
+from ..services.gates import outcomes as OC
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
@@ -988,13 +989,19 @@ def _evidence_fields(
 
 
 def _agent_skip_refusal(
-    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool
+    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool, required=()
 ) -> O.Outcome | None:
     """D-failed-review-gate (B85841c0846): replacing the FAILED outcome of a review gate whose
     confirmed findings were never re-reviewed -- by a skip, or a hand-recorded pass,
     unavailable or partial -- is the operator's override. An agent (`--agent`, DDFLOW_AGENT,
     a harness's shell) is refused; the person records the reason. A review that really runs
-    (`ddflow review`, a triage) does not come through here."""
+    (`ddflow review`, a triage) does not come through here.
+
+    DX-skip-failed-gate: a skip of any other REQUIRED gate that is FAILED is refused for
+    everyone (`skip_over_failure_refusal`); a failure is recorded as one, or as unavailable."""
+    if hard_skip and not (gdef and gdef.reviewer):
+        if why := OC.skip_over_failure_refusal(it, gate, item, required):
+            return O.refused("gate.record", why, id=item, gate=gate, outcome="")
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
         return None
     why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
@@ -1049,6 +1056,7 @@ def record(
         agent,
         skip or outcome == "skipped",
         outcome != "failed",
+        G.required_gates(cfg, gates),
     )
     if refused is not None:
         return refused

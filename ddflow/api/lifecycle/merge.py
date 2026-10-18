@@ -26,6 +26,7 @@ from ...services.cleanup import (  # noqa: F401  (re-exported)
 )
 from ...services.enforce import SELF_MANAGED
 from ...services.gates import failed_review as GO
+from ...services.gates import outcomes as OC
 from ...services.gates import measured as GM
 from .._base import _load
 from ..ci import check_after_merge
@@ -96,6 +97,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             id=item,
             sha="",
             dirty=[],
+        )
+    if ci_failed := OC.failed_ci_blockers(st, cfg, item):
+        return O.refused(
+            "worktree.merged", f"cannot merge {item}: {ci_failed[0]}", id=item, sha="", dirty=[]
         )
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on

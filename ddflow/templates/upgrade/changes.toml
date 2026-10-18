@@ -921,3 +921,10 @@ key = "review.fix_round_free"
 new = "true"
 why = "A review round that only re-checks fixes (every prior finding's lines rewritten or confirmed fixed) no longer counts against review.max_rounds; false restores counting it."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.merge_blocked_by_failed"
+new = "[\"ci\"]"
+why = "Gates whose latest outcome failed, or was skipped over a failed run, make ddflow merge refuse the item; empty turns it off."
+impact = "additive"
