@@ -176,6 +176,7 @@ def test_the_agent_is_told_to_run_relevant_tests_in_parallel_and_all_at_the_gate
     assert "WHOLE suite" not in G.DEFAULT_GATES["unit_tests"].description
     ci = G.DEFAULT_GATES["ci"].prompt
     assert "tests_scope = selected" in ci and "always_tests" in ci
+    assert "WHOLE" not in ci and "the tests ..." not in ci
 
 
 # -- regressions from the rubber-duck review of B16 ----------------------------------
