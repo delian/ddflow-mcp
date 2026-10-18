@@ -1511,7 +1511,7 @@
   ],
   1,
   "",
-  "that edit would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, session, triggers, upgrade, worktree\n"
+  "that edit would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, session, triggers, upgrade, worktree\n"
  ],
  [
   [
@@ -1531,7 +1531,7 @@
   ],
   1,
   "",
-  "appending this would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, session, triggers, upgrade, worktree\n"
+  "appending this would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, session, triggers, upgrade, worktree\n"
  ],
  [
   [

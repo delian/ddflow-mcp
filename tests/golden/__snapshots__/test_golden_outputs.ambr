@@ -1341,6 +1341,15 @@
           is checked on `rule add` and on a `rule edit` of its title or content
           against every other kind, and compared with the other rules by its own
           check; it is never offered as a candidate.
+      evaluation.max_miss_rate = 0.0   [default]
+          The share (0-1) of planted faults a workflow may miss in the shared
+          evaluation harness and still be enabled by default. 0 (default): it must
+          catch every one (D-shared-engines-r2: a workflow is enabled by default only
+          after it catches its planted set).
+      evaluation.min_fixtures = 1   [default]
+          Fixtures with at least one planted fault that a workflow needs before its
+          miss rate counts as evidence. A clean fixture (nothing planted) measures
+          false positives and does not count.
       companions.probe_cache_ttl_s = 300   [default]
           How long a companion detection result stays good, in seconds. Each probe
           shells out and an npx-based one takes seconds on a cold cache, so a session-
