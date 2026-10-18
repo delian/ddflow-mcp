@@ -110,9 +110,7 @@ def _setext_end(lines: list[str], i: int, n: int) -> int:
     return 0
 
 
-def _rst_title(
-    lines: list[str], i: int, n: int, multi: bool = True
-) -> tuple[int, str, str, bool] | None:
+def _rst_title(lines: list[str], i: int, n: int) -> tuple[int, str, str, bool] | None:
     """``(stop, title, adornment char, has overline)`` of a title starting at line ``i``: the
     title may span several lines, ends at the first adornment line at least as long as its
     longest line, and an overline (when there is one) is the same character."""
