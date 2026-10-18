@@ -113,8 +113,8 @@ def _cycle_refusal(st, plans, abandon, kind) -> O.Outcome | None:
     )
 
 
-def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
-    """Append the planned events (the caller holds the lock); a lease refusal records nothing."""
+def _retargets(log, cfg, plans, kind):
+    """``(retargets, None)`` for the lease changes the plans make, or ``(None, refusal)``."""
     retargets = []
     for it, fields in plans:
         globs, res = fields.get("globs"), fields.get("resources")
@@ -123,7 +123,7 @@ def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
         if retargets:
             # Each retarget is checked against the leases as they are NOW; a second one in
             # the same batch would not see the first's new globs (roborev).
-            return O.refused(
+            return None, O.refused(
                 kind,
                 f"{it.id}: the batch retargets more than one lease ({retargets[0][0].id} "
                 f"already); change one claimed item's globs or resources per batch",
@@ -133,17 +133,20 @@ def _record(log, cfg, st, plans, abandon, kind, result) -> O.Outcome:
         if refusal:
             # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
             refusal = refusal.split(" The globs were not changed")[0].rstrip()
-            return O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
+            return None, O.refused(kind, f"{refusal} Nothing in the batch was recorded.", id=it.id)
         if lease is not None:
             retargets.append((it, lease, globs, res))
+    return retargets, None
+
+
+def _record(log, cfg, st, plans, abandon, kind, result, retargets) -> O.Outcome:
+    """Append the planned events (the caller holds the lock and planned ``retargets``)."""
     for it, fields in plans:
         log.append(f"{it.family}.updated", it.id, fields)
     for it, lease, globs, res in retargets:
-        if lease is not None:
-            L.retarget(log, it.id, lease, globs, res)
+        L.retarget(log, it.id, lease, globs, res)
     for iid, why in abandon.items():
-        ab = st.items[iid]
-        log.append("item.abandoned", iid, {"reason": why, "kind": ab.kind})
+        log.append("item.abandoned", iid, {"reason": why, "kind": st.items[iid].kind})
     return O.ok(kind, **result)
 
 
@@ -193,9 +196,13 @@ def _decide(log, cfg, st, entries, abandon, kind, *, dry_run: bool) -> O.Outcome
         "unchanged": unchanged,
         "abandoned": sorted(abandon),
     }
+    # The lease check runs on a dry run too: it must not promise what the real run refuses.
+    retargets, refusal = _retargets(log, cfg, plans, kind)
+    if refusal is not None:
+        return refusal
     if dry_run:
         return O.ok(kind, **result)
-    return _record(log, cfg, st, plans, abandon, kind, result)
+    return _record(log, cfg, st, plans, abandon, kind, result, retargets)
 
 
 def _fold_entries(st, a, b, why: str) -> tuple[dict[str, dict[str, Any]], list[str]]:

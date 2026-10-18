@@ -127,3 +127,13 @@ def test_batch_edits_globs_of_several_unclaimed_items(repo):
 def test_an_empty_batch_is_nothing_to_do(repo):
     _setup(repo)
     assert _batch(repo, [])[0] == 2
+
+
+def test_dry_run_reports_the_lease_refusal_the_real_run_gives(repo):
+    _setup(repo)
+    assert run_cli(repo, "claim", "A", "--agent", "w")[0] == 0
+    assert run_cli(repo, "claim", "C", "--agent", "w2")[0] == 0
+    edits = [{"id": "A", "add_globs": ["C.py"]}]
+    dry = _batch(repo, edits, "--dry-run")
+    real = _batch(repo, edits)
+    assert dry[0] == real[0] == 3
