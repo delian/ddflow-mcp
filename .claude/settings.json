@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# ddflow:begin hooks/session-start ddflow=0.2.1 fmt=1 sha=3de71f0b3bfc\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks session-start; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks session-start; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi\n# ddflow:end hooks/session-start\n"
+            "command": "# ddflow:begin hooks/session-start ddflow=0.2.4 fmt=1 sha=3de71f0b3bfc\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks session-start; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks session-start; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi\n# ddflow:end hooks/session-start\n"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# ddflow:begin hooks/pre-compact ddflow=0.2.1 fmt=1 sha=33e1d7b7f03b\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks pre-compact; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks pre-compact; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/pre-compact\n"
+            "command": "# ddflow:begin hooks/pre-compact ddflow=0.2.4 fmt=1 sha=33e1d7b7f03b\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks pre-compact; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks pre-compact; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/pre-compact\n"
           }
         ]
       }
@@ -26,7 +26,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# ddflow:begin hooks/prompt ddflow=0.2.1 fmt=1 sha=935ffb954277\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks prompt; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks prompt; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/prompt\n"
+            "command": "# ddflow:begin hooks/prompt ddflow=0.2.4 fmt=1 sha=935ffb954277\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks prompt; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks prompt; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/prompt\n"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# ddflow:begin hooks/pre-tool ddflow=0.2.4 fmt=1 sha=4b4ddd746957\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks run pre_tool --harness claude; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks run pre_tool --harness claude; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/pre-tool\n"
           }
         ]
       }
