@@ -29,6 +29,9 @@ class Scope:
     #: "covered by ci ...": the item's ci gate already ran every test this gate would, on
     #: this very tree, so there is nothing to run (scope is then "covered").
     covered_by: str = ""
+    #: The whole suite is what this would run only because the item's ci gate has not passed
+    #: on this tree: the gate refuses and says to rerun ci (B9de2a7dc3e).
+    needs_ci: bool = False
 
     def evidence(self) -> dict[str, object]:
         ev: dict[str, object] = {"scope": self.scope, "scope_why": self.why}
@@ -101,7 +104,7 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
     if not failed_sel and (why := _ci_not_passed_here(cfg, it, tree)):
-        return Scope("full", why)
+        return Scope("full", why, needs_ci="ci" in G.pipeline_for(it, cfg))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
@@ -139,21 +142,21 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
             return "no ci gate in this item's pipeline runs the whole suite, so this gate runs it"
         return (
             f"the ci gate {state}: the whole suite has not passed on this tree, so this "
-            "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
+            "gate will not start it (rerun ci first, and a bug fix or small task then runs the selection)"
         )
     ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
     if not ran:
         return (
             "the ci gate's pass carries no measured tree, so which tree it passed on cannot "
-            "be told: this gate runs the whole suite"
+            "be told: rerun ci"
         )
     if not ran.endswith("+clean"):
         return (
             "the ci gate passed on a tree with uncommitted changes, and ci tests only the "
-            "committed HEAD: this gate runs the whole suite (commit, then re-run ci)"
+            "committed HEAD: commit, then rerun ci"
         )
     if ran != G.normal_fingerprint(G.tree_identity(tree)):
-        return "the tree changed since the ci gate passed (another commit, or uncommitted edits): this gate runs the whole suite"
+        return "the tree changed since the ci gate passed (another commit, or uncommitted edits): rerun ci"
     return ""
 
 

@@ -1328,7 +1328,11 @@
         "properties": {
          "action": {
           "type": "string",
-          "description": "status (default), install, uninstall."
+          "description": "status (default), install, uninstall; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken (read-only)."
+         },
+         "harness": {
+          "type": "string",
+          "description": "harness_show / harness_doctor: the agent's descriptor id."
          },
          "claude": {
           "type": "boolean",
