@@ -155,3 +155,15 @@ def test_adopts_stamped_blocks_are_not_read_as_regions():
 def test_an_orphaned_end_marker_is_a_problem_not_silence():
     orphan = "top\nbody\n<!-- ddflow:end d/a -->\n"
     assert RC.problem(orphan) and RC.mask(orphan) == orphan
+
+
+def test_a_real_region_beside_a_stamped_block_is_still_read():
+    stamped = (
+        "<!-- ddflow:begin rules/work-queue ddflow=0.2.0 fmt=1 sha=f60922c1c1f6 -->\nx\n"
+        "<!-- ddflow:end rules/work-queue -->\n"
+    )
+    ok = RG.render_region("d", "a", "A\n")
+    bad = ok.replace("A\n", "B\n")
+    assert RC.problem(stamped + ok) == "" and RC.edited(stamped + ok) == []
+    assert RC.edited(stamped + bad) == ["d/a"]
+    assert RC.mask(stamped + ok).startswith(stamped) and "A" not in RC.mask(stamped + ok)
