@@ -85,7 +85,7 @@ def test_a_re_review_is_a_full_round_over_the_whole_diff_with_the_triaged_findin
     _review(repo)
     run_cli(
         repo, "review", "triage", "T1", "--gate", "critic", "--finding", "1",
-        "--refuted", "--probe", "x = 1 is the intended value; test_x pins it",
+        "--refuted", "--probe", "x = 1 is the intended value; the suite pins it",
     )  # fmt: skip
     _fix(repo)
 
