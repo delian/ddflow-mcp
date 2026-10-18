@@ -147,6 +147,9 @@ _FLAG = re.compile(
 )  #: `--add-needs`, not `--force`
 _PHRASE_WORDS = 4  #: consecutive words that make a phrase
 _PHRASE_MIN = 16  #: characters a phrase has, so four short words are not one
+_SHORT_WORDS = 3  #: a test often asserts on a fragment of the message, not the whole of it
+_SHORT_MIN = 15  #: characters a fragment has: three short words are common English
+_EDGE = " ,.;:()[]`'\""  #: punctuation a quoted fragment drops at its ends
 _PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is not a signal
 
 
@@ -160,10 +163,12 @@ def _phrases(lines: Iterable[str]) -> set[str]:
             out.update(_FLAG.findall(m.group(1) or m.group(2) or ""))
             for part in _PLACEHOLDER.split(m.group(1) or m.group(2) or ""):
                 words = part.split()
-                for i in range(len(words) - _PHRASE_WORDS + 1):
-                    phrase = " ".join(words[i : i + _PHRASE_WORDS])
-                    if len(phrase) >= _PHRASE_MIN:
-                        out.add(phrase)
+                for n, floor in ((_PHRASE_WORDS, _PHRASE_MIN), (_SHORT_WORDS, _SHORT_MIN)):
+                    for i in range(len(words) - n + 1):
+                        phrase = " ".join(words[i : i + n])
+                        if len(phrase) >= floor:
+                            out.add(phrase)
+                            out.add(phrase.strip(_EDGE))  # a test quotes it without the comma
     return out
 
 
