@@ -82,50 +82,61 @@ def _lines(text: str):
         pos += len(line)
 
 
-def _match(rx: re.Pattern[str], line: str) -> re.Match[str] | None:
-    return rx.fullmatch(line)
+@dataclass(frozen=True)
+class _Mark:
+    kind: str  # "begin" | "end"
+    dialect: str  # "new" | "old" | "bare"
+    doc: str
+    name: str
+    sha: str = ""
+
+
+def _classify(line: str, bare_doc: str) -> _Mark | None:
+    """The marker a line is, or None."""
+    for kind, dialect, rx in (
+        ("begin", "new", _NEW_BEGIN),
+        ("begin", "old", _OLD_BEGIN),
+        ("end", "new", _NEW_END),
+        ("end", "old", _OLD_END),
+    ):
+        m = rx.fullmatch(line)
+        if m:
+            g = m.groupdict()
+            return _Mark(kind, dialect, g["doc"], g.get("name") or DEFAULT_REGION, g.get("sha", ""))
+    if bare_doc:
+        for kind, rx in (("begin", _BARE_BEGIN), ("end", _BARE_END)):
+            if rx.fullmatch(line):
+                return _Mark(kind, "bare", bare_doc, DEFAULT_REGION)
+    return None
 
 
 def parse(text: str, *, bare_doc: str = "") -> list[Region]:
     """Every region in ``text``, in file order. Raises ``RegionError`` for a duplicate
     (doc, name), a nested or unbalanced pair, or an end that names another region."""
     found: list[Region] = []
-    open_: tuple[str, str, str, str, int, int] | None = None  # dialect, doc, name, sha, begin, body
+    cur: tuple[_Mark, int, int] | None = None  # the open begin, its offset, its body offset
     for start, line, nxt in _lines(text):
-        if (m := _match(_NEW_BEGIN, line)) or (m := _match(_OLD_BEGIN, line)):
-            dialect = "new" if "name" in m.groupdict() else "old"
-            if open_ is not None:
+        mark = _classify(line, bare_doc)
+        if mark is None:
+            continue
+        if mark.kind == "begin":
+            if cur is not None:
                 raise RegionError(
-                    f"ddflow region {open_[1]}/{open_[2]} is not closed before the next begin"
+                    f"ddflow region {cur[0].doc}/{cur[0].name} is not closed before the next begin"
                 )
-            name = m.group("name") if dialect == "new" else DEFAULT_REGION
-            open_ = (dialect, m.group("doc"), name, m.group("sha"), start, nxt)
-        elif bare_doc and _match(_BARE_BEGIN, line):
-            if open_ is not None:
-                raise RegionError(
-                    f"ddflow region {open_[1]}/{open_[2]} is not closed before the next begin"
-                )
-            open_ = ("bare", bare_doc, DEFAULT_REGION, "", start, nxt)
-        elif (
-            (m := _match(_NEW_END, line))
-            or (m := _match(_OLD_END, line))
-            or (bare_doc and (m := _match(_BARE_END, line)))
+            cur = (mark, start, nxt)
+            continue
+        if cur is None or (cur[0].doc, cur[0].name, cur[0].dialect) != (
+            mark.doc,
+            mark.name,
+            mark.dialect,
         ):
-            gd = m.groupdict()
-            want = (open_[1], open_[2]) if open_ else None
-            got = (
-                (gd["doc"], gd.get("name") or DEFAULT_REGION)
-                if "doc" in gd
-                else (bare_doc, DEFAULT_REGION)
-            )
-            if open_ is None or want != got or (open_[0] == "new") != ("name" in gd):
-                raise RegionError(f"unbalanced ddflow end marker: {line.strip()}")
-            found.append(
-                Region(open_[1], open_[2], open_[3], open_[4], open_[5], start, nxt, open_[0], text)
-            )
-            open_ = None
-    if open_ is not None:
-        raise RegionError(f"ddflow region {open_[1]}/{open_[2]} is never closed")
+            raise RegionError(f"unbalanced ddflow end marker: {line.strip()}")
+        b = cur[0]
+        found.append(Region(b.doc, b.name, b.sha, cur[1], cur[2], start, nxt, b.dialect, text))
+        cur = None
+    if cur is not None:
+        raise RegionError(f"ddflow region {cur[0].doc}/{cur[0].name} is never closed")
     seen: set[tuple[str, str]] = set()
     for r in found:
         if (r.doc, r.name) in seen:
