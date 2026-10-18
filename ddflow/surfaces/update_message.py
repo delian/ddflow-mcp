@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-from ..config import csv_list
-
-
-def csv_or_none(v: str | None) -> list[str] | None:
-    """`None` stays None (leave alone); a string is a comma list."""
-    return None if v is None else csv_list(v)
-
 
 def update_message(item: str, data: dict) -> str:
     msg = f"{item} updated: {', '.join(data['changed'])}"
