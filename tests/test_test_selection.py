@@ -169,8 +169,13 @@ def test_the_agent_is_told_to_run_relevant_tests_in_parallel_and_all_at_the_gate
     assert "never record unit_tests from a run of\n  your own" in driver
     assert "it runs the **whole** suite on the branch merged with the\n  base" in driver
     prompt = G.DEFAULT_GATES["unit_tests"].prompt
-    assert "WHOLE suite" in prompt and "-n auto" in prompt and "ddflow tests" in prompt
-    assert "ci runs the WHOLE suite on the merge result and passes" in prompt
+    assert "-n auto" in prompt and "ddflow tests" in prompt
+    # DX-gate-prompts-scoped-ci: ci runs the selected tests, so neither prompt says an
+    # item's ci (or this gate) runs the whole suite.
+    assert "tests_scope = selected" in prompt and "WHOLE suite" not in prompt
+    assert "WHOLE suite" not in G.DEFAULT_GATES["unit_tests"].description
+    ci = G.DEFAULT_GATES["ci"].prompt
+    assert "tests_scope = selected" in ci and "always_tests" in ci
 
 
 # -- regressions from the rubber-duck review of B16 ----------------------------------
