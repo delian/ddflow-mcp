@@ -244,7 +244,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
     if early is not None:
-        return _refused_early(log, cfg, item, want, queue, early)
+        return _refused_early(log, cfg, item, want, queue, early, notes)
     broke: list = []
     lz = _acquire(
         repo,
@@ -499,11 +499,14 @@ def _new_report_count(st, item: str) -> int:
     return new_reports(st, item, it.lease.acquired_at)["count"]
 
 
-def _refused_early(log, cfg, item: str, want, queue: bool, early: O.Outcome) -> O.Outcome:
-    """A guard's refusal; in line behind a waiter is a wait too."""
+def _refused_early(
+    log, cfg, item: str, want, queue: bool, early: O.Outcome, notes: list
+) -> O.Outcome:
+    """A guard's refusal, with the notes of the guards before it; in line behind a waiter is
+    a wait too."""
     if early.data.get("queued_behind"):
         _record_waiting(log, cfg, item, want, queue)
-    return early
+    return _with_notes(early, notes)
 
 
 def _with_notes(out: O.Outcome, notes: list) -> O.Outcome:

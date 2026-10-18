@@ -78,3 +78,11 @@ def test_a_note_is_collected_and_later_guards_still_run(clean):
 def test_order_is_keyword_only_so_a_number_is_not_taken_for_the_guard(clean):
     with pytest.raises(TypeError):
         G.register("zz_bad", 40)
+
+
+def test_a_note_before_a_refusal_rides_on_the_refusal():
+    from ddflow.api.lifecycle import claim as C
+
+    refused = O.refused("item.claimed", "no", id="T1")
+    out = C._refused_early(None, None, "T1", None, False, refused, [G.Note("g", "heads up")])
+    assert out.data["claim_notes"] == [{"guard": "g", "text": "heads up"}]
