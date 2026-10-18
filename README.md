@@ -1096,7 +1096,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 353 knobs.
+cadences, and the rest of the 355 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5261,7 +5261,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 353): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 355): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5779,7 +5779,7 @@ declared once and persists — see
 
 ## Configuration
 
-353 knobs across 40 sections, every one documented in place and listed, with its default
+355 knobs across 40 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5846,8 +5846,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=d300a85578f4 -->
-<details><summary>All 353 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=19eb57ef276f -->
+<details><summary>All 355 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6145,6 +6145,8 @@ long default is left to `ddflow config --explain`.
 | `ci.workers` | `"auto"` |  |
 | `ci.min_workers` | `1` |  |
 | `ci.max_workers` | `48` |  |
+| `ci.max_concurrent_suites` | `1` |  |
+| `ci.suite_wait_s` | `1800` |  |
 | `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
 | `ci.tests_scope` | `"selected"` | `selected` \| `full` |
