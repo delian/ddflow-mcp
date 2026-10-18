@@ -7,8 +7,8 @@ A fixture record (`templates/kinds/evalfixture.toml`) carries its planted faults
 finding contains any of its words (case-insensitive), *missed* otherwise, and a finding that
 matches no fault is *extra* (on a clean fixture, a false positive).
 
-Pure: no I/O, no clock. Every number is a parameter whose default the surfaces expose as a
-knob (SE-eval-harness.3).
+Pure: no I/O, no clock. Every number (the miss rate a workflow may have, the fixtures it needs) is a
+required parameter: its default is a config knob, added with the surface (SE-eval-harness.3).
 """
 
 from __future__ import annotations
@@ -16,11 +16,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
-
-#: The share of planted faults a workflow may miss and still be enabled by default.
-DEFAULT_MAX_MISS_RATE = 0.0
-#: Fixtures a workflow needs before its miss rate is evidence at all.
-DEFAULT_MIN_FIXTURES = 1
 
 
 class FaultSpecError(ValueError):
@@ -94,8 +89,8 @@ def miss_rate(scores: Iterable[Score]) -> float | None:
 def report(
     scores: Iterable[Score],
     *,
-    max_miss_rate: float = DEFAULT_MAX_MISS_RATE,
-    min_fixtures: int = DEFAULT_MIN_FIXTURES,
+    max_miss_rate: float,
+    min_fixtures: int,
 ) -> dict[str, dict[str, Any]]:
     """Per workflow: fixtures, planted, missed, miss_rate, false_positives, and whether it
     may be enabled by default (`enable_by_default`) with the reason."""
@@ -121,8 +116,8 @@ def report(
 def enable_by_default(
     row: Mapping[str, Any] | None,
     *,
-    max_miss_rate: float = DEFAULT_MAX_MISS_RATE,
-    min_fixtures: int = DEFAULT_MIN_FIXTURES,
+    max_miss_rate: float,
+    min_fixtures: int,
 ) -> tuple[bool, str]:
     """May a workflow be enabled by default, given its `report` row? ``(ok, reason)``."""
     if not row or row["fixtures"] < min_fixtures:
