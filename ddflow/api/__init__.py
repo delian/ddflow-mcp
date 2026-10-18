@@ -80,6 +80,7 @@ from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
+from .harness import harness_view
 from .healthwatch import health
 from .items import (
     DEFAULT_PRIORITY,
