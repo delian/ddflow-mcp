@@ -22,9 +22,13 @@ from . import report_gates as RG
 TITLE_CAP = 100
 
 
-def _title(*texts: str | None) -> str:
-    """The first non-empty of ``texts``, cut to `TITLE_CAP`: one cut for every record kind."""
-    return next((t for t in texts if t), "")[:TITLE_CAP]
+#: A fixed bug's one-line summary keeps more (it is the regression row's only text).
+BUG_SUMMARY_CAP = 120
+
+
+def _title(*texts: str | None, cap: int = TITLE_CAP) -> str:
+    """The first non-empty of ``texts``, cut to ``cap``: one cutter for every record kind."""
+    return next((t for t in texts if t), "")[:cap]
 
 
 def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
@@ -47,7 +51,7 @@ def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
         rows.append(
             {
                 "bug": bid,
-                "summary": (_title(bug.title, bug.summary) if bug else ""),
+                "summary": (_title(bug.title, bug.summary, cap=BUG_SUMMARY_CAP) if bug else ""),
                 "tests": list(
                     data.get("regression_tests") or (bug.regression_tests if bug else [])
                 ),
