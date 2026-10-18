@@ -17,7 +17,8 @@ data, not code.
   install.
 
 The hooks written for an agent are the ones ddflow acts on (``INSTALLED``); the table
-rows ``claudehooks.HOOKS`` already carry for Claude and Gemini are used as they are.
+rows ``claudehooks.HOOKS`` carry for Claude and Gemini are used while they agree with the
+descriptor on the file.
 """
 
 from __future__ import annotations
@@ -59,8 +60,8 @@ def unsupported(h: Harness) -> str:
 
 
 def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
-    """The hooks ddflow owns for ``h``: the table's rows when it has them, else one per
-    installed event, generated from the descriptor."""
+    """The hooks ddflow owns for ``h``: the table's rows when it has them AND they live in the
+    descriptor's hook file, else one per installed event, generated from the descriptor."""
     if unsupported(h):  # the descriptor is authoritative, the table included
         return ()
     hk = h.hooks
