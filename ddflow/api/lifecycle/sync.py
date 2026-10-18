@@ -45,9 +45,11 @@ def sync(repo: Path, *, item: str = "", check: bool = False, agent: str = "") ->
         notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
         stale = {n.gate for n in notes if not n.unverified}
         unverified = {n.gate for n in notes if n.unverified}
-        recorded = {g for g in it.gates if it.gates[g].outcome}
+        recorded = {g for g, rec in it.gates.items() if rec.outcome == "passed"}
         data["gates_valid"] = sorted(recorded - stale - unverified)
         data["gates_stale"] = sorted(recorded & stale)
+        # A gate recorded failed/unavailable/partial/skipped was never green: not "valid".
+        data["gates_not_passing"] = sorted(g for g, r in it.gates.items() if r.outcome != "passed")
         data["gates_unverified"] = sorted(recorded & unverified)
     text = _text(r, data)
     if r.status in ("refused", "conflict"):
