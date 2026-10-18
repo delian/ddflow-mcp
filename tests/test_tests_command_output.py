@@ -54,3 +54,10 @@ def test_full_is_honoured_when_the_gate_runs_only_the_selection():
 
     text = _tests_text(out, {})
     assert "MERGE QUEUE / PHASE END ONLY" in text and "uv run pytest tests/" in text
+
+
+def test_no_full_hint_when_no_whole_suite_command_is_configured():
+    from ddflow.surfaces.declared.export import _full_suite_lines
+
+    assert _full_suite_lines({"full_suite": "", "full_suite_known": False}) == []
+    assert "--full" in _full_suite_lines({"full_suite": "", "full_suite_known": True})[0]

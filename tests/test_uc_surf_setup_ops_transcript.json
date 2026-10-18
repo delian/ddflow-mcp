@@ -1140,7 +1140,7 @@
    "T1"
   ],
   2,
-  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n\nThe unit_tests gate runs the whole suite: no ci gate in this item's pipeline runs the whole suite, so this gate runs it\n  (the whole-suite command is for the merge queue and phase end; `ddflow tests --full` shows it)\n",
+  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n\nThe unit_tests gate runs the whole suite: no ci gate in this item's pipeline runs the whole suite, so this gate runs it\n",
   ""
  ],
  [
