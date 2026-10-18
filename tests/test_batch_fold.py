@@ -99,3 +99,17 @@ def test_fold_json_names_the_unchanged_list(repo):
     _setup(repo)
     code, out, _e = run_cli(repo, "--json", "task", "fold", "B", "A", "--dry-run")
     assert code == 0 and "unchanged" in J.loads(out)
+
+
+def test_batch_refuses_two_lease_retargets_and_abandoning_a_claimed_item(repo):
+    from ddflow.api import batch
+
+    _setup(repo)
+    assert run_cli(repo, "claim", "A", "--agent", "w")[0] == 0
+    assert run_cli(repo, "claim", "C", "--agent", "w2")[0] == 0
+    code, o, e = _batch(
+        repo, [{"id": "A", "add_globs": ["x1.py"]}, {"id": "C", "add_globs": ["x2.py"]}]
+    )
+    assert code == 3 and "more than one lease" in o + e
+    out = batch.apply(repo, [], abandon={"A": "x"})
+    assert out.exit == 3 and "claimed" in out.reason
