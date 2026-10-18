@@ -20,7 +20,7 @@ from . import reporting as onboarding
 from .order import TOOL_ORDER as LEGACY_ORDER
 
 #: Every declared command, by tool name.
-DECLARED = by_tool(all_commands())
+DECLARED = by_tool(all_commands(tools=True))
 
 #: The hand-written entries: tools no declaration covers yet (their families migrate them).
 HAND_WRITTEN: dict[str, dict[str, Any]] = {
