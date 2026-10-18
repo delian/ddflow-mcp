@@ -42,6 +42,12 @@ def test_bug_found_scope_ddflow_files_a_fix_task_without_the_items_globs(repo):
     assert state(repo).items["fix-Bd"].globs == []
     K.bug_found(repo, summary="the parser drops a line", item="T1", id="Bp", agent="a")
     assert state(repo).items["fix-Bp"].globs == SRC
+    # a report that quotes the item's own files (as Bc0b26248e3 does) inherits nothing either
+    K.bug_found(
+        repo, summary="the brief of fix-X lists claim.py and tests/test_claim.py", item="T1",
+        id="Bq", scope="ddflow", agent="a",
+    )  # fmt: skip
+    assert state(repo).items["fix-Bq"].globs == []
 
 
 def test_file_tasks_keeps_the_scope_when_it_files_the_task_later(repo):
@@ -50,6 +56,10 @@ def test_file_tasks_keeps_the_scope_when_it_files_the_task_later(repo):
         repo, summary="no bug show command", item="T1", id="Bd", scope="ddflow", no_task=True,
         agent="a",
     )  # fmt: skip
+    K.bug_found(
+        repo, summary="the parser drops a line", item="T1", id="Bp", no_task=True, agent="a"
+    )  # fmt: skip
     assert "fix-Bd" not in state(repo).items
     K.bug_file_tasks(repo, agent="a")
+    assert state(repo).items["fix-Bp"].globs == SRC  # the deferred path does have the item
     assert state(repo).items["fix-Bd"].globs == []
