@@ -6,7 +6,7 @@ import time
 
 from ...core import outcome as O
 from ...services import waiting as WG
-from ...services.claim_guards import ClaimContext, register
+from ...services.claimguards import ClaimContext, register
 
 
 def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
@@ -30,4 +30,4 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     )
 
 
-register("queued", order=20)(_refuse_if_queued)
+register("queued", _refuse_if_queued, order=20)

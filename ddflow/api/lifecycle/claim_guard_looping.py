@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ...core import outcome as O
 from ...core import progress as PR
-from ...services.claim_guards import ClaimContext, register
+from ...services.claimguards import ClaimContext, register
 
 
 def _refuse_looping(ctx: ClaimContext) -> O.Outcome | None:
@@ -28,4 +28,4 @@ def _refuse_looping(ctx: ClaimContext) -> O.Outcome | None:
     )
 
 
-register("looping", order=10)(_refuse_looping)
+register("looping", _refuse_looping, order=10)
