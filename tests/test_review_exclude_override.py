@@ -56,3 +56,18 @@ def test_an_item_tag_and_include_pinned_reach_the_reviewer(repo, tmp_path):
     run_cli(repo, "update", "T1", "--add-tags", "review-exclude:x.py")
     api.review(repo, gate="critic", item="T1")
     assert "x = 1" not in seen.read_text()
+
+
+def test_include_pinned_reaches_the_reviewer(repo, tmp_path):
+    import ddflow.api.review as api
+    from test_review_exclude import _setup
+
+    seen = _setup(repo, tmp_path, "[review]\nexclude_globs = []\n")
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "p"\nfiles = ["tests/golden/snap.json"]\ncheck = ["true"]\nregen = ["true"]\n'
+    )
+    api.review(repo, gate="critic", item="T1")
+    assert "GENERATED_MARK" not in seen.read_text()
+    seen.unlink()
+    api.review(repo, gate="critic", item="T1", include_pinned=True, force=True, reason="again")
+    assert "GENERATED_MARK" in seen.read_text()
