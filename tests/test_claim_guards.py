@@ -73,3 +73,8 @@ def test_a_note_is_collected_and_later_guards_still_run(clean):
     refusal, notes = G.run(_ctx())
     assert refusal is not None and [n.guard for n in notes] == ["zz_note"]
     assert G.Note("g", "t", {"k": 1}).as_dict() == {"guard": "g", "text": "t", "k": 1}
+
+
+def test_order_is_keyword_only_so_a_number_is_not_taken_for_the_guard(clean):
+    with pytest.raises(TypeError):
+        G.register("zz_bad", 40)

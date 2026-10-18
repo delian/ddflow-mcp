@@ -77,10 +77,14 @@ GUARDS: Registry[Guard] = Registry(
 )
 
 
-def register(name: str, fn: Check | None = None, order: int = 50) -> Any:
+def register(name: str, fn: Check | None = None, *, order: int = 50) -> Any:
     """Register ``fn`` as claim guard ``name`` at ``order``; with no ``fn``, a decorator."""
 
     def add(check: Check) -> Check:
+        if not callable(check):
+            raise TypeError(
+                f"claim guard {name!r}: {check!r} is not callable (order= is keyword-only)"
+            )
         GUARDS.register(Guard(name, check, order, (check.__doc__ or "").strip()))
         return check
 
