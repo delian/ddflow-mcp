@@ -126,4 +126,5 @@ TOOL_ORDER: tuple[str, ...] = (
     "ddflow_health",
     "ddflow_phase_close",
     "ddflow_docs",
+    "ddflow_record",
 )
