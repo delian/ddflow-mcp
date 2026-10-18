@@ -19,9 +19,7 @@ from ddflow.services import review_exclude as REX
 
 
 def _sec(path: str, body: str = "x") -> str:
-    return (
-        f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1 +1 @@\n-a\n+{body}\n"
-    )
+    return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1 +1 @@\n-a\n+{body}\n"
 
 
 def test_the_defaults_name_golden_transcripts_lockfiles_and_snapshots():
@@ -33,7 +31,12 @@ def test_the_defaults_name_golden_transcripts_lockfiles_and_snapshots():
 
 
 def test_filter_drops_matching_files_and_counts_them():
-    diff = _sec("a.py") + _sec("tests/golden/x.json") + _sec("sub/loop_transcript.json") + _sec("uv.lock")
+    diff = (
+        _sec("a.py")
+        + _sec("tests/golden/x.json")
+        + _sec("sub/loop_transcript.json")
+        + _sec("uv.lock")
+    )
     kept, gone = REX.filter_diff(diff, ["tests/golden/**", "*transcript*.json", "uv.lock"])
     assert "a.py" in kept and "golden" not in kept and "uv.lock" not in kept
     assert [p for p, _ in gone.files] == [
@@ -51,9 +54,7 @@ def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
-        "#!/bin/sh\nin=$(cat)\n"
-        f"printf '%s\\n' \"$in\" >> '{seen}'\n"
-        "echo 'STATUS: NO FINDINGS'\n"
+        f"#!/bin/sh\nin=$(cat)\nprintf '%s\\n' \"$in\" >> '{seen}'\necho 'STATUS: NO FINDINGS'\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
@@ -77,7 +78,9 @@ def test_a_review_leaves_out_excluded_files_and_says_so(repo, tmp_path):
     assert out.exit == 0, out.reason
     sent = seen.read_text()
     assert "x.py" in sent and "GENERATED_MARK" not in sent
-    assert "excluded from review" in out.data["text"] and "tests/golden/snap.json" in out.data["text"]
+    assert (
+        "excluded from review" in out.data["text"] and "tests/golden/snap.json" in out.data["text"]
+    )
     ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
     assert ev["excluded_files"] == 1 and ev["excluded_bytes"] > 0
     assert ev["excluded_paths"] == ["tests/golden/snap.json"]

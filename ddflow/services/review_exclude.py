@@ -59,7 +59,9 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
-def filter_diff(diff: str, pats: list[str], pinned: list[str] | None = None) -> tuple[str, Excluded]:
+def filter_diff(
+    diff: str, pats: list[str], pinned: list[str] | None = None
+) -> tuple[str, Excluded]:
     """``diff`` without the sections whose file matches a pattern, and what was dropped."""
     gone = Excluded()
     pinned = pinned or []
