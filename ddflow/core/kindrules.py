@@ -18,8 +18,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-#: Characters of a validator's pattern a value is matched against at most (a bound on
-#: pathological input).
+#: The longest value a pattern validator will match (a bound on pathological input): a longer
+#: one is refused, not matched in part.
 MAX_VALUE = 20000
 
 
@@ -103,7 +103,9 @@ class KindRules:
                     bad.append(f"validator on {v.field!r}: bad pattern: {exc}")
         if self.render:
             try:
-                used = {n for _l, n, _s, _c in string.Formatter().parse(self.render) if n}
+                used = {
+                    n for _l, n, _s, _c in string.Formatter().parse(self.render) if n is not None
+                }
             except ValueError as exc:
                 return [*bad, f"render is not a template: {exc}"]
             bad += [
@@ -125,7 +127,9 @@ def _value_problem(v: Validator, value: Any) -> str:
             continue
         if v.max_length is not None and len(item) > v.max_length:
             return label or f"{v.field} is longer than {v.max_length} characters"
-        if v.pattern and not re.search(v.pattern, item[:MAX_VALUE]):
+        if v.pattern and len(item) > MAX_VALUE:
+            return label or f"{v.field} is longer than {MAX_VALUE} characters: too long to match"
+        if v.pattern and not re.search(v.pattern, item):
             return label or f"{v.field} {item[:40]!r} does not match {v.pattern!r}"
     return ""
 
