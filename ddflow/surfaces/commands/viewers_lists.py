@@ -17,6 +17,7 @@ from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
+from .reporting import cmd_bug_show
 from .viewers_search import COMMAND as SEARCH
 
 _HELP = {
@@ -158,16 +159,29 @@ def cmd_list(a, c: Ctx) -> int:
 
 
 #: `<kind> list` for the kinds whose group another module declares: the CLI half of `ddflow_list`.
-COMMANDS = tuple(
-    Command(
-        path=(kind, "list"),
-        summary=f"list {_LISTS[kind]}",
-        params=_filter_params(kind),
-        handler=cmd_list,
-        defaults={"list_kind": kind},
-        via=("ddflow_list", kind),
-    )
-    for kind in ("task", "phase", "bug", "lesson")
+#: `bug show`: `show`, for a bug. Over MCP the same reader is ddflow_show, which takes a bug id.
+BUG_SHOW = Command(
+    path=("bug", "show"),
+    summary="read one bug: its text, where it was found, its fix task and its closure",
+    params=(Param("id", positional=True, help="bug id"),),
+    handler=cmd_bug_show,
+    reason="over MCP the same reader is ddflow_show, which takes a bug id: a second tool for "
+    "the same read would cost every agent's tools/list bytes",
+)
+
+COMMANDS = (
+    *(
+        Command(
+            path=(kind, "list"),
+            summary=f"list {_LISTS[kind]}",
+            params=_filter_params(kind),
+            handler=cmd_list,
+            defaults={"list_kind": kind},
+            via=("ddflow_list", kind),
+        )
+        for kind in ("task", "phase", "bug", "lesson")
+    ),
+    BUG_SHOW,
 )
 
 
