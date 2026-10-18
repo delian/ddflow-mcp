@@ -199,7 +199,8 @@ def tracked_in(ctx: Context, rel: str) -> list[str]:
 
 
 def read_capped(ctx: Context, rel: str) -> str:
-    """The text of one tracked file, `SourceError` past ``ctx.max_bytes`` (never truncated
+    """The text of one file inside the repo (callers list it through `tracked_in` first: an
+    untracked file is never a source), `SourceError` past ``ctx.max_bytes`` (never truncated
     silently), `SourceUnavailable` when it cannot be read."""
     if ctx.repo is None:
         raise SourceUnavailable("a file source needs the repository, and none was given")
