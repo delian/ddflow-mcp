@@ -123,8 +123,8 @@ def test_every_packaged_descriptor_loads():
         assert KDA.load_packaged(name).name == name
 
 
-def test_register_kind_never_redefines_a_builtin():
-    D.register_kind("rule", "something else")
+def test_add_kind_never_redefines_a_builtin():
+    D.add_kind("rule", "something else")
     assert D.DEF_KINDS["rule"].startswith("a project rule")
 
 

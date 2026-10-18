@@ -2628,5 +2628,21 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_record": {
+  "command": "record",
+  "schema": "record@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "record@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }

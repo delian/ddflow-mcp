@@ -46,7 +46,7 @@ def kind_from_data(desc: dict[str, Any], records: ModuleType | None = None) -> A
             args[key] = cls(**args[key])
     # a definition kind is added only for a descriptor that stands (a failed one leaves none)
     held = args["def_kind"] in D.DEF_KINDS
-    D.register_kind(args["def_kind"], args["summary"])
+    D.add_kind(args["def_kind"], args["summary"])
     try:
         return R.RecordKind(**args)
     except Exception:

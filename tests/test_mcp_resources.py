@@ -31,7 +31,9 @@ def _call(repo, method, **params):
 
 def test_the_listing_is_the_table_in_order(repo):
     listed = _call(repo, "resources/list")["result"]["resources"]
-    assert [r["uri"] for r in listed] == URIS == [r.uri for r in RESOURCES]
+    # beside the fixed table, one pair per declared record kind (`ddflow://records/<name>`)
+    fixed = [r["uri"] for r in listed if not r["uri"].startswith("ddflow://records/")]
+    assert fixed == URIS == [r.uri for r in RESOURCES]
     assert all(set(r) == {"uri", "name", "description", "mimeType"} for r in listed)
     assert {r["mimeType"] for r in listed} == {"text/markdown"}
 
