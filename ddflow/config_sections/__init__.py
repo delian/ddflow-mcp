@@ -23,6 +23,7 @@ SECTION_NAMES = (
     "bugs",
     "memory",
     "dedupe",
+    "evaluation",
     "imports",
     "companions",
     "reinstruct",
