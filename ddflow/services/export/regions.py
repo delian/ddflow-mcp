@@ -72,7 +72,8 @@ class Region:
 
     @property
     def edited(self) -> bool:
-        return bool(self.sha) and F.body_digest(self.content) != self.sha
+        # a CRLF file stores the body with CRLF; the digest is over the LF form
+        return bool(self.sha) and F.body_digest(self.content.replace("\r\n", "\n")) != self.sha
 
 
 def _lines(text: str):
