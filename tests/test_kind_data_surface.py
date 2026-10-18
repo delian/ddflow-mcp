@@ -185,10 +185,14 @@ def test_a_bad_at_option_is_refused(repo):
     assert out.exit != 0 and "whole number" in out.reason
 
 
-def test_the_tools_list_stays_under_its_budget_with_the_record_tool():
+def test_the_tools_list_carries_the_record_tool_and_core_keeps_its_ratchet(monkeypatch):
+    # the whole list's size is reported, not enforced (D-mcp-budget-report); core is ratcheted
+    from tests.test_mcp_tool_budget import CORE_BUDGET
+
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "core")
     reply = Server(".").handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     size = len(json.dumps(reply["result"]["tools"], separators=(",", ":")))
-    assert size < 100_000
+    assert size <= CORE_BUDGET
 
 
 def test_the_tool_args_are_kind_verb_id_then_fields():
