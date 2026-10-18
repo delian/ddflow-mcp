@@ -14,13 +14,29 @@ import re
 from . import regions as RG
 
 _MARKS = ("ddflow:begin", "ddflow:end")  # an orphaned end marker is unbalanced, not "no regions"
-# adopt's stamped blocks (`ddflow:begin NAME ddflow=V fmt=N sha=H`) are another grammar, owned
-# by pins and adopt: a text holding one is not read here, so its end marker is not "unbalanced"
-_STAMPED = re.compile(r"^<!-- ddflow:begin \S+ [^\n]*\bfmt=\d+", re.M)
+# adopt's stamped blocks (`ddflow:begin NAME ddflow=V fmt=N sha=H` ... `ddflow:end NAME`) are
+# another grammar, owned by pins and adopt: each block is blanked (offsets kept) before
+# parsing, so its end marker is not "unbalanced" and the real regions around it are still read
+_STAMPED = re.compile(r"^<!-- ddflow:begin (\S+) [^\n]*\bfmt=\d+[^\n]*$", re.M)
+
+
+def _blank(text: str) -> str:
+    """``text`` with each stamped block turned to spaces (newlines and offsets kept)."""
+    out, cur = [], 0
+    for m in _STAMPED.finditer(text):
+        if m.start() < cur:
+            continue
+        end = text.find(f"<!-- ddflow:end {m.group(1)} -->", m.end())
+        stop = m.end() if end < 0 else (text.find("\n", end) + 1 or len(text))
+        out.append(text[cur : m.start()] + re.sub(r"[^\n]", " ", text[m.start() : stop]))
+        cur = stop
+    return "".join(out) + text[cur:]
 
 
 def _parsed(text: str) -> list[RG.Region]:
-    return RG.parse(text) if any(m in text for m in _MARKS) and not _STAMPED.search(text) else []
+    if not any(m in text for m in _MARKS):
+        return []
+    return RG.parse(_blank(text) if _STAMPED.search(text) else text)
 
 
 def problem(text: str) -> str:
