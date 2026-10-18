@@ -36,7 +36,8 @@ def test_duplicate_fault_id_is_refused():
 
 def test_report_and_enable_gate():
     rows = E.report(
-        [E.score(FIX, ["injection", "lock"]), E.score({**FIX, "id": "F2", "workflow": "bad"}, [])]
+        [E.score(FIX, ["injection", "lock"]), E.score({**FIX, "id": "F2", "workflow": "bad"}, [])],
+        **K,
     )
     assert rows["wf"]["miss_rate"] == 0 and rows["bad"]["miss_rate"] == 1
     assert rows["wf"]["enabled"] and not rows["bad"]["enabled"] and "2 of 2" in rows["bad"]["why"]
