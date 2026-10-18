@@ -20,8 +20,10 @@ from pathlib import Path
 from typing import Any
 
 from ...core.registry import Registry
+from ...infra import git
 from ..export import registry as export_registry
 from ..export.query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError, Query
+from . import spec
 from .spec import DocType, Section
 
 SEPARATOR = ":"
@@ -107,6 +109,18 @@ def check(text: str) -> None:
         parse(text)
 
 
+def problem(text: str) -> str:
+    """`check` as the message spec shows with file:line ("" when ``text`` is a source)."""
+    try:
+        check(text)
+    except SourceError as exc:
+        return str(exc)
+    return ""
+
+
+spec.SOURCE_PROBLEM.append(problem)
+
+
 def is_generated(section: Section) -> bool:
     """True when the engine can fill ``section``: a source that yields data."""
     return bool(section.source.strip()) and parse(section.source).kind.data is not None
@@ -173,8 +187,6 @@ def check_relative(rel: str, what: str) -> str:
 def tracked_in(ctx: Context, rel: str) -> list[str]:
     """The tracked files at or below ``rel`` (git's own listing, sorted), `SourceUnavailable`
     when there is no repo or git could not answer: a source never reads an untracked file."""
-    from ...infra import git
-
     if ctx.repo is None:
         raise SourceUnavailable("a file source needs the repository, and none was given")
     root = ctx.repo.resolve()

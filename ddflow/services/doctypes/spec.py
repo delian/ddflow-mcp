@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 import tomllib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from string import Formatter
@@ -264,13 +264,15 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
     return Section(**out), start
 
 
-def _check_source(src: _Src, where: str, source: str, start: int) -> None:
-    from .sources import SourceError, check  # lazy: sources imports this module
+#: ``source -> problem text ("" when fine)``; `sources` installs it when the package loads, so a
+#: section's source is validated with the type and this module needs no import of it.
+SOURCE_PROBLEM: list[Callable[[str], str]] = []
 
-    try:
-        check(source)
-    except SourceError as exc:
-        raise src.err(f"{where}: {exc}", "source", max(start - 1, 0)) from None
+
+def _check_source(src: _Src, where: str, source: str, start: int) -> None:
+    for problem in SOURCE_PROBLEM:
+        if msg := problem(source):
+            raise src.err(f"{where}: {msg}", "source", max(start - 1, 0))
 
 
 def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
