@@ -107,3 +107,13 @@ def test_the_command_is_declared_and_runs_from_the_cli(repo):
     code, out, err = run_cli(repo, "sync", "T1", "--check")
     assert code == 2, err
     assert "up to date" in (out + err)
+
+
+def test_an_untracked_file_the_base_adds_is_a_refusal_not_a_conflict(repo):
+    wt = _claimed(repo)
+    _land(repo, "src/new.py", "base\n")
+    (wt / "src").mkdir(exist_ok=True)
+    (wt / "src" / "new.py").write_text("mine\n")
+    out = sync(repo, item="T1", agent=ME)
+    assert out.data["status"] == "refused" and not out.data["conflicts"]
+    assert (wt / "src" / "new.py").read_text() == "mine\n"

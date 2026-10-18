@@ -70,6 +70,10 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
     r = W.git(tree, "merge", "--no-edit", rep.base)
     if not r.ok:
         files = G.unmerged(tree) or []
+        if not files and W.merging(tree) is False:
+            # Git refused before it began (an untracked file the base adds, say): not a
+            # conflict, and there is nothing to abort.
+            return _stop(out, "refused", detail=r.err or r.out)
         W.git(tree, "merge", "--abort")
         out.conflicts = {f: _last_author(tree, rep.base, f) for f in files}
         return _stop(out, "conflict", detail=r.err or r.out)
