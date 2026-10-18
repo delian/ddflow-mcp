@@ -58,3 +58,9 @@ def test_a_gate_run_after_merge_with_no_pass_says_why(repo):
     assert "claimed without a worktree" not in text
     rec = _gate(repo, "unit_tests")
     assert rec.outcome == "unavailable" and "merged" in (rec.reason or ""), rec
+
+
+def test_a_forced_gate_run_after_merge_does_not_answer_with_the_stale_pass(repo):
+    _merged(repo, passed_before=True)
+    run_cli(repo, "gate", "run", "T1", "unit_tests", "--force", "--reason", "fresh please")
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
