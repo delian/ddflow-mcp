@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+import ddflow.api.record_kind_data as KDA
 from ddflow.api import records as R
 from ddflow.core import outcome as O
 from ddflow.core import participation as PA
@@ -222,9 +223,13 @@ def test_the_fixed_sources_are_unchanged_and_come_first(proj, run_cli):
     from ddflow.infra.store import RECALL_SOURCES, recall_sources
 
     assert recall_sources()[: len(RECALL_SOURCES)] == RECALL_SOURCES
-    assert [t for t, _, _ in recall_sources()[len(RECALL_SOURCES) :]] == ["toy"]
+    shipped = {n for n, _ in KDA.packaged()}  # data kinds the package declares
+    extra = [t for t, _, _ in recall_sources()[len(RECALL_SOURCES) :] if t not in shipped]
+    assert extra == ["toy"]
+    kept = [x for x in recall_sources() if x[0] in shipped]
     R.forget("toy")
-    assert recall_sources() == RECALL_SOURCES
+    assert [x for x in recall_sources() if x[0] not in shipped] == list(RECALL_SOURCES)
+    assert [x for x in recall_sources() if x[0] in shipped] == kept  # forgetting toy keeps them
 
 
 # -- resources -------------------------------------------------------------------------

@@ -1,0 +1,36 @@
+# A communication log entry: who said what to whom, when, about what.
+name = "commlog"
+summary = "a communication log entry: what was said or agreed, with whom, and when"
+text = ["summary_text", "outcome", "tags"]
+columns = ["title", "channel", "when"]
+filters = ["channel", "tags"]
+stamp = 1
+[[link]]
+field = "with"
+to = "stakeholder"
+many = true
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "channel"
+choices = ["meeting", "email", "chat", "call", "document"]
+default = "meeting"
+[[field]]
+name = "when"
+default = ""
+help = "ISO date or time."
+[[field]]
+name = "with"
+type = "array"
+default = []
+[[field]]
+name = "summary_text"
+default = ""
+[[field]]
+name = "outcome"
+default = ""
+[[field]]
+name = "tags"
+type = "array"
+default = []

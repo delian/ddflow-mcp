@@ -1,0 +1,36 @@
+# A fitness function: an automated check that an architectural property still holds.
+name = "fitness"
+summary = "a fitness function: a runnable check that an architectural property still holds"
+text = ["property", "tags"]
+columns = ["title", "state", "cadence"]
+filters = ["state", "cadence", "tags"]
+stamp = 1
+[lifecycle]
+field = "state"
+initial = "proposed"
+[lifecycle.transitions]
+proposed = ["active", "dropped"]
+active = ["failing", "dropped"]
+failing = ["active", "dropped"]
+[[field]]
+name = "title"
+required = true
+[[field]]
+name = "property"
+default = ""
+help = "The property that must hold."
+[[field]]
+name = "command"
+default = ""
+help = "The command whose exit code 0 means it holds."
+[[field]]
+name = "cadence"
+choices = ["commit", "merge", "daily", "phase"]
+default = "merge"
+[[field]]
+name = "state"
+choices = ["proposed", "active", "failing", "dropped"]
+[[field]]
+name = "tags"
+type = "array"
+default = []
