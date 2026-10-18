@@ -43,7 +43,7 @@ _TOP = {
 }  # fmt: skip
 _SECTION = {
     "id", "heading", "match", "level", "order", "required", "ownership", "source", "prompt",
-    "guidance", "rules", "depends_on", "remove",
+    "guidance", "rules", "depends_on", "remove", "template",
 }  # fmt: skip
 _REVIEW = {"review_requires", "full_review_every_days", "stamp"}
 _NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -81,6 +81,7 @@ class Section:
     required: bool = False
     ownership: str = "human"
     source: str = ""
+    template: str = ""  # inline Jinja text, or ``file:<repo path>``
     prompt: str = ""
     guidance: str = ""
     rules: tuple[str, ...] = ()
@@ -247,6 +248,7 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
         "required": _typed(src, raw, "required", bool, where, False),
         "ownership": _choice(src, raw, "ownership", OWNERSHIPS, where, "human"),
         "source": _typed(src, raw, "source", str, where, ""),
+        "template": _typed(src, raw, "template", str, where, ""),
         "prompt": _typed(src, raw, "prompt", str, where, ""),
         "guidance": _typed(src, raw, "guidance", str, where, ""),
         "rules": _strs(src, f"{where}.rules", raw.get("rules", [])),
@@ -258,7 +260,17 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
         except re.error as exc:
             raise src.err(f"{where}: heading is not a regex: {exc}", "heading", start) from None
     src.at = 0
+    _check_source(src, where, out["source"], start)
     return Section(**out), start
+
+
+def _check_source(src: _Src, where: str, source: str, start: int) -> None:
+    from .sources import SourceError, check  # lazy: sources imports this module
+
+    try:
+        check(source)
+    except SourceError as exc:
+        raise src.err(f"{where}: {exc}", "source", max(start - 1, 0)) from None
 
 
 def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
