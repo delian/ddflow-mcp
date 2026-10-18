@@ -207,3 +207,18 @@ def test_non_string_pattern_is_a_file_error(val):
     text = ADR.replace('pattern = "docs/adr/{seq:04}-{slug}.md"', f"pattern = {val}")
     with pytest.raises(S.DocTypeError, match=r"x\.toml:\d+: .*pattern must be str"):
         S.parse(text, source="x.toml")
+
+
+def test_extending_type_refuses_bad_tables_and_duplicate_sections():
+    base = ("shipped", [("adr.toml", ADR)])
+    child = 'name = "c"\nextends = "adr"\n'
+    for body, msg in (
+        ("review = true\n", "review must be a table"),
+        (
+            '[[doctype.section]]\nid = "z"\n[[doctype.section]]\nid = "z"\n',
+            "duplicate section id 'z'",
+        ),
+    ):
+        text = "[doctype]\n" + child + body
+        with pytest.raises(S.DocTypeError, match=msg):
+            S.resolve([base, ("project", [("c.toml", text)])])

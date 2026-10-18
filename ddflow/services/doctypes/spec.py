@@ -285,13 +285,19 @@ def _merge(parent: dict[str, Any], child: dict[str, Any], src: _Src) -> dict[str
     }
     for k in ("validate", "review"):
         if k in child:
+            if not isinstance(child[k], dict):
+                raise src.err(f"{k} must be a table", k)
             out[k] = {**parent.get(k, {}), **child[k]}
     secs = {
         s["id"]: dict(s) for s in parent.get("section", []) if isinstance(s, dict) and "id" in s
     }
+    seen: set[str] = set()
     for s in child.get("section", []):
         if not isinstance(s, dict) or "id" not in s:
             raise src.err("a section needs an id", "section")
+        if s["id"] in seen:
+            raise src.err(f"duplicate section id {s['id']!r}", "section")
+        seen.add(s["id"])
         if s.get("remove") is True:
             secs.pop(s["id"], None)
         elif s["id"] in secs:
