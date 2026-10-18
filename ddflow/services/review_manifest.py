@@ -34,16 +34,19 @@ def _summary(fd: unidiff.FileDiff, section: str) -> str:
         m = _DEF_RE.match(ln) or _HEAD_RE.match(ln)
         if m:
             names.append(m.group(m.lastindex).strip())
-    shown = ", ".join(list(dict.fromkeys(names))[:_NAMES])
+    uniq = list(dict.fromkeys(names))
+    shown = ", ".join(uniq[:_NAMES]) + (f" and {len(uniq) - _NAMES} more" if len(uniq) > _NAMES else "")
     return f"{kind}; adds {shown}" if shown else kind
 
 
 def _counts(section: str) -> tuple[int, int]:
     body = section.split("\n@@", 1)[1] if "\n@@" in section else ""
     lines = body.split("\n")
+    # `body` starts at the first hunk, so a "+++"/"---" line is content (`++i;`, a YAML
+    # `---` removed), never a file header.
     return (
-        sum(1 for ln in lines if ln.startswith("+") and not ln.startswith("+++")),
-        sum(1 for ln in lines if ln.startswith("-") and not ln.startswith("---")),
+        sum(1 for ln in lines if ln.startswith("+")),
+        sum(1 for ln in lines if ln.startswith("-")),
     )
 
 
