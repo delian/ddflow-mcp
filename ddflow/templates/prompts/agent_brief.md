@@ -57,4 +57,4 @@ Every ddflow defect or gap you notice becomes a bug (`ddflow bug found`) or a ta
 <!-- section: report -->
 ## Report
 
-File any caveat as a task or bug FIRST. Then end your run with ONLY the output of `ddflow report {{ item }} --agent {{ agent }}` (MCP: `ddflow_show` with `report=true`), nothing before or after it.
+File any caveat as a task or bug FIRST. Then end your run with ONLY the output of `ddflow report {{ item }} --agent {{ agent }} --brief` (8 lines: landing sha, regression test, forced or skipped gates, filed ids, follow-ups, not done), nothing before or after it. The full report stays one command away (`ddflow report {{ item }}`; MCP: `ddflow_show` with `report=true`); do not paste it.
