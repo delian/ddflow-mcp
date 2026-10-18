@@ -105,7 +105,9 @@ def failed_ci_blockers(state: State, cfg: Config, item_id: str) -> list[str]:
             continue
         out.append(
             f"{gate} {what}; landing it can turn the base red. Fix it and re-run "
-            f"`ddflow gate run {item_id} {gate}` so it passes."
+            f"`ddflow gate run {item_id} {gate}` so it passes, or "
+            f"record the real state: `ddflow gate record {item_id} {gate} --outcome "
+            f"unavailable|partial --reason ...`."
         )
     return out
 

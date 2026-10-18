@@ -74,3 +74,16 @@ def test_merge_refuses_a_failed_or_skipped_after_failure_ci(repo):
     assert code == 0, out + err
     code, out, err = run_cli(repo, "merge", "T1", "--branch", "feat")
     assert code == 3 and "skipped after a failed run" in out + err, out + err
+
+
+def test_merge_refusal_names_a_way_past_and_recording_unavailable_lifts_it(repo):
+    _setup(repo, required='["implement", "merge"]')
+    _fail(repo, "ci")
+    _, out, err = run_cli(repo, "merge", "T1", "--branch", "feat")
+    assert "--outcome unavailable|partial --reason" in out + err, out + err
+    code, out, err = run_cli(
+        repo, "gate", "record", "T1", "ci", "--outcome", "unavailable", "--reason", "lease"
+    )
+    assert code == 0, out + err
+    _, out, err = run_cli(repo, "merge", "T1", "--branch", "feat")
+    assert "ci failed" not in out + err and "skipped after" not in out + err, out + err

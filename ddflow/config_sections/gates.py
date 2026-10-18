@@ -63,7 +63,7 @@ class GatesConfig:
     )
     merge_blocked_by_failed: list[str] = knob(
         factory=lambda: ["ci"],
-        doc="Gates whose latest outcome FAILED, or was skipped over a failed run, makes `ddflow merge` refuse the item: landing it can turn the base red. The way past is a run that passes. Empty turns the check off.",
+        doc="Gates whose latest outcome FAILED, or was skipped over a failed run, makes `ddflow merge` refuse the item: landing it can turn the base red. The way past is a run that passes, or `gate record --outcome unavailable|partial --reason`. Empty turns the check off.",
     )
     unavailable_is_failure: bool = knob(
         False,
