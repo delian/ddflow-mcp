@@ -200,3 +200,10 @@ def test_section_type_error_points_at_its_own_section():
     text = ADR.replace("order = 2", 'order = 2\nlevel = "2"')
     with pytest.raises(S.DocTypeError, match=r"x\.toml:13: .*level"):
         S.parse(text, source="x.toml")
+
+
+@pytest.mark.parametrize("val", ["5", '["docs/{slug}.md"]'])
+def test_non_string_pattern_is_a_file_error(val):
+    text = ADR.replace('pattern = "docs/adr/{seq:04}-{slug}.md"', f"pattern = {val}")
+    with pytest.raises(S.DocTypeError, match=r"x\.toml:\d+: .*pattern must be str"):
+        S.parse(text, source="x.toml")

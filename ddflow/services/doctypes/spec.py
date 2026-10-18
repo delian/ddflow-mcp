@@ -342,7 +342,8 @@ def _sections(src: _Src, where: str, raw: dict[str, Any]) -> list[Section]:
 def build(raw: dict[str, Any], src: _Src) -> DocType:
     """The checked `DocType` of a merged table."""
     where = f"doctype {raw['name']!r}"
-    path, pattern = raw.get("path", ""), raw.get("pattern", "")
+    path = _typed(src, raw, "path", str, where, "")
+    pattern = _typed(src, raw, "pattern", str, where, "")
     multi = _typed(src, raw, "multi", bool, where, bool(pattern))
     if multi and not pattern:
         raise src.err(f"{where}: a collection (multi) needs a pattern", "multi")
