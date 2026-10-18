@@ -425,11 +425,14 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
         on_tick=on_tick,
         tick_s=tick_s,
     )
+    unran: set[str] = set()  # stages whose process never started: not a failure of the checks
     if selected:
         scope.ok["hooks"] = p.ran and p.code == 0
+        if not p.ran:
+            unran.add("hooks")
     if not (selected and p.ran and p.code == 0):
         if selected:
-            _say_what_ran(scope)
+            _say_what_ran(scope, unran)
         return p, ""
     before, spent = p.output, p.elapsed_s
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
@@ -447,12 +450,14 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0
+        if not p.ran:
+            unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
         if not scope.ok[label] or at == len(todo) - 1:
             break
         before += p.output
-    _say_what_ran(scope)
+    _say_what_ran(scope, unran)
     return p, before
 
 
@@ -463,7 +468,7 @@ _STAGE_NAMES = {
 }
 
 
-def _say_what_ran(scope) -> None:
+def _say_what_ran(scope, unran: set[str] = frozenset()) -> None:
     """Make the scope's ``why`` (the line the gate records) say what ran, not what was planned:
     a failed hook stage or test stage stops the later ones, and a selected scope that ran no
     test must not read as 'selected N files'."""
@@ -480,7 +485,8 @@ def _say_what_ran(scope) -> None:
     if not bad:
         return
     notrun = [_STAGE_NAMES[st] for st in asked if st not in scope.ok]
-    scope.why += f"; {_STAGE_NAMES[bad]} failed" + (
+    verb = "could not run" if bad in unran else "failed"
+    scope.why += f"; {_STAGE_NAMES[bad]} {verb}" + (
         f", so {' and '.join(notrun)} did not run" if notrun else ""
     )
 
