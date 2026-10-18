@@ -336,7 +336,7 @@ def test_the_tools_list_judgement() -> None:
     _size, bad = DR.tools_problems([{"name": "t", "outputSchema": {}}], 0)
     assert "output schemas" in bad[0]
     _size, bad = DR.tools_problems([{"name": "t"}], 5)
-    assert "over the 5 budget" in bad[0]
+    assert bad == []  # over the report line is a number, not a failure (D-mcp-budget-report)
     assert DR.tools_problems([], 0)[1] == ["tools/list answered nothing"]
 
 

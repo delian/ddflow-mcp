@@ -228,17 +228,30 @@
   
   '''
 # ---
-# name: test_help[ddflow bug]
+# name: test_help[ddflow bug show]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,reopen,list} ...
+  usage: ddflow bug show [-h] id
   
   positional arguments:
-    {found,file-tasks,fixed,invalid,reopen,list}
+    id          bug id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow bug]
+  '''
+  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,reopen,list,show} ...
+  
+  positional arguments:
+    {found,file-tasks,fixed,invalid,reopen,list,show}
       file-tasks          file a fix task for every open bug that has none (one-shot, after an
                           upgrade)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
+      show                read one bug: its text, where it was found, its fix task and its closure
   
   options:
     -h, --help            show this help message and exit
@@ -2860,6 +2873,7 @@
     'ddflow bug invalid',
     'ddflow bug list',
     'ddflow bug reopen',
+    'ddflow bug show',
     'ddflow cadence',
     'ddflow chore',
     'ddflow chore approve',
