@@ -143,6 +143,8 @@ COMMANDS: tuple[Command, ...] = (
             chunks=a.get("chunk") or None,
             delta=bool(a.get("delta")),
             full=bool(a.get("full")),
+            exclude=a.get("exclude", "") or "",
+            include_pinned=bool(a.get("include_pinned")),
         ),
         # The TRANSCRIPT the run produced — findings already formatted with their
         # severities, which is what this tool has always returned.
@@ -209,6 +211,18 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="review the item's WHOLE diff even when [review].delta_default would make it a delta: a full round, counted against [review].max_rounds",
             ),
             Param(
+                "exclude",
+                help="Comma-separated globs left out of THIS review's diff instead of [review].exclude_globs (and the item's review-exclude:<glob> tags); `none` leaves out no glob-matched file.",
+                cli_help="globs left out of this review instead of [review].exclude_globs and the item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing out)",
+                default="",
+            ),
+            Param(
+                "include_pinned",
+                type="boolean",
+                help="Send the files pins.toml owns too (golden snapshots, transcripts) for this review.",
+                cli_help="send the files pins.toml owns too, for this review",
+            ),
+            Param(
                 "force",
                 type="boolean",
                 help="run a full round past [review].max_rounds; needs --reason, recorded in the evidence",
@@ -244,6 +258,8 @@ COMMANDS: tuple[Command, ...] = (
             "branch",
             "delta",
             "full",
+            "exclude",
+            "include_pinned",
             "chunk",
         ),
     ),
