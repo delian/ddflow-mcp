@@ -63,3 +63,8 @@ def test_kit_builds_fresh_fakes_by_name():
     assert list(only) == ["clock"] and only["clock"]() == 5
     with pytest.raises(UnknownName):
         K.kit("nope")
+
+
+def test_agent_prompts_are_recorded_when_passed_by_keyword():
+    a = K.FakeAgent(["ok"])
+    assert a(prompt="do X") == "ok" and a.prompts == ["do X"]
