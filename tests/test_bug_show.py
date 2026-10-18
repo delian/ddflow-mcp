@@ -34,7 +34,7 @@ def test_bug_show_json_is_the_show_json(repo):
 
 def test_bug_show_refuses_what_is_not_a_bug(repo):
     _found(repo)
-    code, out, err = run_cli(repo, "bug", "show", "fix-B1")
+    code, _, err = run_cli(repo, "bug", "show", "fix-B1")
     assert code != 0 and "not a bug" in err
     code, _, err = run_cli(repo, "bug", "show", "B-nope")
     assert code != 0 and err
