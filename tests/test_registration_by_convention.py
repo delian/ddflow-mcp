@@ -95,3 +95,9 @@ def test_a_module_the_text_match_fools_is_skipped_not_crashed_on(tmp_path, monke
         assert all(m.__name__ != f"{D.__name__}.zz_fake" for m in D.family_modules())
     finally:
         sys.path.remove(str(tmp_path.parent))
+
+
+def test_the_tools_only_scan_misses_no_tool_the_full_scan_finds():
+    from ddflow.surfaces.tools import DECLARED
+
+    assert {c.tool for c in all_commands() if c.tool} == set(DECLARED)
