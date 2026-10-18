@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "sensitivity.egress_doors"
+new = "[\"search\", \"recall\"]"
+why = "A record labelled restricted or confidential is withheld from search and recall results, which feed models; empty turns the filter off."
+impact = "additive"

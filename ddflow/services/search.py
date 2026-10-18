@@ -41,6 +41,7 @@ from . import schedule as SCH
 from . import session_view as SV
 from . import skills as SK
 from . import viewers as V
+from .egress import Egress
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 from .rules import RulesStorage
@@ -311,11 +312,12 @@ def _declared_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     reason it was retired, its status, author and last change (RC4: a kind is searchable by
     declaring it, with no code of its own)."""
     out = []
+    egress = Egress(c.repo, c.cfg)
     for d in PA.DECLARED.values():
         if not d.searched or d.name not in kinds:
             continue
         for rec in c.st.defs.values():
-            if rec.kind != d.def_kind:
+            if rec.kind != d.def_kind or egress.withholds("search", dict(rec.fields)):
                 continue
             text = _join(rec.id, d.text(rec.fields), rec.reason)
             phase = rec.fields.get("phase")
