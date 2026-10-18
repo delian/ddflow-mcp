@@ -543,6 +543,9 @@ class Server:
         #: every subagent of one harness reports the same `clientInfo.name`, so using
         #: it as an id would reproduce the exact collapse above while looking specific.
         self.client_info: dict[str, Any] = {}
+        #: The session-start preamble rides on the first call only (`_first_call_note`).
+        self._first_call_done = False
+        self._first_call_tries = 0
         #: Re-instruction cadence, per CONNECTION. `initialize` delivers the rules once and
         #: nothing re-states them afterwards; after a context compaction the model may
         #: retain none of it, and MCP has no server->client context-injection primitive. A
@@ -810,6 +813,18 @@ class Server:
             ),
         )
 
+    def _first_call_note(self, tool: str, agent: str) -> str:
+        """The session start, once, on the first call of this connection (api.firstcall).
+        A start that could not be built is tried again on the next call, at most
+        `_FIRST_CALL_TRIES` times, so a transient failure does not cost the connection it."""
+        if self._first_call_done:
+            return ""
+        note = _api().first_call_preamble(self.repo, agent, tool, self.client_info)
+        self._first_call_tries += 1
+        if note is not None or self._first_call_tries >= _FIRST_CALL_TRIES:
+            self._first_call_done = True
+        return note or ""
+
     @staticmethod
     def _check_call(name: str, spec: Any, args: dict[str, Any], clash: Any) -> str:
         """Why a `tools/call` cannot be run as asked ("" when it can): an unknown tool, a
@@ -934,7 +949,11 @@ class Server:
             out["content"].append({"type": "text", "text": deprecation_note(name, call.retired)})
         for alias in self._notices.fresh(call.used):
             out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
-        for note in (_obligation_footer(self), _upgrade.footer(self, _STALE_CHECK_EVERY_S)):
+        for note in (
+            self._first_call_note(name, agent),
+            _obligation_footer(self),
+            _upgrade.footer(self, _STALE_CHECK_EVERY_S),
+        ):
             if note:
                 out["content"].append({"type": "text", "text": note})
         return _ok(mid, out)
@@ -1055,6 +1074,10 @@ def _modern_identify_note(agent: str) -> str:
 
 #: The look interval when `[mcp].stale_check_every_s` cannot be read (the knob's default).
 _STALE_CHECK_EVERY_S = 60.0
+
+
+#: How many calls try to build the first-call session start before the connection gives up.
+_FIRST_CALL_TRIES = 3
 
 
 def _obligation_footer(server) -> str:
