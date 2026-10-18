@@ -92,7 +92,11 @@ def _ci(repo: Path, item: str, outcome: str = "passed") -> None:
 def _run_unit_tests(repo: Path, item: str) -> tuple[int, dict]:
     code, out, _err = run_cli(repo, "--json", "gate", "run", item, "unit_tests")
     body = json.loads(out)
-    return code, body["evidence"]
+    # a refusal (exit 3) carries its reason, not an evidence block
+    return code, body.get("evidence") or {
+        "scope_why": (body.get("refusal") or {}).get("reason", ""),
+        "body": body,
+    }
 
 
 def test_a_bug_fix_runs_only_the_tests_its_change_reaches(repo):
@@ -108,18 +112,21 @@ def test_a_bug_fix_runs_only_the_tests_its_change_reaches(repo):
     assert "tests/test_f.py" in ev["command"] and "test_elsewhere" not in ev["command"]
 
 
-def test_without_a_passing_ci_the_fix_runs_the_whole_suite(repo):
-    """roborev on 7da06042: a selection resting on a ci that never passed let a fix merge
-    with the whole suite never run."""
+def test_without_a_passing_ci_the_gate_refuses_rather_than_run_the_whole_suite(repo):
+    """B9de2a7dc3e: a stale or missing ci used to start the whole suite from the item gate;
+    it now refuses and says to rerun ci (D-agent-test-etiquette)."""
     _project(repo)
     _fix(repo)
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL, ev  # the unrelated red test ran
-    assert ev["scope"] == "full" and "ci gate has no outcome" in ev["scope_why"], ev
-    assert "selected_tests" not in ev
+    assert code == 3, ev
+    assert "ci gate has no outcome" in ev["scope_why"], ev
+    assert "rerun ci" in ev["scope_why"]
+    assert not (ev["body"].get("evidence") or {}).get(
+        "selected_tests"
+    )  # nothing was selected or run
     _ci(repo, "fix-B1", "skipped")
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL and "ci gate is skipped" in ev["scope_why"], ev
+    assert code == 3 and "ci gate is skipped" in ev["scope_why"], ev
 
 
 def test_an_edit_after_ci_does_not_select(repo):
@@ -128,11 +135,11 @@ def test_an_edit_after_ci_does_not_select(repo):
     _ci(repo, "fix-B1")
     (wt / "src.py").write_text("def f():\n    return 2  # edited after ci\n")
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL, ev
-    assert ev["scope"] == "full" and "the tree changed since the ci gate passed" in ev["scope_why"]
+    assert code == 3, ev
+    assert "the tree changed since the ci gate passed" in ev["scope_why"]
     _commit(wt, "the edit, committed")
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL and "the tree changed since" in ev["scope_why"], ev
+    assert code == 3 and "the tree changed since" in ev["scope_why"], ev
 
 
 def test_a_ci_pass_on_a_dirty_tree_does_not_select_even_once_committed(repo):
@@ -146,10 +153,10 @@ def test_a_ci_pass_on_a_dirty_tree_does_not_select_even_once_committed(repo):
     (wt / "tests" / "test_f.py").write_text(REACHES_F)
     _ci(repo, "fix-B1")  # over uncommitted edits
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL and "uncommitted changes" in ev["scope_why"], ev
+    assert code == 3 and "uncommitted changes" in ev["scope_why"], ev
     _commit(wt, "fix f")
     code, ev = _run_unit_tests(repo, "fix-B1")
-    assert code == FAIL and "uncommitted changes" in ev["scope_why"], ev
+    assert code == 3 and "uncommitted changes" in ev["scope_why"], ev
 
 
 def test_without_a_ci_gate_in_the_pipeline_it_says_so(repo):
