@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ddflow.services import harnessreg as HR
 from ddflow.services import sessions as S
-
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
