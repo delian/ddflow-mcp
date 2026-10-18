@@ -147,3 +147,7 @@ class GatesConfig:
         factory=list,
         doc='Variables a gate command keeps although `scrub_env` removes them, e.g. `["DDFLOW_AGENT"]` for a gate whose command runs ddflow as the calling agent. Empty by default. `[ci].keep_env` does the same for the CI command alone.',
     )
+    standards_wait_s: int = knob(
+        900,
+        doc="Seconds `python -m ddflow.services.roborev_branch` (the standards gate's roborev run on the item's COMBINED branch diff) waits for the roborev job before it gives up (default 900; 0 = enqueue and return). A job still running at the limit is left running and reported with its id and `roborev wait <id>`: the gate is recorded `unavailable` with that reason, never passed.",
+    )
