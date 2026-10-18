@@ -26,6 +26,7 @@ from ..core.slug import ascii_slug
 from ..infra import worktree as W
 from . import ci_conflict as CC
 from . import ci_scope as CS
+from . import workers as WK
 from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
@@ -414,6 +415,12 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     on_tick, tick_s = tick or (None, 0)
+    used: dict[str, dict] = {}  # stage -> the worker count and the inputs it came from
+    if scope is not None:
+        scope.workers = used
+    cmd, auto = WK.resolve(cmd, cfg)
+    if auto:
+        used["command"] = {"n": auto.n, **auto.inputs}
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
@@ -439,6 +446,9 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None):
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
     for at, (cmd_, label) in enumerate(todo):
+        cmd_, auto = WK.resolve(cmd_, cfg)
+        if auto:
+            used[label] = {"n": auto.n, **auto.inputs}
         before += f"\n$ {cmd_}\n"
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
@@ -497,6 +507,8 @@ def _scope_evidence(scope, sha: str) -> dict:
     if scope is None:
         return {}
     ev = scope.evidence(sha)
+    if used := getattr(scope, "workers", None):
+        ev["workers"] = used
     if scope.scope == "selected":
         # stage -> True (passed) | False (ran and failed) | "unavailable" (never started)
         unran = getattr(scope, "unran", set())

@@ -65,11 +65,9 @@ forbidden_trailers = ["Co-Authored-By"]
 brief_max_tokens = 1200
 
 [gate.unit_tests]
-# In parallel (pytest-xdist): one worker per core, capped at 16 -- several agents may run
-# this gate at once, and on a large host `-n auto` alone would start one worker per core
-# for EACH of them. A machine that wants a different count sets it in its own
-# git-ignored .ddflow/gates.toml.
-command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
+# In parallel (pytest-xdist): {workers} is computed at run time from the host's cores and
+# load ([ci].workers = auto|N, min_workers, max_workers; D-agent-test-etiquette).
+command = "uv run pytest tests/ -q --timeout=420 -n {workers}"
 
 # Mutation pass 2026-10-10 (U4): `gate verify <item> unit_tests` breaks the one place a
 # timestamp is parsed and requires the suite to notice.
