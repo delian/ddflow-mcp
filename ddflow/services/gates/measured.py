@@ -36,6 +36,7 @@ from .evidence import (
     tree_identity,
     worktree_entries,
 )
+from .kinds import DiffPaths
 from .outcomes import record, status
 
 
@@ -60,6 +61,7 @@ def gates_ahead_of(
     item_id: str,
     gate: str,
     defs: Mapping[str, GateDef] | None = None,
+    diff: DiffPaths | None = None,
 ) -> list[str]:
     """Pipeline gates BEFORE ``gate`` that have no outcome yet.
 
@@ -69,7 +71,7 @@ def gates_ahead_of(
     `applies_when`) is not ahead of anything.
     """
     try:
-        s = status(st, cfg, item_id, defs)
+        s = status(st, cfg, item_id, defs, diff=diff)
     except KeyError:
         return []
     if gate not in s.pipeline:
@@ -95,6 +97,7 @@ def check_order(
     *,
     recording: bool,
     defs: Mapping[str, GateDef] | None = None,
+    diff: DiffPaths | None = None,
 ) -> Order:
     """Enforce `gates.enforce_order`, and RECORD the violation (``recording``) either way.
 
@@ -103,7 +106,7 @@ def check_order(
     `block` or `off` is a judgement about how often this fires, and for as long as it only
     printed, that judgement had no evidence behind it either way.
     """
-    ahead = gates_ahead_of(st, cfg, item, gate, defs)
+    ahead = gates_ahead_of(st, cfg, item, gate, defs, diff)
     if not ahead or cfg.gates.enforce_order == "off":
         return Order()
     if cfg.gates.enforce_order == "block":
