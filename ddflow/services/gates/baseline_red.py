@@ -11,12 +11,12 @@ does not run pytest leaves the gate FAILED.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
 
@@ -34,6 +34,8 @@ def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) 
 def on_base(repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Path], tuple]) -> dict:
     """Run ``ids`` alone on ``base``: ``{"red": bool, ...}``. ``run(gdef, cwd)`` executes a
     command gate and returns (outcome, evidence)."""
+    if not ids:  # all() of nothing is True: no named test is no attribution
+        return {"red": False, "why": "no failing test id to run on the base"}
     sha = W.rev(repo, base)
     if not sha:
         return {"red": False, "why": f"base {base} does not resolve"}
@@ -51,9 +53,9 @@ def on_base(repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Pat
 
 
 def bug_id(ids: list[str], sha: str) -> str:
-    return "B" + hashlib.sha1(("|".join(sorted(ids)) + sha[:12]).encode()).hexdigest()[:10]
+    return "B" + D.of_obj([sorted(ids), sha[:12]], length=10)
 
 
-def reason(ids: list[str], bug: str) -> str:
+def reason_text(ids: list[str], bug: str) -> str:
     shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
     return f"baseline-red: {shown}, bug {bug or 'not filed'}"
