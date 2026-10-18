@@ -36,6 +36,7 @@ from ..services import leasekeep as LK
 from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
+from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
@@ -808,12 +809,16 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
-def _order_refusal(log, cfg, st, item: str, gate: str, say, defs=None) -> O.Outcome | None:
+def _order_refusal(
+    log, cfg, st, item: str, gate: str, say, defs=None, repo=None
+) -> O.Outcome | None:
     """The pipeline-order check, asked BEFORE the review is paid for (one run before
     `implement` reviews an empty diff): a refusal under `block`, else a note said."""
     if not item:
         return None
-    order = GR.check_order(log, cfg, st, item, gate, recording=True, defs=defs)
+    it = st.items.get(item)
+    diff = (lambda: changed_paths(repo, it)) if repo is not None and it else None
+    order = GR.check_order(log, cfg, st, item, gate, recording=True, defs=defs, diff=diff)
     if order.refusal:
         return O.refused(
             "review",
@@ -1686,11 +1691,15 @@ def _say_selection(selected, say) -> None:
         say(f"→ route: {selected.agent}")
 
 
-def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say, defs=None):
+def _early_refusal(flags, log, cfg, st, item: str, gate: str, say, defs=None, repo=None):
     """The first reason to refuse before any work: contradicting flags, then the order. (Not
     `a or b`: a refusal is falsy.)"""
-    conflict = _flag_conflict(full, force, delta, item, gate)
-    return conflict if conflict is not None else _order_refusal(log, cfg, st, item, gate, say, defs)
+    conflict = _flag_conflict(*flags, item, gate)
+    return (
+        conflict
+        if conflict is not None
+        else _order_refusal(log, cfg, st, item, gate, say, defs, repo)
+    )
 
 
 def _intent_missing(item: str, gate: str, how: str) -> O.Outcome:
@@ -1800,7 +1809,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             **extra,
         )
 
-    refused = _early_refusal(full, force, delta, log, cfg, st, item, gate, say, gates)
+    refused = _early_refusal((full, force, delta), log, cfg, st, item, gate, say, gates, repo)
     if refused is not None:
         return refused
 
