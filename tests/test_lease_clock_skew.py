@@ -111,8 +111,12 @@ def world(tmp_path: Path) -> World:
 
 def _left(out: str) -> int:
     m = re.search(r"lease \S+ \((-?\d+)s left\)", out)
+    if m:
+        return int(m.group(1))
+    # a lapsed lease reads "ran out Ns ago" (never a negative countdown), so it is -N here
+    m = re.search(r"lease \S+ \(ran out (\d+)s ago", out)
     assert m, out
-    return int(m.group(1))
+    return -int(m.group(1))
 
 
 @pytest.fixture(params=[-7200, 7200], ids=["claimant-2h-behind", "claimant-2h-ahead"])
