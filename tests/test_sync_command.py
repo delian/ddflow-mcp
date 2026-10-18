@@ -117,3 +117,22 @@ def test_an_untracked_file_the_base_adds_is_a_refusal_not_a_conflict(repo):
     out = sync(repo, item="T1", agent=ME)
     assert out.data["status"] == "refused" and not out.data["conflicts"]
     assert (wt / "src" / "new.py").read_text() == "mine\n"
+
+
+def test_without_an_item_it_syncs_the_worktree_the_caller_stands_in(repo, monkeypatch):
+    wt = _claimed(repo)
+    _land(repo, "src/a.py")
+    monkeypatch.chdir(wt)
+    out = sync(repo, agent=ME)
+    assert out.ok and out.data["id"] == "T1" and (wt / "src" / "a.py").exists()
+
+
+def test_a_base_that_cannot_be_measured_is_could_not_tell_not_a_failure(repo, monkeypatch):
+    from ddflow.services import drift
+
+    _claimed(repo)
+    monkeypatch.setattr(
+        drift, "measure", lambda *a, **k: drift.DriftReport("main", None, detail="no such ref")
+    )
+    out = sync(repo, item="T1", agent=ME)
+    assert out.data["status"] == "unknown" and out.exit == 2

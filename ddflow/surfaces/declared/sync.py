@@ -32,6 +32,8 @@ COMMANDS: tuple[Command, ...] = (
             "touching_globs",
             "pin_files",
             "conflicts",
+            "dirty",
+            "detail",
             "gates_valid",
             "gates_stale",
             "text",
