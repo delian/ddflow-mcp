@@ -763,7 +763,8 @@
       gates.merge_blocked_by_failed = ['ci']   [default]
           Gates whose latest outcome FAILED, or was skipped over a failed run, makes
           `ddflow merge` refuse the item: landing it can turn the base red. The way
-          past is a run that passes. Empty turns the check off.
+          past is a run that passes, or `gate record --outcome unavailable|partial
+          --reason`. Empty turns the check off.
       gates.unavailable_is_failure = False   [default]
           If true, a gate that could not run (tool missing, endpoint down) blocks like
           a failure. Default false, but UNAVAILABLE is always recorded distinctly and
