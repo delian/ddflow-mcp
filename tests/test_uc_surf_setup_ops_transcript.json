@@ -1130,7 +1130,7 @@
    "tests"
   ],
   2,
-  "{\n  \"schema\": \"tests@1\",\n  \"tree\": \"<repo>\",\n  \"base\": \"main\",\n  \"changed\": [\n    \".ddflow/.gitignore\",\n    \".ddflow/config.toml\",\n    \".ddflow/events/pinhost-proj-<h6>.jsonl\",\n    \".ddflow/events/tx.jsonl\",\n    \".ddflow/templates/export/changelog.md.j2\",\n    \".gitattributes\",\n    \".gitignore\",\n    \"CL.md\"\n  ],\n  \"tests\": [],\n  \"command\": \"\",\n  \"full_suite\": \"\",\n  \"advice\": \"\",\n  \"unparsed\": [],\n  \"cut\": [],\n  \"cut_at_hubs\": [],\n  \"full_reason\": \"\",\n  \"unit_tests_gate\": {}\n}\n",
+  "{\n  \"schema\": \"tests@1\",\n  \"tree\": \"<repo>\",\n  \"base\": \"main\",\n  \"changed\": [\n    \".ddflow/.gitignore\",\n    \".ddflow/config.toml\",\n    \".ddflow/events/pinhost-proj-<h6>.jsonl\",\n    \".ddflow/events/tx.jsonl\",\n    \".ddflow/templates/export/changelog.md.j2\",\n    \".gitattributes\",\n    \".gitignore\",\n    \"CL.md\"\n  ],\n  \"tests\": [],\n  \"command\": \"\",\n  \"full_suite\": \"\",\n  \"full_suite_known\": false,\n  \"advice\": \"\",\n  \"unparsed\": [],\n  \"cut\": [],\n  \"cut_at_hubs\": [],\n  \"full_reason\": \"\",\n  \"unit_tests_gate\": {}\n}\n",
   ""
  ],
  [
@@ -1140,7 +1140,7 @@
    "T1"
   ],
   2,
-  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n\nThe unit_tests gate runs the whole suite: no ci gate in this item's pipeline runs the whole suite, so this gate runs it\n  \n",
+  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n\nThe unit_tests gate runs the whole suite: no ci gate in this item's pipeline runs the whole suite, so this gate runs it\n",
   ""
  ],
  [
