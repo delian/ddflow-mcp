@@ -115,7 +115,17 @@ class DocType:
     def to_mapping(self) -> dict[str, Any]:
         """The ``[doctype]`` table of a type, for the round trip tests and ``ddflow doc types``."""
         out: dict[str, Any] = {}
-        for k in ("name", "title", "path", "pattern", "genre", "owner", "skeleton", "extends", "contract"):
+        for k in (
+            "name",
+            "title",
+            "path",
+            "pattern",
+            "genre",
+            "owner",
+            "skeleton",
+            "extends",
+            "contract",
+        ):
             if getattr(self, k):
                 out[k] = getattr(self, k)
         out["multi"], out["schema_version"] = self.multi, self.schema_version
@@ -125,7 +135,8 @@ class DocType:
             if getattr(self, k):
                 out[k] = dict(getattr(self, k))
         out["section"] = [
-            {k: (list(v) if isinstance(v, tuple) else v) for k, v in s.__dict__.items()} for s in self.sections
+            {k: (list(v) if isinstance(v, tuple) else v) for k, v in s.__dict__.items()}
+            for s in self.sections
         ]
         return out
 
@@ -155,7 +166,9 @@ class _Src:
         line = _line(self.text, key, start) if key else 0
         return DocTypeError(f"{self.source}{f':{line}' if line else ''}: {msg}")
 
-    def unknown(self, tab: Mapping[str, Any], allowed: set[str], where: str, start: int = 0) -> None:
+    def unknown(
+        self, tab: Mapping[str, Any], allowed: set[str], where: str, start: int = 0
+    ) -> None:
         if bad := sorted(set(tab) - allowed):
             raise self.err(f"unknown key {bad[0]!r} in {where}", bad[0], start)
 
@@ -166,14 +179,18 @@ def _strs(src: _Src, where: str, value: Any) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _typed(src: _Src, tab: Mapping[str, Any], key: str, kind: type, where: str, default: Any) -> Any:
+def _typed(
+    src: _Src, tab: Mapping[str, Any], key: str, kind: type, where: str, default: Any
+) -> Any:
     v = tab.get(key, default)
     if isinstance(v, bool) != (kind is bool) or not isinstance(v, kind):
         raise src.err(f"{where}: {key} must be {kind.__name__}", key)
     return v
 
 
-def _choice(src: _Src, tab: Mapping[str, Any], key: str, allowed: Sequence[str], where: str, default: str) -> str:
+def _choice(
+    src: _Src, tab: Mapping[str, Any], key: str, allowed: Sequence[str], where: str, default: str
+) -> str:
     v = _typed(src, tab, key, str, where, default)
     if v not in allowed:
         raise src.err(f"{where}: {key} {v!r} is not one of {', '.join(allowed)}", key)
@@ -192,7 +209,9 @@ def _validate(src: _Src, tab: Any) -> dict[str, Any]:
         if not isinstance(r, dict) or not isinstance(r.get("kind"), str):
             raise src.err("each validate rule is a table with a kind", "rules")
         if r["kind"] not in RULE_KINDS:
-            raise src.err(f"unknown validate rule kind {r['kind']!r}. Known: {', '.join(RULE_KINDS)}", "kind")
+            raise src.err(
+                f"unknown validate rule kind {r['kind']!r}. Known: {', '.join(RULE_KINDS)}", "kind"
+            )
         if bad := sorted(set(r) - {"kind"} - RULE_KINDS[r["kind"]].keys):
             raise src.err(f"unknown key {bad[0]!r} in a {r['kind']} rule", bad[0])
     return {"rules": [dict(r) for r in rules]} if rules else {}
@@ -257,11 +276,16 @@ def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
 
 
 def _merge(parent: dict[str, Any], child: dict[str, Any], src: _Src) -> dict[str, Any]:
-    out = {**parent, **{k: v for k, v in child.items() if k not in ("section", "validate", "review")}}
+    out = {
+        **parent,
+        **{k: v for k, v in child.items() if k not in ("section", "validate", "review")},
+    }
     for k in ("validate", "review"):
         if k in child:
             out[k] = {**parent.get(k, {}), **child[k]}
-    secs = {s["id"]: dict(s) for s in parent.get("section", []) if isinstance(s, dict) and "id" in s}
+    secs = {
+        s["id"]: dict(s) for s in parent.get("section", []) if isinstance(s, dict) and "id" in s
+    }
     for s in child.get("section", []):
         if not isinstance(s, dict) or "id" not in s:
             raise src.err("a section needs an id", "section")
@@ -283,21 +307,33 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
     if multi and not pattern:
         raise src.err(f"{where}: a collection (multi) needs a pattern", "multi")
     if not multi and (pattern or not path):
-        raise src.err(f"{where}: a single document has a path and no pattern", "pattern" if pattern else "name")
+        raise src.err(
+            f"{where}: a single document has a path and no pattern",
+            "pattern" if pattern else "name",
+        )
     for p in re.findall(_PLACE, pattern):
         if p not in PLACEHOLDERS:
-            raise src.err(f"{where}: pattern placeholder {{{p}}} is not one of {', '.join(PLACEHOLDERS)}", "pattern")
+            raise src.err(
+                f"{where}: pattern placeholder {{{p}}} is not one of {', '.join(PLACEHOLDERS)}",
+                "pattern",
+            )
     sections, seen = [], {}
     cursor = 0
     for rs in raw.get("section", []):
         sec, cursor = _section(src, rs, cursor)
         if sec.id in seen:
-            raise src.err(f"{where}: duplicate section id {sec.id!r} (first at line {seen[sec.id]})", "section", cursor - 1)
+            raise src.err(
+                f"{where}: duplicate section id {sec.id!r} (first at line {seen[sec.id]})",
+                "section",
+                cursor - 1,
+            )
         seen[sec.id] = cursor
         sections.append(sec)
     for sec in sections:
         if missing := [d for d in sec.depends_on if d not in seen]:
-            raise src.err(f"{where}: section {sec.id!r} depends_on unknown {missing[0]!r}", "depends_on")
+            raise src.err(
+                f"{where}: section {sec.id!r} depends_on unknown {missing[0]!r}", "depends_on"
+            )
     sections.sort(key=lambda s: s.order)  # stable: file order breaks ties
     return DocType(
         name=raw["name"],
@@ -343,15 +379,17 @@ def resolve(layers: Sequence[Layer]) -> dict[str, DocType]:
     def merged(name: str, upto: int, trail: tuple[str, ...]) -> tuple[dict[str, Any], _Src]:
         cands = [d for d in defs.get(name, []) if d[2] <= upto]
         if not cands:
-            raise DocTypeError(f"unknown document type {name!r}. Known: {', '.join(sorted(defs)) or '(none)'}")
-        raw, src, layer = cands[-1]
+            raise DocTypeError(
+                f"unknown document type {name!r}. Known: {', '.join(sorted(defs)) or '(none)'}"
+            )
+        raw, src, _ = cands[-1]
         parent = raw.get("extends", "")
         if not parent:
             return raw, src
         if not isinstance(parent, str):
             raise src.err("extends must be a type name", "extends")
         if parent == name:  # extend the same name from an earlier layer
-            if len(cands) < 2:
+            if len(cands) == 1:
                 raise src.err(f"{name!r} extends itself but no earlier layer defines it", "extends")
             base, _ = merged(name, cands[-2][2], trail)
         else:
