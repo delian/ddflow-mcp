@@ -85,18 +85,20 @@ def test_critical_path_is_named_and_marks_its_phases():
     d = data(road_log())
     chain = [s["id"] for s in d["critical_path"]]
     assert len(chain) >= 2
-    on = {pid for pid, p in phases(d).items() if p["on_critical_path"]}
-    assert (on and "P1" not in on) or chain[0] in {"T2", "T3"}
+    ph = phases(d)
+    on = {pid for pid, p in ph.items() if p["on_critical_path"]}
+    expect = {pid for pid, p in ph.items() if any(t["id"] in chain for t in p["tasks"])}
+    assert on and on >= expect and len(on) < len(ph)
 
 
 def test_release_lines_group_phases_only_when_there_are_several():
     g = Log()
-    g.phase("P1", "old", 10)
+    g.add("phase.added", "P1", {"title": "old", "priority": 10, "needs": [], "line": "1.x"})
     g.task("T1", "P1", "a")
-    g.add("item.updated", "P1", {"line": "1.x"})
-    g.phase("P2", "new", 20)
+    g.add("phase.added", "P2", {"title": "new", "priority": 20, "needs": [], "line": "2.x"})
     g.task("T2", "P2", "b")
     assert data(road_log())["release_lines"] == []
+    assert [x["line"] for x in data(g)["release_lines"]] == ["1.x", "2.x"]
     lines = RC.by_line([{"id": "a", "line": "1.x", "done": 1, "total": 2},
                         {"id": "b", "line": "2.x", "done": 0, "total": 1}])  # fmt: skip
     assert [(x["line"], x["percent"]) for x in lines] == [("1.x", 50), ("2.x", 0)]
