@@ -1448,14 +1448,13 @@ class Rehearsal:
 
 
 def tools_problems(tools: list[dict[str, Any]], budget: int) -> tuple[int, list[str]]:
-    """`(compact bytes of tools/list, what is wrong with it)`: empty, over ``budget`` (when one
-    is set), or carrying output schemas (`[mcp].output_schemas` ships off)."""
+    """`(compact bytes of tools/list, what is wrong with it)`: empty or carrying output schemas
+    (`[mcp].output_schemas` ships off). ``budget`` is reported, never enforced: the whole list
+    over `TOOLS_LIST_BUDGET` is a number, and only the core tier keeps a ratchet (D-mcp-budget-report)."""
     size = len(json.dumps({"tools": tools}, separators=(",", ":")))
     out = []
     if not tools:
         out.append("tools/list answered nothing")
-    if budget and size > budget:
-        out.append(f"tools/list is {size} bytes, over the {budget} budget")
     if any("outputSchema" in t for t in tools):
         out.append("tools/list carries output schemas ([mcp].output_schemas should be off)")
     return size, out
