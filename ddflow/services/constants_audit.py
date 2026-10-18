@@ -28,6 +28,9 @@ TUNABLE = re.compile(
 
 #: Where the register lives, relative to the repository root.
 REGISTER = Path("docs/ddflow/constants-exemptions.toml")
+#: Fragments beside it: every `*.toml` here carries `[knob]` / `[exempt]` tables of its own,
+#: so a change registering or migrating a constant need not lease the shared register.
+FRAGMENTS = Path("docs/ddflow/constants-exemptions.d")
 
 
 @dataclass(frozen=True)
@@ -113,8 +116,14 @@ class Register:
 
 
 def load_register(root: Path) -> Register:
-    data = tomllib.loads((root / REGISTER).read_text("utf-8"))
-    return Register(dict(data.get("knob", {})), dict(data.get("exempt", {})))
+    knob: dict[str, str] = {}
+    exempt: dict[str, str] = {}
+    paths = [root / REGISTER, *sorted((root / FRAGMENTS).glob("*.toml"))]
+    for path in paths:
+        data = tomllib.loads(path.read_text("utf-8"))
+        knob.update(data.get("knob", {}))
+        exempt.update(data.get("exempt", {}))
+    return Register(knob, exempt)
 
 
 @dataclass(frozen=True)
