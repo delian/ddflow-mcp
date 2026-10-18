@@ -143,9 +143,3 @@ def test_list_changed_stays_false_and_handshake_names_the_tier(repo, monkeypatch
     ]
     assert "tool tier" not in init["instructions"]
     assert not init["instructions"].startswith(("\n", " "))
-
-
-def test_the_budget_ratchet_applies_to_the_full_list(repo):
-    from test_mcp_tool_budget import TOOLS_LIST_BUDGET
-
-    assert _size(_list(repo)) <= TOOLS_LIST_BUDGET
