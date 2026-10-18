@@ -94,7 +94,9 @@ def run(where: Path, base: str, wait_s: int) -> Result:
     if job is None:
         return Result("unavailable", "roborev enqueued the review but named no job", sha=head)
     if wait_s <= 0:
-        return Result("unavailable", f"job {job} enqueued, not waited for: `roborev wait {job}`", job, head)
+        return Result(
+            "unavailable", f"job {job} enqueued, not waited for: `roborev wait {job}`", job, head
+        )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
         return Result(
@@ -109,7 +111,7 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("clean", job=job, sha=head, text=text)
     # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
     status = _job_status(exe, where, job)
-    if status == "done":
+    if status == "done" or (not status and text.strip()):  # unknown status: trust a printed review
         return Result("findings", f"roborev wait exited {w.returncode}", job, head, text)
     return Result(
         "unavailable",
