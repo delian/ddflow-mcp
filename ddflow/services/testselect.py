@@ -379,7 +379,7 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
 
     Built from the configured unit_tests command when it runs pytest: its runner prefix
     (`uv run pytest`) and its options (`--timeout=420`, `-n 48`) are kept, the path
-    arguments are replaced by the selected files. `-n auto` is added when the command
+    arguments are replaced by the selected files. `-n {workers}` is added when the command
     chose no worker count and the project declares pytest-xdist. "" when the project
     does not run pytest: the files are the answer then.
 
@@ -405,12 +405,13 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
     else:
         return ""
     if G.runs_pytest_serially(shlex.join(cmd)) and G.declares_xdist(root):
-        cmd += ["-n", "auto"]
+        cmd += ["-n", "{workers}"]
     if all("::" in t for t in py_tests):
         # A run made only of NAMED tests (node ids): the suite's marker filter (`-m 'not slow'` in
         # addopts) must not deselect it, or a slow regression test runs nothing (Bc332daa185).
         cmd += ["-m", ""]
-    return shlex.join([*cmd, *py_tests])
+    # `{workers}` is the run-time worker count (services/workers.py); join would quote it.
+    return shlex.join([*cmd, *py_tests]).replace("'{workers}'", "{workers}")
 
 
 #: pytest options whose value is the NEXT token. A value is never a test location, even
