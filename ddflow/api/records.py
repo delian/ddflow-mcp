@@ -188,6 +188,10 @@ class RecordKind:
     #: Lifecycle, links, sources, validators, render template and stamp, declared as data
     #: (`core.kindrules`); enforced by `api.record_rules` on add, edit and revise.
     rules: KR.KindRules | None = None
+    #: Whether the kind has CLI words and an MCP tool of its own (the rule kind has, by hand).
+    #: A data kind is reached through the API, search, recall and resources until the generic
+    #: record surface (SE-kind-data.4) carries it; B-rc-conformance reads this.
+    surfaced: bool = True
 
     def __post_init__(self) -> None:
         names = [f.name for f in self.fields]

@@ -19,7 +19,7 @@ from . import kindrules as KR
 
 _FIELD_KEYS = {"name", "type", "help", "required", "choices", "default"}
 _LISTS = ("text", "columns", "filters", "verbs", "aliases", "applies")
-_BOOLS = ("search", "recall", "resource")
+_BOOLS = ("search", "recall", "resource", "surfaced")
 _STRINGS = ("recall_hint", "declined_other")
 _KEYS = {
     "name", "def_kind", "summary", "title", "recall_cap", "declined", "field", "export",
