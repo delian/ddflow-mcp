@@ -20,6 +20,10 @@
           "type": "boolean",
           "description": "Abandon although a sub-task is still open. Those sub-tasks are NOT abandoned with it: decide about each, or they sit under a parent nobody will finish."
          },
+         "repoint_to": {
+          "type": "string",
+          "description": "Re-point every live item that needs this one to need this id instead (cycles refused), so none is left waiting on an abandoned item."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -2619,6 +2623,46 @@
        }
       }
     ''',
+    'ddflow_rename': '''
+      {
+       "name": "ddflow_rename",
+       "description": "Re-file the unclaimed task `old` as `new` (under `parent` when given): title, body, globs, resources, tags, priority and needs are kept, every live item that needs old now needs new, and old stays as an abandoned tombstone naming new. One locked step. Refused when old is claimed, finished, a phase or has sub-tasks, or new is taken. `dry_run` lists what it would do.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "old": {
+          "type": "string",
+          "description": "The task to rename."
+         },
+         "new": {
+          "type": "string",
+          "description": "Its new id."
+         },
+         "parent": {
+          "type": "string",
+          "description": "Move it under this phase or task."
+         },
+         "reason": {
+          "type": "string",
+          "description": "Why (recorded on the tombstone)."
+         },
+         "dry_run": {
+          "type": "boolean",
+          "description": "Plan and show the diff; record nothing."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "required": [
+         "old",
+         "new"
+        ],
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_render': '''
       {
        "name": "ddflow_render",
@@ -4151,6 +4195,7 @@
     'ddflow_recover',
     'ddflow_release',
     'ddflow_remove',
+    'ddflow_rename',
     'ddflow_render',
     'ddflow_replay',
     'ddflow_research_add',
