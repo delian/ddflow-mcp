@@ -37,6 +37,7 @@ from ..services import leasekeep as LK
 from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
+from ..services import review_exclude as REX
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ..services.enforce import SELF_MANAGED
@@ -1910,9 +1911,13 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             exit=O.REFUSED,
             reason=why,
         )
+    diff, extra_evidence, skipped = REX.apply(diff, cfg, repo, say, extra_evidence)
     if not diff.strip():
         return unavailable(
-            f"Empty diff ({how}) — nothing to review. Recording UNAVAILABLE.", how=how
+            f"Empty diff ({how}) — nothing to review"
+            + skipped.empty_note()
+            + ". Recording UNAVAILABLE.",
+            how=how,
         )
 
     intent = intent or _item_intent(it)

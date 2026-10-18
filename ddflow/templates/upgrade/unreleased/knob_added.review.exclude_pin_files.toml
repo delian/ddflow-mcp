@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "review.exclude_pin_files"
+new = 'true'
+why = "Also leave the files .ddflow/pins.toml owns out of review chunks."
+impact = "additive"

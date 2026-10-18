@@ -61,6 +61,10 @@ class GatesConfig:
         ],
         doc="Gates whose failure BLOCKS completion. Everything else records its outcome and lets the pipeline continue — advisory vs blocking is an explicit field, never a convention.",
     )
+    merge_blocked_by_failed: list[str] = knob(
+        factory=lambda: ["ci"],
+        doc="Gates whose latest outcome FAILED, or was skipped over a failed run, makes `ddflow merge` refuse the item: landing it can turn the base red. The way past is a run that passes, or `gate record --outcome unavailable|partial --reason`. Empty turns the check off.",
+    )
     unavailable_is_failure: bool = knob(
         False,
         doc="If true, a gate that could not run (tool missing, endpoint down) blocks like a failure. Default false, but UNAVAILABLE is always recorded distinctly and NEVER as a pass — that distinction is the point.",
