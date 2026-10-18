@@ -23,6 +23,33 @@ def _raw_globs(a: dict, key: str) -> list[str] | None:
     return None if v is None else list(v) if isinstance(v, list) else [v]
 
 
+def item_edit(a: dict):
+    """The `ItemEdit` for `update`'s arguments: the ONE encoding, used by the MCP call and
+    by `ddflow update` alike, so a field cannot be threaded through one and forgotten in
+    the other (DX-update-cli-api-duplicate). `a` maps parameter name -> value."""
+    return _api().ItemEdit(
+        title=a.get("title"),
+        body=a.get("body"),
+        append_body=a.get("append_body"),
+        needs=_list_or_none(a, "needs"),
+        add_needs=_list_or_none(a, "add_needs"),
+        remove_needs=_list_or_none(a, "remove_needs"),
+        add_tags=_list_or_none(a, "add_tags"),
+        remove_tags=_list_or_none(a, "remove_tags"),
+        # Raw, for the api's single read: split on commas here first, a JSON
+        # array (or a glob holding a comma inside one) was lost (roborev).
+        globs=_raw_globs(a, "globs"),
+        add_globs=_raw_globs(a, "add_globs"),
+        remove_globs=_raw_globs(a, "remove_globs"),
+        tags=_list_or_none(a, "tags"),
+        priority=a.get("priority"),
+        line=a.get("line"),
+        resources=_list_or_none(a, "resources"),
+        worktree=a.get("worktree"),
+        queue=bool(a.get("queue")),
+    )
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("init",),
@@ -345,32 +372,18 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().update(
             repo,
             a["id"],
-            _api().ItemEdit(
-                title=a.get("title"),
-                body=a.get("body"),
-                needs=_list_or_none(a, "needs"),
-                add_needs=_list_or_none(a, "add_needs"),
-                remove_needs=_list_or_none(a, "remove_needs"),
-                add_tags=_list_or_none(a, "add_tags"),
-                remove_tags=_list_or_none(a, "remove_tags"),
-                # Raw, for the api's single read: split on commas here first, a JSON
-                # array (or a glob holding a comma inside one) was lost (roborev).
-                globs=_raw_globs(a, "globs"),
-                add_globs=_raw_globs(a, "add_globs"),
-                remove_globs=_raw_globs(a, "remove_globs"),
-                tags=_list_or_none(a, "tags"),
-                priority=a.get("priority"),
-                line=a.get("line"),
-                resources=_list_or_none(a, "resources"),
-                worktree=a.get("worktree"),
-                queue=bool(a.get("queue")),
-            ),
+            item_edit(a),
             agent=agent,
         ),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("title", help="New title.", cli_help=""),
-            Param("body", help="New detail / acceptance criteria.", cli_help=""),
+            Param("body", help="New detail / acceptance criteria. REPLACES the body.", cli_help=""),
+            Param(
+                "append_body",
+                help="Text to ADD after the item's current body (a blank line between); the original is kept. Use it for a note or a decision instead of re-sending the body.",
+                cli_help="ADD this text after the item's current body; the original is kept",
+            ),
             Param(
                 "needs",
                 help="Comma-separated ids it depends on. Pass an EMPTY string to clear them — that is how you break a dependency cycle the loop detector found.",
@@ -462,6 +475,7 @@ COMMANDS: tuple[Command, ...] = (
             "needs",
             "title",
             "body",
+            "append_body",
             "tags",
             "priority",
             "line",

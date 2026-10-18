@@ -24,6 +24,7 @@ from conftest import run_cli
 
 from ddflow import api
 from ddflow.core import outcome as O
+from ddflow.surfaces.declared import all_commands
 from ddflow.surfaces.mcp import TOOLS
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
@@ -389,6 +390,10 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_rule_sync": (["rule", "sync"], {}),
     "ddflow_rule_show": (["rule", "show", "r-test"], {"id": "r-test"}),
 }
+# A new command declares its own row (`Command.wire_shape`) instead of editing this table.
+MIGRATED_WIRE_SHAPES.update(
+    {c.tool: c.wire_shape for c in all_commands() if c.tool and c.wire_shape}  # type: ignore[misc]
+)
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
 #: invoking them twice is not the same as invoking them once.
