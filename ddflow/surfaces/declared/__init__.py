@@ -12,4 +12,32 @@ makes the cycle resolve the same way whichever side a process enters from.
 
 from __future__ import annotations
 
-from .. import tools as _tools  # noqa: F401 -- see the docstring
+import importlib
+import re
+from pathlib import Path
+from types import ModuleType
+
+_HAS_COMMANDS = re.compile(r"^COMMANDS\b", re.MULTILINE)
+
+
+def family_modules() -> tuple[ModuleType, ...]:
+    """Every module of this package that declares ``COMMANDS``, by file name.
+
+    Registration by convention: a new command family is a new file here with a module-level
+    ``COMMANDS`` tuple, and no registry file names it. The source is read first so a helper
+    module (``*_cli``, ``mutation_params``) that declares none is never imported by the scan.
+    """
+    found = []
+    for path in sorted(Path(__file__).parent.glob("[a-z]*.py")):
+        if _HAS_COMMANDS.search(path.read_text("utf-8")):
+            found.append(importlib.import_module(f"{__name__}.{path.stem}"))
+    return tuple(found)
+
+
+def all_commands() -> tuple:
+    """The commands of every family, in file-name order."""
+    return tuple(c for m in family_modules() for c in m.COMMANDS)
+
+
+# Last: the tool package imports `all_commands` from here, so it is defined above.
+from .. import tools as _tools  # noqa: E402,F401 -- see the docstring
