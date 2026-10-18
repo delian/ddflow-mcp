@@ -38,6 +38,7 @@ from ..services import precommit as PC
 from ..services import prosepin as PP
 from ..services import testscope as TSC
 from ..services import testselect as TS
+from ..services import workers as WK
 from ..services.cadence import DueContext, due_all
 from ..services.gates import load_gates, parallel_test_advice
 from ..services.schedule import calendar as schedule_calendar
@@ -356,12 +357,20 @@ def relevant_tests(
     show_full, full = full, gate.command if gate else ""
     files = [t.path for t in sel.tests]
     data = _selection_data(sel, tree, base, full, files)
+    data["command"], auto = WK.resolve(data["command"], cfg, len(files))
+    if auto:
+        data["workers"] = {"n": auto.n, **auto.inputs}
+    data["full_suite"] = WK.resolve(data["full_suite"], cfg)[0]
     if not show_full:  # the whole-suite command is the merge queue's and the phase end's
         data["full_suite"], data["advice"] = "", ""
     if item and gate is not None:
         data["unit_tests_gate"] = _scope_data(
             TSC.unit_tests_scope(cfg, st, st.items[item], full, tree)
         )
+        gate_data = data["unit_tests_gate"]
+        gate_data["command"] = WK.resolve(
+            gate_data["command"], cfg, len(gate_data["tests"]) or None
+        )[0]
     if not files:
         return O.nothing(
             "tests",

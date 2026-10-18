@@ -2369,6 +2369,18 @@
           Seconds the CI command may run before the gate records UNAVAILABLE. Default
           3600: sized for the whole test suite (`ci run --full`, the merge queue's
           batch); an item's selected run is far shorter.
+      ci.workers = 'auto'   [default]
+          The pytest-xdist worker count that replaces `{workers}` in the gate commands
+          and in `ddflow tests` output: `auto` (default) computes it when the tests
+          run, clamp(floor(cores * [schedule.signals.load_per_core].high - current
+          load average), min_workers, max_workers), halved above the memory_pressure
+          high mark, minimum at its critical mark, and never above the number of test
+          files the command names; a number fixes it. The inputs are logged in the
+          gate evidence (D-agent-test-etiquette).
+      ci.min_workers = 1   [default]
+          The fewest workers `[ci].workers = auto` may compute, at least 1.
+      ci.max_workers = 48   [default]
+          The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity
