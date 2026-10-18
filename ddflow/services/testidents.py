@@ -148,7 +148,7 @@ _FLAG = re.compile(
 _PHRASE_WORDS = 4  #: consecutive words that make a phrase
 _PHRASE_MIN = 16  #: characters a phrase has, so four short words are not one
 _SHORT_WORDS = 3  #: a test often asserts on a fragment of the message, not the whole of it
-_SHORT_MIN = 15  #: characters a fragment has: three short words are common English
+_SHORT_MIN = _PHRASE_MIN - 1  #: characters a fragment has: three short words are common English
 _EDGE = " ,.;:()[]`'\""  #: punctuation a quoted fragment drops at its ends
 _PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is not a signal
 
