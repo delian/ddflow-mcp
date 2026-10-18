@@ -25,8 +25,10 @@ from typing import Any
 from ..infra import git as G
 from ..infra.fsio import Unreadable, read_json
 from . import enforce as E
+from . import hookwriters as HW
 from .adopt import AGENT_TARGETS, get_server, has_been_adopted
-from .claudehooks import HOOKS, _ours
+from .claudehooks import _ours
+from .harnessreg import load as _harnesses
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
 _PROBE = re.compile(r'\[ -([xf]) "([^"]+)" \]')
@@ -95,19 +97,27 @@ def check_hook_file(path: Path, fix: str = "ddflow hooks install") -> Dangling |
 
 
 def _commands(data: Any) -> list[str]:
-    """Every hook command string in a harness settings file."""
+    """Every hook command string in a harness hook file: the nested layout's
+    ``{matcher?, hooks: [{command}]}`` groups and the flat layout's ``[{command | bash}]``."""
     out: list[str] = []
     hooks = data.get("hooks") if isinstance(data, dict) else None
     for groups in (hooks or {}).values() if isinstance(hooks, dict) else ():
         for g in groups if isinstance(groups, list) else ():
-            for h in (
-                g.get("hooks", [])
-                if isinstance(g, dict) and isinstance(g.get("hooks"), list)
-                else ()
-            ):
-                if isinstance(h, dict) and isinstance(h.get("command"), str):
-                    out.append(h["command"])
+            if not isinstance(g, dict):
+                continue
+            inner = g.get("hooks")
+            for h in inner if isinstance(inner, list) else [g]:
+                if not isinstance(h, dict):
+                    continue
+                for key in ("command", "bash"):
+                    if isinstance(h.get(key), str):
+                        out.append(h[key])
     return out
+
+
+def _hook_specs() -> list:
+    """Every hook ddflow owns, for every harness whose descriptor ddflow can write."""
+    return [s for hs in _harnesses() for s in HW.specs(hs)]
 
 
 def check_settings(repo: Path) -> list[Dangling]:
@@ -115,18 +125,24 @@ def check_settings(repo: Path) -> list[Dangling]:
 
     # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
     # is the list, so a hook added to it is checked here without anyone remembering to.
-    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    rows = _hook_specs()
+    ours = tuple(dict.fromkeys(s.marker for s in rows))
+    flags: dict[str, list[str]] = {}
+    for s in rows:
+        flags.setdefault(s.file, [])
+        if s.flag not in flags[s.file]:
+            flags[s.file].append(s.flag)
+    fix_for = {rel: "ddflow hooks install " + " ".join(fl) for rel, fl in flags.items()}
 
     out: list[Dangling] = []
-    for rel in dict.fromkeys(h.file for h in HOOKS):
+    for rel in dict.fromkeys(s.file for s in rows):
         path = Path(repo) / rel
         data = read_json(path)
         if isinstance(data, Unreadable):
             continue
         for cmd in _commands(data):
             if any(_ours({"command": cmd}, m) for m in ours):
-                fix = "ddflow hooks install --claude" + (" --gemini" if "gemini" in rel else "")
-                if d := check_command(f"the hook command in {rel}", cmd, fix, rel):
+                if d := check_command(f"the hook command in {rel}", cmd, fix_for[rel], rel):
                     out.append(d)
     return out
 
@@ -277,9 +293,10 @@ def _mcp_local(repo: Path) -> list[str]:
 
 def _hooks_local(repo: Path) -> list[str]:
     """The harness settings files with a ddflow hook command recording a path here."""
-    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    rows = _hook_specs()
+    ours = tuple(dict.fromkeys(h.marker for h in rows))
     out: list[str] = []
-    for rel in dict.fromkeys(h.file for h in HOOKS):
+    for rel in dict.fromkeys(h.file for h in rows):
         data = read_json(Path(repo) / rel)
         if isinstance(data, Unreadable):
             continue

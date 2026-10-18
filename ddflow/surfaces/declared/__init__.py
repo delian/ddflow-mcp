@@ -12,4 +12,41 @@ makes the cycle resolve the same way whichever side a process enters from.
 
 from __future__ import annotations
 
-from .. import tools as _tools  # noqa: F401 -- see the docstring
+import importlib
+import re
+from pathlib import Path
+from types import ModuleType
+
+_HAS_COMMANDS = re.compile(r"^COMMANDS\s*[:=]", re.MULTILINE)
+#: A non-empty ``tool=`` of any spelling: the scan only decides what is IMPORTED.
+_HAS_TOOL = re.compile(r"""\btool\s*=\s*(?!""|'')[^\s)]""")
+
+
+def family_modules(*, tools: bool = False) -> tuple[ModuleType, ...]:
+    """Every module of this package that declares ``COMMANDS``, by file name.
+
+    Registration by convention: a new command family is a new file here with a module-level
+    ``COMMANDS`` tuple, and no registry file names it. The source is read first so a helper
+    module (``*_cli``, ``mutation_params``) that declares none is never imported by the scan.
+    ``tools=True`` also skips a family with no ``tool="ddflow_..."`` (a CLI-only one), so the
+    MCP tool table does not import what only the command line needs.
+    """
+    found = []
+    for path in sorted(Path(__file__).parent.glob("[a-z]*.py")):
+        text = path.read_text("utf-8")
+        if _HAS_COMMANDS.search(text) and (not tools or _HAS_TOOL.search(text)):
+            module = importlib.import_module(f"{__name__}.{path.stem}")
+            if isinstance(
+                getattr(module, "COMMANDS", None), (tuple, list)
+            ):  # the text match can be fooled
+                found.append(module)
+    return tuple(found)
+
+
+def all_commands(*, tools: bool = False) -> tuple:
+    """The commands of every family, in file-name order (``tools``: see `family_modules`)."""
+    return tuple(c for m in family_modules(tools=tools) for c in m.COMMANDS)
+
+
+# Last: the tool package imports `all_commands` from here, so it is defined above.
+from .. import tools as _tools  # noqa: E402,F401 -- see the docstring

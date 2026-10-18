@@ -215,7 +215,10 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "EXPLICIT commit: `roborev review <sha>` with your branch head's sha, never "
             "`roborev review HEAD` from a worktree (it can enqueue the primary's HEAD), "
             "and record it with `gate record --reviewed-sha <sha>`: ddflow refuses a sha "
-            "that is not your branch."
+            "that is not your branch. On a loaded host review the COMBINED diff with a "
+            "bounded wait: `python -m ddflow.services.roborev_branch` (one range job over "
+            "the whole branch; waits `[gates].standards_wait_s`; exit 2 names why it gave "
+            "nothing, and that is recorded `unavailable` WITH the reason)."
         ),
     ),
     "ci": GateDef(
