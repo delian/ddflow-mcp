@@ -363,7 +363,9 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
-        after_failure={g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)},
+        after_failure={
+            g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
+        },
     )
 
 
