@@ -36,7 +36,9 @@ def family_modules(*, tools: bool = False) -> tuple[ModuleType, ...]:
         text = path.read_text("utf-8")
         if _HAS_COMMANDS.search(text) and (not tools or _HAS_TOOL.search(text)):
             module = importlib.import_module(f"{__name__}.{path.stem}")
-            if getattr(module, "COMMANDS", None) is not None:  # the text match can be fooled
+            if isinstance(
+                getattr(module, "COMMANDS", None), (tuple, list)
+            ):  # the text match can be fooled
                 found.append(module)
     return tuple(found)
 
