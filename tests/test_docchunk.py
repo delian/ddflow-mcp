@@ -175,3 +175,22 @@ def test_pipes_without_a_delimiter_row_are_prose_not_a_table():
 def test_list_items_and_rules_are_not_setext_headings():
     res = C.chunk("l.md", "# T\n\n- item\n---\n\npara\n***\n")
     assert [c.heading_path for c in res.chunks] == [("T",)]
+
+
+def test_table_needs_a_matching_delimiter_row():
+    assert [c.kind for c in C.chunk("t.md", "Use grep | sort\n---\nbody\n").chunks] == ["prose"]
+    assert C.chunk("t.md", "Use grep | sort\n---\nbody\n").chunks[0].heading_path == (
+        "Use grep | sort",
+    )
+    assert [c.kind for c in C.chunk("t.md", "| a | b |\n| --- |\n| x |\n").chunks] == ["prose"]
+
+
+def test_pipe_paragraph_can_be_a_setext_heading():
+    assert C.chunk("t.md", "| foo\n===\nbody\n").chunks[0].heading_path == ("| foo",)
+
+
+def test_rst_multi_line_title_and_short_underline():
+    res = C.chunk("t.rst", "Install the tool\nfrom source\n================\n\nbody\n")
+    assert res.chunks[0].heading_path == ("Install the tool from source",)
+    assert res.chunks[0].line_start == 1
+    assert C.chunk("t.rst", "Long title here\n===\n\nbody\n").chunks[0].heading_path == ()
