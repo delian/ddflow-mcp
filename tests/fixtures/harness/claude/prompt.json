@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "recorded": false,
+    "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)",
+    "version": "unversioned"
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "prompt": "hello",
+    "cwd": "/w",
+    "model": "m"
+  },
+  "expect": {
+    "session_id": "s-1",
+    "prompt": "hello"
+  }
+}
