@@ -47,7 +47,9 @@ def advice(tree: Path) -> str:
     """The claim line naming the shim, or "" when the tree has none to offer."""
     shim = write_shim(tree)
     if shim is None:
-        return ""
+        if not is_source_tree(tree):
+            return ""
+        return f"could not write a ddflow shim; for this tree's code: export PYTHONPATH={shlex.quote(str(tree))}"
     return (
         f"ddflow from this tree's code: {shim}  "
         f"(or: export PATH={shlex.quote(str(shim.parent))}:$PATH). "
