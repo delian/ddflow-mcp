@@ -50,6 +50,9 @@ def test_a_phase_reports_merge_not_applicable(repo):
 
 def test_a_phase_with_merged_tasks_completes_without_a_hand_recorded_merge(repo):
     run_cli(repo, "init")
+    # This is about the merge gate; the full-suite close check (DX-phase-acceptance-full-suite,
+    # default 'require') has its own tests, so it is switched off here.
+    assert run_cli(repo, "config", "schedule.phase_full_suite", "off")[0] == 0
     run_cli(repo, "phase", "add", "P1", "--title", "p")
     _task_with_commit(repo, "T1", "P1")
     _finish(repo, "T1", merge=True)
