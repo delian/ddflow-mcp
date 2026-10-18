@@ -11,6 +11,7 @@ from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
 from ...core.stuck import stuck_edges_to
+from ...services import ci as CI
 from ...services import cleanup as CL
 from ...services import completion as CM
 from ...services import gates as G
@@ -235,12 +236,11 @@ def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
     why = PS.missing(log.read_all(), st, phase)
     if not why or cfg.schedule.phase_full_suite != "run":
         return why
-    from ..cirun import run as ci_run  # cirun imports api.gates, which imports this package
-
-    out = ci_run(repo, ref="HEAD", agent=agent, full=True)
-    if out.exit == O.OK:
+    res = CI.run(repo, cfg, ref="HEAD", full=True)
+    if res.ok:
+        log.append("cadence.ran", PS.CADENCE, {"result": "0", "evidence": {"note": "phase close"}})
         return ""
-    return f"the full test suite run for {phase} did not pass: {out.reason}"
+    return f"the full test suite run for {phase} did not pass: {res.reason}"
 
 
 def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[str]:
