@@ -76,5 +76,5 @@ def test_declared_call_builds_the_same_edit(monkeypatch):
     assert seen == [item_edit(SAMPLE)]
 
 
-def test_cli_splits_comma_lists():
+def test_item_edit_splits_comma_lists():
     assert item_edit({"needs": "a,b"}).needs == ["a", "b"]
