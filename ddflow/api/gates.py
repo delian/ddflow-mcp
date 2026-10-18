@@ -782,7 +782,8 @@ def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) 
     """A refusal when `implement` is passed for an item whose own worktree has no commit
     ahead of its base, else "" (bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
-    worktree of its own, or a tree that cannot be measured, is not judged."""
+    worktree of its own, or whose tree was removed, is not judged; a tree whose range cannot
+    be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
     base = cfg.worktree.base_ref or W.default_branch(repo)
