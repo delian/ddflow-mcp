@@ -77,7 +77,7 @@ class ExportConfig:
     #: redact. Filled from those tables by `Config._apply`; this field is only the store.
     tables: dict[str, dict[str, Any]] = knob(
         factory=dict,
-        doc="The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact. Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release's keys do not stop an older checkout.",
+        doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; show_hidden). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
         check=_export_tables_problem,
     )
 
@@ -97,7 +97,20 @@ class ExportConfig:
 
 
 #: Keys an `[export.<doc>]` table understands.
-EXPORT_TABLE_KEYS = frozenset({"path", "mode", "template", "filters", "refresh", "redact"})
+EXPORT_TABLE_KEYS = frozenset(
+    {
+        "path",
+        "mode",
+        "template",
+        "filters",
+        "refresh",
+        "redact",
+        "hide",
+        "next",
+        "tasks",
+        "show_hidden",
+    }
+)
 EXPORT_MODES = ("whole", "region", "append")
 
 
@@ -112,6 +125,15 @@ def _export_table_problem(doc: str, t: Any) -> str:
         return f"[export.{doc}].mode must be one of {', '.join(EXPORT_MODES)}"
     if "refresh" in t and t["refresh"] not in EXPORT_REFRESH_MODES:
         return f"[export.{doc}].refresh must be one of {', '.join(EXPORT_REFRESH_MODES)}"
+    if "hide" in t and not (
+        isinstance(t["hide"], list) and all(isinstance(x, str) for x in t["hide"])
+    ):
+        return f"[export.{doc}].hide must be a list of id prefixes or tags"
+    for k in ("next", "tasks"):
+        if k in t and (isinstance(t[k], bool) or not isinstance(t[k], int) or t[k] < 0):
+            return f"[export.{doc}].{k} must be an integer >= 0"
+    if "show_hidden" in t and not isinstance(t["show_hidden"], bool):
+        return f"[export.{doc}].show_hidden must be true or false"
     if "redact" in t and not isinstance(t["redact"], bool):
         return f"[export.{doc}].redact must be true or false"
     if "filters" in t and not (
