@@ -22,8 +22,6 @@ from .docchunk_scan import SCANNERS, Scan, front_matter
 from .slug import github_anchor
 
 FORMATS = {".md": "md", ".markdown": "md", ".rst": "rst", ".adoc": "adoc", ".asciidoc": "adoc"}
-MAX_CHARS = 1500
-OVERLAP = 150
 
 _LINES = re.compile(r"\r\n|\r|\n")
 
@@ -191,8 +189,8 @@ def chunk(
     *,
     doctype: str = "",
     regions: Sequence[RegionSpan] = (),
-    max_chars: int = MAX_CHARS,
-    overlap: int = OVERLAP,
+    max_chars: int = 1500,  # the caller passes [search] chunk sizes
+    overlap: int = 150,
     fmt: str = "",
 ) -> Chunked:
     """The chunks of ``text`` (any line ending; bytes are decoded as UTF-8, and a file that is
