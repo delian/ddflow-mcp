@@ -194,3 +194,8 @@ def test_rst_multi_line_title_and_short_underline():
     assert res.chunks[0].heading_path == ("Install the tool from source",)
     assert res.chunks[0].line_start == 1
     assert C.chunk("t.rst", "Long title here\n===\n\nbody\n").chunks[0].heading_path == ()
+
+
+def test_rst_transition_before_a_title_is_not_an_overline():
+    res = C.chunk("t.rst", "=====\n\nTitle\n=====\n\nbody\n")
+    assert res.chunks[-1].heading_path == ("Title",)
