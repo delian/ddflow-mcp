@@ -229,19 +229,38 @@ def test_the_session_start_alias_and_the_entry_point_print_the_same_brief(repo):
     assert a[1] == b[1] and "the next thing" in a[1]
 
 
-def test_the_pinned_session_start_brief_carries_no_machine_dependent_line(repo):
-    """B6983363359: the brief's "parallel: N (auto ...)" line is computed from the host's
-    load and memory, so two briefs a moment apart can differ on a busy host. Auto is
-    machine-dependent; a fixed limit is a constant line, which is what the same-brief
-    test pins."""
-    from ddflow.api import setup as S
+def _brief_around_a_loaded_sample(repo) -> tuple[str, str]:
+    """The brief, a host sample taken (as any ddflow command's tick does) while the host
+    is loaded, and the brief again."""
+    import time
 
+    from ddflow.api import setup as S
+    from ddflow.config import Config
+    from ddflow.core.model import State
+    from ddflow.infra import signals
+    from ddflow.services import flowstate as F
+
+    first = S._session_start(repo, "t", "{}").data["message"]
+    busy = signals.FakeSource({"load": 50.0, "memory_free_frac": 0.01, "disk_free_frac": 0.01})
+    ctx = F.FlowCtx(repo=repo, cfg=Config.load(repo), state=State())
+    now = time.time()
+    for k in range(5, 0, -1):
+        F.sample_if_due(ctx, busy, clock=lambda k=k: now - 60 * k)
+    return first, S._session_start(repo, "t", "{}").data["message"]
+
+
+def _three_tasks(repo) -> None:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--title", "the next thing", "--globs", "a.py")
-    assert "(auto" in S._session_start(repo, "t", "{}").data["message"]
-    assert run_cli(repo, "config", "--set", "schedule.parallel", "fixed")[0] == 0
-    text = S._session_start(repo, "t", "{}").data["message"]
-    assert "(fixed)" in text and "(auto" not in text
+    for n in range(1, 13):
+        run_cli(repo, "task", "add", f"T{n}", "--title", f"thing {n}", "--globs", f"f{n}.py")
+
+
+def test_a_fixed_limit_makes_the_brief_independent_of_host_samples(repo):
+    """The fix the same-brief test relies on: pin `schedule.parallel = fixed`."""
+    _three_tasks(repo)
+    run_cli(repo, "config", "--set", "schedule.parallel", "fixed")
+    a, b = _brief_around_a_loaded_sample(repo)
+    assert a == b and "(fixed)" in a
 
 
 def test_session_start_is_shaped_for_the_agent_and_skipped_where_it_cannot_show(repo):
