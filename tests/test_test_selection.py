@@ -112,7 +112,7 @@ def test_committed_branch_work_counts_as_well_as_the_working_tree(proj):
             "uv run pytest tests/ -q --timeout=60 -n 4",
             "uv run pytest -q --timeout=60 -n 4 tests/test_a.py",
         ),
-        ("pytest tests/", "pytest -n auto tests/test_a.py"),  # xdist declared: parallel
+        ("pytest tests/", "pytest -n {workers} tests/test_a.py"),  # xdist declared: parallel
         ("pytest tests/ -p no:xdist", "pytest -p no:xdist tests/test_a.py"),  # deliberate
     ],
 )
