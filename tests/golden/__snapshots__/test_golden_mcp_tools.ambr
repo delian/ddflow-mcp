@@ -1328,7 +1328,11 @@
         "properties": {
          "action": {
           "type": "string",
-          "description": "status (default), install, uninstall."
+          "description": "status (default), install, uninstall; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken (read-only)."
+         },
+         "harness": {
+          "type": "string",
+          "description": "harness_show / harness_doctor: the agent's descriptor id."
          },
          "claude": {
           "type": "boolean",
@@ -3546,7 +3550,11 @@
          },
          "body": {
           "type": "string",
-          "description": "New detail / acceptance criteria."
+          "description": "New detail / acceptance criteria. REPLACES the body."
+         },
+         "append_body": {
+          "type": "string",
+          "description": "Text to ADD after the item's current body (a blank line between); the original is kept. Use it for a note or a decision instead of re-sending the body."
          },
          "tags": {
           "type": "string",

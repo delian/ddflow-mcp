@@ -1,0 +1,90 @@
+"""A manifest of the WHOLE change, carried by every review chunk.
+
+A diff is reviewed one chunk at a time, so a reviewer raised findings the rest of the
+change answered ('no templates, no README rows' while the templates were in another
+chunk; 'nothing adds the guard' on a chunk that only deleted a shard). Each chunk's
+prompt now lists every changed file with its added/removed lines and a one-line summary,
+marks the files this chunk holds, names the new files and the files left out of review
+([review].exclude_globs), so a fact that lives in a sibling chunk can be checked.
+"""
+
+from __future__ import annotations
+
+import re
+
+from ..core import unidiff
+
+#: Names a one-line summary lists at most.
+_NAMES = 4
+_DEF_RE = re.compile(r"^\+\s*(?:async\s+)?(?:def|class)\s+(\w+)")
+_HEAD_RE = re.compile(r"^\+(#{1,4})\s+(.{1,60})$")
+
+
+def _summary(fd: unidiff.FileDiff, section: str) -> str:
+    if fd.old is None:
+        kind = "new file"
+    elif fd.new is None:
+        kind = "deleted"
+    elif fd.old != fd.new:
+        kind = f"renamed from {fd.old}"
+    else:
+        kind = "modified"
+    names: list[str] = []
+    for ln in section.split("\n"):
+        m = _DEF_RE.match(ln) or _HEAD_RE.match(ln)
+        if m:
+            names.append(m.group(m.lastindex).strip())
+    uniq = list(dict.fromkeys(names))
+    shown = ", ".join(uniq[:_NAMES]) + (
+        f" and {len(uniq) - _NAMES} more" if len(uniq) > _NAMES else ""
+    )
+    return f"{kind}; adds {shown}" if shown else kind
+
+
+def _counts(section: str) -> tuple[int, int]:
+    body = section.split("\n@@", 1)[1] if "\n@@" in section else ""
+    lines = body.split("\n")
+    # `body` starts at the first hunk, so a "+++"/"---" line is content (`++i;`, a YAML
+    # `---` removed), never a file header.
+    return (
+        sum(1 for ln in lines if ln.startswith("+")),
+        sum(1 for ln in lines if ln.startswith("-")),
+    )
+
+
+def _names(paths: list[str], cap: int) -> str:
+    """The first ``cap`` names, then how many more."""
+    more = f" and {len(paths) - cap} more" if len(paths) > cap else ""
+    return ", ".join(paths[:cap]) + more
+
+
+def build(
+    diff: str,
+    excluded: list[str] | None = None,
+    max_files: int = 40,
+) -> str:
+    """The manifest text for ``diff`` (the whole change, as sent to the reviewers);
+    "" when it has no files. ``max_files`` caps the rows (0 = no manifest); the rest are
+    counted, never silently dropped."""
+    if max_files <= 0:
+        return ""
+    rows = [(unidiff.parse_section(s), s) for s in unidiff.sections(diff)]
+    if not rows:
+        return ""
+    out = [f"Change: {len(rows)} file(s) in all, sent to you in separate parts."]
+    for fd, sec in rows[:max_files]:
+        add, rem = _counts(sec)
+        out.append(f"- {fd.path} (+{add} -{rem}): {_summary(fd, sec)}")
+    if len(rows) > max_files:
+        out.append(f"- ... and {len(rows) - max_files} more file(s)")
+    new = [fd.path for fd, _s in rows if fd.old is None]
+    out.append("New files: " + (_names(new, max_files) if new else "none"))
+    if excluded:
+        out.append("Left out of review (generated or pinned files): " + _names(excluded, max_files))
+    return "\n".join(out)
+
+
+def for_review(diff: str, skipped, cfg) -> str:
+    """The manifest `ddflow review` sends: the diff, what [review].exclude_globs left
+    out (``skipped``, a ``review_exclude.Excluded``) and [review].manifest_max_files."""
+    return build(diff, [p for p, _n in skipped.files], cfg.review.manifest_max_files)

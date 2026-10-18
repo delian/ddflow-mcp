@@ -38,6 +38,7 @@ from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services import review_exclude as REX
+from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ..services.enforce import SELF_MANAGED
@@ -1962,6 +1963,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             tick_s=tick_s,
             only=only,
             on_chunk=keep.add if item else None,
+            manifest=RM.for_review(diff, skipped, cfg),
         )
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
