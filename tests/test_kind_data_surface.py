@@ -98,6 +98,7 @@ def test_a_project_kind_is_carried_and_can_override_a_shipped_one(repo):
             == 0
         )
         assert R.KINDS["vendor"].summary == "our vendor"
+        assert "ticketx" in D.DEF_KINDS  # a project kind is a definition kind too
     finally:
         R.forget("ticketx")
         D.DEF_KINDS.pop("ticketx", None)
