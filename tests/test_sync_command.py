@@ -179,3 +179,11 @@ def test_a_gate_that_was_never_green_is_not_reported_as_still_valid(repo):
     assert out.ok, out.reason
     assert "research" not in out.data["gates_valid"]
     assert "research" in out.data["gates_not_passing"]
+
+
+def test_a_pin_naming_a_directory_is_touched_by_a_path_under_it():
+    from ddflow.services.branchsync import _inside_dir
+
+    assert _inside_dir("tests/golden/__snapshots__/", {"tests/golden/__snapshots__/a.ambr"})
+    assert not _inside_dir("tests/golden/__snapshots__/", {"tests/golden/b.py"})
+    assert not _inside_dir("README.md", {"README.md"})

@@ -68,7 +68,11 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
         return _stop(out, "refused", dirty=dirty, detail="uncommitted changes; commit them first")
     r = W.git(tree, "merge", "--no-edit", rep.base)
     if not r.ok:
-        files = G.unmerged(tree) or []
+        files = G.unmerged(tree)
+        if files is None:
+            return _stop(
+                out, "refused", detail=f"git could not list the conflicts: {r.err or r.out}"
+            )
         if not files and W.merging(tree) is False:
             # Git refused before it began (an untracked file the base adds, say): not a
             # conflict, and there is nothing to abort.
@@ -77,7 +81,8 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
         out.conflicts = {f: _last_author(tree, rep.base, f) for f in files}
         return _stop(out, "conflict", detail=r.err or r.out)
     out.status = "merged"
-    out.merged_pins = sorted({p for c in rep.commits for p in c.paths} & pins)
+    moved = {p for c in rep.commits for p in c.paths}
+    out.merged_pins = sorted(f for f in pins if f in moved or _inside_dir(f, moved))
     return out
 
 
@@ -86,3 +91,8 @@ def _stop(out: SyncResult, status: str, **kw) -> SyncResult:
     for k, v in kw.items():
         setattr(out, k, v)
     return out
+
+
+def _inside_dir(pin: str, paths: set[str]) -> bool:
+    """A pin that names a directory (`tests/golden/__snapshots__/`) is touched by any path under it."""
+    return pin.endswith("/") and any(p.startswith(pin) for p in paths)

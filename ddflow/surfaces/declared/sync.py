@@ -6,9 +6,13 @@ from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
 
-def _call(repo, a, agent):
+def _call(repo, a, agent, called_from=None):
     return _api().lifecycle.sync(
-        repo, item=a.get("item") or "", check=bool(a.get("check")), agent=agent
+        repo,
+        item=a.get("item") or "",
+        check=bool(a.get("check")),
+        agent=agent,
+        called_from=called_from,
     )
 
 
@@ -25,6 +29,7 @@ COMMANDS: tuple[Command, ...] = (
             "merged commits touch the item's globs and which recorded gates stay valid. check=true measures only."
         ),
         wire_shape=(["sync", "NOPE", "--check"], {"item": "NOPE", "check": True}),
+        wants_called_from=True,
         call=_call,
         payload=(
             "item",
