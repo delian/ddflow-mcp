@@ -223,7 +223,7 @@ def _bounded(timeout_s: float | None, max_s: float | None) -> tuple[float, bool]
     bound: the wait never outlasts it, whatever ``timeout_s`` says."""
     timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
     if max_s is not None:
-        timeout = min(timeout, max(0.0, float(max_s)))
+        timeout = min(timeout, float(max_s))  # negative: refused by the caller
     return min(timeout, float(WAIT_MAX_S)), timeout > WAIT_MAX_S
 
 
@@ -328,7 +328,7 @@ def wait(
         "holders": [],
     }
     if timeout < 0 or poll <= 0:
-        return O.failed("wait", "timeout must be >= 0 and poll > 0 seconds", **empty)
+        return O.failed("wait", "timeout and max-s must be >= 0 and poll > 0 seconds", **empty)
     want, bad = _wait_globs(globs, item)
     if bad:
         return O.failed("wait", bad, **empty)
