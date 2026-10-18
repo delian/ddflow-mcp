@@ -201,7 +201,9 @@ def grouped_tools(tools: Iterable[str]) -> list[tuple[str, list[str]]]:
     declared = {
         t: g
         for t in names
-        if isinstance(tools, Mapping) and (g := (tools[t] or {}).get("help_group"))
+        if isinstance(tools, Mapping)
+        and isinstance(tools[t], Mapping)
+        and (g := tools[t].get("help_group"))
     }
     tools = names
     out: list[tuple[str, list[str]]] = []
