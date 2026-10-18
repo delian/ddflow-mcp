@@ -63,5 +63,23 @@ def test_the_mcp_action_matches_the_cli(repo):
     cmd = BY_TOOL["ddflow_hooks"]
     out = cmd.call(repo, {"action": "harness_show", "harness": "claude"}, "t")
     assert out.data["id"] == "claude"
-    assert cmd.payload({"action": "harness_show"})[0] == "harnesses"
+    assert cmd.payload({"action": "harness_show"}) == ("id", "levels", "features")
     assert cmd.payload({"action": "status"})[0] == "installed"
+
+
+def test_a_toml_mcp_file_is_judged_by_its_servers_not_by_a_substring(repo):
+    codex = HR.get("codex")
+    path = repo / codex.mcp.path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# ddflow owns this\n[mcp_servers.ddflow_old]\ncommand = 'x'\n")
+    assert H.mcp_registered(repo, codex) is False
+    path.write_text("[mcp_servers.ddflow]\ncommand = 'x'\n")
+    assert H.mcp_registered(repo, codex) is True
+
+
+def test_an_unreadable_mcp_file_is_unknown_not_absent_and_has_no_remedy(repo):
+    claude = HR.get("claude")
+    (repo / claude.mcp.path).write_text("{not json")
+    assert H.mcp_registered(repo, claude) is None
+    found = [f for f in harness_view(repo, what="doctor", id="claude").data["findings"] if f["area"] == "mcp"]
+    assert found and "cannot be read" in found[0]["what"] and found[0]["remedy"] == ""
