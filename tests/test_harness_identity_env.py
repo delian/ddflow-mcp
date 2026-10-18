@@ -54,6 +54,7 @@ def test_an_implicit_session_records_the_detected_tool(repo, log, monkeypatch):
 
 def test_both_claude_variables_are_one_harness_not_an_ambiguity():
     assert HR.detect({"CLAUDE_CODE_SESSION_ID": "a"}) == "claude"
+    # CLAUDE_SESSION_ID is a legacy resolution name, in no descriptor: detect() never reads it
     assert HR.detect({"CLAUDE_CODE_SESSION_ID": "a", "CLAUDE_SESSION_ID": "b"}) == "claude"
 
 
