@@ -940,10 +940,14 @@ def _roborev_reviewer(
     )
 
 
-def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
+def _docs_gate_export(
+    repo: Path, cfg, ev: dict[str, Any], warning: str, *, applies: bool = True
+) -> str:
     """`[export].refresh = docs_gate`: the docs gate's export step. Regenerates and verifies
     the selected documents and records them with their body digests in ``ev``; returns the
     warning, extended when a document was skipped, failed or is not fresh. Never fails."""
+    if not applies:
+        return warning
 
     rr = RF.refresh_selected(repo, "docs_gate", cfg=cfg)
     if not rr.outcomes:
@@ -1071,8 +1075,13 @@ def record(
     if bad is not None:
         return bad
 
-    if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
-        warning = _docs_gate_export(repo, cfg, ev, warning)
+    warning = _docs_gate_export(
+        repo,
+        cfg,
+        ev,
+        warning,
+        applies=not skip and (gate, it.kind, result) == ("docs", "phase", "passed"),
+    )
 
     wt: Path | None = None
     if not skip:
