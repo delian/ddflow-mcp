@@ -207,7 +207,7 @@ def test_a_diff_cannot_close_the_reviewer_fence(run):
     assert len(fence) >= 3 and len(fence) > run
     prompt = P.render(
         P.resolve("review_user"), intent="i", context="", diff=diff, fence=fence,
-        chunk_index=1, chunk_total=1,
+        chunk_index=1, chunk_total=1, manifest="", manifest_fence="```", chunk_files="",
     )  # fmt: skip
     lines = prompt.splitlines()
     opens = [n for n, ln in enumerate(lines) if ln == f"{fence}diff"]
