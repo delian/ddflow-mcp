@@ -851,6 +851,24 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
     return msgs
 
 
+def _agent_hooks_outcome(
+    repo: Path, action: str, claude: bool, gemini: bool, harness: str
+) -> O.Outcome:
+    """`hooks install|uninstall` for the agents' own hooks: the Claude/Gemini flags, or any
+    harness the descriptors name."""
+    if not (claude or gemini):
+        return _harness_hooks(repo, action, harness)
+    try:
+        msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
+    except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
+        return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    except CH.SettingsError as exc:
+        return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+    return O.ok(
+        "hooks", message="\n".join(msgs), installed=E.installed(repo), session_hook=CH.installed(repo)
+    )
+
+
 def _harness_hooks(repo: Path, action: str, harness: str) -> O.Outcome:
     """`hooks install|uninstall --harness <id>` for an agent the descriptor names: the writer
     its hook style selects (`services.hookwriters`); a style with no writer is refused."""
@@ -860,7 +878,8 @@ def _harness_hooks(repo: Path, action: str, harness: str) -> O.Outcome:
     try:
         msgs = HW.apply(repo, h, action)
     except HW.Unsupported as exc:
-        return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+        why = f"no hook writer for harness {harness!r} yet: {exc}"
+        return O.failed("hooks", why, message=why, installed=E.installed(repo))
     except CH.NewerSettings as exc:
         return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
     except CH.SettingsError as exc:
@@ -1174,21 +1193,8 @@ def hooks(
 
         return _check_msg(repo, Config.load(repo), msg_file)
     _log, cfg, _st = _load(repo, agent)
-    if harness and not (claude or gemini) and action in ("install", "uninstall"):
-        return _harness_hooks(repo, action, harness)
-    if (claude or gemini) and action in ("install", "uninstall"):
-        try:
-            msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
-        except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
-            return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
-        except CH.SettingsError as exc:
-            return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
-        return O.ok(
-            "hooks",
-            message="\n".join(msgs),
-            installed=E.installed(repo),
-            session_hook=CH.installed(repo),
-        )
+    if action in ("install", "uninstall") and (claude or gemini or harness):
+        return _agent_hooks_outcome(repo, action, claude, gemini, harness)
     if action == "install":
         return _installed_hooks(E, repo, E.install(repo, force=force))
     if action == "uninstall":

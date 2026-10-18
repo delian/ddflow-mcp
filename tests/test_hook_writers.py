@@ -64,8 +64,8 @@ def test_an_unparsable_file_is_refused_and_left_alone(repo):
 
 def test_a_style_without_a_writer_is_refused_not_ignored(repo):
     code, out, err = run_cli(repo, "hooks", "install", "--harness", "cursor")
-    assert code == 3
-    assert "cursor" in out + err and not (repo / ".cursor").exists()
+    assert code == 1
+    assert "no hook writer for harness 'cursor'" in out + err and not (repo / ".cursor").exists()
 
 
 def test_every_descriptor_is_either_writable_or_says_why_not():

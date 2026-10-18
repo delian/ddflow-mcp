@@ -112,17 +112,22 @@ def _commands(data: Any) -> list[str]:
     return out
 
 
+def _hook_specs() -> list:
+    """Every hook ddflow owns, for every harness whose descriptor ddflow can write."""
+    return [s for hs in _harnesses() for s in HW.specs(hs)]
+
+
 def check_settings(repo: Path) -> list[Dangling]:
     """ddflow's own hook commands in `.claude/settings.json` and `.gemini/settings.json`."""
 
     # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
     # is the list, so a hook added to it is checked here without anyone remembering to.
-    rows = [(hs, s) for hs in _harnesses() for s in HW.specs(hs)]
-    ours = tuple(dict.fromkeys(s.marker for _h, s in rows))
-    fix_for = {s.file: f"ddflow hooks install {s.flag}" for _h, s in rows}
+    rows = _hook_specs()
+    ours = tuple(dict.fromkeys(s.marker for s in rows))
+    fix_for = {s.file: f"ddflow hooks install {s.flag}" for s in rows}
 
     out: list[Dangling] = []
-    for rel in dict.fromkeys(s.file for _h, s in rows):
+    for rel in dict.fromkeys(s.file for s in rows):
         path = Path(repo) / rel
         data = read_json(path)
         if isinstance(data, Unreadable):
@@ -280,9 +285,10 @@ def _mcp_local(repo: Path) -> list[str]:
 
 def _hooks_local(repo: Path) -> list[str]:
     """The harness settings files with a ddflow hook command recording a path here."""
-    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    rows = _hook_specs()
+    ours = tuple(dict.fromkeys(h.marker for h in rows))
     out: list[str] = []
-    for rel in dict.fromkeys(h.file for h in HOOKS):
+    for rel in dict.fromkeys(h.file for h in rows):
         data = read_json(Path(repo) / rel)
         if isinstance(data, Unreadable):
             continue
