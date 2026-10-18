@@ -39,7 +39,7 @@ def test_the_scan_level_is_the_highest_kind_found_and_never_below_the_floor():
 
 
 def test_every_scan_kind_is_one_the_redactor_counts():
-    found = redact_text("TOKEN-demo a@b.example", secret_patterns=[r"TOKEN-\w+"]).counts
+    found = redact_text("TOKEN-demo 203.0.113.9 a@b.example host.example.org", secret_patterns=[r"TOKEN-\w+"]).counts
     assert set(found) <= set(SL.load().scan) and "secret" in found and "email" in found
 
 
