@@ -3546,7 +3546,11 @@
          },
          "body": {
           "type": "string",
-          "description": "New detail / acceptance criteria."
+          "description": "New detail / acceptance criteria. REPLACES the body."
+         },
+         "append_body": {
+          "type": "string",
+          "description": "Text to ADD after the item's current body (a blank line between); the original is kept. Use it for a note or a decision instead of re-sending the body."
          },
          "tags": {
           "type": "string",

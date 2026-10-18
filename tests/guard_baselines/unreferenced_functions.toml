@@ -38,3 +38,9 @@ baseline = 0
 # a report are its callers; the two modules stay whole until they exist.
 "ddflow/services/upstream_dedupe.py:report_text" = "B-upstream-surfaces"
 "ddflow/services/upstream_delivery.py:send_gh" = "B-upstream-surfaces"
+# The shared drift calculation (DX-drift-core): each helper's first caller is its consumer.
+"ddflow/services/drift.py:moved_or_gone" = "PL-staleness"
+"ddflow/services/drift.py:decisions_changed" = "DX-sync-command"
+"ddflow/services/drift.py:is_covered" = "DX-phase-suite-pass-sha"
+"ddflow/services/drift.py:last_seen" = "DX-drift-notice"
+"ddflow/services/drift.py:set_last_seen" = "DX-drift-notice"
