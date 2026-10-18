@@ -108,3 +108,20 @@ def test_a_record_linked_by_item_is_listed_even_outside_the_window(repo):
     assert code == 0, out + err
     data = json.loads(run_cli(repo, "--json", "report", "T1")[1])["filed"]
     assert [n["id"] for n in data["notes"]] == ["RBEFORE"]
+
+
+def test_a_record_with_two_recorded_events_is_listed_once():
+    """A merge (`link --duplicate-of`) records the lesson again: one entry, not two."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.core.records import Lesson, State
+    from ddflow.services import report as R
+
+    st = State()
+    st.lessons["L1"] = Lesson(id="L1", title="merged")
+    ev = [
+        NS(kind="lease.acquired", subject="T1", ts="1", agent="a", data={"holder": "a"}),
+        NS(kind="lesson.recorded", subject="L1", ts="2", agent="a", data={}),
+        NS(kind="lesson.recorded", subject="L1", ts="3", agent="a", data={}),
+    ]
+    assert [n["id"] for n in R._filed(ev, st, "T1", "a")["notes"]] == ["L1"]

@@ -103,8 +103,8 @@ def _note(st: State, ev, item_id: str) -> dict[str, Any] | None:
 
 
 def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str, Any]]]:
-    """Bugs and tasks recorded while the item was worked: against it, or by ``who`` between its
-    claim and its completion. Each with whether it is still open."""
+    """Bugs, tasks, lessons, research and decisions recorded while the item was worked: linked to
+    it, or by ``who`` from its claim to the end of the run (see `_window`). Each with whether it is still open."""
     start, end = _window(events, item_id, who)
 
     def inside(ev) -> bool:
@@ -116,7 +116,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         )
 
     bugs, tasks = {}, {}
-    notes: list[dict[str, Any]] = []
+    notes: dict[str, dict[str, Any]] = {}
     for ev in events:
         if ev.kind == "bug.found" and ev.subject in st.bugs:
             if st.bugs[ev.subject].item == item_id or inside(ev):
@@ -131,9 +131,9 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
         elif ev.kind in _NOTE_KINDS:
             note = _note(st, ev, item_id)
             if note and (note["linked"] or inside(ev)):
-                notes.append(note)
+                notes[ev.subject] = note  # once per record: a merge records it again
     return {
-        "notes": notes,
+        "notes": list(notes.values()),
         "bugs": [
             {
                 "id": b.id,
@@ -158,7 +158,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
 
 def _refusals(events, item_id: str, who: str) -> list[str]:
     """The commands the PreToolUse guard (`[hooks].forbidden_commands`) refused while the item
-    was worked: ``who``'s, between the claim and the completion."""
+    was worked: ``who``'s, from the claim to the end of the run (see `_window`)."""
     start, end = _window(events, item_id, who)
     return [
         f"refused by the forbidden-commands hook: {ev.data.get('text', '')}"
