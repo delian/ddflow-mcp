@@ -144,3 +144,34 @@ def test_plain_text_and_empty():
 def test_anchor_that_collides_with_a_suffixed_slug_is_bumped():
     res = C.chunk("d.md", "# Install\n\na\n\n# Install 1\n\nb\n\n# Install\n\nc\n")
     assert ids(res) == ["d.md#install~0", "d.md#install-1~0", "d.md#install-2~0"]
+
+
+def test_no_empty_chunk_after_a_short_block_and_a_huge_line():
+    res = C.chunk("e.md", "# Title\n\n" + "x" * 1500 + "\n")
+    assert all(c.text.strip() for c in res.chunks)
+
+
+def test_setext_headings_the_scanner_used_to_miss():
+    cases = {
+        "**Note**\n========\nbody\n": [("**Note**",)],
+        "Intro\n\n```\nmake\n```\nBuild\n=====\nbody\n": [("Build",)],
+        "# A\nSub\n---\nbody\n": [("A",), ("A", "Sub")],
+        "Title line one\nTitle line two\n==============\nbody\n": [
+            ("Title line one Title line two",)
+        ],
+    }
+    for text, paths in cases.items():
+        got = [c.heading_path for c in C.chunk("s.md", text).chunks if c.heading_path]
+        assert got[-len(paths) :] == paths, text
+
+
+def test_pipes_without_a_delimiter_row_are_prose_not_a_table():
+    res = C.chunk("p.md", "# T\n\nThe pipeline prints:\n| sort\n| uniq -c\n")
+    assert [c.kind for c in res.chunks] == ["prose"]
+    tbl = C.chunk("p.md", "# T\n\na | b\n- | -\n1 | 2\n")
+    assert [c.kind for c in tbl.chunks] == ["prose", "table"]
+
+
+def test_list_items_and_rules_are_not_setext_headings():
+    res = C.chunk("l.md", "# T\n\n- item\n---\n\npara\n***\n")
+    assert [c.heading_path for c in res.chunks] == [("T",)]

@@ -180,6 +180,8 @@ def _split_prose(lines, a, b, reg, max_chars, overlap):
             back -= 1
             size += len(lines[back]) + 1
         s = back if back < e and back > s else e
+        while s < b and not lines[s].strip():  # never start a chunk on a blank line
+            s += 1
     return out
 
 
