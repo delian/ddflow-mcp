@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from ...core import outcome as O
 from ...core import progress as PR
-from .claim_guards import ClaimContext, register
+from ...services.claim_guards import ClaimContext, register
 
 
-@register("looping", order=10)
-def refuse_looping(ctx: ClaimContext) -> O.Outcome | None:
+def _refuse_looping(ctx: ClaimContext) -> O.Outcome | None:
     """The refusal for an item that is already looping; ``--force`` passes it."""
     item = ctx.item
     looping = [
@@ -27,3 +26,6 @@ def refuse_looping(ctx: ClaimContext) -> O.Outcome | None:
         id=item,
         looping=[f.__dict__ for f in looping],
     )
+
+
+register("looping", order=10)(_refuse_looping)

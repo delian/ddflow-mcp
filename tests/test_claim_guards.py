@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ddflow.api.lifecycle import claim_guards as G
 from ddflow.core import outcome as O
 from ddflow.core.registry import DuplicateName
+from ddflow.services import claim_guards as G
 
 
 def _ctx(**kw):
