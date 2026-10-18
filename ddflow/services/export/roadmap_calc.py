@@ -80,8 +80,9 @@ def split_lanes(
 
 
 def cap_tasks(rows: list[dict[str, Any]], cap: int) -> tuple[list[dict[str, Any]], int]:
-    """At most ``cap`` open tasks, in-flight ones first; and how many were left out."""
-    if cap <= 0 or len(rows) <= cap:
+    """At most ``cap`` open tasks (none when 0), in-flight ones first; and how many were left out."""
+    cap = max(cap, 0)
+    if len(rows) <= cap:
         return rows, 0
     ranked = sorted(rows, key=lambda r: r["status"] not in ("running", "review"))
     return ranked[:cap], len(rows) - cap

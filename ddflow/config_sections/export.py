@@ -105,12 +105,17 @@ EXPORT_TABLE_KEYS = frozenset(
         "filters",
         "refresh",
         "redact",
-        "hide",
-        "next",
-        "tasks",
-        "show_hidden",
     }
 )
+#: Keys only `[export.roadmap]` adds to those.
+ROADMAP_TABLE_KEYS = frozenset({"hide", "next", "tasks", "show_hidden"})
+
+
+def export_table_keys(doc: str) -> frozenset[str]:
+    """The keys `[export.<doc>]` understands."""
+    return EXPORT_TABLE_KEYS | ROADMAP_TABLE_KEYS if doc == "roadmap" else EXPORT_TABLE_KEYS
+
+
 EXPORT_MODES = ("whole", "region", "append")
 
 
@@ -139,7 +144,7 @@ def _export_table_problem(doc: str, t: Any) -> str:
         return f"[export.{doc}].mode must be one of {', '.join(EXPORT_MODES)}"
     if "refresh" in t and t["refresh"] not in EXPORT_REFRESH_MODES:
         return f"[export.{doc}].refresh must be one of {', '.join(EXPORT_REFRESH_MODES)}"
-    if why := _roadmap_keys_problem(doc, t):
+    if doc == "roadmap" and (why := _roadmap_keys_problem(doc, t)):
         return why
     if "redact" in t and not isinstance(t["redact"], bool):
         return f"[export.{doc}].redact must be true or false"
