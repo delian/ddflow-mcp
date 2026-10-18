@@ -14,7 +14,7 @@ import time
 from ...api import reporting as A
 from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
-from ..context import FAIL, OK, Ctx
+from ..context import FAIL, OK, REFUSED, Ctx
 from ..render import emit_json
 from ..vocabulary import sources
 from .lifecycle import _next_without_plan
@@ -210,10 +210,22 @@ def contest_block(it) -> str:
 
 
 def cmd_show(a, c: Ctx) -> int:
+    return _show(a, c)
+
+
+def cmd_bug_show(a, c: Ctx) -> int:
+    """`ddflow bug show <id>`: `show`, for a bug only (the id of anything else is refused)."""
+    return _show(a, c, only="bug")
+
+
+def _show(a, c: Ctx, only: str = "") -> int:
     out = A.show(c.repo, a.id, agent=c.requested_agent)
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
+    if only == "bug" and "bug" not in out.data["_render"]:
+        print(f"{a.id} is not a bug (`ddflow show {a.id}` reads it)", file=sys.stderr)
+        return REFUSED
     if c.json:
         emit_json(out.body("item"))
         return OK
