@@ -1,6 +1,7 @@
 id = "gemini"
 rank = 1
 family = "gemini-cli"
+title = "Gemini CLI"
 delta = "gemini-cli.md"
 
 [mcp]

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..core import textsim
 from ..core.rank import bm25
+from . import harnessreg as HR
 
 MAX_FILES = 200
 BODY_HEAD_CHARS = 1500
@@ -89,25 +90,68 @@ def _agent_file(repo: Path, rel: str) -> Entry | None:
     return Entry("rule", rel, desc, rel, f"{rel} {desc} {body[:BODY_HEAD_CHARS]}")
 
 
+def _project_dirs(section: str) -> list[str]:
+    """Each distinct project-relative directory a descriptor gives for ``section``
+    (``skills``, ``commands``), in rank order; home-rooted ones are not the project's."""
+    out: dict[str, None] = {}
+    for h in HR.load():
+        sec = getattr(h, section)
+        if sec is not None and not sec.none and sec.dir and not sec.dir.startswith("~"):
+            out.setdefault(sec.dir.rstrip("/"))
+    return list(out)
+
+
+def subagent_files(repo: Path) -> list[Path]:
+    """Every subagent definition in the project, from each descriptor's ``subagents.dir``."""
+    return [p for d in _project_dirs("subagents") for p in sorted((Path(repo) / d).glob("*.md"))]
+
+
+def _rule_globs() -> tuple[list[str], list[str]]:
+    """(rule globs, top-level instruction files) from every descriptor's ``instructions.reads``.
+
+    A read with a directory part is a rules surface (``.cursor/rules/*.mdc``, ``.clinerules/``);
+    one without is a file at the root (``AGENTS.md``, ``CLAUDE.md``, ``GEMINI.md``). Only
+    markdown is inventoried: ``.aider.conf.yml`` and ``.goosehints`` are not rules text.
+    """
+    globs: dict[str, None] = {}
+    files: dict[str, None] = {}
+    for h in HR.load():
+        for r in h.instructions.reads if h.instructions else ():
+            if r.endswith("/"):
+                globs.setdefault(r + "**/*.md")
+            elif "/" in r and r.endswith((".md", ".mdc")):
+                globs.setdefault(r)
+            elif "/" not in r and r.endswith(".md"):
+                files.setdefault(r)
+    return list(globs), list(files)
+
+
 def inventory(repo: Path) -> list[Entry]:
-    """Every skill, command and rules file the project carries, capped at MAX_FILES."""
+    """Every skill, command and rules file the project carries, capped at MAX_FILES.
+
+    Where each lives is read from the harness descriptors (``ddflow/harnesses``), so a new
+    agent's directories are inventoried without a change here.
+    """
     repo = Path(repo)
     found: list[Entry | None] = []
-    for p in sorted((repo / ".claude" / "skills").glob("*/SKILL.md")):
-        found.append(_entry("skill", repo, p, p.parent.name))
-    for p in sorted((repo / ".claude" / "commands").glob("**/*.md")):
-        found.append(_entry("command", repo, p, p.stem))
-    for sub, pattern in (
-        (".cursor/rules", "*.mdc"),
-        (".cursor/rules", "*.md"),
-        (".kilo", "**/*.md"),
-        (".kilocode/rules", "**/*.md"),
-        (".clinerules", "**/*.md"),
-    ):
-        for p in sorted((repo / sub).glob(pattern)):
-            if p.is_file():
-                found.append(_entry("rule", repo, p, p.stem))
-    for rel in ("AGENTS.md", "CLAUDE.md"):
+    seen: set[Path] = set()
+
+    def add(kind: str, p: Path, name: str) -> None:
+        if p.is_file() and p not in seen:
+            seen.add(p)
+            found.append(_entry(kind, repo, p, name))
+
+    for d in _project_dirs("skills"):
+        for p in sorted((repo / d).glob("*/SKILL.md")):
+            add("skill", p, p.parent.name)
+    for d in _project_dirs("commands"):
+        for p in sorted((repo / d).glob("**/*.md")):
+            add("command", p, p.stem)
+    patterns, root_files = _rule_globs()
+    for pattern in patterns:
+        for p in sorted(repo.glob(pattern)):
+            add("rule", p, p.stem)
+    for rel in root_files:
         found.append(_agent_file(repo, rel))
     return [e for e in found if e][:MAX_FILES]
 

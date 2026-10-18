@@ -156,7 +156,7 @@ def setup(out) -> str:
     if d.get("companions_ready"):
         tail += (
             f"\n\nInstalled here but not wired up: {', '.join(d['companions_ready'])}.\n"
-            f"  ddflow companions add --agents {agents[0] if agents else 'claude'}"
+            f"  ddflow companions add --agents {agents[0] if agents else '<agent>'}"
         )
     if d.get("companions_absent"):
         tail += (
