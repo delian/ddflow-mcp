@@ -13,7 +13,7 @@ echo "$@" >> "$FAKE_LOG"
 case "$1" in
   review) echo "Enqueued job 7 for range" ;;
   wait) [ -n "$FAKE_HANG" ] && sleep 30; exit "${FAKE_WAIT_EXIT:-0}" ;;
-  list) [ -n "$FAKE_LIST_EMPTY" ] && { echo "[]"; exit 0; }; echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS:-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
+  list) [ -n "$FAKE_LIST_EMPTY" ] && { echo "[]"; exit 0; }; echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
   show) [ -n "$FAKE_SHOW_FAIL" ] && exit 1; echo "Review for job 7: ${FAKE_VERDICT:-no issues}" ;;
 esac
 """
