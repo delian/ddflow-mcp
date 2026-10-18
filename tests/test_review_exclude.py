@@ -103,3 +103,16 @@ def test_only_excluded_files_changed_records_unavailable_naming_them(repo, tmp_p
     (repo / "x.py").unlink()
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2 and "excluded file(s)" in out.reason
+
+
+def test_a_rename_out_of_an_excluded_tree_keeps_its_new_side():
+    diff = "diff --git a/tests/golden/x.json b/src/x.json\nsimilarity index 90%\nrename from tests/golden/x.json\nrename to src/x.json\n"
+    kept, gone = REX.filter_diff(diff, ["tests/golden/**"])
+    assert kept == diff and not gone.files
+
+
+def test_a_pin_file_is_an_exact_path_not_an_any_depth_pattern():
+    diff = _sec("README.md") + _sec("docs/README.md") + _sec("snaps/a.ambr")
+    kept, gone = REX.filter_diff(diff, [], ["README.md", "snaps/"])
+    assert [p for p, _ in gone.files] == ["README.md", "snaps/a.ambr"]
+    assert "docs/README.md" in kept
