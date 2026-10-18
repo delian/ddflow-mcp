@@ -35,18 +35,19 @@ def test_hash_ids_batch_the_paths_and_pair_each_with_its_id(monkeypatch):
     class R:
         ok = True
 
-        def __init__(self, n):
-            self.out = "\n".join(f"id{k}" for k in range(n))
+        def __init__(self, paths):
+            self.out = "\n".join(f"id-{p}" for p in paths)
 
-    def fake(cwd, *args):
-        n = len(args) - 1  # after "hash-object", "--"
-        calls.append(n)
-        return R(n)
+    def git(cwd, *args):
+        paths = args[2:]  # after "hash-object", "--"
+        calls.append(len(paths))
+        return R(paths)
 
-    monkeypatch.setattr(E.W, "git", lambda cwd, *a: fake(cwd, *a[1:]))
+    monkeypatch.setattr(E.W, "git", git)
     paths = [f"p{n}" for n in range(E._HASH_BATCH * 2 + 5)]
     ids = E._hash_ids(Path("."), paths)
-    assert calls == [E._HASH_BATCH, E._HASH_BATCH, 5] and len(ids) == len(paths)
+    assert calls == [E._HASH_BATCH, E._HASH_BATCH, 5]
+    assert ids == [f"id-{p}" for p in paths]
 
 
 def test_hash_ids_refuse_a_short_or_long_reply_that_git_called_ok(monkeypatch):
