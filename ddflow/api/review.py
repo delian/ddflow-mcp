@@ -1488,6 +1488,8 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     force: bool = False,
     reason: str = "",
     full: bool = False,
+    exclude: str = "",
+    include_pinned: bool = False,
 ) -> O.Outcome:
     """Run the reviewers configured for `gate`, and record the outcome against `item`.
 
@@ -1805,6 +1807,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     force: bool = False,
     reason: str = "",
     full: bool = False,
+    exclude: str = "",
+    include_pinned: bool = False,
     extra_evidence: dict[str, Any] | None = None,
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
@@ -1911,7 +1915,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             exit=O.REFUSED,
             reason=why,
         )
-    diff, extra_evidence, skipped = REX.apply(diff, cfg, repo, say, extra_evidence)
+    diff, extra_evidence, skipped = REX.apply(
+        diff, cfg, repo, say, extra_evidence, it.tags if it else None, exclude, include_pinned
+    )
     if not diff.strip():
         return unavailable(
             f"Empty diff ({how}) — nothing to review"
