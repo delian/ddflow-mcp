@@ -42,9 +42,9 @@ from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
+from ..services.gates import failed_gate as OC
 from ..services.gates import failed_review as GO
 from ..services.gates import measured as R
-from ..services.gates import outcomes as OC
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
