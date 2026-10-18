@@ -3,51 +3,24 @@
 `TOOLS` is generated here from the declarations (`surfaces/declared/`) and the few
 hand-written entries of this package, in the order of `tools/order.py`; `surfaces/mcp.py`
 (the JSON-RPC engine) imports and re-exports it, so `from ddflow.surfaces.mcp import TOOLS`
-keeps working. A new tool is declared, named in `tools/order.py` and put in a tier in
-`tools/tiers.py`.
+keeps working. A new tool is declared in a new `declared/<family>.py` with a `COMMANDS` tuple and its
+`tier`; it is found by convention and listed after the legacy `tools/order.py` entries.
 """
 
 from __future__ import annotations
 
-from itertools import chain
 from typing import Any
 
-from ..declared import cadence as _cadence
-from ..declared import docs as _docs
-from ..declared import export as _export
-from ..declared import flow as _flow
-from ..declared import health as _health
-from ..declared import hooks as _hooks
-from ..declared import knowledge as _knowledge
-from ..declared import lanes as _lanes
-from ..declared import lifecycle as _lifecycle
-from ..declared import memory as _memory
-from ..declared import mergequeue as _mergequeue
-from ..declared import metrics as _metrics
+from ..declared import all_commands
 from ..declared import plan as plan
-from ..declared import queue as _queue
-from ..declared import recordkinds as _recordkinds
-from ..declared import records as _records
-from ..declared import reporting as _reporting
-from ..declared import review as _review
-from ..declared import rules as _rules
-from ..declared import setup as _setup
 from ..registry import by_tool
 from ..vocabulary import provide
 from . import items, operations
 from . import reporting as onboarding
-from .order import TOOL_ORDER
+from .order import TOOL_ORDER as LEGACY_ORDER
 
 #: Every declared command, by tool name.
-DECLARED = by_tool(
-    chain.from_iterable(
-        f.COMMANDS
-        for f in (
-            _knowledge, _records, _queue, _lifecycle, _rules, _review, _setup, _reporting,
-            _hooks, _flow, _recordkinds, _memory, _export, _cadence, _lanes, _docs, _metrics, _mergequeue, _health,
-        )
-    )
-)  # fmt: skip
+DECLARED = by_tool(all_commands(tools=True))
 
 #: The hand-written entries: tools no declaration covers yet (their families migrate them).
 HAND_WRITTEN: dict[str, dict[str, Any]] = {
@@ -58,12 +31,20 @@ HAND_WRITTEN: dict[str, dict[str, Any]] = {
 
 #: Tool surface, in `TOOL_ORDER`. Each entry maps an MCP tool onto the api call that serves it
 #: (description, {property: (json_type, description, required)}, api, payload).
+ORDER: tuple[str, ...] = (
+    *LEGACY_ORDER,
+    *(n for n in (*DECLARED, *HAND_WRITTEN) if n not in LEGACY_ORDER),
+)
+_unknown = [n for n in LEGACY_ORDER if n not in DECLARED and n not in HAND_WRITTEN]
+if len(LEGACY_ORDER) != len(set(LEGACY_ORDER)) or _unknown:
+    raise RuntimeError(
+        f"tools/order.py lists a tool twice, or names one nothing declares: {_unknown}"
+    )
 TOOLS: dict[str, dict[str, Any]] = {
-    name: DECLARED[name].tool_entry() if name in DECLARED else HAND_WRITTEN[name]
-    for name in TOOL_ORDER
+    name: DECLARED[name].tool_entry() if name in DECLARED else HAND_WRITTEN[name] for name in ORDER
 }
-if len(TOOL_ORDER) != len(set(TOOL_ORDER)) or len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
-    raise RuntimeError("tools/order.py lists a tool twice or leaves one out")
+if len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
+    raise RuntimeError("a tool is both declared and hand-written")
 
 #: The add tools: each takes the answer to the duplicate check (`api/_dedupe.py`).
 ADD_TOOLS = (

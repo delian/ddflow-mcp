@@ -9,50 +9,13 @@ lists the knobs in `Config`'s field order, not in the order these modules are im
 from __future__ import annotations
 
 import importlib
+import pkgutil
 
-#: Every section module, in the order their dataclasses sat in the single `config.py` before
-#: the split. Nothing depends on it: `config --explain` follows `Config`'s field order.
-SECTION_NAMES = (
-    "lease",
-    "worktree",
-    "flow",
-    "gates",
-    "lessons",
-    "session",
-    "schedule",
-    "bugs",
-    "memory",
-    "dedupe",
-    "evaluation",
-    "sensitivity",
-    "imports",
-    "companions",
-    "reinstruct",
-    "cadence",
-    "rules",
-    "ci",
-    "prompts",
-    "log",
-    "upgrade",
-    "release",
-    "mcp",
-    "export",
-    "loops",
-    "review",
-    "enforce",
-    "agent",
-    "ids",
-    "triggers",
-    "rag",
-    "lanes",
-    "docs",
-    "metrics",
-    "pins",
-    "plan",
-    "merge_queue",
-    "chore",
-    "hooks",
-    "health",
+#: Every section module: each public module of this package, found by convention. A new
+#: `[section]` is a new file here and no list names it. Nothing depends on the order:
+#: `config --explain` follows `Config`'s field order.
+SECTION_NAMES = tuple(
+    sorted(m.name for m in pkgutil.iter_modules(__path__) if not m.name.startswith("_"))
 )
 
 SECTION_MODULES = tuple(importlib.import_module(f"{__name__}.{n}") for n in SECTION_NAMES)
