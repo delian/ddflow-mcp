@@ -133,7 +133,18 @@ def call(repo: Any, a: dict[str, Any], agent: str) -> O.Outcome:
             )
         args = {
             k: a[k]
-            for k in ("id", "query", "mode", "where", "all", "limit", "reason", "unset", "relation")
+            for k in (
+                "id",
+                "query",
+                "mode",
+                "where",
+                "all",
+                "limit",
+                "reason",
+                "unset",
+                "relation",
+                "check_only",
+            )
             if a.get(k) not in (None, "")
         }
         args |= {"verb": verb, **coerce(kind, a.get("set") or ())}

@@ -197,3 +197,31 @@ def test_the_tool_args_are_kind_verb_id_then_fields():
     assert got["set"] == ["title=t", "@reason=x"]
     got = RK.from_args({"args": ["risk", "list", "@limit=2"]})
     assert "id" not in got and got["set"] == ["@limit=2"]
+
+
+def test_check_only_reaches_dispatch_and_is_refused_where_it_means_nothing(repo):
+    add = {"kind": "stakeholder", "verb": "add", "id": "s9", "set": ["title=Ann", "@check_only"]}
+    out = RK.call(repo, add, "a")
+    assert (
+        out.exit == 0
+        and RK.call(repo, {"kind": "stakeholder", "verb": "list"}, "a").data["total"] == 0
+    )
+    edit = {"kind": "stakeholder", "verb": "edit", "id": "s9", "set": ["title=B", "@check_only"]}
+    out = RK.call(repo, edit, "a")
+    assert out.exit != 0 and "does not take check_only" in out.reason
+
+
+def test_a_project_override_leaves_the_shipped_definition_kind_alone(repo):
+    shipped = D.DEF_KINDS["vendor"]
+    d = repo / KDA.PROJECT_DIR
+    d.mkdir(parents=True)
+    (d / "vendor.toml").write_text(
+        'name = "vendor"\nsummary = "our vendor"\n[[field]]\nname = "title"\nrequired = true\n'
+    )
+    kept = R.KINDS["vendor"]
+    try:
+        KDA.load_project(repo)
+        assert D.DEF_KINDS["vendor"] == shipped  # add_kind never redefines an existing kind
+    finally:
+        R.forget("vendor")
+        R.declare(kept)
