@@ -44,6 +44,7 @@ _OLD_BEGIN = re.compile(
 )
 _OLD_END = re.compile(rf"<!-- ddflow:end doc=(?P<doc>{_NAME}) -->")
 _BARE_BEGIN = re.compile(r"<!-- DDFLOW:BEGIN\b[^>]*-->")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _BARE_END = re.compile(r"<!-- DDFLOW:END -->")
 
 
@@ -116,8 +117,13 @@ def parse(text: str, *, bare_doc: str = "") -> list[Region]:
     (doc, name), a nested or unbalanced pair, or an end that names another region."""
     found: list[Region] = []
     cur: tuple[_Mark, int, int] | None = None  # the open begin, its offset, its body offset
+    fence = ""  # the opening fence while inside a code block: marker examples there are text
     for start, line, nxt in _lines(text):
-        mark = _classify(line, bare_doc)
+        f = _FENCE.match(line)
+        if f and (not fence or f.group(1)[0] == fence[0]):
+            fence = "" if fence else f.group(1)
+            continue
+        mark = None if fence else _classify(line, bare_doc)
         if mark is None:
             continue
         if mark.kind == "begin":
