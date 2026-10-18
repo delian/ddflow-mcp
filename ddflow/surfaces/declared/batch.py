@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 
+from ...api import batch as B
 from ...core import outcome as O
 from ..registry import CliPolicy, Command, Param
 
@@ -38,18 +39,14 @@ def _entries(a: dict) -> list | O.Outcome:
 
 
 def _batch(repo, a, agent):
-    from ...api import batch
-
     entries = _entries(a)
     if isinstance(entries, O.Outcome):
         return entries
-    return batch.apply(repo, entries, dry_run=bool(a.get("dry_run")), agent=agent)
+    return B.apply(repo, entries, dry_run=bool(a.get("dry_run")), agent=agent)
 
 
 def _fold(repo, a, agent):
-    from ...api import batch
-
-    return batch.fold(
+    return B.fold(
         repo,
         a["dup"],
         a["keep"],
