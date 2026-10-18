@@ -75,14 +75,26 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+    fields = plan_edit(cfg, st, it, edit)
+    if isinstance(fields, O.Outcome):
+        return fields
+    if edit.worktree is not None:
+        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
+    return _record_update(log, cfg, it, fields, queue=edit.queue)
+
+
+def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
+    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
+    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
+    plans many edits before recording any (DX-task-fold)."""
     if edit.line:
         bad = _bad_line(cfg, edit.line)
         if bad:
-            return O.failed("item.updated", bad, id=item)
+            return O.failed("item.updated", bad, id=it.id)
     if edit.line is not None and edit.line != it.line:
         moved = _line_frozen(st, it)
         if moved:
-            return O.refused("item.updated", moved, id=item)
+            return O.refused("item.updated", moved, id=it.id)
 
     fields = _edit_fields(edit)
     if edit.append_body:
@@ -95,20 +107,18 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     _adjust_globs(it, edit, fields)
     unchanged = _nothing_to_change(it, edit, fields)
     if unchanged:
-        return O.nothing("item.updated", unchanged, id=item)
+        return O.nothing("item.updated", unchanged, id=it.id)
     bad = GS.problem(fields.get("globs", [])) or SCH.problem(fields.get("resources", []))
     if bad:
-        return O.failed("item.updated", f"{item}: {bad}", id=item)
+        return O.failed("item.updated", f"{it.id}: {bad}", id=it.id)
     if not fields and edit.worktree is None:
         return O.nothing(
             "item.updated",
             "nothing to change: every field was left unset. Pass a value to set one, "
             "or an empty list to clear it.",
-            id=item,
+            id=it.id,
         )
-    if edit.worktree is not None:
-        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
-    return _record_update(log, cfg, it, fields, queue=edit.queue)
+    return fields
 
 
 def _held_globs(it) -> list[str]:

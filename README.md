@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=1e47610da629 -->
-<details><summary>All 84 commands</summary>
+<!-- ddflow:begin README/commands sha=af608aada4d8 -->
+<details><summary>All 85 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -552,6 +552,7 @@ needs a line written by hand here.
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
 | `ddflow update` | change an item's fields |
+| `ddflow batch` | apply many item edits in one all-or-nothing transaction |
 | `ddflow chore` | commit or approve chore files (no reviewer) |
 | `ddflow plan` | check, file (proposed) and confirm a plan |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
@@ -5519,8 +5520,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=c9cbcac5c218 -->
-<details><summary>All 120 MCP tools: 32 in the `core` tier, 49 more in `standard`, 39 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=fe1497efdc68 -->
+<details><summary>All 122 MCP tools: 32 in the `core` tier, 49 more in `standard`, 41 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5557,7 +5558,9 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_resolve` | standard | Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a… |
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
 | Shaping the work | `ddflow_task_add` | core | Add a task to a phase. |
+| Shaping the work | `ddflow_task_fold` | all | Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's body is appended to keep's, its… |
 | Shaping the work | `ddflow_update` | core | Change an item's fields. |
+| Shaping the work | `ddflow_batch` | all | Apply many field edits in ONE locked transaction: a JSON array of {id, needs, add_needs, remove_needs, tags… |
 | Doing the work | `ddflow_abandon` | standard | Stop work on an item without completing it, with a reason. |
 | Doing the work | `ddflow_block` | standard | Mark an item blocked on something outside the queue — a decision, an upstream outage, an operator question. |
 | Doing the work | `ddflow_claim` | core | Lease an item and create its isolated git worktree. |

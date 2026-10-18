@@ -104,6 +104,7 @@ HOOKS: tuple[HookSpec, ...] = (
         MATCHER,
         "every session starts with the ddflow brief",
         fail_open=False,
+        run="run session_start --harness claude",
     ),
     HookSpec(
         "claude",
@@ -113,9 +114,16 @@ HOOKS: tuple[HookSpec, ...] = (
         None,
         # Not "every operator prompt is recorded", which it said until Ba0febd9946.
         "the session's state is recorded before every compaction",
+        run="run pre_compact --harness claude",
     ),
     HookSpec(
-        "claude", "prompt", PROMPT_EVENT, CLAUDE_SETTINGS, None, "every operator prompt is recorded"
+        "claude",
+        "prompt",
+        PROMPT_EVENT,
+        CLAUDE_SETTINGS,
+        None,
+        "every operator prompt is recorded",
+        run="run prompt --harness claude",
     ),
     HookSpec(
         "claude",
@@ -134,7 +142,7 @@ HOOKS: tuple[HookSpec, ...] = (
         GEMINI_SETTINGS,
         None,
         "every operator prompt is recorded",
-        extra="--gemini",
+        run="run prompt --harness gemini",
     ),
 )
 
@@ -173,6 +181,28 @@ def uninstall_spec(repo: Path, h: HookSpec) -> str:
 
 def state_spec(repo: Path, h: HookSpec) -> tuple[bool | None, str]:
     return state(repo, event=h.event, marker=h.marker, rel=h.file)
+
+
+def stale(repo: Path, h: HookSpec) -> bool:
+    """Is our hook there, but written as an older ddflow wrote it (``hooks session-start``,
+    ``hooks prompt --gemini``) instead of ``hooks run <event> --harness <id>``?
+
+    Both forms work; the old subcommands are kept as aliases (D-compat-r2). The new form
+    is the one every agent shares, so an upgrade moves the line (`install_spec` rewrites it
+    in place, keeping the operator's other hooks).
+    """
+    path = settings_path(repo, h.file)
+    try:
+        data = _read(path)
+        lines = [
+            str(x.get("command", ""))
+            for g in _groups(data, h.event)
+            for x in _hooks_of(g, path)
+            if _ours(x, h.marker)
+        ]
+    except SettingsError:
+        return False
+    return bool(lines) and not any(h.subcommand in line for line in lines)
 
 
 def settings_path(repo: Path, rel: str = CLAUDE_SETTINGS) -> Path:
