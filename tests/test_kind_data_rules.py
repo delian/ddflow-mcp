@@ -238,7 +238,7 @@ def test_show_renders_status_as_the_definition_status(kinds, repo):
         ),
         (
             "[[validator]]\nfield='n'\npattern='^1'\n[[field]]\nname='title'\n[[field]]\nname='n'\ntype='integer'",
-            "validator field 'n'",
+            "validator text check field 'n'",
         ),
         (
             "[lifecycle]\nfield='n'\ninitial='a'\ntransitions=5\n[[field]]\nname='n'",
@@ -251,5 +251,29 @@ def test_rules_that_cannot_work_are_refused(extra, message):
     try:
         with pytest.raises((ValueError, KD.KindDataError), match=message):
             KDA.parse_kind(head + extra)
+    finally:
+        D.DEF_KINDS.pop("zz", None)
+
+
+def test_a_field_called_status_wins_in_the_template(repo):
+    text = (
+        'name = "bugx"\nsummary = "b"\nrender = "{id} is {status}"\n'
+        "[lifecycle]\nfield = 'status'\ninitial = 'new'\n[lifecycle.transitions]\nnew = ['fixed']\n"
+        "[[field]]\nname = 'title'\n[[field]]\nname = 'status'\n"
+    )
+    try:
+        bug = KDA.parse_kind(text)
+        R.record_add(repo, bug, "b1", {"title": "t"})
+        R.record_edit(repo, bug, "b1", {"status": "fixed"})
+        assert R.record_show(repo, bug, "b1").data["rendered"] == "b1 is fixed"
+    finally:
+        D.DEF_KINDS.pop("bugx", None)
+
+
+def test_a_bound_and_a_text_check_on_one_field_cannot_both_work():
+    extra = "[[validator]]\nfield='n'\nmin=1\npattern='^1'\n[[field]]\nname='title'\n[[field]]\nname='n'\ntype='integer'"
+    try:
+        with pytest.raises(ValueError, match="validator text check field 'n'"):
+            KDA.parse_kind('name = "zz"\nsummary = "s"\n' + extra)
     finally:
         D.DEF_KINDS.pop("zz", None)
