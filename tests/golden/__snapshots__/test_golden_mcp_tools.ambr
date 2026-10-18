@@ -2023,7 +2023,7 @@
          },
          "apply": {
           "type": "boolean",
-          "description": "Act on the proposal (preflight/legacy/memory)."
+          "description": "Act on the proposal (preflight/legacy/memory/harness: register, approve, hooks)."
          },
          "accept": {
           "type": "array",

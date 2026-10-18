@@ -66,3 +66,51 @@ def test_every_row_names_the_best_ladder_level(repo):
 def test_an_unknown_agent_is_refused_with_the_list(repo):
     out = A.onboard(repo, stage="harness", accept=["nope"])
     assert out.exit == 1 and "claude" in out.reason
+
+
+def _registered(repo):
+    (repo / ".mcp.json").write_text(json.dumps({"mcpServers": {"ddflow": {"command": "x"}}}))
+    (repo / ".claude").mkdir(exist_ok=True)
+
+
+def test_apply_with_a_step_still_todo_fails(repo):
+    out = A.onboard(repo, stage="harness", accept=["claude"], apply=True)
+    assert _steps(out, "claude")["mcp"]["status"] == "todo"
+    assert out.exit == 1
+
+
+def test_a_non_list_approval_key_is_unknown_not_done_when_proposing(repo):
+    _registered(repo)
+    (repo / ".claude/settings.json").write_text(json.dumps({"enabledMcpjsonServers": "ddflow"}))
+    out = A.onboard(repo, stage="harness", accept=["claude"])
+    assert _steps(out, "claude")["approve"]["status"] == "unknown"
+
+
+def test_a_denied_server_is_refused_when_only_proposing(repo):
+    _registered(repo)
+    (repo / ".claude/settings.json").write_text(
+        json.dumps({"enabledMcpjsonServers": ["ddflow"], "disabledMcpjsonServers": ["ddflow"]})
+    )
+    out = A.onboard(repo, stage="harness", accept=["claude"])
+    assert _steps(out, "claude")["approve"]["status"] == "refused"
+
+
+def test_project_servers_reads_a_toml_shape(repo):
+    from ddflow.services import harness as HS
+    from ddflow.services.adopt import SHAPE_TOML
+
+    (repo / "config.toml").write_text('[mcp_servers.ddflow]\ncommand = "x"\n')
+    assert "ddflow" in HS.project_servers(repo, mcp_rel="config.toml", shape=SHAPE_TOML)
+
+
+def test_a_deny_key_without_an_approval_file_is_a_descriptor_error():
+    from pathlib import Path
+
+    import pytest
+
+    text = (Path(HR.__file__).parent.parent / "harnesses" / "claude.toml").read_text()
+    text = text.replace('approve_file = ".claude/settings.json"\n', "").replace(
+        'approve_key = "enabledMcpjsonServers"\n', ""
+    )
+    with pytest.raises(HR.DescriptorError, match="deny_key"):
+        HR.parse(text, "claude")

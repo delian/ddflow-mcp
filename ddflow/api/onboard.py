@@ -235,7 +235,7 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
         lines += [f"  {s['step']:<8} {s['status']:<8} {s['detail']}" for s in steps]
     data = {"harnesses": rows, "text": "\n".join(lines)}
     open_ = [s for r in rows for s in r["steps"] if s["status"] in ("todo", "refused", "unknown")]
-    if apply and any(s["status"] in ("refused", "unknown") for s in open_):
+    if apply and open_:
         return O.failed("onboard.harness", f"{len(open_)} step(s) not done", **data)
     return O.ok("onboard.harness", **data)
 

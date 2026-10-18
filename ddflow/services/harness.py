@@ -52,6 +52,12 @@ def project_servers(
     path = Path(repo) / mcp_rel
     if not path.is_file():
         return {}
+    if shape == SHAPE_TOML:
+        try:
+            servers = tomllib.loads(path.read_text(encoding="utf-8")).get("mcp_servers", {})
+        except (OSError, ValueError) as exc:
+            raise HarnessError(f"{mcp_rel} could not be read ({exc}); fix it by hand") from exc
+        return dict(servers) if isinstance(servers, dict) else {}
     data = read_json(path)
     if isinstance(data, Unreadable) and data.kind == "not-object":
         raise HarnessError(f"{mcp_rel} is not a JSON object; fix it by hand")
@@ -178,8 +184,21 @@ def _approval(repo: Path, h: Any, registered: bool | None, apply: bool) -> dict[
         )
     try:
         if not apply:
-            data = _read(Path(repo) / m.approve_file)
-            on = "ddflow" in (data.get(m.approve_key) or [])
+            path = Path(repo) / m.approve_file
+            data = _read(path)
+            keys = [m.approve_key, *([m.deny_key] if m.deny_key else [])]
+            for key in keys:
+                value = data.get(key, [])
+                if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                    raise SettingsError(f"{path}: `{key}` is not a list of names")
+            if m.deny_key and "ddflow" in data.get(m.deny_key, []):
+                return _step(
+                    "approve",
+                    "refused",
+                    f"ddflow is listed in {m.deny_key} in {m.approve_file}, which rejects it "
+                    "in every permission mode; remove it there first",
+                )
+            on = "ddflow" in data.get(m.approve_key, [])
             return _step(
                 "approve", "done" if on else "todo", f"{m.approve_key} in {m.approve_file}"
             )
