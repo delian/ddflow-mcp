@@ -30,3 +30,29 @@ def test_the_run_flag_beats_the_item_and_none_leaves_nothing_out(monkeypatch):
 
 def test_include_pinned_sends_the_pin_files(monkeypatch):
     assert _globs(monkeypatch, include_pinned=True)[1] == []
+
+
+def test_a_run_override_reaches_the_reviewer(repo, tmp_path):
+    from test_review_exclude import _setup
+
+    import ddflow.api.review as api
+
+    seen = _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1", exclude="none")
+    assert "GENERATED_MARK" in seen.read_text()  # the default would have left it out
+    seen.unlink()
+    api.review(repo, gate="critic", item="T1", exclude="x.py", force=True, reason="again")
+    sent = seen.read_text()
+    assert "x = 1" not in sent and "GENERATED_MARK" in sent  # replaces the config globs
+
+
+def test_an_item_tag_and_include_pinned_reach_the_reviewer(repo, tmp_path):
+    from conftest import run_cli
+    from test_review_exclude import _setup
+
+    import ddflow.api.review as api
+
+    seen = _setup(repo, tmp_path, "[review]\nexclude_globs = []\n")
+    run_cli(repo, "update", "T1", "--add-tags", "review-exclude:x.py")
+    api.review(repo, gate="critic", item="T1")
+    assert "x = 1" not in seen.read_text()
