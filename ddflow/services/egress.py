@@ -34,5 +34,9 @@ class Egress:
         return not self.vocab.may_send(label, self.cfg.model_allowed)
 
     def withholds_def(self, door: str, st: Any, def_kind: str, rid: str) -> bool:
+        """Is the stored record withheld? One the folded state cannot resolve (a stale index
+        row) is withheld: its label is unknown, so it fails closed."""
+        if door not in self.cfg.egress_doors:
+            return False
         rec = st.defs.get(D.key(def_kind, rid))
-        return rec is not None and self.withholds(door, dict(rec.fields))
+        return rec is None or self.withholds(door, dict(rec.fields))
