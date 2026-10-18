@@ -16,13 +16,16 @@ children index, so a log of thousands of items renders in milliseconds.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from ...config import Config
 from ...core import progress
+from ...core.flow import effective_line
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, State
-from ...core.schedule import dep_status, inherited_deps
+from ...core.schedule import critical_path, dep_status, inherited_deps
 from . import registry
+from . import roadmap_calc as RC
 from .frame import one_line
 from .query import ExportError, Query
 
@@ -31,7 +34,6 @@ _LANE_LABELS = (
     ("next", "Next", "ready to start"),
     ("later", "Later", "waiting on something"),
 )
-_LANES = tuple(k for k, _, _ in _LANE_LABELS)
 
 
 def waits_on(state: State, it: Item, cfg: Config) -> list[str]:
@@ -54,58 +56,118 @@ def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
     }
 
 
-def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
-    if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
-        raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
-    # The project's config when the Query has a repo; the shipped defaults otherwise.
-    cfg = Config.load(q.repo) if q.repo is not None else Config()
-    lanes: dict[str, list[dict[str, Any]]] = {k: [] for k in _LANES}
-    done = 0
-    open_tasks = 0
+def _settings(cfg: Config) -> tuple[list[str], int, int, bool]:
+    t = cfg.export.table("roadmap")
+    hide = t.get("hide", list(RC.DEFAULT_HIDE))
+    hide = [hide] if isinstance(hide, str) else list(hide)
+    return (
+        hide,
+        int(t.get("next", RC.DEFAULT_NEXT)),
+        int(t.get("tasks", RC.DEFAULT_TASKS)),
+        bool(t.get("show_hidden", False)),
+    )
+
+
+def _phase_rows(
+    q: Query, f: registry.Filters, cfg: Config, hide: list[str]
+) -> tuple[list[dict], dict]:
+    """Every listed phase as a row (lane and rank set), and ``{done, hidden, open}`` counts."""
+    seen = {"done": 0, "hidden": 0, "open": 0}
+    rows: list[dict[str, Any]] = []
     for p in q.phases():
         if f.phase and p.id != f.phase:
             continue
+        if RC.hidden(p.id, p.tags, hide):
+            seen["hidden"] += 1
+            continue
         under = q.tasks_under(p.id)
         n = progress.tally(under)  # the one phase rule: every depth, abandoned out
-        tasks = [t for t in under if t.state != ABANDONED]
         if p.state == DONE and n.done == n.live:
-            done += 1
+            seen["done"] += 1
             continue
-        rows = [_task_row(q, t, cfg) for t in tasks if t.state != DONE]
-        open_tasks += len(rows)
-        own_waits = waits_on(q.state, p, cfg) if not rows else []
-        # tasks_under is in item_key order (priority, id): the lane's own order is stable.
-        if any(r["status"] in (RUNNING, REVIEW) for r in rows):
-            lane = "now"
-        elif any(r["status"] == "ready" for r in rows):
-            lane = "next"
-        elif not rows and not own_waits:
-            lane = "next"  # an empty phase nothing waits on is not blocked
-        else:
-            lane = "later"
-        lanes[lane].append(
+        open_rows = [_task_row(q, t, cfg) for t in under if t.state not in (ABANDONED, DONE)]
+        seen["open"] += len(open_rows)
+        own = waits_on(q.state, p, cfg)
+        blocked_by = sorted({w for r in open_rows for w in r["waits_on"]} | set(own))
+        rows.append(
             {
                 "id": p.id,
                 "title": one_line(p.title, 100),
                 "done": n.done,
                 "total": n.live,
-                "tasks": rows,
-                "waits_on": own_waits,
+                "percent": RC.percent(n.done, n.live),
+                "counts": RC.counts(open_rows, n.done),
+                "line": effective_line(q.state, p),
+                "waits_on": own if not open_rows else [],
+                "blocked_by": blocked_by
+                if not any(r["status"] == "ready" for r in open_rows)
+                else [],
+                "ready": False,
+                "lane": RC.lane_of(open_rows, own if not open_rows else []),
+                "all_tasks": open_rows,
             }
         )
+    return rows, seen
+
+
+def _phase_before(q: Query, cfg: Config, ids: set[str]) -> Callable[[str], set[str]]:
+    """The phases a phase waits on: the owners of the unmet dependencies of it and its tasks."""
+    owner: dict[str, str] = {}
+    for pid in ids:
+        owner[pid] = pid
+        for t in q.tasks_under(pid):
+            owner[t.id] = pid
+
+    def before(pid: str) -> set[str]:
+        waits = set(waits_on(q.state, q.state.items[pid], cfg))
+        for t in q.tasks_under(pid):
+            waits |= set(waits_on(q.state, t, cfg))
+        return {owner[w] for w in waits if w in owner}
+
+    return before
+
+
+def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
+    if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
+        raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
+    # The project's config when the Query has a repo; the shipped defaults otherwise.
+    cfg = Config.load(q.repo) if q.repo is not None else Config()
+    hide, next_n, cap, show_hidden = _settings(cfg)
+    rows, seen = _phase_rows(q, f, cfg, [] if show_hidden else hide)
+    by_id = {r["id"]: r for r in rows}
+    key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
+    ranked = RC.order(by_id, _phase_before(q, cfg, set(by_id)), key)
+    chain = critical_path(q.state, f.phase)
+    path = set(chain)
+    for rank, pid in enumerate(ranked):
+        r = by_id[pid]
+        r["rank"] = rank
+        r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
+    phases = [by_id[i] for i in ranked]
+    now, nxt, later = RC.split_lanes(phases, next_n)
+    for lane, listed in (("now", now), ("next", nxt), ("later", later)):
+        for r in listed:
+            tasks = r.pop("all_tasks")
+            r["tasks"], r["more_tasks"] = (
+                ([], len(tasks)) if lane == "later" else RC.cap_tasks(tasks, cap)
+            )
     cut = f.limit or 0
-    hidden = 0
+    omitted = 0
     if cut:  # --limit bounds the phases listed per lane; the counts stay true
-        for k in _LANES:
-            hidden += max(0, len(lanes[k]) - cut)
-            lanes[k] = lanes[k][:cut]
+        omitted = sum(max(0, len(x) - cut) for x in (now, nxt, later))
+        now, nxt, later = now[:cut], nxt[:cut], later[:cut]
+    lanes = [
+        {"label": label, "blurb": blurb, "phases": listed}
+        for (_, label, blurb), listed in zip(_LANE_LABELS, (now, nxt, later), strict=True)
+    ]
     return {
-        "lanes": [
-            {"label": label, "blurb": blurb, "phases": lanes[k]} for k, label, blurb in _LANE_LABELS
-        ],
-        "done_phases": done,
-        "hidden_phases": hidden,
-        "open_tasks": open_tasks,
+        "lanes": lanes,
+        "done_phases": seen["done"],
+        "hidden_phases": omitted,
+        "hidden_batches": seen["hidden"],
+        "open_tasks": seen["open"],
+        "critical_path": [{"id": i, "title": one_line(q.state.items[i].title, 80)} for i in chain],
+        "release_lines": RC.by_line(phases),
     }
 
 
@@ -116,6 +178,7 @@ registry.register(
         data=_data,
         update_mode=registry.WHOLE,
         filters=frozenset({"limit", "phase"}),
+        schema_version=2,
         title="Roadmap: phases in Now / Next / Later lanes with progress",
     )
 )

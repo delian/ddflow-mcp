@@ -1,6 +1,10 @@
 # Roadmap
 
-{{ open_tasks }} open tasks. {{ done_phases }} phases complete (not listed).
+{{ open_tasks }} open tasks. {{ done_phases }} phases complete (not listed).{% if hidden_batches %} {{ hidden_batches }} internal batches hidden.{% endif %}
+{% if critical_path %}
+
+Critical path: {% for s in critical_path %}`{{ s.id }}`{% if not loop.last %} -> {% endif %}{% endfor %}.
+{% endif %}
 {% for lane in lanes %}
 
 ## {{ lane.label }} ({{ lane.blurb }})
@@ -11,9 +15,14 @@ None.
 {% for p in lane.phases %}
 
 ### {{ p.id }}: {{ p.title | md_escape }} ({{ p.done }}/{{ p.total }}) {{ p.done | bar(p.total) }}
+
+{{ p.percent }}%{% for k, v in p.counts.items() %}{% if loop.first %}: {% endif %}{{ v }} {{ k }}{% if not loop.last %}, {% endif %}{% endfor %}{% if p.line %}; line {{ p.line }}{% endif %}{% if p.on_critical_path %}; on the critical path{% endif %}{% if p.ready %}; ready, beyond Next{% endif %}.
 {% if p.waits_on %}
 
 Waits on {{ p.waits_on | join(", ") }}.
+{% elif p.blocked_by %}
+
+Blocked by {{ p.blocked_by | join(", ") }}.
 {% endif %}
 {% if p.tasks %}
 
@@ -22,8 +31,21 @@ Waits on {{ p.waits_on | join(", ") }}.
 - `{{ t.id }}` {{ t.title | md_escape }}{% if t.status != "ready" %} _({{ t.status }}{% if t.holder %}, {{ t.holder }}{% endif %}{% if t.waits_on %}: waits on {{ t.waits_on | join(", ") }}{% endif %})_{% endif %}
 
 {% endfor %}
+{% if p.more_tasks %}
+{% if p.tasks %}
+{% endif %}
+{{ p.more_tasks }} more open tasks not listed.
+{% endif %}
 {% endfor %}
 {% endfor %}
+{% if release_lines %}
+
+## Release lines
+{% for l in release_lines %}
+
+- {{ l.line or "(current)" }}: {{ l.done }}/{{ l.total }} ({{ l.percent }}%), phases {{ l.phases | join(", ") }}
+{% endfor %}
+{% endif %}
 {% if hidden_phases %}
 
 {{ hidden_phases }} more phases not listed (--limit).
