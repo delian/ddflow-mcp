@@ -95,16 +95,18 @@ def load(path: Path = FIXTURE) -> dict[str, Any]:
 
 
 def read_log(paths: Iterable[Path], *, lenient: bool = False) -> list[Event]:
-    """Every event of the shards. ``lenient`` skips a line that does not decode (a shard
-    another process is still writing) and says so on stderr, instead of dying on it."""
+    """Every event of the shards. ``lenient`` skips a line that is not JSON (a shard another
+    process is still writing: a torn line or a cut multi-byte character) and says so on
+    stderr, instead of dying on it. A line that parses but is not an event still raises."""
     out: list[Event] = []
     for p in paths:
-        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+        text = p.read_text(encoding="utf-8", errors="replace" if lenient else "strict")
+        for n, line in enumerate(text.splitlines(), 1):
             if not line.strip():
                 continue
             try:
                 out.append(Event.from_json(line))
-            except (ValueError, KeyError, TypeError) as exc:
+            except json.JSONDecodeError as exc:
                 if not lenient:
                     raise
                 print(f"skipped {p.name}:{n}, not an event ({exc})", file=sys.stderr)

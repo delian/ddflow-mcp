@@ -25,18 +25,6 @@ def _load(name: str, path: Path):
 EK = _load("_event_kind_script", ROOT / "scripts" / "event_kind.py")
 
 
-def test_every_kind_of_the_tree_has_all_five_edits(capsys) -> None:
-    assert EK.main(["check"]) == 0
-    assert "nothing missing" in capsys.readouterr().out
-
-
-def test_a_kind_with_no_edits_lists_all_of_them(capsys) -> None:
-    assert EK.main(["check", "x.new"]) == 1
-    out = capsys.readouterr().out
-    for part in ("handler", "fixture", "coherence", "fragment"):
-        assert f"x.new: {part}:" in out, out
-
-
 @pytest.fixture
 def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for rel in (
@@ -53,6 +41,28 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(EK, "FRAGMENTS", tmp_path / "frag")
     monkeypatch.setattr(EK, "ROOT", tmp_path)
     return tmp_path
+
+
+def test_every_kind_of_the_tree_has_all_five_edits(capsys) -> None:
+    assert EK.main(["check"]) == 0
+    assert "nothing missing" in capsys.readouterr().out
+
+
+def test_a_kind_with_no_edits_lists_all_of_them(tree: Path, capsys) -> None:
+    fx = tree / "tests/fixtures/event_kinds.json"
+    snap = json.loads(fx.read_text())
+    snap["kinds"]["x.new"] = {"v": 1, "fields": {"zz": ["str"]}}
+    fx.write_text(json.dumps(snap))
+    assert EK.main(["check", "x.new"]) == 1
+    out = capsys.readouterr().out
+    for part in ("handler", "redact", "coherence", "fragment"):
+        assert f"x.new: {part}:" in out, out
+    assert "fixture:" not in out
+
+
+def test_a_kind_unknown_everywhere_lacks_its_fixture(capsys) -> None:
+    EK.main(["check", "x.new"])
+    assert "x.new: fixture:" in capsys.readouterr().out
 
 
 def test_add_writes_the_data_edits_and_leaves_the_handler(tree: Path, capsys) -> None:
@@ -91,3 +101,36 @@ def test_write_skips_a_half_written_shard(tmp_path: Path, capsys) -> None:
     assert "skipped a.jsonl:2" in capsys.readouterr().err
     with pytest.raises(ValueError):
         up.read_log([shard])
+
+
+def test_a_refused_add_writes_nothing(tree: Path) -> None:
+    before = {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
+    for bad in (["--exempt", "too short"], ["--lookup", "nowhy"], ["--field", "a=bogus"]):
+        with pytest.raises(SystemExit):
+            EK.main(["add", "x.new", "--why", "w", "--field", "n=int", *bad])
+    assert before == {p: p.read_text() for p in tree.rglob("*") if p.is_file()}
+
+
+def test_a_repeated_lookup_is_written_once(tree: Path) -> None:
+    EK.main(["add", "x.new", "--why", "w", "--lookup", "f=one", "--lookup", "f=two"])
+    assert (tree / "ddflow/core/redact.py").read_text().count('("x.new", "f")') == 1
+
+
+def test_a_kind_with_a_text_entry_is_not_given_a_second(tree: Path) -> None:
+    with pytest.raises(SystemExit):
+        EK.main(["add", "bug.found", "--why", "w", "--text", "detail"])
+
+
+def test_write_still_raises_on_a_line_that_is_json_but_not_an_event(tmp_path: Path) -> None:
+    up = _load("_event_upcasters_test2", ROOT / "tests" / "test_event_upcasters.py")
+    shard = tmp_path / "a.jsonl"
+    shard.write_text('{"data": 5}\n')
+    with pytest.raises(TypeError):
+        up.read_log([shard], lenient=True)
+
+
+def test_write_survives_a_cut_multibyte_character(tmp_path: Path) -> None:
+    up = _load("_event_upcasters_test3", ROOT / "tests" / "test_event_upcasters.py")
+    shard = tmp_path / "a.jsonl"
+    shard.write_bytes(b'{"id": "\xe2\x82')
+    assert up.read_log([shard], lenient=True) == []

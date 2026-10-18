@@ -136,8 +136,8 @@ def _q(s: str) -> str:
 
 
 def add(kind: str, args: argparse.Namespace) -> list[str]:
-    """Apply the edits for `kind`; the lines say what was done."""
-    done: list[str] = []
+    """Apply the edits for `kind`; the lines say what was done. Every argument is checked
+    before the first file is written, so a refusal leaves the tree as it was."""
     snap = json.loads(FIXTURE.read_text(encoding="utf-8"))
     fields = {}
     for spec in args.field:
@@ -146,30 +146,37 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
         if not name or not ts or not set(ts) <= TYPES:
             raise SystemExit(f"--field {spec!r}: want NAME=TYPE[,TYPE], types {sorted(TYPES)}")
         fields[name] = ts
-    if kind not in snap["kinds"]:
-        snap["kinds"][kind] = {"v": 1, "fields": dict(sorted(fields.items()))}
-        snap["kinds"] = dict(sorted(snap["kinds"].items()))
-        FIXTURE.write_text(_dump(snap), encoding="utf-8")
-        done.append(f"fixture: added {kind} with {len(fields)} field(s)")
     text_fields, taken, names, _ = _redact()
-    text = [n for n in args.text if n not in text_fields.get(kind, ())]
-    if text:
-        _insert(REDACT, "LOG_TEXT_FIELDS:", [f"    {_q(kind)}: ({', '.join(map(_q, text))},),"])
-        done.append(f"redact: LOG_TEXT_FIELDS {kind} {text}")
-    pairs = []
+    text = list(dict.fromkeys(n for n in args.text if n not in text_fields.get(kind, ())))
+    if text and kind in text_fields:
+        raise SystemExit(f"--text: {kind} already has a LOG_TEXT_FIELDS entry; edit it by hand")
+    pairs: dict[str, str] = {}
     for spec in args.lookup:
         name, _, why = spec.partition("=")
         if not name or not why:
             raise SystemExit(f"--lookup {spec!r}: want NAME=WHY")
         if (kind, name) not in taken and name not in names:
-            pairs.append(f"    ({_q(kind)}, {_q(name)}): {_q(why)},")
-    if pairs:
-        _insert(REDACT, "LOG_VERBATIM_FIELDS:", pairs)
-        done.append(f"redact: {len(pairs)} lookup field(s)")
+            pairs.setdefault(name, why)
     checked, exempt = _coherence()
+    if args.exempt and kind not in checked | exempt and len(args.exempt) <= MIN_REASON:
+        raise SystemExit(f"--exempt: say why in more than {MIN_REASON} characters")
+    done: list[str] = []
+    if kind not in snap["kinds"]:
+        snap["kinds"][kind] = {"v": 1, "fields": dict(sorted(fields.items()))}
+        snap["kinds"] = dict(sorted(snap["kinds"].items()))
+        FIXTURE.write_text(_dump(snap), encoding="utf-8")
+        done.append(f"fixture: added {kind} with {len(fields)} field(s)")
+    if text:
+        _insert(REDACT, "LOG_TEXT_FIELDS:", [f"    {_q(kind)}: ({', '.join(map(_q, text))},),"])
+        done.append(f"redact: LOG_TEXT_FIELDS {kind} {text}")
+    if pairs:
+        _insert(
+            REDACT,
+            "LOG_VERBATIM_FIELDS:",
+            [f"    ({_q(kind)}, {_q(n)}): {_q(w)}," for n, w in pairs.items()],
+        )
+        done.append(f"redact: {len(pairs)} lookup field(s)")
     if args.exempt and kind not in checked | exempt:
-        if len(args.exempt) <= MIN_REASON:
-            raise SystemExit("--exempt: say why in more than 20 characters")
         _insert(COHERENCE, "EXEMPT: dict[str, str] = {", [f"    {_q(kind)}: {_q(args.exempt)},"])
         done.append("coherence: EXEMPT")
     frag = FRAGMENTS / f"event_kind_added.{kind}.toml"
