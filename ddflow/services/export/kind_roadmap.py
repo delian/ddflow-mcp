@@ -102,7 +102,7 @@ def _phase_rows(
                 "blocked_by": blocked_by
                 if not any(r["status"] == "ready" for r in open_rows)
                 else [],
-                "ready": False,
+                "ready": False,  # True only for a ready phase left in Later (split_lanes)
                 "lane": RC.lane_of(open_rows, own if not open_rows else []),
                 "all_tasks": open_rows,
             }

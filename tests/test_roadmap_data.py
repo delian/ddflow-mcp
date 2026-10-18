@@ -122,3 +122,23 @@ def test_the_roadmap_keys_belong_to_the_roadmap_table_only():
 
     assert {"hide", "next", "tasks", "show_hidden"} <= export_table_keys("roadmap")
     assert not {"hide", "next", "tasks", "show_hidden"} & export_table_keys("changelog")
+
+
+def test_a_task_waiting_on_a_sibling_does_not_make_its_phase_wait_on_itself():
+    g = Log()
+    g.phase("P", "own", 10)
+    g.task("A", "P", "first")
+    g.task("B", "P", "second", needs=["A"])
+    g.phase("Q", "next", 20)
+    g.task("C", "Q", "x")
+    d = data(g)
+    assert [p["id"] for lane in d["lanes"] for p in lane["phases"]][:2] == ["P", "Q"]
+
+
+def test_only_ready_phases_beyond_next_carry_the_ready_marker():
+    g = Log()
+    for i in range(1, 5):
+        g.phase(f"R{i}", f"Ready {i}", i * 10)
+        g.task(f"RT{i}", f"R{i}", "work")
+    ph = phases(data(g))
+    assert [i for i, p in ph.items() if p.get("ready")] == ["R4"]
