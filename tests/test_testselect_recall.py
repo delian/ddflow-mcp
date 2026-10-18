@@ -15,6 +15,7 @@ shallow clone, a tarball, or `DDFLOW_SKIP_HISTORY_REPLAY=1`.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import os
@@ -46,6 +47,11 @@ WORKERS = 4  #: processes replaying at once
 UNROUTABLE = {
     "af8410da tests/test_tallies.py": "drives `task add` through the CLI, imports no changed module"
 }
+#: A test that drives the program in a SUBPROCESS (`run_cli(...)`, `subprocess.run`) imports
+#: nothing it exercises: the selector's stated blind spot (`testselect`, "What it misses"), a
+#: route no import graph can draw. Such a miss is neither scored nor hidden: it is listed in
+#: the report as `blind`, and the floor measures the tests the selector can route (B9934c6c6aa).
+SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_output", "check_call", "call"})
 ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over all replays
 
 
@@ -134,15 +140,77 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
         if not missed:
             return len(co), len(co), [], []
         cut = {t.path for t in new.cut}
-        causes = [
-            f"{sha[:8]} {c} ({'cut at the budget' if c in cut else 'no route reaches it'})"
-            for c in missed
-        ]
         old = T.select(raw, "x", changed=src, listed=listed, idents={}, membership=[], phrases={})
         assert old is not None
         before = {t.path for t in old.tests}
-        lost = [f"{sha[:8]} {c}" for c in missed if c in before]
-        return len(co), len(co) - len(missed), lost, causes
+        lost = [f"{sha[:8]} {c}" for c in missed if c in before]  # blind ones too: pins stay honest
+        blind = [
+            c for c in missed if drives_subprocess((raw / c).read_text("utf-8", "replace"), src)
+        ]
+        scored = [c for c in co if c not in blind]
+        causes = [
+            f"{sha[:8]} {c} ({'cut at the budget' if c in cut else 'no route reaches it'})"
+            for c in missed
+            if c not in blind
+        ]
+        listed_blind = [f"{sha[:8]} {c} (blind: drives a subprocess, not scored)" for c in blind]
+        return len(scored), len(scored) - len(causes), lost, [*causes, *listed_blind]
+
+
+def _imported(text: str) -> set[str] | None:
+    """Every dotted module name a test module imports (`from a.b import c` gives `a.b` and
+    `a.b.c`, `import a.b.c` gives all three prefixes); None when it does not parse."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                names.update(".".join(parts[: i + 1]) for i in range(len(parts)))
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module)
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return names
+
+
+def imports_changed(text: str, src: list[str]) -> bool:
+    """Whether a test module imports one of the changed source modules directly (a route the
+    selector draws, so a miss of it is a real one, whatever else the test does). A changed
+    package `__init__.py` is the package itself."""
+    seen = _imported(text)
+    if seen is None:  # unparsable: do not call it blind on a guess
+        return True
+    for path in src:
+        if path.endswith(".py"):
+            module = path[:-3].replace("/", ".").removesuffix(".__init__")
+            if module in seen:
+                return True
+    return False
+
+
+def drives_subprocess(text: str, src: list[str] = ()) -> bool:
+    """Whether a test module drives the program in a subprocess (the selector's blind spot) and
+    imports none of the changed ``src`` modules itself. Read from the syntax tree: a comment or
+    a docstring that mentions `run_cli(` is not a call."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = (
+                f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+            )
+            owner = (
+                f.value.id if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) else ""
+            )
+            if name == "run_cli" or (owner == "subprocess" and name in SUBPROCESS_CALLS):
+                return not imports_changed(text, list(src))
+    return False
 
 
 def _one(sha: str) -> tuple[int, int, list[str], list[str]] | None:
@@ -172,6 +240,26 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     stale = [k for k in UNROUTABLE if k.split()[0] in in_window and k not in lost]
     assert not stale, f"pinned as unroutable, but the selection holds them now: {stale}"
     assert held / total >= ABSOLUTE_FLOOR, report
+
+
+def test_a_subprocess_driving_test_is_a_blind_spot_not_a_scored_miss():
+    """B9934c6c6aa: eight such tests sank the floor of a window whose selector was fine."""
+    assert drives_subprocess("code, out, err = run_cli(repo, 'bug', 'show', 'B1')")
+    assert drives_subprocess("import subprocess\nsubprocess.run(['ddflow', 'show'])")
+    assert not drives_subprocess("from ddflow.services import ci\nci.run(repo)")
+    assert not drives_subprocess("# run_cli(repo) is the helper for this\nresult = run_cli_like")
+    # a test that imports a changed module AND drives a subprocess is routable: its miss counts
+    both = "from ddflow.services import ci\nrun_cli(repo, 'x')"
+    assert not drives_subprocess(both, ["ddflow/services/ci.py"])
+    assert drives_subprocess(both, ["ddflow/services/gates.py"])
+    assert drives_subprocess("import ddflow.api.review\nrun_cli(r)", ["ddflow/api/cirun.py"])
+    # shapes a regex missed: a parenthesised multi-line import, a changed package __init__
+    multi = "from ddflow.services import (\n    ci,\n)\nrun_cli(repo)\n"
+    assert not drives_subprocess(multi, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(
+        "from ddflow.api import review\nrun_cli(r)", ["ddflow/api/__init__.py"]
+    )
+    assert not drives_subprocess("import ddflow.api\nrun_cli(r)", ["ddflow/api/__init__.py"])
 
 
 def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
