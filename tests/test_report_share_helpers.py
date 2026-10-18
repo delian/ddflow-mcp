@@ -32,6 +32,6 @@ def test_the_gate_line_uses_the_gate_triage_wording_including_the_settled_clause
 
 
 def test_one_title_cut_for_every_kind_of_record():
-    assert R._title("", "second") == "second" and R._title(None) == ""
-    assert len(R._title("x" * 500)) == R.TITLE_CAP
-    assert len(R._title("x" * 500, cap=R.BUG_SUMMARY_CAP)) == 120 > R.TITLE_CAP
+    assert R._title("", "second", cap=100) == "second" and R._title(None, cap=100) == ""
+    assert len(R._title("x" * 500, cap=100)) == 100
+    assert len(R._title("x" * 500, cap=120)) == 120
