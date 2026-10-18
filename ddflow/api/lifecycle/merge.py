@@ -25,9 +25,9 @@ from ...services.cleanup import (  # noqa: F401  (re-exported)
     stands_in,
 )
 from ...services.enforce import SELF_MANAGED
+from ...services.gates import failed_gate as OC
 from ...services.gates import failed_review as GO
 from ...services.gates import measured as GM
-from ...services.gates import outcomes as OC
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
