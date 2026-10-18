@@ -1,0 +1,41 @@
+# Event kinds owned by sessions (core/handlers/sessions.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "ci.result"
+doc = "The result of a CI stage on a commit."
+
+[[kind]]
+name = "ddflow.capabilities"
+doc = "The log capabilities a ddflow version writes with."
+
+[[kind]]
+name = "ddflow.seen"
+doc = "A ddflow version and install touched this log."
+
+[[kind]]
+name = "repair.applied"
+doc = "A versioned data repair ran and settled its findings."
+
+[[kind]]
+name = "session.ended"
+doc = "An agent session ended, with its summary."
+
+[[kind]]
+name = "session.note"
+doc = "A note was recorded in a session."
+
+[[kind]]
+name = "session.prompt"
+doc = "The operator's words were recorded verbatim (redacted)."
+
+[[kind]]
+name = "session.started"
+doc = "An agent session started."
+
+[[kind]]
+name = "skew.overridden"
+doc = "A version-skew refusal was overridden, with the reason."
+
+[[kind]]
+name = "upgrade.applied"
+doc = "A project upgrade was applied."

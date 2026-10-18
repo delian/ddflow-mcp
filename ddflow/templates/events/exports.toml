@@ -1,0 +1,13 @@
+# Event kinds owned by exports (core/handlers/exports.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "export.acknowledged"
+doc = "A generated document's edit by hand was acknowledged."
+
+[[kind]]
+name = "export.disabled"
+doc = "Generating a document was turned off."
+
+[[kind]]
+name = "export.enabled"
+doc = "Generating a document was turned on, with its path and mode."
