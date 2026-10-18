@@ -182,3 +182,45 @@ def test_flags_of_the_other_form_are_refused_not_ignored(proj):
     assert run_cli(proj, "brief", "--note", "x")[0] == 1
     assert run_cli(proj, "brief", "--for-agent", "a")[0] == 1
     assert run_cli(proj, "brief", "--for-agent", "a", "T1", "--phase", "P1")[0] == 1
+
+
+def _decide(repo, did, globs, by="operator"):
+    run_cli(
+        repo,
+        "decision",
+        "add",
+        "--id",
+        did,
+        "--title",
+        f"title {did}",
+        "--decision",
+        f"text {did}",
+        "--by",
+        by,
+        *(["--globs", globs] if globs else []),
+    )
+
+
+def _decision_ids(out):
+    import re
+
+    return re.findall(r'kind="decision" id="([^"]+)"', out)
+
+
+def test_decisions_rank_glob_matches_before_unscoped_and_operator_before_agent(proj):
+    _decide(proj, "D-unscoped", "")
+    _decide(proj, "D-broad", "**")
+    _decide(proj, "D-agent-match", "src/**", by="agent")
+    _decide(proj, "D-op-match", "src/widget.py")
+    ids = _decision_ids(brief(proj)[1])
+    assert ids.index("D-op-match") < ids.index("D-agent-match") < ids.index("D-broad")
+    assert ids.index("D-broad") < ids.index("D-unscoped")
+
+
+def test_pinned_decisions_come_first_whatever_the_cap(proj):
+    _decide(proj, "D-op-match", "src/widget.py")
+    _decide(proj, "D-standing", "docs/x.md")
+    run_cli(proj, "config", "session.agent_brief_pin_decisions", "D-standing")
+    run_cli(proj, "config", "session.agent_brief_decisions", "1")
+    ids = _decision_ids(brief(proj)[1])
+    assert ids[0] == "D-standing" and "D-op-match" not in ids
