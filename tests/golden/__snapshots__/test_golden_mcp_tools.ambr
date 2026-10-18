@@ -2786,6 +2786,14 @@
           "type": "boolean",
           "description": "Force a full round (when delta_default is on)."
          },
+         "exclude": {
+          "type": "string",
+          "description": "Comma-separated globs left out of THIS review's diff instead of [review].exclude_globs (and the item's review-exclude:<glob> tags); `none` leaves out no glob-matched file."
+         },
+         "include_pinned": {
+          "type": "boolean",
+          "description": "Send the files pins.toml owns too (golden snapshots, transcripts) for this review."
+         },
          "chunk": {
           "type": "array",
           "description": "Re-review ONLY these chunk numbers (as the recorded review numbered them, e.g. [5]) and merge into that record; needs the same diff, chunk size and reviewer.",
