@@ -9,7 +9,7 @@ shape = "opencode"
 note = "Kilo's CLI is an opencode fork and reads opencode's shape: `mcp`, NOT `mcpServers`. It was mcpServers until a probe against Kilo 7.2.20 listed that file as 'No MCP servers configured': valid JSON, silently ignored."
 
 [instructions]
-reads = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
+reads = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md", ".kilo/", ".kilocode/rules/"]
 agents_md = "yes"
 claude_md = "yes"
 
