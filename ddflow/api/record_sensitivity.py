@@ -3,8 +3,10 @@
 `checked` runs in the same seam as `record_rules.checked`. A record may carry
 ``sensitivity`` (any kind); it must name a level of the vocabulary (`services.sensitivity`).
 With ``[sensitivity].scan_at_write`` the text written is scanned by `core.redact` (the session
-patterns, so a project's own secret shapes count) and the label is raised to the highest of
-the declared label, the label already held, and what the scan found. Never lowered by the scan.
+patterns, so a project's own secret shapes count) and the label is the highest of the label
+given and what the scan found. With no label given, the label already held is the floor, so a scan
+never lowers one; a write that GIVES a lower label lowers it on purpose (declassifying under an
+approval is SE-approvals' to add), though never below what the scan finds in the text.
 """
 
 from __future__ import annotations
