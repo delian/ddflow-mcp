@@ -119,3 +119,14 @@ def test_execute_runs_the_localized_config_and_logs_it(tmp_path: Path, monkeypat
     CI._execute(cfg(), tmp_path, CI.DEFAULT_COMMAND, None, 60, local=True, used=used)
     assert "-n 7" in seen[1] and "-n auto" not in seen[1] and "-n auto" not in seen[0]
     assert used["hooks"]["n"] == 7
+
+
+def test_a_crashed_holders_note_is_not_named(tmp_path: Path):
+    SL._note(tmp_path, 0).parent.mkdir(parents=True, exist_ok=True)
+    SL._note(tmp_path, 0).write_text('{"holder": "dead", "at": 1, "at_iso": "00:00:01"}')
+    with SL.hold(cfg(limit=2), "agent-b", tmp_path):
+        with SL.hold(cfg(limit=2), "agent-c", tmp_path):
+            with pytest.raises(SL.SuiteBusy) as e:
+                with SL.hold(cfg(wait=0, limit=2), "agent-d", tmp_path):
+                    pass
+    assert e.value.holder["holder"] in ("agent-b", "agent-c")
