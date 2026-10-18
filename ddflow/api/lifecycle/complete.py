@@ -11,11 +11,13 @@ from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
 from ...core.stuck import stuck_edges_to
+from ...services import ci as CI
 from ...services import cleanup as CL
 from ...services import completion as CM
 from ...services import gates as G
 from ...services import leases as L
 from ...services import ledger as LG
+from ...services import phase_suite as PS
 from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
@@ -112,6 +114,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
+    v.blockers += [b for b in (_phase_suite(repo, cfg, log, st, it, agent),) if b]
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
@@ -222,6 +225,22 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
+    """ "" when the full suite has passed on the phase's merged tree (D-gate-economy-r3),
+    else the blocker. [schedule].phase_full_suite = run runs `ci run --full` first."""
+    phase = it.id
+    if it.kind != "phase" or cfg.schedule.phase_full_suite == "off":
+        return ""
+    why = PS.missing(log.read_all(), st, phase)
+    if not why or cfg.schedule.phase_full_suite != "run":
+        return why
+    res = CI.run(repo, cfg, ref="HEAD", full=True)
+    if res.ok:
+        log.append("cadence.ran", PS.CADENCE, {"result": "0", "evidence": {"note": "phase close"}})
+        return ""
+    return f"the full test suite run for {phase} did not pass: {res.reason}"
 
 
 def _failed_review(repo: Path, cfg, st: State, item: str, v, umbrella) -> list[str]:
