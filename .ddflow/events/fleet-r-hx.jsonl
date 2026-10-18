@@ -1,0 +1,2 @@
+{"agent":"fleet-r-hx","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"e7d7f4af8e2a84c893ddd7b9b","kind":"ddflow.seen","lamport":84174,"schema":1,"subject":"ddflow","ts":"2026-10-18T22:32:22.758563Z"}
+{"agent":"fleet-r-hx","data":{"by":"fleet-r-hx","event":"e59258847722380ead48d85b0","holder":"fleet-unblock-e","note":"salvaged"},"id":"eea60835d7d93d5615195b801","kind":"lease.released","lamport":84175,"schema":1,"subject":"B-hx-migrate","ts":"2026-10-18T22:32:22.803550Z"}
