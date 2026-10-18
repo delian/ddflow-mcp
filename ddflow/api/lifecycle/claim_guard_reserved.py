@@ -5,13 +5,12 @@ from __future__ import annotations
 import time
 
 from ...core import outcome as O
-from .claim_guards import ClaimContext, register
+from ...services.claim_guards import ClaimContext, register
 from .claim_line import _join_line
 from .reservations import _reserved_for, _reserved_msg
 
 
-@register("reserved", order=30)
-def refuse_if_reserved(ctx: ClaimContext) -> O.Outcome | None:
+def _refuse_if_reserved(ctx: ClaimContext) -> O.Outcome | None:
     """The refusal for a claim of files that are held for a waiter in line; None if free."""
     it = ctx.st.items.get(ctx.item)
     if ctx.skip or it is None:
@@ -34,3 +33,6 @@ def refuse_if_reserved(ctx: ClaimContext) -> O.Outcome | None:
         alternatives=[],
         reserved_for=ahead.agent,
     )
+
+
+register("reserved", order=30)(_refuse_if_reserved)

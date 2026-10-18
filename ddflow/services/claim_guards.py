@@ -3,7 +3,7 @@
 A guard is a function ``(ClaimContext) -> Outcome | None`` registered under a name with an
 ``order``; `first_refusal` runs them in ``(order, name)`` order and returns the first refusal
 (an `Outcome` is falsy when refused, so a result is compared to None, never chained with
-``or``). A feature adds its refusal as a new ``claim_guard_<name>.py`` beside this file that
+``or``). A feature adds its refusal as a new ``claim_guard_<name>.py`` in `ddflow/api/lifecycle/` that
 calls `register` at import: `claim.py` is not edited, and no two features touch one line.
 Built-ins sit at orders 10, 20, 30; leave gaps.
 
@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ...core import outcome as O
-from ...core.registry import Registry
+from ..core import outcome as O
+from ..core.registry import Registry
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class Guard:
 GUARDS: Registry[Guard] = Registry(
     "claim guard",
     key=lambda g: g.name,
-    package=__package__ or "ddflow.api.lifecycle",
+    package="ddflow.api.lifecycle",  # the guards sit beside the helpers they use
     prefix="claim_guard_",
 )
 

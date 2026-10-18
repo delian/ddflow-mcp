@@ -15,6 +15,7 @@ from ...core.model import ABANDONED, DONE, REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import choices as CHO
+from ...services import claim_guards as GD
 from ...services import flow as FS
 from ...services import leases as L
 from ...services import pins_merge as PM
@@ -27,7 +28,6 @@ from ...services.leaseclock import localize
 from .._base import _load
 from .._globwarn import missing_globs
 from ..reporting import new_reports
-from . import claim_guards as GD
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
 

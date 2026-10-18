@@ -6,11 +6,10 @@ import time
 
 from ...core import outcome as O
 from ...services import waiting as WG
-from .claim_guards import ClaimContext, register
+from ...services.claim_guards import ClaimContext, register
 
 
-@register("queued", order=20)
-def refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
+def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     """The refusal for a claim of files an earlier QUEUED waiter asked for first."""
     it = ctx.st.items.get(ctx.item)
     if ctx.skip or it is None:
@@ -29,3 +28,6 @@ def refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
         alternatives=[],
         queued_behind=ahead.item,
     )
+
+
+register("queued", order=20)(_refuse_if_queued)
