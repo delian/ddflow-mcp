@@ -2431,6 +2431,19 @@
   
   '''
 # ---
+# name: test_help[ddflow sync]
+  '''
+  usage: ddflow sync [-h] [--check] [item]
+  
+  positional arguments:
+    item        The item (default: the item whose worktree this is).
+  
+  options:
+    -h, --help  show this help message and exit
+    --check     Only measure the drift; merge nothing.
+  
+  '''
+# ---
 # name: test_help[ddflow task add]
   '''
   usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
@@ -2923,6 +2936,8 @@
                           match)
       list                list tasks, phases, bugs, research notes or lessons (what `<kind> list`
                           shows)
+      sync                merge the item's recorded base into its branch when that is safe; --check
+                          only measures
   
   options:
     -h, --help            show this help message and exit
@@ -3102,6 +3117,7 @@
     'ddflow similar',
     'ddflow split',
     'ddflow status',
+    'ddflow sync',
     'ddflow task',
     'ddflow task add',
     'ddflow task fold',
