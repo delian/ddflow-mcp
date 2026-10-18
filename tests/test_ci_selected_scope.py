@@ -251,7 +251,7 @@ def test_a_forced_unit_tests_gate_runs_instead_of_being_covered(monkeypatch):
 
     from ddflow.api import gates as AG
 
-    covered = NS(scope="covered", command="", covered_by="ci selected run abc")
+    covered = NS(scope="covered", command="", covered_by="ci selected run abc", needs_ci=False)
     monkeypatch.setattr(AG.TSC, "unit_tests_scope", lambda *a: covered)
     monkeypatch.setattr(AG, "_covered_by_ci", lambda *a: "RECORDED")
     gdef = NS(id="unit_tests", command="pytest")
