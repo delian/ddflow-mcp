@@ -51,7 +51,7 @@ def kind_from_data(desc: dict[str, Any], records: ModuleType | None = None) -> A
         return R.RecordKind(**args)
     except Exception:
         if not held:
-            D.DEF_KINDS.pop(args["def_kind"], None)
+            D.DEF_KINDS.unregister(args["def_kind"])
         raise
 
 

@@ -42,7 +42,7 @@ def test_descriptor_builds_the_kind():
         assert kind.field("tags").default == ("a",)
         assert kind.verbs == R.VERBS and kind.search and kind.recall
     finally:
-        D.DEF_KINDS.pop("gizmo", None)
+        D.DEF_KINDS.unregister("gizmo")
 
 
 def test_verbs_not_offered_are_declined_with_the_reason():
@@ -55,7 +55,7 @@ def test_verbs_not_offered_are_declined_with_the_reason():
         assert set(kind.declined) == set(R.VERBS) - {"list", "show"}
         assert set(kind.declined.values()) == {"later"}
     finally:
-        D.DEF_KINDS.pop("gizmo", None)
+        D.DEF_KINDS.unregister("gizmo")
 
 
 @pytest.mark.parametrize(
@@ -165,4 +165,15 @@ def test_a_data_kind_is_not_surfaced_unless_it_says_so():
             MINIMAL.replace('name = "gizmo"', 'name = "gizmo"\nsurfaced = true')
         ).surfaced
     finally:
-        D.DEF_KINDS.pop("gizmo", None)
+        D.DEF_KINDS.unregister("gizmo")
+
+
+def test_definition_kinds_are_a_registry_not_a_bare_dict():
+    from ddflow.core.registry import Registry
+
+    assert isinstance(D.DEF_KINDS, Registry)
+    assert list(D.DEF_KINDS)[:2] == ["doctype", "schedule"]  # registration order, as before
+    D.add_kind("regtest", "a registry test kind")
+    assert "regtest" in D.DEF_KINDS
+    D.DEF_KINDS.unregister("regtest")
+    assert "regtest" not in D.DEF_KINDS
