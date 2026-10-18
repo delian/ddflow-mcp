@@ -29,7 +29,11 @@ def _entries(a: dict) -> list | O.Outcome:
     if not raw and a.get("file"):
         path = a["file"]
         try:
-            raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+            if path == "-":
+                raw = sys.stdin.read()
+            else:
+                with open(path, encoding="utf-8") as fh:
+                    raw = fh.read()
         except OSError as err:
             return O.failed(kind, f"cannot read {path}: {err}")
     if not raw:
