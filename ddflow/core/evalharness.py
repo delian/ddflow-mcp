@@ -121,7 +121,9 @@ def enable_by_default(
     min_fixtures: int,
 ) -> tuple[bool, str]:
     """May a workflow be enabled by default, given its `report` row? ``(ok, reason)``."""
-    have = row["planted_fixtures"] if row else 0
+    if not row:
+        return False, "no fixture was run for it, so nothing was measured"
+    have = row["planted_fixtures"]
     if have < min_fixtures:
         return False, f"needs at least {min_fixtures} planted-fault fixture(s); has {have}"
     rate = row["miss_rate"]
