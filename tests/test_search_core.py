@@ -111,6 +111,8 @@ def test_search_sources_are_registered_and_cover_every_kind_in_order():
     assert [n for n in names if n not in data] == [
         "records", "sessions", "prompts", "log", "rules", "skills", "agents", "jobs", "schedules"
     ]  # fmt: skip
+    owners = [k for src in registered() for k in src.kinds if k in data]
+    assert sorted(owners) == sorted(data)  # every data kind has exactly one owner
     covered = [k for src in registered() for k in src.kinds if k not in data]
     assert sorted(covered) == sorted(S.SOURCES)  # every kind has exactly one owner
 

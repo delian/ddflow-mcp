@@ -66,7 +66,11 @@ def test_the_same_through_the_tool(repo):
         ({"kind": "nope", "verb": "list"}, "unknown record kind 'nope'"),
         ({"kind": "rule", "verb": "list"}, "has commands of its own"),
         ({"kind": "risk", "verb": "merge"}, "verb must be one of"),
-        ({"kind": "risk", "verb": "add", "id": "x", "set": ["bogus=1"]}, "set takes field=value"),
+        (
+            {"kind": "risk", "verb": "add", "id": "x", "set": ["bogus=1"]},
+            "risk has no field 'bogus'",
+        ),
+        ({"kind": "risk", "verb": "add", "id": "x", "set": ["impact"]}, "set takes field=value"),
         ({"kind": "risk", "verb": "add", "id": "x", "set": ["impact=big"]}, "whole number"),
         ({"kind": "risk", "verb": "add", "id": "x", "set": ["title=t", "impact=9"]}, "at most 5"),
     ],
