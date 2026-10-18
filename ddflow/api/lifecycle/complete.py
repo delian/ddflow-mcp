@@ -113,8 +113,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         model=model,
         **({"log": log, "kids": umbrella} if umbrella else {}),
     )
-    if why := _phase_suite(repo, cfg, log, st, it, agent):
-        v.blockers.append(why)
+    v.blockers += [b for b in (_phase_suite(repo, cfg, log, st, it, agent),) if b]
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
