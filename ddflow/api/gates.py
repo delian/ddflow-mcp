@@ -281,10 +281,12 @@ def verify(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
 
 
 def _order_gate(
-    log, cfg, st, item: str, gate: str, *, recording: bool, defs=None
+    log, cfg, st, item: str, gate: str, *, recording: bool, defs=None, repo=None
 ) -> O.Outcome | list[str]:
     """`services.gates.measured.check_order` as an outcome: a refusal, or the gates ahead."""
-    order = R.check_order(log, cfg, st, item, gate, recording=recording, defs=defs)
+    it = st.items.get(item)
+    diff = (lambda: changed_paths(repo, it)) if repo is not None and it else None
+    order = R.check_order(log, cfg, st, item, gate, recording=recording, defs=defs, diff=diff)
     if order.refusal:
         return O.refused("gate", order.refusal, id=item, gate=gate, ahead=order.ahead)
     return order.ahead
@@ -522,7 +524,7 @@ def run(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    ordered = _order_gate(log, cfg, st, item, gate, recording=False, defs=gates)
+    ordered = _order_gate(log, cfg, st, item, gate, recording=False, defs=gates, repo=repo)
     if isinstance(ordered, O.Outcome):
         return ordered
 
@@ -1036,7 +1038,7 @@ def record(
     if refusal:
         return O.refused("gate.record", refusal, id=item, gate=gate, outcome="")
 
-    ordered = _order_gate(log, cfg, st, item, gate, recording=True, defs=gates)
+    ordered = _order_gate(log, cfg, st, item, gate, recording=True, defs=gates, repo=repo)
     if isinstance(ordered, O.Outcome):
         return ordered
     # The `warn` note. Carried rather than printed, so the surface decides where it goes

@@ -35,6 +35,7 @@ a `RecordKind`.
 from __future__ import annotations
 
 import string
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -247,8 +248,6 @@ class RecordKind:
 
 #: The verbs every kind has had since the surface began, and why a family not yet on the
 #: surface does not offer the others.
-_EVERYDAY = VERBS[:7]
-_UNWIRED = "offered when the rules move onto the record surface (B-rules-onto-record-surface)"
 
 # -- the descriptors -----------------------------------------------------------------
 
@@ -285,33 +284,10 @@ def forget(name: str) -> None:
     PA.forget(name)
 
 
-RULE = declare(
-    RecordKind(
-        name="rule",
-        def_kind="rule",
-        summary="a project rule: a constraint agents are held to",
-        fields=(
-            FieldSpec("title", help="One line saying what the rule is.", required=True),
-            FieldSpec("content", help="The rule's text.", default=""),
-            FieldSpec("tags", "array", "Labels, to find the rule by.", default=()),
-            FieldSpec(
-                "scope", help="Where it applies: project, phase, task or global.", default="project"
-            ),
-            FieldSpec("priority", "integer", "Higher is read first.", default=50),
-            FieldSpec("globs", "array", "Paths it applies to.", default=()),
-        ),
-        text=("content", "tags"),
-        columns=("title", "scope", "priority", "tags"),
-        filters=("tags", "scope"),
-        aliases=("rules",),
-        verbs=_EVERYDAY,
-        declined={v: _UNWIRED for v in VERBS if v not in _EVERYDAY},
-        # rules keep their own search source, and are not yet recalled or served as resources
-        # (their output is pinned); B-rules-onto-record-surface turns these on
-        recall=False,
-        resource=False,
-    )
-)
+from .record_kind_data import load_packaged  # noqa: E402  (needs RecordKind above)
+
+#: The rule kind is data: ``ddflow/templates/kinds/rule.toml``.
+RULE = load_packaged("rule", sys.modules[__name__])
 
 
 # -- shared helpers ------------------------------------------------------------------
