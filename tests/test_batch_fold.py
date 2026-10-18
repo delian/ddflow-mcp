@@ -113,3 +113,17 @@ def test_batch_refuses_two_lease_retargets_and_abandoning_a_claimed_item(repo):
     assert code == 3 and "more than one lease" in o + e
     out = batch.apply(repo, [], abandon={"A": "x"})
     assert out.exit == 3 and "claimed" in out.reason
+
+
+def test_batch_edits_globs_of_several_unclaimed_items(repo):
+    _setup(repo)
+    code, _o, err = _batch(
+        repo, [{"id": "A", "add_globs": ["x1.py"]}, {"id": "C", "add_globs": ["x2.py"]}]
+    )
+    assert code == 0, err
+    assert _items(repo)["C"].globs == ["C.py", "x2.py"]
+
+
+def test_an_empty_batch_is_nothing_to_do(repo):
+    _setup(repo)
+    assert _batch(repo, [])[0] == 2
