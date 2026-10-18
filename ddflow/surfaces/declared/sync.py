@@ -41,6 +41,7 @@ COMMANDS: tuple[Command, ...] = (
             "conflicts",
             "dirty",
             "detail",
+            "aborted",
             "gates_valid",
             "gates_stale",
             "gates_unverified",

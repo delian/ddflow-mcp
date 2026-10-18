@@ -68,8 +68,9 @@ def _unsafe(out: SyncResult, tree: Path) -> SyncResult | None:
 def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
     """Classify a merge git refused: a pre-merge refusal, or a real conflict (aborted)."""
     files = G.unmerged(tree)
-    if files is None:
+    if files is None and W.merging(tree) is False:
         return _stop(out, "refused", detail=f"git could not list the conflicts: {r.err or r.out}")
+    files = files or []  # unlistable but mid-merge: abort below, names unknown
     if not files and W.merging(tree) is False:
         # Git refused before it began (an untracked file the base adds, say): not a
         # conflict, and there is nothing to abort.
