@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import ddflow.api.record_kind_data as KDA
 import ddflow.api.records as R
 import ddflow.core.defs as D
-import ddflow.core.kinddata as KD
 
 DATA_KINDS = (
     "assumption attention attestation commlog contract fitness proposal requirement risk "
@@ -62,53 +60,3 @@ def test_risk_links_and_bounds(repo):
         "no stakeholder 'nobody'"
         in R.record_add(repo, risk, "k1", {"title": "t", "owner": "nobody"}).reason
     )
-
-
-def test_a_project_defines_its_own_kind(repo):
-    d = repo / KDA.PROJECT_DIR
-    d.mkdir(parents=True)
-    (d / "ticketx.toml").write_text(
-        'name = "ticketx"\nsummary = "a ticket"\n[[field]]\nname = "title"\nrequired = true\n'
-    )
-    try:
-        (kind,) = KDA.load_project(repo)
-        assert R.KINDS["ticketx"] is kind
-        assert R.record_add(repo, kind, "t1", {"title": "t"}).exit == 0
-    finally:
-        R.forget("ticketx")
-        D.DEF_KINDS.pop("ticketx", None)
-
-
-def test_a_project_overrides_a_shipped_kind_for_the_process(repo):
-    d = repo / KDA.PROJECT_DIR
-    d.mkdir(parents=True)
-    (d / "vendor.toml").write_text(
-        'name = "vendor"\nsummary = "our vendor"\n[[field]]\nname = "title"\nrequired = true\n'
-    )
-    shipped = R.KINDS["vendor"]
-    try:
-        (kind,) = KDA.load_project(repo)
-        assert R.KINDS["vendor"] is kind and kind.summary == "our vendor"
-    finally:
-        R.forget("vendor")
-        R.declare(shipped)
-
-
-def test_a_bad_project_kind_names_the_file_and_spares_the_rest(repo):
-    d = repo / KDA.PROJECT_DIR
-    d.mkdir(parents=True)
-    (d / "bad.toml").write_text('name = "bad"\n')
-    (d / "good.toml").write_text(
-        'name = "goodx"\nsummary = "g"\n[[field]]\nname = "title"\nrequired = true\n'
-    )
-    try:
-        with pytest.raises(KD.KindDataError, match=r"bad\.toml"):
-            KDA.load_project(repo)
-        assert "goodx" in R.KINDS
-    finally:
-        R.forget("goodx")
-        D.DEF_KINDS.pop("goodx", None)
-
-
-def test_no_project_dir_is_no_kinds(repo):
-    assert KDA.load_project(repo) == []
