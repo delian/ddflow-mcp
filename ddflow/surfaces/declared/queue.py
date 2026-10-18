@@ -30,6 +30,7 @@ def item_edit(a: dict):
     return _api().ItemEdit(
         title=a.get("title"),
         body=a.get("body"),
+        append_body=a.get("append_body"),
         needs=_list_or_none(a, "needs"),
         add_needs=_list_or_none(a, "add_needs"),
         remove_needs=_list_or_none(a, "remove_needs"),
@@ -377,7 +378,12 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("title", help="New title.", cli_help=""),
-            Param("body", help="New detail / acceptance criteria.", cli_help=""),
+            Param("body", help="New detail / acceptance criteria. REPLACES the body.", cli_help=""),
+            Param(
+                "append_body",
+                help="Text to ADD after the item's current body (a blank line between); the original is kept. Use it for a note or a decision instead of re-sending the body.",
+                cli_help="ADD this text after the item's current body; the original is kept",
+            ),
             Param(
                 "needs",
                 help="Comma-separated ids it depends on. Pass an EMPTY string to clear them — that is how you break a dependency cycle the loop detector found.",
@@ -469,6 +475,7 @@ COMMANDS: tuple[Command, ...] = (
             "needs",
             "title",
             "body",
+            "append_body",
             "tags",
             "priority",
             "line",
