@@ -94,15 +94,10 @@ class KindRules:
         for name in self.sources:
             need("sources", name, "string")
         for v in self.validators:
-            numeric = v.min is not None or v.max is not None
-            want = (
-                ("integer",)
-                if numeric
-                else ("string", "array")
-                if (v.pattern or v.max_length)
-                else ()
-            )
-            need("validator", v.field, *want)
+            if v.min is not None or v.max is not None:
+                need("validator bounds", v.field, "integer")
+            if v.pattern or v.max_length is not None:
+                need("validator text check", v.field, "string", "array")
             if v.pattern:
                 try:
                     re.compile(v.pattern)
@@ -215,7 +210,8 @@ def render(rules: KindRules, rid: str, status: str, fields: Mapping[str, Any]) -
         k: (", ".join(map(str, v)) if isinstance(v, list | tuple) else v) for k, v in fields.items()
     }
     names = {n for _l, n, _s, _c in string.Formatter().parse(rules.render) if n}
-    data = dict.fromkeys(names, "") | values | {"id": rid, "status": status}
+    # the record's own field wins over the definition status: a field may be called status
+    data = dict.fromkeys(names, "") | {"id": rid, "status": status} | values
     return rules.render.format_map(data)
 
 
