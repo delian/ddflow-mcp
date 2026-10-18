@@ -203,12 +203,13 @@ def break_hint(cfg) -> str:
 
 @dataclass
 class Prejudged:
-    """What a claim read BEFORE it took the append lock, so judging idleness under the lock
-    costs `stat` calls, not a read of the log or a `git` subprocess (DX-lease-break-lock-scope).
+    """What a claim read BEFORE it took the append lock. While the log has not moved and the
+    readings are young (``FRESH_S``) judging idleness under the lock costs `stat` calls; when
+    the log moved the claim re-reads it (a fold, no git), and when a reading is stale or
+    missing it asks git again under the lock -- slower, never wrong (DX-lease-break-lock-scope).
 
-    ``mark`` is the log's fingerprint taken before ``events`` were read: while it still holds
-    under the lock ``events`` are current; when it moved the claim re-reads (the lock-free
-    fold's contract). ``seen`` is the newest worktree activity of each lease that clashed."""
+    ``mark`` is the log's fingerprint taken before ``events`` were read. ``seen`` is the newest
+    worktree activity of each lease that clashed, read at ``at``."""
 
     mark: Any = None
     events: list[Any] = field(default_factory=list)
