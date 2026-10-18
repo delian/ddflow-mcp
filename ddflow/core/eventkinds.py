@@ -5,7 +5,7 @@ One TOML file per OWNER (the subsystem that writes and folds the kinds), in
 
     [[kind]]
     name = "lease.waiting"
-    doc = "One sentence: what the event records."
+    doc = "One sentence ending in a full stop: what the event records."
     retention = "keep"      # optional: keep (default) or compact
     v = 1                   # optional: the payload version; must equal `upcasters`'
 
@@ -28,12 +28,12 @@ from pathlib import Path
 from typing import Any
 
 from .registry import Registry
+from .upcasters import current_version
 
 EVENTS_DIR = Path(__file__).resolve().parent.parent / "templates" / "events"
 #: How long a kind's events must be kept: forever, or foldable into a summary.
 RETENTIONS = ("keep", "compact")
 _KEYS = {"name", "doc", "retention", "v"}
-MIN_DOC = 10
 
 
 class EventKindError(ValueError):
@@ -98,16 +98,14 @@ def problems(
 ) -> list[str]:
     """What is wrong with the declarations against the kinds the fold `handled`, one line
     each; empty when the registry and the fold agree."""
-    from .upcasters import current_version
-
     out: list[str] = []
     seen: dict[str, str] = {}
     for k in declared:
         if k.name in seen:
             out.append(f"{k.name}: declared twice, by {seen[k.name]} and {k.owner}")
         seen[k.name] = k.owner
-        if len(k.doc.strip()) < MIN_DOC:
-            out.append(f"{k.name}: doc is missing or too short (owner {k.owner})")
+        if not k.doc.strip().endswith("."):
+            out.append(f"{k.name}: doc must be a sentence ending in a full stop (owner {k.owner})")
         if k.retention not in RETENTIONS:
             out.append(f"{k.name}: retention {k.retention!r} is not one of {RETENTIONS}")
         want = current_version(k.name, versions)
