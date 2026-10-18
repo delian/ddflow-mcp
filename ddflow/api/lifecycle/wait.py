@@ -261,7 +261,7 @@ def _freed(st, cfg, was: list[str], me: str) -> list[str]:
         it = st.items.get(i)
         if it is None:
             out.append(f"{i}: gone")
-        elif it.state in (DONE, ABANDONED):
+        elif it.terminal:
             out.append(f"{i}: {it.state}")
         elif i not in live:
             lz = it.lease
