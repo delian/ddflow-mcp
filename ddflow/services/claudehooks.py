@@ -88,7 +88,7 @@ class HookSpec:
     @property
     def flag(self) -> str:
         """The `ddflow hooks install` flag that writes (and refreshes) it."""
-        return f"--{self.agent}"
+        return f"--{self.agent}" if self.agent in ("claude", "gemini") else f"--harness {self.agent}"
 
 
 #: Every harness hook ddflow installs. Git hooks are not here: they are files, not
