@@ -104,7 +104,7 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
     if not failed_sel and (why := _ci_not_passed_here(cfg, it, tree)):
-        return Scope("full", why, needs_ci="rerun ci" in why)
+        return Scope("full", why, needs_ci="ci" in G.pipeline_for(it, cfg))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
