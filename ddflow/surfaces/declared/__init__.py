@@ -17,8 +17,9 @@ import re
 from pathlib import Path
 from types import ModuleType
 
-_HAS_COMMANDS = re.compile(r"^COMMANDS\s*(?::[^=\n]+)?=", re.MULTILINE)
-_HAS_TOOL = re.compile(r'\btool\s*=\s*"ddflow_')
+_HAS_COMMANDS = re.compile(r"^COMMANDS\s*[:=]", re.MULTILINE)
+#: A non-empty ``tool=`` of any spelling: the scan only decides what is IMPORTED.
+_HAS_TOOL = re.compile(r"""\btool\s*=\s*(?!""|'')[^\s)]""")
 
 
 def family_modules(*, tools: bool = False) -> tuple[ModuleType, ...]:

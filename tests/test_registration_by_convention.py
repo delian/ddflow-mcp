@@ -78,6 +78,7 @@ def test_a_docstring_line_starting_with_commands_does_not_register_a_module():
     from ddflow.surfaces.declared import _HAS_COMMANDS
 
     assert not _HAS_COMMANDS.search('"""Helpers.\n\nCOMMANDS that use these.\n"""\n')
+    assert _HAS_COMMANDS.search("COMMANDS: tuple[\n    Command,\n] = (\n")
     assert _HAS_COMMANDS.search("COMMANDS: tuple[Command, ...] = (\n")
     assert _HAS_COMMANDS.search("COMMANDS = ()\n")
 
@@ -101,3 +102,17 @@ def test_the_tools_only_scan_misses_no_tool_the_full_scan_finds():
     from ddflow.surfaces.tools import DECLARED
 
     assert {c.tool for c in all_commands() if c.tool} == set(DECLARED)
+
+
+def test_help_tolerates_a_registry_whose_values_are_not_mappings():
+    groups = dict(grouped_tools({"ddflow_next": "describes it", "ddflow_zz": None}))
+    assert "ddflow_next" in {t for g in groups.values() for t in g}
+
+
+def test_the_tool_pattern_reads_any_spelling_of_a_real_tool_only():
+    from ddflow.surfaces.declared import _HAS_TOOL
+
+    for yes in ('tool="ddflow_x"', "tool='ddflow_x'", "tool=TOOL_X", 'tool = f"ddflow_{n}"'):
+        assert _HAS_TOOL.search(yes), yes
+    for no in ('tool=""', "tool=''", 'tool=""'):
+        assert not _HAS_TOOL.search(no), no
