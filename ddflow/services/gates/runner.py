@@ -13,6 +13,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from .. import workers as WK
 from ..ci_marker import parse_marker
 from ..flakes import failure_evidence
 from ..gateenv import child_env
@@ -201,8 +202,9 @@ def run_command_gate(
         # process-global and unlocked: roborev 827) and, on timeout, kills the whole process
         # group (Bed0f5b6d99).
         ticking = on_tick is not None and tick_s > 0
+        command, auto = WK.resolve(gdef.command, cfg if cfg is not None else Config.load(cwd))
         p = cmdrunner.CommandRunner().run(
-            cmdrunner.Declared(gdef.command, f"gates.toml [gate.{gdef.id}]"),
+            cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
             cwd=cwd,
             env=full_env,
             timeout_s=gdef.timeout_s,
@@ -214,6 +216,7 @@ def run_command_gate(
     out = p.output
     ev = {
         "command": gdef.command,
+        **({"command_run": command, "workers": {"n": auto.n, **auto.inputs}} if auto else {}),
         **command_layer_evidence(gdef, cwd),
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),

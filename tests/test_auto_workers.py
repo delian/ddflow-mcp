@@ -1,0 +1,61 @@
+"""The pytest worker count is computed at run time (D-agent-test-etiquette)."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace as NS
+
+from ddflow.infra.signals import FakeSource
+from ddflow.services import workers as WK
+
+
+def cfg(workers="auto", lo=1, hi=48, marks=None):
+    return NS(
+        ci=NS(workers=workers, min_workers=lo, max_workers=hi),
+        schedule=NS(signals=marks or {"load_per_core": {"high": 0.75}}),
+    )
+
+
+def run(c, load, free=0.9, files=None, cores=192):
+    return WK.compute(c, files, source=FakeSource({"load": load, "memory_free_frac": free}),
+                      cores=cores)  # fmt: skip
+
+
+def test_quiet_host_uses_the_ceiling():
+    assert run(cfg(), 0.0).n == 48
+
+
+def test_busy_host_is_clamped_up_to_the_floor():
+    assert run(cfg(lo=2), 0.9).n == 2
+
+
+def test_formula_is_cores_times_high_minus_loadavg():
+    w = run(cfg(hi=500), 0.5)  # 192*0.75 - 96 = 48
+    assert w.n == 48 and w.inputs["loadavg"] == 96.0 and w.inputs["cores"] == 192
+
+
+def test_never_above_the_selected_files():
+    assert run(cfg(), 0.0, files=3).n == 3
+
+
+def test_memory_pressure_halves_and_critical_floors():
+    assert run(cfg(), 0.0, free=0.10).n == 24
+    assert run(cfg(lo=2), 0.0, free=0.02).n == 2
+
+
+def test_fixed_setting_wins():
+    w = run(cfg(workers="7"), 0.9)
+    assert w.n == 7 and w.inputs["setting"] == "7"
+
+
+def test_unknown_load_is_bounded():
+    assert WK.compute(cfg(), None, source=FakeSource({}), cores=192).n == 16
+
+
+def test_resolve_substitutes_every_form_and_logs_inputs():
+    src = FakeSource({"load": 0.0, "memory_free_frac": 0.9})
+    cmd, w = WK.resolve("pytest -n '{workers}' tests/test_a.py tests/test_b.py", cfg(), source=src)
+    assert cmd == "pytest -n 2 tests/test_a.py tests/test_b.py" and w.inputs["files"] == 2
+
+
+def test_command_without_placeholder_is_untouched():
+    assert WK.resolve("pytest -n 4", cfg()) == ("pytest -n 4", None)
