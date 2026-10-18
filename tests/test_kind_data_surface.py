@@ -139,3 +139,26 @@ def test_a_field_named_like_a_control_argument_is_refused(repo):
     finally:
         R.forget("srch")
         D.DEF_KINDS.pop("srch", None)
+
+
+def test_a_project_kind_is_seen_by_search_resources_and_a_fresh_cli(repo):
+    d = repo / KDA.PROJECT_DIR
+    d.mkdir(parents=True)
+    (d / "ticketx.toml").write_text(
+        'name = "ticketx"\nsummary = "t"\ntext = ["note"]\n[[field]]\nname = "title"\nrequired = true\n'
+        '[[field]]\nname = "note"\ndefault = ""\n'
+    )
+    try:
+        # a fresh CLI process (nothing has declared the kind yet) files and finds it
+        assert (
+            run_cli(repo, "record", "ticketx", "add", "t1", "--set", "title=zebra", agent="a")[0]
+            == 0
+        )
+        code, out, err = run_cli(repo, "search", "--kind", "ticketx", "zebra", agent="a")
+        assert code == 0 and "t1" in out, err
+        # a fresh MCP server lists its resources
+        listed = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "resources/list"})
+        assert "ddflow://records/ticketx" in [r["uri"] for r in listed["result"]["resources"]]
+    finally:
+        R.forget("ticketx")
+        D.DEF_KINDS.pop("ticketx", None)
