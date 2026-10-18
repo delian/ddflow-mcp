@@ -16,6 +16,7 @@ records were ignored.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -111,6 +112,11 @@ def _ready_to_complete(repo: Path, monkeypatch, agent: str) -> None:
     monkeypatch.setenv("DDFLOW_AGENT", agent)
     code, out, err = run_cli(repo, "claim", "T2")
     assert code == 0, out + err
+    # `implement` will not pass over an empty branch (fix-B31c0109012): commit something.
+    tree = Path(next(ln.split(":", 1)[1].strip() for ln in out.splitlines() if "worktree:" in ln))
+    (tree / "b.py").write_text("b = 1\n")
+    for git in (["add", "b.py"], ["commit", "-qm", "T2"]):
+        subprocess.run(["git", "-C", str(tree), *git], check=True, capture_output=True)
     pass_pipeline(repo, "T2")  # cross-family reviewer: gemini-2.5-pro
 
 
