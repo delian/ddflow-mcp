@@ -41,3 +41,11 @@ class ReviewConfig:
         150,
         doc="`ddflow review <id> --gate rubber_duck,critic` on a change with fewer changed lines than this (default 150; 0 = never) sends ONE review request whose prompt carries both gates' lenses and records its outcome for each gate, with a shared `review_id` in their evidence (decision D-gate-economy 2: a small fix spent 2.9 rounds of each gate, most failing on findings later refuted). A larger change keeps one review per gate, one after the other. Not for --chunk, --delta, --commit or --base, nor when either gate is out of rounds, the two are served by different reviewers, or a gate is not rubber_duck or critic; the combined review is a full round of each gate. Change it for the project (`ddflow config review.combined_under_lines 100`), for this machine (add --local), per run (DDFLOW_REVIEW_COMBINED_UNDER_LINES), or over MCP with `ddflow_configure`.",
     )
+    exclude_globs: list[str] = knob(
+        factory=lambda: ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"],
+        doc="Globs of generated and pinned files (golden snapshots, transcripts, lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a re-pinned transcript turned a 3 KB change into an 11-chunk review that took 7 minutes and judged generated text. A bare pattern matches at any depth. The review output and the gate's evidence say how many files and bytes were left out and name them, so a skipped file is never silent. Change it for the project (`ddflow config review.exclude_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`; an empty list sends every file.",
+    )
+    exclude_pin_files: bool = knob(
+        True,
+        doc="Whether the files `.ddflow/pins.toml` owns (README regions, golden snapshots, the setup transcript: regenerated, never read) are left out of review chunks as well as [review].exclude_globs. Default true; false sends them.",
+    )
