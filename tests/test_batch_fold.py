@@ -146,3 +146,24 @@ def test_a_claimed_then_an_unclaimed_globs_edit_is_one_lease_retarget(repo):
         repo, [{"id": "A", "add_globs": ["x1.py"]}, {"id": "C", "add_globs": ["x2.py"]}]
     )
     assert code == 0, err
+    items = _items(repo)
+    assert "x1.py" in items["A"].globs and "x2.py" in items["C"].globs
+
+
+def test_batch_reads_edits_from_a_file_and_refuses_a_missing_one(repo, tmp_path):
+    _setup(repo)
+    f = tmp_path / "edits.json"
+    f.write_text(json.dumps([{"id": "A", "priority": 7}]))
+    assert run_cli(repo, "batch", "--file", str(f))[0] == 0
+    assert _items(repo)["A"].priority == 7
+    code, _o, _e = run_cli(repo, "batch", "--file", str(tmp_path / "nope.json"))
+    assert code == 1
+
+
+def test_a_cycle_closing_through_an_abandoned_item_is_refused(repo):
+    from ddflow.api import batch
+
+    _setup(repo)
+    assert run_cli(repo, "update", "C", "--add-needs", "A")[0] == 0
+    out = batch.apply(repo, [{"id": "A", "needs": ["C"]}], abandon={"C": "gone"}, agent="w")
+    assert out.exit == 3 and out.data.get("cycles")

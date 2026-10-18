@@ -10,6 +10,7 @@ duplicate -- the engine is this one function, for every surface.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -102,8 +103,8 @@ def _cycle_refusal(st, plans, abandon, kind) -> O.Outcome | None:
     for it, fields in plans:
         if "needs" in fields and it.id in needs:
             needs[it.id] = list(fields["needs"])
-    for gone in abandon:
-        needs.pop(gone, None)
+    # An abandoned item stays in the live graph (the scheduler's cycle check sees it), so it
+    # stays a node here with its edges (roborev).
     new = sorted(c for c in _cycles(needs) if c not in before)
     if not new:
         return None
@@ -152,7 +153,7 @@ def _record(log, cfg, st, plans, abandon, kind, result, retargets) -> O.Outcome:
 
 def apply(
     repo: Path,
-    entries: list[dict[str, Any]],
+    entries: list[dict[str, Any]] | Callable[[Any], list[dict[str, Any]]],
     *,
     abandon: dict[str, str] | None = None,
     dry_run: bool = False,
@@ -173,6 +174,8 @@ def apply(
 
 def _decide(log, cfg, st, entries, abandon, kind, *, dry_run: bool) -> O.Outcome:
     """Plan the batch from ``st``, check it, and record it unless ``dry_run``."""
+    if callable(entries):
+        entries = entries(st)  # derived from THIS state, so under the lock from the locked one
     planned = _plan(cfg, st, entries, abandon, kind)
     if isinstance(planned, O.Outcome):
         return planned
@@ -248,10 +251,18 @@ def fold(
             id=dup,
         )
     why = reason or f"duplicate of {keep}"
-    entries, repointed = _fold_entries(st, a, b, why)
+    repointed: list[str] = []
+
+    def derive(state) -> list[dict[str, Any]]:
+        # Re-derived from the state the batch is planned against (under the lock when it
+        # records), so a dependent's needs changed meanwhile are not overwritten (roborev).
+        entries, moved = _fold_entries(state, state.items[dup], state.items[keep], why)
+        repointed[:] = moved
+        return list(entries.values())
+
     out = apply(
         repo,
-        list(entries.values()),
+        derive,
         abandon={dup: f"folded into {keep}: {why}"},
         dry_run=dry_run,
         agent=agent,
