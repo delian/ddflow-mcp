@@ -33,6 +33,7 @@ from .declared.mergequeue import COMMANDS as _MERGEQUEUE
 from .declared.metrics import COMMANDS as _METRICS
 from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
+from .declared.recordkinds import COMMANDS as _RECORDKINDS
 from .declared.records import COMMANDS as _RECORDS
 from .declared.report import COMMANDS as _REPORT
 from .declared.reporting import COMMANDS as _REPORTING
@@ -82,6 +83,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *EXEMPTIONS,
     *_KNOWLEDGE,
     *_RECORDS,
+    *_RECORDKINDS,
     *_QUEUE,
     *_LIFECYCLE,
     *_RULES,

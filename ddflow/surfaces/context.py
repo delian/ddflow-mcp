@@ -37,6 +37,7 @@ from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
+from . import projectkinds as PK
 from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
@@ -67,6 +68,8 @@ class Ctx:
         except W.GitError:
             self.repo = start.resolve()
         self.cfg = Config.load(self.repo)
+        if why := PK.declare(self.repo):
+            print(f"ddflow: {why}", file=sys.stderr)
         # `DDFLOW_AGENT` is the short alias documented in server.json and used by MCP
         # clients and the git hook, which run in an environment where passing `--agent`
         # is not possible. It was documented before it was read -- and a dead env var

@@ -119,6 +119,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "research",
             "bug",
             "session",
+            "record",
         ),
     ),
     (

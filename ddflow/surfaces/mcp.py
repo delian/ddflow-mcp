@@ -56,6 +56,7 @@ from ..infra.worktree import repo_root
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
 from . import mcp_protocol as protocol
 from . import mcp_upgrade as _upgrade
+from . import projectkinds as PK
 from . import registry as _REGISTRY
 from .mcp_bound import BOUNDS
 from .mcp_protocol import (  # noqa: F401
@@ -509,6 +510,7 @@ class Server:
 
     def __init__(self, repo: Path, agent: str = "", *, called_from: Path | None = None) -> None:
         self.repo = Path(repo)
+        PK.declare(self.repo)  # a bad project kind is reported by the `record` tool
         #: WHERE THE CALLER IS, unresolved. `self.repo` is the primary checkout -- that
         #: is what makes every worktree share one event log -- and resolving to it threw
         #: away the fact `claim` needs: whether the caller was already inside a worktree.

@@ -101,15 +101,19 @@ def test_tfidf_ranks_the_closest_doc_first_and_omits_docs_sharing_no_term():
 
 
 def test_search_sources_are_registered_and_cover_every_kind_in_order():
+    from ddflow.api import record_kind_data as KDA
     from ddflow.services import search as S
     from ddflow.services.searchcore import registered
 
     names = [src.name for src in registered()]
     assert names == S.source_names()
-    assert names == [
+    data = {n for n, _ in KDA.packaged()} - {"rule"}  # a source per data kind; rule has its own
+    assert [n for n in names if n not in data] == [
         "records", "sessions", "prompts", "log", "rules", "skills", "agents", "jobs", "schedules"
     ]  # fmt: skip
-    covered = [k for src in registered() for k in src.kinds]
+    owners = [k for src in registered() for k in src.kinds if k in data]
+    assert sorted(owners) == sorted(data)  # every data kind has exactly one owner
+    covered = [k for src in registered() for k in src.kinds if k not in data]
     assert sorted(covered) == sorted(S.SOURCES)  # every kind has exactly one owner
 
 

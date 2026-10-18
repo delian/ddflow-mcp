@@ -77,7 +77,7 @@ def kinds():
         yield KDA.parse_kind(RISK), KDA.parse_kind(STAKE)
     finally:
         for k in ("riskx", "stakeholderx"):
-            D.DEF_KINDS.pop(k, None)
+            D.DEF_KINDS.unregister(k)
 
 
 def _add(repo, kind, rid="r1", **kw):
@@ -183,7 +183,7 @@ def test_declarations_are_checked_against_the_fields(edit, message):
         with pytest.raises(ValueError, match=message):
             KDA.parse_kind(text)
     finally:
-        D.DEF_KINDS.pop("riskx", None)
+        D.DEF_KINDS.unregister("riskx")
 
 
 @pytest.mark.parametrize(
@@ -214,7 +214,7 @@ def test_a_pattern_is_not_bypassed_by_a_long_value():
 def test_an_unnumbered_render_field_is_refused_when_declared():
     with pytest.raises(ValueError, match="render names no such field"):
         KDA.parse_kind(STAKE.replace('summary = "s"', 'summary = "s"\nrender = "{}"'))
-    D.DEF_KINDS.pop("stakeholderx", None)
+    D.DEF_KINDS.unregister("stakeholderx")
 
 
 def test_show_renders_status_as_the_definition_status(kinds, repo):
@@ -251,7 +251,7 @@ def test_rules_that_cannot_work_are_refused(extra, message):
         with pytest.raises((ValueError, KD.KindDataError), match=message):
             KDA.parse_kind(head + extra)
     finally:
-        D.DEF_KINDS.pop("zz", None)
+        D.DEF_KINDS.unregister("zz")
 
 
 def test_a_field_called_status_wins_in_the_template(repo):
@@ -266,7 +266,7 @@ def test_a_field_called_status_wins_in_the_template(repo):
         R.record_edit(repo, bug, "b1", {"status": "fixed"})
         assert R.record_show(repo, bug, "b1").data["rendered"] == "b1 is fixed"
     finally:
-        D.DEF_KINDS.pop("bugx", None)
+        D.DEF_KINDS.unregister("bugx")
 
 
 def test_a_bound_and_a_text_check_on_one_field_cannot_both_work():
@@ -275,7 +275,7 @@ def test_a_bound_and_a_text_check_on_one_field_cannot_both_work():
         with pytest.raises(ValueError, match="validator text check field 'n'"):
             KDA.parse_kind('name = "zz"\nsummary = "s"\n' + extra)
     finally:
-        D.DEF_KINDS.pop("zz", None)
+        D.DEF_KINDS.unregister("zz")
 
 
 def test_lifecycle_states_must_be_choices_of_the_state_field():
@@ -288,4 +288,4 @@ def test_lifecycle_states_must_be_choices_of_the_state_field():
         with pytest.raises(ValueError, match="states b are not choices of 's'"):
             KDA.parse_kind(text)
     finally:
-        D.DEF_KINDS.pop("zz", None)
+        D.DEF_KINDS.unregister("zz")

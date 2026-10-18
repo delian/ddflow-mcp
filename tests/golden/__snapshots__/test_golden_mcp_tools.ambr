@@ -2486,6 +2486,29 @@
        }
       }
     ''',
+    'ddflow_record': '''
+      {
+       "name": "ddflow_record",
+       "description": "Records of a data kind (risk, vendor ...). args: kind, verb (list show add edit remove search revise history), [id], then field=value; @opt=value gives an option.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "args": {
+          "type": "array",
+          "description": "kind verb [id] then field=value or @opt=value.",
+          "items": {
+           "type": "string"
+          }
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_recover': '''
       {
        "name": "ddflow_recover",
@@ -4023,6 +4046,7 @@
     'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
+    'ddflow_record',
     'ddflow_recover',
     'ddflow_release',
     'ddflow_remove',
