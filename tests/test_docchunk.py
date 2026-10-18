@@ -139,3 +139,8 @@ def test_plain_text_and_empty():
     assert [c.chunk_id for c in C.chunk("n.txt", "one\n\ntwo\n").chunks] == ["n.txt#~0"]
     assert C.chunk("n.txt", "").chunks == ()
     assert C.detect("x.ADOC") == "adoc" and C.detect("Makefile") == "text"
+
+
+def test_anchor_that_collides_with_a_suffixed_slug_is_bumped():
+    res = C.chunk("d.md", "# Install\n\na\n\n# Install 1\n\nb\n\n# Install\n\nc\n")
+    assert ids(res) == ["d.md#install~0", "d.md#install-1~0", "d.md#install-2~0"]
