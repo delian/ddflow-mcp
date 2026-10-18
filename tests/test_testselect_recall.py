@@ -15,10 +15,10 @@ shallow clone, a tarball, or `DDFLOW_SKIP_HISTORY_REPLAY=1`.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -51,7 +51,7 @@ UNROUTABLE = {
 #: nothing it exercises: the selector's stated blind spot (`testselect`, "What it misses"), a
 #: route no import graph can draw. Such a miss is neither scored nor hidden: it is listed in
 #: the report as `blind`, and the floor measures the tests the selector can route (B9934c6c6aa).
-DRIVES_SUBPROCESS = re.compile(r"\brun_cli\(|\bsubprocess\.(?:run|Popen|check_output|call)\(")
+SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_output", "check_call", "call"})
 ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over all replays
 
 
@@ -157,31 +157,60 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
         return len(scored), len(scored) - len(causes), lost, [*causes, *listed_blind]
 
 
-def _code(text: str) -> str:
-    """``text`` without its comment lines (a mention in a comment is not a call)."""
-    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+def _imported(text: str) -> set[str] | None:
+    """Every dotted module name a test module imports (`from a.b import c` gives `a.b` and
+    `a.b.c`, `import a.b.c` gives all three prefixes); None when it does not parse."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                names.update(".".join(parts[: i + 1]) for i in range(len(parts)))
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module)
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return names
 
 
 def imports_changed(text: str, src: list[str]) -> bool:
     """Whether a test module imports one of the changed source modules directly (a route the
-    selector draws, so a miss of it is a real one, whatever else the test does)."""
-    code = _code(text)
+    selector draws, so a miss of it is a real one, whatever else the test does). A changed
+    package `__init__.py` is the package itself."""
+    seen = _imported(text)
+    if seen is None:  # unparsable: do not call it blind on a guess
+        return True
     for path in src:
-        if not path.endswith(".py"):
-            continue
-        module = path[:-3].replace("/", ".")
-        parent, _, stem = module.rpartition(".")
-        if re.search(rf"\b(?:from|import)\s+{re.escape(module)}\b", code) or (
-            parent and re.search(rf"\bfrom\s+{re.escape(parent)}\s+import\s[^\n]*\b{stem}\b", code)
-        ):
-            return True
+        if path.endswith(".py"):
+            module = path[:-3].replace("/", ".").removesuffix(".__init__")
+            if module in seen:
+                return True
     return False
 
 
 def drives_subprocess(text: str, src: list[str] = ()) -> bool:
     """Whether a test module drives the program in a subprocess (the selector's blind spot) and
-    imports none of the changed ``src`` modules itself."""
-    return bool(DRIVES_SUBPROCESS.search(_code(text))) and not imports_changed(text, list(src))
+    imports none of the changed ``src`` modules itself. Read from the syntax tree: a comment or
+    a docstring that mentions `run_cli(` is not a call."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = (
+                f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else ""
+            )
+            owner = (
+                f.value.id if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) else ""
+            )
+            if name == "run_cli" or (owner == "subprocess" and name in SUBPROCESS_CALLS):
+                return not imports_changed(text, list(src))
+    return False
 
 
 def _one(sha: str) -> tuple[int, int, list[str], list[str]] | None:
@@ -224,6 +253,13 @@ def test_a_subprocess_driving_test_is_a_blind_spot_not_a_scored_miss():
     assert not drives_subprocess(both, ["ddflow/services/ci.py"])
     assert drives_subprocess(both, ["ddflow/services/gates.py"])
     assert drives_subprocess("import ddflow.api.review\nrun_cli(r)", ["ddflow/api/cirun.py"])
+    # shapes a regex missed: a parenthesised multi-line import, a changed package __init__
+    multi = "from ddflow.services import (\n    ci,\n)\nrun_cli(repo)\n"
+    assert not drives_subprocess(multi, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(
+        "from ddflow.api import review\nrun_cli(r)", ["ddflow/api/__init__.py"]
+    )
+    assert not drives_subprocess("import ddflow.api\nrun_cli(r)", ["ddflow/api/__init__.py"])
 
 
 def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
