@@ -216,3 +216,40 @@ def test_an_unnumbered_render_field_is_refused_when_declared():
     with pytest.raises(ValueError, match="render names no such field"):
         KDA.parse_kind(STAKE.replace('summary = "s"', 'summary = "s"\nrender = "{}"'))
     D.DEF_KINDS.pop("stakeholderx", None)
+
+
+def test_show_renders_status_as_the_definition_status(kinds, repo):
+    risk, _ = kinds
+    import dataclasses
+
+    risk = dataclasses.replace(
+        risk, rules=dataclasses.replace(risk.rules, render="{id} is {status}")
+    )
+    _add(repo, risk)
+    assert R.record_show(repo, risk, "r1").data["rendered"] == "r1 is active"
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        (
+            "sources = ['n']\n[[field]]\nname='title'\n[[field]]\nname='n'\ntype='integer'",
+            "sources field 'n' is a integer",
+        ),
+        (
+            "[[validator]]\nfield='n'\npattern='^1'\n[[field]]\nname='title'\n[[field]]\nname='n'\ntype='integer'",
+            "validator field 'n'",
+        ),
+        (
+            "[lifecycle]\nfield='n'\ninitial='a'\ntransitions=5\n[[field]]\nname='n'",
+            "transitions must be a table",
+        ),
+    ],
+)
+def test_rules_that_cannot_work_are_refused(extra, message):
+    head = 'name = "zz"\nsummary = "s"\n'
+    try:
+        with pytest.raises((ValueError, KD.KindDataError), match=message):
+            KDA.parse_kind(head + extra)
+    finally:
+        D.DEF_KINDS.pop("zz", None)
