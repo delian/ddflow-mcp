@@ -1963,9 +1963,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             tick_s=tick_s,
             only=only,
             on_chunk=keep.add if item else None,
-            manifest=RM.build(
-                diff, [p for p, _n in skipped.files], cfg.review.manifest_max_files
-            ),
+            manifest=RM.for_review(diff, skipped, cfg),
         )
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the

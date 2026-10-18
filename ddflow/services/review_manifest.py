@@ -79,3 +79,9 @@ def build(
 def held(chunk: str) -> str:
     """The files this chunk's diff holds, for the prompt's 'this part' line."""
     return ", ".join(dict.fromkeys(fd.path for fd in unidiff.files(chunk)))
+
+
+def for_review(diff: str, skipped, cfg) -> str:
+    """The manifest `ddflow review` sends: the diff, what [review].exclude_globs left
+    out (``skipped``, a ``review_exclude.Excluded``) and [review].manifest_max_files."""
+    return build(diff, [p for p, _n in skipped.files], cfg.review.manifest_max_files)

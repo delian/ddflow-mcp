@@ -91,6 +91,8 @@ def test_stdlib_renderer_matches_jinja_on_the_shipped_templates():
             "fence": "```",
             "chunk_index": 1,
             "chunk_total": 2,
+            "manifest": "- a.py (+1 -0): new file",
+            "chunk_files": "a.py",
         },
         "session_brief_header": {"recovery": []},
     }
