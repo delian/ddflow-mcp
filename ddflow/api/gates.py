@@ -336,6 +336,37 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     return (repo, "") if gdef.cwd != "worktree" else item_tree(repo, cfg, st, it, called_from)
 
 
+def _no_tree_reason(it, item: str, gate: str, held: str) -> tuple[str, str]:
+    """(why a worktree gate has nowhere to run, the recorded outcome it leaves standing or "").
+    A MERGED item's tree is gone (DX-gate-run-after-merge): a pre-merge pass is kept and
+    `complete` uses it; without one the reason says to run gates before `ddflow merge`."""
+    if it.merged_sha:
+        sha = it.merged_sha[:12]
+        prior = it.gate_outcome(gate)
+        if prior == "passed":
+            return (
+                f"{item} merged ({sha}) and the merge removed its worktree: the recorded "
+                f"{gate} outcome (passed before the merge) stands and `complete` uses it.",
+                prior,
+            )
+        return (
+            f"{item} merged ({sha}) and the merge removed its worktree, so {gate} cannot run "
+            f"now; gates are run before `ddflow merge {item}`. Recording UNAVAILABLE: "
+            f"re-run it on the merged tree, or record the real outcome with `ddflow gate "
+            f"record {item} {gate} --outcome ... --evidence ...`.",
+            "",
+        )
+    why = (
+        f"the worktree you are in belongs to {held}, not {item}: its suite is not "
+        f"{item}'s. Run the gate from the worktree {item} is worked in."
+        if held
+        else f"{item} was claimed without a worktree, and the primary's working tree "
+        f"is not its: run the gate from the worktree it is worked in, or set "
+        f"[worktree].enabled = false if the primary is where you work."
+    )
+    return why + " Recording UNAVAILABLE.", ""
+
+
 def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outcome | None:
     """`[loops].on_detect = "block"`: a gate that has failed the same way N times is not
     run again on the work that last failed it. Changing the work lifts the refusal --
@@ -565,18 +596,19 @@ def run(
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
     if cwd is None:
-        reason = (
-            f"the worktree you are in belongs to {held}, not {item}: its suite is not "
-            f"{item}'s. Run the gate from the worktree {item} is worked in."
-            if held
-            else f"{item} was claimed without a worktree, and the primary's working tree "
-            f"is not its: run the gate from the worktree it is worked in, or set "
-            f"[worktree].enabled = false if the primary is where you work."
-        ) + " Recording UNAVAILABLE."
-        R.record_measured(
-            log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+        reason, kept = _no_tree_reason(it, item, gate, held)
+        if not kept:
+            R.record_measured(
+                log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+            )
+        return O.nothing(
+            "gate.run",
+            reason,
+            gate=gate,
+            outcome=kept or "unavailable",
+            evidence={"reason": reason},
+            id=item,
         )
-        return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
         return repeated
