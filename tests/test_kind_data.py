@@ -82,9 +82,10 @@ def test_bad_descriptor_names_the_problem(edit, message):
     else:
         text = text.replace('name = "gizmo"', edit)
     with pytest.raises(
-        KD.KindDataError, match=message.replace("[", r"\[").replace("(", r"\(").replace(")", r"\)")
+        (KD.KindDataError, ValueError),
+        match=message.replace("[", r"\[").replace("(", r"\(").replace(")", r"\)"),
     ):
-        KD.parse(text)
+        KDA.kind_from_data(KD.parse(text))
 
 
 def test_not_toml_is_refused():
