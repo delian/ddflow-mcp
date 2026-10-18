@@ -128,3 +128,18 @@ def test_stamp_coverage_and_last_seen(repo):
     assert D.last_seen(repo, repo) == ""
     D.set_last_seen(repo, repo, b)
     assert D.last_seen(repo, repo) == b
+
+
+def test_a_merge_commit_lists_the_paths_it_brought(repo):
+    wt = _tree(repo, "feat", "main", "T6")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "src/s.py")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side")
+    r = D.measure(repo, wt, globs=["src/"])
+    assert any(c.subject == "merge side" for c in r.relevant)
+    assert len([c for c in r.commits if c.subject == "merge side"]) == 1
+
+
+def test_moved_or_gone_is_none_when_git_cannot_say(repo):
+    assert D.moved_or_gone(repo, ["README.md"], "0" * 40) is None
