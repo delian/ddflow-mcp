@@ -13,14 +13,14 @@ import re
 
 from . import regions as RG
 
-_MARK = "ddflow:begin"
+_MARKS = ("ddflow:begin", "ddflow:end")  # an orphaned end marker is unbalanced, not "no regions"
 # adopt's stamped blocks (`ddflow:begin NAME ddflow=V fmt=N sha=H`) are another grammar, owned
 # by pins and adopt: a text holding one is not read here, so its end marker is not "unbalanced"
 _STAMPED = re.compile(r"^<!-- ddflow:begin \S+ [^\n]*\bfmt=\d+", re.M)
 
 
 def _parsed(text: str) -> list[RG.Region]:
-    return RG.parse(text) if _MARK in text and not _STAMPED.search(text) else []
+    return RG.parse(text) if any(m in text for m in _MARKS) and not _STAMPED.search(text) else []
 
 
 def problem(text: str) -> str:
