@@ -839,6 +839,54 @@
   
   '''
 # ---
+# name: test_help[ddflow harness doctor]
+  '''
+  usage: ddflow harness doctor [-h] [id]
+  
+  positional arguments:
+    id          one agent (default: every adopted one)
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow harness list]
+  '''
+  usage: ddflow harness list [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow harness show]
+  '''
+  usage: ddflow harness show [-h] id
+  
+  positional arguments:
+    id          the agent's descriptor id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow harness]
+  '''
+  usage: ddflow harness [-h] {list,show,doctor} ...
+  
+  positional arguments:
+    {list,show,doctor}
+      list              every agent and whether this project is adopted for it
+      show              per event the ladder level in effect, and per feature the support
+      doctor            drift, missing hooks and dangling commands (exit 1 = findings)
+  
+  options:
+    -h, --help          show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow health]
   '''
   usage: ddflow health [-h] [--run] [--mode {off,propose,apply}]
@@ -2474,7 +2522,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2483,6 +2531,8 @@
     -h, --help            show this help message and exit
     --title TITLE
     --body BODY
+    --append-body APPEND_BODY
+                          ADD this text after the item's current body; the original is kept
     --needs NEEDS
     --add-needs ADD_NEEDS
                           ADD these comma-separated ids to the item's needs; the rest are kept
@@ -2731,13 +2781,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2832,6 +2882,7 @@
                           nothing)
       companions          companion MCP servers that serve the gates (exit 2 = a default one is
                           missing)
+      harness             what each agent gets, at which fallback level, and what is broken
       prompts             inspect and override the prompt templates
       hooks               install/inspect the enforcement git hook and the Claude Code session hook
       mcp                 run the MCP stdio server over this repository
@@ -2910,6 +2961,10 @@
     'ddflow gate skip',
     'ddflow gate status',
     'ddflow gate verify',
+    'ddflow harness',
+    'ddflow harness doctor',
+    'ddflow harness list',
+    'ddflow harness show',
     'ddflow health',
     'ddflow heartbeat',
     'ddflow help',
