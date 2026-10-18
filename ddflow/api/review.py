@@ -14,6 +14,7 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import re
 import json
 import secrets
 import threading
@@ -259,6 +260,46 @@ def _finding_listing(it, gate: str) -> str:
     return "\nfindings:\n" + "\n".join(lines) if lines else ""
 
 
+_NODE = re.compile(r"([\w./-]+\.py)::([\w:.\[\]-]+)")
+_BARE_TEST = re.compile(r"\btest_\w+")
+
+
+def _defines(text: str, name: str) -> bool:
+    return (
+        re.search(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b", text, re.M) is not None
+    )
+
+
+def probe_problem(roots: list[Path], probe: str) -> str:
+    """Why a triage probe names a test that does not exist, or "" (bug Bb049f0ae06).
+
+    A probe is free text -- the command run, the fix made -- so only what it CLAIMS to be a
+    test is checked: a pytest node id (`tests/x.py::test_y`, `::Class::test_y`) must name an
+    existing file defining each part, and a bare `test_name` must be defined somewhere under
+    `tests/`. A node that resolves nowhere was never run, so the verdict rests on nothing."""
+    covered: set[str] = set()
+    for path, node in _NODE.findall(probe):
+        covered.update(re.split(r"::", re.sub(r"\[.*", "", node)))
+        files = [r / path for r in roots if (r / path).is_file()]
+        if not files:
+            return f"probe names {path}::{node}, but {path} does not exist"
+        text = files[0].read_text(errors="replace")
+        for part in (x for x in re.sub(r"\[.*", "", node).split("::") if x):
+            if not _defines(text, part):
+                return f"probe names {path}::{node}, but {path} defines no {part!r}"
+    bare = {m for m in _BARE_TEST.findall(probe) if m not in covered}
+    if bare:
+        texts = [
+            f.read_text(errors="replace")
+            for r in roots
+            for f in sorted((r / "tests").rglob("*.py"))
+        ]
+        for name in sorted(bare):
+            if not any(_defines(t, name) for t in texts):
+                return f"probe names test {name!r}, but no file under tests/ defines it"
+    return ""
+
+
 def triage(
     repo: Path,
     item: str,
@@ -303,6 +344,9 @@ def triage(
             "--probe is required: for --refuted the run that shows the finding false, for "
             "--confirmed the fix or test that answers it"
         )
+    roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
+    if problem := probe_problem(roots, probe):
+        return bad(f"{problem}: a probe must name an existing test or a command that was run")
     if not gate:
         withf = sorted(g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings"))
         if len(withf) > 1:
