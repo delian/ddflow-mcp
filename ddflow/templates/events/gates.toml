@@ -1,0 +1,45 @@
+# Event kinds owned by gates (core/handlers/gates.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "cadence.ran"
+doc = "A periodic whole-repo pass ran, with its result."
+
+[[kind]]
+name = "gate.failed"
+doc = "A gate ran and failed."
+
+[[kind]]
+name = "gate.out_of_order"
+doc = "A gate outcome was recorded ahead of the gates before it."
+
+[[kind]]
+name = "gate.partial"
+doc = "A gate ran in part."
+
+[[kind]]
+name = "gate.passed"
+doc = "A gate passed."
+
+[[kind]]
+name = "gate.skipped"
+doc = "A gate was skipped, with the reason."
+
+[[kind]]
+name = "gate.started"
+doc = "A gate's run began."
+
+[[kind]]
+name = "gate.unavailable"
+doc = "A gate could not run; never a pass."
+
+[[kind]]
+name = "review.triaged"
+doc = "A review finding was triaged."
+
+[[kind]]
+name = "reviewer.approved"
+doc = "A reviewer was approved for use."
+
+[[kind]]
+name = "reviewer.configured"
+doc = "A reviewer was configured."

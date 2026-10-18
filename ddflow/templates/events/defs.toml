@@ -1,0 +1,21 @@
+# Event kinds owned by defs (core/handlers/defs.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "def.merged"
+doc = "Two managed definitions were merged into one."
+
+[[kind]]
+name = "def.recorded"
+doc = "A managed definition (kind, template, gate, lens, role) was added."
+
+[[kind]]
+name = "def.retired"
+doc = "A managed definition was removed as a tombstone."
+
+[[kind]]
+name = "def.superseded"
+doc = "A managed definition was replaced by a successor."
+
+[[kind]]
+name = "def.updated"
+doc = "A managed definition's fields were changed."

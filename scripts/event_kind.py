@@ -4,7 +4,7 @@
     scripts/event_kind.py check [KIND ...]     what each kind still lacks (default: every kind)
     scripts/event_kind.py add KIND --why TEXT [options]
 
-A kind needs five edits, each found otherwise by a failing test, one suite round at a time:
+A kind needs six edits, each found otherwise by a failing test, one suite round at a time (the doc of the registry is --why):
 
   1. handler    `core/model.py` HANDLERS -- code only you can write; `check` reports it
   2. fixture    `tests/fixtures/event_kinds.json`, the kind and its fields' JSON types
@@ -12,11 +12,13 @@ A kind needs five edits, each found otherwise by a failing test, one suite round
                 LOG_VERBATIM_NAMES (a lookup) for every str, dict or list field
   4. coherence  `tests/test_coherence_coverage.py` CHECKED or EXEMPT, with a reason
   5. fragment   `ddflow/templates/upgrade/unreleased/event_kind_added.<kind>.toml`
+  6. registry   `ddflow/templates/events/<owner>.toml`, a [[kind]] with the kind's doc
 
-`add` writes 2, 3 (as told), 4 (EXEMPT, as told) and 5 and leaves 1 to you; it never edits an
+`add` writes 2, 3 (as told), 4 (EXEMPT, as told), 5 and 6 and leaves 1 to you; it never edits an
 entry that exists. Options (repeatable): --field NAME=TYPE[,TYPE] a field of the payload;
 --text NAME a free-text field; --lookup NAME=WHY a field compared or opened;
---exempt REASON why the kind files no checkable text (over 20 characters).
+--exempt REASON why the kind files no checkable text (over 20 characters);
+--owner NAME the subsystem file the kind is declared in (default: the kind's first word).
 
 Run from the repository root with the project's environment (`uv run`).
 """
@@ -33,11 +35,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from ddflow.core import eventkinds as EK  # noqa: E402
 from ddflow.core.model import HANDLERS  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "event_kinds.json"
 REDACT = ROOT / "ddflow" / "core" / "redact.py"
 COHERENCE = ROOT / "tests" / "test_coherence_coverage.py"
+EVENTS = ROOT / "ddflow" / "templates" / "events"
 FRAGMENTS = ROOT / "ddflow" / "templates" / "upgrade" / "unreleased"
 MIN_REASON = 20
 TEXT_TYPES = {"str", "dict", "list"}
@@ -107,6 +111,8 @@ def lacks(kind: str, snapshot: dict, checked: set[str], exempt: set[str]) -> lis
             out.append(f"redact: field {name!r} is neither LOG_TEXT_FIELDS nor a lookup")
     if kind not in checked and kind not in exempt and not kind.startswith("gate."):
         out.append("coherence: in neither CHECKED nor EXEMPT of tests/test_coherence_coverage.py")
+    if kind not in {k.name for k in EK.load_dir(EVENTS)}:
+        out.append("registry: declared in no ddflow/templates/events/<owner>.toml")
     if not (FRAGMENTS / f"event_kind_added.{kind}.toml").exists() and not _released(kind):
         out.append(f"fragment: no unreleased/event_kind_added.{kind}.toml")
     return out
@@ -135,6 +141,27 @@ def _q(s: str) -> str:
     return json.dumps(s)
 
 
+def _declare(kind: str, owner: str, why: str) -> list[str]:
+    """The registry row and the upgrade fragment of `kind`, each only when absent."""
+    done: list[str] = []
+    if kind not in {k.name for k in EK.load_dir(EVENTS)}:
+        reg = EVENTS / f"{owner}.toml"
+        head = "" if reg.exists() else f"# Event kinds owned by {owner}. One [[kind]] per kind.\n"
+        row = f"\n[[kind]]\nname = {_q(kind)}\ndoc = {_q(why)}\n"
+        reg.write_text((reg.read_text(encoding="utf-8") if reg.exists() else head) + row, "utf-8")
+        done.append(f"registry: {reg.relative_to(ROOT)}")
+    frag = FRAGMENTS / f"event_kind_added.{kind}.toml"
+    if not frag.exists():
+        frag.write_text(
+            "# One unreleased change; cutting a version folds it into that release.\n\n"
+            f'[[change]]\nkind = "event_kind_added"\nkey = {_q(kind)}\nwhy = {_q(why)}\n'
+            'impact = "additive"\n',
+            encoding="utf-8",
+        )
+        done.append(f"fragment: {frag.relative_to(ROOT)}")
+    return done
+
+
 def add(kind: str, args: argparse.Namespace) -> list[str]:
     """Apply the edits for `kind`; the lines say what was done. Every argument is checked
     before the first file is written, so a refusal leaves the tree as it was."""
@@ -160,6 +187,11 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
     checked, exempt = _coherence()
     if args.exempt and kind not in checked | exempt and len(args.exempt) <= MIN_REASON:
         raise SystemExit(f"--exempt: say why in more than {MIN_REASON} characters")
+    owner = args.owner or kind.partition(".")[0]
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", owner):
+        raise SystemExit(f"--owner {owner!r}: lower-case letters, digits and _ only")
+    if len(args.why.strip()) < EK.MIN_DOC:
+        raise SystemExit(f"--why: at least {EK.MIN_DOC} characters (it is the kind's doc)")
     done: list[str] = []
     if kind not in snap["kinds"]:
         snap["kinds"][kind] = {"v": 1, "fields": dict(sorted(fields.items()))}
@@ -179,15 +211,7 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
     if args.exempt and kind not in checked | exempt:
         _insert(COHERENCE, "EXEMPT: dict[str, str] = {", [f"    {_q(kind)}: {_q(args.exempt)},"])
         done.append("coherence: EXEMPT")
-    frag = FRAGMENTS / f"event_kind_added.{kind}.toml"
-    if not frag.exists():
-        frag.write_text(
-            "# One unreleased change; cutting a version folds it into that release.\n\n"
-            f'[[change]]\nkind = "event_kind_added"\nkey = {_q(kind)}\nwhy = {_q(args.why)}\n'
-            'impact = "additive"\n',
-            encoding="utf-8",
-        )
-        done.append(f"fragment: {frag.relative_to(ROOT)}")
+    done += _declare(kind, owner, args.why)
     return done
 
 
@@ -216,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--text", action="append", default=[], metavar="NAME")
     a.add_argument("--lookup", action="append", default=[], metavar="NAME=WHY")
     a.add_argument("--exempt", default="", metavar="REASON")
+    a.add_argument("--owner", default="", metavar="NAME")
     args = p.parse_args(argv)
     if args.cmd == "add":
         for line in add(args.kind, args):

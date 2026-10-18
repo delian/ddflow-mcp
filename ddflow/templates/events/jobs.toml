@@ -1,0 +1,37 @@
+# Event kinds owned by jobs (core/handlers/jobs.py unless noted). One [[kind]] per kind.
+
+[[kind]]
+name = "external.observed"
+doc = "A job observed a change outside the log."
+
+[[kind]]
+name = "job.ended"
+doc = "A background job ended."
+
+[[kind]]
+name = "job.started"
+doc = "A background job started."
+
+[[kind]]
+name = "schedule.defined"
+doc = "A scheduled job was defined."
+
+[[kind]]
+name = "schedule.removed"
+doc = "A scheduled job was removed."
+
+[[kind]]
+name = "schedule.updated"
+doc = "A scheduled job was changed."
+
+[[kind]]
+name = "trigger.evaluated"
+doc = "The trigger evaluator ran over a batch of events."
+
+[[kind]]
+name = "trigger.fired"
+doc = "A trigger fired its job."
+
+[[kind]]
+name = "trigger.suppressed"
+doc = "A trigger was suppressed, with the reason."
