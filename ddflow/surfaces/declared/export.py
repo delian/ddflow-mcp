@@ -59,6 +59,8 @@ def _full_suite_lines(d) -> list[str]:
     """The whole-suite command, only behind `--full`, and marked as not the agent's to run."""
     if d["full_suite"]:
         return [f"  MERGE QUEUE / PHASE END ONLY -- do not run this yourself:\n  {d['full_suite']}"]
+    if not d.get("full_suite_known"):
+        return []  # no whole-suite command is configured: `--full` would show nothing
     return [
         "  (the whole-suite command is for the merge queue and phase end; `ddflow tests --full` shows it)"
     ]
