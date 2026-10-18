@@ -52,13 +52,11 @@ def test_add_show_edit_list_over_the_cli(repo):
 
 
 def test_the_same_through_the_tool(repo):
-    res = _tool(repo, kind="stakeholder", verb="add", id="s1", set=["title=Ann", "role=sponsor"])
+    res = _tool(repo, args=["stakeholder", "add", "s1", "title=Ann", "role=sponsor"])
     assert not res.get("isError"), res
-    listed = _body(_tool(repo, kind="stakeholder", verb="list"))
+    listed = _body(_tool(repo, args=["stakeholder", "list"]))
     assert [r["id"] for r in listed["rows"]] == ["s1"]
-    found = _body(
-        _tool(repo, kind="stakeholder", verb="search", set=["@query=sponsor", "@limit=5"])
-    )
+    found = _body(_tool(repo, args=["stakeholder", "search", "@query=sponsor", "@limit=5"]))
     assert found["total"] == 1
 
 
@@ -191,3 +189,11 @@ def test_the_tools_list_stays_under_its_budget_with_the_record_tool():
     reply = Server(".").handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     size = len(json.dumps(reply["result"]["tools"], separators=(",", ":")))
     assert size < 100_000
+
+
+def test_the_tool_args_are_kind_verb_id_then_fields():
+    got = RK.from_args({"args": ["risk", "edit", "r1", "title=t", "@reason=x"]})
+    assert (got["kind"], got["verb"], got["id"]) == ("risk", "edit", "r1")
+    assert got["set"] == ["title=t", "@reason=x"]
+    got = RK.from_args({"args": ["risk", "list", "@limit=2"]})
+    assert "id" not in got and got["set"] == ["@limit=2"]
