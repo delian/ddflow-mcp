@@ -47,3 +47,8 @@ def test_the_cli_flag_is_declared(proj):
         proj, "wait", "--item", "T2", "--max-s", "0.2", "--poll", "0.05", "--json", agent=WAITER
     )
     assert code == 2 and "agent-holder" in out
+
+
+def test_a_negative_max_s_is_refused_not_read_as_zero(proj):
+    out = A.wait(proj, item="T2", max_s=-1, agent=WAITER)
+    assert out.exit != 0 and "max-s" in out.reason
