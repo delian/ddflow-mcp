@@ -136,3 +136,11 @@ def test_a_base_that_cannot_be_measured_is_could_not_tell_not_a_failure(repo, mo
     )
     out = sync(repo, item="T1", agent=ME)
     assert out.data["status"] == "unknown" and out.exit == 2
+
+
+def test_the_help_index_files_sync_under_its_declared_group_not_unmapped():
+    from ddflow.services.help import render_index
+    from ddflow.surfaces import tools
+
+    text = render_index(tools=tools.TOOLS)
+    assert "ddflow_sync" in text and "Unmapped" not in text
