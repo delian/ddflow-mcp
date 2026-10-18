@@ -79,3 +79,5 @@
 {"agent":"fleet-unblock-d","data":{"gate":"critic"},"id":"edca66c7d7eb6123217ba993e","kind":"gate.started","lamport":82221,"schema":1,"subject":"B-ds-chunker","ts":"2026-10-18T17:15:58.695649Z"}
 {"agent":"fleet-unblock-d","data":{"at":1792343879.2645712,"holder":"fleet-unblock-d"},"id":"ed78b2807c23a644d0489015a","kind":"lease.renewed","lamport":82241,"schema":1,"subject":"B-ds-chunker","ts":"2026-10-18T17:17:59.291711Z"}
 {"agent":"fleet-unblock-d","data":{"at":1792344119.3305736,"holder":"fleet-unblock-d"},"id":"ed00c4589dcf6c5f508923090","kind":"lease.renewed","lamport":82261,"schema":1,"subject":"B-ds-chunker","ts":"2026-10-18T17:21:59.353703Z"}
+{"agent":"fleet-unblock-d","data":{"at":1792344359.8650055,"holder":"fleet-unblock-d"},"id":"eb51b063ec471d40e622d97bf","kind":"lease.renewed","lamport":82279,"schema":1,"subject":"B-ds-chunker","ts":"2026-10-18T17:25:59.935731Z"}
+{"agent":"fleet-unblock-d","data":{"at":1792344599.2432005,"holder":"fleet-unblock-d"},"id":"e3153f54bf23e5d192f149b69","kind":"lease.renewed","lamport":82294,"schema":1,"subject":"B-ds-chunker","ts":"2026-10-18T17:29:59.260570Z"}
