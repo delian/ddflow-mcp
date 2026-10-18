@@ -33,9 +33,16 @@ def harness_of(client_info: Mapping[str, Any], environ: Mapping[str, str] | None
     if found := HR.detect(os.environ if environ is None else environ):
         return found
     name = str(client_info.get("name", "")).lower()
-    for h in HR.load():
-        if name and (h.id in name or h.family in name):
-            return h.id
+    if not name:
+        return ""
+    # An id in the name, else a family; only a UNIQUE match counts (a family is shared by
+    # several descriptors, and a wrong guess would switch off the start for the right agent).
+    for hits in (
+        {h.id for h in HR.load() if h.id and h.id in name},
+        {h.id for h in HR.load() if h.family and h.family in name},
+    ):
+        if len(hits) == 1:
+            return hits.pop()
     return ""
 
 

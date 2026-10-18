@@ -100,3 +100,16 @@ def test_the_start_is_recorded_with_the_harness_name(repo):
 
     started = [e for e in EventLog(repo, "x").read_all() if e.kind == "session.started"]
     assert started and started[-1].data["tool"] == "qwen"
+
+
+def test_an_ambiguous_client_name_is_not_guessed():
+    assert firstcall.harness_of({"name": "claude-gemini-bridge"}, {}) == ""
+    assert firstcall.harness_of({"name": "Kilo Code"}, {}) == "kilo"
+
+
+def test_a_failing_start_degrades_to_no_note_and_never_fails_the_call(repo, monkeypatch):
+    monkeypatch.setattr(firstcall, "_session_start", lambda *a, **k: 1 / 0)
+    srv = Server(repo)
+    srv.client_info = {"name": "some-client"}
+    res = _call(srv)
+    assert not res.get("isError") and "ddflow session start" not in "".join(_texts(res))
