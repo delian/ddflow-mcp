@@ -22,6 +22,11 @@ from .. import testselect as TS
 
 GATES = ("ci", "unit_tests")
 SHOWN = 5
+#: Said in the evidence: the comparison is only as clean as a fresh checkout is.
+ISOLATION = (
+    "fresh detached worktree of the base; the project's own command ran in it, so an "
+    "editable install of the branch or git-ignored fixtures can still mislead it"
+)
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:
@@ -48,7 +53,7 @@ def on_base(repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Pat
         outcome, ev = run(replace(gdef, command=cmd), tree.path)
     failing = ev.get("failed_tests") or []
     red = outcome == "failed" and all(i in failing for i in ids)
-    return {"red": red, "base": base, "base_sha": sha, "outcome": outcome, "command": cmd,
+    return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha, "outcome": outcome, "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
 
 
