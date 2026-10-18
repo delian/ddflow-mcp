@@ -336,13 +336,22 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     return (repo, "") if gdef.cwd != "worktree" else item_tree(repo, cfg, st, it, called_from)
 
 
-def _no_tree_reason(it, item: str, gate: str, held: str) -> tuple[str, str]:
+def _no_tree_reason(it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
     """(why a worktree gate has nowhere to run, the recorded outcome it leaves standing or "").
     A MERGED item's tree is gone (DX-gate-run-after-merge): a pre-merge pass is kept and
     `complete` uses it; without one the reason says to run gates before `ddflow merge`."""
     if it.merged_sha:
         sha = it.merged_sha[:12]
         prior = it.gate_outcome(gate)
+        if prior == "passed" and force:
+            return (
+                f"{item} merged ({sha}) and the merge removed its worktree: --force asked "
+                f"for a fresh {gate} measurement that cannot be taken, so the pre-merge "
+                f"pass is REPLACED by unavailable (it stays in the log). Record the real "
+                f"outcome with `ddflow gate record {item} {gate} --outcome passed "
+                f"--evidence ...`.",
+                "",
+            )
         if prior == "passed":
             return (
                 f"{item} merged ({sha}) and the merge removed its worktree: the recorded "
@@ -596,8 +605,7 @@ def run(
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
     if cwd is None:
-        reason, kept = _no_tree_reason(it, item, gate, held)
-        kept = "" if force else kept  # --force asks for a fresh measurement: leave the trace
+        reason, kept = _no_tree_reason(it, item, gate, held, force)
         if not kept:
             R.record_measured(
                 log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
