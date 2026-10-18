@@ -85,6 +85,14 @@ def test_relevant_and_unrelated_commits_are_told_apart(repo):
     assert D.measure(repo, wt).relevant == ()
 
 
+def test_since_never_lists_what_the_tree_already_carries(repo):
+    first = _commit(repo, "a.txt")
+    wt = _tree(repo, "feat", "main", "T8")
+    _commit(repo, "b.txt")
+    r = D.measure(repo, wt, since=first)
+    assert r.behind == 1 and len(r.commits) == 1
+
+
 def test_since_limits_the_commits_to_those_after_the_last_seen_sha(repo):
     wt = _tree(repo, "feat", "main", "T4")
     first = _commit(repo, "a.txt")
@@ -118,6 +126,9 @@ def test_decisions_added_or_superseded_after_a_time_that_govern_the_globs():
     got = D.decisions_changed(SimpleNamespace(decisions=ds), ["src/a.py"], "2026-02-01")
     assert [(c.id, c.how) for c in got] == [("new", "added"), ("old", "superseded")]
     assert D.decisions_changed(SimpleNamespace(decisions=ds), ["src/a.py"], "2026-04-01") == []
+    ds["old"].at = ""
+    again = D.decisions_changed(SimpleNamespace(decisions=ds), ["src/a.py"], "2026-02-01")
+    assert [c.id for c in again] == ["new"]
 
 
 def test_stamp_coverage_and_last_seen(repo):

@@ -93,10 +93,10 @@ def base_of(repo: Path, tree: Path, cfg: Config | None = None) -> str:
     return W.default_branch(repo)
 
 
-def _commits(tree: Path, rng: str) -> tuple[Commit, ...] | None:
+def _commits(tree: Path, *rng: str) -> tuple[Commit, ...] | None:
     # A merge lists the paths it brought (against its first parent), not nothing.
     r = git(tree, "-c", "core.quotepath=off", "log", "--diff-merges=first-parent", "--no-renames", "--name-only",
-            "--format=%x01%H%x1f%s", rng)  # fmt: skip
+            "--format=%x01%H%x1f%s", *rng)  # fmt: skip
     if not r.ok:
         return None
     seen: dict[str, tuple[str, list[str]]] = {}
@@ -157,10 +157,11 @@ def measure(
     ahead = int(a.out) if a.ok and a.out.isdigit() else 0
     if behind == 0:
         return DriftReport(base, 0, ahead)
-    rng = f"{since}..{base}" if since else f"HEAD..{base}"
-    commits = _commits(tree, rng)
+    # Never more than HEAD..base: what the tree already carries is not drift.
+    rng = [base, f"^{since}", "^HEAD"] if since else [f"HEAD..{base}"]
+    commits = _commits(tree, *rng)
     if commits is None:
-        return DriftReport(base, None, ahead, detail=f"git could not list {rng}")
+        return DriftReport(base, None, ahead, detail=f"git could not list the commits of {base}")
     rules = ()
     if rulebooks:
         got = _rules(tree, base, rulebooks)
@@ -200,7 +201,9 @@ def decisions_changed(state, globs: Iterable[str], since_at: str) -> list[Change
     for d in state.decisions.values():
         if not any(inside(g, dg) or inside(dg, g) for g in gl for dg in d.globs):
             continue
-        if d.at and d.at > since_at:
+        if not d.at:
+            continue  # age unknown: neither added nor superseded can be told
+        if d.at > since_at:
             out.append(Change(d.id, "added"))
         by = state.decisions.get(d.superseded_by) if d.superseded_by else None
         if by is not None and by.at and by.at > since_at and d.at <= since_at:
