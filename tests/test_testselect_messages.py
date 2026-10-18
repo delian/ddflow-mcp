@@ -86,7 +86,7 @@ def test_phrases_are_the_words_of_the_string_literals_a_line_gains_or_loses():
     got = TI._phrases([OLD, NEW, "    x = a_function_name(1, 2, 3)  # not a literal at all\n"])
     assert "the tree you are" in got and "it was not adopted" in got
     assert not any("function" in p for p in got), got
-    assert all(len(p) >= TI._PHRASE_MIN for p in got)
+    assert all(len(p) >= TI._SHORT_MIN for p in got)  # three words (floor _SHORT_MIN) or four
 
 
 @pytest.fixture
