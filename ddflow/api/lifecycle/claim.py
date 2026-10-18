@@ -11,11 +11,11 @@ from typing import Any, NamedTuple
 from ...config import csv_list
 from ...core import globspec as GS
 from ...core import outcome as O
-from ...core import progress as PR
 from ...core.model import ABANDONED, DONE, REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import choices as CHO
+from ...services import claimguards as GD
 from ...services import flow as FS
 from ...services import leases as L
 from ...services import pins_merge as PM
@@ -30,7 +30,6 @@ from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
-from .reservations import _reserved_for, _reserved_msg
 
 
 def _worktree_held_by(st, stored: str, me: str, repo: Path | None = None, cfg=None) -> str:
@@ -241,13 +240,11 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
-    early = _early_refusal(
+    early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
     if early is not None:
-        if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
-            _record_waiting(log, cfg, item, want, queue)
-        return early
+        return _refused_early(log, cfg, item, want, queue, early, notes)
     broke: list = []
     lz = _acquire(
         repo,
@@ -283,7 +280,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
-    return out
+    return _with_notes(out, notes)
 
 
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
@@ -502,55 +499,31 @@ def _new_report_count(st, item: str) -> int:
     return new_reports(st, item, it.lease.acquired_at)["count"]
 
 
+def _refused_early(
+    log, cfg, item: str, want, queue: bool, early: O.Outcome, notes: list
+) -> O.Outcome:
+    """A guard's refusal, with the notes of the guards before it; in line behind a waiter is
+    a wait too."""
+    if early.data.get("queued_behind"):
+        _record_waiting(log, cfg, item, want, queue)
+    return _with_notes(early, notes)
+
+
+def _with_notes(out: O.Outcome, notes: list) -> O.Outcome:
+    """What claim guards want said about a claim that went ahead, on its answer."""
+    if notes:
+        out.data["claim_notes"] = [n.as_dict() for n in notes]
+    return out
+
+
 def _early_refusal(
     repo: Path, cfg, events, st, item: str, want, me: str, *, force: bool, held_before: bool
-) -> O.Outcome | None:
-    """A claim turned away before it asks for the lease: the item is looping, or its
-    files are held for a waiter in line. (An `Outcome` is falsy when refused, so these
-    are compared to None, never chained with `or`.)"""
-    looped = _refuse_looping(events, st, cfg, item, force)
-    if looped is not None:
-        return looped
-    queued = _refuse_if_queued(cfg, st, item, want, me, skip=force or held_before)
-    if queued is not None:
-        return queued
-    return _refuse_if_reserved(repo, cfg, st, item, want, me, skip=force or held_before)
-
-
-def _refuse_if_queued(cfg, st, item: str, want, me: str, *, skip: bool) -> O.Outcome | None:
-    """The refusal for a claim of files an earlier QUEUED waiter asked for first."""
-    it = st.items.get(item)
-    if skip or it is None:
-        return None
-    ahead = WG.queue_ahead(
-        st, cfg, item, me, list(want if want is not None else it.globs), time.time()
-    )
-    if ahead is None:
-        return None
-    return O.refused(
-        "item.claimed",
-        f"{item}: those files are queued behind {ahead.holder} ({ahead.item}), who asked for "
-        f"them first ([lease].wait_queue).",
-        id=item,
-        alternatives=[],
-        queued_behind=ahead.item,
-    )
-
-
-def _refuse_looping(events, st, cfg, item: str, force: bool) -> O.Outcome | None:
-    """The refusal for an item that is already looping (`[loops].on_detect = "block"`)."""
-
-    looping = [f for f in PR.detect(events, st, cfg) if f.item == item and f.severity == "block"]
-    if not looping or force:
-        return None
-    return O.refused(
-        "item.claimed",
-        f"refusing to claim {item}: it is already looping.\n"
-        + "\n".join(f"  {f.render()}" for f in looping)
-        + "\n\nRe-claiming it would continue the loop. Change the task, abandon it, "
-        "or --force if you have fixed the underlying cause.",
-        id=item,
-        looping=[f.__dict__ for f in looping],
+) -> tuple[O.Outcome | None, list]:
+    """``(refusal, notes)``: a claim turned away before it asks for the lease: the first claim guard that refuses
+    (`services/claimguards`: looping, queued behind a waiter, files reserved for one in line, and
+    whatever a feature registers in its own `claim_guard_*.py`)."""
+    return GD.run(
+        GD.ClaimContext(repo, cfg, events, st, item, want, me, force=force, held_before=held_before)
     )
 
 
@@ -561,32 +534,6 @@ def _prior_lease(st, cfg, item: str, me: str):
     prior = it.lease if it is not None else None
     live = bool(prior and prior.holder == me and prior.live(time.time(), cfg.lease.grace_s))
     return prior, live
-
-
-def _refuse_if_reserved(
-    repo: Path, cfg, st, item: str, want, me: str, *, skip: bool
-) -> O.Outcome | None:
-    """The refusal for a claim of files that are held for a waiter in line; None if free."""
-    it = st.items.get(item)
-    if skip or it is None:
-        return None
-    now = time.time()
-    live = st.active_leases(now, cfg.lease.grace_s)
-    ahead = _reserved_for(
-        repo, st, cfg, it, me, list(want if want is not None else it.globs), live, now
-    )
-    if ahead is None:
-        return None
-    reason = _reserved_msg(item, ahead, cfg)
-    _join_line(repo, cfg, me, item, [ahead.item], reason)
-    return O.refused(
-        "item.claimed",
-        reason + f"\n\n`ddflow wait --item {item}` sleeps until it is yours; your place in "
-        f"line is kept while you wait or keep asking.",
-        id=item,
-        alternatives=[],
-        reserved_for=ahead.agent,
-    )
 
 
 def _blocking_items(st, cfg, item: str, want, me: str) -> list[str]:

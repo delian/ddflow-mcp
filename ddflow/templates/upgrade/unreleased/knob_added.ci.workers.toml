@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.workers"
+new = '"auto"'
+why = "The pytest worker count that replaces {workers} in gate commands is computed at run time from cores and load (D-agent-test-etiquette); a number fixes it."
+impact = "additive"
