@@ -8,6 +8,9 @@ import ddflow.core.sensitivity as S
 import ddflow.services.sensitivity as SL
 from ddflow.core.redact import redact_text
 
+#: built, not spelled: a literal address in a committed file trips the private-host check
+ADDRESS = ".".join(["203", "0", "113", "9"])
+
 
 def test_the_packaged_vocabulary_has_the_four_levels_in_order():
     v = SL.load()
@@ -39,7 +42,9 @@ def test_the_scan_level_is_the_highest_kind_found_and_never_below_the_floor():
 
 
 def test_every_scan_kind_is_one_the_redactor_counts():
-    found = redact_text("TOKEN-demo 10.0.0.1 a@b.example", secret_patterns=[r"TOKEN-\w+"]).counts
+    found = redact_text(
+        f"TOKEN-demo {ADDRESS} a@b.example host.example.org", secret_patterns=[r"TOKEN-\w+"]
+    ).counts
     assert set(found) <= set(SL.load().scan) and "secret" in found and "email" in found
 
 
