@@ -36,3 +36,4 @@
 {"agent":"fleet-unblock-a","data":{"at":1792313956.8372905,"holder":"fleet-unblock-a"},"id":"e2894167ad3dd224b19278918","kind":"lease.renewed","lamport":80104,"schema":1,"subject":"DX-event-kind-scaffold","ts":"2026-10-18T08:59:16.859629Z"}
 {"agent":"fleet-unblock-a","data":{"at":1792314197.2777302,"holder":"fleet-unblock-a"},"id":"e082151d6b7bf61214df68a6c","kind":"lease.renewed","lamport":80121,"schema":1,"subject":"DX-event-kind-scaffold","ts":"2026-10-18T09:03:17.311389Z"}
 {"agent":"fleet-unblock-a","data":{"at":1792314437.1354597,"holder":"fleet-unblock-a"},"id":"e0b9cd8af6dcf3ca461973ea1","kind":"lease.renewed","lamport":80135,"schema":1,"subject":"DX-event-kind-scaffold","ts":"2026-10-18T09:07:17.166057Z"}
+{"agent":"fleet-unblock-a","data":{"at":1792314677.0092978,"holder":"fleet-unblock-a"},"id":"efd7b0cdeb12cb89d55c36b2e","kind":"lease.renewed","lamport":80153,"schema":1,"subject":"DX-event-kind-scaffold","ts":"2026-10-18T09:11:17.029734Z"}
