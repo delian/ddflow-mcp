@@ -464,17 +464,11 @@ def cmd_hooks(a, c: Ctx) -> int:
             print(out.data["note"], file=sys.stderr)
         return OK
     harness = getattr(a, "harness", "") or ""
-    if harness and harness not in ("claude", "gemini"):
-        print(
-            f"ddflow hooks {a.hooks_cmd}: no hook writer for harness {harness!r} yet; "
-            "--harness takes claude or gemini",
-            file=sys.stderr,
-        )
-        return FAIL
     out = A.hooks(
         c.repo,
         action=a.hooks_cmd or "status",
         force=bool(getattr(a, "force", False)),
+        harness=harness if harness not in ("claude", "gemini") else "",
         claude=bool(getattr(a, "claude", False)) or harness == "claude",
         msg_file=getattr(a, "msg_file", "") or "",
         agent=c.requested_agent,
