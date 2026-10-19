@@ -64,7 +64,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     A bug is an item in the queue (B-bugs-as-items): unless ``no_task`` (a bug fixed in
     the commit that found it) or ``[bugs].file_task`` is off, the same transaction files
     its fix task -- `_file_fix_task` -- and the reply carries ``fix_task``. ``globs`` are
-    the fix task's files; absent, the item's. An OPEN bug-fix task named as ``item`` is
+    the fix task's files, kept verbatim; absent, the item's that exist in the tree. An OPEN bug-fix task named as ``item`` is
     the fix itself and nothing new is filed."""
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
@@ -239,7 +239,7 @@ def _file_fix_task(
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
-    use, never the item's own phase, which it would hold open) -- carrying ``globs`` or the item's, the item's
+    use, never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
     transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
