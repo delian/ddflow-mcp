@@ -786,7 +786,10 @@ def _holder_note(path: Path) -> str:
         except (OSError, ValueError):
             return ""
         if pid:
-            return f" Held by {_describe_pid(pid)}."
+            try:
+                return f" Held by {_describe_pid(pid)}."
+            except (OSError, ValueError):
+                return f" Held by pid {pid}."
         if not _still_locked(path):
             return ""  # released meanwhile: there is no holder to name
         if scans >= _HOLDER_SCANS_MAX or time.monotonic() >= deadline:
