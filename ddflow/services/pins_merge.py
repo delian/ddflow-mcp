@@ -77,8 +77,8 @@ def _say(line: str) -> None:
 
 
 def after_merge(repo: Path, cfg: Config) -> str:
-    """Post-merge: regenerate; fold the result into the merge commit when only pin files
-    changed. Returns one line saying what happened."""
+    """Post-merge: regenerate; fold the result into the merge commit when a pin changed and no
+    other change is staged. Returns one line saying what happened."""
     mode = cfg.pins.after_merge
     if mode == "off":
         return ""
@@ -109,12 +109,14 @@ def after_merge(repo: Path, cfg: Config) -> str:
     # Baebce1eca7): ddflow's own event shards are always dirty in the primary, and a README
     # regeneration left there blocked the next merge. Only other STAGED changes would be
     # swept into the rewritten commit, so only those stop the fold.
-    staged = G.run(repo, "diff", "--cached", "--name-only", "-z", z=True).paths() or []
-    changed = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths() or []
+    staged = G.run(repo, "diff", "--cached", "--name-only", "-z", z=True).paths()
+    changed = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths()
     merge = G.run(repo, "rev-parse", "-q", "--verify", "HEAD^2").ok
     if (
         mode == "amend"
         and merge
+        and staged is not None  # None is "git could not say", not "nothing is staged"
+        and changed is not None
         and any(is_pin(p) for p in changed)
         and all(is_pin(p) for p in staged)
     ):

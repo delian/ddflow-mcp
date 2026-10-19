@@ -60,3 +60,16 @@ def test_a_pin_is_folded_into_the_merge_commit_though_another_file_is_dirty(tmp_
     assert git(repo, "status", "--porcelain").strip() == "M events.jsonl"
     assert len(git(repo, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 3
     assert git(repo, "diff", "--cached", "--name-only").strip() == ""
+
+
+def test_a_staged_change_to_another_file_stops_the_fold(tmp_path):
+    repo = _merged_repo(tmp_path)
+    (repo / "events.jsonl").write_text("1\n2\n")
+    git(repo, "add", "events.jsonl")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    cfg = Config()
+    cfg.pins.after_merge = "amend"
+    said = PM.after_merge(repo, cfg)
+    assert "not committed" in said, said
+    assert git(repo, "rev-parse", "HEAD").strip() == before
+    assert git(repo, "diff", "--cached", "--name-only").strip() == "events.jsonl"
