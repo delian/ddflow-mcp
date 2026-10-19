@@ -213,9 +213,11 @@ Wave 3b (runs BEFORE item 8 fixes the poll defaults: RM-run-tool-mcp needs RM-cl
 
 ## 7. Self-assessment (D-ddflow-self-assessment-r2)
 
-Defects and gaps found, with their records (no duplicates: dupes checked at filing):
-* gate_run/gate_verify/ci/verify/bisect/wait send no progress: task RM-progress-everywhere.
-* 112 unended jobs, `job end` manual: task RM-run-reaper.
-* no run poller, handle only implicit: tasks RM-runs-core, RM-run-tool-mcp.
-* review of a `--no-worktree` item sees an empty diff; roborev kilo agent model not found: bug B9a8c95a9da.
-* unprobed clients: task RM-client-probes.
+Defects found in ddflow itself, each filed as a bug record (the dupe check found no similar record) with
+its fix task:
+* B7b3b4cf483: gate_run/gate_verify/ci/verify/bisect/wait send no progress. Fix task RM-progress-everywhere.
+* B7b11533045: 112 unended jobs, `job end` manual. Fix task RM-run-reaper.
+* B9a8c95a9da: review of a `--no-worktree` item sees an empty diff and records unavailable.
+* Bbc4f952ca9: roborev kilo agent ProviderModelNotFoundError (standards gate unavailable).
+Missing features (no run poller, implicit handle, unprobed clients) are the tasks RM-runs-core,
+RM-run-tool-mcp and RM-client-probes.
