@@ -761,7 +761,9 @@ def _holder_note(path: Path) -> str:
     (no `.ddflow/.gitignore` yet), where two clones' notes conflict on merge.
 
     Best effort and never raises: this runs while a TimeoutError is being built. Other
-    platforms (no /proc/locks) and a pid from another namespace give ''.
+    platforms (no /proc/locks) and a lock released meanwhile give ''; a lock still held
+    whose holder is not in /proc/locks (another pid namespace, or a scan that kept missing
+    it) gives 'Holder unknown (...)', never silence.
     """
     try:
         st = os.stat(path)
@@ -785,9 +787,9 @@ def _holder_note(path: Path) -> str:
             return ""
         if pid:
             return f" Held by {_describe_pid(pid)}."
+        if not _still_locked(path):
+            return ""  # released meanwhile: there is no holder to name
         if scans >= _HOLDER_SCANS_MAX or time.monotonic() >= deadline:
-            if not _still_locked(path):
-                return ""  # released meanwhile: there is no holder to name
             return f" Holder unknown (not in /proc/locks after {scans} scans in {time.monotonic() - t0:.1f}s)."
         time.sleep(0.01)
 
