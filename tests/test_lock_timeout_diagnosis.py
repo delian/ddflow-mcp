@@ -258,3 +258,42 @@ def test_the_holder_line_wins_over_a_waiter_line(tmp_path, monkeypatch):
         ),
     )
     assert "pid 4242" in L._holder_note(lock) and "777" not in L._holder_note(lock)
+
+
+@needs_proc_locks
+def test_a_scan_that_misses_the_holder_is_retried_not_silently_dropped(tmp_path, monkeypatch):
+    """Bf540195aec: /proc/locks is read in chunks and churns under load, so one read can
+    skip a live holder. The first reads here omit it (as the kernel does); the holder must
+    still be named, and a holder that never shows must be SAID unknown, not omitted."""
+    lock = tmp_path / "events.lock"
+    p = _hold(lock)
+    real = Path.read_text
+    calls = {"n": 0}
+
+    def flaky(self, *a, **k):
+        text = real(self, *a, **k)
+        if str(self) != "/proc/locks":
+            return text
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            return "\n".join(ln for ln in text.splitlines() if f" {p.pid} " not in ln)
+        return text
+
+    try:
+        monkeypatch.setattr(Path, "read_text", flaky)
+        with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
+            pass
+        assert f"Held by pid {p.pid} (" in str(e.value), str(e.value)
+        assert calls["n"] >= 4  # a real miss under load only adds scans
+
+        monkeypatch.setattr(
+            Path,
+            "read_text",
+            lambda self, *a, **k: "" if str(self) == "/proc/locks" else real(self, *a, **k),
+        )
+        with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
+            pass
+        assert "Holder unknown" in str(e.value), str(e.value)
+    finally:
+        p.kill()
+        p.wait()
