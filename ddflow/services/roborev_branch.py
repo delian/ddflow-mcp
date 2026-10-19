@@ -57,14 +57,9 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
     m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
     if m:
         return int(m.group(1))
-    p = proc.capture([exe, "list", "--json", "--limit", "50"], cwd=where, timeout=RR._TIMEOUT_S)
-    try:
-        jobs = json.loads(p.stdout or "[]") or []
-    except ValueError:
-        return None
     ids = [
-        int(j["id"]) for j in jobs
-        if isinstance(j, dict) and RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
+        int(j["id"]) for j in _list(exe, where)
+        if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
     return max(ids) if ids else None
 
@@ -92,8 +87,8 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
         if not RR._covers(ref, sha) or RR._job_id(j) is None:
             continue
         start = ref.rsplit("..", 1)[0].strip().lower() if ".." in ref else ""
-        if start and not (len(start) >= RR._MIN_ABBREV and mb.startswith(start)):
-            continue  # a range from somewhere else is a different review
+        if not (len(start) >= RR._MIN_ABBREV and mb.startswith(start)):
+            continue  # a single commit, or a range from elsewhere, is not the branch review
         ids.append(RR._job_id(j))
     return max(ids) if ids else None  # type: ignore[type-var]
 
@@ -140,13 +135,8 @@ def _workers(exe: str, where: Path) -> int:
 
 def _job_status(exe: str, where: Path, job: int) -> str:
     """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
-    p = proc.capture([exe, "list", "--json", "--limit", "100"], cwd=where, timeout=RR._TIMEOUT_S)
-    try:
-        jobs = json.loads(p.stdout or "[]") or []
-    except ValueError:
-        return ""
-    for j in jobs:
-        if isinstance(j, dict) and str(j.get("id")) == str(job):
+    for j in _list(exe, where):
+        if str(j.get("id")) == str(job):
             return str(j.get("status") or "")
     return ""
 
@@ -198,7 +188,7 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
             f"job {job} enqueued, not waited for{suffix}: `roborev wait --job {job}`; {rerun}",
             job,
             head,
-            pending_rerun=True,
+            pending_rerun=bool(where_in_queue),
         )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
