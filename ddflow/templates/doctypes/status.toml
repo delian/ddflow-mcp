@@ -1,0 +1,11 @@
+[doctype]
+name = "status"
+title = "Status"
+path = "STATUS.md"
+genre = "reference"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:status"
