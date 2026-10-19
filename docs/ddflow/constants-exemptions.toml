@@ -139,6 +139,9 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
+"ddflow/infra/docindex.py:MIN_SUBSTRING" = "a format fact: a trigram index matches no fewer than 3 characters, so shorter substrings fall back to LIKE"
+"ddflow/infra/docindex.py:LOCK_TIMEOUT_S" = "the default of DocIndex.lock_timeout_s, a field every caller sets; the docs verb will pass its [docs] config (it is not read anywhere as a bare constant)"
+"ddflow/services/docsearch/scope.py:MAX_BYTES" = "the default of Scope.max_bytes, a field the caller sets; the docs verb will pass its [docs] config"
 "ddflow/services/doctypes/recordquery.py:MAX_LIMIT" = "the ceiling a document section's `limit=` word may name, a validation bound on a declarative query (a section asks for fewer; the cap only rejects a typo like limit=1e9)"
 "ddflow/services/leasebreak.py:FRESH_S" = "how long a pre-lock reading of a worktree may be used under the append lock; it only trades a git call for a few seconds of staleness against a hold limit of minutes, and a stale reading re-probes (never wrong)"
 "ddflow/core/participation.py:DEFAULT_RECALL_CAP" = "the default of a declared kind's own `recall_cap` field: a descriptor sets it per kind, it is not a project preference"
