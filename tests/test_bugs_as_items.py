@@ -32,6 +32,9 @@ def seed(repo: Path, *, feature: bool = True):
     """A phase with a done task T1 (where the bug is found) and, optionally, a feature F1
     on the same files at the default priority."""
     run_cli(repo, "init")
+    for f in ["src/parser.py", "src/lexer.py"]:
+        (repo / f).parent.mkdir(parents=True, exist_ok=True)
+        (repo / f).write_text("")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("task.added", "T1", {"parent": "P1", "title": "parser", "globs": ["src/parser.py"]})
