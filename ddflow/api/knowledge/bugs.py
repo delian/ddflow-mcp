@@ -14,7 +14,7 @@ from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
 from ...services import reprobundle as RB
-from ...services.bug_globs import inherit_globs
+from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
@@ -290,14 +290,17 @@ def _file_fix_task(
         f"`ddflow complete {tid} --regression-test <test>` closes the bug with the task "
         f"(or `ddflow bug fixed {bug_id} --regression-test <test>` first)."
     )
+    kept, dropped = fix_task_globs(
+        log.root, globs, src.globs if src else [], summary, tool_bug=scope == "ddflow"
+    )
+    if dropped:
+        body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
     draft = TaskDraft(
         tid,
         parent=parent,
         title=full_title,
         needs=[],
-        globs=GS.parse(globs)
-        if globs
-        else inherit_globs(src.globs if src else [], summary, tool_bug=scope == "ddflow"),
+        globs=kept,
         body=body,
         tags=[tag],
         # the item's own priority when it set one; the bug band when it sits at the generic default
