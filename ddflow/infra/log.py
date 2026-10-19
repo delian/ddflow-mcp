@@ -800,7 +800,7 @@ def _still_locked(path: Path) -> bool:
     except fsio.LockTimeout:
         return True
     except OSError:
-        return False
+        return True  # could not probe: keep the 'unknown' conclusion, not 'free'
 
 
 def _locks_holder(want: str) -> int:
