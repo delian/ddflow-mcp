@@ -96,7 +96,7 @@ class ExportConfig:
         return out
 
 
-#: Keys an `[export.<doc>]` table understands.
+#: Keys every `[export.<doc>]` table understands; `export_table_keys(doc)` adds a doc's own.
 EXPORT_TABLE_KEYS = frozenset(
     {
         "path",

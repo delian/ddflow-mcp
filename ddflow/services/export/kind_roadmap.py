@@ -77,7 +77,7 @@ def _phase_rows(
     for p in q.phases():
         if f.phase and p.id != f.phase:
             continue
-        if RC.hidden(p.id, p.tags, hide):
+        if p.id != f.phase and RC.hidden(p.id, p.tags, hide):  # asking for a batch shows it
             seen["hidden"] += 1
             continue
         under = q.tasks_under(p.id)
