@@ -131,4 +131,6 @@ def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):
     assert "roborev wait --job 7" in r.reason
     from ddflow.services import roborev as RR
 
-    assert "roborev wait --job" in RR.__doc__ or "wait --job" in open(RR.__file__).read()
+    sha = "a" * 40
+    note = RR._unfinished_note([{"id": 12, "git_ref": sha, "status": "running"}], sha)
+    assert "`roborev wait --job 12`" in note
