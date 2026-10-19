@@ -194,16 +194,17 @@ def _reference_cost() -> float:
 
 def test_runtime_on_this_repositorys_readme():
     root = Path(__file__).resolve().parents[1]
-    ratios = []
+    ratios, seconds = [], []
     for _ in range(RUNTIME_ATTEMPTS):
         reference = _reference_cost()
         spent, report = _cost(lambda: D.check_docs(root, docs=["README.md"]))
         ratios.append(spent / reference)
+        seconds.append(spent)
         if ratios[-1] < RUNTIME_RATIO:
             break
     assert min(ratios) < RUNTIME_RATIO, (
         f"check_docs(README.md) cost {min(ratios):.1f}x the reference workload "
-        f"({spent:.2f}s of CPU); budget {RUNTIME_RATIO}x"
+        f"({seconds[ratios.index(min(ratios))]:.2f}s of CPU); budget {RUNTIME_RATIO}x"
     )
     assert report.checked["identifiers"] > 50
 
