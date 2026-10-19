@@ -1,6 +1,7 @@
 id = "kilo"
 rank = 5
 family = "opencode"
+title = "Kilo"
 delta = "kilo-cline.md"
 
 [mcp]

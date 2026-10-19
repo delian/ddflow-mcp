@@ -1,6 +1,7 @@
 id = "cline"
 rank = 16
 family = "cline"
+title = "Cline"
 delta = "cline.md"
 
 [mcp]

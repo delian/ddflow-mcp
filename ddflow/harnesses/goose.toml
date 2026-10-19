@@ -1,6 +1,7 @@
 id = "goose"
 rank = 20
 family = "goose"
+title = "Goose"
 delta = "goose.md"
 
 [mcp]
