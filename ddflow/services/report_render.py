@@ -7,11 +7,16 @@ from __future__ import annotations
 from typing import Any
 
 from . import agent_brief as AB
+from . import gates as G
 from . import prompts as P
 
 
 def _bullets(lines: list[str]) -> str:
     return "\n".join(f"- {x}" for x in lines) if lines else "none"
+
+
+def _open(rec: dict[str, Any]) -> str:
+    return ", open" if rec["open"] else ", closed"
 
 
 def _unlinked(rec: dict[str, Any]) -> str:
@@ -30,10 +35,7 @@ def _gate_line(g: dict[str, Any]) -> str:
         line += f", {g['rounds']} round(s)"
     t = g.get("triage")
     if t:
-        line += (
-            f", {t['findings']} finding(s): {t['refuted']} refuted, {t['confirmed']} confirmed, "
-            f"{t['untriaged']} without a verdict"
-        )
+        line += f", {G.triage_line(t)}"
     if g.get("covered_by"):
         line += f" ({g['covered_by']})"
     if g["reason"]:
@@ -76,14 +78,8 @@ def variables(d: dict[str, Any], test_files: int = 12) -> dict[str, str]:
         landing += f"; completed {ld['completed_at']} by {ld['completed_by'] or 'unknown'}"
     hand = [f"{g['gate']}: {g['note'] or 'no evidence text'}" for g in d["gates"] if g["by_hand"]]
     f = d["filed"]
-    filed = [
-        f"{b['id']} (bug{', open' if b['open'] else ', closed'}{_unlinked(b)}): {b['title']}"
-        for b in f["bugs"]
-    ]
-    filed += [
-        f"{t['id']} (task{', open' if t['open'] else ', closed'}{_unlinked(t)}): {t['title']}"
-        for t in f["tasks"]
-    ]
+    filed = [f"{b['id']} (bug{_open(b)}{_unlinked(b)}): {b['title']}" for b in f["bugs"]]
+    filed += [f"{t['id']} (task{_open(t)}{_unlinked(t)}): {t['title']}" for t in f["tasks"]]
     filed += [f"{n['id']} ({n['kind']}{_unlinked(n)}): {n['title']}" for n in f.get("notes", [])]
     return {
         "item": it["id"],
