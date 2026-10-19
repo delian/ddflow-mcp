@@ -77,8 +77,8 @@ def _list(exe: str, where: Path, limit: int = 100) -> list[dict]:
 
 
 def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
-    """The newest queued/running/done review job of exactly this work (the commit, or the
-    range from ``mb`` to it), so one sha is never enqueued twice."""
+    """The newest queued/running/done review job of exactly this work (the range from
+    ``mb`` to it; a single-commit job is not the branch review), so one sha is never enqueued twice."""
     ids = []
     for j in jobs:
         ref = str(j.get("git_ref") or "")
@@ -119,7 +119,7 @@ def queue_position(jobs: list[dict], job: int, workers: int = 1) -> str:
     median = durs[len(durs) // 2] if durs else 0.0
     if me.get("status") == "running":
         return f"running now ({running} running, {len(queued)} queued behind)"
-    pos = queued.index(job) + 1 if job in queued else len(queued)
+    pos = queued.index(job) + 1
     out = f"position {pos} of {len(queued)} queued, {running} running"
     if median:
         waves = (pos - 1) // max(1, workers) + 1
@@ -188,7 +188,7 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
             f"job {job} enqueued, not waited for{suffix}: `roborev wait --job {job}`; {rerun}",
             job,
             head,
-            pending_rerun=bool(where_in_queue),
+            pending_rerun=True,
         )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
