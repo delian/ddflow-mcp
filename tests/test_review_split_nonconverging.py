@@ -153,7 +153,7 @@ def test_partial_findings_follow_the_chunk_number_when_only_some_chunks_are_sent
         for n, m in (("a", "AAA"), ("b", "BBB"), ("c", "SLOWC"), ("d", "DDD"))
     ).replace("\\n", "\n")
     script = (
-        "case \"$in\" in *SLOWC*) sleep 20;; esac\n"
+        'case "$in" in *SLOWC*) sleep 20;; esac\n'
         "case \"$in\" in *DDD*) printf 'FINDING LOW d.py:1\\nnit\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac"
     )
