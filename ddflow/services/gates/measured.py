@@ -162,7 +162,7 @@ def _landed_if_only_untracked_differs(repo: Path, it: Item, wt: Path) -> dict[st
     return {"tree_sha": f"{landed[:12]}+clean"}
 
 
-def keep_reviewed_round(
+def _keep_reviewed_round(
     it: Item, gate: str, outcome: str, reason: str, evidence: dict[str, Any] | None
 ) -> tuple[str, str, dict[str, Any] | None]:
     """(outcome, reason, evidence) to record: a delta review round that reached no reviewer
@@ -214,7 +214,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
     guard.
     """
     taken = {} if outcome == "skipped" else measure_tree(repo, it, tree)
-    outcome, reason, evidence = keep_reviewed_round(it, gate, outcome, reason, evidence)
+    outcome, reason, evidence = _keep_reviewed_round(it, gate, outcome, reason, evidence)
     record(
         log,
         cfg,
