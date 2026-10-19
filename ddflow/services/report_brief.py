@@ -10,9 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-#: The brief is always these lines, in this order; a line with nothing to say reads ``none``.
-LINES = 8
-
 
 def _cut(text: str, chars: int) -> str:
     return text if len(text) <= chars else text[: max(chars - 1, 0)] + "…"
@@ -23,7 +20,7 @@ def _ids(rows: list[dict[str, Any]]) -> str:
 
 
 def lines(d: dict[str, Any]) -> list[str]:
-    """The ``LINES`` lines of a collected report (`services.report.collect`)."""
+    """The 8 lines of a collected report (`services.report.collect`)."""
     it, ld = d["item"], d["landing"]
     sha = (ld.get("merge_sha") or "")[:12]
     bugs = d["regression"]["bugs"]
