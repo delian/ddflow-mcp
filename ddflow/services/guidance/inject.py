@@ -36,6 +36,7 @@ from ...core.model import State
 from ...core.schedule import shared_globs
 from ...core.textcut import clip
 from ..contextpack import Candidate, pack
+from ..doctypes.guidance import records as doctype_records
 from . import deffields as DF
 from .kinds import RULE, decision_record
 from .record import GuidanceRecord
@@ -236,11 +237,8 @@ def _cut_line(trimmed: list[str]) -> str:
 
 def _document_types(cfg) -> list[GuidanceRecord]:
     """The guidance the project's document types carry (B-dt-rules): scoped to a type's
-    documents, so it governs an item whose files overlap one. Imported here because the
-    document types are built on this package, not the other way round."""
-    from ..doctypes.guidance import records
-
-    return records(getattr(cfg, "root", None))
+    documents, so it governs an item whose files overlap one."""
+    return doctype_records(getattr(cfg, "root", None))
 
 
 def for_work(
