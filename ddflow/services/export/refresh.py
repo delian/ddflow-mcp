@@ -104,7 +104,7 @@ def _digest_of(path: Path, doc: str = "", mode: str = R.WHOLE) -> str:
         if mode == R.REGION:
             return _region_digest(text, doc)
         head, _ = F.split(text)
-    except (OSError, ValueError, IndexError, ExportError):
+    except (OSError, ValueError, ExportError):
         return ""
     return head.digest if head else ""
 
