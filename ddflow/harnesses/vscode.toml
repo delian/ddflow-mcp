@@ -1,6 +1,7 @@
 id = "vscode"
 rank = 4
 family = "copilot"
+title = "VS Code"
 delta = "vscode.md"
 
 [mcp]

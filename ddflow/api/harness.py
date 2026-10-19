@@ -69,6 +69,21 @@ def best_level(h: Harness) -> str:
     return min(got, key=LADDER.index) if got else NV
 
 
+def agent_table() -> list[tuple[str, str, str, str, str]]:
+    """(title, id, MCP config path, hook style, best level) per descriptor, in rank order:
+    the rows of the README's table of supported agents."""
+    return [
+        (
+            h.title or h.id,
+            h.id,
+            h.mcp.path or "none",
+            h.hooks.style if h.hooks else "not verified",
+            best_level(h),
+        )
+        for h in HR.load()
+    ]
+
+
 def _row(h: Harness, adopted: set[str]) -> dict[str, Any]:
     return {
         "id": h.id,

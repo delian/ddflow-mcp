@@ -1,6 +1,7 @@
 id = "cody"
 rank = 21
 family = "cody"
+title = "Sourcegraph Cody"
 delta = "cody.md"
 
 [mcp]

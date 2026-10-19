@@ -1,6 +1,7 @@
 id = "aider"
 rank = 15
 family = "aider"
+title = "Aider"
 delta = "aider.md"
 
 [mcp]
