@@ -48,7 +48,7 @@ def cmd_ci(a, c: Ctx) -> int:
     ref = (
         a.ref or AR.held_item(c.repo, c.log.agent_id, where) or SS.head_here_or_repo(c.repo, where)
     )
-    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=where,
+    out = AR.run(c.repo, ref=ref, agent=c.log.agent_id, base=a.base, command=a.command, called_from=where,
                  full=bool(getattr(a, "full", False)))  # fmt: skip
     if c.json:
         emit_json(out.body(""))
