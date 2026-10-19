@@ -19,7 +19,7 @@ def _worker_imports(tmp_path: Path) -> subprocess.CompletedProcess:
         "if __name__ == '__main__':\n"
         "    p = mp.get_context('spawn').Process(target=test_mcp_load._noop)\n"
         "    p.start(); p.join(120)\n"
-        "    sys.exit(p.exitcode)\n"
+        "    sys.exit(1 if p.exitcode is None else p.exitcode)\n"
     )
     return subprocess.run(
         [sys.executable, str(script)], capture_output=True, text=True, timeout=300, cwd=tmp_path
