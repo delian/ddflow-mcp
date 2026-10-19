@@ -93,7 +93,10 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("unavailable", "roborev enqueued the review but named no job", sha=head)
     if wait_s <= 0:
         return Result(
-            "unavailable", f"job {job} enqueued, not waited for: `roborev wait --job {job}`", job, head
+            "unavailable",
+            f"job {job} enqueued, not waited for: `roborev wait --job {job}`",
+            job,
+            head,
         )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
