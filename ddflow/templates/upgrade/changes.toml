@@ -949,3 +949,10 @@ key = "session.report_summary_chars"
 new = "120"
 why = "Characters `ddflow report` keeps of each fixed bug's summary."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_brief_chars"
+new = "200"
+why = "Characters `ddflow report --brief` keeps of each free-text entry; ids and shas are never cut."
+impact = "additive"
