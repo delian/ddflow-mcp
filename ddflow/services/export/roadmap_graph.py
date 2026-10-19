@@ -23,22 +23,25 @@ def reduce_edges(
     members = list(ids)
     inset = set(members)
     pre = {i: {d for d in before(i) if d in inset and d != i} for i in members}
-    reach: dict[str, set[str]] = {}
 
-    def below(i: str, stack: frozenset[str] = frozenset()) -> set[str]:
-        if i not in reach:
-            out: set[str] = set()
-            for d in pre[i] - stack - {i}:
-                out |= {d} | below(d, stack | {i})
-            reach[i] = out
-        return reach[i]
+    def reaches(start: str, target: str, avoid: str) -> bool:
+        """Is ``target`` a prerequisite of ``start``, by a path that never goes through ``avoid``?"""
+        seen, todo = {avoid}, [start]
+        while todo:
+            n = todo.pop()
+            if n == target:
+                return True
+            if n not in seen:
+                seen.add(n)
+                todo.extend(pre[n])
+        return False
 
-    edges = []
-    for i in members:
-        for d in sorted(pre[i]):
-            if not any(d in below(o) for o in pre[i] if o != d):
-                edges.append((d, i))
-    return edges
+    return [
+        (d, i)
+        for i in members
+        for d in sorted(pre[i])
+        if not any(reaches(o, d, i) for o in pre[i] if o != d)
+    ]
 
 
 def graph(

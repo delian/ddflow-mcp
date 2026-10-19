@@ -63,7 +63,6 @@ def test_the_document_draws_a_mermaid_flowchart_with_classes():
     assert "classDef later" in body
 
 
-
 def test_the_knob_is_validated_with_the_other_roadmap_keys():
     import pytest
 
@@ -72,3 +71,9 @@ def test_the_knob_is_validated_with_the_other_roadmap_keys():
     Config.check({"export": {"roadmap": {"graph": 0}}})
     with pytest.raises(ValueError, match="graph"):
         Config.check({"export": {"roadmap": {"graph": -1}}})
+
+
+def test_an_edge_into_a_cycle_is_not_dropped_by_a_path_through_itself():
+    deps = {"b": ["i"], "i": ["a", "b"]}
+    edges = RG.reduce_edges(["a", "b", "i"], lambda i: deps.get(i, []))
+    assert ("a", "i") in edges and ("i", "b") in edges and ("b", "i") in edges
