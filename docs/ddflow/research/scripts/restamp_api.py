@@ -32,3 +32,4 @@ for i,it in L.items():
     r=subprocess.run(a,capture_output=True,text=True); n+=1
     if r.returncode: f+=1; print("FAIL",i,r.stderr[:80],flush=True)
 print("restamped",n,"failed",f,flush=True)
+sys.exit(1 if f else 0)

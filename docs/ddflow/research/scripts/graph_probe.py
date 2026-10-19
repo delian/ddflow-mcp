@@ -77,7 +77,7 @@ for m in merges:
     cht=[f for f in ch if f.startswith('tests/') and f in tset]
     if chs and cht and len(names)<60: sample.append((m,chs,cht))
     if len(sample)>=60: break
-sample=random.sample(sample,10)
+sample=random.sample(sample,min(10,len(sample)))
 from ddflow.services import testselect as TS
 listed=files+[f for f in git('ls-files').split('\n') if f]
 res=[]
