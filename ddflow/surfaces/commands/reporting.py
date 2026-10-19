@@ -57,6 +57,15 @@ def _waiting_lines(r) -> list[str]:
     return ["", "Waiting for files:", *(f"  [w] {w}" for w in r["waiting"])]
 
 
+def _stranded_lines(r) -> list[str]:
+    """Removed items whose lease is still live, in this clone or another (B71dedb76d2)."""
+    return (
+        ["", "Removed, lease still held:", *(f"  [!] {t}" for t in r["stranded"])]
+        if r.get("stranded")
+        else []
+    )
+
+
 def _health_lines(r) -> list[str]:
     """Stalled, locked or runaway lanes the watchdog found (`ddflow health`)."""
     return ["", "Health:", *(f"  [!] {h}" for h in r["health"])] if r.get("health") else []
@@ -79,6 +88,7 @@ def _queue_lines(r) -> list[str]:
     out += _contested_lines(r)
     out += _waiting_lines(r)
     out += _health_lines(r)
+    out += _stranded_lines(r)
     if r["ready"]:
         out.append("")
         out.append("Ready to start:")

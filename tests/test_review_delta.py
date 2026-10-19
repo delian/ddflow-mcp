@@ -434,11 +434,12 @@ def test_force_is_a_full_round_even_when_the_default_would_make_it_a_delta(repo,
 def test_a_delta_that_reached_no_reviewer_does_not_move_the_reviewed_head(repo, tmp_path):
     _setup(repo, tmp_path)
     _review(repo)
+    head = _ev(repo)["reviewed_head"]
     _fix(repo, "a.py")
     (tmp_path / "fake-reviewer").write_text("#!/bin/sh\nexit 1\n")  # the reviewer is down
     down = _review(repo)
     assert down.exit != OK
-    assert "reviewed_head" not in _ev(repo), "no reviewer saw this head"
+    assert _ev(repo)["reviewed_head"] == head, "no reviewer saw this head: the old one stays"
     (tmp_path / "fake-reviewer").write_text(
         "#!/bin/sh\ncat >/dev/null\necho 'STATUS: NO FINDINGS'\n"
     )
@@ -491,3 +492,23 @@ def test_force_with_delta_is_refused_not_silently_a_delta(repo, tmp_path):
     _review(repo)
     out = _review(repo, force=True, reason="why", delta=True)
     assert out.exit == FAIL and "--force" in out.reason and "--delta" in out.reason
+
+
+def test_an_unreachable_delta_keeps_the_earlier_passed_round_and_notes_the_outage(repo, tmp_path):
+    """Bug B277e2a224f: a delta that found the reviewer down replaced the gate's passed
+    round with `unavailable`; the pass stays and the outage is an extra note on it."""
+    from ddflow.core.model import fold
+
+    _setup(repo, tmp_path)
+    (tmp_path / "fake-reviewer").write_text(
+        "#!/bin/sh\ncat >/dev/null\necho 'STATUS: NO FINDINGS'\n"
+    )
+    assert _review(repo).exit == OK
+    head = _ev(repo)["reviewed_head"]
+    _fix(repo, "a.py")
+    (tmp_path / "fake-reviewer").write_text("#!/bin/sh\nexit 1\n")  # the reviewer is down
+    assert _review(repo).exit != OK
+    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
+    assert rec.outcome == "passed", rec
+    ev = rec.evidence
+    assert ev["reviewed_head"] == head and ev["unavailable_deltas"], ev
