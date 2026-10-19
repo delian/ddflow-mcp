@@ -342,3 +342,25 @@ def test_ci_run_with_repo_from_a_worktree_still_checks_that_trees_head(repo, mon
     body = json.loads(_cli_in(tree, repo).stdout)
     assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip()
     assert body["recorded"]["item"] == "T1"
+
+
+def test_ci_run_with_no_ref_from_outside_the_items_tree_checks_the_holders_item_branch(
+    repo, monkeypatch
+):
+    """Bug Be81c39acb8: from a tree that is no item's (a session's own checkout) `ci run`
+    with no --ref reported main's sha and ran main's tests, not the claimed item's."""
+    _item_with_ci(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    shown = json.loads(out)
+    tree = Path(shown["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    _commit(tree, {"w.txt": "w\n"}, "work")
+    holder = shown["lease"]["holder"]
+    other = repo.parent / "elsewhere"
+    other.mkdir()
+    body = json.loads(_cli_in(other, repo, agent=holder).stdout)
+    assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip(), body
+    assert body["recorded"]["item"] == "T1"
+    # a caller that holds no item still gets the repository's HEAD
+    body = json.loads(_cli_in(other, repo, agent="nobody").stdout)
+    assert body["sha"] == _git(repo, "rev-parse", "HEAD").strip(), body
