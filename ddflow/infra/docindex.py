@@ -361,7 +361,7 @@ class DocIndex:
         if mode == "words":
             match = " ".join(f'"{w}"' for w in words)
             sql = (
-                f"SELECT {cols.format(score='-bm25(chunks_fts, 5.0, 1.0)')} FROM chunks_fts "
+                f"SELECT {cols.format(score='-bm25(chunks_fts, 5.0, 1.0)')} FROM chunks_fts "  # nosec B608 -- only literals are spliced; values are bound
                 f"JOIN chunks c ON c.id = chunks_fts.rowid WHERE chunks_fts MATCH ?{extra} "
                 "ORDER BY bm25(chunks_fts, 5.0, 1.0), c.chunk_id LIMIT ?"
             )
@@ -369,7 +369,7 @@ class DocIndex:
         if mode == "substring":
             match = '"' + raw.replace('"', '""') + '"'
             sql = (
-                f"SELECT {cols.format(score='-bm25(chunks_tri)')} FROM chunks_tri "
+                f"SELECT {cols.format(score='-bm25(chunks_tri)')} FROM chunks_tri "  # nosec B608 -- only literals are spliced; values are bound
                 f"JOIN chunks c ON c.id = chunks_tri.rowid WHERE chunks_tri MATCH ?{extra} "
                 "ORDER BY bm25(chunks_tri), c.chunk_id LIMIT ?"
             )
@@ -378,7 +378,7 @@ class DocIndex:
         pats = ["%" + w.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
                 for w in words]  # fmt: skip
         sql = (
-            f"SELECT {cols.format(score='0.0')} FROM chunks c WHERE {like}{extra} "
+            f"SELECT {cols.format(score='0.0')} FROM chunks c WHERE {like}{extra} "  # nosec B608 -- only literals are spliced; values are bound
             "ORDER BY c.path, c.line_start LIMIT ?"
         )
         return con.execute(sql, [*pats, *args, limit]).fetchall()
