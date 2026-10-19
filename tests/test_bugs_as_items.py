@@ -348,7 +348,9 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     assert out.data["linked"] == ["B-linked", "B-hand"]
     assert state(repo).bugs["B-hand"].fix_task == "fix-B-hand"
     st = state(repo)
-    assert st.items["fix-B-old"].parent == "bugs" and st.items["fix-B-old"].globs == ["src/parser.py"]
+    assert st.items["fix-B-old"].parent == "bugs" and st.items["fix-B-old"].globs == [
+        "src/parser.py"
+    ]
     assert st.bugs["B-old"].fix_task == "fix-B-old"
     assert st.bugs["B-linked"].fix_task == "B-fix-x"
     assert "fix-B-done" not in st.items
