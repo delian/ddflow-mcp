@@ -26,7 +26,7 @@ class QueryError(ExportError):
 
 
 def _bug_state(b: Any) -> str:
-    return "invalid" if b.invalid_at else "fixed" if b.fixed_at else "open"
+    return b.resolution or "open"  # a fix wins over an invalid closure
 
 
 def _item_owner(i: Any) -> str:
@@ -45,7 +45,7 @@ class RecordKind:
 
 
 def _status(r: Any) -> str:
-    return getattr(r, "status", "")
+    return "contested" if getattr(r, "contested", None) else getattr(r, "status", "")
 
 
 def _live(r: Any) -> str:
@@ -65,7 +65,7 @@ def _memories(q: Query) -> list[Any]:
 
 
 def _lesson_state(r: Any) -> str:
-    return "superseded" if r.superseded_by else "live"
+    return "superseded" if r.superseded_by else "contested" if r.contested else "live"
 
 
 def _session_state(r: Any) -> str:
@@ -129,7 +129,7 @@ def parse(text: str) -> RecordQuery:
         except ExportError as exc:
             raise QueryError(str(exc)) from None
     limit = words.get("limit", "0")
-    if not limit.isdigit() or int(limit) > MAX_LIMIT:
+    if not limit.isdecimal() or int(limit) > MAX_LIMIT:
         raise QueryError(f"query limit {limit!r} is not a number from 0 to {MAX_LIMIT}")
     sort = words.get("sort", "id")
     names = _columns(kind)
@@ -179,7 +179,7 @@ def run(rq: RecordQuery, q: Query) -> list[dict[str, Any]]:
     if rq.limit:
         rows = rows[: rq.limit]
     if rq.fields:
-        rows = [{k: x[k] for k in rq.fields if k in x} for x in rows]
+        rows = [{k: x.get(k, "") for k in rq.fields} for x in rows]  # omitted-when-empty: ""
     return rows
 
 
