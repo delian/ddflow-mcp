@@ -3,7 +3,7 @@ nothing else (B-pin-argparse-format)."""
 
 from __future__ import annotations
 
-from tests.pin_norm import argparse_stable, stable
+from tests.pin_norm import argparse_stable, option_headings, stable
 
 WRAPPED_NEW = (
     "usage: ddflow link [-h]\n"
@@ -93,3 +93,15 @@ def test_whitespace_after_a_usage_block_still_matters():
     assert argparse_stable(base) != argparse_stable(base.replace("error: one", "error:  one"))
     assert argparse_stable(base) != argparse_stable(base.replace("\nddflow link", "\n ddflow link"))
     assert argparse_stable(base + "\n\n  indented  help\n").endswith("\n\n  indented  help\n")
+
+
+def test_option_headings_with_both_forms_and_a_value_read_the_same():
+    old = "options:\n  -m MESSAGE, --message MESSAGE\n  -n [N], --num [N]  text\n"
+    new = "options:\n  -m, --message MESSAGE\n  -n, --num [N]  text\n"
+    assert option_headings(old) == new == option_headings(new)
+    assert argparse_stable(old) == argparse_stable(new)
+
+
+def test_option_headings_leave_other_lines_alone():
+    text = "  -a A, --bee B\n  -h, --help  x\n  --only ONLY\nuse -m M, --message M here\n"
+    assert option_headings(text) == text

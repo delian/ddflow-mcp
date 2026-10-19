@@ -3,7 +3,9 @@
 One snapshot per command, so a diff names the command whose help moved. The usage
 paragraph is recorded on one line: Python 3.13's argparse wraps a long usage line at
 different points than 3.11's (mutually exclusive groups, subcommand choices), and nothing
-else in the help differs between them. Every word of the usage is still pinned.
+else differs between them but how an option with a short and a long form that takes a value
+is headed (`-m MESSAGE, --message MESSAGE` before 3.13, `-m, --message MESSAGE` after),
+which `pin_norm.option_headings` makes uniform. Every word of the usage is still pinned.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import re
 
 import pytest
 from goldenfix import _pinned_environment  # noqa: F401 -- fixtures
+from pin_norm import option_headings
 
 from ddflow.surfaces.cli import build_parser
 
@@ -43,7 +46,7 @@ COMMANDS = sorted(PARSERS)
 def unwrap_usage(text: str) -> str:
     """The help with its leading `usage:` paragraph joined onto one line."""
     usage, sep, rest = text.partition("\n\n")
-    return re.sub(r"\s+", " ", usage).strip() + sep + rest
+    return re.sub(r"\s+", " ", usage).strip() + sep + option_headings(rest)
 
 
 def test_the_command_tree(snapshot):
@@ -54,3 +57,9 @@ def test_the_command_tree(snapshot):
 @pytest.mark.parametrize("command", COMMANDS)
 def test_help(command, snapshot):
     assert unwrap_usage(PARSERS[command].format_help()) == snapshot
+
+
+def test_unwrap_usage_reads_both_option_heading_spellings_the_same():
+    old = "usage: x [-m MESSAGE]\n\noptions:\n  -m MESSAGE, --message MESSAGE\n                        text\n  -o, --out\n"
+    new = old.replace("-m MESSAGE, --message MESSAGE", "-m, --message MESSAGE")
+    assert unwrap_usage(old) == unwrap_usage(new) == new
