@@ -11,11 +11,13 @@ from collections.abc import Callable
 from datetime import UTC
 from typing import Any
 
+from ...config import Config
 from ...core import clock
 from ...services.guidance.kinds import overlapping_live
 from ...services.metrics.facts import collect
 from ...services.metrics.forecast import forecast
 from . import roadmap_calc as RC
+from .kind_changelog import _tags
 from .query import Query
 
 #: Entries listed per kind of change and per phase link list; the rest are counted.
@@ -31,8 +33,6 @@ def latest_tag_date(q: Query) -> str:
     """The date (YYYY-MM-DD) of the newest version tag, or "" with no repo, no tag or no git."""
     if q.repo is None:
         return ""
-    from ...config import Config
-    from .kind_changelog import _tags
 
     try:
         tags = _tags(q.repo, Config.load(q.repo).flow.tag_prefix)
@@ -157,3 +157,26 @@ def visibility(state: Any, hide: list[str], phase: str = "") -> Callable[[str], 
         )
 
     return visible
+
+
+def annotate(
+    q: Query,
+    cfg: Any,
+    split: tuple[list, list, list],
+    ids: list[str],
+    *,
+    eta: bool,
+    hide: list[str],
+    since: str,
+    phase: str,
+) -> tuple[str, dict[str, Any]]:
+    """Decorate the rows of every lane (``split``) with links and the estimate, and give
+    ``(the point in time, the Changed section)``. ``ids`` are the listed phases, in order."""
+    linked = links(q, {i: [i, *(t.id for t in q.tasks_under(i))] for i in ids})
+    asked = [r["id"] for lane in split[:2] for r in lane] if eta else []
+    found = etas(q, cfg, asked)
+    for r in (r for lane in split for r in lane):  # the Later rows are copies: decorate these
+        r.update(linked[r["id"]])
+        r["eta"] = eta_line(found[r["id"]]) if r["id"] in found else ""
+    point = resolve_since(q, since)
+    return point, changed(q, point, visibility(q.state, hide, phase))

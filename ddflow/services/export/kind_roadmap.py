@@ -156,6 +156,18 @@ def _lanes(split: tuple[list, list, list], cap: int, cut: int) -> tuple[list[dic
     return lanes, omitted
 
 
+def _mark_critical(q: Query, phase: str, by_id: dict[str, dict], ranked: list[str]) -> list[str]:
+    """Rank each phase row, flag the ones on the critical path, and return the listed chain."""
+    listed = set(by_id) | {t["id"] for r in by_id.values() for t in r["all_tasks"]}
+    chain = [i for i in critical_path(q.state, phase) if i in listed]
+    path = set(chain)
+    for rank, pid in enumerate(ranked):
+        r = by_id[pid]
+        r["rank"] = rank
+        r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
+    return chain
+
+
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
         raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
@@ -167,31 +179,20 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
     before = _phase_before(q, cfg, set(by_id))
     ranked = RC.order(by_id, before, key)
-    listed = set(by_id) | {t["id"] for r in rows for t in r["all_tasks"]}
-    chain = [i for i in critical_path(q.state, f.phase) if i in listed]
-    path = set(chain)
-    for rank, pid in enumerate(ranked):
-        r = by_id[pid]
-        r["rank"] = rank
-        r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
+    chain = _mark_critical(q, f.phase, by_id, ranked)
     phases = [by_id[i] for i in ranked]
     split = RC.split_lanes(phases, st.next_n)
     shown = {
         p["id"]: key for (key, _, _), lane in zip(_LANE_LABELS, split, strict=True) for p in lane
     }
-    owned = {pid: [pid, *(t.id for t in q.tasks_under(pid))] for pid in by_id}
-    linked = CH.links(q, owned)
-    etas = CH.etas(q, cfg, [i for i in ranked if shown[i] != "later"]) if st.eta else {}
-    for r in (r for lane in split for r in lane):  # the Later rows are copies: decorate these
-        r.update(linked[r["id"]])
-        r["eta"] = CH.eta_line(etas[r["id"]]) if r["id"] in etas else ""
     lanes, omitted = _lanes(split, st.cap, f.limit or 0)
-    since = CH.resolve_since(q, f.since)
+    since, changes = CH.annotate(
+        q, cfg, split, ranked, eta=st.eta, hide=[] if st.show_hidden else st.hide,
+        since=f.since, phase=f.phase,
+    )  # fmt: skip
     return {
         "since": since,
-        "changes": CH.changed(
-            q, since, CH.visibility(q.state, [] if st.show_hidden else st.hide, f.phase)
-        ),
+        "changes": changes,
         "lanes": lanes,
         "done_phases": seen["done"],
         "hidden_phases": omitted,
