@@ -1,0 +1,2 @@
+{"agent":"fleet-ci-red","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"ef772b76f220cbd1d6de67acc","kind":"ddflow.seen","lamport":85556,"schema":1,"subject":"ddflow","ts":"2026-10-19T08:12:12.929922Z"}
+{"agent":"fleet-ci-red","data":{"path":".ddflow/worktrees/fix-B5504f1becd"},"id":"ece6f3e6c71c4a3c310a0d751","kind":"worktree.removed","lamport":85557,"schema":1,"subject":"fix-B5504f1becd","ts":"2026-10-19T08:12:12.962360Z"}
