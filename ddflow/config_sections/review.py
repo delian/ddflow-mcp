@@ -59,5 +59,5 @@ class ReviewConfig:
     )
     split_rounds: int = knob(
         2,
-        doc="How many times a review chunk that never came back -- out of tokens (`TRUNCATED`) or out of time (`DID NOT CONVERGE`, a request cut at the reviewer's `timeout_s`) on every copy -- is split in halves and sent again (default 2; 1 = once; each half that is lost again is halved in the next round; all inside the reviewer's `total_budget_s`). A chunk some halves of which still never came back is recorded as unreviewed with how many parts were, and the findings of the parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer in 1800 s twice).",
+        doc="How many times a review chunk that never came back -- out of tokens (`TRUNCATED`) or out of time (`DID NOT CONVERGE`, a request cut at the reviewer's `timeout_s`) on every copy -- is split in halves and sent again (default 2; 1 = once, and a value below 1 is read as 1; each half that is lost again is halved in the next round; all inside the reviewer's `total_budget_s`). A chunk some halves of which still never came back is recorded as unreviewed with how many parts were, and the findings of the parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer in 1800 s twice).",
     )
