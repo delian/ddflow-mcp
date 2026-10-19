@@ -29,7 +29,7 @@ useDefault = true
   description = "Inert. See the header: configuration lives in [allowlist]."
   regex = '''\$\^ddflow-inert-never-matches\$'''
 
-[allowlist]
+[[allowlists]]
   description = "Fixture credentials for ddflow's own redaction tests"
   # Named values, not paths. Each is either a documented vendor example or plainly filler.
   regexes = [
@@ -49,3 +49,16 @@ useDefault = true
   ]
   # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
   # It does not appear in ddflow's history, and if it ever does, this scan must fire.
+
+[[allowlists]]
+  # The sourcegraph-access-token rule takes any bare 40-hex string as a token once the word
+  # "sourcegraph" appears anywhere in the scanned diff (its keyword prefilter is per file,
+  # not per match). The committed event logs name git commit shas and diff digests (40 hex)
+  # constantly, and one log mentioned sourcegraph in a task body: 16 false positives.
+  # Scoped to ONE rule, ONLY the event logs, ONLY a bare 40-hex value; a real `sgp_`-prefixed
+  # token, or the same rule in any other file, still fires.
+  description = "40-hex git shas in the committed event logs are not sourcegraph tokens"
+  targetRules = ["sourcegraph-access-token"]
+  condition = "AND"
+  paths = ['''\.ddflow/events/.*\.jsonl$''']
+  regexes = ['''^[0-9a-f]{40}$''']
