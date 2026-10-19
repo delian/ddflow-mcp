@@ -239,19 +239,24 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
         )  # fmt: skip
     covered = f"ci selected run {sha}"
     sel = select(tree, base, **limits(cfg))
-    if sel is None or sel.full:
-        why = "git could not say what changed" if sel is None else sel.full
-        # ci passed its selected run on this very tree: that run is the evidence. The whole
-        # suite is never started from here (B9ec96cb844, D-agent-test-etiquette).
-        return Scope(
-            "covered", f"{why}; the ci gate's selected run passed on this tree and is the evidence",
-            changed_lines=lines, covered_by=covered,
-        )  # fmt: skip
-    # A cut test list (`selected` > len(tests)) is no reason to start the whole suite: the
-    # tests it does not name run here, which is still the selection (B9ec96cb844).
-    done = set(ran.get("tests") or ())
+    done = set(ran.get("tests") or ())  # a cut list (`selected` > len) names fewer than ran
     done |= set(ran.get("always_tests") or ())  # the always-run guards ran as well
-    rest = _not_run(sel.tests, _regression(st, it), done)
+    if sel is None or sel.full:
+        # ci passed its selected run on this very tree: that run is the evidence, and the
+        # whole suite is never started from here (B9ec96cb844, D-agent-test-etiquette). The
+        # item's own regression tests are the one thing still checked: they run unless ci took
+        # them.
+        why = "git could not say what changed" if sel is None else sel.full
+        rest = _not_run([], _regression(st, it), done)
+        if not rest:
+            return Scope(
+                "covered", f"{why}; the ci gate's selected run passed on this tree and is the evidence",
+                changed_lines=lines, covered_by=covered,
+            )  # fmt: skip
+    else:
+        # A cut test list is no reason to start the whole suite: the tests it does not name
+        # run here, which is still the selection.
+        rest = _not_run(sel.tests, _regression(st, it), done)
     if not rest:
         return Scope(
             "covered", f"every test this change reaches ran in the ci gate ({len(done)} files)",
@@ -262,7 +267,7 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
         return Scope("full", "the unit_tests command does not run pytest", changed_lines=lines)
     return Scope(
         "selected", f"{len(rest)} test(s) the ci selected run {sha} did not take",
-        command=cmd, tests=rest, changed_lines=lines, cut=sel.cut, cut_at=sel.cut_at,
+        command=cmd, tests=rest, changed_lines=lines, cut=sel.cut if sel else [], cut_at=sel.cut_at if sel else 0,
         max_files=cfg.gates.unit_tests_max_files,
     )  # fmt: skip
 
