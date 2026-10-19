@@ -205,7 +205,7 @@ Wave 3
 9. P-remote.runs: GET /v1/runs/<key>, events, MCP tasks mapping (`resultType: "task"` for clients declaring
    the extension). Needs P-remote.serve.
 
-Wave 4 (verify with real clients)
+Wave 3b (runs BEFORE item 8 fixes the poll defaults: RM-run-tool-mcp needs RM-client-probes; RM-client-probes needs RM-runs-core)
 10. RM-client-probes: repeat the sleepy probe with opencode/Kilo, Codex, Gemini CLI when credentials exist;
     record matrix rows; adjust `long_poll_max_s` default.
 11. RM-run-retention-and-driver: implement driver and deltas say "start, then `ddflow_run wait_s=20`"; never
