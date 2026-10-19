@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from string import Formatter
 from typing import Any
 
@@ -81,9 +81,13 @@ def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = 
         return
     tree = _tree(repo)
     have = set(tree)
+    dirs = {str(p) for f in tree for p in PurePosixPath(f).parents}
 
     def read(path: str) -> str | None:
-        return (repo / path).read_text("utf-8", errors="replace") if path in have else None
+        """The text of a tracked file; "" for a tracked directory (a link to it resolves)."""
+        if path in have:
+            return (repo / path).read_text("utf-8", errors="replace")
+        return "" if path.rstrip("/") in dirs else None
 
     count = 0
     for dt in types:

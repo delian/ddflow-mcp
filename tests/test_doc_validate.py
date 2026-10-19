@@ -365,3 +365,26 @@ def test_a_project_lint_command_with_commands_off_is_not_unavailable(repo: Path)
     put(repo, "NOTE.md", "a\n")
     check = DR.run_check(repo, Config.load(repo), run_commands=False)
     assert "lint:note" in check.not_configured and "lint:note" not in check.unavailable
+
+
+def test_links_resolve_follows_directories_markdown_extensions_images_and_definitions():
+    files = {"docs/b.markdown": "# Real\n", "docs": ""}
+    dt = spec.parse(
+        '[doctype]\nname = "t"\npath = "docs/a.md"\n'
+        '[doctype.validate]\nrules = [{ kind = "links_resolve" }]\n'
+    )
+
+    def run(t):
+        return [f.line for f in validate(dt, t, "docs/a.md", read=files.get)]
+
+    assert run("[d](/docs) [e](b.markdown#real) ![i](b.markdown)\n") == []
+    assert run("[d](b.markdown#nope)\n") == [1]
+    assert run("![i](gone.png)\n") == [1]
+    assert run("see [d][x]\n\n[x]: gone.md\n") == [3]
+
+
+def test_a_required_section_without_a_heading_is_refused_at_load():
+    with pytest.raises(spec.DocTypeError, match="needs a heading"):
+        spec.parse(
+            '[doctype]\nname = "t"\npath = "T.md"\n[[doctype.section]]\nid = "a"\nrequired = true\n'
+        )

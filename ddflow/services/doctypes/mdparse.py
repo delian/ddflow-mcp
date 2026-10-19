@@ -18,7 +18,8 @@ from ..docscheck_md import SPAN, lines
 _ATX = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 _DELIM = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
-_LINK = re.compile(r"(?<!!)\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+_LINK = re.compile(r"!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+_REFDEF = re.compile(r"^ {0,3}\[[^\]\n]+\]:\s*<?([^\s>]+)>?(?:\s|$)")
 _FENCE_RUN = re.compile(r"^\s*(`{3,}|~{3,})\s*([\w+-]*)")
 _KEY = re.compile(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$")
 _INT = re.compile(r"^-?\d+$")
@@ -140,14 +141,21 @@ def parse(text: str) -> Doc:
     return doc
 
 
+def _targets(line: str) -> list[str]:
+    """The link targets on one line, as the reference link check reads them: inline and image
+    links outside code spans, and a reference definition."""
+    masked = SPAN.sub(lambda c: " " * len(c.group(0)), line)
+    found = [m.group(1) for m in _LINK.finditer(masked)]
+    return found + ([d.group(1)] if (d := _REFDEF.match(masked)) else [])
+
+
 def _read(live: list[Part], line: str, prev: str, n: int) -> None:
     item = _ITEM.match(line)
     table = bool("|" in line and "|" in prev and _DELIM.match(line))
+    links = [(n, t) for t in _targets(line)]
     for s in live:
         s.body += ("\n" if s.body else "") + line
         s.tables += table
         if item:
             s.items.append(item.group(1))
-        s.links += [
-            (n, m.group(1)) for m in _LINK.finditer(SPAN.sub(lambda c: " " * len(c.group(0)), line))
-        ]
+        s.links += links
