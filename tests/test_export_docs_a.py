@@ -108,8 +108,10 @@ def test_roadmap_lanes_follow_state_and_dependencies():
     assert "`T4` ready thing\n" in lanes["Next"]
     # P3 inherits P2's dependency; P5 names an id that does not exist: both wait.
     assert "### P3: Third phase (0/1)" in lanes["Later"]
-    assert "`T5` inherits the phase dependency _(blocked: waits on P2)_" in lanes["Later"]
-    assert "waits on NOPE" in lanes["Later"]
+    assert (
+        "Blocked by P2." in lanes["Later"] and "1 more open tasks not listed" in lanes["Later"]
+    )  # Later is counts only (B-rm-data)
+    assert "Blocked by NOPE" in lanes["Later"]
     assert "1 phases complete (not listed)" in body  # P4
     assert "P4" not in body.split("(not listed)", 1)[1]
 
