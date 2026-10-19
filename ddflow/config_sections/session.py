@@ -134,7 +134,7 @@ class SessionConfig:
     )
     report_brief_chars: int = knob(
         200,
-        doc="Characters `ddflow report ITEM --brief` keeps of each of its 8 lines. Change it for the project (`ddflow config --set session.report_brief_chars 300`), for this machine (add --local), or over MCP with `ddflow_configure`.",
+        doc="Characters `ddflow report ITEM --brief` keeps of each free-text entry (an override reason, a not-done note); ids, gate names, test names and the landing sha are never cut. Change it for the project (`ddflow config --set session.report_brief_chars 300`), for this machine (add --local), or over MCP with `ddflow_configure`.",
     )
     report_test_files: int = knob(
         12,

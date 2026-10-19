@@ -26,13 +26,20 @@ def test_the_brief_is_eight_lines_with_the_landing_sha_and_the_filed_ids(repo):
     assert "BX1" in got[5] and got[7] == "not done: none"
 
 
-def test_a_line_is_cut_to_the_knob(repo):
-    _land(repo)
-    assert run_cli(repo, "config", "--set", "session.report_brief_chars", "20")[0] == 0
-    out = run_cli(repo, "report", "T1", "--brief")[1].rstrip("\n").split("\n")
-    # free-text lines are cut; the landing and id lines are whole
-    cut = [line for i, line in enumerate(out) if i not in RB._WHOLE]
-    assert all(len(line) <= 20 for line in cut) and any(line.endswith("…") for line in cut)
+def test_only_free_text_entries_are_cut_to_the_knob():
+    d = {
+        "item": {"id": "T", "state": "done", "agent": "a"},
+        "landing": {"merge_sha": "a" * 40, "base": "main"},
+        "regression": {"bugs": [], "test_files": []},
+        "gates": [{"gate": f"gate{n}", "outcome": "failed"} for n in range(12)],
+        "overrides": ["x" * 400],
+        "follow_ups": [],
+        "not_done": ["y" * 400],
+        "filed": {"bugs": [], "tasks": []},
+    }
+    out = RB.render(d, 20).split("\n")
+    assert "gate11 failed" in out[3] and not out[3].endswith("…")
+    assert out[4].endswith("…") and out[7].endswith("…")
 
 
 def test_the_full_report_is_unchanged_and_the_agent_brief_points_at_brief(repo):
@@ -61,7 +68,7 @@ def test_an_unmerged_item_reports_not_merged_and_ids_are_never_cut():
     out = RB.render(d, 20).split("\n")
     assert out[1] == "landed: not merged"
     assert "BUG-0029-long-id" in out[5] and not out[5].endswith("…")
-    assert out[7].endswith("…") and len(out[7]) == 20
+    assert out[7].endswith("…")
 
 
 def test_the_brief_is_reachable_over_mcp_as_show_report_brief(repo):
