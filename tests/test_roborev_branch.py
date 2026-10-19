@@ -147,7 +147,7 @@ MB=$(git merge-base main HEAD)
 case "$1" in
   review) echo "Enqueued job 9 for range" ;;
   status) echo "Workers: 1/2 active" ;;
-  wait) [ -n "$FAKE_HANG" ] && sleep 30; exit 0 ;;
+  wait) [ -n "$FAKE_HANG" ] && sleep 30; exit "${FAKE_WAIT_EXIT:-0}" ;;
   show) echo "Review for job 7: no issues" ;;
   list) cat <<JSON
 [{"id": 8, "status": "queued", "job_type": "range", "git_ref": "zzzzzzzz..ffffffff"},
@@ -200,3 +200,20 @@ def test_a_pending_job_is_collected_by_id_without_enqueueing(tmp_path, monkeypat
     assert not any(c.startswith("review") for c in log.read_text().splitlines())
     assert RB.run_job(repo, 99, 5).outcome == "unavailable"
     assert RB.main(["--repo", str(repo), "--base", "main", "--job", "7", "--wait-s", "5"]) == 0
+
+
+def test_a_reused_done_job_with_a_fail_verdict_is_findings_not_clean(tmp_path, monkeypatch):
+    repo, _log = _qsetup_in(tmp_path, "done", monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    r = RB.run(repo, "main", 5)
+    assert r.job == 7 and r.outcome == "findings"
+
+
+def test_a_single_commit_job_of_head_is_not_the_branch_review(tmp_path, monkeypatch):
+    repo, log = _setup(tmp_path, monkeypatch)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    jobs = [{"id": 3, "status": "done", "job_type": "review", "git_ref": head}]
+    assert RB._reusable_job(jobs, head, "0" * 40) is None
+    r = RB.run(repo, "main", 5)
+    assert any(c.startswith("review --since") for c in log.read_text().splitlines())
+    assert r.job == 7
