@@ -14,7 +14,7 @@ import shlex
 from collections.abc import Iterable
 from pathlib import Path
 from string import Formatter
-from typing import TYPE_CHECKING
+from typing import Any
 
 from ..config import Config
 from .cmdrunner import CommandRunner, Declared
@@ -23,9 +23,6 @@ from .docscheck_types import Finding
 from .docsync import glob_regex
 from .doctypes import spec
 from .doctypes.validate import validate
-
-if TYPE_CHECKING:  # docscheck_run imports this module
-    from .docscheck_run import Check
 
 PROJECT_DIR = ".ddflow/doctypes"
 
@@ -48,7 +45,7 @@ def types_of(repo: Path) -> list[spec.DocType]:
     return spec.registry(layers).values_list()
 
 
-def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Check) -> Iterable[Finding]:
+def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Any) -> Iterable[Finding]:
     line = str(dt.validate.get("lint_command", "")).strip().replace("{path}", shlex.quote(path))
     key = f"lint:{dt.name}"
     if not line:
@@ -74,7 +71,7 @@ def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Check) ->
     )
 
 
-def check_doctypes(repo: Path, cfg: Config, check: Check, *, run_commands: bool = True) -> None:
+def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = True) -> None:
     """Add the ``doctype`` findings of every document that has a type to ``check``."""
     report = check.report
     try:
@@ -101,6 +98,10 @@ def check_doctypes(repo: Path, cfg: Config, check: Check, *, run_commands: bool 
             count += 1
             if run_commands:
                 report.findings += _lint(repo, cfg, dt, path, check)
-            elif dt.validate.get("lint_command"):
+            elif dt.validate.get("lint_command") and dt.source.startswith("shipped/"):
                 check.unavailable[f"lint:{dt.name}"] = "commands are off for this check"
+            elif dt.validate.get("lint_command"):
+                check.not_configured[f"lint:{dt.name}"] = (
+                    f"{dt.name}: a lint command in a project-added type is inert until approved"
+                )
     report.checked["doctypes"] = count
