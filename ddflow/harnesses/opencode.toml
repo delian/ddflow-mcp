@@ -1,6 +1,7 @@
 id = "opencode"
 rank = 8
 family = "opencode"
+title = "opencode"
 delta = "opencode.md"
 
 [mcp]

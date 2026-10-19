@@ -58,3 +58,9 @@ name = "readme-commands"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_command_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "ddflow.surfaces.command_table", "README.md", "--force"]
+
+[[pin]]
+name = "readme-agents"
+files = ["README.md"]
+check = ["{python}", "-m", "pytest", "tests/test_readme_agents_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "ddflow.surfaces.harness_table", "README.md", "--force"]

@@ -1,6 +1,7 @@
 id = "qodo"
 rank = 13
 family = "qodo"
+title = "Qodo"
 delta = "qodo.md"
 
 [mcp]

@@ -1,6 +1,7 @@
 id = "cursor"
 rank = 6
 family = "cursor"
+title = "Cursor"
 delta = "cursor.md"
 
 [mcp]

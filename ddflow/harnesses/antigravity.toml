@@ -1,6 +1,7 @@
 id = "antigravity"
 rank = 11
 family = "antigravity"
+title = "Google Antigravity"
 delta = "antigravity.md"
 
 [mcp]
