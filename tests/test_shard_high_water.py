@@ -686,3 +686,63 @@ def test_a_shard_unlinked_for_a_moment_during_the_looks_is_waited_for(clone, mon
 
     n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=3, during=vanish)
     assert n == 3 and not lost
+
+
+def test_lost_settles_a_shard_it_catches_half_rewritten(clone, monkeypatch):
+    """The settle inside lost(): the shard reads short when doctor looks and is whole again a
+    moment later; no loss is reported and nothing is flagged."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+    log = EventLog(clone, AGENT)
+    path = _shard(clone)
+    whole = path.read_text()
+    rows = whole.splitlines(keepends=True)
+    path.write_text("".join(rows[: len(rows) // 2]))
+    sleeps = []
+
+    def sleep(_s):
+        sleeps.append(1)
+        if len(sleeps) == 2:
+            path.write_text(whole)
+
+    monkeypatch.setattr(shardmarks.time, "sleep", sleep)
+    assert not shardmarks.lost(clone, log) and len(sleeps) >= 2
+
+
+def test_a_second_short_look_under_the_lock_flags_nothing_when_the_first_read_whole(
+    clone, monkeypatch
+):
+    """The look taken after the marks lock reads short (the shard is being rewritten again)
+    while the settled one read whole: neither is believed, and the flag is not set."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+    log = EventLog(clone, AGENT)
+    path = _shard(clone)
+    whole = path.read_text()
+    rows = whole.splitlines(keepends=True)
+    real = shardmarks._scan
+    calls = {"n": 0}
+
+    def scan(p):
+        calls["n"] += 1
+        if calls["n"] == 1:  # the unlocked look: bigger than the mark, reads whole
+            return real(p)
+        path.write_text("".join(rows[: len(rows) // 2]))  # the locked look: mid-rewrite
+        try:
+            return real(p)
+        finally:
+            path.write_text(whole)
+
+    key = next(iter(_marks_doc(clone)["data"]))
+    doc = _marks_doc(clone)
+    doc["data"][key]["size"] = 0  # make observe look at the shard
+    _marks_path(clone).write_text(json.dumps(doc))
+    monkeypatch.setattr(shardmarks, "_scan", scan)
+    shardmarks.observe(clone, log)
+    monkeypatch.setattr(shardmarks, "_scan", real)
+    assert not any(r.get("shrunk") for r in _marks_doc(clone)["data"].values())
+    assert not shardmarks.lost(clone, log)
