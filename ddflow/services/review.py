@@ -1320,7 +1320,7 @@ def _retry_truncated(
     so a chunk lost to `TRUNCATED` or `DID NOT CONVERGE` is retried: in halves when it
     splits (by file, then by hunk, as `split_diff` always does), whole -- once, and only
     for a truncation, whose length is a fresh draw -- when it does not. A half that is lost
-    again is halved in the next of at most ``rounds`` rounds, all inside `total_budget_s`.
+    again is halved in the next of at most ``max(1, rounds)`` rounds, all inside `total_budget_s`.
     The chunk counts as reviewed only if every part comes back on contract; the parts'
     replies are joined into the chunk's one reply, so chunk counts and reports are
     unchanged. A chunk some parts of which never came back is unreviewed with the reason
