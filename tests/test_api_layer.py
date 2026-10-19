@@ -424,6 +424,10 @@ TEXT_BODIED = {
 }
 
 WRITES_NOT_COMPARABLE = {
+    # Many edits / a fold in one transaction: a second call finds nothing to do. Pinned by
+    # tests/test_batch_fold.py.
+    "ddflow_batch",
+    "ddflow_task_fold",
     "ddflow_promote_add",
     # Reads or WRITES the forge (a reply, a resolve); pinned by tests/test_review_threads.py.
     "ddflow_pr_threads",
