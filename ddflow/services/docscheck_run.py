@@ -19,6 +19,7 @@ from .cmdrunner import CommandRunner, Declared
 from .docscheck import _tree
 from .docscheck_config import check_configured
 from .docscheck_diff import added_lines, restrict
+from .docscheck_doctypes import check_doctypes
 from .docscheck_net import check_remote
 from .docscheck_types import KINDS, Finding, Report
 from .docsync import glob_regex
@@ -139,6 +140,7 @@ def run_check(repo: Path | str, cfg: Config, *, diff: str = "", run_commands: bo
     )
     check = Check(report, cfg.docs.severity, diff)
     _links(root, cfg, check)
+    check_doctypes(root, cfg, check, run_commands=run_commands)
     if diff:
         docs = set(report.checked["docs"])
         report.findings = restrict(report.findings, docs, added_lines(root, diff))
