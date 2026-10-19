@@ -121,7 +121,7 @@ def test_an_unfinished_job_is_named_as_unfinished_not_as_missing(repo, fake_robo
     code, out, err = _record(repo, head)
     assert code == 0, out + err
     why = _gate(repo).evidence["roborev"]["why"]
-    assert "job 7" in why and "running" in why and "roborev wait 7" in why, why
+    assert "job 7" in why and "running" in why and "roborev wait --job 7" in why, why
     assert "no finished review" not in why
 
 
@@ -133,7 +133,7 @@ def test_a_running_review_is_not_masked_by_a_newer_non_review_job(repo, fake_rob
     code, out, err = _record(repo, head)
     assert code == 0, out + err
     why = _gate(repo).evidence["roborev"]["why"]
-    assert "job 7" in why and "roborev wait 7" in why, why
+    assert "job 7" in why and "roborev wait --job 7" in why, why
 
 
 def test_a_failed_job_is_not_told_to_wait(repo, fake_roborev):
