@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 #: Finding kinds, in the order a report lists them.
-KINDS = ("identifier", "flag", "command", "link", "anchor", "count", "lint")
+KINDS = ("identifier", "flag", "command", "link", "anchor", "count", "doctype", "lint")
 
 
 @dataclass(frozen=True)
