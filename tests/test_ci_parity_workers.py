@@ -123,7 +123,7 @@ def test_execute_runs_the_localized_config_and_logs_it(tmp_path: Path, monkeypat
 
 def test_a_crashed_holders_note_is_not_named(tmp_path: Path):
     """A dead holder's note is left at every slot; the live hold overwrites one, so
-     the unfixed oldest-note read would name it."""
+    the unfixed oldest-note read would name it."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     for i in (0, 1):  # the live hold overwrites its own slot's note; the other stays stale
         SL._note(tmp_path, i).write_text('{"holder": "dead", "at": 1, "at_iso": "00:00:01"}')
