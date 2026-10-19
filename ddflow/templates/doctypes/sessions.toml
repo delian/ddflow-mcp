@@ -1,0 +1,11 @@
+[doctype]
+name = "sessions"
+title = "Sessions"
+path = "SESSION.md"
+genre = "log"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:sessions"
