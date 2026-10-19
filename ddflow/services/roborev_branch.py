@@ -22,18 +22,17 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
-import hashlib
 import json
 import re
 import shutil
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
-from ..infra import proc
+from ..core import clock
+from ..core.digest import content_digest
+from ..infra import fsio, proc
 from ..infra import worktree as W
 from . import roborev as RR
 
@@ -103,11 +102,9 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
 
 
 def _secs(a: str, b: str) -> float | None:
-    from datetime import datetime
-
     try:
-        fa = datetime.fromisoformat(a.replace("Z", "+00:00"))
-        fb = datetime.fromisoformat(b.replace("Z", "+00:00"))
+        fa = clock.parse_ts(a)
+        fb = clock.parse_ts(b)
     except ValueError:
         return None
     return (fb - fa).total_seconds()
@@ -155,13 +152,9 @@ def _job_status(exe: str, where: Path, job: int) -> str:
 @contextlib.contextmanager
 def _enqueue_lock(where: Path):
     """Serialise the list-then-enqueue of concurrent callers on one machine and repo."""
-    key = hashlib.sha1(str(W.repo_root(where)).encode(), usedforsecurity=False).hexdigest()[:12]
-    with open(Path(tempfile.gettempdir()) / f"ddflow-roborev-enqueue-{key}.lock", "a") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+    key = content_digest(str(W.repo_root(where)), "sha1", length=12)
+    with fsio.file_lock(fsio.temp_root() / f"ddflow-roborev-enqueue-{key}.lock"):
+        yield
 
 
 def run(where: Path, base: str, wait_s: int) -> Result:
