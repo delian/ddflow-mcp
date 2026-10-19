@@ -7,6 +7,9 @@ delta = "claude-code.md"
 [mcp]
 path = ".mcp.json"
 shape = "mcpServers"
+approve_file = ".claude/settings.json"
+approve_key = "enabledMcpjsonServers"
+deny_key = "disabledMcpjsonServers"
 
 [instructions]
 reads = ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", ".claude/rules/*.md", "AGENTS.md"]
