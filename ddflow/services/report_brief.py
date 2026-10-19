@@ -55,11 +55,13 @@ def lines(d: dict[str, Any]) -> list[str]:
     ]
 
 
-#: The lines (0-based) that hold ids: never cut, a cut id names nothing or the wrong item.
-_WHOLE = (0, 1, 2, 5, 6)
-
-
 def render(d: dict[str, Any], chars: int) -> str:
-    """The brief as text: the free-text lines cut to ``chars`` ([session].report_brief_chars);
-    the lines of ids and the landing sha are kept whole."""
-    return "\n".join(t if i in _WHOLE else _cut(t, chars) for i, t in enumerate(lines(d))) + "\n"
+    """The brief as text. Only the free-text entries (each override and each not-done note) are
+    cut, to ``chars`` ([session].report_brief_chars); no id, gate name, test or sha is ever cut:
+    a cut id names nothing, or the wrong item."""
+    d = {
+        **d,
+        "overrides": [_cut(t, chars) for t in d["overrides"]],
+        "not_done": [_cut(t, chars) for t in d["not_done"]],
+    }
+    return "\n".join(lines(d)) + "\n"
