@@ -118,4 +118,4 @@ def test_research_has_no_globs_so_it_links_by_item_only():
     from ddflow.core.records import ResearchNote
 
     assert "globs" not in {f.name for f in fields(ResearchNote)}
-    assert CH.eta_line({"low_s": 7200, "high_s": 7200 * 12}) == "2.0 h to 1.0 days"
+    assert CH.eta_line({"low_s": 7200, "high_s": 3 * 86400}) == "2.0 h to 3.0 days"
