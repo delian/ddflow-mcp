@@ -4,12 +4,13 @@ An agent is **data**: one descriptor file, `ddflow/harnesses/<id>.toml`. No Pyth
 for an agent whose hooks fit an existing style. The README's table of supported agents
 (`README/agents`) is rendered from the descriptors, so a new file adds its row.
 
-You finish with four things, and `tests/test_harness_conformance.py` checks all of them with
-no new test:
+You finish with four things. `tests/test_harness_conformance.py` checks the descriptor, the
+fixtures and the hooks with no new test, and `tests/test_harness_registry.py` checks that the
+delta file exists:
 
 1. a descriptor, with every fact either stated, or marked absent, or left out (not verified);
 2. payload fixtures for each hook event the agent sends;
-3. a delta note, `ddflow/templates/drivers/deltas/<delta>.md`;
+3. a delta note: the file the descriptor's `delta` names (it already ends in `.md`), under `ddflow/templates/drivers/deltas/`;
 4. one passing conformance run for the new id.
 
 ## The three-valued rule
@@ -132,7 +133,7 @@ descriptor's `delta` says. Do not copy the driver; a copy drifts.
 ## The conformance run
 
 ```
-uv run pytest tests/test_harness_conformance.py -k acmecli -q
+uv run pytest tests/test_harness_conformance.py tests/test_harness_registry.py -k acmecli -q
 ```
 
 It checks for the new id: paths are project-relative; every mapped event is canonical and the
@@ -172,5 +173,5 @@ agent's facts moved.
 - [ ] `ddflow/harnesses/<id>.toml`, id equal to the file name, `[verified]` filled
 - [ ] `tests/fixtures/harness/<id>/<event>.json` for each hooked event
 - [ ] `ddflow/templates/drivers/deltas/<delta>`
-- [ ] `uv run pytest tests/test_harness_conformance.py -k <id>` green
+- [ ] `uv run pytest tests/test_harness_conformance.py tests/test_harness_registry.py -k <id>` green
 - [ ] `ddflow pins regenerate`; `ddflow harness doctor <id>` shows nothing broken

@@ -1,6 +1,7 @@
 id = "codex"
 rank = 2
 family = "codex"
+title = "Codex CLI"
 delta = "codex-cli.md"
 
 [mcp]

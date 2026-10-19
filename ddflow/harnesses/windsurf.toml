@@ -1,6 +1,7 @@
 id = "windsurf"
 rank = 17
 family = "devin"
+title = "Windsurf"
 delta = "windsurf.md"
 
 [mcp]

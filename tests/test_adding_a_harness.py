@@ -33,3 +33,13 @@ def test_the_guide_names_every_hook_style_and_shape_the_loader_accepts():
 
 def test_the_guide_stays_small():
     assert GUIDE.stat().st_size < 20_000
+
+
+def test_a_descriptor_without_an_mcp_section_is_refused_not_rendered():
+    """`agent_table` may read `h.mcp.path` unguarded because the loader never yields a
+    harness without `[mcp]`: `shape = "none"` with `path = ""` is the absent form."""
+    import pytest
+
+    text = _example().replace('[mcp]\npath = ".acme/mcp.json"\nshape = "mcpServers"\n', "")
+    with pytest.raises(HR.DescriptorError):
+        HR.parse(text, "acmecli")

@@ -1,6 +1,7 @@
 id = "tabnine"
 rank = 14
 family = "gemini-cli"
+title = "Tabnine"
 delta = "tabnine.md"
 
 [mcp]

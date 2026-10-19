@@ -1,6 +1,7 @@
 id = "devin"
 rank = 12
 family = "devin"
+title = "Devin"
 delta = "devin.md"
 
 [mcp]
