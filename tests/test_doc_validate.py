@@ -229,7 +229,10 @@ def test_a_project_type_is_validated_and_its_lint_command_is_inert(repo: Path):
     put(repo, "NOTE.md", "a\nTODO\n")
     assert doctype_findings(repo) == [("NOTE.md", "forbidden_text")]
     out = api.run_docs(repo, verb="check")
-    assert "inert" in out.data["unavailable"]["lint:note"] and out.data["clean"] is False
+    assert (
+        "inert" in out.data["not_configured"]["lint:note"]
+        and "lint:note" not in out.data["unavailable"]
+    )
 
 
 def test_an_unreadable_type_makes_the_check_unavailable_not_clean(repo: Path):
@@ -316,3 +319,15 @@ def test_a_rule_without_its_regex_is_a_finding():
 def test_a_schema_with_the_wrong_container_types_cannot_be_applied():
     dt = dtype('{ kind = "front_matter", schema = { required = "status" } }')
     assert "cannot be applied" in validate(dt, "---\na: 1\n---\n", "T.md")[0].detail
+
+
+def test_malformed_rule_values_are_findings_not_crashes():
+    dt = dtype('{ kind = "code_blocks", min = "two" }')
+    assert [f.detail for f in validate(dt, "x\n", "T.md")] == ["min must be an integer"]
+    bad = dtype('{ kind = "front_matter", schema = { properties = { status = "accepted" } } }')
+    assert "must be a table" in validate(bad, "---\nstatus: no\n---\n", "T.md")[0].detail
+
+
+def test_a_whole_document_rule_refuses_a_section_key_at_load():
+    with pytest.raises(spec.DocTypeError, match="unknown key 'section'"):
+        dtype('{ kind = "max_bytes", limit = 3, section = "a" }', sec("a", "A"))

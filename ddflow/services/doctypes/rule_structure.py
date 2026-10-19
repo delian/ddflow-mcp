@@ -27,7 +27,7 @@ def required_sections(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
             )
 
 
-@rule("heading_order")
+@rule("heading_order", section=False)
 def heading_order(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     """The type's sections that are present follow its order."""
     last = None
@@ -46,7 +46,7 @@ def heading_order(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
             last = part
 
 
-@rule("no_skipped_levels")
+@rule("no_skipped_levels", section=False)
 def no_skipped_levels(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     """A heading is at most one level deeper than the one before it."""
     prev = 0
@@ -58,7 +58,7 @@ def no_skipped_levels(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
         prev = h.level
 
 
-@rule("unique_headings")
+@rule("unique_headings", section=False)
 def unique_headings(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     """No two headings of the same level read the same."""
     seen: dict[tuple[int, str], int] = {}
@@ -71,7 +71,7 @@ def unique_headings(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
         seen.setdefault(key, h.line)
 
 
-@rule("max_bytes", "limit")
+@rule("max_bytes", "limit", section=False)
 def max_bytes(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     size, limit = len(ctx.doc.text.encode()), r.get("limit")
     if not isinstance(limit, int) or isinstance(limit, bool):

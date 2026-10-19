@@ -4,7 +4,8 @@ Every tracked document that a type's ``path`` or ``pattern`` names is validated 
 type (shipped types, then `.ddflow/doctypes/*.toml`). A type that cannot be read, or a lint
 command that cannot run, is ``unavailable`` with the reason -- never a clean report. A type's
 ``[doctype.validate] lint_command`` (e.g. ``vale {path}``) runs once per document, but only for
-a shipped type: a command in a project-added type stays inert until it is approved.
+a shipped type: a command in a project-added type stays inert until it is approved, said in
+``not_configured`` (declared, not asked for by the operator, so it does not poison the report).
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Check) ->
     if not line:
         return []
     if not dt.source.startswith("shipped/"):
-        check.unavailable[key] = (
+        check.not_configured[key] = (
             f"{dt.name}: a lint command in a project-added type is inert until approved"
         )
         return []

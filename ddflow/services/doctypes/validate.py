@@ -25,16 +25,19 @@ from .spec import RULE_KINDS, DocType, RuleKind
 Read = Callable[[str], "str | None"]
 Check = Callable[["Ctx", Mapping[str, Any]], Iterable[Finding]]
 
-#: Keys every rule kind may carry: the section it applies to, and the message that replaces
-#: its default.
-COMMON_KEYS = frozenset({"section", "message"})
+#: Keys every rule kind may carry: the message that replaces its default. A kind that judges
+#: one section also takes ``section``; one that judges the whole document (`section=False`)
+#: refuses it at load rather than ignoring it.
+COMMON_KEYS = frozenset({"message"})
 
 
-def rule(name: str, *keys: str) -> Callable[[Check], Check]:
+def rule(name: str, *keys: str, section: bool = True) -> Callable[[Check], Check]:
     """Register ``fn`` as the check of the validate rule kind ``name`` (with these keys)."""
 
     def deco(fn: Check) -> Check:
-        RULE_KINDS.register(RuleKind(name, COMMON_KEYS | frozenset(keys), fn))
+        RULE_KINDS.register(
+            RuleKind(name, COMMON_KEYS | frozenset(keys) | ({"section"} if section else set()), fn)
+        )
         return fn
 
     return deco
@@ -123,8 +126,9 @@ def validate(
         if kind.check is None:
             out.append(Finding("doctype", path, 1, kind.name, "the rule kind has no check"))
             continue
-        if r.get("section") and r["section"] not in ctx.found:
-            out.append(ctx.finding(kind.name, 1, f"unknown section {r['section']!r}", r))
+        sec = r.get("section")
+        if sec is not None and (not isinstance(sec, str) or sec not in ctx.found):
+            out.append(ctx.finding(kind.name, 1, f"unknown section {sec!r}", r))
             continue
         out += kind.check(ctx, r)
     return sorted(out, key=lambda f: (f.line, f.ref, f.detail))
