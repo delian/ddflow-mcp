@@ -5052,7 +5052,7 @@ The **roadmap** lists phases in dependency order then priority: Now is work in f
 the top `next` ready phases, Later the rest (task lists capped at `tasks`, Later as counts), each
 with percent, counts by status, what it waits on, its release line and whether it is on the
 critical path. `[export.roadmap]` takes `hide` (id prefixes or tags, default `["BL-"]`), `next`
-(3), `tasks` (8) and `show_hidden`; `--phase` names a hidden batch to show it.
+(3), `tasks` (8), `graph` (25; the phases the Mermaid dependency graph draws, edges implied by a longer path removed, 0 for none) and `show_hidden`; `--phase` names a hidden batch to show it.
 
 Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
 decisions in force, lessons and workflow settings: imported rulebooks are not exported. The
