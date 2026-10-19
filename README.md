@@ -5048,6 +5048,12 @@ Output is deterministic: the same log gives the same bytes, with no clock in the
 | `rules` | `RULES.md` | `limit` `tag` | decisions in force by governing path, lessons by tag, the enforced workflow |
 | `changelog` | `CHANGELOG.md` | `tag` (`--version`) | Keep a Changelog 1.1: Unreleased and one section per version tag |
 
+The **roadmap** lists phases in dependency order then priority: Now is work in flight, Next
+the top `next` ready phases, Later the rest (task lists capped at `tasks`, Later as counts), each
+with percent, counts by status, what it waits on, its release line and whether it is on the
+critical path. `[export.roadmap]` takes `hide` (id prefixes or tags, default `["BL-"]`), `next`
+(3), `tasks` (8) and `show_hidden`; `--phase` names a hidden batch to show it.
+
 Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
 decisions in force, lessons and workflow settings: imported rulebooks are not exported. The
 **changelog** takes each finished item (and each fixed bug that carries a changelog line) and
