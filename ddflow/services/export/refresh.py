@@ -27,7 +27,9 @@ from typing import Any
 from ...config import EXPORT_REFRESH_MODES, Config
 from . import frame as F
 from . import ops
+from . import region_check as RC
 from . import registry as R
+from . import write as W
 from .query import ExportError
 
 # Outcomes. Only these two mean the working tree changed.
@@ -93,12 +95,30 @@ class Refresh:
         return {**self.evidence(), "changed": self.changed}
 
 
-def _digest_of(path: Path) -> str:
+def _digest_of(path: Path, doc: str = "", mode: str = R.WHOLE) -> str:
+    """The body digest of the document as it stands: the frame header's, or for a region
+    document (no header) the digest in its region's begin marker (several regions: the digest
+    of their ``name=sha`` lines in name order)."""
     try:
-        head, _ = F.split(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = path.read_text(encoding="utf-8")
+        if mode == R.REGION:
+            return _region_digest(text, doc)
+        head, _ = F.split(text)
+    except (OSError, ValueError, ExportError):
         return ""
     return head.digest if head else ""
+
+
+def _region_digest(text: str, doc: str) -> str:
+    mine = [r for r in RC.regions(text) if r.doc == doc and r.sha]
+    if len(mine) == 1:
+        return mine[0].sha
+    if mine:
+        return F.body_digest(
+            "".join(f"{r.name}={r.sha}\n" for r in sorted(mine, key=lambda r: r.name))
+        )
+    found = W._region_pattern(doc, "begin").search(text)
+    return found.group("sha") if found else ""
 
 
 def refresh_selected(
@@ -175,7 +195,7 @@ def _one(root: Path, cfg: Config, q: Any, spec: ops.Spec, verify: bool) -> DocOu
         else:
             w = ops.write_doc(root, cfg, q, spec)
             o.action, o.path = w.action, w.rel
-        o.digest = _digest_of(root / o.path)
+        o.digest = _digest_of(root / o.path, spec.doc, spec.mode)
         if verify:
             o.verified = ops.write_doc(root, cfg, q, spec, check=True).code == 0
             if not o.verified:
