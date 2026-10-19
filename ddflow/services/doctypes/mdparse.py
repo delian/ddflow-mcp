@@ -13,13 +13,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..docscheck import _LINK, _REFDEF  # the reference check's own grammar of a link
 from ..docscheck_md import SPAN, lines
 
 _ATX = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
 _DELIM = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
-_LINK = re.compile(r"!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
-_REFDEF = re.compile(r"^ {0,3}\[[^\]\n]+\]:\s*<?([^\s>]+)>?(?:\s|$)")
 _FENCE_RUN = re.compile(r"^\s*(`{3,}|~{3,})\s*([\w+-]*)")
 _KEY = re.compile(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$")
 _INT = re.compile(r"^-?\d+$")
