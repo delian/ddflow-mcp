@@ -59,16 +59,13 @@ class RuleKind:
 
     name: str
     keys: frozenset[str] = frozenset()
+    check: Callable[..., Any] | None = field(default=None, compare=False)  #: set by `validate.rule`
 
 
-RULE_KINDS: Registry[RuleKind] = Registry("validate rule kind", key=lambda k: k.name)
-for _k in (
-    RuleKind("required_sections"),
-    RuleKind("heading_order"),
-    RuleKind("max_bytes", frozenset({"limit"})),
-    RuleKind("pattern", frozenset({"regex", "message"})),
-):
-    RULE_KINDS.register(_k)
+#: Every rule kind, found by convention: a ``rule_*.py`` file of this package registers its kinds.
+RULE_KINDS: Registry[RuleKind] = Registry(
+    "validate rule kind", key=lambda k: k.name, package=__package__ or "", prefix="rule_"
+)
 
 
 @dataclass(frozen=True)
@@ -203,7 +200,7 @@ def _validate(src: _Src, tab: Any) -> dict[str, Any]:
     if not isinstance(tab, dict):
         raise src.err("validate must be a table", "validate")
     rules = tab.get("rules", [])
-    if bad := sorted(set(tab) - {"rules"}):
+    if bad := sorted(set(tab) - {"rules", "lint_command"}):
         raise src.err(f"unknown key {bad[0]!r} in validate", bad[0])
     if not isinstance(rules, list):
         raise src.err("validate.rules must be an array of tables", "rules")
@@ -216,7 +213,11 @@ def _validate(src: _Src, tab: Any) -> dict[str, Any]:
             )
         if bad := sorted(set(r) - {"kind"} - RULE_KINDS[r["kind"]].keys):
             raise src.err(f"unknown key {bad[0]!r} in a {r['kind']} rule", bad[0])
-    return {"rules": [dict(r) for r in rules]} if rules else {}
+    lint = tab.get("lint_command", "")
+    if not isinstance(lint, str):
+        raise src.err("validate.lint_command must be a command line", "lint_command")
+    out: dict[str, Any] = {"rules": [dict(r) for r in rules]} if rules else {}
+    return {**out, "lint_command": lint} if lint else out
 
 
 def _review(src: _Src, tab: Any) -> dict[str, Any]:
