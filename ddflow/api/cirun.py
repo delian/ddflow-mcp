@@ -5,6 +5,7 @@ recording goes through `api.gates`, which imports `merge`)."""
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from ..core import outcome as O
@@ -39,6 +40,27 @@ def _item_here(st, ref: str, called_from: Path | None, repo: Path) -> str:
         if not it.removed and it.lease is not None and (it.worktree or "") == stored:
             return it.id
     return ""
+
+
+def held_item(repo: Path, agent: str, where: Path | None) -> str:
+    """The item this caller is working on when it stands in no item's tree: the one live
+    lease ``agent`` holds, else "" (none, or several -- then the tree decides, as before).
+    A caller standing in a tree that is an item's own keeps that tree's HEAD."""
+    if not agent:
+        return ""
+    _log, cfg, st = _load(repo, agent)
+    now = time.time()
+    held = [
+        it.id
+        for it in st.items.values()
+        if not it.removed and it.branch and it.lease is not None
+        and it.lease.holder == agent and it.lease.live(now, cfg.lease.grace_s)
+    ]  # fmt: skip
+    if len(held) != 1:
+        return ""
+    if where is not None and _item_here(st, "HEAD", where, repo):
+        return ""
+    return held[0]
 
 
 def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from) -> str:
@@ -133,6 +155,8 @@ def ci_tool(
 ) -> O.Outcome:
     """The `ddflow_ci` tool: action run | status."""
     if action == "run":
+        if ref in ("", "HEAD"):  # no ref given: the held item's branch (Be81c39acb8)
+            ref = held_item(repo, agent, called_from) or ref
         return run(
             repo,
             ref=ref or "HEAD",
