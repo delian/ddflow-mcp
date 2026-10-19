@@ -297,3 +297,23 @@ def test_a_scan_that_misses_the_holder_is_retried_not_silently_dropped(tmp_path,
     finally:
         p.kill()
         p.wait()
+
+
+@needs_proc_locks
+def test_a_holder_that_cannot_be_described_is_still_named_by_pid(tmp_path, monkeypatch):
+    """The holder can exit between the /proc/locks read and the /proc/<pid> read: the
+    timeout must still carry its pid, never raise from the message builder."""
+    lock = tmp_path / "events.lock"
+    p = _hold(lock)
+
+    def gone(pid):
+        raise FileNotFoundError(pid)
+
+    monkeypatch.setattr(L, "_describe_pid", gone)
+    try:
+        with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
+            pass
+        assert f"Held by pid {p.pid}." in str(e.value), str(e.value)
+    finally:
+        p.kill()
+        p.wait()

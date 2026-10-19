@@ -784,7 +784,8 @@ def _holder_note(path: Path) -> str:
         try:
             pid = _locks_holder(want)
         except (OSError, ValueError):
-            return ""
+            # could not read the table: say so if the lock is still held, else say nothing
+            return " Holder unknown (/proc/locks unreadable)." if _still_locked(path) else ""
         if pid:
             try:
                 return f" Held by {_describe_pid(pid)}."
