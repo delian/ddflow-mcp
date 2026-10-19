@@ -209,3 +209,5 @@
 "ddflow/services/export/roadmap_calc.py:DEFAULT_NEXT" = "the default of the [export.roadmap] `next` knob, which is already configurable"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_TASKS" = "the default of the [export.roadmap] `tasks` knob, which is already configurable"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_GRAPH" = "the default of the [export.roadmap] `graph` knob, which is already configurable"
+"ddflow/services/export/roadmap_changes.py:LIST_CAP" = "entries listed per kind of change in the Changed section; the rest are counted (a presentation width)"
+"ddflow/services/export/roadmap_changes.py:LINK_CAP" = "decisions or research notes named per phase; the rest are counted (a presentation width)"

@@ -43,8 +43,12 @@ def cmd_ci(a, c: Ctx) -> int:
     where = SS.caller_tree(
         c.repo, c.called_from, bool(c.tree_owner), c.log.agent_id, c.log.read_all()
     )
-    ref = a.ref or SS.head_here_or_repo(c.repo, where)
-    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=where,
+    # Standing in no item's tree (a session's own checkout), the default is the branch of the
+    # one item the caller holds (Be81c39acb8), not the primary's HEAD.
+    ref = (
+        a.ref or AR.held_item(c.repo, c.log.agent_id, where) or SS.head_here_or_repo(c.repo, where)
+    )
+    out = AR.run(c.repo, ref=ref, agent=c.log.agent_id, base=a.base, command=a.command, called_from=where,
                  full=bool(getattr(a, "full", False)))  # fmt: skip
     if c.json:
         emit_json(out.body(""))
