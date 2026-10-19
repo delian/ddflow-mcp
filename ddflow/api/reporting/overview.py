@@ -17,6 +17,7 @@ from ...services import gates as G
 from ...services import leases as L
 from ...services import upgrade_check as UC
 from ...services import waiting as WG
+from ...services.cleanup import removed_with_live_lease
 from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
@@ -213,6 +214,11 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
             {"id": i, "holder": holder, "taken_over_by": by}
             for i, (holder, by) in sorted(taken.items())
         ]
+    stranded = removed_with_live_lease(st, cfg, log.clone_id(create=False))
+    if stranded:
+        data["stranded"] = (
+            stranded  # removed, lease still live: in every clone, not only the holder's
+        )
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
     flagged = G.refuted_passes(st)
@@ -248,6 +254,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "contested": contested,
         "waiting": [WG.line(w) for w in waits],
+        "stranded": [x["text"] for x in stranded],
         "health": health,
         "recoverable": rec,
         "findings": findings,

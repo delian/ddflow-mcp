@@ -17,6 +17,7 @@ caller remembered to pass the gate definitions (bug B279a0ebfc1).
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any
 from ...config import Config
 from ...core.model import Item, State
 from ...infra.log import EventLog
+from .. import logblobs as LB
 from .defs import GateDef
 from .evidence import (
     _untracked_paths,
@@ -160,6 +162,31 @@ def _landed_if_only_untracked_differs(repo: Path, it: Item, wt: Path) -> dict[st
     return {"tree_sha": f"{landed[:12]}+clean"}
 
 
+def _keep_reviewed_round(
+    it: Item, gate: str, outcome: str, reason: str, evidence: dict[str, Any] | None
+) -> tuple[str, str, dict[str, Any] | None]:
+    """(outcome, reason, evidence) to record: a delta review round that reached no reviewer
+    (``unavailable``) must not replace a round a reviewer DID finish -- the passed or failed
+    record stays and the outage is added as a note under `unavailable_deltas` (B277e2a224f).
+    The head that record covers does not move, so the next delta starts from it. Anything
+    else is recorded as given."""
+    rec = it.gates.get(gate)
+    ev = evidence or {}
+    if outcome != "unavailable" or ev.get("review_kind") != "delta":
+        return outcome, reason, evidence
+    if rec is None or rec.outcome not in ("passed", "failed"):
+        return outcome, reason, evidence
+    prior = dict(LB.full(rec.evidence or {}))
+    note = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "reviewer": str(ev.get("reviewer", "")),
+        "reason": (reason or "unavailable")[:300],
+        "diff_chars": ev.get("diff_chars", 0),
+    }
+    prior["unavailable_deltas"] = [*(prior.get("unavailable_deltas") or []), note]
+    return rec.outcome, rec.reason, prior
+
+
 def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` takes, plus where the item's work is
     log: EventLog,
     cfg: Config,
@@ -187,6 +214,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
     guard.
     """
     taken = {} if outcome == "skipped" else measure_tree(repo, it, tree)
+    outcome, reason, evidence = _keep_reviewed_round(it, gate, outcome, reason, evidence)
     record(
         log,
         cfg,

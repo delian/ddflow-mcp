@@ -77,7 +77,7 @@ class ExportConfig:
     #: redact. Filled from those tables by `Config._apply`; this field is only the store.
     tables: dict[str, dict[str, Any]] = knob(
         factory=dict,
-        doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; graph, how many phases the dependency graph draws, default 25, 0 for none; show_hidden). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
+        doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; graph, how many phases the dependency graph draws, default 25, 0 for none; eta, true by default, false leaves out the estimated time to finish; show_hidden). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
         check=_export_tables_problem,
     )
 
@@ -108,7 +108,7 @@ EXPORT_TABLE_KEYS = frozenset(
     }
 )
 #: Keys only `[export.roadmap]` adds to those.
-ROADMAP_TABLE_KEYS = frozenset({"hide", "next", "tasks", "show_hidden", "graph"})
+ROADMAP_TABLE_KEYS = frozenset({"hide", "next", "tasks", "show_hidden", "graph", "eta"})
 
 
 def export_table_keys(doc: str) -> frozenset[str]:
@@ -128,8 +128,9 @@ def _roadmap_keys_problem(doc: str, t: dict[str, Any]) -> str:
     for k in ("next", "tasks", "graph"):
         if k in t and (isinstance(t[k], bool) or not isinstance(t[k], int) or t[k] < 0):
             return f"[export.{doc}].{k} must be an integer >= 0"
-    if "show_hidden" in t and not isinstance(t["show_hidden"], bool):
-        return f"[export.{doc}].show_hidden must be true or false"
+    for k in ("show_hidden", "eta"):
+        if k in t and not isinstance(t[k], bool):
+            return f"[export.{doc}].{k} must be true or false"
     return ""
 
 
