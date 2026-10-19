@@ -95,5 +95,5 @@ for m,chs,cht in sample:
     r=lambda S: (len(T&S)/len(T), len(S))
     res.append((m[:8],len(chs),len(T),r(c),r(s2),full2))
     print(m[:8],'src',len(chs),'chg-tests',len(T),'| closure recall %.2f reach %d | existing(src-only) recall %.2f reach %d full=%s'%(r(c)+r(s2)+(full2,)))
-n=len(res)
+n=max(len(res),1)
 print('mean recall closure %.2f existing %.2f; mean reach closure %.0f existing %.0f'%(sum(x[3][0] for x in res)/n,sum(x[4][0] for x in res)/n,sum(x[3][1] for x in res)/n,sum(x[4][1] for x in res)/n))
