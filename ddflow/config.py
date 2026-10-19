@@ -58,9 +58,9 @@ from .config_sections.export import (  # noqa: F401
     EXPORT_DEFAULT_TARGETS,
     EXPORT_MODES,
     EXPORT_REFRESH_MODES,
-    EXPORT_TABLE_KEYS,
     ExportConfig,
     _export_table_problem,
+    export_table_keys,
 )
 from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow imports them here
     FLOW_CLAIMS,
@@ -532,12 +532,12 @@ class Config:
                 continue
             clean = {}
             for key, val in v.items():
-                if key not in EXPORT_TABLE_KEYS:
+                if key not in export_table_keys(k):
                     if soft(f"export.{k}.{key}"):
                         self.unknown_knobs.append(f"export.{k}.{key}")
                         continue
                     raise ValueError(
-                        f"unknown key '{key}' in [export.{k}]. Known: {sorted(EXPORT_TABLE_KEYS)}"
+                        f"unknown key '{key}' in [export.{k}]. Known: {sorted(export_table_keys(k))}"
                     )
                 clean[key] = val
             if why := _export_table_problem(k, clean):
