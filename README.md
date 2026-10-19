@@ -5849,8 +5849,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=8673daf0a429 -->
-<details><summary>All 355 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=bf70f348b518 -->
+<details><summary>All 357 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5961,6 +5961,8 @@ long default is left to `ddflow config --explain`.
 | `session.agent_brief_pin_decisions` | `[]` |  |
 | `session.report_commits` | `20` |  |
 | `session.report_note_chars` | `200` |  |
+| `session.report_title_chars` | `100` |  |
+| `session.report_summary_chars` | `120` |  |
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
