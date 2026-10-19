@@ -19,6 +19,9 @@ SRC = ["ddflow/api/lifecycle/claim.py", "tests/test_claim.py"]
 
 def _seed(repo):
     run_cli(repo, "init")
+    for f in ["ddflow/api/lifecycle/claim.py", "tests/test_claim.py"]:
+        (repo / f).parent.mkdir(parents=True, exist_ok=True)
+        (repo / f).write_text("")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("task.added", "T1", {"parent": "P1", "title": "t", "globs": SRC})

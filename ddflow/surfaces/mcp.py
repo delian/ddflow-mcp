@@ -635,6 +635,10 @@ class Server:
         return per_call or self.agent, per_call, args, bad
 
     def _invoke(self, spec, args, agent, per_call, params):
+        with _identity().via_mcp():
+            return self._invoke_marked(spec, args, agent, per_call, params)
+
+    def _invoke_marked(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""
         # `called_from` only where the tool asks for it. `claim` is the one
         # operation whose behaviour depends on WHERE the caller is standing
