@@ -239,7 +239,7 @@ def test_a_default_base_that_exists_only_as_a_remote_ref_is_still_merged(
     assert r.merged_with == "origin/trunk" and r.ok
 
 
-def _item_with_ci(repo, monkeypatch):
+def _item_with_ci(repo, monkeypatch, agent=""):
     monkeypatch.delenv(A.IN_GATE_ENV, raising=False)  # this suite may itself run inside a gate
     _project(repo)
     (repo / ".ddflow" / "config.toml").write_text(
@@ -247,7 +247,7 @@ def _item_with_ci(repo, monkeypatch):
     )
     run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
     run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "src/x.py")
-    code, out, err = run_cli(repo, "claim", "T1")
+    code, out, err = run_cli(repo, "claim", "T1", agent=agent)
     assert code == 0, out + err
 
 
@@ -349,7 +349,7 @@ def test_ci_run_with_no_ref_from_outside_the_items_tree_checks_the_holders_item_
 ):
     """Bug Be81c39acb8: from a tree that is no item's (a session's own checkout) `ci run`
     with no --ref reported main's sha and ran main's tests, not the claimed item's."""
-    _item_with_ci(repo, monkeypatch)
+    _item_with_ci(repo, monkeypatch, agent="holder-w")  # not the process default identity
     _, out, _ = run_cli(repo, "--json", "show", "T1")
     shown = json.loads(out)
     tree = Path(shown["worktree"])
@@ -361,7 +361,9 @@ def test_ci_run_with_no_ref_from_outside_the_items_tree_checks_the_holders_item_
     body = json.loads(_cli_in(other, repo, agent=holder).stdout)
     assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip(), body
     assert body["recorded"]["item"] == "T1" and body["recorded"]["ok"], body
-    assert _ci_gate(repo)["outcome"] == "passed"
+    gate = _ci_gate(repo)
+    assert gate["outcome"] == "passed" and holder == "holder-w", (gate, holder)
+    assert "holder-w" in json.dumps(gate), gate  # recorded under the caller, not a default id
     # a caller that holds no item still gets the repository's HEAD
     body = json.loads(_cli_in(other, repo, agent="nobody").stdout)
     assert body["sha"] == _git(repo, "rev-parse", "HEAD").strip(), body
