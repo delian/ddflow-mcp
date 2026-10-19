@@ -19,7 +19,7 @@ def test_the_brief_is_eight_lines_with_the_landing_sha_and_the_filed_ids(repo):
     code, out, err = run_cli(repo, "report", "T1", "--brief")
     assert code == 0, err
     got = out.rstrip("\n").split("\n")
-    assert len(got) == RB.LINES == 8
+    assert len(got) == 8
     assert got[0].startswith("T1: done")
     sha = json.loads(run_cli(repo, "--json", "report", "T1")[1])["landing"]["merge_sha"][:12]
     assert f"landed: {sha} on" in got[1]
