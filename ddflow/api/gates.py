@@ -626,7 +626,12 @@ def run(
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)
-    if twin := RUN.live_run(repo, item, gate, started_on):
+    # Mark FIRST, then look: two runs started together both mark and both see the other, and
+    # the one that started later (marker `at`, then pid) refuses, so exactly one goes on.
+    marker = RUN.mark_started(repo, item, gate, started_on)
+    twin = RUN.live_run(repo, item, gate, started_on)
+    if twin and (marker is None or (twin.at, twin.pid) < (marker.at, marker.pid)):
+        RUN.clear_started(marker)
         return O.nothing(
             "gate.run",
             f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
@@ -654,6 +659,7 @@ def run(
         rerun_failed=rerun_failed,
         started_on=started_on,
         started_at=started_at,
+        marker=marker,
     )
     if isinstance(done, O.Outcome):
         return done
@@ -678,7 +684,7 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
         run["gates"],
         run["forced"],
     )
-    marker = RUN.mark_started(repo, item, gate, started_on)
+    marker = run.pop("marker")
     try:
         with RUN.terminating():
             return _execute(log, cfg, repo, agent, it, item, gate, **run)
