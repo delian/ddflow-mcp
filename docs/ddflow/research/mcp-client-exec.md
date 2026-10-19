@@ -70,7 +70,7 @@ Evidence for the split, from this repo:
   from a git remote. Command reviewers (`rev.env`, `review.py:777`, `shell=True`
   `review.py:485`) run a local binary: host-bound.
 
-Consequence: **About three fifths of the tools need nothing from a tree** (69 pure plus 4 secret-bound = 78 of 119, if the forge tools are
+Consequence: **About three fifths of the tools need nothing from a tree** (69 pure plus 4 secret-bound = 73 of 119, if the forge tools are
 served from the server), 46 need one, and the 46 collapse to five primitives: worktree
 create, run a declared command in a tree, git land, write a project file, probe the host.
 
@@ -104,8 +104,8 @@ Rules of the envelope:
 
 * `argv` arrays, never shell strings, except the one declared gate command that is a shell
   line by definition (`Declared.line`): it is delivered as `["sh","-c",line]` with
-  `declared_by` so the agent and an auditor can see whose line it is. No secret ever appears
-  in `argv`; the envelope carries `env_names` only (names the agent's environment must
+  `declared_by` so the agent and an auditor can see whose line it is. No secret appears
+  in `argv` unless the operator cleared that exact line (below); the envelope carries `env_names` only (names the agent's environment must
   already hold), no values. A declared line is shipped only DEFAULT-DENY: the gate must carry an operator opt-in
   (`client_exec = true`, a statement that the line holds no secret), and a secret heuristic
   (inline token, `Authorization:` header, `-p <password>`) is a second, advisory refusal. Any
@@ -167,14 +167,15 @@ recovery in `brief` generalises); no report before `plan_ttl_s` => the plan expi
 > ddflow_gate_run {id:"probe-w", gate:"unit_tests", exec:"client",
                    tree:{head:"d77a9316378d", pushed:true}}
 < {needs_local:true, plan_id:"pl_2", command_digest:"53f697ca568fc793",
-   steps:[{id:"s1", argv:["sh","-c","python3 -m pytest -q test_m.py"], cwd:"$WORKTREE",
+   steps:[{id:"s0", argv:["git","worktree","add","--detach","$REPO/.ddflow/runs/pl_2","d77a9316378d"], cwd:"$REPO"},
+          {id:"s1", argv:["sh","-c","python3 -m pytest -q test_m.py"], cwd:"$REPO/.ddflow/runs/pl_2",
            timeout_s:600, expect:{exit_codes:[0,1]},
            capture:{stdout_digest:true, tail_bytes:4000, upload_blob:true}},
-          {id:"s2", argv:["git","rev-parse","HEAD"], cwd:"$WORKTREE"}],
+          {id:"s2", argv:["git","rev-parse","HEAD"], cwd:"$REPO/.ddflow/runs/pl_2"}],
    // $WORKTREE here is a fresh detached checkout of the pushed sha made by an earlier plan step
    then:"ddflow_plan_report"}
   (agent runs; pytest exit 0, HEAD d77a93...; uploads output blob)
-> ddflow_plan_report {plan_id:"pl_2", results:[{id:"s1",exit:0,output_digest:"..",elapsed_s:0.1,tail:"1 passed"},
+> ddflow_plan_report {plan_id:"pl_2", results:[{id:"s0",exit:0},{id:"s1",argv:["sh","-c","python3 -m pytest -q test_m.py"],exit:0,output_digest:"..",elapsed_s:0.1,tail:"1 passed"},
    {id:"s2",stdout:"d77a9316378d..."}], blob:"<upload id>"}
 < {gate:"unit_tests", outcome:"passed", trust:"agent-run, server-checked",
    checked:{sha_on_remote:true, argv_matches_plan:true, blob_digest_matches:true},
