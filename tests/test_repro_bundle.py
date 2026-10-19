@@ -211,6 +211,14 @@ def test_a_dash_led_test_path_that_exists_is_never_a_bare_option(tmp_path, monke
     assert "-test_x.py" not in seen[0] and "./-test_x.py" in seen[0]
 
 
+def test_a_bracket_in_the_file_name_is_part_of_the_path(tmp_path, monkeypatch):
+    RF, _ = _spy(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "test_x[0].py").write_text("def test_ok():\n    pass\n")
+    got = RF.test_run(tmp_path, "test_x[0].py::test_ok", 4000, 60)
+    assert got["exit_code"] == 0, got["tail"]
+
+
 def test_the_test_run_does_not_inherit_the_callers_pytest_options(tmp_path, monkeypatch):
     RF, _ = _spy(monkeypatch)
     monkeypatch.chdir(tmp_path)
