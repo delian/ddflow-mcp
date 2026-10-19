@@ -367,3 +367,29 @@ def test_ci_run_with_no_ref_from_outside_the_items_tree_checks_the_holders_item_
     # a caller that holds no item still gets the repository's HEAD
     body = json.loads(_cli_in(other, repo, agent="nobody").stdout)
     assert body["sha"] == _git(repo, "rev-parse", "HEAD").strip(), body
+
+
+def test_ci_run_as_a_gate_checks_the_tree_it_runs_in_not_another_item_the_agent_holds(
+    repo, monkeypatch
+):
+    """Bug B-gate-run-ci-wrong-tree: `gate run <item> ci` ran on the HEAD of ANOTHER item's
+    branch (the one live lease the caller held) when its own tree was not recognised as an
+    item's. A gate runs in the tree it was given; that tree's HEAD is what is tested."""
+    _item_with_ci(repo, monkeypatch, agent="other-w")
+    run_cli(repo, "task", "add", "T2", "--phase", "P1", "--globs", "src/y.py")
+    code, out, err = run_cli(repo, "claim", "T2", agent="holder-w")
+    assert code == 0, out + err
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(out)["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    _commit(tree, {"w.txt": "w\n"}, "T1 work")
+    _, out, _ = run_cli(repo, "--json", "show", "T2")
+    t2 = Path(json.loads(out)["worktree"])
+    t2 = t2 if t2.is_absolute() else repo / t2
+    _commit(t2, {"z.txt": "z\n"}, "T2 work")
+    code, out, err = run_cli(repo, "release", "T1", agent="other-w")  # T1's lease lapses
+    assert code == 0, out + err
+    monkeypatch.setenv(A.IN_GATE_ENV, "ci")  # as `gate run ci` runs its command
+    body = json.loads(_cli_in(tree, repo, agent="holder-w").stdout)
+    assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip(), body
+    assert body["sha"] != _git(t2, "rev-parse", "HEAD").strip(), body
