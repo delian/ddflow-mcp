@@ -89,7 +89,7 @@ def records(root: Path | str | None) -> list[GuidanceRecord]:
     try:
         types, note = types_of(root), []
     except (ValueError, OSError) as exc:
-        note = [_unreadable(str(exc).splitlines()[0][:200])]
+        note = [_unreadable(next(iter(str(exc).splitlines()), type(exc).__name__)[:200])]
         try:
             types = types_of(root, project=False)
         except (ValueError, OSError):
