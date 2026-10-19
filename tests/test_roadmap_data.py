@@ -142,3 +142,11 @@ def test_only_ready_phases_beyond_next_carry_the_ready_marker():
         g.task(f"RT{i}", f"R{i}", "work")
     ph = phases(data(g))
     assert [i for i, p in ph.items() if p.get("ready")] == ["R4"]
+
+
+def test_asking_for_a_hidden_batch_by_name_shows_it():
+    g = Log()
+    g.phase("BL-batch", "internal", 5)
+    g.task("BT", "BL-batch", "x")
+    d = data(g, phase="BL-batch")
+    assert "BL-batch" in phases(d) and d["hidden_batches"] == 0
