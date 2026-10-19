@@ -29,8 +29,8 @@ data. Ambiguous cases are named.
 
 | Class | Count | What it needs | Tools (MCP names without `ddflow_`) |
 |---|---|---|---|
-| A. pure state | **74** | the event log (+ derived index) only | next brief heartbeat release wait gate_status gate_list gate_record gate_skip abandon\* remove block unblock; task_add phase_add split resolve update batch task_fold rename record; research_add bug_found bug_file_tasks bug_fixed\* bug_invalid session_start/prompt/note/end; decision_add/list/show/applicable/supersede lesson_add/search/verify recall similar dupes link; memory_add/list/forget job_add job_list job_end; promote_add/deployed/status flow_show flow_choose; status show board history progress loops replay lanes health\* metrics cadence; review_triage reviewers_list rule_list rule_search rule_show; workflow workflow_state help prompts |
-| B. tree/host-bound | **41** | a git worktree, a shell, files in the project | claim (worktree add), gate_run, gate_verify, merge, complete (compares landed tree to gate evidence), ci tests precommit bisect docs pins export render queue (integrator), phase_close (runs the phase suite), version_cut version_show, job_run, verify, sync, recover cleanup rebuild, reviewers_detect (probes host binaries), setup configure upgrade import import_verify doctor, hooks companions companions_verify companions_add, workflow_pipeline workflow_gate workflow_drop (write gates.toml), rule_add rule_edit rule_remove rule_sync (rules are files under `.ddflow/rules/`) |
+| A. pure state | **69** | the event log (+ derived index) only | next brief heartbeat release wait gate_status gate_list gate_record gate_skip abandon\* remove block unblock; task_add phase_add split resolve update batch task_fold rename record; research_add bug_found bug_file_tasks bug_fixed\* bug_invalid session_start/prompt/note/end; decision_add/list/show/applicable/supersede lesson_add/search/verify recall similar dupes link; memory_add/list/forget job_add job_list job_end; promote_add/deployed/status flow_show flow_choose; status show board history progress loops replay lanes health\* metrics cadence; review_triage reviewers_list; help prompts |
+| B. tree/host-bound | **46** | a git worktree, a shell, files in the project (this includes the file-backed reads rule_list rule_search rule_show workflow workflow_state, which read `.ddflow/rules/` and gates.toml) | claim (worktree add), gate_run, gate_verify, merge, complete (compares landed tree to gate evidence), ci tests precommit bisect docs pins export render queue (integrator), phase_close (runs the phase suite), version_cut version_show, job_run, verify, sync, recover cleanup rebuild, reviewers_detect (probes host binaries), setup configure upgrade import import_verify doctor, hooks companions companions_verify companions_add, workflow_pipeline workflow_gate workflow_drop (write gates.toml), rule_add rule_edit rule_remove rule_sync (rules are files under `.ddflow/rules/`) |
 | C. secret/network-bound | **4** | an API key or forge token, plus (for review) a diff | review (reviewer API keys, `services/review.py:90-181` `api_key_env` per provider; read from the environment at `review.py:290`), pr_sync pr_status pr_threads (forge token, `infra/forge.py`) |
 
 Caveats that change a class: `brief` with `check_recovery` scans worktrees (becomes B on
@@ -70,13 +70,13 @@ Evidence for the split, from this repo:
   from a git remote. Command reviewers (`rev.env`, `review.py:777`, `shell=True`
   `review.py:485`) run a local binary: host-bound.
 
-Consequence: **About two thirds of the tools need nothing from a tree** (74 pure plus 4 secret-bound = 78 of 119, if the forge tools are
-served from the server), 41 need one, and the 41 collapse to five primitives: worktree
+Consequence: **About three fifths of the tools need nothing from a tree** (69 pure plus 4 secret-bound = 78 of 119, if the forge tools are
+served from the server), 46 need one, and the 46 collapse to five primitives: worktree
 create, run a declared command in a tree, git land, write a project file, probe the host.
 
 ## 2. The `client-exec` contract
 
-Shape of the reply of any class-B tool when the server has no tree (`[serve].exec = "client"`,
+Shape of the reply of the THREE class-B verbs in scope (claim, gate run, merge-as-PR; section 5) when the server has no tree (`[serve].exec = "client"`,
 or the caller's `locality` capability says `none`):
 
 ```json
@@ -98,15 +98,19 @@ or the caller's `locality` capability says `none`):
 }
 ```
 
+Every other class-B tool answers `refused` (exit 3) with `local_required` and the thin-client instruction; it never emits a plan.
+
 Rules of the envelope:
 
 * `argv` arrays, never shell strings, except the one declared gate command that is a shell
   line by definition (`Declared.line`): it is delivered as `["sh","-c",line]` with
   `declared_by` so the agent and an auditor can see whose line it is. No secret ever appears
   in `argv`; the envelope carries `env_names` only (names the agent's environment must
-  already hold), no values. A declared line that matches a secret heuristic (inline token,
-  `Authorization:` header, `-p <password>`) is NOT shipped: the planner records that gate
-  `unavailable` with that reason and the operator moves the secret to an env name. Reviewer
+  already hold), no values. A declared line is shipped only DEFAULT-DENY: the gate must carry an operator opt-in
+  (`client_exec = true`, a statement that the line holds no secret), and a secret heuristic
+  (inline token, `Authorization:` header, `-p <password>`) is a second, advisory refusal. Any
+  other gate is recorded `unavailable` ("line not cleared for client-exec"). The heuristic
+  alone cannot clear a line; the operator's opt-in does. Reviewer
   keys never leave the server (section 3).
 * `cwd` uses `$REPO` / `$WORKTREE` placeholders; the agent substitutes real paths. This is
   the path-difference fix: the log already stores worktree paths relative to the repo root
@@ -174,7 +178,7 @@ recovery in `brief` generalises); no report before `plan_ttl_s` => the plan expi
    {id:"s2",stdout:"d77a9316378d..."}], blob:"<upload id>"}
 < {gate:"unit_tests", outcome:"passed", trust:"agent-run, server-checked",
    checked:{sha_on_remote:true, argv_matches_plan:true, blob_digest_matches:true},
-   tree_sha:"d77a9316378d+clean"}   // clean by construction of the plan, not asserted
+   tree_sha:"d77a9316378d+clean"}   // claimed, unverified: the plan prescribed a fresh checkout
 ```
 
 What the probe actually did (today's primitives, no new server code):
@@ -215,7 +219,7 @@ fetched itself. The agent's job is only `git push` of a branch.
 ## 3. Trust and verification
 
 Evidence is agent-reported; the question is which gates can still be made verifiable (the
-falsifier of the task). Result: server-derived gates stay verifiable in client-exec ONLY for a pushed, clean tree
+falsifier of the task). FALSIFIER PARTLY HOLDS: no gate becomes server-verifiable by report alone. Only a server re-run or a forge result is verification; everything an agent merely reports is `agent-reported` or `agent-run, server-checked` (consistency checks that catch accidents, not lies). Result: server-derived gates stay verifiable in client-exec ONLY for a pushed, clean tree
 (`head+clean`). **A gate run on a dirty tree (`+st:<manifest>`, the normal state while
 developing) is verifiable today and is NOT in client-exec**: a real downgrade, so dirty-tree
 gates are not expressible in the envelope and need the thin client. Prose gates were never
@@ -228,7 +232,7 @@ command gate. And the report's "by hand" heuristic does not catch it:
 `services/report_gates.py:15` marks a gate hand-recorded only when none of
 `TOOL_KEYS = ("command","reviewer","covered_by","roborev","branch_head","ci_scope","scope")`
 is in the evidence, and `gate record --command` writes `command` itself. So a faked pass
-carrying a command is reported as tool-produced. Filed as bug Bed643a611b (task fix-Bed643a611b; `bug found --check` found no earlier duplicate); client-exec must not
+carrying a command is reported as tool-produced. Also filed as bug Bb305b43f56: the record route stores `output_file` as an agent-host path and no `tree_sha`/`elapsed_s`/`command_digest`. Filed as bug Bed643a611b (task fix-Bed643a611b; `bug found --check` found no earlier duplicate); client-exec must not
 ship before a provenance field exists.
 
 Trust labels (a `trust` field on gate evidence, ordered): 
@@ -237,7 +241,7 @@ Trust labels (a `trust` field on gate evidence, ordered):
 |---|---|---|
 | `server-run` | server (or its sandbox) executed it | review by API reviewers (diff from remote), research/rules/standards gates that are agent prose do not apply; ci re-run in a server sandbox |
 | `forge-attested` | an external system reported it | ci via `pr_status` on the pushed sha; merge via forge merge commit |
-| `agent-run, server-checked` | agent ran it in a server-prescribed fresh checkout of the pushed sha; the server checked what it can: sha on the remote and equal to the branch head, argv echoed by the agent equals the plan's (the report carries argv, not only a digest), blob digest matches. It does NOT check that the run happened, nor cleanliness: the clean tree is by construction (fresh `git worktree add --detach <sha>` in the plan), not by the agent's `status` output | unit_tests, tests, precommit; upgraded to `server-run` for a sampled fraction by re-run (`[gates].audit_rate`) |
+| `agent-run, server-checked` | agent ran it in a server-prescribed fresh checkout of the pushed sha; the server checked what it can: sha on the remote and equal to the branch head, argv echoed by the agent equals the plan's (the report carries argv, not only a digest), blob digest matches. It does NOT check that the run happened, nor that the tree was clean: the plan prescribes a fresh `git worktree add --detach <sha>` but that step runs on the agent's host and is itself agent-reported | unit_tests, tests, precommit; upgraded to `server-run` for a sampled fraction by re-run (`[gates].audit_rate`) |
 | `agent-reported` | agent says so, nothing to check | hand-recorded gates (research, critic, rubber_duck prose), dirty-tree runs (`+st:<manifest>` is not derivable from a remote), gates whose command needs the agent's private environment (GPU, secrets) |
 
 What the server can re-verify with a git remote and no working tree: that a commit sha exists
@@ -279,7 +283,7 @@ as trustworthy as an agent with a shell is today.
 | Dimension | Thin client (`ddflow --remote URL`) | Raw commands in tool results |
 |---|---|---|
 | What runs | the real ddflow code: `Worktree.create`, `CommandRunner`, `merge`, evidence builders, against a remote log backend | the agent's shell executes argv the server emitted |
-| Per-tool cost | **~0**: reuses the declared commands; needs only `EventLog` over HTTP (P-storage seam + P-remote.serve) | a plan/apply split for each of 41 class-B tools, each with its own state machine (merge is 57 git calls with branches) plus a report handler and tests |
+| Per-tool cost | **~0**: reuses the declared commands; needs only `EventLog` over HTTP (P-storage seam + P-remote.serve) | a plan/apply split for each of 46 class-B tools, each with its own state machine (merge is 57 git calls with branches) plus a report handler and tests |
 | Evidence fidelity | identical keys (`tree_sha`, `diff_stat`, `output_log`, `command_digest`) | reconstructed from agent reports; `tree_sha` and dirty manifest not derivable |
 | Skipped or faked step | the client is ddflow itself; a wrong client is a different problem | fully open: agent may skip, reorder, edit argv, fabricate results; mitigated by step ids, digest checks, sampled re-run |
 | Partial execution | the local half is atomic per command as today (lease, adoption) | needs plan state, ttl, resume; the new thing the server must keep |
