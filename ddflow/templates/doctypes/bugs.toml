@@ -1,0 +1,11 @@
+[doctype]
+name = "bugs"
+title = "Bugs"
+path = "BUGS.md"
+genre = "reference"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:bugs"
