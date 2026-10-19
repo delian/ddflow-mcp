@@ -33,7 +33,7 @@ from ..core import clock
 from ..core.docchunk import Chunk
 from .fsio import LockTimeout, file_lock, lock_path_for
 
-SCHEMA_VERSION = 1
+INDEX_LAYOUT = 1  # derived, rebuilt on mismatch: not an upcast contract version
 LOCK_TIMEOUT_S = 30.0
 MODES = ("words", "substring", "like")
 MIN_SUBSTRING = 3  # a trigram index cannot match fewer characters
@@ -132,7 +132,7 @@ class Stats:
     chunks: int = 0
     fts5: bool = True
     trigram: bool = True
-    schema: int = SCHEMA_VERSION
+    schema: int = INDEX_LAYOUT
     rebuilt: bool = False
 
 
@@ -220,7 +220,7 @@ class DocIndex:
                 v = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
         except sqlite3.Error:
             return "bad"
-        return "ok" if v and v[0] == str(SCHEMA_VERSION) else "old"
+        return "ok" if v and v[0] == str(INDEX_LAYOUT) else "old"
 
     def _ro(self) -> sqlite3.Connection:
         return sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=5)
@@ -233,7 +233,7 @@ class DocIndex:
             con.executescript(_TRI)
         con.executemany(
             "INSERT INTO meta VALUES (?,?)",
-            [("schema", str(SCHEMA_VERSION)), ("fts5", str(int(self._caps[0]))),
+            [("schema", str(INDEX_LAYOUT)), ("fts5", str(int(self._caps[0]))),
              ("trigram", str(int(self._caps[1]))), ("created_at", _now())],
         )  # fmt: skip
 
@@ -304,7 +304,7 @@ class DocIndex:
             what = {"none": "has not been built", "old": "is of another schema"}.get(
                 state, "is unreadable"
             )
-            raise IndexMissing(f"the docs index {what}: build it with the docs index command")
+            raise IndexMissing(f"the docs index {what}: build it first")
         return self._ro()
 
     def files(self) -> dict[str, Known]:
@@ -326,22 +326,25 @@ class DocIndex:
         with closing(self._open()) as con:
             meta = dict(con.execute("SELECT key, value FROM meta"))
             used, note = mode, ""
-            if mode == "words" and meta.get("fts5") != "1":
+            fts_ok = meta.get("fts5") == "1" and self._caps[0]  # built here AND runnable here
+            tri_ok = meta.get("trigram") == "1" and self._caps[1]
+            if mode == "words" and not fts_ok:
                 used, note = (
                     "like",
                     "FTS5 is not available in this SQLite build; searched with LIKE",
                 )
-            elif mode == "substring" and (
-                meta.get("trigram") != "1" or len(query.strip()) < MIN_SUBSTRING
-            ):
+            elif mode == "substring" and (not tri_ok or len(query.strip()) < MIN_SUBSTRING):
                 used = "like"
                 note = (
                     "the trigram index is not available in this SQLite build; searched with LIKE"
-                    if meta.get("trigram") != "1"
+                    if not tri_ok
                     else "a substring under 3 characters is searched with LIKE"
                 )
             terms = [query.strip()] if mode == "substring" else words  # LIKE: literal, or each word
-            rows = self._query(con, used, query.strip(), terms, limit, doctype)
+            try:
+                rows = self._query(con, used, query.strip(), terms, limit, doctype)
+            except sqlite3.Error as exc:
+                raise DocIndexError(f"the docs index could not answer: {exc}") from None
         return SearchResult(tuple(Hit(*r) for r in rows), used, note)
 
     def _query(
