@@ -119,7 +119,7 @@ lower bound (member descriptions are cut to 60 characters; expect +10%).
 | C per-client profile only (existing tiers: core 32 / standard 81 / all 123) | 32 to 123 | 34.7 KB to 104 KB | unchanged | low, and already built |
 
 - A1 halves the list (-50.7 KB, about 12,700 tokens at 4 bytes per token, once per session and again after
-  every compaction on clients that reload tools). Union params cost: the 13 families total 105 KB of member
+  every compaction on clients that reload tools). Union params cost: the 15 families total 105 KB of member
   schemas folded into ~53 KB; the wasted-parameter overhead per call is the difference between a
   family's parameter count and the action's own (e.g. `task` 42 against 3 to 17 per action). Prune by sharing
   `as_agent` (122 tools carry it today; once per family is 1) and moving seldom-used flags into one
@@ -149,7 +149,7 @@ Counts are for ddflow alone; leave room for other servers.
 ## 5. Mapping table (old tool to new tool and action, design A1)
 
 Generated from the inventory by script (families in section 4: gate, bug, decision, memory, rule,
-session, job, release, workflow, reviewers, task, lease, view, doctor, admin); reviewed by hand for the
+session, job, ship, workflow, reviewers, task, lease, view, doctor, admin); reviewed by hand for the
 points below. `(kept)` means unchanged.
 
 Hand review notes:
@@ -163,7 +163,7 @@ Hand review notes:
 - `view` already exists in spirit as `ddflow_list kind=`; `list`, `board`, `status`, `progress` should
   merge into one view tool with `kind` (B-view-mcp-list prior art).
 - `admin`/`doctor` have 42 and 24 union params; split further or keep out of the `lean` profile.
-- Nothing is dropped: all 123 names appear below and in the alias table.
+- Nothing is dropped: all 123 names appear below; the middle column is the family tool, the third column is the legacy name suffix, and the real `action` enum value is the CLI verb with the family noun stripped (`gate_record` becomes `ddflow_gate action=record`, `bug_found` becomes `action=found`); MTD-aliases generates the alias table from this mapping. `ddflow_release` (the lease release) maps into `ddflow_lease`, so the promote/version family is named `ddflow_ship` to avoid colliding with the legacy name `ddflow_release`.
 
 | old tool | new tool | action | calls | bytes | params | tier |
 |---|---|---|---|---|---|---|
@@ -238,9 +238,9 @@ Hand review notes:
 | `ddflow_pr_threads` | `ddflow_reviewers` | pr_threads | 0 | 623 | 5 | standard |
 | `ddflow_precommit` | `ddflow_doctor` | precommit | 0 | 852 | 3 | all |
 | `ddflow_progress` | `ddflow_view` | progress | 0 | 657 | 3 | standard |
-| `ddflow_promote_add` | `ddflow_release` | promote_add | 0 | 675 | 3 | all |
-| `ddflow_promote_deployed` | `ddflow_release` | promote_deployed | 0 | 490 | 3 | all |
-| `ddflow_promote_status` | `ddflow_release` | promote_status | 0 | 324 | 1 | all |
+| `ddflow_promote_add` | `ddflow_ship` | promote_add | 0 | 675 | 3 | all |
+| `ddflow_promote_deployed` | `ddflow_ship` | promote_deployed | 0 | 490 | 3 | all |
+| `ddflow_promote_status` | `ddflow_ship` | promote_status | 0 | 324 | 1 | all |
 | `ddflow_prompts` | `ddflow_admin` | prompts | 4 | 668 | 4 | all |
 | `ddflow_queue` | `ddflow_view` | queue | 0 | 740 | 6 | standard |
 | `ddflow_rebuild` | `ddflow_doctor` | rebuild | 0 | 310 | 1 | all |
@@ -282,8 +282,8 @@ Hand review notes:
 | `ddflow_update` | `ddflow_task` | update | 8 | 2118 | 13 | core |
 | `ddflow_upgrade` | `ddflow_admin` | upgrade | 0 | 1552 | 14 | all |
 | `ddflow_verify` | `ddflow_doctor` | verify | 0 | 917 | 10 | standard |
-| `ddflow_version_cut` | `ddflow_release` | version_cut | 0 | 949 | 8 | all |
-| `ddflow_version_show` | `ddflow_release` | version_show | 0 | 596 | 3 | standard |
+| `ddflow_version_cut` | `ddflow_ship` | version_cut | 0 | 949 | 8 | all |
+| `ddflow_version_show` | `ddflow_ship` | version_show | 0 | 596 | 3 | standard |
 | `ddflow_wait` | `ddflow_lease` | wait | 4 | 1354 | 7 | core |
 | `ddflow_workflow` | `ddflow_workflow` | workflow | 0 | 591 | 1 | all |
 | `ddflow_workflow_drop` | `ddflow_workflow` | workflow_drop | 0 | 718 | 3 | all |
@@ -399,7 +399,7 @@ These tasks are filed as MTD-* (MTD-decision, MTD-family-spec, MTD-family-schema
 
 | # | Task | Globs | Needs | Wave |
 |---|---|---|---|---|
-| 1 | MTD-decision: operator decision superseding D-mcp-surface (1) and settling A1 versus A2, deprecation window and the default profile | docs/ddflow/decisions (decision record only) | RM-tool-diet-research | 1 |
+| 1 | MTD-decision: operator decision superseding D-mcp-surface (1): adopt families (A1 provisional) and fix the deprecation window and default profile; the final A1 versus A2 choice is left to MTD-accuracy-eval | docs/ddflow/decisions (decision record only) | RM-tool-diet-research | 1 |
 | 2 | MTD-family-spec: add `family` and `action` to `Command` in the declared matrix; import fails without one; generate the family/alias table from it (reuse `Command.tier`) | ddflow/surfaces/registry.py, ddflow/surfaces/declared/**, tests/test_declared_families.py | MTD-decision | 2 |
 | 3 | MTD-family-schema: build family tool schemas (action enum, union params deduplicated, shared `as_agent` once, per-action required errors) in `tools/list` and `tools/call` | ddflow/surfaces/mcp.py, ddflow/surfaces/tools/families.py, tests/test_mcp_families.py | MTD-family-spec | 3 |
 | 4 | MTD-aliases: one `Alias` per old name with implied `action`, hidden from lists, once-per-session note, `removed_in`; golden alias table | ddflow/surfaces/registry.py, ddflow/surfaces/tools/aliases.py, tests/test_mcp_aliases.py | MTD-family-schema | 4 |
