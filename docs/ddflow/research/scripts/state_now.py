@@ -30,7 +30,7 @@ bd=collections.Counter(depth(i) for i in tasks); bt=collections.Counter(tag(t) f
 dn=collections.Counter(tag(t) for t in I.values() if t.kind=="task" and t.state=="done")
 rn=collections.Counter(depth(i) for i,t in tasks.items() if t.state=="running")
 print("wave | live(true depth) | live(tag) | running | done(tag)")
-for w in range(0,max(bd)+1): print(f"{w:>4} | {bd.get(w,0):>6} | {bt.get(w,0):>6} | {rn.get(w,0):>3} | {dn.get(w,0):>4}")
+for w in range(0,max(bd,default=0)+1): print(f"{w:>4} | {bd.get(w,0):>6} | {bt.get(w,0):>6} | {rn.get(w,0):>3} | {dn.get(w,0):>4}")
 print("tag != depth:",sum(1 for i,t in tasks.items() if tag(t)!=depth(i)),"of",len(tasks))
 ph=[]
 for pid,p in phases.items():
