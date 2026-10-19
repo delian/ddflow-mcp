@@ -39,7 +39,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _cli_helpers import run_cli  # not `conftest`: spawn workers would find the root one
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -198,11 +199,48 @@ def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int, int]:
     return agent, reads, writes, failed
 
 
+def _noop() -> None:
+    """Target of the pre-flight; spawn imports THIS module in the child to find it."""
+
+
+def _preflight_spawn_import(ctx) -> None:
+    """Fail fast, and truthfully, when a spawn worker cannot even import this module.
+
+    A pool whose workers die on import respawns them forever and nothing finishes; the
+    only symptom is a timeout that reads as a deadlock (Bconftest-spawn-collision). One
+    spawned process with its stderr captured turns that into the real ImportError.
+    """
+    import tempfile
+
+    with tempfile.TemporaryFile() as err:
+        saved = os.dup(2)
+        try:
+            os.dup2(err.fileno(), 2)
+            proc = ctx.Process(target=_noop)
+            proc.start()
+            proc.join(120)
+        finally:
+            os.dup2(saved, 2)
+            os.close(saved)
+        if proc.is_alive():
+            proc.terminate()
+            proc.join()
+        if proc.exitcode != 0:
+            err.seek(0)
+            tail = err.read().decode(errors="replace")[-1500:]
+            pytest.fail(
+                f"a spawn worker exited {proc.exitcode} before running anything: it cannot "
+                f"import {__name__}. This is an import failure, NOT a deadlock. Worker "
+                f"stderr:\n{tail}"
+            )
+
+
 def _pool_map(fn, items, timeout_s: float):
     """Run in real processes, bounded. A deadlock must surface as a FAILURE with a
     message, not as a CI job that runs until the runner kills it — the second is
     indistinguishable from an infrastructure problem and gets retried, not fixed."""
     ctx = mp.get_context("spawn")
+    _preflight_spawn_import(ctx)
     with ctx.Pool(processes=min(len(items), (os.cpu_count() or 4) * 2)) as pool:
         async_result = pool.map_async(fn, items)
         try:
@@ -314,6 +352,7 @@ def test_readers_are_not_blocked_by_writers(repo):
     # readers really are running while the writers are. (`spawn` cannot pickle a
     # closure, so a single heterogeneous map over both job shapes is not available.)
     ctx = mp.get_context("spawn")
+    _preflight_spawn_import(ctx)
     with ctx.Pool(processes=LOAD_AGENTS) as pool:
         writers = pool.map_async(_writer, [j for j in jobs if len(j) == 3])
         readers = pool.map_async(_reader, [j for j in jobs if len(j) == 2])
