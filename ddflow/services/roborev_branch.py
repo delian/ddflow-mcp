@@ -86,7 +86,7 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
             continue
         if not RR._covers(ref, sha) or RR._job_id(j) is None:
             continue
-        start = ref.rsplit("..", 1)[0].strip().lower() if ".." in ref else ""
+        start = ref.rsplit("..", 1)[0].strip().rstrip(".").lower() if ".." in ref else ""
         if not (len(start) >= RR._MIN_ABBREV and mb.startswith(start)):
             continue  # a single commit, or a range from elsewhere, is not the branch review
         ids.append(RR._job_id(j))

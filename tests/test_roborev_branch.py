@@ -217,3 +217,9 @@ def test_a_single_commit_job_of_head_is_not_the_branch_review(tmp_path, monkeypa
     r = RB.run(repo, "main", 5)
     assert any(c.startswith("review --since") for c in log.read_text().splitlines())
     assert r.job == 7
+
+
+def test_a_three_dot_range_from_the_merge_base_is_reused():
+    mb, head = "a" * 40, "b" * 40
+    jobs = [{"id": 4, "status": "queued", "job_type": "range", "git_ref": f"{mb}...{head}"}]
+    assert RB._reusable_job(jobs, head, mb) == 4
