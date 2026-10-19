@@ -189,7 +189,7 @@ def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str,
     # anything, `-p mod` would import `mod`). `--` is not trusted to say so: Python 3.12.3's
     # argparse (the GitHub runner's) lets pytest read `-- --co` as `--co`, exit 5. So the
     # path is checked here, and a dash-led one that exists is spelled `./-x`.
-    path_part = test_id.partition("::")[0].partition("[")[0]
+    path_part = test_id.partition("::")[0]
     if not path_part or not (Path(where) / path_part).exists():
         out.update(
             exit_code=4,
@@ -205,7 +205,7 @@ def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str,
     env = {
         k: v
         for k, v in os.environ.items()
-        if k != "PYTEST_ADDOPTS" and not k.startswith("PYTEST_XDIST_")
+        if k.upper() != "PYTEST_ADDOPTS" and not k.upper().startswith("PYTEST_XDIST_")
     }
     got = P.capture(argv, timeout=timeout_s, cwd=where, env=env)
     if got.error is not None:
