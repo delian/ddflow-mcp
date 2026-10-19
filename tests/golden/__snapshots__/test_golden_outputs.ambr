@@ -890,7 +890,7 @@
           roborev run on the item's COMBINED branch diff) waits for the roborev job
           before it gives up (default 900; 0 = enqueue and return). A job still
           running at the limit is left running and reported with its id and `roborev
-          wait <id>`: the gate is recorded `unavailable` with that reason, never
+          wait --job <id>`: the gate is recorded `unavailable` with that reason, never
           passed.
       lessons.search_backend = 'fts5'   [default]
           'fts5' uses SQLite full-text BM25 ranking; 'like' is a portable fallback for
