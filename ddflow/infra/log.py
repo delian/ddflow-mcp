@@ -774,7 +774,8 @@ def _holder_note(path: Path) -> str:
     # traffic (a parallel test run) entries move between chunks and a live holder is
     # skipped by a single read (bug Bf540195aec; ~14% of scans missed it in a
     # reproduction). So scan again, within a small budget, before giving up.
-    deadline = time.monotonic() + _HOLDER_SCAN_S
+    t0 = time.monotonic()
+    deadline = t0 + _HOLDER_SCAN_S
     scans = 0
     while True:
         scans += 1
@@ -787,9 +788,7 @@ def _holder_note(path: Path) -> str:
         if scans >= _HOLDER_SCANS_MAX or time.monotonic() >= deadline:
             if not _still_locked(path):
                 return ""  # released meanwhile: there is no holder to name
-            return (
-                f" Holder unknown (not in /proc/locks after {scans} scans in {_HOLDER_SCAN_S:g}s)."
-            )
+            return f" Holder unknown (not in /proc/locks after {scans} scans in {time.monotonic() - t0:.1f}s)."
         time.sleep(0.01)
 
 
