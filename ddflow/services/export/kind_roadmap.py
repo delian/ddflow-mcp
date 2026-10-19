@@ -10,8 +10,9 @@ own answer (`schedule.dep_status`, under the project's `[flow].stack` and
 `[schedule].unknown_dep_policy`), so a phase counts as met when it is closed, as for `next`
 (B58010c24b3). Per dependency only: what `next` judges across several (two review branches
 to stack on) is not reflected here.
-Abandoned tasks are not counted. Pure over the Query: built from the single-pass
-children index, so a log of thousands of items renders in milliseconds.
+Abandoned tasks are not counted. Over the Query: built from the single-pass
+children index, so a log of thousands of items renders in milliseconds; the Changed section
+reads the version tags from git, and the estimate runs the metrics forecast.
 """
 
 from __future__ import annotations

@@ -8,6 +8,10 @@ Critical path: {% for s in critical_path %}`{{ s.id }}`{% if not loop.last %} ->
 {% if changes %}
 
 ## Changed since {{ changes.since }}
+{% if not changes.any %}
+
+Nothing changed.
+{% endif %}
 {% for label, title in (("added", "Added"), ("completed", "Completed"), ("blocked", "Blocked"), ("reprioritised", "Reprioritised")) %}
 {% set part = changes[label] %}
 {% if part["items"] %}
