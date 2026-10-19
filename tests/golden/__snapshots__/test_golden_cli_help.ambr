@@ -1951,7 +1951,7 @@
 # ---
 # name: test_help[ddflow report]
   '''
-  usage: ddflow report [-h] [--agent AGENT] item
+  usage: ddflow report [-h] [--agent AGENT] [--brief] item
   
   positional arguments:
     item           the item to report on
@@ -1959,6 +1959,8 @@
   options:
     -h, --help     show this help message and exit
     --agent AGENT  count as filed by this agent only (default: the agent that completed it)
+    --brief        the 8-line form: landing sha, regression test, forced or skipped gates, filed
+                   ids, follow-ups, not done
   
   '''
 # ---
