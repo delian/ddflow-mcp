@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=af608aada4d8 -->
+<!-- ddflow:begin README/commands sha=fec0bf53c21a -->
 <details><summary>All 85 commands</summary>
 
 | Command | What it does |
@@ -585,7 +585,7 @@ needs a line written by hand here.
 | `ddflow rule` | project rules: add, edit, list, search, show, remove |
 | `ddflow verify` | re-derive the claims behind a done task, or sweep them all (exit 1 = one fails) |
 | `ddflow ci` | the CI parity gate: run the pre-push checks on the merge result |
-| `ddflow onboard` | run an onboarding stage: one report, propose by default (status\|preflight\|legacy\|memory\|test-gate\|verify) |
+| `ddflow onboard` | run an onboarding stage: one report, propose by default… |
 | `ddflow status` | one answer to 'what is the state of this project?' |
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |
@@ -5849,8 +5849,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=8673daf0a429 -->
-<details><summary>All 355 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=bf70f348b518 -->
+<details><summary>All 357 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5961,6 +5961,8 @@ long default is left to `ddflow config --explain`.
 | `session.agent_brief_pin_decisions` | `[]` |  |
 | `session.report_commits` | `20` |  |
 | `session.report_note_chars` | `200` |  |
+| `session.report_title_chars` | `100` |  |
+| `session.report_summary_chars` | `120` |  |
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
