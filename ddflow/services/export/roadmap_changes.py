@@ -55,7 +55,7 @@ def _label(kind: str) -> str:
 def changed(
     q: Query, since: str, visible: Callable[[str], bool], cap: int = LIST_CAP
 ) -> dict[str, Any]:
-    """``{since, added, completed, blocked, reprioritised}``: each a ``{items, more}`` of
+    """``{since, any, added, completed, blocked, reprioritised}``: each a ``{items, more}`` of
     ``{id, title, kind}`` (the last also ``priority``), the latest event per item, log order.
     Empty ``since`` gives no section (``{}``)."""
     if not since:
@@ -78,6 +78,7 @@ def changed(
     for label, rows in found.items():
         listed = list(rows.values())
         out[label] = {"items": listed[:cap], "more": max(len(listed) - cap, 0)}
+    out["any"] = any(out[k]["items"] for k in found)
     return out
 
 
@@ -107,7 +108,7 @@ def _now(q: Query) -> float:
     if not q.events:
         return 0.0
     try:
-        return clock.parse_ts(q.events[-1].ts).replace(tzinfo=UTC).timestamp()
+        return clock.parse_ts(q.events[-1].ts).astimezone(UTC).timestamp()
     except ValueError:
         return 0.0
 

@@ -119,3 +119,13 @@ def test_research_has_no_globs_so_it_links_by_item_only():
 
     assert "globs" not in {f.name for f in fields(ResearchNote)}
     assert CH.eta_line({"low_s": 7200, "high_s": 3 * 86400}) == "2.0 h to 3.0 days"
+
+
+def test_a_point_with_nothing_after_it_says_so_and_an_offset_is_converted():
+    body = registry.render_body("roadmap", _g().query(), Filters(since="2099-01-01"))
+    assert "## Changed since 2099-01-01" in body and "Nothing changed." in body
+    g = Log()
+    g.add(
+        "phase.added", "P", {"title": "t", "priority": 1, "needs": []}, "2026-09-01T10:00:00+02:00"
+    )
+    assert CH._now(g.query()) == 1788249600.0
