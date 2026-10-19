@@ -19,36 +19,43 @@ def _ids(rows: list[dict[str, Any]]) -> str:
     return ", ".join(f"{r['id']}{'' if r.get('open', True) else ' (closed)'}" for r in rows)
 
 
+def _landed(ld: dict[str, Any]) -> str:
+    sha = (ld.get("merge_sha") or "")[:12]
+    return f"landed: {sha} on {ld['base'] or 'the base'}" if sha else "landed: not merged"
+
+
+def _regression(reg: dict[str, Any]) -> str:
+    rows = [
+        f"{b['bug']}: {', '.join(b['tests']) or 'no test'} ({b['verified'] or 'unverified'})"
+        for b in reg["bugs"]
+    ]
+    files = ["test files: " + ", ".join(reg["test_files"][:3])] if reg["test_files"] else []
+    return "regression: " + ("; ".join(rows or files) or "none")
+
+
+def _filed(filed: dict[str, Any]) -> str:
+    ids = [i for i in (_ids(filed["bugs"]), _ids(filed["tasks"])) if i]
+    notes = ", ".join(n["id"] for n in filed.get("notes", []))
+    return f"filed: {', '.join(ids) or 'none'}" + (f"; notes {notes}" if notes else "")
+
+
+def _list(label: str, items: list[str], sep: str) -> str:
+    return f"{label}: {sep.join(items) or 'none'}"
+
+
 def lines(d: dict[str, Any]) -> list[str]:
     """The 8 lines of a collected report (`services.report.collect`)."""
-    it, ld = d["item"], d["landing"]
-    sha = (ld.get("merge_sha") or "")[:12]
-    bugs = d["regression"]["bugs"]
-    tests = "; ".join(
-        f"{b['bug']}: {', '.join(b['tests']) or 'no test'} ({b['verified'] or 'unverified'})"
-        for b in bugs
-    ) or (
-        "test files: " + ", ".join(d["regression"]["test_files"][:3])
-        if d["regression"]["test_files"]
-        else ""
-    )
+    it = d["item"]
     off = [f"{g['gate']} {g['outcome']}" for g in d["gates"] if g["outcome"] != "passed"]
-    filed = d["filed"]
-    ids = (
-        _ids(filed["bugs"])
-        + (", " if filed["bugs"] and filed["tasks"] else "")
-        + _ids(filed["tasks"])
-    )
-    notes = ", ".join(n["id"] for n in filed.get("notes", []))
     return [
         f"{it['id']}: {it['state']} ({it['agent']})",
-        f"landed: {sha + ' on ' + (ld['base'] or 'the base') if sha else 'not merged'}",
-        f"regression: {tests or 'none'}",
-        f"gates not passed: {', '.join(off) or 'none'}",
-        f"forced or skipped: {'; '.join(d['overrides']) or 'none'}",
-        f"filed: {ids or 'none'}" + (f"; notes {notes}" if notes else ""),
-        f"follow-ups: {', '.join(d['follow_ups']) or 'none'}",
-        f"not done: {'; '.join(d['not_done']) or 'none'}",
+        _landed(d["landing"]),
+        _regression(d["regression"]),
+        _list("gates not passed", off, ", "),
+        _list("forced or skipped", d["overrides"], "; "),
+        _filed(d["filed"]),
+        _list("follow-ups", d["follow_ups"], ", "),
+        _list("not done", d["not_done"], "; "),
     ]
 
 
