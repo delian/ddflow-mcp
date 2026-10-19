@@ -75,7 +75,8 @@ class Ctx:
 
     def scope(self, rule_: Mapping[str, Any]) -> mdparse.Part | None:
         """The part a rule judges: its section, or the whole document when it names none.
-        None when it names a section the document lacks: `required_sections` reports that."""
+        None when it names a section the document lacks: a required one is reported by
+        `required_sections`, an optional one has nothing to judge."""
         sid = rule_.get("section")
         return self.found.get(sid) if sid else self.doc.whole
 
@@ -95,8 +96,10 @@ def regex(
     ctx: Ctx, rule_: Mapping[str, Any], key: str = "regex"
 ) -> tuple[re.Pattern | None, list[Finding]]:
     """The compiled ``rule_[key]``, or a finding saying the rule cannot be applied."""
+    if not str(rule_.get(key, "")):
+        return None, [ctx.finding(str(rule_["kind"]), 1, f"{key} is required", rule_)]
     try:
-        return re.compile(str(rule_.get(key, "")), re.M), []
+        return re.compile(str(rule_[key]), re.M), []
     except re.error as exc:
         return None, [
             ctx.finding(str(rule_["kind"]), 1, f"{key} is not a regular expression: {exc}", rule_)
@@ -119,6 +122,9 @@ def validate(
             continue
         if kind.check is None:
             out.append(Finding("doctype", path, 1, kind.name, "the rule kind has no check"))
+            continue
+        if r.get("section") and r["section"] not in ctx.found:
+            out.append(ctx.finding(kind.name, 1, f"unknown section {r['section']!r}", r))
             continue
         out += kind.check(ctx, r)
     return sorted(out, key=lambda f: (f.line, f.ref, f.detail))

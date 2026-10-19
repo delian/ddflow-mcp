@@ -298,3 +298,21 @@ def test_a_regex_heading_is_case_sensitive_a_literal_one_is_not():
     assert found(rx, "## API\n") == [] and found(rx, "## api\n") == [("required_sections", 1)]
     lit = dtype('{ kind = "required_sections" }', sec("a", "API", required="true"))
     assert found(lit, "## api\n") == []
+
+
+def test_a_rule_naming_an_undeclared_section_is_a_finding_not_a_silent_pass():
+    dt = dtype('{ kind = "forbidden_text", regex = "TODO", section = "nope" }')
+    assert [(f.ref, f.detail) for f in validate(dt, "TODO\n", "T.md")] == [
+        ("forbidden_text:nope", "unknown section 'nope'")
+    ]
+
+
+def test_a_rule_without_its_regex_is_a_finding():
+    for kind in ("required_text", "forbidden_text", "each_item_matches"):
+        got = validate(dtype('{ kind = "%s" }' % kind), "x\n", "T.md")  # noqa: UP031
+        assert [f.detail for f in got] == ["regex is required"], kind
+
+
+def test_a_schema_with_the_wrong_container_types_cannot_be_applied():
+    dt = dtype('{ kind = "front_matter", schema = { required = "status" } }')
+    assert "cannot be applied" in validate(dt, "---\na: 1\n---\n", "T.md")[0].detail

@@ -31,10 +31,13 @@ def _type_ok(value: Any, name: str) -> bool:
 def schema_problems(front: Mapping[str, Any], schema: Mapping[str, Any]) -> Iterator[str]:
     """What a JSON-Schema subset (``required``, ``properties`` with ``type`` ``enum``
     ``pattern``) finds wrong with ``front``."""
-    for key in schema.get("required", []):
+    required, props = schema.get("required", []), schema.get("properties", {})
+    if not isinstance(required, list) or not isinstance(props, dict):
+        raise TypeError("required must be a list and properties a table")
+    for key in required:
         if key not in front:
             yield f"{key!r} is required"
-    for key, spec in schema.get("properties", {}).items():
+    for key, spec in props.items():
         if key not in front:
             continue
         v = front[key]
