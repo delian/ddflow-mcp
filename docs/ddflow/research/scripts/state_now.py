@@ -41,7 +41,7 @@ for pid,p in phases.items():
 print("\nphases open:",len(ph),"| done phases:",sum(1 for p in phases.values() if p.state=='done'))
 print("most progressed (done/total):")
 for r in sorted([r for r in ph if r[2]],key=lambda r:-(r[1]/r[2]))[:12]: print(f"  {r[0]:<30} {r[1]:>3}/{r[2]:<3} waves {r[3]}-{r[4]}")
-print("phases with all work ready (min wave 0) and none started:",sum(1 for r in ph if r[3]==0 and r[1]==0))
+print("phases with all work ready (min wave 0) and none done:",sum(1 for r in ph if r[3]==0 and r[1]==0))
 cnt=collections.Counter()
 for t in tasks.values():
     for n in t.needs:
