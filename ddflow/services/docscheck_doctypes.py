@@ -1,8 +1,9 @@
 """Document types in ``ddflow docs check`` (B-dt-validate): the ``doctype`` finding family.
 
-Every tracked document that a type's ``path`` or ``pattern`` names is validated against that
-type (shipped types, then `.ddflow/doctypes/*.toml`). A type that cannot be read, or a lint
-command that cannot run, is ``unavailable`` with the reason -- never a clean report. A type's
+Every tracked document that the check covers (``check_paths``, else the document globs minus
+the excluded and generated files, as for every other family) and that a type's ``path`` or
+``pattern`` names is validated against that type (shipped types, then
+`.ddflow/doctypes/*.toml`). A type that cannot be read, or a lint command that cannot run, is ``unavailable`` with the reason -- never a clean report. A type's
 ``[doctype.validate] lint_command`` (e.g. ``vale {path}``) runs once per document, but only for
 a shipped type: a command in a project-added type stays inert until it is approved, said in
 ``not_configured`` (declared, not asked for by the operator, so it does not poison the report).
@@ -81,6 +82,7 @@ def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = 
         return
     tree = _tree(repo)
     have = set(tree)
+    checked = set(report.checked.get("docs", []))  # the documents this check covers, no others
     dirs = {str(p) for f in tree for p in PurePosixPath(f).parents}
 
     def read(path: str) -> str | None:
@@ -92,7 +94,7 @@ def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = 
     count = 0
     for dt in types:
         rx = glob_regex(type_glob(dt))
-        for path in (p for p in tree if rx.fullmatch(p)):
+        for path in (p for p in tree if p in checked and rx.fullmatch(p)):
             try:
                 text = read(path)
                 report.findings += validate(dt, text or "", path, read=read)

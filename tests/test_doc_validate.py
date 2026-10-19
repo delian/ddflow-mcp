@@ -388,3 +388,25 @@ def test_a_required_section_without_a_heading_is_refused_at_load():
         spec.parse(
             '[doctype]\nname = "t"\npath = "T.md"\n[[doctype.section]]\nid = "a"\nrequired = true\n'
         )
+
+
+def test_links_are_read_with_the_reference_checks_grammar():
+    files = {"a(b).md": "# x\n"}
+    dt = spec.parse(
+        '[doctype]\nname = "t"\npath = "docs/a.md"\n'
+        '[doctype.validate]\nrules = [{ kind = "links_resolve" }]\n'
+    )
+
+    def run(t):
+        return [f.line for f in validate(dt, t, "a.md", read=files.get)]
+
+    assert run("see[^1]\n\n[^1]: a note\n") == []  # a footnote is no reference definition
+    assert run(r"\[x](gone.md)" + "\n") == []  # an escaped link is prose
+    assert run("[x](a(b).md)\n") == []  # a parenthesised destination
+
+
+def test_a_document_the_check_does_not_cover_is_not_validated(repo: Path):
+    put(repo, "docs/adr/0001-x.md", "# x\n")
+    put(repo, "README.md", "# r\n")
+    put(repo, ".ddflow/config.toml", '[docs]\ncheck_paths = ["README.md"]\n')
+    assert doctype_findings(repo) == []
