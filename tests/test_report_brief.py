@@ -70,3 +70,26 @@ def test_the_brief_is_reachable_over_mcp_as_show_report_brief(repo):
     _land(repo)
     out = show_report(repo, "T1", brief=True)
     assert out.data["item"]["text"].count("\n") == 8
+
+
+def test_the_regression_line_with_bug_ids_and_tests_is_not_cut():
+    bugs = [
+        {
+            "bug": f"B{n}",
+            "tests": [f"tests/test_x.py::test_{n}_" + "a" * 40],
+            "verified": "verified",
+        }
+        for n in range(6)
+    ]
+    d = {
+        "item": {"id": "T", "state": "done", "agent": "a"},
+        "landing": {"merge_sha": "a" * 40, "base": "main"},
+        "regression": {"bugs": bugs, "test_files": []},
+        "gates": [],
+        "overrides": [],
+        "follow_ups": [],
+        "not_done": [],
+        "filed": {"bugs": [], "tasks": []},
+    }
+    line = RB.render(d, 20).split("\n")[2]
+    assert "B5: " in line and not line.endswith("…")
