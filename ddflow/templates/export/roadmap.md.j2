@@ -38,6 +38,26 @@ Blocked by {{ p.blocked_by | join(", ") }}.
 {% endif %}
 {% endfor %}
 {% endfor %}
+{% if graph.nodes %}
+
+**Dependency graph**
+
+```mermaid
+flowchart LR
+{% for n in graph.nodes %}
+    {{ n.key }}["{{ n.id | replace('"', "'") }}"]:::{{ n.lane }}
+{% endfor %}
+{% if graph.more %}
+    n_more["and {{ graph.more }} more"]:::later
+{% endif %}
+{% for a, b in graph.edges %}
+    {{ a }} --> {{ b }}
+{% endfor %}
+    classDef now fill:#cfe8cf,stroke:#2e7d32
+    classDef next fill:#d6e6f8,stroke:#1565c0
+    classDef later fill:#eeeeee,stroke:#757575
+```
+{% endif %}
 {% if release_lines %}
 
 ## Release lines

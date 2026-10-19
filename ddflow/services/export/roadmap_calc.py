@@ -14,6 +14,8 @@ from typing import Any
 #: Defaults for `[export.roadmap]` `next` and `tasks`.
 DEFAULT_NEXT = 3
 DEFAULT_TASKS = 8
+#: Default of `[export.roadmap]` `graph`: how many phases the dependency graph draws (0 = no graph).
+DEFAULT_GRAPH = 25
 DEFAULT_HIDE = ("BL-",)
 #: The order statuses are listed in.
 STATUSES = ("running", "review", "ready", "blocked", "done")

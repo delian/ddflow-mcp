@@ -208,3 +208,4 @@
 "ddflow/services/companions.py:_MAX_BUF" = "pipe read buffer of a child process: an I/O mechanism, not a workload setting"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_NEXT" = "the default of the [export.roadmap] `next` knob, which is already configurable"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_TASKS" = "the default of the [export.roadmap] `tasks` knob, which is already configurable"
+"ddflow/services/export/roadmap_calc.py:DEFAULT_GRAPH" = "the default of the [export.roadmap] `graph` knob, which is already configurable"
