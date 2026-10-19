@@ -235,6 +235,8 @@ def test_substring_of_punctuation_only(idx, repo):
         res = idx.search(q, mode="substring")
         assert res.mode == "substring" and [h.path for h in res.hits] == ["docs/arrow.md"]
     assert idx.search("   ", mode="substring").hits == ()
+    for q in ('"""', "***", "((("):  # FTS5 metacharacters are quoted, never a syntax error
+        assert idx.search(q, mode="substring").hits == ()
 
 
 def test_no_trigram_degrades_substring_search(tmp_path, repo):
