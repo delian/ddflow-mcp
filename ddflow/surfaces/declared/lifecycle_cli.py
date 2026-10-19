@@ -82,19 +82,27 @@ def _tree_line(out) -> str:
     )
 
 
-def _stranded_line(out, a) -> str:
+def _stranded_line(out, a, *, offer: str = "") -> str:
     """The open items still needing this one: they are stuck for good until the edge goes."""
     cmds = out.data.get("drop_edges") or []
     if not cmds:
         return ""
     return (
         f"\nwarning: {', '.join(out.data['stranded'])} still need(s) {a['id']} and can "
-        "never start; drop the edge:\n  " + "\n  ".join(cmds)
+        "never start; drop the edge:\n  " + "\n  ".join(cmds) + offer
     )
 
 
 def abandon_text(out, a) -> str:
-    return f"{a['id']} abandoned: {a['reason']}" + _tree_line(out) + _stranded_line(out, a)
+    moved = out.data.get("repointed") or []
+    note = f"\n  re-pointed to {a.get('repoint_to', '')}: {', '.join(moved)}" if moved else ""
+    offer = f"\n  or re-point them: ddflow abandon {a['id']} --repoint-to ID --reason ..."
+    return (
+        f"{a['id']} abandoned: {a['reason']}"
+        + note
+        + _tree_line(out)
+        + _stranded_line(out, a, offer=offer)
+    )
 
 
 def remove_text(out, a) -> str:
