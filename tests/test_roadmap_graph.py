@@ -34,8 +34,16 @@ def test_the_cap_leaves_phases_off_and_counts_them():
     assert RG.graph(ph, lambda i: [], 0) == {"nodes": [], "edges": [], "more": 4}
 
 
-def test_node_names_are_safe_for_mermaid():
-    assert RG.node_key("P-unify.1") == "n_P_unify_1"
+def test_node_names_are_safe_and_never_collide():
+    ph = [{"id": "P-unify.1", "lane": "now"}, {"id": "P-unify-1", "lane": "now"}]
+    keys = [n["key"] for n in RG.graph(ph, lambda i: [], 5)["nodes"]]
+    assert keys == ["n0", "n1"]
+
+
+def test_mutually_dependent_prerequisites_keep_their_edges_into_a_third_phase():
+    deps = {"i": ["d", "o"], "d": ["o"], "o": ["d"]}
+    edges = RG.reduce_edges(["d", "o", "i"], lambda x: deps.get(x, []))
+    assert ("d", "i") in edges and ("o", "i") in edges
 
 
 def _log() -> Log:
@@ -53,13 +61,13 @@ def _log() -> Log:
 def test_the_data_carries_lanes_and_the_reduced_edges():
     gr = data(_log())["graph"]
     assert {n["id"]: n["lane"] for n in gr["nodes"]} == {"P1": "now", "P2": "later", "P3": "later"}
-    assert gr["edges"] == [["n_P1", "n_P2"], ["n_P2", "n_P3"]] and gr["more"] == 0
+    assert gr["edges"] == [["n0", "n1"], ["n1", "n2"]] and gr["more"] == 0
 
 
 def test_the_document_draws_a_mermaid_flowchart_with_classes():
     body = _body("roadmap", _log().query())
     assert "```mermaid\nflowchart LR" in body
-    assert 'n_P1["P1"]:::now' in body and "n_P2 --> n_P3" in body and "n_P1 --> n_P3" not in body
+    assert 'n0["P1"]:::now' in body and "n1 --> n2" in body and "n0 --> n2" not in body
     assert "classDef later" in body
 
 
