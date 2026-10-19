@@ -39,6 +39,9 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import NamedTuple
 
@@ -101,6 +104,21 @@ def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> 
 HARNESS_MARKERS = ("CLAUDECODE",)
 
 
+_MCP_CALL: ContextVar[bool] = ContextVar("ddflow_mcp_call", default=False)
+
+
+@contextmanager
+def via_mcp() -> Iterator[None]:
+    """Mark the calls made inside as arriving over MCP. The MCP dispatch wraps every tool
+    call in it, so who is an agent comes from HOW the call arrived, not from variables a
+    server process may not have (fix-agent-identity-over-mcp-in-api)."""
+    token = _MCP_CALL.set(True)
+    try:
+        yield
+    finally:
+        _MCP_CALL.reset(token)
+
+
 def agent_marker(requested_agent: str = "") -> str:
     """Why this invocation is an agent's, or ``""`` when nothing says it is.
 
@@ -108,6 +126,8 @@ def agent_marker(requested_agent: str = "") -> str:
     own terminal sets none of them; an agent that unsets all three is the shell edit the
     decision accepts it cannot stop.
     """
+    if _MCP_CALL.get():
+        return "the MCP surface"
     if requested_agent:
         return f"--agent {requested_agent}"
     if os.environ.get("DDFLOW_AGENT"):
@@ -122,7 +142,7 @@ def is_agent(requested_agent: str = "", via_mcp: bool = False) -> str:
     """Why this call is an agent's, or "" for a person at a terminal. The MCP surface is
     always an agent; a CLI call is one under `--agent`, `DDFLOW_AGENT` or a harness's
     marker (the rule ``reviewers approve`` and the export enable use)."""
-    return "the MCP surface" if via_mcp else agent_marker(requested_agent)
+    return "the MCP surface" if via_mcp else agent_marker(requested_agent)  # marker: MCP call too
 
 
 def bind(cfg: Config, who: AgentId) -> None:
