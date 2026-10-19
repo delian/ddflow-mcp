@@ -121,3 +121,14 @@ def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monk
     monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
     r = RB.run(repo, "main", 20)
     assert r.outcome == "unavailable" and "unknown state" in r.reason
+
+
+def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):
+    """B-baedb82a4c5: `roborev wait 3023` reads the number as a sha prefix ("No job found");
+    the hints must say `--job`."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    r = RB.run(repo, "main", 0)
+    assert "roborev wait --job 7" in r.reason
+    from ddflow.services import roborev as RR
+
+    assert "roborev wait --job" in RR.__doc__ or "wait --job" in open(RR.__file__).read()

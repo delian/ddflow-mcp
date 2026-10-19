@@ -149,5 +149,5 @@ class GatesConfig:
     )
     standards_wait_s: int = knob(
         900,
-        doc="Seconds `python -m ddflow.services.roborev_branch` (the standards gate's roborev run on the item's COMBINED branch diff) waits for the roborev job before it gives up (default 900; 0 = enqueue and return). A job still running at the limit is left running and reported with its id and `roborev wait <id>`: the gate is recorded `unavailable` with that reason, never passed.",
+        doc="Seconds `python -m ddflow.services.roborev_branch` (the standards gate's roborev run on the item's COMBINED branch diff) waits for the roborev job before it gives up (default 900; 0 = enqueue and return). A job still running at the limit is left running and reported with its id and `roborev wait --job <id>`: the gate is recorded `unavailable` with that reason, never passed.",
     )
