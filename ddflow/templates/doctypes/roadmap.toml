@@ -1,0 +1,11 @@
+[doctype]
+name = "roadmap"
+title = "Roadmap"
+path = "ROADMAP.md"
+genre = "reference"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:roadmap"

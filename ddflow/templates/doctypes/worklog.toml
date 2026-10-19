@@ -1,0 +1,11 @@
+[doctype]
+name = "worklog"
+title = "Work log"
+path = "LOG.md"
+genre = "log"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:worklog"
