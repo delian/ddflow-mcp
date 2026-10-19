@@ -512,7 +512,8 @@ def test_a_command_word_cannot_be_both_alias_and_command():
     sub = SuggestingParser(prog="d").add_subparsers(dest="cmd")
     parser = sub.add_parser("docs")
     R.add_command_alias(sub, parser, "doc", Alias("command", "doc", "docs", SINCE))
-    with pytest.raises(argparse.ArgumentError, match="conflicting subparser"):
+    # 3.12/3.13 raise ArgumentError, 3.14 raises ValueError: the invariant is the refusal
+    with pytest.raises((argparse.ArgumentError, ValueError), match="conflicting subparser"):
         sub.add_parser("doc")  # a canonical command registered after the alias is refused
     with pytest.raises(ValueError, match="already a command"):
         R.add_command_alias(sub, parser, "docs", Alias("command", "docs", "x", SINCE))
