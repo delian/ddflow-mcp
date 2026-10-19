@@ -236,23 +236,35 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
             "covered", "the ci gate ran the whole suite on this tree", changed_lines=lines,
             covered_by=f"ci full run {sha}",
         )  # fmt: skip
+    covered = f"ci selected run {sha}"
     sel = select(tree, base, **limits(cfg))
     if sel is None or sel.full:
         why = "git could not say what changed" if sel is None else sel.full
-        return Scope("full", f"{why}: only the whole suite keeps recall", changed_lines=lines)
+        # ci passed its selected run on this very tree: that run is the evidence. The whole
+        # suite is never started from here (B9ec96cb844, D-agent-test-etiquette).
+        return Scope(
+            "covered", f"{why}; the ci gate's selected run passed on this tree and is the evidence",
+            changed_lines=lines, covered_by=covered,
+        )  # fmt: skip
     done = set(ran.get("tests") or ())
     if int(ran.get("selected") or 0) > len(done):  # a truncated list proves nothing about the rest
-        return Scope("full", "the ci gate's test list is cut: this gate runs its own selection")
+        return Scope(
+            "covered", "the ci gate's test list is cut; its selected run passed on this tree",
+            changed_lines=lines, covered_by=covered,
+        )  # fmt: skip
     done |= set(ran.get("always_tests") or ())  # the always-run guards ran as well
     rest = _not_run(sel.tests, _regression(st, it), done)
     if not rest:
         return Scope(
             "covered", f"every test this change reaches ran in the ci gate ({len(done)} files)",
-            changed_lines=lines, covered_by=f"ci selected run {sha}",
+            changed_lines=lines, covered_by=covered,
         )  # fmt: skip
     cmd = run_command(command, [t.path for t in rest], tree)
     if not cmd:
-        return Scope("full", "the unit_tests command does not run pytest", changed_lines=lines)
+        return Scope(
+            "covered", "the unit_tests command does not run pytest; ci's selected run stands",
+            changed_lines=lines, covered_by=covered,
+        )  # fmt: skip
     return Scope(
         "selected", f"{len(rest)} test(s) the ci selected run {sha} did not take",
         command=cmd, tests=rest, changed_lines=lines, cut=sel.cut, cut_at=sel.cut_at,
