@@ -1,0 +1,11 @@
+[doctype]
+name = "changelog"
+title = "Changelog"
+path = "CHANGELOG.md"
+genre = "changelog"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:changelog"
