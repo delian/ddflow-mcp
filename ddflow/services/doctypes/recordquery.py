@@ -8,6 +8,7 @@ keys are ``kind`` (required), ``state``, ``tags`` (any of), ``phase``, ``since``
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
@@ -30,7 +31,7 @@ def _bug_state(b: Any) -> str:
 
 
 def _item_owner(i: Any) -> str:
-    return i.lease.holder if i.lease and not i.lease.expired_at else ""
+    return i.lease.holder if i.lease and i.lease.live(time.time()) else ""
 
 
 @dataclass(frozen=True)
