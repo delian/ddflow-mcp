@@ -214,7 +214,9 @@ def test_status_lists_the_stranded_item_in_both_clones(tmp_path):
         assert [r["item"] for r in rows] == ["T2"] and rows[0]["holder"] == "alice", rows
         assert ("ddflow release T2" in rows[0]["text"]) is release, rows
         _, text, err = run_cli(clone, "status", agent=agent)
-        assert "Removed, lease still held" in text + err and "T2" in text + err, text
+        shown = text + err
+        assert "Removed, lease still held" in shown and rows[0]["text"] in shown, shown
+        assert "{'item'" not in shown, shown
 
 
 def test_status_has_no_stranded_list_without_one(tmp_path):
