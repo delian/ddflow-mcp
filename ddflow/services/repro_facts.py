@@ -184,13 +184,13 @@ def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str,
         where = str(Path.cwd())
     except OSError:
         where = str(repo)
-    out: dict[str, Any] = {"id": test_id, "command": "pytest --tb=short -- " + test_id}
     # An id is a path to look for, never an option (`--co` would "pass" without running
     # anything, `-p mod` would import `mod`). `--` is not trusted to say so: Python 3.12.3's
     # argparse (the GitHub runner's) lets pytest read `-- --co` as `--co`, exit 5. So the
     # path is checked here, and a dash-led one that exists is spelled `./-x`.
     path_part = test_id.partition("::")[0].partition("[")[0]  # as pytest does
     if not path_part or not (Path(where) / path_part).exists():
+        out: dict[str, Any] = {"id": test_id, "command": "(not run: path not found)"}
         out.update(
             exit_code=4,
             head=[],
@@ -199,6 +199,7 @@ def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str,
         )
         return out
     safe_id = "./" + test_id if test_id.startswith("-") else test_id
+    out = {"id": test_id, "command": "pytest --tb=short " + safe_id}
     argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", safe_id]
     # This may run inside an xdist worker or under a caller's PYTEST_ADDOPTS: neither
     # belongs to the run being reproduced.
