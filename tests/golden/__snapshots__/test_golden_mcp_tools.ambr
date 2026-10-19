@@ -3368,6 +3368,10 @@
           "type": "boolean",
           "description": "Its completion report."
          },
+         "brief": {
+          "type": "boolean",
+          "description": "With report: the 8-line form."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
