@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.config import Config
-from ddflow.infra.docindex import SCHEMA_VERSION, DocIndex, DocIndexError, IndexMissing
+from ddflow.infra.docindex import INDEX_LAYOUT, DocIndex, DocIndexError, IndexMissing
 from ddflow.services.docsearch import scope as SC
 from ddflow.services.export.safe import redact_text
 
@@ -46,6 +46,7 @@ def idx(tmp_path: Path) -> DocIndex:
 
 
 def _sync(idx: DocIndex, repo: Path, **kw) -> SC.Refresh:
+    kw.setdefault("redact", lambda t: t)
     return SC.refresh(idx, repo, SC.Scope(), **kw)
 
 
@@ -71,7 +72,7 @@ def test_scope_excludes_caps_binary_and_generated(repo):
     (repo / "gen.md").write_text("<!-- ddflow:generated doc=status -->\n# S\n")
     _commit(repo)
     got = SC.resolve(repo, SC.Scope(exclude=("docs/**",), max_bytes=400))
-    assert got.files == ["README.md"] or "README.md" in got.files
+    assert got.files == ["README.md"]
     assert "docs/guide.md" not in got.files
     assert "big" in got.skipped["big.md"] or "cap" in got.skipped["big.md"]
     assert got.skipped["bin.md"] == "binary"
@@ -101,7 +102,7 @@ def test_first_refresh_builds_and_searches(idx, repo):
     assert [h.path for h in res.hits] == ["docs/guide.md"]  # porter: installing -> install
     assert res.mode == "words" and res.hits[0].heading == "Guide"
     st = idx.stats()
-    assert st.files == 3 and st.chunks >= 3 and st.fts5 and st.schema == SCHEMA_VERSION
+    assert st.files == 3 and st.chunks >= 3 and st.fts5 and st.schema == INDEX_LAYOUT
 
 
 def test_second_refresh_touches_nothing(idx, repo):
@@ -157,7 +158,7 @@ def test_only_limits_the_work_to_a_batch(idx, repo):
     _sync(idx, repo)
     (repo / "docs/guide.md").write_text(GUIDE + "\nzebra\n")
     (repo / "docs/other.md").write_text("# Other\n\nllama\n")
-    r = SC.refresh(idx, repo, SC.Scope(), only=["docs/guide.md"])
+    r = SC.refresh(idx, repo, SC.Scope(), redact=lambda t: t, only=["docs/guide.md"])
     assert r.changed == ["docs/guide.md"]
     assert idx.search("llama").hits == () and idx.search("zebra").hits
 
@@ -180,7 +181,7 @@ def test_schema_bump_rebuilds_atomically(idx, repo):
         idx.stats()
     r = _sync(idx, repo)
     assert r.rebuilt and len(r.added) == 3
-    assert idx.stats().schema == SCHEMA_VERSION
+    assert idx.stats().schema == INDEX_LAYOUT
     assert not idx.path.with_name("docs.db.new").exists()
 
 
@@ -321,3 +322,10 @@ def test_a_failed_write_changes_nothing(idx, repo):
         w.drop(["README.md"])
         raise RuntimeError("boom")
     assert idx.files() == before
+
+
+def test_an_index_built_with_fts_opened_without_it_falls_back(tmp_path, repo):
+    built = DocIndex(tmp_path / "x.db")
+    _sync(built, repo)
+    res = DocIndex(tmp_path / "x.db", fts5=False).search("widget")
+    assert res.mode == "like" and "FTS5" in res.note and res.hits

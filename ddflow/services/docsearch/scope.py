@@ -123,7 +123,7 @@ def refresh(
     repo: Path | str,
     scope: Scope,
     *,
-    redact: Redact | None = None,
+    redact: Redact,
     doctype_of: Callable[[str], str] = lambda p: "",
     max_chars: int = 1500,
     overlap: int = 150,
@@ -173,11 +173,10 @@ def _one(w, root: Path, rel, old: Known | None, out: Refresh, redact, doctype, m
         out.touched.append(rel)
         return
     text: str | bytes = data
-    if redact is not None:  # the whole file, before chunking: a key block can span chunks
-        try:
-            text = redact(data.decode("utf-8"))
-        except UnicodeDecodeError:
-            pass  # the chunker reports it as not UTF-8
+    try:  # the whole file, before chunking: a key block can span chunks
+        text = redact(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        pass  # the chunker reports it as not UTF-8
     chunked = docchunk.chunk(rel, text, doctype=doctype, max_chars=max_chars, overlap=overlap)
     if chunked.skipped:
         out.skipped[rel] = chunked.skipped
