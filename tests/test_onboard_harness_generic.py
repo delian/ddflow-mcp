@@ -114,3 +114,32 @@ def test_a_deny_key_without_an_approval_file_is_a_descriptor_error():
     )
     with pytest.raises(HR.DescriptorError, match="deny_key"):
         HR.parse(text, "claude")
+
+
+def test_an_unreadable_hook_file_is_unknown_not_todo(repo):
+    _registered(repo)
+    (repo / ".claude/settings.json").write_text("{not json")
+    s = _steps(A.onboard(repo, stage="harness", accept=["claude"]), "claude")
+    assert s["hooks"]["status"] == "unknown"
+
+
+def test_a_hook_style_with_no_writer_is_unknown_not_n_a(repo):
+    ids = [h.id for h in HR.load() if h.hooks and h.hooks.style not in ("none", "")]
+    from ddflow.services import hookwriters as HW
+
+    stuck = [i for i in ids if HW.unsupported(HR.get(i)) and HR.get(i).hooks.style != "none"]
+    if not stuck:
+        return
+    s = _steps(A.onboard(repo, stage="harness", accept=[stuck[0]]), stuck[0])
+    assert s["hooks"]["status"] == "unknown"
+
+
+def test_a_malformed_toml_server_table_is_an_error_not_no_servers(repo):
+    import pytest
+
+    from ddflow.services import harness as HS
+    from ddflow.services.adopt import SHAPE_TOML
+
+    (repo / "config.toml").write_text('mcp_servers = "x"\n')
+    with pytest.raises(HS.HarnessError):
+        HS.project_servers(repo, mcp_rel="config.toml", shape=SHAPE_TOML)

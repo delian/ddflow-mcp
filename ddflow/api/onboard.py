@@ -213,9 +213,10 @@ def verify(repo: Path) -> O.Outcome:
 
 
 def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.Outcome:
-    """Onboard the named agents (default: every one this project was adopted for): register
-    the server, approve it where the agent needs that, install hooks at the best ladder
-    level the agent supports, and say which level that is. Proposes unless ``apply``."""
+    """Onboard the named agents (default: every one this project was adopted for): report
+    whether the server is registered (``ddflow adopt`` registers it), approve it where the
+    agent needs that, install hooks at the best ladder level the agent supports, and say
+    which level that is. Proposes unless ``apply``; ``apply`` fails while any step is open."""
     adopted = set(AD.adopted_agents(repo))
     want = list(accept) or [h.id for h in HR.load() if h.id in adopted]
     unknown = [w for w in want if HR.get(w) is None]

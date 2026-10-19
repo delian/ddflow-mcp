@@ -58,7 +58,9 @@ def project_servers(
             servers = tomllib.loads(path.read_text(encoding="utf-8")).get("mcp_servers", {})
         except (OSError, ValueError) as exc:
             raise HarnessError(f"{mcp_rel} could not be read ({exc}); fix it by hand") from exc
-        return dict(servers) if isinstance(servers, dict) else {}
+        if not isinstance(servers, dict):
+            raise HarnessError(f"{mcp_rel}: `mcp_servers` is not a table; fix it by hand")
+        return dict(servers)
     data = read_json(path)
     if isinstance(data, Unreadable) and data.kind == "not-object":
         raise HarnessError(f"{mcp_rel} is not a JSON object; fix it by hand")
@@ -138,8 +140,8 @@ def mcp_registered(repo: Path, h: Any) -> bool | None:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):  # TOMLDecodeError and UnicodeDecodeError are ValueErrors
             return None
-        servers = data.get("mcp_servers")
-        return isinstance(servers, dict) and "ddflow" in servers
+        servers = data.get("mcp_servers", {})
+        return "ddflow" in servers if isinstance(servers, dict) else None
     data = read_json(path)
     if isinstance(data, Unreadable):
         return None
@@ -222,13 +224,19 @@ def _hooks(repo: Path, h: Any, apply: bool) -> dict[str, str]:
         return _step("hooks", "unknown", "hooks are NOT VERIFIED in the descriptor")
     why = HW.unsupported(h)
     if why:
-        return _step("hooks", "n/a", why)
+        # "n/a" only for an agent that has no hooks; a style ddflow has no writer for is a
+        # step it cannot do, not one that does not exist.
+        return _step("hooks", "n/a" if h.hooks.style == "none" else "unknown", why)
     try:
         if apply:
             return _step("hooks", "done", "; ".join(HW.apply(repo, h, "install")))
-        missing = [s.event for s, on, _w in HW.state(repo, h) if on is not True]
+        rows = HW.state(repo, h)
     except (SettingsError, HW.Unsupported) as exc:
         return _step("hooks", "unknown", str(exc))
+    unread = [(s.event, w) for s, on, w in rows if on is None]
+    if unread:
+        return _step("hooks", "unknown", f"{h.hooks.file} cannot be read: {unread[0][1]}")
+    missing = [s.event for s, on, _w in rows if on is False]
     return _step(
         "hooks",
         "todo" if missing else "done",
