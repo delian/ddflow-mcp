@@ -44,7 +44,8 @@ def _item_here(st, ref: str, called_from: Path | None, repo: Path) -> str:
 
 def held_item(repo: Path, agent: str, where: Path | None) -> str:
     """The item this caller is working on when it stands in no item's tree: the one live
-    lease ``agent`` holds, else "" (none, or several -- then the tree decides, as before).
+    lease ``agent`` holds that has a branch to test (a claim without a worktree has none),
+    else "" (none, or several -- then the tree decides, as before).
     A caller standing in a tree that is an item's own keeps that tree's HEAD."""
     if not agent:
         return ""
