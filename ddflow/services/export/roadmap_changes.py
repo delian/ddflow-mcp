@@ -141,7 +141,7 @@ def hours(seconds: float) -> str:
 
 
 def eta_line(eta: dict[str, Any]) -> str:
-    """The hint as text, always labelled an estimate: ``about 3.0 h to 1.2 days``."""
+    """The range as text, ``3.0 h to 1.2 days``; the template prefixes it ``ETA (estimate):``."""
     return f"{hours(eta['low_s'])} to {hours(eta['high_s'])}"
 
 
