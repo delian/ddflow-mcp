@@ -22,7 +22,7 @@ from typing import Any
 from ...config import Config
 from ...core import progress
 from ...core.flow import effective_line
-from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, State
+from ...core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, State
 from ...core.schedule import critical_path, dep_status, inherited_deps
 from . import registry
 from . import roadmap_calc as RC
@@ -85,7 +85,7 @@ def _phase_rows(
         if p.state == DONE and n.done == n.live:
             seen["done"] += 1
             continue
-        open_rows = [_task_row(q, t, cfg) for t in under if t.state not in (ABANDONED, DONE)]
+        open_rows = [_task_row(q, t, cfg) for t in under if not t.terminal]
         seen["open"] += len(open_rows)
         own = waits_on(q.state, p, cfg)
         blocked_by = sorted({w for r in open_rows for w in r["waits_on"]} | set(own))
