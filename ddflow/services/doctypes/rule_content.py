@@ -91,6 +91,9 @@ def min_words(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
 def code_blocks(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     if part := ctx.scope(r):
         want, need = r.get("lang"), r.get("min", 1)
+        if not isinstance(need, int) or isinstance(need, bool):
+            yield ctx.finding("code_blocks", 1, "min must be an integer", r)
+            return
         have = [x for x in part.code_langs if not want or x == want]
         if len(have) < need:
             lang = f" in {want}" if want else ""

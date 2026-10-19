@@ -10,7 +10,7 @@ from .rubrics import RUBRICS
 from .validate import Ctx, rule
 
 
-@rule("rubric", "name", "min_score")
+@rule("rubric", "name", "min_score", section=False)
 def rubric(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     name, floor = r.get("name"), r.get("min_score", 1.0)
     if not isinstance(name, str) or name not in RUBRICS:

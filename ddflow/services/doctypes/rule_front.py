@@ -41,6 +41,9 @@ def schema_problems(front: Mapping[str, Any], schema: Mapping[str, Any]) -> Iter
         if key not in front:
             continue
         v = front[key]
+        if not isinstance(spec, dict):
+            yield f"{key!r}: the property schema must be a table"
+            continue
         if "type" in spec and spec["type"] not in _TYPES:
             yield f"{key!r}: the schema type {spec['type']!r} is not supported ({', '.join(_TYPES)})"
         elif "type" in spec and not _type_ok(v, spec["type"]):
@@ -51,7 +54,7 @@ def schema_problems(front: Mapping[str, Any], schema: Mapping[str, Any]) -> Iter
             yield f"{key!r} does not match /{spec['pattern']}/"
 
 
-@rule("front_matter", "schema")
+@rule("front_matter", "schema", section=False)
 def front_matter(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     schema = r.get("schema")
     if not isinstance(schema, dict):
@@ -64,7 +67,7 @@ def front_matter(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
         yield ctx.finding("front_matter", 1, f"the schema cannot be applied: {exc}", r)
 
 
-@rule("no_draft")
+@rule("no_draft", section=False)
 def no_draft(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     """A document the type calls accepted is not still a draft."""
     f = ctx.doc.front
@@ -72,7 +75,7 @@ def no_draft(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
         yield ctx.finding("no_draft", 1, "the front matter marks this document a draft", r)
 
 
-@rule("not_expired")
+@rule("not_expired", section=False)
 def not_expired(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     """``review_by`` (an ISO date) is not in the past."""
     raw = ctx.doc.front.get("review_by")
