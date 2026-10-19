@@ -163,3 +163,11 @@ def test_partial_findings_follow_the_chunk_number_when_only_some_chunks_are_sent
     gap = res.unreviewed[0]
     assert gap["chunk"] == 2 and gap["partial"] == 1, gap
     assert [(f.chunk, f.location) for f in res.findings] == [(2, "d.py:1")]
+
+
+def test_a_chunk_that_does_not_split_says_it_was_not_retried(tmp_path):
+    rev, seen = _reviewer(tmp_path, "sleep 20")
+    one = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+x = 1\n"
+    res = review(rev, one, "i", split_rounds=2)
+    assert len(seen.read_text().split()) == 1  # one hunk, one file: nothing to halve
+    assert "not retried" in res.unreviewed[0]["reason"], res.unreviewed

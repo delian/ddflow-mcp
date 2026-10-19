@@ -1332,7 +1332,8 @@ def _retry_truncated(
         return results
     # per chunk: its parts as [piece, content, error]
     parts: dict[int, list[list[str]]] = {i: [[chunks[i], *results[i]]] for i in lost}
-    for rnd in range(max(1, rounds)):
+    tried: set[int] = set()
+    for rnd in range(max(1, rounds)):  # below 1 is read as 1: a chunk lost to size gets one more go
         todo: list[tuple[int, int]] = []
         grown: dict[int, list[list[str]]] = {}
         for i in lost:
@@ -1354,6 +1355,7 @@ def _retry_truncated(
         if not todo:
             break
         parts = grown
+        tried.update(i for i, _k in todo)
         users = [render(parts[i][k][0], i + 1) for i, k in todo]
         again = _race(rev, system, users, started, **race_kw)
         for (i, k), (content, err) in zip(todo, again, strict=True):
@@ -1369,11 +1371,12 @@ def _retry_truncated(
         _c, err = failed
         # An empty or off-contract part has no error of its own: report the original failure.
         why = err or results[i][1]
-        note = (
-            f"retried in {len(mine)} part(s), {len(good)} reviewed; the rest is unreviewed"
-            if len(mine) > 1 or good
-            else "retried, still unreviewed"
-        )
+        if i not in tried:
+            note = "not retried: the chunk does not split"
+        elif len(mine) > 1 or good:
+            note = f"retried in {len(mine)} part(s), {len(good)} reviewed; the rest is unreviewed"
+        else:
+            note = "retried, still unreviewed"
         out[i] = ("", f"{why} ({note})")
         if partial is not None and good:
             partial[i] = good
