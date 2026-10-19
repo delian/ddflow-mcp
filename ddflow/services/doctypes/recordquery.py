@@ -31,6 +31,9 @@ def _bug_state(b: Any) -> str:
 
 
 def _item_owner(i: Any) -> str:
+    """The holder of a LIVE lease. No grace window: a doctype `Context` carries no `[lease]`
+    configuration yet, so a lease past its TTL reads as unowned here for the grace seconds
+    `claim` still treats it as held."""
     return i.lease.holder if i.lease and i.lease.live(time.time()) else ""
 
 
