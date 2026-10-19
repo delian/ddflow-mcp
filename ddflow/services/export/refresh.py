@@ -10,7 +10,8 @@ which also verifies and returns the documents with their body digests as evidenc
 Rules it keeps, whatever the trigger:
 
 * only SELECTED documents whose effective refresh equals the trigger, in selection order;
-* only whole-file documents (a region or append document is reported and skipped);
+* whole-file and region documents (an append document is reported and skipped); a region
+  document is spliced by name, text outside the markers is never touched;
 * a hand-edited, unmarked or otherwise foreign target is never touched: reported and skipped;
 * a failure for one document (unreadable log, template error, unsafe path) is that document's
   outcome, never an exception: a refresh must not fail the operation that triggered it;
@@ -162,7 +163,7 @@ def refresh_selected(
 def _one(root: Path, cfg: Config, q: Any, spec: ops.Spec, verify: bool) -> DocOutcome:
     o = DocOutcome(spec.doc, spec.path)
     try:
-        if spec.mode != R.WHOLE:
+        if spec.mode not in (R.WHOLE, R.REGION):
             o.action, o.message = "skipped", f"mode {spec.mode} is not refreshed automatically"
             return o
         state, detail = ops.state_of(root, cfg, q, spec)

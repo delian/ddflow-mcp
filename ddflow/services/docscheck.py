@@ -58,6 +58,7 @@ from .docscheck_md import (  # noqa: F401  (anchors_of, slugify: re-exported)
 )
 from .docscheck_types import KINDS, Finding, Report
 from .docsync import glob_regex
+from .export.region_check import mask as mask_regions
 
 #: Files larger than this are not scanned for names: a lockfile or a data dump is not a
 #: place a document's identifier lives, and reading it costs the second the check lacks.
@@ -176,6 +177,8 @@ def check_docs(  # noqa: PLR0913 -- one keyword per option of a public entry poi
         # a document nobody read is "could not tell", never a clean report
         raise OSError(f"cannot read: {', '.join(unreadable)}")
     heads = Headings(root, texts)
+    # text a template wrote is checked by `ddflow export --check`, not as prose
+    texts = {d: mask_regions(t) for d, t in texts.items()}
 
     report = Report()
     counts: Counter = Counter()

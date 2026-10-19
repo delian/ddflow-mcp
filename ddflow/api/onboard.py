@@ -12,6 +12,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..core import outcome as O
+from ..services import adopt as AD
+from ..services import harness as HS
+from ..services import harnessreg as HR
 from ..services import importer_harness as MH
 from ..services import legacy as LG
 from ..services import onboard as ON
@@ -20,9 +23,10 @@ from ..services import onboard_verify as OV
 from ..services.adopt import Refused
 from ..services.enforce import NEWER_HINT
 from ._base import _load
+from .harness import best_level
 
 #: The stages in the prompt's own order; the CLI choices and MCP enum come from here.
-STAGES = ("status", "preflight", "legacy", "memory", "test-gate", "verify")
+STAGES = ("status", "preflight", "legacy", "memory", "test-gate", "verify", "harness")
 
 
 def preflight(
@@ -208,6 +212,35 @@ def verify(repo: Path) -> O.Outcome:
     return _verification("onboard.verify", suite=True, repo=repo)
 
 
+def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.Outcome:
+    """Onboard the named agents (default: every one this project was adopted for): report
+    whether the server is registered (``ddflow adopt`` registers it), approve it where the
+    agent needs that, install hooks at the best ladder level the agent supports, and say
+    which level that is. Proposes unless ``apply``; ``apply`` fails while any step is open."""
+    adopted = set(AD.adopted_agents(repo))
+    want = list(accept) or [h.id for h in HR.load() if h.id in adopted]
+    unknown = [w for w in want if HR.get(w) is None]
+    if unknown:
+        return O.failed(
+            "onboard.harness", f"no harness {', '.join(unknown)}; known: {', '.join(HR.ids())}"
+        )
+    if not want:
+        return O.nothing("onboard.harness", "no agent adopted here: name one with --accept <id>")
+    rows, lines = [], []
+    for w in want:
+        h = HR.get(w)
+        steps = HS.onboard_steps(repo, h, apply=apply)
+        level = best_level(h)
+        rows.append({"id": w, "level": level, "steps": steps})
+        lines.append(f"{w}: best level {level}")
+        lines += [f"  {s['step']:<8} {s['status']:<8} {s['detail']}" for s in steps]
+    data = {"harnesses": rows, "text": "\n".join(lines)}
+    open_ = [s for r in rows for s in r["steps"] if s["status"] in ("todo", "refused", "unknown")]
+    if apply and open_:
+        return O.failed("onboard.harness", f"{len(open_)} step(s) not done", **data)
+    return O.ok("onboard.harness", **data)
+
+
 def onboard(
     repo: Path,
     *,
@@ -229,6 +262,8 @@ def onboard(
         return test_gate(repo)
     if stage == "verify":
         return verify(repo)
+    if stage == "harness":
+        return harness(repo, apply=apply, accept=accept)
     return O.refused(
         "onboard",
         f"unknown stage {stage!r}; one of: {', '.join(STAGES)}",
