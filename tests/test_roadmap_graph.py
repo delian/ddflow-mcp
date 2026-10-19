@@ -85,3 +85,9 @@ def test_an_edge_into_a_cycle_is_not_dropped_by_a_path_through_itself():
     deps = {"b": ["i"], "i": ["a", "b"]}
     edges = RG.reduce_edges(["a", "b", "i"], lambda i: deps.get(i, []))
     assert ("a", "i") in edges and ("i", "b") in edges and ("b", "i") in edges
+
+
+def test_a_phase_in_a_cycle_keeps_all_its_edges_whatever_reaches_what():
+    deps = {"a": [], "b": ["i", "a"], "i": ["a", "b"]}
+    edges = RG.reduce_edges(["a", "b", "i"], lambda x: deps[x])
+    assert sorted(edges) == [("a", "b"), ("a", "i"), ("b", "i"), ("i", "b")]

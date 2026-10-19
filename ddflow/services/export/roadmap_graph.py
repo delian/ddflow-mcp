@@ -13,7 +13,8 @@ def reduce_edges(
     ids: Iterable[str], before: Callable[[str], Iterable[str]]
 ) -> list[tuple[str, str]]:
     """``(prerequisite, dependent)`` pairs among ``ids`` with every edge a longer path already
-    implies removed. Phases that wait on each other (a cycle) cannot make one another's edge redundant."""
+    implies removed. A phase that waits on itself through a cycle keeps every edge it has: with a cycle there
+    is no order in which one path can be called the longer."""
     members = list(ids)
     inset = set(members)
     pre = {i: {d for d in before(i) if d in inset and d != i} for i in members}
@@ -30,11 +31,13 @@ def reduce_edges(
                 todo.extend(pre[n])
         return False
 
+    cyclic = {n for n in members if any(reaches(d, n, "") for d in pre[n])}  # waits on itself
+
     return [
         (d, i)
         for i in members
         for d in sorted(pre[i])
-        if not any(reaches(o, d, i) and not reaches(d, o, i) for o in pre[i] if o != d)
+        if d in cyclic or i in cyclic or not any(reaches(o, d, i) for o in pre[i] if o != d)
     ]
 
 
