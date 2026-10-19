@@ -56,7 +56,7 @@ def lines(d: dict[str, Any]) -> list[str]:
 
 
 #: The lines (0-based) that hold ids: never cut, a cut id names nothing or the wrong item.
-_WHOLE = (0, 1, 5, 6)
+_WHOLE = (0, 1, 2, 5, 6)
 
 
 def render(d: dict[str, Any], chars: int) -> str:
