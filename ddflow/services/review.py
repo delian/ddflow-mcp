@@ -27,6 +27,7 @@ review did not happen, whatever the token count says.
 
 from __future__ import annotations
 
+import dataclasses
 import http.client
 import json
 import os
@@ -800,7 +801,9 @@ def _chat_command(
     except P.TimeoutExpired:
         _abort(p)
         p.communicate()
-        return "", _tool_moved(state_before, tree) or f"command timed out after {timeout_s:.0f}s"
+        return "", _tool_moved(state_before, tree) or (
+            f"{DID_NOT_CONVERGE} command timed out after {timeout_s:.0f}s"
+        )
     except OSError as exc:
         _abort(p)
         return "", _tool_moved(state_before, tree) or f"could not execute: {exc}"
@@ -1108,6 +1111,7 @@ def _absorb_chunk(
     err: str,
     all_raw: list[str],
     files: list[str] | None = None,
+    partial: list[str] | None = None,
 ) -> list[Finding] | None:
     """Fold one chunk's reply into the result. Returns its findings, or None if it did
     not produce a usable review -- recorded in `res.unreviewed` with its files.
@@ -1124,6 +1128,17 @@ def _absorb_chunk(
 
     if err:
         lost(err)
+        # The parts of a chunk that did come back: their findings are real, the chunk is
+        # still unreviewed (and says so), so nothing is claimed that was not looked at.
+        for part in partial or ():
+            found, _ok = parse(part)
+            for f in found:
+                f.chunk = index
+                f.digest = finding_digest(f.severity, f.location, f.title, f.detail)
+            res.findings.extend(found)
+            all_raw.append(part)
+        if partial:
+            res.unreviewed[-1]["partial"] = len(partial)
         return None
     if not content:
         res.chunks_off_contract += 1
@@ -1209,11 +1224,24 @@ def _race(
         remaining = rev.total_budget_s - (time.time() - started)
         if remaining <= 0:
             return "", f"total budget {rev.total_budget_s}s exhausted before it started"
+        bound = min(rev.timeout_s, remaining)
         _running.cancel = tokens[(i, c)]
+        # The bound is enforced by a hard cancel, not by the socket's read timeout alone: that
+        # one is renewed by every byte a loaded server trickles, so a request could outlive the
+        # bound it stated (bug B-review-chunk-overran-bound: 332 s past 1800 s).
+        fired = threading.Event()
+        # one second past the bound: the read timeout gets the first word (and the better message)
+        timer = threading.Timer(bound + 1.0, lambda: (fired.set(), tokens[(i, c)].cancel()))
+        timer.daemon = True
+        timer.start()
         try:
-            return _chat(rev, system, users[i], min(rev.timeout_s, remaining), tree)
+            got = _chat(rev, system, users[i], bound, tree)
         finally:
+            timer.cancel()
             _running.cancel = None
+        if fired.is_set() and (got[1] or not got[0]):
+            return "", _no_answer_in_time(bound) + " Cancelled at the wall-clock bound."
+        return got
 
     order = [(i, c) for c in range(hedge) for i in range(n)]
     with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool:
@@ -1250,6 +1278,25 @@ def _race(
     return [settled[i] for i in range(n)]
 
 
+def _retryable(err: str) -> bool:
+    """A chunk lost to its own size: out of tokens, or no answer within the bound. Smaller
+    pieces can fix either; an unreachable endpoint or a bad key they cannot."""
+    return err.startswith((TRUNCATED, DID_NOT_CONVERGE))
+
+
+def _halves(piece: str) -> list[str]:
+    """``piece`` in two (by file, then by hunk, as `split_diff` always does), or [] when it
+    does not split into parts that together carry every file header: halves missing a file
+    would let the chunk count as reviewed without it (split_diff no longer drops a hunkless
+    section, B779270c994; this stays as the invariant check, not as a workaround). No header at
+    all is not "every header kept": there is nothing to check the halves against (roborev)."""
+    pieces = split_diff(piece, max(1, (len(piece) + 1) // 2))
+    headers = unidiff.headers(piece)
+    if len(pieces) < 2 or not headers or not all(any(h in p for p in pieces) for h in headers):
+        return []
+    return pieces
+
+
 def _retry_truncated(
     rev: Reviewer,
     system: str,
@@ -1257,47 +1304,74 @@ def _retry_truncated(
     results: list[tuple[str, str]],
     render,
     started: float,
+    *,
+    rounds: int = 1,
+    partial: dict[int, list[str]] | None = None,
     **race_kw: Any,
 ) -> list[tuple[str, str]]:
-    """Give a chunk that ran out of budget on EVERY copy one more round.
+    """Give a chunk that ran out of budget, or of time, on EVERY copy another go in halves.
 
     A reasoning model's thinking length is random per call and grows with the input,
-    so a chunk lost to `TRUNCATED` is retried once: in halves when it splits (by file,
-    then by hunk, as `split_diff` always does), whole when it does not. The chunk counts
-    as reviewed only if every part comes back on contract; the parts' replies are
-    joined into the chunk's one reply, so chunk counts and reports are unchanged. One
-    round only, inside `total_budget_s` -- this is a second draw, not a loop.
+    so a chunk lost to `TRUNCATED` or `DID NOT CONVERGE` is retried: in halves when it
+    splits (by file, then by hunk, as `split_diff` always does), whole -- once, and only
+    for a truncation, whose length is a fresh draw -- when it does not. A half that is lost
+    again is halved in the next of at most ``rounds`` rounds, all inside `total_budget_s`.
+    The chunk counts as reviewed only if every part comes back on contract; the parts'
+    replies are joined into the chunk's one reply, so chunk counts and reports are
+    unchanged. A chunk some parts of which never came back is unreviewed with the reason
+    and how many parts did; the replies of the parts that did are put in ``partial[i]`` so
+    their findings are kept (bug B587e607ad9: a ~4.5k-char chunk looped for 1800 s twice).
     """
-    lost = [i for i, (_c, err) in enumerate(results) if err.startswith(TRUNCATED)]
+    lost = [i for i, (_c, err) in enumerate(results) if _retryable(err)]
     if not lost:
         return results
-    parts: list[tuple[int, str]] = []
-    for i in lost:
-        pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2))
-        # Halves missing a file would let the chunk count as reviewed without it, so a
-        # chunk whose halves do not carry every file header is retried whole. split_diff
-        # no longer drops a hunkless section (B779270c994); this stays as the invariant
-        # check, not as a workaround.
-        headers = unidiff.headers(chunks[i])
-        # No header at all is not "every header kept": without one there is nothing to
-        # check the halves against, so the chunk goes again whole (roborev).
-        if not pieces or not headers or not all(any(h in p for p in pieces) for h in headers):
-            pieces = [chunks[i]]
-        parts += [(i, piece) for piece in pieces]
-    # `render` is the renderer every first copy already went through.
-    users = [render(piece, i + 1) for i, piece in parts]
-    again = _race(rev, system, users, started, **race_kw)
+    # per chunk: its parts as [piece, content, error]
+    parts: dict[int, list[list[str]]] = {i: [[chunks[i], *results[i]]] for i in lost}
+    for rnd in range(max(1, rounds)):
+        todo: list[tuple[int, int]] = []
+        grown: dict[int, list[list[str]]] = {}
+        for i in lost:
+            cur: list[list[str]] = []
+            for piece, content, err in parts[i]:
+                if not _retryable(err):
+                    cur.append([piece, content, err])
+                    continue
+                pieces = _halves(piece) or (
+                    [piece] if rnd == 0 and err.startswith(TRUNCATED) else []
+                )
+                if not pieces:
+                    cur.append([piece, content, err])
+                    continue
+                for sub in pieces:
+                    todo.append((i, len(cur)))
+                    cur.append([sub, "", err])
+            grown[i] = cur
+        if not todo:
+            break
+        parts = grown
+        users = [render(parts[i][k][0], i + 1) for i, k in todo]
+        again = _race(rev, system, users, started, **race_kw)
+        for (i, k), (content, err) in zip(todo, again, strict=True):
+            parts[i][k][1:] = [content, err]
     out = list(results)
     for i in lost:
-        mine = [again[k] for k, (j, _p) in enumerate(parts) if j == i]
-        failed = next(((c, e) for c, e in mine if e or not c or not parse(c)[1]), None)
+        mine = parts[i]
+        good = [c for _p, c, e in mine if not e and c and parse(c)[1]]
+        failed = next(((c, e) for _p, c, e in mine if e or not c or not parse(c)[1]), None)
         if failed is None:
-            out[i] = ("\n\n".join(c for c, _e in mine), "")
+            out[i] = ("\n\n".join(good), "")
             continue
-        note = f"retried once in {len(mine)} part(s), still unreviewed"
         _c, err = failed
-        # An empty or off-contract part has no error of its own: report the truncation.
-        out[i] = ("", f"{err} ({note})" if err else f"{results[i][1]} ({note})")
+        # An empty or off-contract part has no error of its own: report the original failure.
+        why = err or results[i][1]
+        note = (
+            f"retried in {len(mine)} part(s), {len(good)} reviewed; the rest is unreviewed"
+            if len(mine) > 1 or good
+            else "retried, still unreviewed"
+        )
+        out[i] = ("", f"{why} ({note})")
+        if partial is not None and good:
+            partial[i] = good
     return out
 
 
@@ -1310,6 +1384,7 @@ class _Progress:
 
     def __init__(self, files, started, timeout_s, on_progress=None, on_tick=None) -> None:
         self.files, self.started, self.timeout_s = files, started, timeout_s
+        self.round_started = started
         self.on_progress, self.on_tick = on_progress, on_tick
 
     def _say(self, line: str) -> None:
@@ -1336,8 +1411,8 @@ class _Progress:
         self._say(
             f"  ... waiting on {len(waiting)} of {len(self.files)} chunk(s){how} "
             f"({', '.join(str(i + 1) for i in waiting)}), "
-            f"{time.time() - self.started:.0f}s elapsed; one request may take up to "
-            f"{self.timeout_s}s"
+            f"{time.time() - self.started:.0f}s elapsed, {time.time() - self.round_started:.0f}s "
+            f"in this round; each request is cut at {self.timeout_s}s"
         )
 
 
@@ -1450,6 +1525,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     tick_s: float = 60,
     on_chunk: Callable[[int, str], None] | None = None,
     manifest: str = "",
+    chunk_max_tokens: int = 0,
+    split_rounds: int = 1,
 ) -> ReviewResult:
     """Run one reviewer over one diff. Never raises; encodes everything in the status.
 
@@ -1465,7 +1542,12 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     ``only`` names the chunks (1-based, as a full run numbers them) to send; the rest
     are neither sent nor counted as lost -- `merge_rerun` folds such a run into the
     record of the full one.
+    ``chunk_max_tokens`` (> 0) caps the tokens one chunk's request may spend below the
+    reviewer's own ``max_tokens``; ``split_rounds`` is how many times a chunk lost to size
+    (out of tokens or time) is halved and retried (``_retry_truncated``).
     """
+    if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
+        rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
     started = time.time()
 
@@ -1542,7 +1624,9 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     )
     # The retry races PARTS of the lost chunks, so its indices are not chunk numbers:
     # its ticks name the chunks being retried instead (critic).
-    retried = [wanted[k] - 1 for k, (_c, err) in enumerate(first) if err.startswith(TRUNCATED)]
+    retried = [wanted[k] - 1 for k, (_c, err) in enumerate(first) if _retryable(err)]
+    progress.round_started = time.time()
+    partial: dict[int, list[str]] = {}
     results = _retry_truncated(
         rev,
         system,
@@ -1553,6 +1637,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         on_tick=lambda _parts: progress.tick(retried, " on retry"),
         tree=tree,
         tick_s=tick_s,
+        rounds=split_rounds,
+        partial=partial,
     )
     for k, (before, after) in enumerate(zip(first, results, strict=True)):
         if before != after:
@@ -1563,7 +1649,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
     # transcript and the reported failures do not depend on which copy was quick.
     for n, (content, err) in zip(wanted, results, strict=True):
-        _absorb_chunk(res, n, content, err, all_raw, files[n - 1])
+        _absorb_chunk(res, n, content, err, all_raw, files[n - 1], partial.get(wanted.index(n)))
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started
     _settle(res)

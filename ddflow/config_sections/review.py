@@ -53,3 +53,11 @@ class ReviewConfig:
         True,
         doc="Whether the files `.ddflow/pins.toml` owns (README regions, golden snapshots, the setup transcript: regenerated, never read) are left out of review chunks as well as [review].exclude_globs. Default true; false sends them.",
     )
+    chunk_max_tokens: int = knob(
+        0,
+        doc="A cap on the tokens ONE review chunk's request may spend, below the reviewer's own `max_tokens` (default 0 = the reviewer's own). A reasoning model sampled cold can loop until its whole budget is gone (lesson Lf3feebf5d3); a chunk that does so is halved and retried (`[review].split_rounds`), so a lower cap finds out sooner. It never raises a reviewer's `max_tokens`.",
+    )
+    split_rounds: int = knob(
+        2,
+        doc="How many times a review chunk that never came back -- out of tokens (`TRUNCATED`) or out of time (`DID NOT CONVERGE`, a request cut at the reviewer's `timeout_s`) on every copy -- is split in halves and sent again (default 2; 1 = once; each half that is lost again is halved in the next round; all inside the reviewer's `total_budget_s`). A chunk some halves of which still never came back is recorded as unreviewed with how many parts were, and the findings of the parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer in 1800 s twice).",
+    )

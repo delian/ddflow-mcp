@@ -1964,6 +1964,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             only=only,
             on_chunk=keep.add if item else None,
             manifest=RM.for_review(diff, skipped, cfg),
+            chunk_max_tokens=cfg.review.chunk_max_tokens,
+            split_rounds=cfg.review.split_rounds,
         )
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
