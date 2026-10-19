@@ -280,7 +280,9 @@ def test_findings_that_cannot_be_read_back_are_not_no_findings(repo, tmp_path, m
     assert "cannot be read back" in FR.unresolved_review_failure(it, "critic", confirmed_only=True)
 
 
-def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(pr_repo):
+def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(
+    pr_repo,  # noqa: F811
+):
     """The PR-settle path (`pr sync`) judged completion without the failed-review check, so a
     gate that failed after the request opened still let the merge complete the item."""
     from test_flow import AUTHOR, _state, _work
