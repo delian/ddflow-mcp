@@ -5450,31 +5450,31 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=c842c4080975 -->
+<!-- ddflow:begin README/agents sha=dce53e105504 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
 | Gemini CLI | `gemini` | `.gemini/settings.json` | gemini | native hook |
-| codex | `codex` | `.codex/config.toml` | claude | native hook |
-| copilot | `copilot` | `.github/mcp.json` | copilot | native hook |
-| vscode | `vscode` | `.vscode/mcp.json` | claude | native hook |
-| kilo | `kilo` | `.kilo/kilo.json` | plugin | plugin |
-| cursor | `cursor` | `.cursor/mcp.json` | cursor | native hook |
-| kimi | `kimi` | `.kimi-code/mcp.json` | claude | native hook |
+| Codex CLI | `codex` | `.codex/config.toml` | claude | native hook |
+| GitHub Copilot | `copilot` | `.github/mcp.json` | copilot | native hook |
+| VS Code | `vscode` | `.vscode/mcp.json` | claude | native hook |
+| Kilo | `kilo` | `.kilo/kilo.json` | plugin | plugin |
+| Cursor | `cursor` | `.cursor/mcp.json` | cursor | native hook |
+| Kimi Code | `kimi` | `.kimi-code/mcp.json` | claude | native hook |
 | opencode | `opencode` | `opencode.json` | plugin | plugin |
-| glm | `glm` | `.zcode/config.json` | not verified | nv |
-| qwen | `qwen` | `.qwen/settings.json` | claude | native hook |
-| antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | native hook |
-| devin | `devin` | `.devin/mcp_config.json` | claude | native hook |
-| qodo | `qodo` | `mcp.json` | not verified | nv |
-| tabnine | `tabnine` | `.tabnine/agent/settings.json` | gemini | native hook |
-| aider | `aider` | none | none | instruction text |
-| cline | `cline` | none | cline | native hook |
-| windsurf | `windsurf` | none | cascade | native hook |
-| replit | `replit` | none | not verified | nv |
-| openhands | `openhands` | none | claude | native hook |
-| goose | `goose` | none | claude | native hook |
-| cody | `cody` | none | not verified | nv |
+| Z Code (GLM) | `glm` | `.zcode/config.json` | not verified | nv |
+| Qwen Code | `qwen` | `.qwen/settings.json` | claude | native hook |
+| Google Antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | native hook |
+| Devin | `devin` | `.devin/mcp_config.json` | claude | native hook |
+| Qodo | `qodo` | `mcp.json` | not verified | nv |
+| Tabnine | `tabnine` | `.tabnine/agent/settings.json` | gemini | native hook |
+| Aider | `aider` | none | none | instruction text |
+| Cline | `cline` | none | cline | native hook |
+| Windsurf | `windsurf` | none | cascade | native hook |
+| Replit Agent | `replit` | none | not verified | nv |
+| OpenHands | `openhands` | none | claude | native hook |
+| Goose | `goose` | none | claude | native hook |
+| Sourcegraph Cody | `cody` | none | not verified | nv |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->

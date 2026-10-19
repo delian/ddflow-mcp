@@ -1,6 +1,7 @@
 id = "copilot"
 rank = 3
 family = "copilot"
+title = "GitHub Copilot"
 delta = "github-copilot.md"
 
 [mcp]

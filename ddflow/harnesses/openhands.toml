@@ -1,6 +1,7 @@
 id = "openhands"
 rank = 19
 family = "openhands"
+title = "OpenHands"
 delta = "openhands.md"
 
 [mcp]

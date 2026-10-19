@@ -1,6 +1,7 @@
 id = "qwen"
 rank = 10
 family = "gemini-cli"
+title = "Qwen Code"
 delta = "qwen-code.md"
 
 [mcp]

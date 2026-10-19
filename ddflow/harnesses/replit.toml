@@ -1,6 +1,7 @@
 id = "replit"
 rank = 18
 family = "replit"
+title = "Replit Agent"
 delta = "replit.md"
 
 [mcp]

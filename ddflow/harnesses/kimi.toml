@@ -1,6 +1,7 @@
 id = "kimi"
 rank = 7
 family = "claude-code"
+title = "Kimi Code"
 delta = "kimi-code.md"
 
 [mcp]
