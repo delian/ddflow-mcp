@@ -39,10 +39,12 @@ _OPT_HEADING = re.compile(r"^( +)(-\S+) (\S.*?)((?:, -\S+ \3)+)(?=  |$)", re.MUL
 
 
 def _one_metavar(m: re.Match) -> str:
-    strings = [m.group(2)] + [part.split(" ", 1)[0] for part in m.group(4).split(", -")[1:]]
-    # split(", -") dropped the dash of every later string; put it back
-    strings = [strings[0]] + ["-" + s for s in strings[1:]]
-    return m.group(1) + ", ".join(strings) + " " + m.group(3)
+    metavar, rest, strings = m.group(3), m.group(4), [m.group(2)]
+    while rest:  # ", <string> <metavar>" repeated; the metavar is known, so it may hold ", -"
+        string = rest[2:].split(" ", 1)[0]
+        strings.append(string)
+        rest = rest[2 + len(string) + 1 + len(metavar) :]
+    return m.group(1) + ", ".join(strings) + " " + metavar
 
 
 def option_headings(text: str) -> str:
