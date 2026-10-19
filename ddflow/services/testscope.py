@@ -95,7 +95,8 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
     selection that cannot be made: no base, git cannot say what changed, no test reaches
     the change (running nothing would pass vacuously), or the command does not run
-    pytest. Each answer says why. The base is the item's, else the configured base ref,
+    pytest -- except after a ci gate whose SELECTED run passed on this tree: that run is the
+    evidence (scope "covered"), and the whole suite is never started (B9ec96cb844). Each answer says why. The base is the item's, else the configured base ref,
     else the default branch."""
     if cfg.gates.unit_tests_scope != "selected":
         return Scope("full", f'[gates].unit_tests_scope = "{cfg.gates.unit_tests_scope}"')

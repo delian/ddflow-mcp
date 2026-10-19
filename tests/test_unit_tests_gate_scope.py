@@ -39,3 +39,13 @@ def test_a_cut_test_list_in_cis_record_is_covered_by_cis_selected_run(monkeypatc
     ran = {**RAN, "selected": 5}  # five reached, one listed
     sc = _after(monkeypatch, sel, ran)
     assert sc.scope == "covered" and sc.covered_by.startswith("ci selected run "), sc
+
+
+def test_a_command_that_does_not_run_pytest_is_covered_by_cis_selected_run(monkeypatch):
+    sel = NS(full="", tests=[Selected("tests/b.py", "")], cut=[], cut_at=0)
+    monkeypatch.setattr(TSC, "select", lambda *a, **k: sel)
+    monkeypatch.setattr(TSC, "limits", lambda cfg: {})
+    monkeypatch.setattr(TSC, "run_command", lambda *a: "")  # the project does not run pytest
+    cfg = NS(gates=NS(unit_tests_max_files=10))
+    sc = TSC._after_ci(cfg, NS(bugs={}), NS(fixes=[]), "make test", Path("."), "main", 3, RAN)
+    assert sc.scope == "covered" and sc.covered_by.startswith("ci selected run "), sc

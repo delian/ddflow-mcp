@@ -8,7 +8,9 @@ pre-existing failures that every targeted run had missed). Where that whole run 
 is `unit_tests_scope`'s answer (D-gate-economy 1): once the item's ci gate has PASSED the
 whole suite on the clean commit its tree holds now, the unit_tests gate of a bug fix or a small
 task runs the selection; in every other case -- no passing ci on this tree, a larger
-task, a selection that cannot be made -- the unit_tests gate runs the whole suite itself.
+task, a selection that cannot be made -- the unit_tests gate runs the whole suite itself,
+except that a ci gate whose SELECTED run passed on this tree is the evidence: the gate is
+covered by it and never starts the whole suite (B9ec96cb844).
 
 A test is selected when, relative to the item's base:
 
