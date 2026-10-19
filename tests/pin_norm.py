@@ -6,7 +6,9 @@ release to the next. Two differences are formatting only and are normalised here
 sides of a comparison:
 
 * where a ``usage:`` line wraps (3.12 and 3.13 break the line at different places), and
-* how ``(choose from a, b)`` quotes the choices (3.12 writes ``'a', 'b'``).
+* how ``(choose from a, b)`` quotes the choices (3.12 writes ``'a', 'b'``), and
+* how an option with a short AND a long form that takes a value is headed in a help
+  listing (3.11/3.12 write ``-m MESSAGE, --message MESSAGE``, 3.13 ``-m, --message MESSAGE``).
 
 Nothing else is touched: the usage words themselves, every other line, the indentation of
 help text and the quoting of the offending VALUE (``invalid choice: 'x'``) still have to
@@ -29,11 +31,33 @@ _USAGE = re.compile(r"^usage: [^\n]*(?:\n[ \t]+\S[^\n]*)*", re.MULTILINE)
 _CHOOSE = re.compile(r"\(choose from ('[^',\n]*'(?:, '[^',\n]*')*)\)")
 
 
+#: A help-listing option heading in the pre-3.13 spelling: every option string repeats the
+#: metavar (``  -m MESSAGE, --message MESSAGE``, ``  -f [FILE ...], --file [FILE ...]``);
+#: 3.13 writes it once, after the last string (``-m, --message MESSAGE``). The metavar may
+#: hold spaces; the heading ends at the help column (two spaces) or the end of the line.
+_OPT_HEADING = re.compile(r"^( +)(-\S+) (\S.*?)((?:, -\S+ \3)+)(?=  |$)", re.MULTILINE)
+
+
+def _one_metavar(m: re.Match) -> str:
+    metavar, rest, strings = m.group(3), m.group(4), [m.group(2)]
+    while rest:  # ", <string> <metavar>" repeated; the metavar is known, so it may hold ", -"
+        string = rest[2:].split(" ", 1)[0]
+        strings.append(string)
+        rest = rest[2 + len(string) + 1 + len(metavar) :]
+    return m.group(1) + ", ".join(strings) + " " + metavar
+
+
+def option_headings(text: str) -> str:
+    """``text`` with every pre-3.13 ``-m MSG, --message MSG`` heading spelt the 3.13 way."""
+    return _OPT_HEADING.sub(_one_metavar, text)
+
+
 def argparse_stable(text: str) -> str:
     """``text`` with argparse's version-dependent formatting made uniform.
 
     The newer choice layout (``choose from a, b``) cannot tell choices ``['a', 'b']`` from
     ``['a, b']``, so a pin compared through this cannot either; the old one could."""
+    text = option_headings(text)
     text = _USAGE.sub(lambda m: " ".join(m.group(0).split()), text)
     return _CHOOSE.sub(lambda m: "(choose from " + m.group(1).replace("'", "") + ")", text)
 
