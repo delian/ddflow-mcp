@@ -146,3 +146,5 @@
 {"agent":"fleet-r-docs1","data":{"at":1792396157.3691497,"holder":"fleet-r-docs1"},"id":"e6655d3f1a121b6fd68179cd3","kind":"lease.renewed","lamport":85502,"schema":1,"subject":"B-dt-rules","ts":"2026-10-19T07:49:17.406031Z"}
 {"agent":"fleet-r-docs1","data":{"at":1792396948.3711305,"holder":"fleet-r-docs1"},"id":"e77be826097205ff5866daa6c","kind":"lease.renewed","lamport":85540,"schema":1,"subject":"B-dt-rules","ts":"2026-10-19T08:02:28.414315Z"}
 {"agent":"fleet-r-docs1","data":{"at":1792397583.5784595,"holder":"fleet-r-docs1"},"id":"ee15aeef0866ed745e9a7f679","kind":"lease.renewed","lamport":85558,"schema":1,"subject":"B-dt-rules","ts":"2026-10-19T08:13:03.615776Z"}
+{"agent":"fleet-r-docs1","data":{"at":1792398160.83268,"holder":"fleet-r-docs1"},"id":"eef01f0fe03eda9e5279f9265","kind":"lease.renewed","lamport":85601,"schema":1,"subject":"B-dt-rules","ts":"2026-10-19T08:22:40.870084Z"}
+{"agent":"fleet-r-docs1","data":{"at":1792398686.8305016,"holder":"fleet-r-docs1"},"id":"e254dc5521b9b0503df732e0f","kind":"lease.renewed","lamport":85613,"schema":1,"subject":"B-dt-rules","ts":"2026-10-19T08:31:26.873468Z"}
