@@ -766,18 +766,61 @@ def _holder_note(path: Path) -> str:
     try:
         st = os.stat(path)
         want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
-        for line in Path("/proc/locks").read_text().splitlines():
-            f = line.split()
-            # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`.
-            if any("->" in tok for tok in f[:2]):
-                continue  # a blocked waiter (the kernel prefixes it), never the holder
-            if len(f) >= _LOCK_FIELDS and f[1] == "FLOCK" and f[5] == want:
-                pid = int(f[4])
-                if pid > 0:
-                    return f" Held by {_describe_pid(pid)}."
-    except (OSError, ValueError):
+        if not Path("/proc/locks").exists():
+            return ""
+    except OSError:
         return ""
-    return ""
+    # /proc/locks is served in several chunks and is not a snapshot: under heavy flock
+    # traffic (a parallel test run) entries move between chunks and a live holder is
+    # skipped by a single read (bug Bf540195aec; ~14% of scans missed it in a
+    # reproduction). So scan again, within a small budget, before giving up.
+    deadline = time.monotonic() + _HOLDER_SCAN_S
+    scans = 0
+    while True:
+        scans += 1
+        try:
+            pid = _locks_holder(want)
+        except (OSError, ValueError):
+            return ""
+        if pid:
+            return f" Held by {_describe_pid(pid)}."
+        if scans >= _HOLDER_SCANS_MAX or time.monotonic() >= deadline:
+            if not _still_locked(path):
+                return ""  # released meanwhile: there is no holder to name
+            return (
+                f" Holder unknown (not in /proc/locks after {scans} scans in {_HOLDER_SCAN_S:g}s)."
+            )
+        time.sleep(0.01)
+
+
+def _still_locked(path: Path) -> bool:
+    """Is the flock on `path` held by someone right now? (a non-blocking probe)"""
+    try:
+        with fsio.file_lock(path, 0, poll_s=0.01):
+            return False
+    except fsio.LockTimeout:
+        return True
+    except OSError:
+        return False
+
+
+def _locks_holder(want: str) -> int:
+    """The pid holding the flock on `major:minor:inode` per one read of /proc/locks, or 0."""
+    for line in Path("/proc/locks").read_text().splitlines():
+        f = line.split()
+        # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`.
+        if any("->" in tok for tok in f[:2]):
+            continue  # a blocked waiter (the kernel prefixes it), never the holder
+        if len(f) >= _LOCK_FIELDS and f[1] == "FLOCK" and f[5] == want:
+            pid = int(f[4])
+            if pid > 0:
+                return pid
+    return 0
+
+
+#: Rescans of /proc/locks when the holder is not in the first read, and the time they get.
+_HOLDER_SCANS_MAX = 50
+_HOLDER_SCAN_S = 1.0
 
 
 #: Fields on a /proc/locks line up to and including the `major:minor:inode` column.
