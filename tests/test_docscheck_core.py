@@ -168,7 +168,9 @@ def test_a_directory_that_is_not_a_repository_cannot_answer(tmp_path):
 #: flaked at 2.03 s of CPU in the parallel run on a 192-thread box (load 60-180).
 RUNTIME_RATIO = 15.0
 RUNTIME_ATTEMPTS = 3  #: contention comes and goes: the best of a few ratios is the cost
-_REF_TEXT = "def some_function(arg_one, arg_two):  # a --flag\n    return arg_one + arg_two\n" * 160_000
+_REF_TEXT = (
+    "def some_function(arg_one, arg_two):  # a --flag\n    return arg_one + arg_two\n" * 160_000
+)
 
 
 def _cpu() -> float:
