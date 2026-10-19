@@ -1008,6 +1008,16 @@
       session.report_note_chars = 200   [default]
           Characters `ddflow report ITEM` keeps of a gate's reason, of the evidence
           text of a gate recorded by hand and of an earlier-tree note.
+      session.report_title_chars = 100   [default]
+          Characters `ddflow report ITEM` keeps of the title of each bug, task,
+          lesson, research note and decision it lists as filed. Change it for the
+          project (`ddflow config --set session.report_title_chars 140`), for this
+          machine (add --local), or over MCP with `ddflow_configure`.
+      session.report_summary_chars = 120   [default]
+          Characters `ddflow report ITEM` keeps of the summary of each bug the item
+          fixed, in its regression-test rows. Change it for the project (`ddflow
+          config --set session.report_summary_chars 200`), for this machine (add
+          --local), or over MCP with `ddflow_configure`.
       session.report_test_files = 12   [default]
           How many changed test files `ddflow report ITEM` names before it says how
           many more there were.
