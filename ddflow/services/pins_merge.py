@@ -100,10 +100,24 @@ def after_merge(repo: Path, cfg: Config) -> str:
     if not done:
         return cannot
     files = pin_files(repo, cfg)
-    paths = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths() or []
     own = tuple(f.rstrip("/") for f in files)
+
+    def is_pin(p: str) -> bool:
+        return any(p == f or p.startswith(f + "/") for f in own)
+
+    # Other DIRTY files are no reason to leave the pins behind (bugs B099544a590, Be27952a38f,
+    # Baebce1eca7): ddflow's own event shards are always dirty in the primary, and a README
+    # regeneration left there blocked the next merge. Only other STAGED changes would be
+    # swept into the rewritten commit, so only those stop the fold.
+    staged = G.run(repo, "diff", "--cached", "--name-only", "-z", z=True).paths() or []
+    changed = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths() or []
     merge = G.run(repo, "rev-parse", "-q", "--verify", "HEAD^2").ok
-    if mode == "amend" and merge and paths and all(p.startswith(own) for p in paths):
+    if (
+        mode == "amend"
+        and merge
+        and any(is_pin(p) for p in changed)
+        and all(is_pin(p) for p in staged)
+    ):
         return "; ".join(filter(None, [_fold_into_merge(repo, files, done), cannot]))
     return "; ".join(
         filter(None, [f"pins regenerated, not committed: {', '.join(done)}; commit them", cannot])
