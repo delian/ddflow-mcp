@@ -17,6 +17,13 @@ def test_existing_globs_keeps_paths_and_patterns_that_match(tmp_path):
     assert kept == ["a/x.py", "a/*.py", "a"] and dropped == ["a/nope.py", "b/**"]
 
 
+def test_an_anchored_glob_is_checked_against_the_tree_not_the_host(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "p.py").write_text("")
+    kept, dropped = existing_globs(tmp_path, ["/src/p.py", "/src/*.py", "/etc/hosts"])
+    assert kept == ["/src/p.py", "/src/*.py"] and dropped == ["/etc/hosts"]
+
+
 def _seed(repo):
     run_cli(repo, "init")
     (repo / "src").mkdir(exist_ok=True)

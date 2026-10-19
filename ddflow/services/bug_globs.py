@@ -67,10 +67,11 @@ def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
     kept: list[str] = []
     dropped: list[str] = []
     for g in globs:
+        rel = g.lstrip("/")  # `/a.md` is anchored to the repo root, not the host's
         try:
-            hit = (root / g).exists() if not any(c in g for c in "*?[") else any(root.glob(g))
+            hit = (root / rel).exists() if not any(c in rel for c in "*?[") else any(root.glob(rel))
         except (ValueError, OSError, NotImplementedError):
-            hit = False
+            hit = True  # could not check: keep it, never call an unchecked glob empty
         (kept if hit else dropped).append(g)
     return kept, dropped
 
