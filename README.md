@@ -1098,7 +1098,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 358 knobs.
+cadences, and the rest of the 360 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5269,7 +5269,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 358): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 360): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5450,14 +5450,36 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-| Agent | Reads | MCP config written by `adopt` |
-|---|---|---|
-| Claude Code | `CLAUDE.md` → driver | `.mcp.json` |
-| Gemini CLI | `AGENTS.md` | `.gemini/settings.json` |
-| Codex CLI | `AGENTS.md` | `.codex/config.toml` |
-| GitHub Copilot | `.github/copilot-instructions.md`, `AGENTS.md` | `.vscode/mcp.json` |
-| Kilo / Cline | `AGENTS.md` | `.kilo/kilo.json` |
-| CI / Make / human | — | none; the CLI is complete on its own |
+<!-- ddflow:begin README/agents sha=c842c4080975 -->
+| Agent | Id | MCP config written by `adopt` | Hook style | Best level |
+|---|---|---|---|---|
+| Claude Code | `claude` | `.mcp.json` | claude | native hook |
+| Gemini CLI | `gemini` | `.gemini/settings.json` | gemini | native hook |
+| codex | `codex` | `.codex/config.toml` | claude | native hook |
+| copilot | `copilot` | `.github/mcp.json` | copilot | native hook |
+| vscode | `vscode` | `.vscode/mcp.json` | claude | native hook |
+| kilo | `kilo` | `.kilo/kilo.json` | plugin | plugin |
+| cursor | `cursor` | `.cursor/mcp.json` | cursor | native hook |
+| kimi | `kimi` | `.kimi-code/mcp.json` | claude | native hook |
+| opencode | `opencode` | `opencode.json` | plugin | plugin |
+| glm | `glm` | `.zcode/config.json` | not verified | nv |
+| qwen | `qwen` | `.qwen/settings.json` | claude | native hook |
+| antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | native hook |
+| devin | `devin` | `.devin/mcp_config.json` | claude | native hook |
+| qodo | `qodo` | `mcp.json` | not verified | nv |
+| tabnine | `tabnine` | `.tabnine/agent/settings.json` | gemini | native hook |
+| aider | `aider` | none | none | instruction text |
+| cline | `cline` | none | cline | native hook |
+| windsurf | `windsurf` | none | cascade | native hook |
+| replit | `replit` | none | not verified | nv |
+| openhands | `openhands` | none | claude | native hook |
+| goose | `goose` | none | claude | native hook |
+| cody | `cody` | none | not verified | nv |
+
+One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
+<!-- ddflow:end README/agents -->
+
+CI, Make or a human need no row: the CLI is complete on its own.
 
 ---
 
@@ -5790,7 +5812,7 @@ declared once and persists — see
 
 ## Configuration
 
-358 knobs across 40 sections, every one documented in place and listed, with its default
+360 knobs across 40 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5857,8 +5879,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=67fbe05cc246 -->
-<details><summary>All 358 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=2bd363d2542e -->
+<details><summary>All 360 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6161,6 +6183,8 @@ long default is left to `ddflow config --explain`.
 | `ci.workers` | `"auto"` |  |
 | `ci.min_workers` | `1` |  |
 | `ci.max_workers` | `48` |  |
+| `ci.max_concurrent_suites` | `1` |  |
+| `ci.suite_wait_s` | `1800` |  |
 | `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
 | `ci.tests_scope` | `"selected"` | `selected` \| `full` |
