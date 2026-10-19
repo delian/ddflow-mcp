@@ -223,3 +223,25 @@ def test_a_three_dot_range_from_the_merge_base_is_reused():
     mb, head = "a" * 40, "b" * 40
     jobs = [{"id": 4, "status": "queued", "job_type": "range", "git_ref": f"{mb}...{head}"}]
     assert RB._reusable_job(jobs, head, mb) == 4
+
+
+def test_concurrent_callers_enqueue_one_job_for_one_sha(tmp_path, monkeypatch):
+    import threading
+
+    repo, log = _setup(tmp_path, monkeypatch)
+    exe = tmp_path / "bin" / "roborev"
+    # a stateful fake: `review` records a job file, `list` shows it, with a slow enqueue
+    exe.write_text(
+        '#!/bin/sh\necho "$@" >> "$FAKE_LOG"\nS="$FAKE_LOG.job"\ncase "$1" in\n'
+        '  review) sleep 1; echo "$2 $3" > "$S"; echo "Enqueued job 7" ;;\n'
+        '  status) ;;\n  wait) exit 0 ;;\n  show) echo ok ;;\n'
+        '  list) if [ -f "$S" ]; then H=$(git rev-parse HEAD); M=$(git merge-base main HEAD);'
+        ' echo "[{\\"id\\":7,\\"status\\":\\"done\\",\\"job_type\\":\\"range\\",\\"git_ref\\":\\"$M..$H\\"}]";'
+        ' else echo "[]"; fi ;;\nesac\n'
+    )
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(RB.run(repo, "main", 5))) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert [r.job for r in out] == [7, 7]
+    assert sum(c.startswith("review") for c in log.read_text().splitlines()) == 1

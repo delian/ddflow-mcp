@@ -21,10 +21,14 @@ drained -- it collects the same job -- or `--job N` to collect that job by id.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
+import hashlib
 import json
 import re
 import shutil
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -141,6 +145,18 @@ def _job_status(exe: str, where: Path, job: int) -> str:
     return ""
 
 
+@contextlib.contextmanager
+def _enqueue_lock(where: Path):
+    """Serialise the list-then-enqueue of concurrent callers on one machine and repo."""
+    key = hashlib.sha1(str(W.repo_root(where)).encode()).hexdigest()[:12]
+    with open(Path(tempfile.gettempdir()) / f"ddflow-roborev-enqueue-{key}.lock", "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def run(where: Path, base: str, wait_s: int) -> Result:
     exe = shutil.which("roborev")
     if not exe:
@@ -151,13 +167,14 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("unavailable", f"no merge-base of {base!r} and HEAD in {where}")
     if mb == head:
         return Result("unavailable", f"the branch has no commit ahead of {base!r}", sha=head)
-    job = _reusable_job(_list(exe, where), head, mb)
-    if job is None:
-        q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
-        if q.error is not None or q.returncode != 0:
-            why = q.error or (q.stderr or q.stdout).strip()[-200:] or f"exit {q.returncode}"
-            return Result("unavailable", f"roborev could not enqueue the range review: {why}", sha=head)
-        job = _find_job(exe, where, head, q.stdout + q.stderr)
+    with _enqueue_lock(where):  # list + enqueue is one step, or two callers both enqueue
+        job = _reusable_job(_list(exe, where), head, mb)
+        if job is None:
+            q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
+            if q.error is not None or q.returncode != 0:
+                why = q.error or (q.stderr or q.stdout).strip()[-200:] or f"exit {q.returncode}"
+                return Result("unavailable", f"roborev could not enqueue the range review: {why}", sha=head)
+            job = _find_job(exe, where, head, q.stdout + q.stderr)
     return _collect(exe, where, job, head, wait_s)
 
 
