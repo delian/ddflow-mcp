@@ -5,6 +5,25 @@
 
 Critical path: {% for s in critical_path %}`{{ s.id }}`{% if not loop.last %} -> {% endif %}{% endfor %}.
 {% endif %}
+{% if changes %}
+
+## Changed since {{ changes.since }}
+{% for label, title in (("added", "Added"), ("completed", "Completed"), ("blocked", "Blocked"), ("reprioritised", "Reprioritised")) %}
+{% set part = changes[label] %}
+{% if part["items"] %}
+
+### {{ title }}
+{% for it in part["items"] %}
+
+- `{{ it.id }}` {{ it.title | md_escape }}{% if it.priority is defined %} (priority {{ it.priority }}){% endif %}
+
+{% endfor %}
+{% if part.more %}
+{{ part.more }} more not listed.
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
 {% for lane in lanes %}
 
 ## {{ lane.label }} ({{ lane.blurb }})
@@ -23,6 +42,18 @@ Waits on {{ p.waits_on | join(", ") }}.
 {% elif p.blocked_by %}
 
 Blocked by {{ p.blocked_by | join(", ") }}.
+{% endif %}
+{% if p.eta %}
+
+ETA (estimate): {{ p.eta }}.
+{% endif %}
+{% if p.decisions %}
+
+Governed by {{ p.decisions | join(", ") }}{% if p.more_decisions %} and {{ p.more_decisions }} more{% endif %}.
+{% endif %}
+{% if p.research %}
+
+Research: {{ p.research | join(", ") }}{% if p.more_research %} and {{ p.more_research }} more{% endif %}.
 {% endif %}
 {% if p.tasks %}
 

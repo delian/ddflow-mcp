@@ -26,6 +26,7 @@ from ...core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, State
 from ...core.schedule import critical_path, dep_status, inherited_deps
 from . import registry
 from . import roadmap_calc as RC
+from . import roadmap_changes as CH
 from .frame import one_line
 from .query import ExportError, Query
 from .roadmap_graph import graph
@@ -63,6 +64,7 @@ class _Settings(NamedTuple):
     cap: int
     show_hidden: bool
     graph: int
+    eta: bool
 
 
 def _settings(cfg: Config) -> _Settings:
@@ -73,6 +75,7 @@ def _settings(cfg: Config) -> _Settings:
         int(t.get("tasks", RC.DEFAULT_TASKS)),
         bool(t.get("show_hidden", False)),
         int(t.get("graph", RC.DEFAULT_GRAPH)),
+        bool(t.get("eta", True)),
     )
 
 
@@ -176,8 +179,19 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     shown = {
         p["id"]: key for (key, _, _), lane in zip(_LANE_LABELS, split, strict=True) for p in lane
     }
+    owned = {pid: [pid, *(t.id for t in q.tasks_under(pid))] for pid in by_id}
+    linked = CH.links(q, owned)
+    etas = CH.etas(q, cfg, [i for i in ranked if shown[i] != "later"]) if st.eta else {}
+    for r in (r for lane in split for r in lane):  # the Later rows are copies: decorate these
+        r.update(linked[r["id"]])
+        r["eta"] = CH.eta_line(etas[r["id"]]) if r["id"] in etas else ""
     lanes, omitted = _lanes(split, st.cap, f.limit or 0)
+    since = CH.resolve_since(q, f.since)
     return {
+        "since": since,
+        "changes": CH.changed(
+            q, since, CH.visibility(q.state, [] if st.show_hidden else st.hide, f.phase)
+        ),
         "lanes": lanes,
         "done_phases": seen["done"],
         "hidden_phases": omitted,
@@ -189,13 +203,20 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     }
 
 
+def _header(q: Query, f: registry.Filters) -> dict[str, str]:
+    """``since=`` in the header: the point the Changed section counts from, when there is one."""
+    since = CH.resolve_since(q, f.since)
+    return {"since": since} if since else {}
+
+
 registry.register(
     registry.DocKind(
         name="roadmap",
         default_target="ROADMAP.md",
         data=_data,
         update_mode=registry.WHOLE,
-        filters=frozenset({"limit", "phase"}),
+        filters=frozenset({"limit", "phase", "since"}),
+        header=_header,
         schema_version=2,
         title="Roadmap: phases in Now / Next / Later lanes with progress",
     )
