@@ -257,9 +257,36 @@ def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(any_log):  # 
     """`State.tasks(phase)` walks the descendants, not every item; same answer, same order."""
     st = fold(any_log.read_all(), strict=False)
     for iid in [*st.items, "no-such-item"]:
-        live = [i for i in st.items.values() if i.kind == "task" and not i.removed]
+        live = [i for i in st.items.values() if i.is_work and not i.removed]
         wanted = st.descendants(iid)
         assert [i.id for i in st.tasks(iid)] == [i.id for i in live if i.id in wanted]
+
+
+def _ev(kind, subject, data, agent, lamport):
+    ev = Event(
+        kind, subject, data, agent=agent, lamport=lamport, ts=f"2026-10-19T14:30:{lamport:02d}Z"
+    )
+    return Event(**{**ev.__dict__, "id": ev.compute_id()})
+
+
+def test_tasks_below_a_phase_include_every_work_kind_in_definition_order():
+    """Regression (fleet-ci-order): `tasks()` returns WORK_KINDS (task, research, doc, job), as
+    its callers (schedule, progress, phase close) need; the equivalence reference once filtered
+    on kind == 'task' only, so adding a research item to the real log broke it."""
+    evs = [
+        _ev("phase.added", "P", {"title": "p"}, "a", 1),
+        _ev("task.added", "T1", {"title": "t1", "parent": "P"}, "a", 2),
+        _ev("task.added", "R1", {"title": "r1", "parent": "P", "kind": "research"}, "b", 2),
+        _ev("task.added", "T2", {"title": "t2", "parent": "P"}, "b", 3),
+        _ev("task.added", "R2", {"title": "r2", "parent": "P", "kind": "research"}, "a", 3),
+    ]
+    st = fold(evs, strict=False)
+    got = [i.id for i in st.tasks("P")]
+    below = st.descendants("P")
+    assert got == [i.id for i in st.items.values() if i.is_work and not i.removed and i.id in below]
+    assert {"R1", "R2"} <= set(got) and len(got) == 4
+    stale = [i.id for i in st.items.values() if i.kind == "task" and i.id in below]
+    assert stale != got  # the old reference disagrees: it was the stale side
 
 
 # -- review findings: probes ---------------------------------------------------------------
