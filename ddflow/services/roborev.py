@@ -81,7 +81,7 @@ def _unfinished_note(jobs: list, sha: str) -> str:
         )
     return (
         f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status')}, not done: "
-        f"`roborev wait {_job_id(j)}` first (`roborev show --job` of an unfinished job "
+        f"`roborev wait --job {_job_id(j)}` first (`roborev show --job` of an unfinished job "
         "says 'no review found'); the reviewer is unchecked"
     )
 

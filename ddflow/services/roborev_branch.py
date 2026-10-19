@@ -4,7 +4,7 @@
 it reviewed commit by commit and blocked with no bound. This enqueues ONE range job over
 the whole branch (`roborev review --since <merge-base>`), waits for it a configurable
 `[gates].standards_wait_s`, and says WHY when it gives nothing: a timeout names the job
-(left running; `roborev wait <id>` later) and the host, so the gate is recorded
+(left running; `roborev wait --job <id>` later) and the host, so the gate is recorded
 `unavailable` with a reason rather than silently. Exit 0 reviewed clean, 1 findings,
 2 could not run / no result in time (never a pass).
 
@@ -93,7 +93,7 @@ def run(where: Path, base: str, wait_s: int) -> Result:
         return Result("unavailable", "roborev enqueued the review but named no job", sha=head)
     if wait_s <= 0:
         return Result(
-            "unavailable", f"job {job} enqueued, not waited for: `roborev wait {job}`", job, head
+            "unavailable", f"job {job} enqueued, not waited for: `roborev wait --job {job}`", job, head
         )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
