@@ -26,7 +26,7 @@ useDefault = true
   # A placeholder so `[extend]` above is not the only table; gitleaks requires at least
   # one rule or extend block to parse, and this one can never match.
   id = "ddflow-never-matches"
-  description = "Inert. See the header: configuration lives in [allowlist]."
+  description = "Inert. See the header: configuration lives in [[allowlists]]."
   regex = '''\$\^ddflow-inert-never-matches\$'''
 
 [[allowlists]]
