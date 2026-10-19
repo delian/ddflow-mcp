@@ -8,7 +8,7 @@ machine; CLAIMED = read in vendor docs or issue titles, not probed.
 1. The falsifier ("only emit progress") holds for ONE client, Claude Code, and only for the IDLE
    timer: CONFIRMED by probe. It fails for the wall-clock limit and is unproven or false for the others.
 2. ddflow already emits progress for `ddflow_review`, `ddflow_merge`, `ddflow_upgrade`, `ddflow_pins`
-   (`wants_progress`) but NOT for `ddflow_gate_run`, `ddflow_ci`, `ddflow_verify`, `ddflow_bisect`
+   (`wants_progress`) but NOT for `ddflow_gate_run`, `ddflow_gate_verify`, `ddflow_ci`, `ddflow_verify`, `ddflow_bisect`
    (CONFIRMED in code). Claude Code's DOCUMENTED idle window for stdio is 30 minutes (CLAIMED; the probe only measured a 30 s floor
 under a 15 s setting): that is very likely the
    "30 minute background limit" of DX-gate-background-limit / Bec9936dc6b.
@@ -188,7 +188,7 @@ Wave 1 (shared engine, no client dependency)
 1. RM-runs-core: run key, run record (`.ddflow/runs/`, reuse `services/jobs.py` launch/alive/status and the
    gate started-markers; no second process manager), `ddflow run status|wait|cancel|list`, the handle schema.
    This is the engine of P-remote.runs; its HTTP route is later.
-2. RM-progress-everywhere: emit progress from every OFFLOADED tool (gate_run, ci, verify, bisect, wait),
+2. RM-progress-everywhere: emit progress from every OFFLOADED tool (gate_run, gate_verify, ci, verify, bisect, wait),
    periodic `[runs].progress_s` even with no output. Smallest fix; removes the Claude Code 30 min idle abort now.
 3. RM-run-reaper: `job end` automatic on exit (collect exit code from the wrapper, B-style), and the 112
    unended jobs report; run retention.
@@ -210,3 +210,12 @@ Wave 3b (runs BEFORE item 8 fixes the poll defaults: RM-run-tool-mcp needs RM-cl
     record matrix rows; adjust `long_poll_max_s` default.
 11. RM-run-retention-and-driver: implement driver and deltas say "start, then `ddflow_run wait_s=20`"; never
     background shell + hand-polled files.
+
+## 7. Self-assessment (D-ddflow-self-assessment-r2)
+
+Defects and gaps found, with their records (no duplicates: dupes checked at filing):
+* gate_run/gate_verify/ci/verify/bisect/wait send no progress: task RM-progress-everywhere.
+* 112 unended jobs, `job end` manual: task RM-run-reaper.
+* no run poller, handle only implicit: tasks RM-runs-core, RM-run-tool-mcp.
+* review of a `--no-worktree` item sees an empty diff; roborev kilo agent model not found: bug B9a8c95a9da.
+* unprobed clients: task RM-client-probes.
