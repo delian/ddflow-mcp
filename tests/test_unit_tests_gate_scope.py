@@ -34,18 +34,21 @@ def test_a_selector_that_now_wants_the_whole_suite_is_covered_by_cis_selected_ru
     assert sc.scope == "covered" and sc.covered_by == "ci selected run abcdef012345", sc
 
 
-def test_a_cut_test_list_in_cis_record_is_covered_by_cis_selected_run(monkeypatch):
+def test_a_cut_test_list_in_cis_record_runs_the_selection_not_the_whole_suite(monkeypatch):
     sel = NS(full="", tests=[Selected("tests/a.py", "")], cut=[], cut_at=0)
-    ran = {**RAN, "selected": 5}  # five reached, one listed
-    sc = _after(monkeypatch, sel, ran)
-    assert sc.scope == "covered" and sc.covered_by.startswith("ci selected run "), sc
+    ran = {**RAN, "selected": 5, "tests": ["tests/other.py"]}  # five reached, one listed
+    monkeypatch.setattr(TSC, "run_command", lambda cmd, paths, root: "pytest " + " ".join(paths))
+    cfg = NS(gates=NS(unit_tests_max_files=10))
+    monkeypatch.setattr(TSC, "select", lambda *a, **k: sel)
+    monkeypatch.setattr(TSC, "limits", lambda cfg: {})
+    sc = TSC._after_ci(cfg, NS(bugs={}), NS(fixes=[]), "pytest -q", Path("."), "main", 3, ran)
+    assert sc.scope == "selected" and sc.command == "pytest tests/a.py", sc
 
 
-def test_a_command_that_does_not_run_pytest_is_covered_by_cis_selected_run(monkeypatch):
+def test_a_command_that_does_not_run_pytest_keeps_its_own_command_for_the_rest(monkeypatch):
     sel = NS(full="", tests=[Selected("tests/b.py", "")], cut=[], cut_at=0)
     monkeypatch.setattr(TSC, "select", lambda *a, **k: sel)
     monkeypatch.setattr(TSC, "limits", lambda cfg: {})
     monkeypatch.setattr(TSC, "run_command", lambda *a: "")  # the project does not run pytest
-    cfg = NS(gates=NS(unit_tests_max_files=10))
-    sc = TSC._after_ci(cfg, NS(bugs={}), NS(fixes=[]), "make test", Path("."), "main", 3, RAN)
-    assert sc.scope == "covered" and sc.covered_by.startswith("ci selected run "), sc
+    sc = TSC._after_ci(NS(), NS(bugs={}), NS(fixes=[]), "make unit", Path("."), "main", 3, RAN)
+    assert sc.scope == "full" and "does not run pytest" in sc.why, sc

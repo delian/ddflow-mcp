@@ -95,8 +95,8 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
     selection that cannot be made: no base, git cannot say what changed, no test reaches
     the change (running nothing would pass vacuously), or the command does not run
-    pytest -- except after a ci gate whose SELECTED run passed on this tree: that run is the
-    evidence (scope "covered"), and the whole suite is never started (B9ec96cb844). Each answer says why. The base is the item's, else the configured base ref,
+    pytest -- except that after a ci gate whose SELECTED run passed on this tree, a cut test list
+    or a selector that wants the whole suite is covered by that run (B9ec96cb844). Each answer says why. The base is the item's, else the configured base ref,
     else the default branch."""
     if cfg.gates.unit_tests_scope != "selected":
         return Scope("full", f'[gates].unit_tests_scope = "{cfg.gates.unit_tests_scope}"')
@@ -247,12 +247,9 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
             "covered", f"{why}; the ci gate's selected run passed on this tree and is the evidence",
             changed_lines=lines, covered_by=covered,
         )  # fmt: skip
+    # A cut test list (`selected` > len(tests)) is no reason to start the whole suite: the
+    # tests it does not name run here, which is still the selection (B9ec96cb844).
     done = set(ran.get("tests") or ())
-    if int(ran.get("selected") or 0) > len(done):  # a truncated list proves nothing about the rest
-        return Scope(
-            "covered", "the ci gate's test list is cut; its selected run passed on this tree",
-            changed_lines=lines, covered_by=covered,
-        )  # fmt: skip
     done |= set(ran.get("always_tests") or ())  # the always-run guards ran as well
     rest = _not_run(sel.tests, _regression(st, it), done)
     if not rest:
@@ -261,11 +258,8 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
             changed_lines=lines, covered_by=covered,
         )  # fmt: skip
     cmd = run_command(command, [t.path for t in rest], tree)
-    if not cmd:
-        return Scope(
-            "covered", "the unit_tests command does not run pytest; ci's selected run stands",
-            changed_lines=lines, covered_by=covered,
-        )  # fmt: skip
+    if not cmd:  # tests ci did not run, and no way to run just them: the gate's own command
+        return Scope("full", "the unit_tests command does not run pytest", changed_lines=lines)
     return Scope(
         "selected", f"{len(rest)} test(s) the ci selected run {sha} did not take",
         command=cmd, tests=rest, changed_lines=lines, cut=sel.cut, cut_at=sel.cut_at,
