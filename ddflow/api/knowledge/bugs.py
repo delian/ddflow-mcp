@@ -251,33 +251,32 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. Only the parent needs an OPEN phase.
+    # globs are what makes a feature on them wait. The parent is the standing bugs phase.
     src = st.items.get(item) if item else None
     # Never the item's own phase: a fix task there would hold that phase open and block its
     # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
     parent = ""
     phase_made = ""
-    if True:
-        standing = st.items.get(cfg.bugs.phase)
-        if standing is None or standing.removed:
-            phase_made = cfg.bugs.phase
-            log.append(
-                "phase.added",
-                phase_made,
-                {
-                    "title": "Bugs",
-                    "needs": [],
-                    "globs": [],
-                    "body": "Fix tasks for bugs found outside any open phase (`bug found`).",
-                    "tags": [],
-                    "priority": DEFAULT_PRIORITY,
-                    "line": "",
-                },
-            )
-            st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
-            parent = phase_made
-        else:
-            parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
+    standing = st.items.get(cfg.bugs.phase)
+    if standing is None or standing.removed:
+        phase_made = cfg.bugs.phase
+        log.append(
+            "phase.added",
+            phase_made,
+            {
+                "title": "Bugs",
+                "needs": [],
+                "globs": [],
+                "body": "Fix tasks for bugs found outside any open phase (`bug found`).",
+                "tags": [],
+                "priority": DEFAULT_PRIORITY,
+                "line": "",
+            },
+        )
+        st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
+        parent = phase_made
+    else:
+        parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
