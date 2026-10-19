@@ -187,3 +187,39 @@ def test_require_judges_liveness_by_the_configured_grace():
     st = _removed(lease_at=time.time() - 150)  # ttl 100: lapsed by 50s
     assert "no such item" in _require(st, "T", "worktree.merged", 0).reason
     assert "alice" in _require(st, "T", "worktree.merged", 500).reason
+
+
+@pytest.fixture
+def remover(tmp_path: Path) -> Path:
+    """Bob's clone: he removed T2, and alice's live lease on it arrived by pull."""
+    return _two_clones(tmp_path, alice_claims=True)[1]
+
+
+@pytest.mark.parametrize("verb", ["merge", "complete", "heartbeat"])
+def test_the_remover_clone_is_not_told_a_remedy_it_would_refuse(remover, verb):
+    code, out, err = run_cli(remover, verb, "T2", agent="bob")
+    text = out + err
+    assert code != 0 and "alice" in text and "another clone" in text, text
+    assert "ddflow release T2" not in text and "git branch -D" not in text, text
+    assert run_cli(remover, "release", "T2", agent="bob")[0] != 0, "the premise: release refuses"
+
+
+def test_status_lists_the_stranded_item_in_both_clones(tmp_path):
+    import json
+
+    a, b = _two_clones(tmp_path, alice_claims=True)
+    for clone, agent, release in ((a, "alice", True), (b, "bob", False)):
+        _, out, _ = run_cli(clone, "--json", "status", agent=agent)
+        rows = json.loads(out)["stranded"]
+        assert [r["item"] for r in rows] == ["T2"] and rows[0]["holder"] == "alice", rows
+        assert ("ddflow release T2" in rows[0]["text"]) is release, rows
+        _, text, err = run_cli(clone, "status", agent=agent)
+        assert "Removed, lease still held" in text + err and "T2" in text + err, text
+
+
+def test_status_has_no_stranded_list_without_one(tmp_path):
+    import json
+
+    a, _b = _two_clones(tmp_path, alice_claims=False)
+    _, out, _ = run_cli(a, "--json", "status", agent="alice")
+    assert "stranded" not in json.loads(out)
