@@ -25,7 +25,7 @@ def _ids(rows: list[dict[str, Any]]) -> str:
 def lines(d: dict[str, Any]) -> list[str]:
     """The ``LINES`` lines of a collected report (`services.report.collect`)."""
     it, ld = d["item"], d["landing"]
-    sha = ld["merge_sha"][:12]
+    sha = (ld.get("merge_sha") or "")[:12]
     bugs = d["regression"]["bugs"]
     tests = "; ".join(
         f"{b['bug']}: {', '.join(b['tests']) or 'no test'} ({b['verified'] or 'unverified'})"
@@ -55,6 +55,11 @@ def lines(d: dict[str, Any]) -> list[str]:
     ]
 
 
+#: The lines (0-based) that hold ids: never cut, a cut id names nothing or the wrong item.
+_WHOLE = (0, 1, 5, 6)
+
+
 def render(d: dict[str, Any], chars: int) -> str:
-    """The brief as text: each line cut to ``chars`` ([session].report_brief_chars)."""
-    return "\n".join(_cut(line, chars) for line in lines(d)) + "\n"
+    """The brief as text: the free-text lines cut to ``chars`` ([session].report_brief_chars);
+    the lines of ids and the landing sha are kept whole."""
+    return "\n".join(t if i in _WHOLE else _cut(t, chars) for i, t in enumerate(lines(d))) + "\n"
