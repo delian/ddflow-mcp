@@ -626,6 +626,16 @@ def run(
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)
+    if twin := RUN.live_run(repo, item, gate, started_on):
+        return O.nothing(
+            "gate.run",
+            f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
+            f"{twin.at}); wait for it (`ddflow gate status {item}`) -- a second run would only "
+            f"race it for the outcome. A run on a newer commit is allowed.",
+            gate=gate,
+            outcome="",
+            id=item,
+        )
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     done = _guarded(
@@ -668,7 +678,7 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
         run["gates"],
         run["forced"],
     )
-    marker = RUN.mark_started(repo, item, gate)
+    marker = RUN.mark_started(repo, item, gate, started_on)
     try:
         with RUN.terminating():
             return _execute(log, cfg, repo, agent, it, item, gate, **run)
