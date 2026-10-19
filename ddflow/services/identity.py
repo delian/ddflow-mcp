@@ -126,8 +126,6 @@ def agent_marker(requested_agent: str = "") -> str:
     own terminal sets none of them; an agent that unsets all three is the shell edit the
     decision accepts it cannot stop.
     """
-    if _MCP_CALL.get():
-        return "the MCP surface"
     if requested_agent:
         return f"--agent {requested_agent}"
     if os.environ.get("DDFLOW_AGENT"):
@@ -135,7 +133,8 @@ def agent_marker(requested_agent: str = "") -> str:
     for var in HARNESS_MARKERS:
         if os.environ.get(var):
             return f"{var} is set (an agent harness's shell)"
-    return ""
+    # Last: the more specific marker names the agent; this is the one that cannot be unset.
+    return "the MCP surface" if _MCP_CALL.get() else ""
 
 
 def is_agent(requested_agent: str = "", via_mcp: bool = False) -> str:
