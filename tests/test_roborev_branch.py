@@ -55,7 +55,7 @@ def test_one_range_job_covers_the_whole_branch(tmp_path, monkeypatch):
     base = subprocess.run(
         ["git", "-C", str(repo), "merge-base", "main", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
-    assert calls[0] == f"review --since {base}"  # one combined job, no --branch/--local
+    assert [c for c in calls if c.startswith("review")] == [f"review --since {base}"]  # one combined job, no --branch/--local
     assert "wait --job 7" in calls
 
 
@@ -136,3 +136,67 @@ def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):
     note = RR._unfinished_note([{"id": 12, "git_ref": sha, "status": "running"}, other], sha)
     assert "`roborev wait --job 12`" in note and "job 13" not in note
     assert RR._unfinished_note([other], sha) == ""
+
+
+# --- DX-roborev-speed: queue-aware wait, dedupe by sha, re-run path ----------------------
+
+QFAKE = r"""#!/bin/sh
+echo "$@" >> "$FAKE_LOG"
+HEAD=$(git rev-parse HEAD)
+MB=$(git merge-base main HEAD)
+case "$1" in
+  review) echo "Enqueued job 9 for range" ;;
+  status) echo "Workers: 1/2 active" ;;
+  wait) [ -n "$FAKE_HANG" ] && sleep 30; exit 0 ;;
+  show) echo "Review for job 7: no issues" ;;
+  list) cat <<JSON
+[{"id": 8, "status": "queued", "job_type": "range", "git_ref": "zzzzzzzz..ffffffff"},
+ {"id": 7, "status": "${FAKE_STATE:-queued}", "job_type": "range", "git_ref": "$MB..$HEAD"},
+ {"id": 6, "status": "running", "job_type": "review", "git_ref": "eeeeeeee"},
+ {"id": 5, "status": "done", "job_type": "review", "git_ref": "dddddddd",
+  "started_at": "2026-10-19T09:00:00Z", "finished_at": "2026-10-19T09:10:00Z"}]
+JSON
+  ;;
+esac
+"""
+
+
+def _qsetup(tmp_path, monkeypatch):
+    repo, log = _setup(tmp_path, monkeypatch)
+    exe = tmp_path / "bin" / "roborev"
+    exe.write_text(QFAKE)
+    return repo, log
+
+
+def test_a_timeout_reports_the_queue_position_and_a_pending_rerun_marker(tmp_path, monkeypatch):
+    repo, _log = _qsetup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_HANG", "1")
+    r = RB.run(repo, "main", 1)
+    assert r.outcome == "unavailable" and r.job == 7 and r.pending_rerun
+    assert "position 1 of 2 queued, 1 running" in r.reason and "ETA" in r.reason
+    assert "PENDING-RERUN job 7" in r.reason and "--job 7" in r.reason
+
+
+def test_a_sha_with_a_live_or_done_job_is_not_enqueued_again(tmp_path, monkeypatch):
+    for state in ("queued", "running", "done"):
+        repo, log = _qsetup_in(tmp_path, state, monkeypatch)
+        r = RB.run(repo, "main", 5)
+        assert r.job == 7, state
+        assert not any(c.startswith("review") for c in log.read_text().splitlines()), state
+
+
+def _qsetup_in(tmp_path, state, monkeypatch):
+    d = tmp_path / state
+    d.mkdir()
+    monkeypatch.setenv("FAKE_STATE", state)
+    return _qsetup(d, monkeypatch)
+
+
+def test_a_pending_job_is_collected_by_id_without_enqueueing(tmp_path, monkeypatch):
+    repo, log = _qsetup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_STATE", "done")
+    r = RB.run_job(repo, 7, 5)
+    assert r.outcome == "clean" and r.job == 7 and not r.pending_rerun
+    assert not any(c.startswith("review") for c in log.read_text().splitlines())
+    assert RB.run_job(repo, 99, 5).outcome == "unavailable"
+    assert RB.main(["--repo", str(repo), "--base", "main", "--job", "7", "--wait-s", "5"]) == 0
