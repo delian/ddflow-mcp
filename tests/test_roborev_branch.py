@@ -55,7 +55,9 @@ def test_one_range_job_covers_the_whole_branch(tmp_path, monkeypatch):
     base = subprocess.run(
         ["git", "-C", str(repo), "merge-base", "main", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
-    assert [c for c in calls if c.startswith("review")] == [f"review --since {base}"]  # one combined job, no --branch/--local
+    assert [c for c in calls if c.startswith("review")] == [
+        f"review --since {base}"
+    ]  # one combined job, no --branch/--local
     assert "wait --job 7" in calls
 
 
@@ -211,7 +213,9 @@ def test_a_reused_done_job_with_a_fail_verdict_is_findings_not_clean(tmp_path, m
 
 def test_a_single_commit_job_of_head_is_not_the_branch_review(tmp_path, monkeypatch):
     repo, log = _setup(tmp_path, monkeypatch)
-    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
     jobs = [{"id": 3, "status": "done", "job_type": "review", "git_ref": head}]
     assert RB._reusable_job(jobs, head, "0" * 40) is None
     r = RB.run(repo, "main", 5)
@@ -234,7 +238,7 @@ def test_concurrent_callers_enqueue_one_job_for_one_sha(tmp_path, monkeypatch):
     exe.write_text(
         '#!/bin/sh\necho "$@" >> "$FAKE_LOG"\nS="$FAKE_LOG.job"\ncase "$1" in\n'
         '  review) sleep 1; echo "$2 $3" > "$S"; echo "Enqueued job 7" ;;\n'
-        '  status) ;;\n  wait) exit 0 ;;\n  show) echo ok ;;\n'
+        "  status) ;;\n  wait) exit 0 ;;\n  show) echo ok ;;\n"
         '  list) if [ -f "$S" ]; then H=$(git rev-parse HEAD); M=$(git merge-base main HEAD);'
         ' echo "[{\\"id\\":7,\\"status\\":\\"done\\",\\"job_type\\":\\"range\\",\\"git_ref\\":\\"$M..$H\\"}]";'
         ' else echo "[]"; fi ;;\nesac\n'

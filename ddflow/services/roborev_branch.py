@@ -72,7 +72,9 @@ _LIVE = ("queued", "running")
 
 
 def _list(exe: str, where: Path, limit: int = 100) -> list[dict]:
-    p = proc.capture([exe, "list", "--json", "--limit", str(limit)], cwd=where, timeout=RR._TIMEOUT_S)
+    p = proc.capture(
+        [exe, "list", "--json", "--limit", str(limit)], cwd=where, timeout=RR._TIMEOUT_S
+    )
     try:
         jobs = json.loads(p.stdout or "[]") or []
     except ValueError:
@@ -86,7 +88,10 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
     ids = []
     for j in jobs:
         ref = str(j.get("git_ref") or "")
-        if j.get("job_type", "review") not in RR._REVIEW_JOBS or j.get("status") not in (*_LIVE, "done"):
+        if j.get("job_type", "review") not in RR._REVIEW_JOBS or j.get("status") not in (
+            *_LIVE,
+            "done",
+        ):
             continue
         if not RR._covers(ref, sha) or RR._job_id(j) is None:
             continue
@@ -113,7 +118,9 @@ def queue_position(jobs: list[dict], job: int, workers: int = 1) -> str:
     me = next((j for j in jobs if RR._job_id(j) == job), None)
     if me is None or me.get("status") not in _LIVE:
         return ""
-    queued = sorted(i for j in jobs if j.get("status") == "queued" and (i := RR._job_id(j)) is not None)
+    queued = sorted(
+        i for j in jobs if j.get("status") == "queued" and (i := RR._job_id(j)) is not None
+    )
     running = sum(1 for j in jobs if j.get("status") == "running")
     durs = sorted(
         d for j in jobs if j.get("status") == "done"
@@ -148,7 +155,7 @@ def _job_status(exe: str, where: Path, job: int) -> str:
 @contextlib.contextmanager
 def _enqueue_lock(where: Path):
     """Serialise the list-then-enqueue of concurrent callers on one machine and repo."""
-    key = hashlib.sha1(str(W.repo_root(where)).encode()).hexdigest()[:12]
+    key = hashlib.sha1(str(W.repo_root(where)).encode(), usedforsecurity=False).hexdigest()[:12]
     with open(Path(tempfile.gettempdir()) / f"ddflow-roborev-enqueue-{key}.lock", "a") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
         try:
@@ -173,7 +180,9 @@ def run(where: Path, base: str, wait_s: int) -> Result:
             q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
             if q.error is not None or q.returncode != 0:
                 why = q.error or (q.stderr or q.stdout).strip()[-200:] or f"exit {q.returncode}"
-                return Result("unavailable", f"roborev could not enqueue the range review: {why}", sha=head)
+                return Result(
+                    "unavailable", f"roborev could not enqueue the range review: {why}", sha=head
+                )
             job = _find_job(exe, where, head, q.stdout + q.stderr)
     return _collect(exe, where, job, head, wait_s)
 
