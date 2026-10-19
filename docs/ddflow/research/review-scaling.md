@@ -110,8 +110,10 @@ review once there are 100 chunks.
 
 | host | role | requests | mean e2e s | mean queue s | mean prefill s | mean decode s | tokens generated per request | decode tok/s per stream | prefix hit | running now |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 10.220.230.69 | Pro, critic, roborev | 31 072 | 5.7 | 0.0004 | 0.10 | 5.5 | 480 | 86.7 | 92.5% | 0 |
-| 10.220.230.242 | Flash, rubber_duck | 9 354 | 47.7 | 0.12 | 0.26 | 47.3 | 1 154 | 24.4 | 80.5% | 127 |
+| host A (Pro: critic, roborev) | Pro, critic, roborev | 31 072 | 5.7 | 0.0004 | 0.10 | 5.5 | 480 | 86.7 | 92.5% | 0 |
+| host B (Flash: rubber_duck) | Flash, rubber_duck | 9 354 | 47.7 | 0.12 | 0.26 | 47.3 | 1 154 | 24.4 | 80.5% | 127 |
+
+The addresses of hosts A and B are in the git-ignored .ddflow/local/reviewers.toml.
 
 MEASURED (cumulative counters read 2026-10-19). Decode per stream falls from 128 tok/s
 alone to 74 tok/s at 16 concurrent (Rfa535c6747) and 24 tok/s at 127 concurrent: the
