@@ -50,7 +50,7 @@ class Ctx:
     dt: DocType
     doc: mdparse.Doc
     path: str
-    read: Read | None = None  #: text of another tracked file (None: not tracked / unreadable)
+    read: Read | None = None  #: text of a tracked file; "" for a tracked directory; None when it is not tracked
     today: date = field(default_factory=lambda: clock.now_utc().date())
     found: dict[str, mdparse.Part | None] = field(default_factory=dict)
 

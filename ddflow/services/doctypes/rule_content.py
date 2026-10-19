@@ -158,8 +158,8 @@ def links_resolve(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     for n, url in part.links:
         if _EXTERNAL.match(url):
             continue
-        base, _, frag = unquote(url).partition("#")
-        target = base.partition("?")[0]
+        base, _, frag = url.partition("#")
+        target, frag = unquote(base.partition("?")[0]), unquote(frag)
         if target.startswith("/"):  # root-relative, as the reference check reads it
             dest = posixpath.normpath(target.lstrip("/"))
         else:
@@ -171,5 +171,9 @@ def links_resolve(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
         text = ctx.doc.text if not target else ctx.read(dest)
         if text is None:
             yield ctx.finding("links_resolve", n, f"{url}: {dest} is not in the tree", r)
-        elif frag and dest.endswith(".md") and frag.lower() not in anchors_of(text):
+        elif (
+            frag
+            and dest.lower().endswith((".md", ".markdown"))
+            and frag.lower() not in anchors_of(text)
+        ):
             yield ctx.finding("links_resolve", n, f"{url}: no heading #{frag} in {dest}", r)

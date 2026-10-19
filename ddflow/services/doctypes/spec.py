@@ -255,6 +255,10 @@ def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
         "rules": _strs(src, f"{where}.rules", raw.get("rules", [])),
         "depends_on": _strs(src, f"{where}.depends_on", raw.get("depends_on", [])),
     }
+    if out["required"] and not out["heading"]:
+        raise src.err(
+            f"{where}: a required section needs a heading to be found by", "required", start
+        )
     if out["match"] == "regex":
         try:
             re.compile(out["heading"])
