@@ -237,3 +237,51 @@ def test_an_unreadable_type_makes_the_check_unavailable_not_clean(repo: Path):
     put(repo, "README.md", "# x\n")
     out = api.run_docs(repo, verb="check")
     assert "doctypes" in out.data["unavailable"] and out.data["clean"] is False
+
+
+def test_a_blank_line_inside_a_fence_does_not_end_the_block():
+    d = mdparse.parse("# A\n```python\nx = 1\n\ny = 2\n```\n~~~\n```\ntext\n~~~\n")
+    assert d.parts[0].code_langs == ["python", ""]
+
+
+def test_a_table_without_outer_pipes_is_a_table():
+    assert mdparse.parse("# A\na | b\n--- | ---\n1 | 2\n").parts[0].tables == 1
+
+
+def test_forbidden_whole_text_on_an_empty_scope_is_a_finding_not_a_crash():
+    dt = dtype('{ kind = "forbidden_whole_text", regex = "\\\\s*", section = "a" }', sec("a", "A"))
+    assert found(dt, "## A\n```\ncode\n```\n") == []
+
+
+def test_a_schema_type_the_subset_does_not_know_is_reported():
+    dt = dtype('{ kind = "front_matter", schema = { properties = { a = { type = "strin" } } } }')
+    assert "not supported" in validate(dt, "---\na: x\n---\n", "T.md")[0].detail
+    obj = dtype('{ kind = "front_matter", schema = { properties = { a = { type = "object" } } } }')
+    assert [f.ref for f in validate(obj, "---\na: x\n---\n", "T.md")] == ["front_matter"]
+
+
+def test_a_heading_regex_that_does_not_compile_is_refused_at_load():
+    with pytest.raises(spec.DocTypeError, match="not a regex"):
+        dtype("", sec("a", "Over(", match='"regex"'))
+
+
+def test_a_malformed_collection_pattern_is_refused_at_load():
+    with pytest.raises(spec.DocTypeError, match="pattern"):
+        spec.parse('[doctype]\nname = "t"\nmulti = true\npattern = "docs/{slug.md"\n')
+
+
+def test_the_lint_command_gets_the_path_quoted(repo: Path):
+    from types import SimpleNamespace
+
+    from ddflow.config import Config
+    from ddflow.services import docscheck_doctypes as DD
+
+    put(repo, "docs/Release Notes.md", "# x\n")
+    dt = spec.parse(
+        '[doctype]\nname = "t"\npath = "docs/Release Notes.md"\n'
+        '[doctype.validate]\nlint_command = "test -f {path}"\n',
+        source="shipped/t.toml",
+    )
+    check = SimpleNamespace(unavailable={})
+    assert not DD._lint(repo, Config.load(repo), dt, "docs/Release Notes.md", check)
+    assert not check.unavailable

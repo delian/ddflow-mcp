@@ -50,7 +50,7 @@ def forbidden_whole_text(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     yield from bad
     rows = ctx.prose(r) if rx else []
     m = rx.search("\n".join(t for _, t in rows)) if rx else None
-    if m:
+    if m and rows:
         line = rows[_row_at(rows, m.start())][0]
         yield ctx.finding("forbidden_whole_text", line, f"text matching /{rx.pattern}/", r)
 

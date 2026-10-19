@@ -9,6 +9,7 @@ a shipped type: a command in a project-added type stays inert until it is approv
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Iterable
 from pathlib import Path
 from string import Formatter
@@ -47,7 +48,7 @@ def types_of(repo: Path) -> list[spec.DocType]:
 
 
 def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Check) -> Iterable[Finding]:
-    line = str(dt.validate.get("lint_command", "")).strip().replace("{path}", path)
+    line = str(dt.validate.get("lint_command", "")).strip().replace("{path}", shlex.quote(path))
     key = f"lint:{dt.name}"
     if not line:
         return []
