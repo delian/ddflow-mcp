@@ -17,7 +17,6 @@ from ..docscheck_md import lines
 
 _ATX = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
-_ROW = re.compile(r"^.*\|.*$")
 _DELIM = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
 _LINK = re.compile(r"(?<!!)\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 _FENCE_RUN = re.compile(r"^\s*(`{3,}|~{3,})\s*([\w+-]*)")
@@ -143,7 +142,7 @@ def parse(text: str) -> Doc:
 
 def _read(live: list[Part], line: str, prev: str, n: int) -> None:
     item = _ITEM.match(line)
-    table = bool(_DELIM.match(line) and _ROW.match(prev))
+    table = bool("|" in line and "|" in prev and _DELIM.match(line))
     for s in live:
         s.body += ("\n" if s.body else "") + line
         s.tables += table

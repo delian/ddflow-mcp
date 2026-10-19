@@ -285,3 +285,16 @@ def test_the_lint_command_gets_the_path_quoted(repo: Path):
     check = SimpleNamespace(unavailable={})
     assert not DD._lint(repo, Config.load(repo), dt, "docs/Release Notes.md", check)
     assert not check.unavailable
+
+
+def test_a_pipe_above_a_rule_is_not_a_table():
+    assert mdparse.parse("# A\nflags `--a | --b`\n---\n").parts[0].tables == 0
+
+
+def test_a_regex_heading_is_case_sensitive_a_literal_one_is_not():
+    rx = dtype(
+        '{ kind = "required_sections" }', sec("a", "^API$", match='"regex"', required="true")
+    )
+    assert found(rx, "## API\n") == [] and found(rx, "## api\n") == [("required_sections", 1)]
+    lit = dtype('{ kind = "required_sections" }', sec("a", "API", required="true"))
+    assert found(lit, "## api\n") == []
