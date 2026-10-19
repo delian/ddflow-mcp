@@ -110,3 +110,12 @@ def test_an_eta_is_printed_as_an_estimate_only_when_the_forecast_has_a_range(mon
     )
     body = registry.render_body("roadmap", q, Filters())
     assert "ETA (estimate): 2.0 h to 3.0 days." in body
+
+
+def test_research_has_no_globs_so_it_links_by_item_only():
+    from dataclasses import fields
+
+    from ddflow.core.records import ResearchNote
+
+    assert "globs" not in {f.name for f in fields(ResearchNote)}
+    assert CH.eta_line({"low_s": 7200, "high_s": 7200 * 12}) == "2.0 h to 1.0 days"
