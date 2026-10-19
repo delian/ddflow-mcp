@@ -2621,6 +2621,74 @@
   },
   "array_schema": null
  },
+ "ddflow_batch": {
+  "command": "batch",
+  "schema": "batch@1",
+  "shape": "object",
+  "payload": [
+   "dry_run",
+   "edits",
+   "unchanged",
+   "abandoned"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "batch@1"
+    },
+    "dry_run": {},
+    "edits": {},
+    "unchanged": {},
+    "abandoned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_task_fold": {
+  "command": "task_fold",
+  "schema": "task_fold@1",
+  "shape": "object",
+  "payload": [
+   "dup",
+   "keep",
+   "repointed",
+   "dry_run",
+   "edits",
+   "unchanged",
+   "abandoned"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "task_fold@1"
+    },
+    "dup": {},
+    "keep": {},
+    "repointed": {},
+    "dry_run": {},
+    "edits": {},
+    "unchanged": {},
+    "abandoned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_sync": {
   "command": "sync",
   "schema": "sync@1",
