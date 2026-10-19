@@ -629,7 +629,7 @@ def test_folding_a_legacy_row_never_clears_a_flagged_loss(clone):
     assert _problem_lines(_doctor(clone)[1])
 
 
-def _caught_short(clone, monkeypatch, restore_on_sleep: int | None):
+def _caught_short(clone, monkeypatch, restore_on_sleep: int | None, *, during=None):
     """observe() on a shard caught half-rewritten; the file is whole again at the given
     sleep (None = never). Returns (sleeps, lost)."""
     from ddflow.infra.log import EventLog
@@ -645,6 +645,8 @@ def _caught_short(clone, monkeypatch, restore_on_sleep: int | None):
 
     def sleep(_s):
         sleeps.append(1)
+        if during is not None and (restore_on_sleep is None or len(sleeps) < restore_on_sleep):
+            during(path, rows, len(sleeps))
         if restore_on_sleep is not None and len(sleeps) == restore_on_sleep:
             path.write_text(whole)  # it settles
 
@@ -665,3 +667,22 @@ def test_a_shard_caught_half_rewritten_by_git_is_not_flagged_as_lost(clone, monk
 def test_a_shard_that_stays_short_is_still_a_loss_after_the_looks(clone, monkeypatch):
     n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=None)
     assert lost and n >= 4
+
+
+def test_a_shard_still_growing_during_the_looks_is_waited_for(clone, monkeypatch):
+    """The window is progress-aware: a writer still rewriting the file (its size changes at
+    every look) does not use up the looks, so a rewrite longer than four pauses still settles."""
+
+    def grow(path, rows, k):
+        path.write_text("".join(rows[: len(rows) // 2 + k]))  # a little more each look
+
+    n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=9, during=grow)
+    assert n > 4 and not lost  # more looks than a fixed window of four would have made
+
+
+def test_a_shard_unlinked_for_a_moment_during_the_looks_is_waited_for(clone, monkeypatch):
+    def vanish(path, rows, k):
+        path.unlink(missing_ok=True)
+
+    n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=3, during=vanish)
+    assert n == 3 and not lost
