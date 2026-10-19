@@ -10,8 +10,9 @@ own answer (`schedule.dep_status`, under the project's `[flow].stack` and
 `[schedule].unknown_dep_policy`), so a phase counts as met when it is closed, as for `next`
 (B58010c24b3). Per dependency only: what `next` judges across several (two review branches
 to stack on) is not reflected here.
-Abandoned tasks are not counted. Pure over the Query: built from the single-pass
-children index, so a log of thousands of items renders in milliseconds.
+Abandoned tasks are not counted. Over the Query: built from the single-pass
+children index, so a log of thousands of items renders in milliseconds; the Changed section
+reads the version tags from git, and the estimate runs the metrics forecast.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from ...core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, State
 from ...core.schedule import critical_path, dep_status, inherited_deps
 from . import registry
 from . import roadmap_calc as RC
+from . import roadmap_changes as CH
 from .frame import one_line
 from .query import ExportError, Query
 from .roadmap_graph import graph
@@ -63,6 +65,7 @@ class _Settings(NamedTuple):
     cap: int
     show_hidden: bool
     graph: int
+    eta: bool
 
 
 def _settings(cfg: Config) -> _Settings:
@@ -73,6 +76,7 @@ def _settings(cfg: Config) -> _Settings:
         int(t.get("tasks", RC.DEFAULT_TASKS)),
         bool(t.get("show_hidden", False)),
         int(t.get("graph", RC.DEFAULT_GRAPH)),
+        bool(t.get("eta", True)),
     )
 
 
@@ -153,6 +157,18 @@ def _lanes(split: tuple[list, list, list], cap: int, cut: int) -> tuple[list[dic
     return lanes, omitted
 
 
+def _mark_critical(q: Query, phase: str, by_id: dict[str, dict], ranked: list[str]) -> list[str]:
+    """Rank each phase row, flag the ones on the critical path, and return the listed chain."""
+    listed = set(by_id) | {t["id"] for r in by_id.values() for t in r["all_tasks"]}
+    chain = [i for i in critical_path(q.state, phase) if i in listed]
+    path = set(chain)
+    for rank, pid in enumerate(ranked):
+        r = by_id[pid]
+        r["rank"] = rank
+        r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
+    return chain
+
+
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
         raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
@@ -164,20 +180,20 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
     before = _phase_before(q, cfg, set(by_id))
     ranked = RC.order(by_id, before, key)
-    listed = set(by_id) | {t["id"] for r in rows for t in r["all_tasks"]}
-    chain = [i for i in critical_path(q.state, f.phase) if i in listed]
-    path = set(chain)
-    for rank, pid in enumerate(ranked):
-        r = by_id[pid]
-        r["rank"] = rank
-        r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
+    chain = _mark_critical(q, f.phase, by_id, ranked)
     phases = [by_id[i] for i in ranked]
     split = RC.split_lanes(phases, st.next_n)
     shown = {
         p["id"]: key for (key, _, _), lane in zip(_LANE_LABELS, split, strict=True) for p in lane
     }
     lanes, omitted = _lanes(split, st.cap, f.limit or 0)
+    since, changes = CH.annotate(
+        q, cfg, split, ranked, eta=st.eta, hide=[] if st.show_hidden else st.hide,
+        since=f.since, phase=f.phase,
+    )  # fmt: skip
     return {
+        "since": since,
+        "changes": changes,
         "lanes": lanes,
         "done_phases": seen["done"],
         "hidden_phases": omitted,
@@ -189,13 +205,20 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     }
 
 
+def _header(q: Query, f: registry.Filters) -> dict[str, str]:
+    """``since=`` in the header: the point the Changed section counts from, when there is one."""
+    since = CH.resolve_since(q, f.since)
+    return {"since": since} if since else {}
+
+
 registry.register(
     registry.DocKind(
         name="roadmap",
         default_target="ROADMAP.md",
         data=_data,
         update_mode=registry.WHOLE,
-        filters=frozenset({"limit", "phase"}),
+        filters=frozenset({"limit", "phase", "since"}),
+        header=_header,
         schema_version=2,
         title="Roadmap: phases in Now / Next / Later lanes with progress",
     )
