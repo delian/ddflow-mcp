@@ -562,6 +562,7 @@ class Config:
         out.pop("file_format", None)
         out.pop("_fallback_notes", None)
         out.pop("_bad_values", None)
+        out.pop("root", None)
         return out
 
     def explain(self) -> list[tuple[str, Any, str, str]]:
