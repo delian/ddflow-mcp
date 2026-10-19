@@ -35,6 +35,7 @@ from ...config import Config
 from ..prompts import Template
 from . import frame as F
 from . import query as Q
+from . import region_check as RC
 from . import regions as RG
 from . import registry as R
 from . import safe as S
@@ -416,6 +417,13 @@ def state_of(repo: Path, cfg: Config, q: Q.Query, spec: Spec) -> tuple[str, str]
 
 def _region_edit(text: str, doc: str) -> str:
     """ok | none (no markers) | edited (digest mismatch) | broken (duplicate/unbalanced)."""
+    if "ddflow:begin" in text:  # named regions (<doc>/<name>) and the legacy dialects
+        try:
+            mine = [r for r in RC.regions(text) if r.doc == doc]
+        except RG.RegionError:
+            return "broken"
+        if mine:
+            return "edited" if any(RC.is_edited(r) for r in mine) else "ok"
     begins = list(W._region_pattern(doc, "begin").finditer(text))
     ends = list(W._region_pattern(doc, "end").finditer(text))
     if not begins and not ends:
