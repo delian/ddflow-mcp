@@ -16,17 +16,15 @@ reported as ``nv``, never as an absence (see ``harnessreg``).
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..infra.fsio import Unreadable, read_json
 from ..services import adopt as AD
 from ..services import claudehooks as CH
 from ..services import harnessreg as HR
+from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
-from ..services.mcpconfig import SHAPE_TOML, get_servers
 
 NATIVE = "native hook"
 PLUGIN = "plugin"
@@ -66,7 +64,7 @@ def levels(h: Harness) -> dict[str, str]:
     return {e: event_level(h, e) for e in HR.CANONICAL_EVENTS}
 
 
-def _best(h: Harness) -> str:
+def best_level(h: Harness) -> str:
     got = [v for v in levels(h).values() if v in LADDER]
     return min(got, key=LADDER.index) if got else NV
 
@@ -78,7 +76,7 @@ def _row(h: Harness, adopted: set[str]) -> dict[str, Any]:
         "adopted": h.id in adopted,
         "mcp": h.mcp.shape,
         "hooks": h.hooks.style if h.hooks else NV,
-        "best": _best(h),
+        "best": best_level(h),
     }
 
 
@@ -109,25 +107,6 @@ def harness_show(repo: Path, which: str) -> O.Outcome:
     if h.verified.unverified:
         lines.append("  not verified: " + ", ".join(h.verified.unverified))
     return O.ok("harness_show", id=h.id, levels=lv, features=feats, message="\n".join(lines))
-
-
-def mcp_registered(repo: Path, h: Harness) -> bool | None:
-    """Is a ``ddflow`` server in the agent's project MCP file? None when the file exists and
-    cannot be read: unknown is not absent."""
-    path = Path(repo) / h.mcp.path
-    if not path.is_file():
-        return False
-    if h.mcp.shape == SHAPE_TOML:
-        try:
-            data = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):  # TOMLDecodeError and UnicodeDecodeError are ValueErrors
-            return None
-        servers = data.get("mcp_servers")
-        return isinstance(servers, dict) and "ddflow" in servers
-    data = read_json(path)
-    if isinstance(data, Unreadable):
-        return None
-    return "ddflow" in get_servers(data, h.mcp.shape)
 
 
 def _hook_findings(repo: Path, h: Harness) -> list[dict[str, str]]:

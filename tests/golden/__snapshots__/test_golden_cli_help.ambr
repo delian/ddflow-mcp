@@ -1445,15 +1445,15 @@
 # ---
 # name: test_help[ddflow onboard]
   '''
-  usage: ddflow onboard [-h] [--apply] [--accept NAME] [{status,preflight,legacy,memory,test-gate,verify}]
+  usage: ddflow onboard [-h] [--apply] [--accept NAME] [{status,preflight,legacy,memory,test-gate,verify,harness}]
   
   positional arguments:
-    {status,preflight,legacy,memory,test-gate,verify}
+    {status,preflight,legacy,memory,test-gate,verify,harness}
                           which stage (default status: the standing drift report)
   
   options:
     -h, --help            show this help message and exit
-    --apply               act on the stage's proposal (preflight/legacy/memory)
+    --apply               act on the stage's proposal (preflight/legacy/memory/harness)
     --accept NAME         approve one named item (repeatable); without it, apply acts on everything
                           the report marked safe
   
@@ -2877,7 +2877,7 @@
                           fails)
       ci                  the CI parity gate: run the pre-push checks on the merge result
       onboard             run an onboarding stage: one report, propose by default
-                          (status|preflight|legacy|memory|test-gate|verify)
+                          (status|preflight|legacy|memory|test-gate|verify|harness)
       status              one answer to 'what is the state of this project?'
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
