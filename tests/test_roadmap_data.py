@@ -153,3 +153,20 @@ def test_asking_for_a_hidden_batch_by_name_shows_it():
     g.task("BT", "BL-batch", "x")
     d = data(g, phase="BL-batch")
     assert "BL-batch" in phases(d) and d["hidden_batches"] == 0
+
+
+def test_a_hidden_batch_stays_out_of_the_critical_path():
+    g = Log()
+    g.phase("BL-b", "internal", 5)
+    g.task("B1", "BL-b", "first")
+    g.task("B2", "BL-b", "second", needs=["B1"])
+    g.phase("P", "real", 10)
+    g.task("T", "P", "y")
+    d = data(g)
+    assert not [s for s in d["critical_path"] if s["id"].startswith("B")]
+    assert any(s["id"].startswith("B") for s in data(g, phase="BL-b")["critical_path"])
+
+
+def test_a_phase_in_flight_is_not_called_blocked():
+    p = phases(data(road_log()))["P1"]
+    assert p["counts"].get("running") and p["blocked_by"] == []
