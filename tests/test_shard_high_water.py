@@ -629,9 +629,9 @@ def test_folding_a_legacy_row_never_clears_a_flagged_loss(clone):
     assert _problem_lines(_doctor(clone)[1])
 
 
-def test_a_shard_caught_half_rewritten_by_git_is_not_flagged_as_lost(clone, monkeypatch):
-    """B-events-uncommitted-shards: a look that lands while another process rewrites the shard
-    in place sees half of it; the sticky flag then reported a loss for events still present."""
+def _caught_short(clone, monkeypatch, restore_on_sleep: int | None):
+    """observe() on a shard caught half-rewritten; the file is whole again at the given
+    sleep (None = never). Returns (sleeps, lost)."""
     from ddflow.infra.log import EventLog
     from ddflow.services import shardmarks
 
@@ -641,7 +641,27 @@ def test_a_shard_caught_half_rewritten_by_git_is_not_flagged_as_lost(clone, monk
     whole = path.read_text()
     rows = whole.splitlines(keepends=True)
     path.write_text("".join(rows[: len(rows) // 2]))  # the half-written moment
-    monkeypatch.setattr(shardmarks.time, "sleep", lambda s: path.write_text(whole))  # it settles
+    sleeps = []
+
+    def sleep(_s):
+        sleeps.append(1)
+        if restore_on_sleep is not None and len(sleeps) == restore_on_sleep:
+            path.write_text(whole)  # it settles
+
+    monkeypatch.setattr(shardmarks.time, "sleep", sleep)
     shardmarks.observe(clone, log)
-    assert not shardmarks.lost(clone, log)
+    return len(sleeps), shardmarks.lost(clone, log)
+
+
+def test_a_shard_caught_half_rewritten_by_git_is_not_flagged_as_lost(clone, monkeypatch):
+    """B-events-uncommitted-shards: a look that lands while another process rewrites the shard
+    in place sees half of it; the sticky flag then reported a loss for events still present.
+    It settles on the third look here, so a window of one or two looks would not do."""
+    n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=3)
+    assert n >= 3 and not lost
     assert not any(r.get("shrunk") for r in _marks_doc(clone)["data"].values())
+
+
+def test_a_shard_that_stays_short_is_still_a_loss_after_the_looks(clone, monkeypatch):
+    n, lost = _caught_short(clone, monkeypatch, restore_on_sleep=None)
+    assert lost and n >= 4

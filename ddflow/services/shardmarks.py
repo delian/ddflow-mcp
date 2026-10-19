@@ -199,14 +199,18 @@ def _settled(
     """``scanned``, looked at again while it reads as a shrink against ``old``: a shard being
     rewritten by another process settles within a moment; a real loss is still there."""
     seen = str(old.get("last_event_id", ""))
-    for _ in range(looks):
-        if path is None or not (scanned[0] < old["count"] or not _holds(path, seen)):
+    quiet, last = 0, scanned[2]
+    for _ in range(looks * 25):  # a hard stop for a shard that never stops changing
+        if quiet >= looks or path is None or not (scanned[0] < old["count"] or not _holds(path, seen)):
             break
         time.sleep(pause_s)
         again = _scan(path)
-        if again is None:
-            break
-        scanned = again
+        if again is None:  # unlinked for the moment git recreates it: look again
+            quiet += 1
+            continue
+        # a look at a file that is still changing (a writer mid-rewrite) does not count
+        quiet = quiet + 1 if again[2] == last else 0
+        last, scanned = again[2], again
     return scanned
 
 
