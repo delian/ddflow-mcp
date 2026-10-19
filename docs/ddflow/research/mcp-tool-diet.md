@@ -119,7 +119,7 @@ lower bound (member descriptions are cut to 60 characters; expect +10%).
 | C per-client profile only (existing tiers: core 32 / standard 81 / all 123) | 32 to 123 | 34.7 KB to 104 KB | unchanged | low, and already built |
 
 - A1 halves the list (-50.7 KB, about 12,700 tokens at 4 bytes per token, once per session and again after
-  every compaction on clients that reload tools). Union params cost: the 15 families total 105 KB of member
+  every compaction on clients that reload tools). Union params cost: the 15 families total about 96 KB (95,742 bytes) of member
   schemas folded into ~53 KB; the wasted-parameter overhead per call is the difference between a
   family's parameter count and the action's own (e.g. `task` 42 against 3 to 17 per action). Prune by sharing
   `as_agent` (122 tools carry it today; once per family is 1) and moving seldom-used flags into one
