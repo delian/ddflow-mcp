@@ -37,6 +37,52 @@ def test_a_second_run_on_the_same_commit_is_refused_naming_the_first(repo, tmp_p
         _reap(first)
 
 
+def test_a_run_on_a_newer_commit_is_allowed_while_the_first_lives(repo, tmp_path):
+    import subprocess
+    import time
+
+    from helpers import git as _git
+
+    repo, began = _setup(repo, tmp_path)
+    first = _start(repo, began)
+    second = None
+    try:
+        (repo / "b.py").write_text("b = 1\n")
+        _git(repo, "add", "b.py")
+        _git(repo, "commit", "-qm", "newer commit")
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+        second = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "ddflow",
+                "--repo",
+                str(repo),
+                "gate",
+                "run",
+                "T1",
+                "unit_tests",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            start_new_session=True,
+        )
+        markers = repo / ".ddflow" / "runs" / "T1"
+        deadline = time.monotonic() + 60
+        while (
+            len(list(markers.glob("unit_tests.running.*.json"))) < 2 and time.monotonic() < deadline
+        ):
+            time.sleep(0.2)
+        assert second.poll() is None, "refused: a newer commit is no twin"
+        assert len(list(markers.glob("unit_tests.running.*.json"))) == 2
+    finally:
+        for p in (first, second):
+            if p is not None:
+                _reap(p)
+
+
 def test_live_run_judges_commit_liveness_and_host(tmp_path):
     repo = tmp_path
     m = RUN.mark_started(repo, "T1", "ci", "tree-aaa")
