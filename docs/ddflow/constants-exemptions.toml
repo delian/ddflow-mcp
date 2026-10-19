@@ -206,3 +206,5 @@
 "ddflow/surfaces/registry.py:GROUP_DEPTH" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/surfaces/registry.py:MAX_VIA" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/services/companions.py:_MAX_BUF" = "pipe read buffer of a child process: an I/O mechanism, not a workload setting"
+"ddflow/services/export/roadmap_calc.py:DEFAULT_NEXT" = "the default of the [export.roadmap] `next` knob, which is already configurable"
+"ddflow/services/export/roadmap_calc.py:DEFAULT_TASKS" = "the default of the [export.roadmap] `tasks` knob, which is already configurable"
