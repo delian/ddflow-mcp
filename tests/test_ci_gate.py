@@ -360,7 +360,8 @@ def test_ci_run_with_no_ref_from_outside_the_items_tree_checks_the_holders_item_
     other.mkdir()
     body = json.loads(_cli_in(other, repo, agent=holder).stdout)
     assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip(), body
-    assert body["recorded"]["item"] == "T1"
+    assert body["recorded"]["item"] == "T1" and body["recorded"]["ok"], body
+    assert _ci_gate(repo)["outcome"] == "passed"
     # a caller that holds no item still gets the repository's HEAD
     body = json.loads(_cli_in(other, repo, agent="nobody").stdout)
     assert body["sha"] == _git(repo, "rev-parse", "HEAD").strip(), body
