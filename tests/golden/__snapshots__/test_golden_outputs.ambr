@@ -1018,6 +1018,12 @@
           fixed, in its regression-test rows. Change it for the project (`ddflow
           config --set session.report_summary_chars 200`), for this machine (add
           --local), or over MCP with `ddflow_configure`.
+      session.report_brief_chars = 200   [default]
+          Characters `ddflow report ITEM --brief` keeps of each free-text entry (an
+          override reason, a not-done note); ids, gate names, test names and the
+          landing sha are never cut. Change it for the project (`ddflow config --set
+          session.report_brief_chars 300`), for this machine (add --local), or over
+          MCP with `ddflow_configure`.
       session.report_test_files = 12   [default]
           How many changed test files `ddflow report ITEM` names before it says how
           many more there were.
