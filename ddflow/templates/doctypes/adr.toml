@@ -6,6 +6,11 @@ multi = true
 genre = "decision"
 contract = "point_in_time"
 
+[doctype.guidance]
+audience = "engineers who join the project later and ask why it is this way"
+tone = "plain and factual; the decision in the present tense"
+style = "One decision per record. Say the forces, the choice and what it costs; do not edit an accepted record, supersede it."
+
 [[doctype.section]]
 id = "status"
 heading = "Status"

@@ -185,6 +185,7 @@ _NOT_SECTIONS = (
     "file_format",
     "_fallback_notes",
     "_bad_values",
+    "root",
 )
 
 
@@ -246,6 +247,9 @@ class Config:
     #: The `format = N` a file layer declared (0: none did); `CONFIG_FORMAT` is what this
     #: code reads. A newer one is reported by `doctor` and refuses writes.
     file_format: int = field(default=0, repr=False)
+    #: The project root this config was loaded for (None when loaded without one): where code
+    #: that holds only a config finds the project's files, e.g. its document types.
+    root: Path | None = field(default=None, repr=False, compare=False)
 
     #: For each enum knob that fell back to its strictest value, the (index in
     #: unknown_knobs, "key = 'bad'") of each note, so a later layer's value rewrites the
@@ -264,6 +268,7 @@ class Config:
     @classmethod
     def load(cls, root: Path | None = None, *, env: dict[str, str] | None = None) -> Config:
         cfg = cls()
+        cfg.root = Path(root) if root is not None else None
         env = os.environ if env is None else env
         for sec in cfg._sections():
             for f in fields(getattr(cfg, sec)):

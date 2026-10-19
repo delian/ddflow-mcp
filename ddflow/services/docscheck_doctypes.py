@@ -14,7 +14,6 @@ from __future__ import annotations
 import shlex
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
-from string import Formatter
 from typing import Any
 
 from ..config import Config
@@ -23,27 +22,8 @@ from .docscheck import _tree
 from .docscheck_types import Finding
 from .docsync import glob_regex
 from .doctypes import spec
+from .doctypes.find import type_glob, types_of
 from .doctypes.validate import validate
-
-PROJECT_DIR = ".ddflow/doctypes"
-
-
-def type_glob(dt: spec.DocType) -> str:
-    """The glob of the documents of ``dt``: a collection's placeholders become ``*``."""
-    if not dt.multi:
-        return dt.path
-    return "".join(
-        lit + ("*" if field is not None else "")
-        for lit, field, _, _ in Formatter().parse(dt.pattern)
-    )
-
-
-def types_of(repo: Path) -> list[spec.DocType]:
-    layers = [
-        spec.read_layer("shipped", spec.SHIPPED_DIR),
-        spec.read_layer("project", repo / PROJECT_DIR),
-    ]
-    return spec.registry(layers).values_list()
 
 
 def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Any) -> Iterable[Finding]:
