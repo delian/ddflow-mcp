@@ -121,3 +121,8 @@ def test_option_headings_with_a_spaced_metavar_long_first_or_many_strings():
         "  -a, --bee, --cee A  y\n"
     )
     assert option_headings(old) == new == option_headings(new)
+
+
+def test_option_headings_with_a_metavar_that_holds_a_comma_and_dash():
+    old = "  -p X, -y, --pair X, -y  help\n"
+    assert option_headings(old) == "  -p, --pair X, -y  help\n"
