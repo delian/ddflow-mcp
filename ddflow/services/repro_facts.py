@@ -180,15 +180,34 @@ def recent_events(events: list[Any], agent: str, n: int) -> list[dict[str, str]]
 
 def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str, Any]:
     """Run pytest on ``test_id`` once and keep the head (plugins, seed) and the output tail."""
-    # `--` ends pytest's options: an id that starts with a dash is a path to look for, never
-    # an option (`--co` would "pass" without running anything, `-p mod` would import `mod`).
-    argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", "--", test_id]
     try:  # the tree the bug was seen in, which a linked worktree makes unlike the project root
         where = str(Path.cwd())
     except OSError:
         where = str(repo)
-    got = P.capture(argv, timeout=timeout_s, cwd=where)
     out: dict[str, Any] = {"id": test_id, "command": "pytest --tb=short -- " + test_id}
+    # An id is a path to look for, never an option (`--co` would "pass" without running
+    # anything, `-p mod` would import `mod`). `--` is not trusted to say so: Python 3.12.3's
+    # argparse (the GitHub runner's) lets pytest read `-- --co` as `--co`, exit 5. So the
+    # path is checked here, and a dash-led one that exists is spelled `./-x`.
+    path_part = test_id.partition("::")[0].partition("[")[0]
+    if not path_part or not (Path(where) / path_part).exists():
+        out.update(
+            exit_code=4,
+            head=[],
+            seed_lines=[],
+            tail=tail(f"ERROR: file or directory not found: {test_id}\n", nbytes),
+        )
+        return out
+    safe_id = "./" + test_id if test_id.startswith("-") else test_id
+    argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", safe_id]
+    # This may run inside an xdist worker or under a caller's PYTEST_ADDOPTS: neither
+    # belongs to the run being reproduced.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k != "PYTEST_ADDOPTS" and not k.startswith("PYTEST_XDIST_")
+    }
+    got = P.capture(argv, timeout=timeout_s, cwd=where, env=env)
     if got.error is not None:
         out["unavailable"] = f"pytest did not run to an exit status: {got.error}"
         return out
