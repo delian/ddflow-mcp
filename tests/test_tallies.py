@@ -19,6 +19,7 @@ from helpers import state as _state
 from ddflow import api
 from ddflow.config import Config
 from ddflow.core import progress as PR
+from ddflow.infra.log import EventLog
 from ddflow.services import progress_line as PL
 from ddflow.services.export import kind_roadmap, registry
 from ddflow.services.export import query as Q
@@ -97,7 +98,24 @@ def proj(repo):
     _ok(repo, "complete", "T1", "--force", "--reason", "test setup")
     _ok(repo, "complete", "T2a", "--force", "--reason", "test setup")
     _ok(repo, "abandon", "T3", "--reason", "not needed")
-    _ok(repo, "bug", "found", "--summary", "t one breaks", "--item", "T1", "--new")
+    # `bug found` files the fix task under the standing bugs phase (B1bfcaf6ebb), so the
+    # fix task counted in P1 is filed there by hand: the rule pinned is that a phase's
+    # tally includes the bug-fix tasks nested under it.
+    _ok(
+        repo, "bug", "found", "--id", "Bt", "--summary", "t one breaks", "--item", "T1", "--no-task"
+    )
+    EventLog(repo, "seed").append(
+        "task.added",
+        "fix-Bt",
+        {
+            "parent": "P1",
+            "title": "fix",
+            "fixes": ["Bt"],
+            "globs": ["fix.py"],
+            "tags": ["bugfix"],
+            "priority": Config.load(repo).schedule.bug_priority,
+        },
+    )
     return repo
 
 
