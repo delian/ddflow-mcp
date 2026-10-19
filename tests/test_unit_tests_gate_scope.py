@@ -52,3 +52,19 @@ def test_a_command_that_does_not_run_pytest_keeps_its_own_command_for_the_rest(m
     monkeypatch.setattr(TSC, "run_command", lambda *a: "")  # the project does not run pytest
     sc = TSC._after_ci(NS(), NS(bugs={}), NS(fixes=[]), "make unit", Path("."), "main", 3, RAN)
     assert sc.scope == "full" and "does not run pytest" in sc.why, sc
+
+
+def test_a_whole_suite_selector_still_runs_the_items_regression_test_ci_did_not_take(monkeypatch):
+    """The covered answer for a hub change keeps the bug's own regression test running."""
+    monkeypatch.setattr(TSC, "select", lambda *a, **k: None)
+    monkeypatch.setattr(TSC, "limits", lambda cfg: {})
+    monkeypatch.setattr(TSC, "run_command", lambda cmd, paths, root: "pytest " + " ".join(paths))
+    cfg = NS(gates=NS(unit_tests_max_files=10))
+    st = NS(bugs={"B1": NS(regression_tests=["tests/test_reg.py"])})
+    sc = TSC._after_ci(cfg, st, NS(fixes=["B1"]), "pytest -q", Path("."), "main", 3, RAN)
+    assert sc.scope == "selected" and sc.command == "pytest tests/test_reg.py", sc
+    ran = {**RAN, "tests": ["tests/a.py", "tests/test_reg.py"]}
+    assert (
+        TSC._after_ci(cfg, st, NS(fixes=["B1"]), "pytest -q", Path("."), "main", 3, ran).scope
+        == "covered"
+    )
