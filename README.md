@@ -1097,7 +1097,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 357 knobs.
+cadences, and the rest of the 358 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5048,6 +5048,12 @@ Output is deterministic: the same log gives the same bytes, with no clock in the
 | `rules` | `RULES.md` | `limit` `tag` | decisions in force by governing path, lessons by tag, the enforced workflow |
 | `changelog` | `CHANGELOG.md` | `tag` (`--version`) | Keep a Changelog 1.1: Unreleased and one section per version tag |
 
+The **roadmap** lists phases in dependency order then priority: Now is work in flight, Next
+the top `next` ready phases, Later the rest (task lists capped at `tasks`, Later as counts), each
+with percent, counts by status, what it waits on, its release line and whether it is on the
+critical path. `[export.roadmap]` takes `hide` (id prefixes or tags, default `["BL-"]`), `next`
+(3), `tasks` (8) and `show_hidden`; `--phase` names a hidden batch to show it.
+
 Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
 decisions in force, lessons and workflow settings: imported rulebooks are not exported. The
 **changelog** takes each finished item (and each fixed bug that carries a changelog line) and
@@ -5262,7 +5268,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 357): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 358): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5782,7 +5788,7 @@ declared once and persists — see
 
 ## Configuration
 
-357 knobs across 40 sections, every one documented in place and listed, with its default
+358 knobs across 40 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5849,8 +5855,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=bf70f348b518 -->
-<details><summary>All 357 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=67fbe05cc246 -->
+<details><summary>All 358 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5963,6 +5969,7 @@ long default is left to `ddflow config --explain`.
 | `session.report_note_chars` | `200` |  |
 | `session.report_title_chars` | `100` |  |
 | `session.report_summary_chars` | `120` |  |
+| `session.report_brief_chars` | `200` |  |
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
