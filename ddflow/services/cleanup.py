@@ -121,12 +121,29 @@ class _Protected:
         return "", ""
 
 
-def stranded_text(item: str, holder: str, branch: str, worktree: str = "") -> str:
+def stranded_text(
+    item: str,
+    holder: str,
+    branch: str,
+    worktree: str = "",
+    clone: str = "",
+    mine: str | None = None,
+) -> str:
     """THE sentence for a removed item whose lease is still held (B71dedb76d2): who holds
     it, which branch their work is on, and the exact way out. A lease is evidence of
-    intent and is never stolen; removal does not destroy the holder's branch."""
+    intent and is never stolen; removal does not destroy the holder's branch.
+
+    ``mine`` is THIS clone's id (None = not known). A lease taken from another clone cannot
+    be released here (`release` refuses it), so that clone's holder is told to do it
+    (fix-removed-item-residuals); the remedy is never one this clone would refuse."""
     on = f" on branch {branch}" if branch else ""
     tree = f" (worktree {worktree})" if worktree else ""
+    if clone and mine is not None and clone != mine:
+        return (
+            f"item {item} removed from the queue, lease still held by "
+            f"{holder or 'unknown'} in another clone ({clone}){on}: nothing is stranded in "
+            f"this clone; the holder, in that clone, releases it and keeps or deletes the branch"
+        )
     fix = f"`ddflow release {item}`"
     if branch:
         fix += (
@@ -139,6 +156,26 @@ def stranded_text(item: str, holder: str, branch: str, worktree: str = "") -> st
     )
 
 
+def removed_with_live_lease(
+    state: State, cfg: Config, mine: str | None, now: float | None = None
+) -> list[dict[str, str]]:
+    """Every removed item whose lease is still live, in ANY clone: `status` lists them, in the
+    clone that removed the item as well as the holder's (fix-removed-item-residuals)."""
+    now = time.time() if now is None else now
+    return [
+        {
+            "item": iid,
+            "holder": ls.holder,
+            "clone": ls.clone,
+            "text": stranded_text(
+                iid, ls.holder, ls.branch or state.items[iid].branch, ls.worktree, ls.clone, mine
+            ),
+        }
+        for iid, ls in sorted(state.active_leases(now, cfg.lease.grace_s).items())
+        if state.items[iid].removed
+    ]
+
+
 @dataclass(frozen=True)
 class Stranded:
     item: str
@@ -147,7 +184,7 @@ class Stranded:
     worktree: str
 
     def render(self) -> str:
-        return stranded_text(self.item, self.holder, self.branch, self.worktree)
+        return stranded_text(self.item, self.holder, self.branch, self.worktree)  # same clone
 
 
 def stranded_leases(

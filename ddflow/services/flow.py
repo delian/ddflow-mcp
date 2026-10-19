@@ -39,6 +39,7 @@ from . import gates as G
 from . import leases as L
 from .cleanup import dispose_tree
 from .export.query import EXIT_REFUSED, ExportError
+from .gates import failed_review as GO
 from .gates import measured as GR
 
 
@@ -412,6 +413,8 @@ def _settle_merged(
     st = _state(log)
     model = it.pr.author_model if it.pr else ""
     v = CM.verdict(st, cfg, it.id, repo=repo, model=model)
+    # D-failed-review-gate: the same refusal `complete` applies; a merge is a fact, this is not.
+    v.blockers += GO.failed_review_blockers(st, cfg, it.id, G.load_gates(repo, cfg))
     if v.may_complete:
         log.append(
             "item.completed",
