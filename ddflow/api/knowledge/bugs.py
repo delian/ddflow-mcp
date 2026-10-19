@@ -238,8 +238,8 @@ def _file_fix_task(
     """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
-    `bugs_first` and gitflow both see it), under the item's open phase -- else the standing
-    `[bugs] phase`, made on first use -- carrying ``globs`` or the item's, the item's
+    `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
+    use, never the item's own phase, which it would hold open) -- carrying ``globs`` or the item's, the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
     transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
@@ -253,9 +253,11 @@ def _file_fix_task(
     # whether or not the item that touched them is still in the queue, and the fix task's
     # globs are what makes a feature on them wait. Only the parent needs an OPEN phase.
     src = st.items.get(item) if item else None
-    parent = _open_phase_of(st, item)
+    # Never the item's own phase: a fix task there would hold that phase open and block its
+    # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+    parent = ""
     phase_made = ""
-    if not parent:
+    if True:
         standing = st.items.get(cfg.bugs.phase)
         if standing is None or standing.removed:
             phase_made = cfg.bugs.phase
