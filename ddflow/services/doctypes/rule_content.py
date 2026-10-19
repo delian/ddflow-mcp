@@ -123,6 +123,10 @@ def each_item_matches(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     rx, bad = regex(ctx, r)
     yield from bad
     part = ctx.scope(r)
+    if rx and part and not part.items:
+        yield ctx.finding(
+            "each_item_matches", max(part.heading.line, 1), "no list items to match", r
+        )
     for item in part.items if rx and part else []:
         if not rx.search(item):
             yield ctx.finding(
@@ -154,12 +158,16 @@ def links_resolve(ctx: Ctx, r: Mapping[str, Any]) -> Iterator[Finding]:
     for n, url in part.links:
         if _EXTERNAL.match(url):
             continue
-        target, _, frag = unquote(url).partition("#")
-        dest = (
-            posixpath.normpath(posixpath.join(posixpath.dirname(ctx.path), target))
-            if target
-            else ctx.path
-        )
+        base, _, frag = unquote(url).partition("#")
+        target = base.partition("?")[0]
+        if target.startswith("/"):  # root-relative, as the reference check reads it
+            dest = posixpath.normpath(target.lstrip("/"))
+        else:
+            dest = (
+                posixpath.normpath(posixpath.join(posixpath.dirname(ctx.path), target))
+                if target
+                else ctx.path
+            )
         text = ctx.doc.text if not target else ctx.read(dest)
         if text is None:
             yield ctx.finding("links_resolve", n, f"{url}: {dest} is not in the tree", r)

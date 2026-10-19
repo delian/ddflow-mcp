@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..docscheck_md import lines
+from ..docscheck_md import SPAN, lines
 
 _ATX = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
@@ -148,4 +148,6 @@ def _read(live: list[Part], line: str, prev: str, n: int) -> None:
         s.tables += table
         if item:
             s.items.append(item.group(1))
-        s.links += [(n, m.group(1)) for m in _LINK.finditer(line)]
+        s.links += [
+            (n, m.group(1)) for m in _LINK.finditer(SPAN.sub(lambda c: " " * len(c.group(0)), line))
+        ]

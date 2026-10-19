@@ -331,3 +331,37 @@ def test_malformed_rule_values_are_findings_not_crashes():
 def test_a_whole_document_rule_refuses_a_section_key_at_load():
     with pytest.raises(spec.DocTypeError, match="unknown key 'section'"):
         dtype('{ kind = "max_bytes", limit = 3, section = "a" }', sec("a", "A"))
+
+
+def test_links_resolve_reads_queries_roots_and_inline_code_like_the_link_check():
+    files = {"docs/b.md": "# Real\n", "docs/c.md": "# C\n"}
+    dt = spec.parse(
+        '[doctype]\nname = "t"\npath = "docs/a.md"\n'
+        '[doctype.validate]\nrules = [{ kind = "links_resolve" }]\n'
+    )
+
+    def run(t):
+        return [f.line for f in validate(dt, t, "docs/a.md", read=files.get)]
+
+    assert run("[x](b.md?plain=1) [y](/docs/c.md)\n") == []
+    assert run("write `[x](gone.md)` to link\n") == []
+    assert run("[x](/docs/gone.md)\n") == [1]
+
+
+def test_each_item_matches_needs_items_to_match():
+    dt = dtype('{ kind = "each_item_matches", regex = "x", section = "a" }', sec("a", "A"))
+    assert [f.detail for f in validate(dt, "## A\nno list\n", "T.md")] == ["no list items to match"]
+
+
+def test_a_project_lint_command_with_commands_off_is_not_unavailable(repo: Path):
+    from ddflow.config import Config
+    from ddflow.services import docscheck_run as DR
+
+    put(
+        repo,
+        ".ddflow/doctypes/note.toml",
+        '[doctype]\nname = "note"\npath = "NOTE.md"\n[doctype.validate]\nlint_command = "false"\n',
+    )
+    put(repo, "NOTE.md", "a\n")
+    check = DR.run_check(repo, Config.load(repo), run_commands=False)
+    assert "lint:note" in check.not_configured and "lint:note" not in check.unavailable
