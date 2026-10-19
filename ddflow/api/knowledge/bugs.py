@@ -267,7 +267,7 @@ def _file_fix_task(
                 "title": "Bugs",
                 "needs": [],
                 "globs": [],
-                "body": "Fix tasks for bugs found outside any open phase (`bug found`).",
+                "body": "Fix tasks for bugs filed by `bug found`.",
                 "tags": [],
                 "priority": DEFAULT_PRIORITY,
                 "line": "",
