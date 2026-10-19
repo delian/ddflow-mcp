@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "review.split_rounds"
+new = '2'
+why = "How many times a review chunk lost to its size (out of tokens or time) is split in halves and sent again."
+impact = "additive"
