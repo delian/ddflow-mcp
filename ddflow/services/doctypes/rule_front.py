@@ -16,6 +16,8 @@ _TYPES: dict[str, type | tuple[type, ...]] = {
     "boolean": bool,
     "array": list,
     "number": (int, float),
+    "object": dict,
+    "null": type(None),
 }
 DRAFT_STATES = ("draft", "proposed", "wip")
 
@@ -23,7 +25,7 @@ DRAFT_STATES = ("draft", "proposed", "wip")
 def _type_ok(value: Any, name: str) -> bool:
     if name in ("integer", "number") and isinstance(value, bool):
         return False
-    return isinstance(value, _TYPES.get(name, object))
+    return isinstance(value, _TYPES[name])
 
 
 def schema_problems(front: Mapping[str, Any], schema: Mapping[str, Any]) -> Iterator[str]:
@@ -36,7 +38,9 @@ def schema_problems(front: Mapping[str, Any], schema: Mapping[str, Any]) -> Iter
         if key not in front:
             continue
         v = front[key]
-        if "type" in spec and not _type_ok(v, spec["type"]):
+        if "type" in spec and spec["type"] not in _TYPES:
+            yield f"{key!r}: the schema type {spec['type']!r} is not supported ({', '.join(_TYPES)})"
+        elif "type" in spec and not _type_ok(v, spec["type"]):
             yield f"{key!r} must be {spec['type']}"
         elif "enum" in spec and v not in spec["enum"]:
             yield f"{key!r} is {v!r}; one of {', '.join(map(str, spec['enum']))}"

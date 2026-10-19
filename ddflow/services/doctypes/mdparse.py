@@ -17,10 +17,10 @@ from ..docscheck_md import lines
 
 _ATX = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)")
-_ROW = re.compile(r"^\s*\|.*\|\s*$")
+_ROW = re.compile(r"^.*\|.*$")
 _DELIM = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
 _LINK = re.compile(r"(?<!!)\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
-_FENCE_OPEN = re.compile(r"^\s*(?:`{3,}|~{3,})\s*([\w+-]*)")
+_FENCE_RUN = re.compile(r"^\s*(`{3,}|~{3,})\s*([\w+-]*)")
 _KEY = re.compile(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$")
 _INT = re.compile(r"^-?\d+$")
 
@@ -110,19 +110,19 @@ def parse(text: str) -> Doc:
     total = len(text.splitlines())
     doc.whole = Part(Heading(0, "", first - 1), total)
     live: list[Part] = [doc.whole]  # parts still open: each runs to a heading at or above it
-    fence: str | None = None
+    fence: tuple[str, int] | None = None  # the open code block's fence character and length
     prev = ""
     for n, line, code in lines(text):
         if n < first:
             continue
         if code:
+            m = _FENCE_RUN.match(line)
             if fence is None:
-                m = _FENCE_OPEN.match(line)
-                fence = m.group(1) if m else ""
+                fence = (m.group(1)[0], len(m.group(1))) if m else ("`", 3)
                 for s in live:
-                    s.code_langs.append(fence)
-            elif not line.strip().strip("`~"):
-                fence = None
+                    s.code_langs.append(m.group(2) if m else "")
+            elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                fence = fence if line.strip() != m.group(1) else None  # a closer has no info string
             prev = line
             continue
         fence = None

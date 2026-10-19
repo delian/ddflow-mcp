@@ -59,14 +59,10 @@ class Ctx:
 
     def _locate(self, heading: str, match: str, level: int) -> mdparse.Part | None:
         try:
-            ok = (
-                (lambda t: re.fullmatch(heading, t) is not None)
-                if match == "regex"
-                else (lambda t: t.casefold() == heading.casefold())
-            )
+            rx = re.compile(heading if match == "regex" else re.escape(heading), re.I)
         except re.error:
-            return None
-        hits = [p for p in self.doc.parts if ok(p.heading.text)]
+            return None  # `spec` refuses a bad heading regex at load; a hand-built type reads as absent
+        hits = [p for p in self.doc.parts if rx.fullmatch(p.heading.text)]
         return next((p for p in hits if p.heading.level == level), hits[0] if hits else None)
 
     def finding(self, rule_kind: str, line: int, detail: str, rule_: Mapping[str, Any]) -> Finding:
