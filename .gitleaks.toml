@@ -60,5 +60,5 @@ useDefault = true
   description = "40-hex git shas in the committed event logs are not sourcegraph tokens"
   targetRules = ["sourcegraph-access-token"]
   condition = "AND"
-  paths = ['''\.ddflow/events/.*\.jsonl$''']
+  paths = ['''(?:^|/)\.ddflow/events/[^/]+\.jsonl$''']
   regexes = ['''^[0-9a-f]{40}$''']
