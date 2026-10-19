@@ -16,9 +16,11 @@ from helpers import git_proc as _git
 
 from ddflow.config import Config
 from ddflow.services import docscheck
+from ddflow.services.export import frame as F
 from ddflow.services.export import refresh as RF
 from ddflow.services.export import region_check as RC
 from ddflow.services.export import regions as RG
+from ddflow.services.export import write as W
 
 TEMPLATE = (
     "# Plan\n\nmy intro\n\n"
@@ -192,3 +194,29 @@ def test_a_stamped_looking_line_inside_a_region_body_still_counts_in_its_digest(
     ok = RG.render_region("d", "a", body)
     assert RC.problem(ok) == "" and RC.edited(ok) == []
     assert RC.edited(ok.replace("notes\n", "other\n", 1)) == ["d/a"]
+
+
+def test_a_refreshed_region_document_records_its_digest_as_evidence(proj):
+    """Bb850be2a85: a region document has no ddflow:generated header, so its refresh
+    evidence carried no digest; the digest is the one in the region's begin marker."""
+    _move_the_log(proj)
+    out = _refresh(proj)
+    regions = RC.regions((proj / DOC).read_text())
+    assert [o.action for o in out.outcomes] == ["updated"]
+    assert out.evidence()["digests"] == {"roadmap": regions[0].sha}
+    again = _refresh(proj)  # unchanged still names what the file holds
+    assert again.outcomes[0].action == "unchanged"
+    assert again.evidence()["digests"] == {"roadmap": regions[0].sha}
+
+
+def test_region_digest_of_several_regions_and_of_a_legacy_marker():
+    two = RG.render_region("d", "a", "A\n") + "x\n" + RG.render_region("d", "b", "B\n")
+    sa, sb = (r.sha for r in RC.regions(two))
+    got = RF._region_digest(two, "d")
+    assert got and got not in (sa, sb)
+    swapped = RG.render_region("d", "b", "B\n") + "x\n" + RG.render_region("d", "a", "A\n")
+    assert RF._region_digest(swapped, "d") == got  # name order, not file order
+    assert RF._region_digest(RG.render_region("d", "a", "A\n"), "d") == sa
+    legacy = W.region_text("d", "body\n")
+    assert RF._region_digest(legacy, "d") == F.body_digest("body\n")
+    assert RF._region_digest("no markers\n", "d") == ""
