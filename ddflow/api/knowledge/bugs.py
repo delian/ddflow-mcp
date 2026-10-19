@@ -255,7 +255,6 @@ def _file_fix_task(
     src = st.items.get(item) if item else None
     # Never the item's own phase: a fix task there would hold that phase open and block its
     # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
-    parent = ""
     phase_made = ""
     standing = st.items.get(cfg.bugs.phase)
     if standing is None or standing.removed:

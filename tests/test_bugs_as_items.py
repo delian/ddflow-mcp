@@ -3,8 +3,8 @@
 Operator 2026-09-28: "Can the bugs be treated as tasks and part of the DAG tree with
 priority for correction by default in order to not accumulate bugs over bugs?"
 
-`bug found` files the fix task by default (`[bugs].file_task`), under the phase of the
-item the bug names or a standing `bugs` phase, tagged as a bug fix and carrying the item's
+`bug found` files the fix task by default (`[bugs].file_task`), under the standing
+`bugs` phase, tagged as a bug fix and carrying the item's
 globs -- so `bugs_first` offers it ahead of features and a feature on the same files waits
 behind it. The bug closes when that task completes with a verified regression test:
 `complete` refuses while a bug the task fixes is open, and `--regression-test` closes it.
