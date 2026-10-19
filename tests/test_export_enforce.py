@@ -22,6 +22,7 @@ from ddflow.config import Config
 from ddflow.core.schedule import shared_globs
 from ddflow.services import docscheck
 from ddflow.services import shared_files as SF
+from ddflow.services.export import regions as RG
 
 DOC = "ROADMAP.md"
 
@@ -119,8 +120,7 @@ def test_a_hand_written_file_with_a_region_is_not_a_generated_file(proj):
     assert Config.load(proj).export.targets() == [("roadmap", "NOTES.md", "region")]
     notes = proj / "NOTES.md"
     notes.write_text(
-        "# Notes\n\nmy words\n\n<!-- ddflow:begin doc=roadmap body-sha256=000000000000 -->\n"
-        "stale region\n<!-- ddflow:end doc=roadmap -->\n"
+        "# Notes\n\nmy words\n\n" + RG.render_region("roadmap", "body", "stale region\n")
     )
     _move_the_log(proj)
     r = _commit(proj, "NOTES.md", ".ddflow")
