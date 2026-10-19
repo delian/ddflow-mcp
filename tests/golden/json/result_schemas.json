@@ -1787,6 +1787,7 @@
    "reason",
    "stranded",
    "drop_edges",
+   "repointed",
    "worktree_removed",
    "kept_reason"
   ],
@@ -1800,6 +1801,7 @@
     "reason": {},
     "stranded": {},
     "drop_edges": {},
+    "repointed": {},
     "worktree_removed": {},
     "kept_reason": {},
     "export_refresh": {},
@@ -2678,6 +2680,41 @@
     "edits": {},
     "unchanged": {},
     "abandoned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rename": {
+  "command": "rename",
+  "schema": "rename@1",
+  "shape": "object",
+  "payload": [
+   "old",
+   "new",
+   "parent",
+   "repointed",
+   "dry_run",
+   "released_parent_lease"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rename@1"
+    },
+    "old": {},
+    "new": {},
+    "parent": {},
+    "repointed": {},
+    "dry_run": {},
+    "released_parent_lease": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
