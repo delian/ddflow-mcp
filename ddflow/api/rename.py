@@ -19,7 +19,7 @@ from ._base import _load
 
 
 def _dependents(st, old: str) -> list:
-    return [i for i in st.items.values() if not i.removed and not i.terminal and old in i.needs]
+    return [i for i in st.live_items() if not i.terminal and old in i.needs]
 
 
 def _moved(needs: list[str], old: str, new: str, own: str) -> list[str]:
@@ -43,7 +43,7 @@ def _problem(st, it, old: str, new: str, parent: str | None) -> O.Outcome | None
             f"and dispose of those first",
             id=old,
         )
-    kids = [c.id for c in st.items.values() if not c.removed and c.parent == old]
+    kids = [c.id for c in st.live_items() if c.parent == old]
     if kids:
         return O.refused(
             kind, f"{old} has sub-tasks ({', '.join(kids[:5])}); move them first", id=old
