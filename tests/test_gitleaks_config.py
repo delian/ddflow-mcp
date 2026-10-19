@@ -35,6 +35,10 @@ pytestmark = pytest.mark.skipif(_gitleaks() is None, reason="gitleaks is not ins
 def _scan(tmp_path: Path, text: str) -> int:
     """gitleaks' exit code over a file holding ``text`` (0 clean, 1 leaks found)."""
     (tmp_path / "log.jsonl").write_text(text)
+    return _scan_dir(tmp_path)
+
+
+def _scan_dir(tmp_path: Path) -> int:
     run = subprocess.run(
         [
             _gitleaks() or "",
@@ -60,3 +64,19 @@ def test_a_real_looking_key_after_the_same_keyword_still_fires(tmp_path):
     # Built from pieces: the repository's own scan must not find a key-shaped literal here.
     key = "api_key = '" + "Zx9Qw3Lm8Vb2" + "Nc7Kd4Hf6Jg1" + "Ts5Pr0Ye" + "'\n"
     assert _scan(tmp_path, key) != 0
+
+
+_SHA = "0123456789abcdef" * 2 + "01234567"
+
+
+def test_a_git_sha_in_an_event_log_that_mentions_sourcegraph_is_not_a_token(tmp_path):
+    # The rule's keyword is per file; the committed logs name 40-hex shas all the time.
+    events = tmp_path / ".ddflow" / "events"
+    events.mkdir(parents=True)
+    (events / "a.jsonl").write_text('{"body":"sourcegraph search","head":"' + _SHA + '"}\n')
+    assert _scan_dir(tmp_path) == 0
+
+
+def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
+    (tmp_path / "notes.txt").write_text("sourcegraph token " + _SHA + "\n")
+    assert _scan_dir(tmp_path) != 0
