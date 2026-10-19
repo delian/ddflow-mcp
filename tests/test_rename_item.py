@@ -94,3 +94,12 @@ def test_abandon_with_dependents_offers_repoint(repo):
     _setup(repo)
     _c, out, _e = run_cli(repo, "abandon", "A", "--reason", "x")
     assert "--repoint-to" in out
+
+
+def test_the_tombstone_names_the_new_id_once_and_repoint_to_self_is_refused(repo):
+    _setup(repo)
+    assert run_cli(repo, "rename", "A", "A2")[0] == 0
+    logs = "".join(f.read_text() for f in (repo / ".ddflow" / "events").glob("*.jsonl"))
+    assert '"reason":"renamed to A2"' in logs
+    code, _o, _e = run_cli(repo, "abandon", "B", "--reason", "x", "--repoint-to", "B")
+    assert code == 1

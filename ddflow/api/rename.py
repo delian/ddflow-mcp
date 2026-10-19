@@ -104,8 +104,8 @@ def rename(
             return (O.refused if added.refused else O.failed)(kind, added.problem, id=old)
         for d in deps:
             log.append(f"{d.family}.updated", d.id, {"needs": _moved(d.needs, old, new, d.id)})
-        why = reason or f"renamed to {new}"
-        log.append("item.abandoned", old, {"reason": f"renamed to {new}: {why}", "kind": it.kind})
+        why = f"renamed to {new}" + (f": {reason}" if reason else "")
+        log.append("item.abandoned", old, {"reason": why, "kind": it.kind})
     return O.ok(kind, **data)
 
 
@@ -113,6 +113,8 @@ def repoint(repo: Path, old: str, to: str, *, agent: str = "", dry_run: bool = F
     """Re-point every live item that needs ``old`` to need ``to``, in one batch (cycles
     refused). The dependents half of a rename, for `abandon --repoint-to`."""
     _log, _cfg, st = _load(repo, agent)
+    if to == old:
+        return O.failed("item.repointed", "--repoint-to names the item being abandoned", id=old)
     target = st.items.get(to)
     if target is None or target.removed or target.terminal:
         return O.failed("item.repointed", f"--repoint-to {to!r} is not a live item", id=old)
