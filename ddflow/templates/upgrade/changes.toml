@@ -935,3 +935,17 @@ key = "review.manifest_max_files"
 new = "40"
 why = "How many files the manifest of the whole change lists in every review chunk's prompt, so a chunk is not judged alone; 0 = no manifest."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_title_chars"
+new = "100"
+why = "Characters `ddflow report` keeps of each filed record's title."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_summary_chars"
+new = "120"
+why = "Characters `ddflow report` keeps of each fixed bug's summary."
+impact = "additive"

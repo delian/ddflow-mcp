@@ -118,5 +118,5 @@ def not_done(
     for g in it.gates:
         counts = G.triage_counts(it, g)
         if counts and counts["untriaged"]:
-            out.append(f"review {g}: {counts['untriaged']} finding(s) without a verdict")
+            out.append(f"review {g}: {counts['untriaged']} finding(s) untriaged")
     return out

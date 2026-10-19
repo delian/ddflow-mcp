@@ -10,6 +10,7 @@ import argparse
 from .. import cliexec
 from ..commands.queue import cmd_phase_add, cmd_task_add
 from ..commands.setup import cmd_init
+from ..declared.batch import COMMANDS as BATCH_COMMANDS
 from ..declared.queue import COMMANDS
 from ..registry import add_commands
 
@@ -28,7 +29,7 @@ def register(s: argparse._SubParsersAction) -> None:
 
     add_commands(
         s,
-        COMMANDS,
+        (*COMMANDS, *BATCH_COMMANDS),
         groups={"phase": "add, list or close a phase", "task": "add a task"},
         handlers={**HANDLERS, ("update",): cmd_item_update},
         executor=cliexec.handler,
