@@ -185,7 +185,7 @@ COMMANDS: tuple[Command, ...] = (
         "One locked step. Refused when old is claimed, finished, a phase or has sub-tasks, or "
         "new is taken. `dry_run` lists what it would do.",
         call=_rename,
-        payload=("old", "new", "parent", "repointed", "dry_run"),
+        payload=("old", "new", "parent", "repointed", "dry_run", "released_parent_lease"),
         render=rename_text,
         cli=CliPolicy(shown=(OK,)),
         params=(
