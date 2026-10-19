@@ -183,10 +183,42 @@ def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
     assert "recent_events" in _bundle(proj, bug)
 
 
-def test_a_test_id_that_looks_like_an_option_is_not_one(proj):
+def _spy(monkeypatch):
+    from ddflow.services import repro_facts as RF
+
+    seen = []
+    real = RF.P.capture
+    monkeypatch.setattr(RF.P, "capture", lambda argv, **kw: seen.append(argv) or real(argv, **kw))
+    return RF, seen
+
+
+def test_a_test_id_that_looks_like_an_option_is_not_one(proj, monkeypatch):
+    # The invariant, not one pytest's wording: nothing is run and the id is reported missing.
+    # Python 3.12.3 (the GitHub runner) reads `pytest -- --co` as `--co`: exit 5, nothing found.
+    _, seen = _spy(monkeypatch)
     _, bug = _file(proj, test="--co")
     got = _bundle(proj, bug)["test"]
-    assert got["exit_code"] != 0 and "not found" in got["tail"]  # a missing path, not a pass
+    assert got["exit_code"] != 0 and "--co" in got["tail"] and "not found" in got["tail"]
+    assert not seen  # a missing path never reaches pytest, whichever argparse it has
+
+
+def test_a_dash_led_test_path_that_exists_is_never_a_bare_option(tmp_path, monkeypatch):
+    RF, seen = _spy(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "-test_x.py").write_text("def test_ok():\n    pass\n")
+    got = RF.test_run(tmp_path, "-test_x.py", 4000, 60)
+    assert got["exit_code"] == 0, got["tail"]
+    assert "-test_x.py" not in seen[0] and "./-test_x.py" in seen[0]
+
+
+def test_the_test_run_does_not_inherit_the_callers_pytest_options(tmp_path, monkeypatch):
+    RF, _ = _spy(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "test_x.py").write_text("def test_ok():\n    pass\n")
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--co")  # would "collect" without running
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    got = RF.test_run(tmp_path, "test_x.py", 4000, 60)
+    assert got["exit_code"] == 0 and "1 passed" in got["tail"], got["tail"]
 
 
 def test_a_cwd_outside_the_project_is_not_recorded_whole(proj, tmp_path, monkeypatch):

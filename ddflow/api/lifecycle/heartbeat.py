@@ -48,7 +48,14 @@ def heartbeat(
         ls = gone.lease
         return O.refused(
             "lease.renewed",
-            stranded_text(item, ls.holder, ls.branch or gone.branch, ls.worktree),
+            stranded_text(
+                item,
+                ls.holder,
+                ls.branch or gone.branch,
+                ls.worktree,
+                ls.clone,
+                log.clone_id(create=False),
+            ),
             id=item,
             renewed=False,
             waiters=[],
