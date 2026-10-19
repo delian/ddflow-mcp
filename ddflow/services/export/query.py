@@ -186,6 +186,11 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
     return at_or_after
 
 
+def since_filter(since: str) -> Callable[[str], bool] | None:
+    """`_cutoff` for other readers (a declarative record query): same dates, same refusals."""
+    return _cutoff(since)
+
+
 _DATE_LEN = len("2026-10-01")
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _DATE_PREFIX = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")

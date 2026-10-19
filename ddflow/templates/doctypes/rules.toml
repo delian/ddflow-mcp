@@ -1,0 +1,11 @@
+[doctype]
+name = "rules"
+title = "Rules"
+path = "RULES.md"
+genre = "reference"
+contract = "generated"
+
+[[doctype.section]]
+id = "document"
+ownership = "generated"
+source = "kind:rules"
