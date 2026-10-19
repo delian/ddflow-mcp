@@ -1,0 +1,3 @@
+{"agent":"Monster3-DX-roborev-speed-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"e06e9531d2e66b0c3e042cc1b","kind":"ddflow.seen","lamport":85948,"schema":1,"subject":"ddflow","ts":"2026-10-19T10:11:53.451720Z"}
+{"agent":"Monster3-DX-roborev-speed-7267fe","data":{"ahead":["research","rules","implement"],"gate":"rubber_duck","policy":"warn"},"id":"ef30cc9d4fbdaeefa05ff7c9a","kind":"gate.out_of_order","lamport":85949,"schema":1,"subject":"DX-roborev-speed","ts":"2026-10-19T10:11:53.796472Z"}
+{"agent":"Monster3-DX-roborev-speed-7267fe","data":{"gate":"rubber_duck"},"id":"e5def695478f803d910252cc8","kind":"gate.started","lamport":85950,"schema":1,"subject":"DX-roborev-speed","ts":"2026-10-19T10:11:54.030612Z"}

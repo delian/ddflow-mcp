@@ -36,6 +36,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,41 @@ def _holds(path: Path | None, event_id: str, *, tail: bool = False) -> bool:
     return re.search(rb'"id"\s*:\s*"' + re.escape(event_id.encode()) + rb'"', data) is not None
 
 
+#: How long a look that finds a shard SHORT is repeated before it is believed: git rewrites a
+#: working-tree file in place (a checkout, a merge), and a reader in that span sees half of it.
+#: The flag is sticky, so one such look flagged a loss that was never one (B-events-uncommitted-shards).
+def _short(old: dict[str, Any], scanned: tuple[int, str, int], path: Path | None) -> bool:
+    """Does ``scanned`` read as a shrink against the mark ``old``?"""
+    return scanned[0] < old["count"] or not _holds(path, str(old.get("last_event_id", "")))
+
+
+def _settled(
+    path: Path | None,
+    old: dict[str, Any],
+    scanned: tuple[int, str, int],
+    *,
+    looks: int = 4,
+    pause_s: float = 0.1,
+) -> tuple[int, str, int]:
+    """``scanned``, looked at again while it reads as a shrink against ``old``: a shard being
+    rewritten by another process settles within a moment; a real loss is still there."""
+    quiet, gone, last = 0, 0, scanned[2]
+    for _ in range(looks * 25):  # a hard stop for a shard that never stops changing
+        if quiet >= looks or path is None or not _short(old, scanned, path):
+            break
+        time.sleep(pause_s)
+        again = _scan(path)
+        if again is None:  # unlinked for the moment git recreates it: look again, for longer
+            gone += 1
+            if gone > looks * 5:
+                break
+            continue
+        # a look at a file that is still changing (a writer mid-rewrite) does not count
+        quiet = quiet + 1 if again[2] == last else 0
+        last, scanned = again[2], again
+    return scanned
+
+
 def _raised(
     out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str, path: Path | None
 ) -> None:
@@ -281,19 +317,31 @@ def observe(repo: Any, log: Any) -> None:
             if row is not None and row.get("size") == size and not row.get("shrunk"):
                 continue
             if (scanned := _scan(p)) is not None:
+                # settled HERE, before the marks lock is taken: waiting for a rewrite to finish
+                # must not hold up the appends and commands that queue on that lock
+                if row is not None and not row.get("shrunk"):
+                    scanned = _settled(p, row, scanned)
                 found[p.name] = scanned
         if not found:
             return
 
         def raise_marks(cur: Any) -> dict[str, Any]:
             out = _migrate(cur)
-            for name in found:
+            for name, settled in found.items():
                 # looked at again HERE, under the marks lock: an append by another process
                 # between the unlocked look above and this write has already raised the mark,
                 # and a stale count must not read as a shrink
                 fresh = _scan(paths[name]) if name in paths else None
-                if fresh is not None:
-                    _raised(out, name, fresh, ref, paths[name])
+                if fresh is None:
+                    continue
+                row = _row(out, _key(ref, name))
+                # The unlocked look was settled and read whole; this one, taken after the lock
+                # wait, reads short: the shard is being rewritten again. Neither is believed;
+                # the next command looks again (a flag here would be sticky).
+                if row is not None and not row.get("shrunk") and _short(row, fresh, paths[name]):
+                    if not _short(row, settled, paths[name]):
+                        continue
+                _raised(out, name, fresh, ref, paths[name])
             return out
 
         _update(store, raise_marks)
@@ -354,6 +402,8 @@ def lost(repo: Any, log: Any) -> list[Lost]:
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
                 continue  # unreadable: the integrity pass names it
+            if name in present and not row.get("shrunk"):
+                scanned = _settled(present[name], row, scanned)  # a read mid-rewrite is no loss
             seen = str(row.get("last_event_id", ""))
             if (
                 row.get("shrunk")
