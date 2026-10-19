@@ -72,6 +72,14 @@ def test_a_written_export_config_is_validated():
     with pytest.raises(ValueError, match="refresh"):
         Config.check({"export": {"refresh": "sometimes"}})
     Config.check({"export": {"refresh": "merge", "roadmap": {"filters": {"limit": 5}}}})
+    Config.check(
+        {"export": {"roadmap": {"hide": ["X"], "next": 1, "tasks": 0, "show_hidden": True}}}
+    )
+    for bad in ({"hide": "BL-"}, {"next": -1}, {"tasks": 1.5}, {"next": True}, {"show_hidden": 1}):
+        with pytest.raises(ValueError, match="roadmap"):
+            Config.check({"export": {"roadmap": bad}})
+    with pytest.raises(ValueError, match="unknown key"):
+        Config.check({"export": {"changelog": {"next": 3}}})
 
 
 def test_default_targets_agree_with_the_kinds():
@@ -126,9 +134,27 @@ def test_print_any_kind_without_selection_and_writes_nothing(proj):
     assert "Billing" in r["text"] and not (proj / "ROADMAP.md").exists()
 
 
+def test_the_roadmap_knobs_read_from_the_config_change_the_document(proj):
+    for i in range(1, 4):
+        run_cli(proj, "phase", "add", f"R{i}", "--title", f"Ready {i}", "--globs", f"r{i}/**")
+        run_cli(proj, "task", "add", f"R{i}.T", "--phase", f"R{i}", "--title", f"work {i}")
+    _select(proj, '[export.roadmap]\nnext = 1\ntasks = 0\nhide = ["R3"]\n')
+    text = _results(api.export_documents(proj, "roadmap"))[0]["text"]
+    assert "Ready 1" in text and "Ready 3" not in text
+    assert "work 1" not in text and "1 more open task" in text
+
+
+def test_show_hidden_brings_the_internal_batches_back(proj):
+    run_cli(proj, "phase", "add", "BL-inner", "--title", "Inner batch", "--globs", "b/**")
+    run_cli(proj, "task", "add", "BL-inner.T", "--phase", "BL-inner", "--title", "inner work")
+    assert "Inner batch" not in _results(api.export_documents(proj, "roadmap"))[0]["text"]
+    _select(proj, "[export.roadmap]\nshow_hidden = true\n")
+    assert "Inner batch" in _results(api.export_documents(proj, "roadmap"))[0]["text"]
+
+
 def test_print_is_capped_with_an_explicit_truncation_field(proj):
     for i in range(30):
-        run_cli(proj, "task", "add", f"P1.X{i}", "--phase", "P1", "--title", f"Task number {i}")
+        run_cli(proj, "phase", "add", f"PX{i}", "--title", f"Phase number {i}", "--globs", "x/**")
     full = _results(api.export_documents(proj, "roadmap", max_bytes=0))[0]
     cut = _results(api.export_documents(proj, "roadmap", max_bytes=900))[0]
     assert full["truncated"] is False
