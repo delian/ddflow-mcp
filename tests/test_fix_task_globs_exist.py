@@ -17,16 +17,30 @@ def test_existing_globs_keeps_paths_and_patterns_that_match(tmp_path):
     assert kept == ["a/x.py", "a/*.py", "a"] and dropped == ["a/nope.py", "b/**"]
 
 
-def test_a_guessed_glob_that_matches_nothing_is_not_attached(repo):
+def _seed(repo):
     run_cli(repo, "init")
     (repo / "src").mkdir(exist_ok=True)
     (repo / "src" / "real.py").write_text("")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "p"})
-    out = K.bug_found(
-        repo, summary="s", id="Bx", agent="a", globs="src/real.py,src/guessed/standards.py"
+    log.append(
+        "task.added",
+        "T1",
+        {"parent": "P1", "title": "t", "globs": ["src/real.py", "src/guessed/standards.py"]},
     )
+
+
+def test_an_inherited_glob_that_matches_nothing_is_not_attached(repo):
+    _seed(repo)
+    out = K.bug_found(repo, summary="s", id="Bx", agent="a", item="T1")
     assert out.exit == 0, out.reason
     fix = state(repo).items["fix-Bx"]
     assert fix.globs == ["src/real.py"]
     assert "src/guessed/standards.py" in fix.body
+
+
+def test_an_explicit_glob_is_kept_even_when_it_names_a_file_the_fix_creates(repo):
+    _seed(repo)
+    out = K.bug_found(repo, summary="s", id="By", agent="a", globs="src/new_module.py")
+    assert out.exit == 0, out.reason
+    assert state(repo).items["fix-By"].globs == ["src/new_module.py"]

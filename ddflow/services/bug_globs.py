@@ -78,7 +78,9 @@ def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
 def fix_task_globs(
     root: Path, globs: str, source_globs: list[str], text: str, *, tool_bug: bool = False
 ) -> tuple[list[str], list[str]]:
-    """``(kept, dropped)`` for a fix task: the reporter's ``globs`` else the ones inherited
-    from the source item, cut to those that exist in the tree."""
-    wanted = GS.parse(globs) if globs else inherit_globs(source_globs, text, tool_bug=tool_bug)
-    return existing_globs(root, wanted)
+    """``(kept, dropped)`` for a fix task: the reporter's ``globs`` verbatim (an explicit
+    scope may name a file the fix creates), else the ones inherited from the source item,
+    cut to those that exist in the tree (only a guess can be wrong about the tree)."""
+    if globs:
+        return GS.parse(globs), []
+    return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
