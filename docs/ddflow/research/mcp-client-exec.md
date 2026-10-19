@@ -172,7 +172,7 @@ recovery in `brief` generalises); no report before `plan_ttl_s` => the plan expi
   (agent runs; pytest exit 0, HEAD d77a93...; uploads output blob)
 > ddflow_plan_report {plan_id:"pl_2", results:[{id:"s1",exit:0,output_digest:"..",elapsed_s:0.1,tail:"1 passed"},
    {id:"s2",stdout:"d77a9316378d..."}], blob:"<upload id>"}
-< {gate:"unit_tests", outcome:"passed", trust:"agent-reported",
+< {gate:"unit_tests", outcome:"passed", trust:"agent-run, server-checked",
    checked:{sha_on_remote:true, argv_matches_plan:true, blob_digest_matches:true},
    tree_sha:"d77a9316378d+clean"}   // clean by construction of the plan, not asserted
 ```
