@@ -82,6 +82,7 @@ def rename(
             "parent": parent or it.parent,
             "repointed": sorted(d.id for d in deps),
             "dry_run": dry_run,
+            "released_parent_lease": False,
         }
         if dry_run:
             return O.ok(kind, **data)
@@ -102,23 +103,33 @@ def rename(
         added = IT.add_task(log, st, cfg, draft, dedupe=f"renamed from {old}")
         if not added.ok:
             return (O.refused if added.refused else O.failed)(kind, added.problem, id=old)
+        released = IT.release_umbrella(
+            log, st, draft.parent or "", note=f"became an umbrella when {new} was renamed in"
+        )
+        data["released_parent_lease"] = released
         for d in deps:
             log.append(f"{d.family}.updated", d.id, {"needs": _moved(d.needs, old, new, d.id)})
         why = f"renamed to {new}" + (f": {reason}" if reason else "")
-        log.append("item.abandoned", old, {"reason": why, "kind": it.kind})
+        log.append("item.abandoned", old, {"reason": why, "kind": it.kind, "renamed_to": new})
     return O.ok(kind, **data)
 
 
-def repoint(repo: Path, old: str, to: str, *, agent: str = "", dry_run: bool = False) -> O.Outcome:
+def repoint(repo: Path, old: str, to: str, *, agent: str = "") -> O.Outcome:
     """Re-point every live item that needs ``old`` to need ``to``, in one batch (cycles
-    refused). The dependents half of a rename, for `abandon --repoint-to`."""
+    refused). The dependents half of a rename, for `abandon --repoint-to`. The entries are
+    derived from the state the batch records against, under its lock, so an item that began
+    needing ``old`` meanwhile is moved too."""
+    kind = "item.repointed"
     _log, _cfg, st = _load(repo, agent)
     if to == old:
-        return O.failed("item.repointed", "--repoint-to names the item being abandoned", id=old)
+        return O.failed(kind, "--repoint-to names the item being abandoned", id=old)
     target = st.items.get(to)
     if target is None or target.removed or target.terminal:
-        return O.failed("item.repointed", f"--repoint-to {to!r} is not a live item", id=old)
-    entries = [{"id": d.id, "needs": _moved(d.needs, old, to, d.id)} for d in _dependents(st, old)]
-    if not entries:
-        return O.nothing("item.repointed", f"nothing needs {old}", id=old)
-    return batch.apply(repo, entries, dry_run=dry_run, agent=agent, kind="item.repointed")
+        return O.failed(kind, f"--repoint-to {to!r} is not a live item", id=old)
+
+    def derive(state) -> list[dict[str, Any]]:
+        return [
+            {"id": d.id, "needs": _moved(d.needs, old, to, d.id)} for d in _dependents(state, old)
+        ]
+
+    return batch.apply(repo, derive, agent=agent, kind=kind)

@@ -2700,7 +2700,8 @@
    "new",
    "parent",
    "repointed",
-   "dry_run"
+   "dry_run",
+   "released_parent_lease"
   ],
   "output_schema": {
    "type": "object",
@@ -2713,6 +2714,7 @@
     "parent": {},
     "repointed": {},
     "dry_run": {},
+    "released_parent_lease": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

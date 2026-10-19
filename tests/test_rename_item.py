@@ -103,3 +103,14 @@ def test_the_tombstone_names_the_new_id_once_and_repoint_to_self_is_refused(repo
     assert '"reason":"renamed to A2"' in logs
     code, _o, _e = run_cli(repo, "abandon", "B", "--reason", "x", "--repoint-to", "B")
     assert code == 1
+
+
+def test_renaming_under_a_claimed_task_releases_its_lease_and_records_the_successor(repo):
+    _setup(repo)
+    assert run_cli(repo, "task", "add", "Q", "--parent", "P2", "--title", "q")[0] == 0
+    assert run_cli(repo, "claim", "Q", "--agent", "w")[0] == 0
+    code, _o, err = run_cli(repo, "rename", "A", "A2", "--parent", "Q")
+    assert code == 0, err
+    assert _items(repo)["Q"].lease is None
+    logs = "".join(f.read_text() for f in (repo / ".ddflow" / "events").glob("*.jsonl"))
+    assert '"renamed_to":"A2"' in logs
