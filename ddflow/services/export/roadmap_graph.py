@@ -6,20 +6,14 @@ and the cap; the template draws the result as a `flowchart LR` (GitHub renders M
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterable, Mapping
-
-
-def node_key(pid: str) -> str:
-    """A Mermaid-safe node name for a phase id."""
-    return "n_" + re.sub(r"\W", "_", pid)
 
 
 def reduce_edges(
     ids: Iterable[str], before: Callable[[str], Iterable[str]]
 ) -> list[tuple[str, str]]:
     """``(prerequisite, dependent)`` pairs among ``ids`` with every edge a longer path already
-    implies removed. A cycle's edges are kept as they are (no path to compare against)."""
+    implies removed. Phases that wait on each other (a cycle) cannot make one another's edge redundant."""
     members = list(ids)
     inset = set(members)
     pre = {i: {d for d in before(i) if d in inset and d != i} for i in members}
@@ -40,7 +34,7 @@ def reduce_edges(
         (d, i)
         for i in members
         for d in sorted(pre[i])
-        if not any(reaches(o, d, i) for o in pre[i] if o != d)
+        if not any(reaches(o, d, i) and not reaches(d, o, i) for o in pre[i] if o != d)
     ]
 
 
@@ -52,8 +46,9 @@ def graph(
     shown phases only, so a link through a phase that was cut stays drawn."""
     shown = phases[: max(cap, 0)]
     ids = [p["id"] for p in shown]
+    keys = {i: f"n{k}" for k, i in enumerate(ids)}  # an index, so no two phases share a node
     return {
-        "nodes": [{"id": p["id"], "key": node_key(p["id"]), "lane": p["lane"]} for p in shown],
-        "edges": [[node_key(a), node_key(b)] for a, b in reduce_edges(ids, before)],
+        "nodes": [{"id": p["id"], "key": keys[p["id"]], "lane": p["lane"]} for p in shown],
+        "edges": [[keys[a], keys[b]] for a, b in reduce_edges(ids, before)],
         "more": len(phases) - len(shown),
     }
