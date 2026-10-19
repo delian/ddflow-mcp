@@ -17,7 +17,7 @@ children index, so a log of thousands of items renders in milliseconds.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 from ...config import Config
 from ...core import progress
@@ -28,6 +28,7 @@ from . import registry
 from . import roadmap_calc as RC
 from .frame import one_line
 from .query import ExportError, Query
+from .roadmap_graph import graph
 
 _LANE_LABELS = (
     ("now", "Now", "work in flight"),
@@ -56,14 +57,22 @@ def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
     }
 
 
-def _settings(cfg: Config) -> tuple[list[str], int, int, bool]:
+class _Settings(NamedTuple):
+    hide: list[str]
+    next_n: int
+    cap: int
+    show_hidden: bool
+    graph: int
+
+
+def _settings(cfg: Config) -> _Settings:
     t = cfg.export.table("roadmap")
-    hide = list(t.get("hide", RC.DEFAULT_HIDE))  # a list: the config validator refuses the rest
-    return (
-        hide,
+    return _Settings(
+        list(t.get("hide", RC.DEFAULT_HIDE)),  # a list: the config validator refuses the rest
         int(t.get("next", RC.DEFAULT_NEXT)),
         int(t.get("tasks", RC.DEFAULT_TASKS)),
         bool(t.get("show_hidden", False)),
+        int(t.get("graph", RC.DEFAULT_GRAPH)),
     )
 
 
@@ -149,11 +158,12 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
     # The project's config when the Query has a repo; the shipped defaults otherwise.
     cfg = Config.load(q.repo) if q.repo is not None else Config()
-    hide, next_n, cap, show_hidden = _settings(cfg)
-    rows, seen = _phase_rows(q, f, cfg, [] if show_hidden else hide)
+    st = _settings(cfg)
+    rows, seen = _phase_rows(q, f, cfg, [] if st.show_hidden else st.hide)
     by_id = {r["id"]: r for r in rows}
     key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
-    ranked = RC.order(by_id, _phase_before(q, cfg, set(by_id)), key)
+    before = _phase_before(q, cfg, set(by_id))
+    ranked = RC.order(by_id, before, key)
     listed = set(by_id) | {t["id"] for r in rows for t in r["all_tasks"]}
     chain = [i for i in critical_path(q.state, f.phase) if i in listed]
     path = set(chain)
@@ -162,7 +172,11 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         r["rank"] = rank
         r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
     phases = [by_id[i] for i in ranked]
-    lanes, omitted = _lanes(RC.split_lanes(phases, next_n), cap, f.limit or 0)
+    split = RC.split_lanes(phases, st.next_n)
+    shown = {
+        p["id"]: key for (key, _, _), lane in zip(_LANE_LABELS, split, strict=True) for p in lane
+    }
+    lanes, omitted = _lanes(split, st.cap, f.limit or 0)
     return {
         "lanes": lanes,
         "done_phases": seen["done"],
@@ -171,6 +185,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         "open_tasks": seen["open"],
         "critical_path": [{"id": i, "title": one_line(q.state.items[i].title, 80)} for i in chain],
         "release_lines": RC.by_line(phases),
+        "graph": graph([{"id": i, "lane": shown[i]} for i in ranked], before, st.graph),
     }
 
 
