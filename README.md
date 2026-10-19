@@ -4759,9 +4759,8 @@ fix task fix-Bx filed in the queue (claim it to fix; `complete fix-Bx --regressi
 
 The task is `fix-<bug id>`, titled `Fix bug <id>: <headline>`, tagged with the first of
 `[flow] bugfix_tags` (so `bugs_first` offers it ahead of every feature and gitflow gives
-it a `bugfix/` branch), filed under the nearest **open phase** of the item the bug names
--- or under the standing `bugs` phase (`[bugs] phase`, made on first use) when the bug
-names no item or its phase is already done -- and it **carries that item's globs**
+it a `bugfix/` branch), filed under the standing `bugs` phase (`[bugs] phase`, made on first
+use), never the phase of the item the bug names, which it would hold open -- and it **carries that item's globs**
 unless `--globs` says otherwise. That last part is what stops bugs piling up under new
 work: a feature that touches the same files is passed over in `ddflow next` until the
 fix has landed, like any two items that overlap. The bug record carries the task
@@ -6319,7 +6318,7 @@ part that matters.
   more work is built on it. Priority orders each group; `[schedule] bugs_first = false`
   orders by priority alone.
 * **Bugs are queue items.** `bug found` files the fix task `fix-<bug>` by default -- in
-  the phase of the item the bug names, on that item's files -- so a feature touching the
+  the standing `bugs` phase, on the named item's files -- so a feature touching the
   same files waits behind it, and the bug closes when that task completes with a
   regression test (`complete fix-<bug> --regression-test ...`). See [Bugs are queue
   items](#bugs-are-queue-items).
