@@ -45,9 +45,10 @@ Evidence for the split, from this repo:
   creates `.ddflow/rules/` plus `DDFLOW.md`, so rule_* and workflow_* are files and belong
   to P-storage's seam, not to the pure-state set. That moves 7 tools out of what R14 called
   "queue as pure data".
-* **claim has exactly one tree-bound step.** `GIT_TRACE` of `ddflow claim` shows
-  `git branch ddflow/<id> main` then `git worktree add -b ddflow/<id> <path>`
-  (infra/worktree.py:244, `create`), then `[worktree].local_files` copies. The lease is
+* **claim has exactly one tree-bound step.** `GIT_TRACE` (unsorted, re-run) of `ddflow claim` shows one ddflow call,
+  `git worktree add -b ddflow/<id> <path>` (infra/worktree.py:244, `create`); the `git branch
+  ddflow/<id> main`, `reset --hard` and `ls-files` lines that follow in the trace are git's own
+  subprocesses of `worktree add`, not extra ddflow steps. Then `[worktree].local_files` copies. The lease is
   an event. The worktree is adoptable: `create` returns the existing tree if present
   (worktree.py:219-223), which is what makes a retry after a lost reply safe.
 * **gate_run's single choke point is `CommandRunner`.** `run_command_gate`
@@ -112,14 +113,17 @@ Rules of the envelope:
   (R14, worktree.py:341-377).
 * `expect.exit_codes` lets the server tell "ran and failed" from "could not run" exactly as
   `classify_exit` does (runner.py:266). `127`/spawn error/timeout map to `unavailable`.
-* **Replay semantics, one way:** `plan_id` is minted once per (tool, item, head) and is live
-  until reported or expired. Calling the tool again while a plan is live returns the SAME
-  plan (no second plan, no orphan in `brief`); a report for an already-reported plan returns
-  the recorded outcome. The agent has no `Worktree.create` adoption logic, so the claim plan
-  begins with a probe step (`git rev-parse --verify --quiet refs/heads/ddflow/<id>`) and the
-  server picks `git worktree add -b ...` (fresh) or `git worktree add <path> <branch>`
-  (existing) from the reported probe result (a two-round plan); a report of "already present"
-  counts as success. The adoption claim in section 1 therefore holds for the thin client only.
+* **Replay semantics, one way:** `plan_id` is minted once per (tool, item, head) and lives
+  until reported or expired. The server remembers each reported step result by step id.
+  Calling the tool again returns the SAME plan id with only the unreported steps, and
+  **every mutating round begins with a fresh read-only probe** the server re-evaluates:
+  for claim, `git rev-parse --verify --quiet refs/heads/ddflow/<id>` plus `git worktree list
+  --porcelain`. Branch absent => `git worktree add -b`; branch present and tree registered =>
+  nothing to do, adopted (the agent-side equivalent of `Worktree.create`'s adoption);
+  branch present, no tree => `git worktree add <path> <branch>`. So a lost reply after a
+  mutating step re-probes and finds the work done; the add step is never replayed blind. The
+  adoption claim in section 1 holds for the thin client natively and for the envelope only
+  through this probe round.
 * The server emits the envelope by a `PlanRunner` that implements the `CommandRunner`
   interface (cmdrunner.py:208) and returns a plan instead of running. Same code path, same
   evidence keys, one new status `"deferred"` beside `ran`/`unavailable`.
@@ -133,14 +137,17 @@ alone (probed: `claimed probe-w (lease 1800s, renew every 300s)`). Proposed cont
 ```
 > ddflow_claim {id:"probe-w", exec:"client"}
 < {ok:true, lease:{expires:"+1800s", renew_every_s:300}, needs_local:true, plan_id:"pl_1",
-   steps:[
-    {id:"s1", argv:["git","fetch","origin","main"], cwd:"$REPO", expect:{exit_codes:[0]}},
-    {id:"s2", argv:["git","worktree","add","-b","ddflow/probe-w","$REPO/.ddflow/worktrees/probe-w","origin/main"],
-     cwd:"$REPO", expect:{exit_codes:[0]}}],
+   round:1, steps:[
+    {id:"s0", argv:["git","fetch","origin","main"], cwd:"$REPO", expect:{exit_codes:[0]}},
+    {id:"p1", argv:["git","rev-parse","--verify","--quiet","refs/heads/ddflow/probe-w"],
+     cwd:"$REPO", expect:{exit_codes:[0,1]}},
+    {id:"p2", argv:["git","worktree","list","--porcelain"], cwd:"$REPO", expect:{exit_codes:[0]}}],
    then:"ddflow_plan_report(plan_id, results)"}
-  (agent runs s1, s2; both exit 0)
-> ddflow_plan_report {plan_id:"pl_1", results:[{id:"s1",exit:0},{id:"s2",exit:0}],
-   tree:{head:"399834b564bb", branch:"ddflow/probe-w"}}
+> ddflow_plan_report {plan_id:"pl_1", results:[{id:"s0",exit:0},{id:"p1",exit:1},{id:"p2",stdout:"..."}]}
+< {round:2, steps:[                       // branch absent, no tree: the server picks the fresh form
+    {id:"s2", argv:["git","worktree","add","-b","ddflow/probe-w","$REPO/.ddflow/worktrees/probe-w","origin/main"],
+     cwd:"$REPO", expect:{exit_codes:[0]}}]}
+> ddflow_plan_report {plan_id:"pl_1", results:[{id:"s2",exit:0}], tree:{head:"399834b564bb", branch:"ddflow/probe-w"}}
 < {ok:true, worktree:{branch:"ddflow/probe-w", base:"main", head:"399834b564bb",
     status:"agent-reported"}}                      // lease already held; worktree event appended
 ```
@@ -159,15 +166,15 @@ recovery in `brief` generalises); no report before `plan_ttl_s` => the plan expi
    steps:[{id:"s1", argv:["sh","-c","python3 -m pytest -q test_m.py"], cwd:"$WORKTREE",
            timeout_s:600, expect:{exit_codes:[0,1]},
            capture:{stdout_digest:true, tail_bytes:4000, upload_blob:true}},
-          {id:"s2", argv:["git","rev-parse","HEAD"], cwd:"$WORKTREE"},
-          {id:"s3", argv:["git","status","--porcelain"], cwd:"$WORKTREE"}],
+          {id:"s2", argv:["git","rev-parse","HEAD"], cwd:"$WORKTREE"}],
+   // $WORKTREE here is a fresh detached checkout of the pushed sha made by an earlier plan step
    then:"ddflow_plan_report"}
-  (agent runs; pytest exit 0, HEAD d77a93..., porcelain empty; pushes output blob)
+  (agent runs; pytest exit 0, HEAD d77a93...; uploads output blob)
 > ddflow_plan_report {plan_id:"pl_2", results:[{id:"s1",exit:0,output_digest:"..",elapsed_s:0.1,tail:"1 passed"},
-   {id:"s2",stdout:"d77a9316378d..."},{id:"s3",stdout:""}], blob:"<upload id>"}
+   {id:"s2",stdout:"d77a9316378d..."}], blob:"<upload id>"}
 < {gate:"unit_tests", outcome:"passed", trust:"agent-reported",
-   verified:{sha_on_remote:true, command_digest_matches:true, blob_digest_matches:true},
-   tree_sha:"d77a9316378d+clean"}
+   checked:{sha_on_remote:true, argv_matches_plan:true, blob_digest_matches:true},
+   tree_sha:"d77a9316378d+clean"}   // clean by construction of the plan, not asserted
 ```
 
 What the probe actually did (today's primitives, no new server code):
@@ -230,7 +237,7 @@ Trust labels (a `trust` field on gate evidence, ordered):
 |---|---|---|
 | `server-run` | server (or its sandbox) executed it | review by API reviewers (diff from remote), research/rules/standards gates that are agent prose do not apply; ci re-run in a server sandbox |
 | `forge-attested` | an external system reported it | ci via `pr_status` on the pushed sha; merge via forge merge commit |
-| `server-verified` | agent ran it, server re-derived the checkable parts | unit_tests, tests, precommit when: command_digest equals the declared one, sha on remote and equals the branch head at report time, tree clean (`head+clean`), output blob digest matches, plus sampled server re-run (`[gates].audit_rate`) |
+| `agent-run, server-checked` | agent ran it in a server-prescribed fresh checkout of the pushed sha; the server checked what it can: sha on the remote and equal to the branch head, argv echoed by the agent equals the plan's (the report carries argv, not only a digest), blob digest matches. It does NOT check that the run happened, nor cleanliness: the clean tree is by construction (fresh `git worktree add --detach <sha>` in the plan), not by the agent's `status` output | unit_tests, tests, precommit; upgraded to `server-run` for a sampled fraction by re-run (`[gates].audit_rate`) |
 | `agent-reported` | agent says so, nothing to check | hand-recorded gates (research, critic, rubber_duck prose), dirty-tree runs (`+st:<manifest>` is not derivable from a remote), gates whose command needs the agent's private environment (GPU, secrets) |
 
 What the server can re-verify with a git remote and no working tree: that a commit sha exists
@@ -306,7 +313,7 @@ envelope is new).
 |---|---|---|---|---|
 | 0 | fix-Bed643a611b. Gate provenance: `gate record` on a command gate carries `trust:"agent-reported"` and the report no longer treats `command` alone as tool-produced (bug) | ddflow/api/gates.py, ddflow/services/report_gates.py, tests/test_gate_provenance.py | none | 1 |
 | 1 | Locality column from this taxonomy: A / B / C per declared command, shown in the matrix, enforced by serve | ddflow/surfaces/registry.py, ddflow/surfaces/declared/*.py, tests/test_locality.py | ST-locality (extend, do not duplicate) | 1 |
-| 2 | `trust` ladder on gate evidence (server-run, forge-attested, server-verified, agent-reported), shown in gate status/report/doctor, and a `[gates].min_trust` knob per gate | ddflow/services/gates/outcomes.py, ddflow/services/report_gates.py, ddflow/config_sections/gates.py | task 0 | 2 |
+| 2 | `trust` ladder on gate evidence (server-run, forge-attested, agent-run/server-checked, agent-reported), shown in gate status/report/doctor, and a `[gates].min_trust` knob per gate | ddflow/services/gates/outcomes.py, ddflow/services/report_gates.py, ddflow/config_sections/gates.py | task 0 | 2 |
 | 3 | Remote EventLog backend (HTTP append/read) behind the seam; thin client flag `--remote` | ddflow/infra/log_remote.py, ddflow/surfaces/cli.py | P-remote.serve, P-storage seam | 2 |
 | 4 | Thin-client acceptance: claim, gate run, merge from a clone against a served queue | tests/test_thin_client.py | task 3, ST-acceptance | 3 |
 | 5 | `PlanRunner`: a `CommandRunner` that returns a plan (`deferred`), plus plan state (plan_id, ttl, step ids) in the log | ddflow/services/cmdrunner.py, ddflow/services/plans.py | P-remote.runs, task 1 | 3 |
