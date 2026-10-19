@@ -105,3 +105,19 @@ def test_option_headings_with_both_forms_and_a_value_read_the_same():
 def test_option_headings_leave_other_lines_alone():
     text = "  -a A, --bee B\n  -h, --help  x\n  --only ONLY\nuse -m M, --message M here\n"
     assert option_headings(text) == text
+
+
+def test_option_headings_with_a_spaced_metavar_long_first_or_many_strings():
+    old = (
+        "  -f [FILE ...], --file [FILE ...]  input\n"
+        "  --message MESSAGE, -m MESSAGE\n"
+        "  -p A B, --pair A B  x\n"
+        "  -a A, --bee A, --cee A  y\n"
+    )
+    new = (
+        "  -f, --file [FILE ...]  input\n"
+        "  --message, -m MESSAGE\n"
+        "  -p, --pair A B  x\n"
+        "  -a, --bee, --cee A  y\n"
+    )
+    assert option_headings(old) == new == option_headings(new)

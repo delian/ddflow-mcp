@@ -44,7 +44,8 @@ COMMANDS = sorted(PARSERS)
 
 
 def unwrap_usage(text: str) -> str:
-    """The help with its leading `usage:` paragraph joined onto one line."""
+    """The help with its leading `usage:` paragraph joined onto one line and its option
+    headings spelt the 3.13 way."""
     usage, sep, rest = text.partition("\n\n")
     return re.sub(r"\s+", " ", usage).strip() + sep + option_headings(rest)
 
