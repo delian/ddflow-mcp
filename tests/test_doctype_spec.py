@@ -116,16 +116,16 @@ def test_not_toml():
 def test_rule_kind_added_as_data():
     text = ADR.replace(
         "[[doctype.section]]",
-        '[doctype.validate]\nrules = [{ kind = "each_item_matches" }]\n[[doctype.section]]',
+        '[doctype.validate]\nrules = [{ kind = "zz_future_kind" }]\n[[doctype.section]]',
         1,
     )
-    with pytest.raises(S.DocTypeError, match="each_item_matches"):
+    with pytest.raises(S.DocTypeError, match="zz_future_kind"):
         S.parse(text)
-    S.RULE_KINDS.register(S.RuleKind("each_item_matches"))
+    S.RULE_KINDS.register(S.RuleKind("zz_future_kind"))
     try:
-        assert S.parse(text).validate["rules"][0]["kind"] == "each_item_matches"
+        assert S.parse(text).validate["rules"][0]["kind"] == "zz_future_kind"
     finally:
-        S.RULE_KINDS.unregister("each_item_matches")
+        S.RULE_KINDS.unregister("zz_future_kind")
 
 
 def test_extends_merges_sections_by_id_and_removes():

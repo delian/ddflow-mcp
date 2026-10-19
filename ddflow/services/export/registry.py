@@ -67,6 +67,8 @@ class DocKind:
     #: shapes). Templates see it as ``schema_version``; ddflow only ever ADDS fields within
     #: one version, so an ejected or user template keeps rendering across upgrades.
     schema_version: int = 1
+    #: Extra header attributes the kind records for a render (the roadmap's ``since=``).
+    header: Callable[[Any, Any], dict[str, str]] | None = None
 
     def __post_init__(self) -> None:
         if self.update_mode not in UPDATE_MODES:
@@ -561,6 +563,8 @@ def render_document(  # noqa: PLR0913 -- the document kind's whole vocabulary: f
     body = render_body(
         k, query, filters, repo=repo, overrides=overrides, builtin=builtin, template=template
     )
+    if k.header is not None:
+        extra = {**(extra or {}), **k.header(query, filters or Filters())}
     if post is not None:
         body, more = post(body)
         extra = {**(extra or {}), **more}
