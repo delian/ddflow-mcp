@@ -31,14 +31,23 @@ _USAGE = re.compile(r"^usage: [^\n]*(?:\n[ \t]+\S[^\n]*)*", re.MULTILINE)
 _CHOOSE = re.compile(r"\(choose from ('[^',\n]*'(?:, '[^',\n]*')*)\)")
 
 
-#: A help-listing option heading with both forms and a value, in the pre-3.13 spelling
-#: ``  -m MESSAGE, --message MESSAGE`` (the metavar repeated); 3.13 writes ``-m, --message MESSAGE``.
-_OPT_HEADING = re.compile(r"^( +)(-\w) (\S+), (--[\w-]+) \3(?=\s|$)", re.MULTILINE)
+#: A help-listing option heading in the pre-3.13 spelling: every option string repeats the
+#: metavar (``  -m MESSAGE, --message MESSAGE``, ``  -f [FILE ...], --file [FILE ...]``);
+#: 3.13 writes it once, after the last string (``-m, --message MESSAGE``). The metavar may
+#: hold spaces; the heading ends at the help column (two spaces) or the end of the line.
+_OPT_HEADING = re.compile(r"^( +)(-\S+) (\S.*?)((?:, -\S+ \3)+)(?=  |$)", re.MULTILINE)
+
+
+def _one_metavar(m: re.Match) -> str:
+    strings = [m.group(2)] + [part.split(" ", 1)[0] for part in m.group(4).split(", -")[1:]]
+    # split(", -") dropped the dash of every later string; put it back
+    strings = [strings[0]] + ["-" + s for s in strings[1:]]
+    return m.group(1) + ", ".join(strings) + " " + m.group(3)
 
 
 def option_headings(text: str) -> str:
     """``text`` with every pre-3.13 ``-m MSG, --message MSG`` heading spelt the 3.13 way."""
-    return _OPT_HEADING.sub(r"\1\2, \4 \3", text)
+    return _OPT_HEADING.sub(_one_metavar, text)
 
 
 def argparse_stable(text: str) -> str:
