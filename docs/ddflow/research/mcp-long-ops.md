@@ -9,7 +9,8 @@ machine; CLAIMED = read in vendor docs or issue titles, not probed.
    timer: CONFIRMED by probe. It fails for the wall-clock limit and is unproven or false for the others.
 2. ddflow already emits progress for `ddflow_review`, `ddflow_merge`, `ddflow_upgrade`, `ddflow_pins`
    (`wants_progress`) but NOT for `ddflow_gate_run`, `ddflow_ci`, `ddflow_verify`, `ddflow_bisect`
-   (CONFIRMED in code). Claude Code's idle window for stdio is 30 minutes: that is very likely the
+   (CONFIRMED in code). Claude Code's DOCUMENTED idle window for stdio is 30 minutes (CLAIMED; the probe only measured a 30 s floor
+under a 15 s setting): that is very likely the
    "30 minute background limit" of DX-gate-background-limit / Bec9936dc6b.
 3. Nothing a server pushes wakes an idle agent in any client except Claude Code's experimental
    `claude/channel` (research preview, interactive only). Polling is the only portable contract.
@@ -124,26 +125,31 @@ Detach first, poll always, progress as a courtesy, tasks later as a mapping.
 ### Run key
 `run_key = sha256(op | item | head_sha | gate/reviewer | normalized args)[:16]`, prefix `R`. The same
 request returns the SAME run (join), never a second process: look up the key, `alive(pid)`, return it.
-A new head gives a new key. A finished run with the same key within `[runs].retention_s` returns its
-recorded result (idempotent retry after the client lost the reply).
+A new head gives a new key. Idempotency is scoped: an IN-FLIGHT run is joined, and a run that ended
+`passed`/`completed` within `[runs].retention_s` returns its recorded result (retry after the client lost the
+reply). A run that ended `cancelled`, `failed` or `unavailable` is NOT sticky: the same request starts a NEW
+run (the old record stays in history, linked as `previous`), and `force=true` mints a new key even over a
+success. (Found by the rubber_duck review: otherwise one crash or one cancel poisons (op,item,head).)
 
 ### Handle (returned within `[runs].sync_wait_s`, default 20, knob in file/CLI/MCP/prompt)
 ```
-{ resultType: "run", run: "R3f2a...", op: "review", item, head, state: "running",
+{ kind: "run", run: "R3f2a...", op: "review", item, head, state: "running",
   started_at, elapsed_s, eta_s|null, poll_after_s, wait_tool: "ddflow_run", log: ".ddflow/local/runs/R3f2a.log",
-  pid, host, lease_renewed_until, next: "ddflow_run run=R3f2a... wait_s=45" }
+  pid, host, lease_renewed_until, next: "ddflow_run run=R3f2a... wait_s=20" }
 ```
-Field-compatible with MCP tasks 2026-07-28: `run`=taskId, `state` working|input_required|completed|failed|
+`kind` is ours; `resultType` is NOT used, it is the 2026-07-28 spec discriminator (`complete`, `input_required`,
+`task`) and is only ever set to `task` for a client that declared the extension. Field-compatible with MCP
+tasks 2026-07-28: `run`=taskId, `state` working|input_required|completed|failed|
 cancelled (+ `unavailable` mapped to failed with statusMessage), `poll_after_s`=pollIntervalMs/1000,
 `ttl_s`=ttlMs/1000. If the call finishes inside `sync_wait_s` the ordinary result is returned directly,
 so short runs cost one call.
 
 ### Poll
 One tool, `ddflow_run` (CLI `ddflow run status|wait|cancel`): `run=<key>`, `wait_s` default 0, max
-`[runs].long_poll_max_s` (default 45, must be below the smallest client request timeout we care about; Codex
-default is 60 s). Bounded long-poll: it blocks up to `wait_s` or until the state changes, answers with the
+`[runs].long_poll_max_s` (default 20 until RM-client-probes measures opencode/Kilo/Gemini; the one number known
+is Codex `tool_timeout_sec` 60 s per its docs, CLAIMED, and an unprobed client with a 30 s timeout would break 45). Bounded long-poll: it blocks up to `wait_s` or until the state changes, answers with the
 same handle plus `state`, `progress_line` (last log line), `elapsed_s`, `eta_s` (median of the last N runs of
-the same op/gate, else null), and `poll_after_s` that backs off 5 -> 15 -> 30 -> 45 s. On terminal state it
+the same op/gate, else null), and `poll_after_s` that backs off 5 -> 10 -> 20 s (capped by `long_poll_max_s`). On terminal state it
 carries the result object exactly as the synchronous tool would (gate outcome, findings, evidence path),
 and a `recorded: true` flag saying the gate/review outcome is already in the log. Unknown key: exit 2 naming
 `ddflow run list`. The agent never infers completion from silence.
@@ -202,5 +208,5 @@ Wave 3
 Wave 4 (verify with real clients)
 10. RM-client-probes: repeat the sleepy probe with opencode/Kilo, Codex, Gemini CLI when credentials exist;
     record matrix rows; adjust `long_poll_max_s` default.
-11. RM-run-retention-and-driver: implement driver and deltas say "start, then `ddflow_run wait_s=45`"; never
+11. RM-run-retention-and-driver: implement driver and deltas say "start, then `ddflow_run wait_s=20`"; never
     background shell + hand-polled files.
