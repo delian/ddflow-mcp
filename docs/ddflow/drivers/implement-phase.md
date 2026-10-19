@@ -158,7 +158,7 @@ the ten steps below; `.ddflow/gates.toml` changes it per project.
 | 3 | `implement` | you | `gate record <ID> implement --outcome passed` |
 | 4 | `rubber_duck` | a **different-family** model | `gate record ... --model <reviewer model>` |
 | 5 | `critic` | a **different-family** critic | same |
-| 6 | `standards` | tooling | `ddflow gate run <ID> standards`; for roborev: `roborev review <sha>` (an explicit sha, never `HEAD` from a worktree), then `roborev wait <job>` (job ids are daemon-wide; `roborev show --job <job>` of an unfinished job says "no review found", and `roborev list` is scoped to the cwd's repo and branch), then `gate record ... --reviewed-sha <sha>` |
+| 6 | `standards` | tooling | `ddflow gate run <ID> standards`; for roborev: `roborev review <sha>` (an explicit sha, never `HEAD` from a worktree), then `roborev wait --job <job>` (a bare `roborev wait <job>` reads the number as a sha prefix and says "No job found"; job ids are daemon-wide; `roborev show --job <job>` of an unfinished job says "no review found", and `roborev list` is scoped to the cwd's repo and branch), then `gate record ... --reviewed-sha <sha>` |
 | 7 | `unit_tests` | tooling | `ddflow gate run <ID> unit_tests` |
 | 8 | `bug_hunt` | you | `gate record` + a probe per finding |
 | 9 | `dedupe` | you | `gate record` |

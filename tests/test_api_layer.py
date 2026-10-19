@@ -428,6 +428,7 @@ WRITES_NOT_COMPARABLE = {
     # tests/test_batch_fold.py.
     "ddflow_batch",
     "ddflow_task_fold",
+    "ddflow_rename",  # a second call finds the old id abandoned; tests/test_rename_item.py
     "ddflow_promote_add",
     # Reads or WRITES the forge (a reply, a resolve); pinned by tests/test_review_threads.py.
     "ddflow_pr_threads",
