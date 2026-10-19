@@ -85,9 +85,9 @@ or the caller's `locality` capability says `none`):
   "tool": "ddflow_gate_run",
   "steps": [
     {"id": "s1", "argv": ["git","fetch","origin","ddflow/probe-w"],
-     "cwd": "$REPO", "env_hints": {}, "expect": {"exit_codes": [0]}},
+     "cwd": "$REPO", "env_names": [], "expect": {"exit_codes": [0]}},
     {"id": "s2", "argv": ["python3","-m","pytest","-q","test_m.py"],
-     "cwd": "$WORKTREE", "env_hints": {"PYTHONDONTWRITEBYTECODE": "1"},
+     "cwd": "$WORKTREE", "env_names": [],   // names only, never values
      "timeout_s": 600, "capture": {"stdout_digest": true, "tail_bytes": 4000},
      "expect": {"exit_codes": [0,1], "artifacts": []}}
   ],
@@ -102,15 +102,24 @@ Rules of the envelope:
 * `argv` arrays, never shell strings, except the one declared gate command that is a shell
   line by definition (`Declared.line`): it is delivered as `["sh","-c",line]` with
   `declared_by` so the agent and an auditor can see whose line it is. No secret ever appears
-  in `argv`/`env_hints`: only `env_names` (names the agent's environment must already hold).
-  Reviewer keys never leave the server (section 3).
+  in `argv`; the envelope carries `env_names` only (names the agent's environment must
+  already hold), no values. A declared line that matches a secret heuristic (inline token,
+  `Authorization:` header, `-p <password>`) is NOT shipped: the planner records that gate
+  `unavailable` with that reason and the operator moves the secret to an env name. Reviewer
+  keys never leave the server (section 3).
 * `cwd` uses `$REPO` / `$WORKTREE` placeholders; the agent substitutes real paths. This is
   the path-difference fix: the log already stores worktree paths relative to the repo root
   (R14, worktree.py:341-377).
 * `expect.exit_codes` lets the server tell "ran and failed" from "could not run" exactly as
   `classify_exit` does (runner.py:266). `127`/spawn error/timeout map to `unavailable`.
-* The reply is **idempotent and resumable**: `plan_id` replay returns the same plan; a
-  report for a plan that already has a report returns the recorded outcome.
+* **Replay semantics, one way:** `plan_id` is minted once per (tool, item, head) and is live
+  until reported or expired. Calling the tool again while a plan is live returns the SAME
+  plan (no second plan, no orphan in `brief`); a report for an already-reported plan returns
+  the recorded outcome. The agent has no `Worktree.create` adoption logic, so the claim plan
+  begins with a probe step (`git rev-parse --verify --quiet refs/heads/ddflow/<id>`) and the
+  server picks `git worktree add -b ...` (fresh) or `git worktree add <path> <branch>`
+  (existing) from the reported probe result (a two-round plan); a report of "already present"
+  counts as success. The adoption claim in section 1 therefore holds for the thin client only.
 * The server emits the envelope by a `PlanRunner` that implements the `CommandRunner`
   interface (cmdrunner.py:208) and returns a plan instead of running. Same code path, same
   evidence keys, one new status `"deferred"` beside `ran`/`unavailable`.
@@ -174,14 +183,17 @@ has nothing to compare; (3) the server could resolve the pushed sha (`git cat-fi
 ### Worked example C: merge (PR-mode, two round trips)
 
 ```
-> ddflow_merge {id:"probe-w", exec:"client"}
-< refusals are server-side and unchanged: contested lease, gate blockers, nothing-to-land check
-  (needs the pushed head): {needs_local:true, plan_id:"pl_3",
+> ddflow_merge {id:"probe-w", exec:"client", head:"d77a9316378d"}
+< refusals that need no tree are evaluated BEFORE any plan: contested lease, gate blockers
+  (evidence tree vs the supplied head), and a provisional nothing-to-land check on the
+  supplied head (re-run on the fetched head after the push). Then {needs_local:true, plan_id:"pl_3",
    steps:[{id:"s1", argv:["git","push","origin","ddflow/probe-w"], cwd:"$WORKTREE", expect:{exit_codes:[0]}},
           {id:"s2", argv:["git","status","--porcelain"], cwd:"$WORKTREE"}],
    then:"ddflow_plan_report"}
 > ddflow_plan_report {plan_id:"pl_3", results:[{id:"s1",exit:0},{id:"s2",stdout:""}]}
-< server fetches ddflow/probe-w from the remote, verifies head == the head the gates ran on,
+< server fetches ddflow/probe-w from the remote, re-runs nothing-to-land on the fetched head
+  (a plan that expires after the push leaves only an unreferenced branch, which `cleanup`
+  lists), verifies head == the head the gates ran on,
   then lands IT, not the agent: (a) integration="pr": opens/updates the PR via forge token,
   item -> REVIEW, `pr sync` finishes (merge.py docstring); or (b) a server-side bare mirror:
   `git merge-tree` conflict check + `git update-ref` fast-forward of main, then push.
@@ -196,8 +208,11 @@ fetched itself. The agent's job is only `git push` of a branch.
 ## 3. Trust and verification
 
 Evidence is agent-reported; the question is which gates can still be made verifiable (the
-falsifier of the task). Result: **no gate becomes unverifiable that was verifiable before; the
-gates that were never verifiable stay honor-system**, and one existing hole should be fixed first.
+falsifier of the task). Result: server-derived gates stay verifiable in client-exec ONLY for a pushed, clean tree
+(`head+clean`). **A gate run on a dirty tree (`+st:<manifest>`, the normal state while
+developing) is verifiable today and is NOT in client-exec**: a real downgrade, so dirty-tree
+gates are not expressible in the envelope and need the thin client. Prose gates were never
+verifiable and stay honor-system. One existing hole should be fixed first.
 
 **The floor today (probed).** `ddflow gate record probe-u unit_tests --outcome passed --command
 "pytest -q" --exit-code 0` on a command gate that was never run is accepted and logged as
@@ -206,7 +221,7 @@ command gate. And the report's "by hand" heuristic does not catch it:
 `services/report_gates.py:15` marks a gate hand-recorded only when none of
 `TOOL_KEYS = ("command","reviewer","covered_by","roborev","branch_head","ci_scope","scope")`
 is in the evidence, and `gate record --command` writes `command` itself. So a faked pass
-carrying a command is reported as tool-produced. Filed as a bug (below); client-exec must not
+carrying a command is reported as tool-produced. Filed as bug Bed643a611b (task fix-Bed643a611b; `bug found --check` found no earlier duplicate); client-exec must not
 ship before a provenance field exists.
 
 Trust labels (a `trust` field on gate evidence, ordered): 
@@ -276,7 +291,7 @@ three-verb fallback, generated from the same declared commands.
 * GO: thin client over the remote log (needs P-remote.serve + P-storage seam).
 * GO (narrow): `needs_local` envelope for claim, gate run, merge-as-PR, with push-before-gate and server-side verification.
 * NO-GO: general client-exec for all class-B tools (setup, upgrade, hooks, doctor, import, render, cleanup, rebuild): these are *install-time or local-maintenance* verbs; on a client with no ddflow they have no meaning, and a thin client already runs them.
-* Bug first: hand-recorded command-gate pass is unlabelled (below). Without it the trust label cannot be built.
+* Bug first: Bed643a611b, a hand-recorded command-gate pass is unlabelled. Without it the trust label cannot be built.
 
 Reuses: P-remote.serve (single stateless writer, authorization table over declared commands),
 P-remote.runs (run handles, idempotent retries = the plan_id/report mechanics),
@@ -289,7 +304,7 @@ envelope is new).
 
 | # | Task (title) | Globs | Needs | Wave |
 |---|---|---|---|---|
-| 0 | Gate provenance: `gate record` on a command gate carries `trust:"agent-reported"` and the report no longer treats `command` alone as tool-produced (bug) | ddflow/api/gates.py, ddflow/services/report_gates.py, tests/test_gate_provenance.py | none | 1 |
+| 0 | fix-Bed643a611b. Gate provenance: `gate record` on a command gate carries `trust:"agent-reported"` and the report no longer treats `command` alone as tool-produced (bug) | ddflow/api/gates.py, ddflow/services/report_gates.py, tests/test_gate_provenance.py | none | 1 |
 | 1 | Locality column from this taxonomy: A / B / C per declared command, shown in the matrix, enforced by serve | ddflow/surfaces/registry.py, ddflow/surfaces/declared/*.py, tests/test_locality.py | ST-locality (extend, do not duplicate) | 1 |
 | 2 | `trust` ladder on gate evidence (server-run, forge-attested, server-verified, agent-reported), shown in gate status/report/doctor, and a `[gates].min_trust` knob per gate | ddflow/services/gates/outcomes.py, ddflow/services/report_gates.py, ddflow/config_sections/gates.py | task 0 | 2 |
 | 3 | Remote EventLog backend (HTTP append/read) behind the seam; thin client flag `--remote` | ddflow/infra/log_remote.py, ddflow/surfaces/cli.py | P-remote.serve, P-storage seam | 2 |
@@ -312,4 +327,4 @@ envelope is new).
 * Real run (`ddflow gate run`) evidence has `tree_sha:"399834b564bb+clean"`, `output_log`, `elapsed_s`,
   `command_digest`; the record route has none of tree_sha, elapsed_s, command_digest.
 * Not probed: a real server container with no repo mount (P-remote.serve does not exist yet);
-  no code in the repo was changed.
+  no ddflow code was changed (only this note was added).
