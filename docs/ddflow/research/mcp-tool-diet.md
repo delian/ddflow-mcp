@@ -24,7 +24,7 @@ secondary source or vendor statement not reproduced; THEORETICAL = reasoning, no
    already planned PM-search-call facade (`ddflow_search`/`ddflow_call`, reached via CP-mcp-profiles).
 5. Add an optional `next` field to state-changing results, hard-capped at 3 hints / 400 bytes.
 6. A caps budget must count OTHER servers: a client cap (128, 100, 64, 40) is shared by all MCP
-   servers, so ddflow should aim for at most about a quarter of it, not the whole of it. Today
+   servers, so ddflow should not take the whole of it; the per-profile targets in section 4 (15 for 40, 24 for 64, 36 for 128) are the practical ceiling, between a quarter and over a third of the cap, because fewer would split families too far. Today
    `all` (123) already leaves only 5 slots under 128 and is over Devin/Windsurf 100 by 23.
 
 This amends D-mcp-surface (1) "no tool is renamed or merged": that line was written when merging was
@@ -165,7 +165,7 @@ Hand review notes:
 - `admin`/`doctor` have 42 and 24 union params; split further or keep out of the `lean` profile.
 - Nothing is dropped: all 123 names appear below; the middle column is the family tool, the third column is the legacy name suffix, and the real `action` enum value is the CLI verb with the family noun stripped (`gate_record` becomes `ddflow_gate action=record`, `bug_found` becomes `action=found`); MTD-aliases generates the alias table from this mapping. `ddflow_release` (the lease release) maps into `ddflow_lease`, so the promote/version family is named `ddflow_ship` to avoid colliding with the legacy name `ddflow_release`.
 
-| old tool | new tool | action | calls | bytes | params | tier |
+| old tool | new tool | legacy suffix (the action enum value is the CLI verb: strip the family noun) | calls | bytes | params | tier |
 |---|---|---|---|---|---|---|
 | `ddflow_abandon` | `ddflow_lease` | abandon | 0 | 1053 | 5 | standard |
 | `ddflow_batch` | `ddflow_task` | batch | 0 | 758 | 3 | all |
