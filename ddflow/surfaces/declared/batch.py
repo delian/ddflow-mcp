@@ -65,6 +65,27 @@ def _fold(repo, a, agent):
     )
 
 
+def _rename(repo, a, agent):
+    return importlib.import_module("ddflow.api.rename").rename(
+        repo,
+        a["old"],
+        a["new"],
+        parent=a.get("parent") or "",
+        reason=a.get("reason") or "",
+        dry_run=bool(a.get("dry_run")),
+        agent=agent,
+    )
+
+
+def rename_text(out, a) -> str:
+    d = out.data
+    head = f"{d['old']} renamed to {d['new']} (under {d['parent'] or 'no phase'})" + (
+        " (dry run: nothing recorded)" if d["dry_run"] else ""
+    )
+    moved = f"\n  re-pointed: {', '.join(d['repointed'])}" if d["repointed"] else ""
+    return head + moved
+
+
 def batch_text(out, a) -> str:
     d = out.data
     verb = "would change" if d["dry_run"] else "changed"
@@ -149,6 +170,29 @@ COMMANDS: tuple[Command, ...] = (
             Param("dup", help="The duplicate to abandon.", cli_help="", positional=True),
             Param("keep", help="The survivor.", cli_help="", positional=True),
             Param("reason", help="Why (recorded on the abandonment).", cli_help="", default=""),
+            _DRY,
+        ),
+    ),
+    Command(
+        path=("rename",),
+        summary="move an item to a new id (and phase), re-pointing every needs edge",
+        tool="ddflow_rename",
+        tier="all",
+        help_group="Shaping the work",
+        description="Re-file the unclaimed task `old` as `new` (under `parent` when given): "
+        "title, body, globs, resources, tags, priority and needs are kept, every live item "
+        "that needs old now needs new, and old stays as an abandoned tombstone naming new. "
+        "One locked step. Refused when old is claimed, finished, a phase or has sub-tasks, or "
+        "new is taken. `dry_run` lists what it would do.",
+        call=_rename,
+        payload=("old", "new", "parent", "repointed", "dry_run", "released_parent_lease"),
+        render=rename_text,
+        cli=CliPolicy(shown=(OK,)),
+        params=(
+            Param("old", help="The task to rename.", cli_help="", positional=True),
+            Param("new", help="Its new id.", cli_help="", positional=True),
+            Param("parent", help="Move it under this phase or task.", cli_help="", default=""),
+            Param("reason", help="Why (recorded on the tombstone).", cli_help="", default=""),
             _DRY,
         ),
     ),
