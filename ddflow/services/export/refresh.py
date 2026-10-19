@@ -114,7 +114,9 @@ def _region_digest(text: str, doc: str) -> str:
     if len(mine) == 1:
         return mine[0].sha
     if mine:
-        return F.body_digest("".join(f"{r.name}={r.sha}\n" for r in sorted(mine, key=lambda r: r.name)))
+        return F.body_digest(
+            "".join(f"{r.name}={r.sha}\n" for r in sorted(mine, key=lambda r: r.name))
+        )
     found = W._region_pattern(doc, "begin").search(text)
     return found.group("sha") if found else ""
 
