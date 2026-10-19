@@ -132,5 +132,7 @@ def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):
     from ddflow.services import roborev as RR
 
     sha = "a" * 40
-    note = RR._unfinished_note([{"id": 12, "git_ref": sha, "status": "running"}], sha)
-    assert "`roborev wait --job 12`" in note
+    other = {"id": 13, "git_ref": "b" * 40, "status": "running"}  # newer, another commit
+    note = RR._unfinished_note([{"id": 12, "git_ref": sha, "status": "running"}, other], sha)
+    assert "`roborev wait --job 12`" in note and "job 13" not in note
+    assert RR._unfinished_note([other], sha) == ""
