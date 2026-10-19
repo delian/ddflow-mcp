@@ -16,10 +16,7 @@ from pathlib import Path
 from ..guidance.kinds import RULE
 from ..guidance.record import GuidanceRecord, Scope
 from . import spec
-from .find import type_glob, types_of
-
-#: Shipped types are the product's; a project-added one is a repository's own words.
-SHIPPED = "shipped/"
+from .find import SHIPPED, type_glob, types_of
 
 
 def _body(dt: spec.DocType) -> str:
@@ -73,13 +70,28 @@ def records_of(dt: spec.DocType) -> list[GuidanceRecord]:
     return out
 
 
+def _unreadable(why: str) -> GuidanceRecord:
+    """Advice that says the project's own types are missing, so "no guidance" is not read as
+    "no types": the agent holding the claim does not run `ddflow docs check`."""
+    body = (
+        f"The project's document type files could not be read ({why}); guidance from its own "
+        "types is missing here. `ddflow docs check` says which file and why."
+    )
+    return GuidanceRecord("dt-unreadable", RULE.kind, title="Document types unreadable", body=body)
+
+
 def records(root: Path | str | None) -> list[GuidanceRecord]:
-    """The guidance of every type of the project at ``root`` (none when it has no root, or its
-    type files cannot be read: `ddflow docs check` says so, a claim must not fail on it)."""
+    """The guidance of every type of the project at ``root``. None without a root. When a
+    project type file cannot be read the shipped types still count, and a record says the rest
+    is missing: a claim must not fail on it, nor go quiet."""
     if root is None:
         return []
     try:
-        types = types_of(root)
-    except (spec.DocTypeError, OSError):
-        return []
-    return [r for dt in types for r in records_of(dt)]
+        types, note = types_of(root), []
+    except (ValueError, OSError) as exc:
+        note = [_unreadable(str(exc).splitlines()[0][:200])]
+        try:
+            types = types_of(root, project=False)
+        except (ValueError, OSError):
+            types = []
+    return [*(r for dt in types for r in records_of(dt)), *note]

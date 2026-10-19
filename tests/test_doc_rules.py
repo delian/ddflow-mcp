@@ -10,6 +10,7 @@ from conftest import run_cli
 
 from ddflow.api import review as RVAPI
 from ddflow.api._base import _load
+from ddflow.config import Config
 from ddflow.services.doctypes import guidance as DG
 from ddflow.services.doctypes import spec
 from ddflow.services.guidance import inject as GI
@@ -86,10 +87,16 @@ def test_a_type_with_nothing_to_say_adds_nothing():
     assert DG.records_of(spec.parse(bare)) == []
 
 
-def test_broken_type_files_never_fail_the_lookup(tmp_path: Path):
-    (tmp_path / ".ddflow" / "doctypes").mkdir(parents=True)
-    (tmp_path / ".ddflow" / "doctypes" / "bad.toml").write_text("[[[", encoding="utf-8")
-    assert DG.records(tmp_path) == [] and DG.records(None) == []
+def test_a_broken_project_type_file_keeps_the_shipped_guidance_and_says_so(tmp_path: Path):
+    d = tmp_path / ".ddflow" / "doctypes"
+    d.mkdir(parents=True)
+    (d / "bad.toml").write_text("[[[", encoding="utf-8")
+    got = [r.id for r in DG.records(tmp_path)]
+    assert "dt-adr" in got and got[-1] == "dt-unreadable"
+    (d / "bad.toml").write_bytes(b"\xff\xfe not utf-8")  # not decodable either
+    assert "dt-unreadable" in [r.id for r in DG.records(tmp_path)]
+    assert DG.records(None) == []
+    assert "root" not in Config().as_dict()
 
 
 def test_a_claim_on_a_document_gets_its_types_guidance_and_one_on_code_does_not(repo: Path):

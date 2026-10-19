@@ -22,7 +22,7 @@ from .docscheck import _tree
 from .docscheck_types import Finding
 from .docsync import glob_regex
 from .doctypes import spec
-from .doctypes.find import type_glob, types_of
+from .doctypes.find import SHIPPED, type_glob, types_of
 from .doctypes.validate import validate
 
 
@@ -31,7 +31,7 @@ def _lint(repo: Path, cfg: Config, dt: spec.DocType, path: str, check: Any) -> I
     key = f"lint:{dt.name}"
     if not line:
         return []
-    if not dt.source.startswith("shipped/"):
+    if not dt.source.startswith(SHIPPED):
         check.not_configured[key] = (
             f"{dt.name}: a lint command in a project-added type is inert until approved"
         )
@@ -57,7 +57,7 @@ def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = 
     report = check.report
     try:
         types = types_of(repo)
-    except (spec.DocTypeError, OSError) as exc:
+    except (ValueError, OSError) as exc:
         check.unavailable["doctypes"] = str(exc)
         return
     tree = _tree(repo)
@@ -84,7 +84,7 @@ def check_doctypes(repo: Path, cfg: Config, check: Any, *, run_commands: bool = 
             count += 1
             if run_commands:
                 report.findings += _lint(repo, cfg, dt, path, check)
-            elif dt.validate.get("lint_command") and dt.source.startswith("shipped/"):
+            elif dt.validate.get("lint_command") and dt.source.startswith(SHIPPED):
                 check.unavailable[f"lint:{dt.name}"] = "commands are off for this check"
             elif dt.validate.get("lint_command"):
                 check.not_configured[f"lint:{dt.name}"] = (
