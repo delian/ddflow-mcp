@@ -55,6 +55,10 @@ def test_live_run_judges_commit_liveness_and_host(tmp_path):
     assert RUN.live_run(repo, "T1", "ci", "tree-bbb") is None
     assert RUN.live_run(repo, "T1", "unit_tests", "tree-aaa") is None
     assert RUN.live_run(repo, "T1", "ci", "") is None
+    data["host"] = "some-other-host.invalid"  # not judged from here
+    other_pid_marker.write_text(json.dumps(data))
+    assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
+    data["host"] = RUN.H.hostname()
     data["pid"] = 2**22 + 7  # gone
     other_pid_marker.write_text(json.dumps(data))
     assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
