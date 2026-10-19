@@ -209,4 +209,3 @@
 "ddflow/services/export/roadmap_calc.py:DEFAULT_NEXT" = "the default of the [export.roadmap] `next` knob, which is already configurable"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_TASKS" = "the default of the [export.roadmap] `tasks` knob, which is already configurable"
 "ddflow/services/export/roadmap_calc.py:DEFAULT_GRAPH" = "the default of the [export.roadmap] `graph` knob, which is already configurable"
-"ddflow/services/shardmarks.py:SETTLE_S" = "a retry pause of a few tenths of a second so a shard git is rewriting in place can finish; a race window, not a policy anyone tunes"

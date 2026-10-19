@@ -201,7 +201,11 @@ def _settled(
     seen = str(old.get("last_event_id", ""))
     quiet, last = 0, scanned[2]
     for _ in range(looks * 25):  # a hard stop for a shard that never stops changing
-        if quiet >= looks or path is None or not (scanned[0] < old["count"] or not _holds(path, seen)):
+        if (
+            quiet >= looks
+            or path is None
+            or not (scanned[0] < old["count"] or not _holds(path, seen))
+        ):
             break
         time.sleep(pause_s)
         again = _scan(path)
@@ -232,11 +236,7 @@ def _raised(
         if scanned[2] == old.get("size") and scanned[0] >= old["count"] and _holds(path, seen):
             out[key] = _mk(shard, scanned, ref)  # restored to exactly what was seen
     elif scanned[0] < old["count"] or not _holds(path, seen):
-        scanned = _settled(path, old, scanned)
-        if scanned[0] < old["count"] or not _holds(path, seen):
-            out[key] = {**old, "shrunk": True}
-        else:
-            out[key] = _mk(shard, scanned, ref)
+        out[key] = {**old, "shrunk": True}
     else:
         out[key] = _mk(shard, scanned, ref)
 
@@ -315,6 +315,10 @@ def observe(repo: Any, log: Any) -> None:
             if row is not None and row.get("size") == size and not row.get("shrunk"):
                 continue
             if (scanned := _scan(p)) is not None:
+                # settled HERE, before the marks lock is taken: waiting for a rewrite to finish
+                # must not hold up the appends and commands that queue on that lock
+                if row is not None and not row.get("shrunk"):
+                    scanned = _settled(p, row, scanned)
                 found[p.name] = scanned
         if not found:
             return
@@ -388,6 +392,8 @@ def lost(repo: Any, log: Any) -> list[Lost]:
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
                 continue  # unreadable: the integrity pass names it
+            if name in present and not row.get("shrunk"):
+                scanned = _settled(present[name], row, scanned)  # a read mid-rewrite is no loss
             seen = str(row.get("last_event_id", ""))
             if (
                 row.get("shrunk")
