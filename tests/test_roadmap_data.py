@@ -108,7 +108,10 @@ def test_release_lines_group_phases_only_when_there_are_several():
 def test_schema_version_is_bumped_and_limit_still_counts():
     assert registry.get("roadmap").schema_version == 2
     d = data(road_log(), limit=1)
-    assert d["hidden_phases"] >= 0 and d["open_tasks"] == 5
+    full = data(road_log())
+    shown = sum(len(lane["phases"]) for lane in d["lanes"])
+    assert d["open_tasks"] == 5 == full["open_tasks"]
+    assert d["hidden_phases"] == sum(len(lane["phases"]) for lane in full["lanes"]) - shown > 0
 
 
 def test_a_zero_cap_lists_no_tasks_and_counts_them():

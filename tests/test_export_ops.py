@@ -144,6 +144,14 @@ def test_the_roadmap_knobs_read_from_the_config_change_the_document(proj):
     assert "work 1" not in text and "1 more open task" in text
 
 
+def test_show_hidden_brings_the_internal_batches_back(proj):
+    run_cli(proj, "phase", "add", "BL-inner", "--title", "Inner batch", "--globs", "b/**")
+    run_cli(proj, "task", "add", "BL-inner.T", "--phase", "BL-inner", "--title", "inner work")
+    assert "Inner batch" not in _results(api.export_documents(proj, "roadmap"))[0]["text"]
+    _select(proj, "[export.roadmap]\nshow_hidden = true\n")
+    assert "Inner batch" in _results(api.export_documents(proj, "roadmap"))[0]["text"]
+
+
 def test_print_is_capped_with_an_explicit_truncation_field(proj):
     for i in range(30):
         run_cli(proj, "phase", "add", f"PX{i}", "--title", f"Phase number {i}", "--globs", "x/**")

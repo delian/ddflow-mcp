@@ -1,11 +1,11 @@
 """Roadmap: phases in lanes Now / Next / Later with done/total, open tasks, Done as a count.
 
-A phase is in NOW when any of its tasks is running or in review, NEXT when it has an open
-task nothing blocks, LATER when every open task waits on something (a dependency of its
-own or of an ancestor, or the blocked state), and DONE (a count only) when it is closed and
-all its tasks are done. A phase with no open task -- none yet, or all done but the phase
-not closed -- is NEXT (nothing waits on it: there is work, or the phase is there to close)
-or LATER (it names a dependency not met). Whether one dependency is met is the scheduler's
+Phases come in dependency order, then priority (`roadmap_calc.order`). A phase is in NOW
+when any of its tasks is running or in review; a READY phase (an open task nothing blocks,
+or no open task and nothing awaited) is in NEXT while it is among the top `next` of them,
+and in LATER beyond that; LATER also holds a phase whose every open task waits on something
+(a dependency of its own or of an ancestor, or the blocked state). DONE is a count only: a
+closed phase whose tasks are all done. Whether one dependency is met is the scheduler's
 own answer (`schedule.dep_status`, under the project's `[flow].stack` and
 `[schedule].unknown_dep_policy`), so a phase counts as met when it is closed, as for `next`
 (B58010c24b3). Per dependency only: what `next` judges across several (two review branches
@@ -58,8 +58,7 @@ def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
 
 def _settings(cfg: Config) -> tuple[list[str], int, int, bool]:
     t = cfg.export.table("roadmap")
-    hide = t.get("hide", list(RC.DEFAULT_HIDE))
-    hide = [hide] if isinstance(hide, str) else list(hide)
+    hide = list(t.get("hide", RC.DEFAULT_HIDE))  # a list: the config validator refuses the rest
     return (
         hide,
         int(t.get("next", RC.DEFAULT_NEXT)),
@@ -71,7 +70,7 @@ def _settings(cfg: Config) -> tuple[list[str], int, int, bool]:
 def _phase_rows(
     q: Query, f: registry.Filters, cfg: Config, hide: list[str]
 ) -> tuple[list[dict], dict]:
-    """Every listed phase as a row (lane and rank set), and ``{done, hidden, open}`` counts."""
+    """Every listed phase as a row (lane set; `_data` adds rank), and ``{done, hidden, open}`` counts."""
     seen = {"done": 0, "hidden": 0, "open": 0}
     rows: list[dict[str, Any]] = []
     for p in q.phases():
