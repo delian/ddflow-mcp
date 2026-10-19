@@ -69,21 +69,49 @@ def test_a_real_looking_key_after_the_same_keyword_still_fires(tmp_path):
 _SHA = "0123456789abcdef" * 2 + "01234567"
 
 
+def _scan_committed(repo: Path, rel: str, text: str) -> int:
+    """gitleaks over a one-commit git repo holding ``text`` at ``rel``: paths are repo-relative,
+    as in the pre-push scan."""
+    target = repo / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x", "--no-verify"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, env=env, capture_output=True)
+    run = subprocess.run(
+        [
+            _gitleaks() or "",
+            "git",
+            "--no-banner",
+            "--config",
+            str(ROOT / ".gitleaks.toml"),
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode in (0, 1), run.stderr
+    return run.returncode
+
+
+_BODY = '{"body":"sourcegraph search","head":"' + _SHA + '"}\n'
+
+
 def test_a_git_sha_in_an_event_log_that_mentions_sourcegraph_is_not_a_token(tmp_path):
     # The rule's keyword is per file; the committed logs name 40-hex shas all the time.
-    events = tmp_path / ".ddflow" / "events"
-    events.mkdir(parents=True)
-    (events / "a.jsonl").write_text('{"body":"sourcegraph search","head":"' + _SHA + '"}\n')
-    assert _scan_dir(tmp_path) == 0
+    assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", _BODY) == 0
 
 
 def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
-    (tmp_path / "notes.txt").write_text("sourcegraph token " + _SHA + "\n")
-    assert _scan_dir(tmp_path) != 0
+    assert _scan_committed(tmp_path, "notes.txt", "sourcegraph token " + _SHA + "\n") != 0
 
 
-def test_a_lookalike_event_log_path_is_not_exempt(tmp_path):
-    events = tmp_path / "lib.ddflow" / "events"
-    events.mkdir(parents=True)
-    (events / "a.jsonl").write_text('{"body":"sourcegraph search","head":"' + _SHA + '"}\n')
-    assert _scan_dir(tmp_path) != 0
+def test_a_lookalike_or_nested_event_log_path_is_not_exempt(tmp_path):
+    assert _scan_committed(tmp_path, "vendor/x/.ddflow/events/a.jsonl", _BODY) != 0
+    assert _scan_committed(tmp_path / "b", "lib.ddflow/events/a.jsonl", _BODY) != 0
