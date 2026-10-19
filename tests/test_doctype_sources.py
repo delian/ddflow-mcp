@@ -348,3 +348,41 @@ def test_read_capped_stays_in_the_repo(tmp_path):
     (repo / "link.txt").symlink_to(tmp_path / "out" / "s.txt")
     with pytest.raises(S.SourceError):
         S.read_capped(S.Context(repo=repo), "link.txt")
+
+
+def test_bug_state_fix_wins_over_invalid_closure():
+    def ev(kind: str, ts: str, **data: object) -> Event:
+        return Event(
+            kind, "B9", data, agent="a1", lamport=int(ts[-3:-1]), ts=f"2026-09-01T08:00:{ts}Z"
+        )
+
+    q = query.build(
+        [ev("bug.found", "01", summary="x"), ev("bug.fixed", "02", regression_test="t.py::t"),
+         ev("bug.invalid", "03", reason="r")]
+    )  # fmt: skip
+    assert [r["state"] for r in RQ.run(RQ.parse("kind=bug"), q)] == ["fixed"]
+
+
+def test_contested_records_are_not_live():
+    from types import SimpleNamespace as NS
+
+    assert RQ._lesson_state(NS(superseded_by="", contested=[{"x": 1}])) == "contested"
+    assert RQ._lesson_state(NS(superseded_by="", contested=[])) == "live"
+    assert RQ._status(NS(status="accepted", contested=[{"x": 1}])) == "contested"
+    assert RQ._status(NS(status="accepted", contested=[])) == "accepted"
+
+
+def test_query_limit_must_be_decimal_and_fields_are_always_present(q):
+    with pytest.raises(RQ.QueryError):
+        RQ.parse("kind=task limit=²")
+    rows = RQ.run(
+        RQ.parse("kind=task fields=id,title"),
+        q,
+    )
+    assert all(set(r) == {"id", "title"} for r in rows)
+
+
+def test_fragments_directory_typo_is_refused_not_empty(tmp_path):
+    repo = _repo(tmp_path)
+    with pytest.raises(ExportError, match="not a directory"):
+        S.render_type(_dt("fragments:docs/fragment"), S.Context(repo=repo))

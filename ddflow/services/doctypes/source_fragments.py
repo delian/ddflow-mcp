@@ -11,6 +11,7 @@ from typing import Any
 
 from .sources import (
     Context,
+    SourceError,
     SourceKind,
     check_relative,
     read_capped,
@@ -29,7 +30,10 @@ def _check(arg: str) -> str:
 def _data(arg: str, ctx: Context) -> dict[str, Any]:
     base = arg.rstrip("/")
     out = []
-    for rel in tracked_in(ctx, base):
+    listed = tracked_in(ctx, base)
+    if not listed and not (ctx.repo and (ctx.repo / base).is_dir()):
+        raise SourceError(f"{base!r} is not a directory of the repo")  # a typo is not 'none yet'
+    for rel in listed:
         if not rel.lower().endswith(SUFFIXES) or rel.rsplit("/", 1)[-1].lower().startswith(
             "readme"
         ):
