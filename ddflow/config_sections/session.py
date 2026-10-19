@@ -132,6 +132,10 @@ class SessionConfig:
         120,
         doc="Characters `ddflow report ITEM` keeps of the summary of each bug the item fixed, in its regression-test rows. Change it for the project (`ddflow config --set session.report_summary_chars 200`), for this machine (add --local), or over MCP with `ddflow_configure`.",
     )
+    report_brief_chars: int = knob(
+        200,
+        doc="Characters `ddflow report ITEM --brief` keeps of each free-text entry (an override reason, a not-done note); ids, gate names, test names and the landing sha are never cut. Change it for the project (`ddflow config --set session.report_brief_chars 300`), for this machine (add --local), or over MCP with `ddflow_configure`.",
+    )
     report_test_files: int = knob(
         12,
         doc="How many changed test files `ddflow report ITEM` names before it says how many more there were.",

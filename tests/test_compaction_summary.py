@@ -112,12 +112,16 @@ def test_install_adds_the_pre_compact_hook_and_uninstall_removes_it(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "hooks", "install", "--claude")[0] == 0
     hooks = json.loads((repo / ".claude" / "settings.json").read_text())["hooks"]
-    assert any("hooks pre-compact" in h["command"] for g in hooks["PreCompact"] for h in g["hooks"])
+    assert any(
+        "hooks run pre_compact" in h["command"] for g in hooks["PreCompact"] for h in g["hooks"]
+    )
     assert "PreCompact hook: installed" in run_cli(repo, "hooks", "status")[1]
     run_cli(repo, "hooks", "uninstall", "--claude")
     hooks = json.loads((repo / ".claude" / "settings.json").read_text()).get("hooks", {})
     assert not any(
-        "hooks pre-compact" in h["command"] for g in hooks.get("PreCompact", []) for h in g["hooks"]
+        "hooks run pre_compact" in h["command"]
+        for g in hooks.get("PreCompact", [])
+        for h in g["hooks"]
     )
 
 

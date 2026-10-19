@@ -207,9 +207,16 @@ COMMANDS: tuple[Command, ...] = (
                 default=False,
                 mcp_only=True,
             ),
+            Param(
+                "brief",
+                type="boolean",
+                help="With report: the 8-line form.",
+                default=False,
+                mcp_only=True,
+            ),
         ),
         call=lambda repo, a, agent: (
-            _api().show_report(repo, a["id"], agent=agent)
+            _api().show_report(repo, a["id"], agent=agent, brief=bool(a.get("brief")))
             if a.get("report")
             else _api().show(repo, a["id"], agent=agent)
         ),

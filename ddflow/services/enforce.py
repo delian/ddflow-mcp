@@ -70,6 +70,7 @@ from .backups import make_backup
 from .enforce_committed import committed_log
 from .export import frame as F
 from .export import ops as X
+from .export import region_check as RC
 from .export import registry as R
 from .export import write as XW
 from .export.query import ExportError
@@ -1786,6 +1787,9 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     configured = {p for _d, p, _m in cfg.export.targets()}
     staged, exports = _staged_generated(repo, listed, names, tree, configured)
     rules = _staged_rule_files(repo, listed, tree)
+    regions = _edited_regions(repo, listed, tree, configured)
+    if regions:
+        return _verdict(mode, regions)
     if not staged and not exports and not rules:
         return Verdict(OK, "")
     noun = _staged_noun(staged, exports)
@@ -1836,6 +1840,35 @@ def _staged_generated(
         if data is not None and data.startswith(GENERATED_PREFIX.encode("utf-8")):
             staged[p] = data
     return staged, exports
+
+
+def _edited_regions(repo: Path, listed: list[str], tree: Path, configured: set[str]) -> list[str]:
+    """Message lines for staged files holding a ddflow region whose body no longer matches
+    the digest in its begin marker (B-tpl-refresh): empty when none. The check needs no
+    log, only the staged text; a file whose markers cannot be read is named too."""
+    bad: list[tuple[str, str]] = []
+    for p in listed:
+        if p not in configured and not p.lower().endswith((".md", ".markdown", ".txt")):
+            continue
+        data = staged_bytes(repo, p, tree=tree)
+        if data is None or b"ddflow:begin" not in data:
+            continue
+        text = _lf(data).decode("utf-8", errors="replace")
+        why = RC.problem(text)
+        if why:
+            bad.append((p, why))
+        bad += [(p, f"region {name} was edited by hand") for name in RC.edited(text)]
+    if not bad:
+        return []
+    return [
+        f"ddflow: {len(bad)} staged ddflow region(s) do not match their recorded digest:",
+        "",
+        *(f"  {p}  ({why})" for p, why in bad),
+        "",
+        "A region is regenerated from its template, never edited. Regenerate and stage:",
+        "    ddflow export <doc> --update",
+        "    git add " + " ".join(shlex.quote(p) for p in sorted({p for p, _ in bad})),
+    ]
 
 
 def _staged_rule_files(repo: Path, listed: list[str], tree: Path) -> dict[str, bytes]:

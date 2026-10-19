@@ -12,15 +12,19 @@ from ._common import _api
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_onboard": {
         "description": (
-            "The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate, verify. Propose by default; apply=true acts on the safe/approved items and accepts names."
+            "The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate, verify, harness (per-agent: registered?, approve, hooks, best ladder level). Propose by default; apply=true acts on the safe/approved items and accepts names."
         ),
         "properties": {
             "stage": (
                 "string",
-                "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate or verify.",
+                "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate, verify or harness (accept = agent ids).",
                 False,
             ),
-            "apply": ("boolean", "Act on the proposal (preflight/legacy/memory).", False),
+            "apply": (
+                "boolean",
+                "Act on the proposal (preflight/legacy/memory/harness: approve, hooks).",
+                False,
+            ),
             "accept": (
                 "array",
                 "Names to approve (preflight leftovers, memory facts); empty = everything the report marked safe.",
