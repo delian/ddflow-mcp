@@ -228,11 +228,14 @@ def test_the_readme_budget_catches_a_checker_that_became_quadratic(monkeypatch):
     real = D.check_docs
 
     def quadratic(*args, **kwargs):
-        for _ in range(int(RUNTIME_RATIO * 1.5)):  # a sleep-free busy loop, 1.5x the budget
-            _reference_cost()
+        start = _cpu()
+        while _cpu() - start < 1.0:  # a sleep-free busy loop: one CPU second, whatever the load
+            pass
         return real(*args, **kwargs)
 
     monkeypatch.setattr(D, "check_docs", quadratic)
+    # a pinned reference (0.05 s: 5x lighter than idle) so the mutation does not race the load
+    monkeypatch.setattr(sys.modules[__name__], "_reference_cost", lambda: 0.05)
     monkeypatch.setattr(sys.modules[__name__], "RUNTIME_ATTEMPTS", 1)
     with pytest.raises(AssertionError, match="reference workload"):
         test_runtime_on_this_repositorys_readme()
