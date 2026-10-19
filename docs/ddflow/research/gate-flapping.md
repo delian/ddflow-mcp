@@ -24,8 +24,9 @@ cannot tell a review loop converging round after round from a coin flip.
   `evidence.status` are triage settlements, those with `status: REVIEWED` and 0 findings
   are clean delta rounds.
 * All 4475 recorded critic/rubber_duck outcomes: 2538 failed, 680 passed on a clean review
-  (0 findings), 1257 passed otherwise (triage, budget, refutation). A third of the
-  gate's passes are settlements, which is exactly the shape that reads as a flip.
+  (0 findings), 1257 passed otherwise (triage, budget, refutation). Of the 1937 passes,
+  1257 (about two thirds) are settlements rather than clean reviews, which is exactly the
+  shape that reads as a flip.
 
 ## Verdict: REFUTED as reviewer nondeterminism; CONFIRMED as a detector defect
 
@@ -42,7 +43,10 @@ cannot tell a review loop converging round after round from a coin flip.
 
 ## Fix (filed as a task)
 
-Count a flip only when the opposite verdict comes from a NEW review run of the gate (a
-`gate.started` between the two outcomes), not from the triage or settlement of the previous
-round. Regression test: a failed review round followed by a triage pass, repeated five
-times, is not `gate_flapping`; an alternating started/failed/started/passed run still is.
+Group a gate's outcomes into rounds (each `gate.started` opens one) and give a round the
+LAST decisive verdict recorded before the next one starts: a failed round that its own
+triage settled is `passed`. Count a flip only when consecutive rounds end differently.
+Judged this way fix-Ba24a8d32ee, whose six rounds each ended `passed`, has no flips; a gate
+whose round 1 ended `failed` (left unsettled) and whose round 2 ended `passed` still has one.
+Regression test: five failed-then-settled rounds are not `gate_flapping`; an unsettled
+failed round followed by a passing one, five times over, still is.
