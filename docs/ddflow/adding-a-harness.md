@@ -20,7 +20,7 @@ For every fact the descriptor says one of:
 - a **value** (`path = ".gemini/settings.json"`);
 - **documented absent** (`none = true`, `style = "none"`, `shape = "none"` with `path = ""`);
 - **nothing**, which means *not verified*. ddflow never guesses: it reports the step
-  `unknown`, and `ddflow harness doctor` lists it. Writing `none` for something you did not
+  `unknown`, and `ddflow harness show <id>` lists it under `not verified`. (`harness doctor` reports drift, not missing facts: a clean doctor is not evidence that anything was verified.) Writing `none` for something you did not
   check is the one wrong answer.
 
 Cite where each value came from in `[verified]`: `sources` (at least one URL), `date`, and
@@ -93,7 +93,7 @@ What each section is for:
 | `[hooks.events]` | canonical event to the agent's event name: `session_start`, `prompt`, `pre_tool`, `post_tool`, `pre_compact`, `stop`, `session_end` | hook writers, the ladder |
 | `[plugin]` `[commands]` `[skills]` `[subagents]` `[worktrees]` | the other surfaces the agent has, or `none = true` | `adopt`, `inventory` |
 | `[env]` | the environment variables that carry the agent's session id (`session_id = [...]`) | session identity, attribution |
-| `[verified]` | sources, date, probe, record | `harness doctor`, review |
+| `[verified]` | sources, date, probe, record | `harness show`, review |
 
 A hook style with no writer yet (`plugin`, `cascade`, `cline`, `antigravity` today) is
 loaded and reported: `onboard harness` says `unknown` for its hooks step, never `n/a` and
@@ -142,7 +142,7 @@ ladder is total; the normalizer and emitter named exist; each fixture normalizes
 file; `adopt` twice changes nothing. A live probe (`<id> --version`) runs only when the binary
 is on `PATH`; otherwise it is **skipped, a recorded gap, never a pass**.
 
-Then `ddflow pins regenerate` to add the README row, and `ddflow harness doctor acmecli`.
+Then `ddflow pins regenerate` to add the README row, and `ddflow harness show acmecli` for the not-verified list and `ddflow harness doctor acmecli` for drift.
 
 ## Tiers: how much testing an agent gets
 
@@ -174,4 +174,4 @@ agent's facts moved.
 - [ ] `tests/fixtures/harness/<id>/<event>.json` for each hooked event
 - [ ] `ddflow/templates/drivers/deltas/<delta>`
 - [ ] `uv run pytest tests/test_harness_conformance.py tests/test_harness_registry.py -k <id>` green
-- [ ] `ddflow pins regenerate`; `ddflow harness doctor <id>` shows nothing broken
+- [ ] `ddflow pins regenerate`; `ddflow harness show <id>` lists no fact you could have checked; `ddflow harness doctor <id>` shows nothing broken

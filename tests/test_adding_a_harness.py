@@ -25,8 +25,9 @@ def test_the_worked_example_is_a_valid_descriptor():
 
 def test_the_guide_names_every_hook_style_and_shape_the_loader_accepts():
     text = GUIDE.read_text("utf-8")
+    row = next(r for r in text.splitlines() if r.startswith("| `[hooks]` |"))
     for style in HR.HOOK_STYLES:
-        assert f"`{style}`" in text, style
+        assert f"`{style}`" in row, style
     for shape in HR.SHAPES - {HR.SHAPE_NONE}:
         assert f"`{shape}`" in text, shape
 
