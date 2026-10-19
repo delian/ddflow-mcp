@@ -627,3 +627,21 @@ def test_folding_a_legacy_row_never_clears_a_flagged_loss(clone):
         },
     )
     assert _problem_lines(_doctor(clone)[1])
+
+
+def test_a_shard_caught_half_rewritten_by_git_is_not_flagged_as_lost(clone, monkeypatch):
+    """B-events-uncommitted-shards: a look that lands while another process rewrites the shard
+    in place sees half of it; the sticky flag then reported a loss for events still present."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+    log = EventLog(clone, AGENT)
+    path = _shard(clone)
+    whole = path.read_text()
+    rows = whole.splitlines(keepends=True)
+    path.write_text("".join(rows[: len(rows) // 2]))  # the half-written moment
+    monkeypatch.setattr(shardmarks.time, "sleep", lambda s: path.write_text(whole))  # it settles
+    shardmarks.observe(clone, log)
+    assert not shardmarks.lost(clone, log)
+    assert not any(r.get("shrunk") for r in _marks_doc(clone)["data"].values())

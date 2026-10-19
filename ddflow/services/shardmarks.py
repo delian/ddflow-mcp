@@ -36,6 +36,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,30 @@ def _holds(path: Path | None, event_id: str, *, tail: bool = False) -> bool:
     return re.search(rb'"id"\s*:\s*"' + re.escape(event_id.encode()) + rb'"', data) is not None
 
 
+#: How long a look that finds a shard SHORT is repeated before it is believed: git rewrites a
+#: working-tree file in place (a checkout, a merge), and a reader in that span sees half of it.
+#: The flag is sticky, so one such look flagged a loss that was never one (B-events-uncommitted-shards).
+SETTLE_LOOKS = 4
+SETTLE_S = 0.1
+
+
+def _settled(
+    path: Path | None, old: dict[str, Any], scanned: tuple[int, str, int]
+) -> tuple[int, str, int]:
+    """``scanned``, looked at again while it reads as a shrink against ``old``: a shard being
+    rewritten by another process settles within a moment; a real loss is still there."""
+    seen = str(old.get("last_event_id", ""))
+    for _ in range(SETTLE_LOOKS):
+        if path is None or not (scanned[0] < old["count"] or not _holds(path, seen)):
+            break
+        time.sleep(SETTLE_S)
+        again = _scan(path)
+        if again is None:
+            break
+        scanned = again
+    return scanned
+
+
 def _raised(
     out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str, path: Path | None
 ) -> None:
@@ -202,7 +227,11 @@ def _raised(
         if scanned[2] == old.get("size") and scanned[0] >= old["count"] and _holds(path, seen):
             out[key] = _mk(shard, scanned, ref)  # restored to exactly what was seen
     elif scanned[0] < old["count"] or not _holds(path, seen):
-        out[key] = {**old, "shrunk": True}
+        scanned = _settled(path, old, scanned)
+        if scanned[0] < old["count"] or not _holds(path, seen):
+            out[key] = {**old, "shrunk": True}
+        else:
+            out[key] = _mk(shard, scanned, ref)
     else:
         out[key] = _mk(shard, scanned, ref)
 
