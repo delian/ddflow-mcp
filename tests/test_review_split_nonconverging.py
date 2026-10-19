@@ -143,3 +143,23 @@ def test_a_request_is_cancelled_at_its_wall_clock_bound_even_if_bytes_keep_comin
     assert took < 8, f"a 2 s bound took {took:.0f}s"
     assert json.dumps(res.unreviewed).lower().count("did not converge") >= 1, res.unreviewed
     assert PARTIAL != res.status
+
+
+def test_partial_findings_follow_the_chunk_number_when_only_some_chunks_are_sent(tmp_path):
+    """reviewer (refuted by this test): `partial` is keyed by position in the chunks sent, and
+    absorbed by the same position; a --chunk 2 run keeps chunk 2's partial findings."""
+    files = "".join(
+        f"diff --git a/{n}.py b/{n}.py\\n--- a/{n}.py\\n+++ b/{n}.py\\n@@ -0,0 +1 @@\\n+x = '{m}'\\n"
+        for n, m in (("a", "AAA"), ("b", "BBB"), ("c", "SLOWC"), ("d", "DDD"))
+    ).replace("\\n", "\n")
+    script = (
+        "case \"$in\" in *SLOWC*) sleep 20;; esac\n"
+        "case \"$in\" in *DDD*) printf 'FINDING LOW d.py:1\\nnit\\n\\nSTATUS: FINDINGS 1\\n';; "
+        "*) echo 'STATUS: NO FINDINGS';; esac"
+    )
+    rev, _ = _reviewer(tmp_path, script, max_chunk_chars=170)
+    res = review(rev, files, "i", only=[2], split_rounds=2)
+    assert res.chunks_total == 2 and res.reviewed == []
+    gap = res.unreviewed[0]
+    assert gap["chunk"] == 2 and gap["partial"] == 1, gap
+    assert [(f.chunk, f.location) for f in res.findings] == [(2, "d.py:1")]
