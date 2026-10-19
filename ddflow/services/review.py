@@ -1180,6 +1180,28 @@ def _waves(rev: Reviewer, sent: int) -> int:
     return max(1, -(-sent // _concurrency(rev, sent))) if sent else 1
 
 
+def _bounded(
+    rev: Reviewer, system: str, user: str, bound: float, token: _Cancel, tree: Path | None
+) -> tuple[str, str]:
+    """One request, cut at ``bound`` seconds by a hard cancel, not by the socket's read timeout
+    alone: that one is renewed by every byte a loaded server trickles, so a request could
+    outlive the bound it stated (bug B-review-chunk-overran-bound: 332 s past 1800 s). The
+    cancel is one second late, so the read timeout still gets the first word."""
+    fired = threading.Event()
+    timer = threading.Timer(bound + 1.0, lambda: (fired.set(), token.cancel()))
+    timer.daemon = True
+    _running.cancel = token
+    timer.start()
+    try:
+        got = _chat(rev, system, user, bound, tree)
+    finally:
+        timer.cancel()
+        _running.cancel = None
+    if fired.is_set() and (got[1] or not got[0]):
+        return "", _no_answer_in_time(bound) + " Cancelled at the wall-clock bound."
+    return got
+
+
 def _race(
     rev: Reviewer,
     system: str,
@@ -1224,24 +1246,7 @@ def _race(
         remaining = rev.total_budget_s - (time.time() - started)
         if remaining <= 0:
             return "", f"total budget {rev.total_budget_s}s exhausted before it started"
-        bound = min(rev.timeout_s, remaining)
-        _running.cancel = tokens[(i, c)]
-        # The bound is enforced by a hard cancel, not by the socket's read timeout alone: that
-        # one is renewed by every byte a loaded server trickles, so a request could outlive the
-        # bound it stated (bug B-review-chunk-overran-bound: 332 s past 1800 s).
-        fired = threading.Event()
-        # one second past the bound: the read timeout gets the first word (and the better message)
-        timer = threading.Timer(bound + 1.0, lambda: (fired.set(), tokens[(i, c)].cancel()))
-        timer.daemon = True
-        timer.start()
-        try:
-            got = _chat(rev, system, users[i], bound, tree)
-        finally:
-            timer.cancel()
-            _running.cancel = None
-        if fired.is_set() and (got[1] or not got[0]):
-            return "", _no_answer_in_time(bound) + " Cancelled at the wall-clock bound."
-        return got
+        return _bounded(rev, system, users[i], min(rev.timeout_s, remaining), tokens[(i, c)], tree)
 
     order = [(i, c) for c in range(hedge) for i in range(n)]
     with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool:
@@ -1292,7 +1297,7 @@ def _halves(piece: str) -> list[str]:
     all is not "every header kept": there is nothing to check the halves against (roborev)."""
     pieces = split_diff(piece, max(1, (len(piece) + 1) // 2))
     headers = unidiff.headers(piece)
-    if len(pieces) < 2 or not headers or not all(any(h in p for p in pieces) for h in headers):
+    if len(pieces) <= 1 or not headers or not all(any(h in p for p in pieces) for h in headers):
         return []
     return pieces
 
