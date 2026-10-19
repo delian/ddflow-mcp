@@ -99,7 +99,7 @@ def _phase_rows(
                 "line": effective_line(q.state, p),
                 "waits_on": own if not open_rows else [],
                 "blocked_by": blocked_by
-                if not any(r["status"] == "ready" for r in open_rows)
+                if not any(r["status"] in ("ready", "running", "review") for r in open_rows)
                 else [],
                 "ready": False,  # True only for a ready phase left in Later (split_lanes)
                 "lane": RC.lane_of(open_rows, own if not open_rows else []),
@@ -136,7 +136,8 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     by_id = {r["id"]: r for r in rows}
     key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
     ranked = RC.order(by_id, _phase_before(q, cfg, set(by_id)), key)
-    chain = critical_path(q.state, f.phase)
+    listed = set(by_id) | {t["id"] for r in rows for t in r["all_tasks"]}
+    chain = [i for i in critical_path(q.state, f.phase) if i in listed]
     path = set(chain)
     for rank, pid in enumerate(ranked):
         r = by_id[pid]
