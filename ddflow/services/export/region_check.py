@@ -10,6 +10,7 @@ and left unmasked: "could not tell" is never read as clean or as generated.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from . import frame as F
 from . import regions as RG
@@ -37,7 +38,11 @@ def _blank(text: str) -> str:
 def _parsed(text: str) -> list[RG.Region]:
     if not any(m in text for m in _MARKS):
         return []
-    return RG.parse(_blank(text) if _STAMPED.search(text) else text)
+    if not _STAMPED.search(text):
+        return RG.parse(text)
+    # parse the blanked text for the markers, but hold the real text: a stamped-looking line
+    # inside a region body is part of that body's digest
+    return [replace(r, text=text) for r in RG.parse(_blank(text))]
 
 
 def regions(text: str) -> list[RG.Region]:

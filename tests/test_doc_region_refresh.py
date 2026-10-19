@@ -185,3 +185,10 @@ def test_ops_reads_a_region_beside_a_stamped_block():
     ok = RG.render_region("d", "a", "A\n")
     assert ops._region_edit(stamped + ok, "d") == "ok"
     assert ops._region_edit(stamped + ok.replace("A\n", "B\n"), "d") == "edited"
+
+
+def test_a_stamped_looking_line_inside_a_region_body_still_counts_in_its_digest():
+    body = "pin syntax:\n<!-- ddflow:begin notes ddflow=v1 fmt=2 sha=abc -->\nnotes\n"
+    ok = RG.render_region("d", "a", body)
+    assert RC.problem(ok) == "" and RC.edited(ok) == []
+    assert RC.edited(ok.replace("notes\n", "other\n", 1)) == ["d/a"]
