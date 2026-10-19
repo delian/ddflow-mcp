@@ -80,3 +80,10 @@ def test_a_git_sha_in_an_event_log_that_mentions_sourcegraph_is_not_a_token(tmp_
 def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
     (tmp_path / "notes.txt").write_text("sourcegraph token " + _SHA + "\n")
     assert _scan_dir(tmp_path) != 0
+
+
+def test_a_lookalike_event_log_path_is_not_exempt(tmp_path):
+    events = tmp_path / "lib.ddflow" / "events"
+    events.mkdir(parents=True)
+    (events / "a.jsonl").write_text('{"body":"sourcegraph search","head":"' + _SHA + '"}\n')
+    assert _scan_dir(tmp_path) != 0
