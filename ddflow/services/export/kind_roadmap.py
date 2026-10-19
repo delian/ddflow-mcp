@@ -126,6 +126,24 @@ def _phase_before(q: Query, cfg: Config, ids: set[str]) -> Callable[[str], set[s
     return before
 
 
+def _lanes(split: tuple[list, list, list], cap: int, cut: int) -> tuple[list[dict], int]:
+    """The three lanes with their task lists capped (Later: counts only) and ``--limit`` applied
+    per lane; also how many phases the limit left out (the counts elsewhere stay true)."""
+    for (key, _, _), listed in zip(_LANE_LABELS, split, strict=True):
+        for r in listed:
+            tasks = r.pop("all_tasks")
+            r["tasks"], r["more_tasks"] = (
+                ([], len(tasks)) if key == "later" else RC.cap_tasks(tasks, cap)
+            )
+    omitted = sum(max(0, len(x) - cut) for x in split) if cut else 0
+    shown = [x[:cut] if cut else x for x in split]
+    lanes = [
+        {"label": label, "blurb": blurb, "phases": listed}
+        for (_, label, blurb), listed in zip(_LANE_LABELS, shown, strict=True)
+    ]
+    return lanes, omitted
+
+
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
         raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
@@ -144,22 +162,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         r["rank"] = rank
         r["on_critical_path"] = pid in path or any(t["id"] in path for t in r["all_tasks"])
     phases = [by_id[i] for i in ranked]
-    now, nxt, later = RC.split_lanes(phases, next_n)
-    for lane, listed in (("now", now), ("next", nxt), ("later", later)):
-        for r in listed:
-            tasks = r.pop("all_tasks")
-            r["tasks"], r["more_tasks"] = (
-                ([], len(tasks)) if lane == "later" else RC.cap_tasks(tasks, cap)
-            )
-    cut = f.limit or 0
-    omitted = 0
-    if cut:  # --limit bounds the phases listed per lane; the counts stay true
-        omitted = sum(max(0, len(x) - cut) for x in (now, nxt, later))
-        now, nxt, later = now[:cut], nxt[:cut], later[:cut]
-    lanes = [
-        {"label": label, "blurb": blurb, "phases": listed}
-        for (_, label, blurb), listed in zip(_LANE_LABELS, (now, nxt, later), strict=True)
-    ]
+    lanes, omitted = _lanes(RC.split_lanes(phases, next_n), cap, f.limit or 0)
     return {
         "lanes": lanes,
         "done_phases": seen["done"],
