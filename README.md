@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=af608aada4d8 -->
+<!-- ddflow:begin README/commands sha=fec0bf53c21a -->
 <details><summary>All 85 commands</summary>
 
 | Command | What it does |
@@ -585,7 +585,7 @@ needs a line written by hand here.
 | `ddflow rule` | project rules: add, edit, list, search, show, remove |
 | `ddflow verify` | re-derive the claims behind a done task, or sweep them all (exit 1 = one fails) |
 | `ddflow ci` | the CI parity gate: run the pre-push checks on the merge result |
-| `ddflow onboard` | run an onboarding stage: one report, propose by default (status\|preflight\|legacy\|memory\|test-gate\|verify) |
+| `ddflow onboard` | run an onboarding stage: one report, propose by default… |
 | `ddflow status` | one answer to 'what is the state of this project?' |
 | `ddflow research` | see `ddflow research --help` |
 | `ddflow bug` | see `ddflow bug --help` |

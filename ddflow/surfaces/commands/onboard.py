@@ -14,7 +14,7 @@ def add_onboard_parser(sub) -> None:
     ob = sub.add_parser(
         "onboard",
         help="run an onboarding stage: one report, propose by default "
-        "(status|preflight|legacy|memory|test-gate|verify)",
+        "(status|preflight|legacy|memory|test-gate|verify|harness)",
     )
     ob.add_argument(
         "stage",
@@ -26,7 +26,7 @@ def add_onboard_parser(sub) -> None:
     ob.add_argument(
         "--apply",
         action="store_true",
-        help="act on the stage's proposal (preflight/legacy/memory)",
+        help="act on the stage's proposal (preflight/legacy/memory/harness)",
     )
     ob.add_argument(
         "--accept",
