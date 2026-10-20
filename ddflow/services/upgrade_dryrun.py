@@ -759,10 +759,6 @@ class Rehearsal:
         keys = [_key(i) for i in _asked(planned)]
         return self.ddflow(self.new, repo, *self.apply_args(backup, keys), agent=agent)
 
-    def doctor_ok(self, doctor: P.Captured) -> bool:
-        """Did doctor pass, allowing for the contested records the plan already announced?"""
-        return doctor.returncode == 0 or contested_only(doctor.stdout, self.contested)
-
     def doctor_baseline(self) -> set[str] | None:
         """The problems the previous release's own project already has, as the new doctor reads
         them before anything is applied (taken once, on a fresh clone); None when it cannot be
@@ -777,7 +773,7 @@ class Rehearsal:
         return self._baseline
 
     def doctor_verdict(self, repo: Path, agent: str) -> str:
-        """"" when doctor in ``repo`` shows nothing the project did not already have before the
+        """Return "" when doctor in ``repo`` shows nothing the project did not already have before the
         upgrade (the records the plan announced as contested aside); else what went wrong.
         A doctor that crashed or printed no JSON is a failure; the pre-existing count is a note."""
         base = self.doctor_baseline()
@@ -1553,27 +1549,13 @@ def new_problems(
 ) -> list[str]:
     """The problems in ``after`` that ``before`` did not have, less those that only name a
     record the plan announced as CONTESTED."""
-    held = list(contested)
-    return [
-        p
-        for p in sorted(set(after) - before)
-        if not (" is CONTESTED" in p and any(c.split()[-1] in p for c in held))
-    ]
+    planned = set(contested)
 
+    def announced(problem: str) -> bool:
+        named = re.search(r"\b(decision|lesson|research) (\S+) is CONTESTED", problem)
+        return bool(named) and f"{named.group(1)} {named.group(2)}" in planned
 
-def contested_only(text: str, planned: set[str]) -> bool:
-    """Is every problem in ``doctor``'s output one of the CONTESTED records in ``planned``
-    (`"decision D-x"`)? Then the failure is the plan's announced step, not a surprise: the
-    count of problems must equal the contested lines, each naming a planned record."""
-    counted = re.search(r"(\d+) problem\(s\)", text)
-    lines = [ln for ln in text.splitlines() if " is CONTESTED" in ln]
-    if not counted or not lines or int(counted.group(1)) != len(lines):
-        return False
-    for ln in lines:
-        named = re.search(r"\b(decision|lesson|research) (\S+) is CONTESTED", ln)
-        if not named or f"{named.group(1)} {named.group(2)}" not in planned:
-            return False
-    return True
+    return [p for p in sorted(set(after) - before) if not announced(p)]
 
 
 def _asked(plan: P.Captured) -> list[dict[str, Any]]:
