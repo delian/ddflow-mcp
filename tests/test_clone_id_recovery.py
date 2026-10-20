@@ -103,9 +103,18 @@ def test_without_evidence_a_new_id_is_minted(tmp_path):
     assert again and again != first  # nothing recorded the old one: minted afresh
 
 
-def test_newest_claim_wins_when_two_suffixes_qualify(claimed):
+@pytest.mark.parametrize("order", ["natural", "sorted", "reversed"])
+def test_newest_claim_wins_when_two_suffixes_qualify(claimed, monkeypatch, order):
+    """`.ddflow/worktrees` holds the claimed tree AND a `.gitignore` file; the fixture must
+    pick the directory whatever order the filesystem lists them in (B81f52de542: on a CI
+    runner the file came first and the planted claim then named a non-worktree)."""
+    if order != "natural":
+        real = Path.iterdir
+        monkeypatch.setattr(
+            Path, "iterdir", lambda self: iter(sorted(real(self), reverse=order == "reversed"))
+        )
     bare = L.bare_agent_id(claimed)
-    tree = next(p for p in (claimed / ".ddflow" / "worktrees").iterdir())
+    tree = next(p for p in (claimed / ".ddflow" / "worktrees").iterdir() if p.is_dir())
     stored = str(tree.relative_to(claimed))
     shard = claimed / ".ddflow" / "events" / f"{bare}-aaaaaa.jsonl"
     ev = {
