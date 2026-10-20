@@ -1066,7 +1066,7 @@ class Rehearsal:
             "; ".join(problems)
             or "users' records unchanged, "
             + (f"hand edit in {edited} kept, " if edited else "no stamped block to hand-edit, ")
-            + "doctor clean, second apply a no-op, restore exact",
+            + "doctor adds no new problem, second apply a no-op, restore exact",
         )
 
     def _hand_edit(self, repo: Path) -> str:
