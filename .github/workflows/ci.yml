@@ -75,6 +75,11 @@ jobs:
           # tests must contain — by VALUE, never by path, so a real key pasted into a
           # test file still fires. See that file's header for why the distinction matters.
           GITLEAKS_CONFIG: .gitleaks.toml
+          # The SAME gitleaks as the pre-commit hook (.pre-commit-config.yaml), not the
+          # Action's built-in default: 8.24.3 ignores the `[[allowlists]]` tables in
+          # `.gitleaks.toml`, so CI failed on commit shas that the hook passed. Kept equal
+          # by tests/test_gitleaks_config.py.
+          GITLEAKS_VERSION: 8.30.1
 
       - name: Static security scan
         # `bandit` over the package only. Tests are excluded deliberately: they use

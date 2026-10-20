@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -115,3 +116,31 @@ def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
 def test_a_lookalike_or_nested_event_log_path_is_not_exempt(tmp_path):
     assert _scan_committed(tmp_path, "vendor/x/.ddflow/events/a.jsonl", _BODY) != 0
     assert _scan_committed(tmp_path / "b", "lib.ddflow/events/a.jsonl", _BODY) != 0
+
+
+def _hook_version() -> str:
+    text = (ROOT / ".pre-commit-config.yaml").read_text()
+    found = re.search(r"gitleaks/v8@v(\d+\.\d+\.\d+)", text)
+    assert found, "the pre-commit gitleaks pin is gone"
+    return found.group(1)
+
+
+def _action_version() -> str:
+    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "gitleaks/gitleaks-action@" in text
+    found = re.search(r"^\s*GITLEAKS_VERSION:\s*['\"]?(\d+\.\d+\.\d+)['\"]?\s*$", text, re.M)
+    assert found, "the Action is unpinned: it would run its own default, which may be older"
+    return found.group(1)
+
+
+def test_ci_and_the_precommit_hook_run_the_same_gitleaks():
+    # Bug Bci-gitleaks-version-skew: the Action's default (8.24.3) ignores `[[allowlists]]`,
+    # the hook's 8.30.1 honours it, so a push that passed locally failed the Secrets job.
+    assert _action_version() == _hook_version()
+
+
+def test_a_real_sourcegraph_token_in_an_event_log_still_fires(tmp_path):
+    # The allowlist is bare 40-hex only: a prefixed token in the event log is a real finding.
+    token = "sgp_" + "0123456789abcdef" * 2 + "01234567"
+    body = '{"body":"sourcegraph search","token":"' + token + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", body) != 0
