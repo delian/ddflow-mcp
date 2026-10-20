@@ -103,12 +103,15 @@ def test_the_connect_proposal_and_the_notice_warn_about_them(repo):
 
 def test_the_dry_run_tolerates_exactly_the_planned_contests(repo):
     _rivals(repo)
-    out = run_cli(repo, "doctor")[1]
+    code, out = run_cli(repo, "--json", "doctor")[:2]
+    found = DR.doctor_problems(DR.P.Captured(code, out, ""))
 
-    assert DR.contested_only(out, {"decision D-x"}), out
-    assert not DR.contested_only(out, set()), "an unplanned contest is still a failure"
-    other = out.replace("1 problem(s)", "2 problem(s)") + "\nsomething else is wrong\n"
-    assert not DR.contested_only(other, {"decision D-x"}), "a second, unplanned problem fails"
+    assert found and DR.new_problems(set(), found, {"decision D-x"}) == []
+    assert DR.new_problems(set(), found, set()), "an unplanned contest is still a failure"
+    other = DR.new_problems(set(), [*found, "something else is wrong"], {"decision D-x"})
+    assert other == ["something else is wrong"], "a second, unplanned problem fails"
+    longer = DR.new_problems(set(), ["decision D-x2 is CONTESTED: rivals"], {"decision D-x"})
+    assert longer, "a planned id is not a prefix match"
 
 
 def test_a_research_note_has_no_in_force_wording():
