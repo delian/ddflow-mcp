@@ -1527,7 +1527,7 @@ def _items(plan: P.Captured) -> list[dict[str, Any]]:
 def problem_identity(line: str) -> str:
     """What names a doctor problem across runs: its text up to the first em dash (so the class
     and the item, not the counts and paths that follow)."""
-    return " ".join(line.split(" \u2014 ")[0].split())[:200]
+    return " ".join(line.split(" \u2014 ", maxsplit=1)[0].split())[:200]
 
 
 def doctor_problems(done: P.Captured) -> tuple[str, ...] | None:
