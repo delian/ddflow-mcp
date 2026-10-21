@@ -272,3 +272,40 @@ def test_an_empty_worktree_diff_falls_back_to_the_cited_commits(repo):
     _commit(repo, "docs/note.md", "merge T1: the note")
     cfg, s = _pipeline_of(repo)
     assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+
+
+def test_a_cited_commit_outside_the_globs_still_counts_toward_the_change(repo):
+    """rubber_duck: a split landing (docs commit + code commit, both citing the item) is not docs-only."""
+    _unmerged_task(repo, "docs/note.md")
+    _commit(repo, "docs/note.md", "T1: the note")
+    _commit(repo, "src/code.py", "T1: the code")
+    _cfg, s = _pipeline_of(repo)
+    assert "unit_tests" in s.pipeline
+
+
+def test_a_cited_root_commit_is_read_not_dropped(repo):
+    """rubber_duck: a root commit has no parent, and used to vanish from the citations."""
+    from ddflow.services import landed as LD
+
+    _unmerged_task(repo, "docs/note.md")
+    root = _git(repo, "rev-list", "--max-parents=0", "HEAD").splitlines()[-1]
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(repo, "checkout", "-q", "--orphan", "orph")
+    _git(repo, "rm", "-rfq", ".")
+    _commit(repo, "src/root.py", "T1: orphan root")
+    _git(repo, "checkout", "-q", main)
+    _git(repo, "merge", "-q", "--allow-unrelated-histories", "--no-ff", "-m", "join", "orph")
+    _commit(repo, "docs/note.md", "T1: the note")
+    it = _state(repo).items["T1"]
+    assert root and LD.cited_paths(repo, it, "HEAD") is not None
+    assert "src/root.py" in LD.cited_paths(repo, it, "HEAD")
+
+
+def test_a_research_item_with_a_cited_docs_commit_runs_the_doc_pipeline(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "R1", "--title", "r", "--kind", "research", "--globs", "docs/**")
+    _commit(repo, "docs/note.md", "merge R1: the note")
+    cfg = Config.load(repo)
+    st = _state(repo)
+    s = G.status(st, cfg, "R1", None, diff=lambda: CO.changed_paths(repo, st.items["R1"]))
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline

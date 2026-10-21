@@ -7,13 +7,15 @@ pipeline could never apply. Two ways to know it, both VERIFIED, both failing clo
 the full task pipeline) and neither letting declared globs decide (B-na-required-gate):
 
 - the commits on the base whose subject cites the item (``merge <id>: ...`` or ``<id>: ...``),
-  each of which must touch at least one of the item's declared globs;
+  at least one of which must touch the item's declared globs, and ALL of which count toward
+  the change (a cited commit that touched code is never left out);
 - a range the operator or agent recorded with ``ddflow update <id> --landed`` (`parse`),
   checked once, at record time, by `check`.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from ..core.globs import inside
@@ -31,41 +33,58 @@ def _cites(item_id: str, subject: str) -> bool:
     return subject.startswith((f"merge {item_id}:", f"{item_id}:"))
 
 
+#: git's empty tree: the "before" of a root commit, which has no parent to diff against.
+_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+
+def _since(created_at: str) -> str:
+    """The item's creation time less a margin: a commit date has whole seconds and the item's
+    has fractions, and a clock a little behind must not hide the item's own commit."""
+    try:
+        t = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return "1970-01-01"
+    return (t - timedelta(minutes=2)).isoformat()
+
+
 def cited_ranges(repo: Path, item, base: str) -> list[tuple[str, str]]:
-    """``(before, after)`` for each commit on ``base`` that cites the item and touches its
-    declared globs, oldest first. ``before`` is the first parent. Empty when git cannot say."""
-    if not item.globs or not base:
+    """``(before, after)`` for EVERY commit on ``base`` that cites the item, oldest first,
+    ``before`` being its first parent (the empty tree for a root commit). Every commit counts,
+    a side branch's too: a plain `git merge` lands the cited commits under a merge commit that
+    does not cite the item. A commit that cites the item but touches nothing it declared is
+    still listed, so the code half of a split landing is never left out of the verdict.
+    Only commits made since the item was created count: an id reused after removal
+    (`--readd`) is not credited with the old item's work. Empty when git cannot say."""
+    if not base:
         return []
+    since = [f"--since={_since(item.created_at)}"] if item.created_at else []
     r = W.git(
-        repo, "log", base, "--reverse", "-F", f"--grep={item.id}:",
+        repo, "log", base, "--reverse", *since, "-F", f"--grep={item.id}:",
         "--format=%H%x00%P%x00%s",
     )  # fmt: skip
     out: list[tuple[str, str]] = []
     for line in r.out.splitlines() if r.ok else []:
         sha, _, rest = line.partition("\x00")
         parents, _, subject = rest.partition("\x00")
-        first = parents.split()
-        if not first or not _cites(item.id, subject):
-            continue
-        if _touches(
-            item, CH.changed_paths(repo, first[0], tip=sha, include=("committed",), fork=False)
-        ):
-            out.append((first[0], sha))
+        if _cites(item.id, subject):
+            out.append(((parents.split() or [_EMPTY_TREE])[0], sha))
     return out
 
 
 def cited_paths(repo: Path, item, base: str) -> list[str] | None:
-    """Every path the item's cited commits changed, or None when none is verifiable."""
+    """Every path the item's cited commits changed, or None unless that is verifiable: at
+    least one cited commit must touch what the item declared (the citation alone proves
+    nothing), and git must be able to say what each one changed."""
     ranges = cited_ranges(repo, item, base)
-    if not ranges:
-        return None
     found: set[str] = set()
+    touched = False
     for before, after in ranges:
         paths = CH.changed_paths(repo, before, tip=after, include=("committed",), fork=False)
         if paths is None:
             return None
+        touched = touched or _touches(item, paths)
         found.update(paths)
-    return sorted(found)
+    return sorted(found) if touched else None
 
 
 def parse(repo: Path, spec: str) -> tuple[str, str] | str:
