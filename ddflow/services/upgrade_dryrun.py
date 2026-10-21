@@ -619,6 +619,9 @@ class Rehearsal:
         #: `"decision D-x"`-style names of the records the plan said are CONTESTED (set by
         #: `step_plan`): the operator's to resolve, so doctor failing on them alone is expected.
         self.contested: set[str] = set()
+        #: The problem identities doctor shows on the untouched clone (see `doctor_baseline`).
+        self._baseline: set[str] | None = None
+        self._baseline_read = False
 
     # recording
 
@@ -756,9 +759,37 @@ class Rehearsal:
         keys = [_key(i) for i in _asked(planned)]
         return self.ddflow(self.new, repo, *self.apply_args(backup, keys), agent=agent)
 
-    def doctor_ok(self, doctor: P.Captured) -> bool:
-        """Did doctor pass, allowing for the contested records the plan already announced?"""
-        return doctor.returncode == 0 or contested_only(doctor.stdout, self.contested)
+    def doctor_baseline(self) -> set[str] | None:
+        """The problems the previous release's own project already has, as the new doctor reads
+        them before anything is applied (taken once, on a fresh clone); None when it cannot be
+        read. The upgrade is judged by what it ADDS to them, not by the old queue's hygiene."""
+        if not self._baseline_read:
+            repo = self.clone("doctor-baseline")
+            found = doctor_problems(
+                self.ddflow(self.new, repo, "--json", "doctor", agent="dry-baseline")
+            )
+            self._baseline = None if found is None else set(found)
+            self._baseline_read = True
+        return self._baseline
+
+    def doctor_verdict(self, repo: Path, agent: str) -> str:
+        """Return "" when doctor in ``repo`` shows nothing the project did not already have before the
+        upgrade (the records the plan announced as contested aside); else what went wrong.
+        A doctor that crashed or printed no JSON is a failure; the pre-existing count is a note."""
+        base = self.doctor_baseline()
+        done = self.ddflow(self.new, repo, "--json", "doctor", agent=agent)
+        found = doctor_problems(done)
+        if found is None:
+            return f"doctor exited {done.returncode} and printed no readable report"
+        if base is None:
+            return "doctor could not be read on the untouched clone, so there is no baseline"
+        added = new_problems(base, found, self.contested)
+        if added:
+            return f"doctor reports {len(added)} NEW problem(s): " + "; ".join(
+                a[:160] for a in added[:3]
+            )
+        self.report.facts["doctor_preexisting"] = len(base)
+        return ""
 
     def commit_all(self, repo: Path, message: str) -> None:
         self.git(repo, "add", "-A")
@@ -1035,7 +1066,7 @@ class Rehearsal:
             "; ".join(problems)
             or "users' records unchanged, "
             + (f"hand edit in {edited} kept, " if edited else "no stamped block to hand-edit, ")
-            + "doctor clean, second apply a no-op, restore exact",
+            + "doctor adds no new problem, second apply a no-op, restore exact",
         )
 
     def _hand_edit(self, repo: Path) -> str:
@@ -1059,11 +1090,9 @@ class Rehearsal:
         moved = [k for k in before_users if before_users[k] != after.get(k)]
         if moved:
             out.append(f"the apply changed {', '.join(moved)}")
-        doctor = self.ddflow(self.new, repo, "doctor", agent="dry-apply")
-        if not self.doctor_ok(doctor):
-            out.append(
-                f"doctor after the apply exited {doctor.returncode}: {doctor.stdout.strip()[-160:]}"
-            )
+        wrong = self.doctor_verdict(repo, "dry-apply")
+        if wrong:
+            out.append(f"doctor after the apply: {wrong}")
         left = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent="dry-apply")
         todo = [i["id"] for i in _items(left) if i["action"] != "note"]
         if todo:
@@ -1245,9 +1274,9 @@ class Rehearsal:
         out: list[str] = []
         if (body.get("applied") or {}).get("failed", 1):
             out.append(f"the confirmed apply over MCP did not finish: {json.dumps(body)[:160]}")
-        doctor = self.ddflow(self.new, repo, "doctor", agent="dry-connect")
-        if not self.doctor_ok(doctor):
-            out.append(f"doctor after the consent exited {doctor.returncode}")
+        wrong = self.doctor_verdict(repo, "dry-connect")
+        if wrong:
+            out.append(f"doctor after the consent: {wrong}")
         return out
 
     def _told_to_restart(self, repo: Path) -> tuple[list[str], list[str]]:
@@ -1367,9 +1396,9 @@ class Rehearsal:
             problems.append(
                 f"after the honest release {b} could not take the task ({left.returncode}, {took.returncode})"
             )
-        doctor = self.ddflow(self.new, repo, "doctor", agent=a)
-        if not self.doctor_ok(doctor):
-            problems.append(f"doctor exited {doctor.returncode}")
+        wrong = self.doctor_verdict(repo, a)
+        if wrong:
+            problems.append(wrong)
         how = (
             "completed"
             if done.returncode == 0
@@ -1495,19 +1524,38 @@ def _items(plan: P.Captured) -> list[dict[str, Any]]:
     return [i for v in cats.values() for i in v]
 
 
-def contested_only(text: str, planned: set[str]) -> bool:
-    """Is every problem in ``doctor``'s output one of the CONTESTED records in ``planned``
-    (`"decision D-x"`)? Then the failure is the plan's announced step, not a surprise: the
-    count of problems must equal the contested lines, each naming a planned record."""
-    counted = re.search(r"(\d+) problem\(s\)", text)
-    lines = [ln for ln in text.splitlines() if " is CONTESTED" in ln]
-    if not counted or not lines or int(counted.group(1)) != len(lines):
-        return False
-    for ln in lines:
-        named = re.search(r"\b(decision|lesson|research) (\S+) is CONTESTED", ln)
-        if not named or f"{named.group(1)} {named.group(2)}" not in planned:
-            return False
-    return True
+def problem_identity(line: str) -> str:
+    """What names a doctor problem across runs: its text up to the first em dash (so the class
+    and the item, not the counts and paths that follow)."""
+    return " ".join(line.split(" \u2014 ", maxsplit=1)[0].split())[:200]
+
+
+def doctor_problems(done: P.Captured) -> tuple[str, ...] | None:
+    """The problem identities of ``doctor --json``; None when doctor crashed (an exit other
+    than 0 or 1), printed no report, or failed with no problem to show for it."""
+    if not done.ran or done.returncode not in (0, 1):
+        return None
+    try:
+        found = json.loads(done.stdout)["problems"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(found, list) or (done.returncode == 1 and not found):
+        return None
+    return tuple(problem_identity(str(x)) for x in found)
+
+
+def new_problems(
+    before: set[str], after: Iterable[str], contested: Iterable[str] = ()
+) -> list[str]:
+    """The problems in ``after`` that ``before`` did not have, less those that only name a
+    record the plan announced as CONTESTED."""
+    planned = set(contested)
+
+    def announced(problem: str) -> bool:
+        named = re.search(r"\b(decision|lesson|research) (\S+) is CONTESTED", problem)
+        return bool(named) and f"{named.group(1)} {named.group(2)}" in planned
+
+    return [p for p in sorted(set(after) - before) if not announced(p)]
 
 
 def _asked(plan: P.Captured) -> list[dict[str, Any]]:
