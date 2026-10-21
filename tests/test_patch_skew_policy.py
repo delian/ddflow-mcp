@@ -333,3 +333,13 @@ def test_a_linked_worktree_post_merge_skip_is_not_refused(repo: Path, monkeypatc
     monkeypatch.setattr(PF, "_linked_worktree", lambda _r: True)
     out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
     assert out.exit == 0 and "skipped" in out.data["note"]
+
+
+def test_an_unreadable_log_does_not_make_pins_regenerate_refuse(repo: Path, monkeypatch):
+    from ddflow.api import pin_files as PF
+
+    def boom(*_a, **_k):
+        raise RuntimeError("log unreadable")
+
+    monkeypatch.setattr(PF, "_load", boom)
+    assert PF._older_binary_refusal(repo, "me") == ""
