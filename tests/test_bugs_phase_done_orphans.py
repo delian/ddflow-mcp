@@ -34,3 +34,14 @@ def test_the_next_bug_reuses_the_fresh_bugs_phase(repo):
     K.bug_found(repo, summary="t", id="By", agent="a")
     st = state(repo)
     assert st.items["fix-Bx"].parent == st.items["fix-By"].parent != ""
+
+
+def test_a_removed_followup_phase_is_skipped(repo):
+    _done_bugs_phase(repo)
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "bugs-2", {"title": "Bugs"})
+    log.append("phase.removed", "bugs-2", {})
+    K.bug_found(repo, summary="s", id="Bx", agent="a")
+    st = state(repo)
+    parent = st.items[st.items["fix-Bx"].parent]
+    assert parent.id not in ("bugs", "bugs-2") and not parent.removed and not parent.terminal
