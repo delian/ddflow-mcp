@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from . import evidence as GE
+from .evidence import worktree_entries
 
 #: The evidence field a review round carries.
 REVIEWED_PATHS_FIELD = "reviewed_paths"
@@ -22,7 +22,7 @@ def path_snapshot(wt: Path | str, paths: Iterable[str]) -> dict[str, str] | None
     """{path: "mode oid"} of ``paths`` as ``wt`` holds them, or None when the tree cannot be
     read. A path ``wt`` lacks (deleted) is "": absent is a state to compare, not a key to
     drop, or a file deleted after the round would match a snapshot that never named it."""
-    entries = GE.worktree_entries(wt)
+    entries = worktree_entries(wt)
     if entries is None:
         return None
     return {
