@@ -24,9 +24,10 @@ from ddflow.infra.log import EventLog
 ID = "tests/test_x.py::test_a"
 
 
-def _project(repo: Path, *, rerun_ok: bool, command: str = "./bin/pytest -q tests/") -> None:
+def _project(repo: Path, *, broken: str = "", command: str = "./bin/pytest -q tests/") -> None:
     """A fake pytest that lists ``test_a`` as FAILED yet exits 0 (a wrapper that masks the
-    exit) when run on the suite, and passes or fails it when run on the node id alone."""
+    exit) when run on the suite, and passes it on the node id alone unless a file `broken`
+    exists: ``broken="tree"`` makes it only in the item's tree, ``"base"`` in the base too."""
     run_cli(repo, "init")
     (repo / "bin").mkdir()
     (repo / "tests").mkdir()
@@ -35,22 +36,25 @@ def _project(repo: Path, *, rerun_ok: bool, command: str = "./bin/pytest -q test
     script.write_text(
         "#!/bin/sh\n"
         'case "$*" in *::*)\n'
-        + (
-            '  echo "1 passed in 0.1s"; exit 0;;\n'
-            if rerun_ok
-            else f'  echo "FAILED {ID} - boom"; echo "1 failed in 0.1s"; exit 1;;\n'
-        )
-        + "esac\n"
+        '  if [ -e "$(dirname "$0")/../broken" ]; then\n'
+        f'    echo "FAILED {ID} - boom"; echo "1 failed in 0.1s"; exit 1\n'
+        "  fi\n"
+        '  echo "1 passed in 0.1s"; exit 0;;\n'
+        "esac\n"
         f'printf "FAILED {ID} - boom\\n1 failed, 3 passed in 0.1s\\nunit_tests: passed\\n"; exit 0\n'
     )
     script.chmod(0o755)
     (repo / ".ddflow" / "gates.toml").write_text(
         f'[gate.unit_tests]\ncommand = {json.dumps(command)}\ncwd = "repo"\n'
     )
+    if broken == "base":
+        (repo / "broken").write_text("")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
+    if broken == "tree":
+        (repo / "broken").write_text("")
 
 
 def _record(repo: Path):
@@ -58,7 +62,7 @@ def _record(repo: Path):
 
 
 def test_failures_that_pass_alone_pass_and_the_verdict_names_them(repo) -> None:
-    _project(repo, rerun_ok=True)
+    _project(repo)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code == 0, out + err
     rec = _record(repo)
@@ -69,7 +73,7 @@ def test_failures_that_pass_alone_pass_and_the_verdict_names_them(repo) -> None:
 
 
 def test_a_failure_that_fails_alone_never_yields_passed(repo) -> None:
-    _project(repo, rerun_ok=False)
+    _project(repo, broken="tree")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code == 1, out + err
     rec = _record(repo)
@@ -79,7 +83,7 @@ def test_a_failure_that_fails_alone_never_yields_passed(repo) -> None:
 
 def test_a_failure_that_cannot_be_rerun_never_yields_passed(repo) -> None:
     cmd = f"{sys.executable} -c \"print('FAILED {ID} - boom')\""
-    _project(repo, rerun_ok=True, command=cmd)
+    _project(repo, command=cmd)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code != 0, out + err
     rec = _record(repo)
@@ -88,8 +92,15 @@ def test_a_failure_that_cannot_be_rerun_never_yields_passed(repo) -> None:
 
 
 def test_the_log_prints_one_verdict(repo) -> None:
-    _project(repo, rerun_ok=True)
+    _project(repo)
     _c, out, _e = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     verdicts = [ln for ln in out.splitlines() if ln.lower().startswith("unit_tests: passed")]
     assert len(verdicts) == 1, out
     assert not any(ln.strip().lower() == "unit_tests: passed" for ln in out.splitlines()), out
+
+
+def test_a_failure_that_fails_alone_and_on_the_base_is_baseline_red(repo) -> None:
+    _project(repo, broken="base")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code != 1 and "PASSED" not in out, out + err
+    assert _record(repo).outcome == "partial"
