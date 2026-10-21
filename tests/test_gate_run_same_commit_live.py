@@ -43,6 +43,7 @@ def test_a_run_on_a_newer_commit_is_allowed_while_the_first_lives(repo, tmp_path
 
     from helpers import git as _git
 
+    root = repo  # markers live under the project root, not the agent's tree
     repo, began = _setup(repo, tmp_path)
     first = _start(repo, began)
     second = None
@@ -69,7 +70,7 @@ def test_a_run_on_a_newer_commit_is_allowed_while_the_first_lives(repo, tmp_path
             env=env,
             start_new_session=True,
         )
-        markers = repo / ".ddflow" / "runs" / "T1"
+        markers = root / ".ddflow" / "runs" / "T1"
         deadline = time.monotonic() + 60
         while (
             len(list(markers.glob("unit_tests.running.*.json"))) < 2 and time.monotonic() < deadline
