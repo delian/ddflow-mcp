@@ -626,11 +626,15 @@ STASH_RETRIES = 4
 STASH_RETRY_PAUSE_S = 0.25
 
 
-def _stash_failed(r: GitResult) -> bool:
+def _stash_failed(r: GitResult, tree: Path) -> bool:
     """Is git's own `fatal: stash failed` line in the answer? A whole line from column 0 of
     stderr, never the words anywhere: git lists file names indented (a tab), so a file NAMED
     "stash failed" or "fatal: stash failed" cannot pass for it."""
-    return "fatal: stash failed" in r.err.splitlines()
+    if "fatal: stash failed" not in r.err.splitlines():
+        return False
+    # Git stashes BEFORE it merges anything: a merge already begun (MERGE_HEAD) is a real
+    # conflict whose output merely contains such a line (e.g. in a path), never to be re-run.
+    return not git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok
 
 
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
@@ -638,11 +642,11 @@ def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
     When it never clears, the error names the cause and says nothing was merged."""
     r = git(tree, *args)
     tries = 1
-    while not r.ok and _stash_failed(r) and tries < STASH_RETRIES:
+    while not r.ok and _stash_failed(r, tree) and tries < STASH_RETRIES:
         time.sleep(STASH_RETRY_PAUSE_S * 2 ** (tries - 1))
         r = git(tree, *args)
         tries += 1
-    if not r.ok and _stash_failed(r):
+    if not r.ok and _stash_failed(r, tree):
         return GitResult(
             r.code,
             r.out,
