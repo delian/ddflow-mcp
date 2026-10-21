@@ -112,3 +112,14 @@ def test_a_task_held_by_someone_else_is_kept(repo):
     assert res.exit == OK, res.reason
     assert res.data["fix_task_kept"] == "held", res.data
     assert not _item(repo, "fix-B1").removed
+
+
+def test_a_close_without_landed_records_no_landing_and_leaves_the_task(repo):
+    """The opt-in must not leak into ordinary closes (a falsy `landing`, not a tuple)."""
+    _landed_elsewhere(repo)
+    res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
+    assert res.exit == OK, res.reason
+    assert "landed" not in res.data and "fix_task_removed" not in res.data, res.data
+    ev = [e.data for e in EventLog(repo).read_all() if e.kind == "bug.fixed"][-1]
+    assert "landed" not in ev, ev
+    assert not _item(repo, "fix-B1").removed
