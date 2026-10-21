@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "review.chunk_max_tokens"
+new = '0'
+why = "A cap on the tokens one review chunk's request may spend, below the reviewer's own max_tokens; 0 = the reviewer's own."
+impact = "additive"
