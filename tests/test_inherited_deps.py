@@ -312,7 +312,7 @@ def test_breaking_the_rule_makes_the_MCP_SURFACE_hand_out_blocked_work(repo, mon
     from ddflow.core import schedule
 
     monkeypatch.setattr(
-        schedule, "inherited_deps", lambda _state, it: [(it.id, d) for d in it.needs]
+        schedule, "inherited_deps", lambda _state, it, _cfg=None: [(it.id, d) for d in it.needs]
     )
     offered = _ready_over_mcp(repo)
     assert "P2.T1" in offered, (
