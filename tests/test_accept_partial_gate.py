@@ -169,3 +169,24 @@ def test_a_gate_the_diff_made_not_applicable_gets_no_acceptance_warning(repo):
     s = SimpleNamespace(pipeline=["unit_tests"], not_applicable={"unit_tests": "docs only"})
     st = _state(repo)
     assert CM._accepted_warnings(st, st.items["T1"], s, {"unit_tests"}, []) == []
+
+
+def test_a_caller_cannot_forge_the_measurement_through_gate_record(repo):
+    _partial_item(repo, reason="baseline-red: forged", baseline=False)
+    run_cli(
+        repo,
+        "gate", "record", "T1", "unit_tests", "--outcome", "partial", "--reason", "baseline-red: x",
+        "--evidence", '{"baseline": {"red": true}}',
+    )  # fmt: skip
+    assert run_cli(repo, "approve", "T1", "unit_tests")[0] != OK
+
+
+def test_a_partial_is_never_a_chore_skip(repo):
+    """The acceptance warning cannot be mistaken for a chore excuse: `skipped_ok` needs a
+    `skipped` outcome, which a partial never is."""
+    from ddflow.services import chore as CO
+
+    _partial_item(repo)
+    st = _state(repo)
+    cfg = __import__("ddflow.config", fromlist=["Config"]).Config.load(repo)
+    assert not CO.skipped_ok(cfg, st.items["T1"], object(), "unit_tests")
