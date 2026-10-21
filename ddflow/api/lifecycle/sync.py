@@ -50,6 +50,7 @@ def sync(
         "detail": r.detail,
         "aborted": r.aborted,
         "kept_stash": r.kept_stash,
+        "stash_note": r.stash_note,
     }
     if r.status == "merged":
         notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
