@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=34b976d09f41 -->
-<details><summary>All 86 commands</summary>
+<!-- ddflow:begin README/commands sha=b58e7b0d7534 -->
+<details><summary>All 87 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -630,7 +630,8 @@ needs a line written by hand here.
 | `ddflow hooks` | install/inspect the enforcement git hook and the Claude Code session hook |
 | `ddflow mcp` | run the MCP stdio server over this repository |
 | `ddflow search` | search tasks, phases, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs… |
-| `ddflow list` | list tasks, phases, bugs, research notes or lessons (what `<kind> list` shows) |
+| `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
+| `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
 
 </details>
@@ -5887,8 +5888,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=bae732e41d27 -->
-<details><summary>All 363 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=b6f0adc23b4f -->
+<details><summary>All 364 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6055,6 +6056,7 @@ long default is left to `ddflow config --explain`.
 | `dedupe.ask_threshold` | `0.55` |  |
 | `dedupe.max_candidates` | `3` |  |
 | `dedupe.min_words` | `8` |  |
+| `dedupe.research_task_asks` | `false` |  |
 | `dedupe.kinds` | (long: see `ddflow config --explain`) |  |
 | `evaluation.max_miss_rate` | `0.0` |  |
 | `evaluation.min_fixtures` | `1` |  |
