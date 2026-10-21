@@ -117,7 +117,7 @@ def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monke
     monkeypatch.setattr(TSC, "_selected", lambda *a, **kw: (picked, kw)[0])
     monkeypatch.setattr(TSC.W, "repo_root", lambda t: tmp_path)
     monkeypatch.setattr(TSC.W, "default_branch", lambda r: "main")
-    monkeypatch.setattr(TSC.G, "pipeline_for", lambda it, cfg: ["ci"])
+    monkeypatch.setattr(TSC, "effective_pipeline", lambda repo, cfg, it: ["ci"])
     cfg = Config()
     cfg.gates.unit_tests_scope = "selected"
     got = TSC.unit_tests_scope(cfg, NS(bugs={}), _item("failed", "selected"), "pytest", tmp_path)

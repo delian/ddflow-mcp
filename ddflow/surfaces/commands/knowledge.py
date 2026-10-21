@@ -321,6 +321,7 @@ def _bug_fixed(a, c: Ctx) -> int:
         verify_regression=not getattr(a, "skip_regression_verify", False),
         verify_reason=getattr(a, "verify_reason", "") or "",
         mutation=mutation_of(vars(a)),
+        landed=getattr(a, "landed", "") or "",
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
@@ -334,11 +335,20 @@ def _bug_fixed(a, c: Ctx) -> int:
         tail += "\n  could not check: " + A.could_not_run_text(
             out.data.get("regression_verify") or {}
         )
+    if out.data.get("landed"):
+        tail += f"\n  fix landed in {out.data['landed'][:12]}" + _fix_task_tail(out.data)
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
         out.body(
-            ("id", "regression_verified", "regression_verify", "lesson_captured", "lesson_capture")
+            (
+                "id",
+                "landed",
+                "regression_verified",
+                "regression_verify",
+                "lesson_captured",
+                "lesson_capture",
+            )
         ),
     )
     return OK

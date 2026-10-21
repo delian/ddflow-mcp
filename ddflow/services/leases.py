@@ -28,15 +28,18 @@ from typing import Any
 
 from ..config import Config
 from ..core import clock, schedule
+from ..core import globs as GL
 from ..core import globspec as GS
 from ..core import outcome as O
-from ..core.admission import glob_conflict
+from ..core.admission import conflicts, glob_conflict, is_shared, shared_globs
+from ..core.flow import line_key
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
 from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
+from . import changes as CH
 from . import leasebreak as LB
 from . import waiting as WG
 from .leaseclock import foreign, localize
@@ -176,9 +179,91 @@ def glob_clash(
         globs,
         holder,
         against="live",
-        live=state.active_leases(now, cfg.lease.grace_s),
+        live=_unfinished_leases(state, cfg, now),
     )
     return (clash.item, clash.lease, clash.pair) if clash else None
+
+
+def _unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]:
+    """The live leases of items still in progress. A finished item holds nothing: its
+    lease may be unreleased, but its files are free."""
+    return {
+        i: lz
+        for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
+        if not (i in state.items and state.items[i].terminal)
+    }
+
+
+def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:
+    """The paths the lease holder's item ``it`` has actually changed, or None when git
+    cannot say (no worktree, unreadable): unknown never means "disjoint". Run only for a
+    holder whose globs already clash, so the git reads cost a refusal, never a claim."""
+    try:
+        path = W.load_path(log.root, it.worktree) if it.worktree else None
+        if path is None or not path.is_dir():
+            return None
+        return CH.changed_paths(path, it.base or W.default_branch(log.root))
+    except Exception:
+        return None
+
+
+def _clash_text(
+    log: EventLog, cfg: Config, state: State, it: Item, globs: list[str], now: float
+) -> tuple[str, str, list[str]] | None:
+    """(holder item, text naming it, globs left after dropping the disjoint ones), or None
+    when nothing overlaps once the holder's real changes are compared.
+
+    A directory glob held by another lease covers files its holder never touched; the
+    holder's changed paths say which. Each requested glob that overlaps a live lease is
+    kept as a clash only when it overlaps one of those changed paths (or they are unknown).
+    """
+    shared = shared_globs(cfg)
+    mine = it.lease.holder if it.lease else ""
+    line = line_key(state, it, cfg)
+    first, parts, bad = "", [], set()
+    for other_id, lz in _unfinished_leases(state, cfg, now).items():
+        other = state.items.get(other_id)
+        if other_id == it.id or other is None or lz.holder == mine:
+            continue  # itself or my own
+        if line_key(state, other, cfg) != line:
+            continue  # another release line is another branch: no clash
+        pairs = _live_pairs(log, other, lz, globs, shared)
+        if not pairs:
+            continue
+        listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
+        parts.append(f"held by {lz.holder} on {other_id} for {_age(now, lz)}: {listed}")
+        first = first or other_id
+        bad |= {a for a, _ in pairs}
+    if not first:
+        return None
+    return first, " | ".join(parts), [g for g in globs if g not in bad]
+
+
+def _age(now: float, lz: Lease) -> str:
+    held = max(now - lz.acquired_at, 0)
+    return (
+        clock.fmt_age(held, "h", places=1)
+        if held >= clock.AGE_UNITS["h"][0]
+        else clock.fmt_age(held, "min")
+    )
+
+
+def _live_pairs(
+    log: EventLog, other: Item, lz: Lease, globs: list[str], shared: list[str]
+) -> list[tuple[str, str]]:
+    """The (mine, theirs) glob pairs that really clash with ``lz``, once the files its
+    holder has changed are compared. Only a WILDCARD lease glob can cover files its holder
+    never touches: an exact path it claimed is declared work, changed yet or not."""
+    pairs = conflicts(globs, lz.globs, shared)
+    changed = holder_changed_paths(log, other) if pairs else None
+    if changed is None:
+        return pairs
+    real = [p for p in changed if not is_shared(p, shared)]
+    return [
+        (a, b)
+        for a, b in pairs
+        if not any(c in b for c in "*?[") or any(GL.match(p, a) for p in real)
+    ]
 
 
 def acquire(
@@ -720,14 +805,16 @@ def plan_retarget(
     lz = it.lease if it else None
     if it is None or lz is None or not lz.live(now, cfg.lease.grace_s):
         return None, ""
-    clash = glob_clash(state, cfg, it, lz.holder, globs, now) if globs is not None else None
+    clash = _clash_text(log, cfg, state, it, globs, now) if globs is not None else None
     if clash:
-        other_id, other, pair = clash
+        other_id, text, keep = clash
         return lz, (
-            f"{item_id} is claimed, so its globs are its lease: {pair[0]!r} overlaps "
-            f"{pair[1]!r} held by {other.holder} on {other_id}. The globs were not changed; "
-            f"your lease stays as it is and the request is recorded as waiting. Do not poll: "
-            f"keep {item_id} off those paths, or ask again when {other_id} is done."
+            f"{item_id} is claimed, so its globs are its lease: {text}. The globs were not "
+            f"changed; your lease stays as it is and the request is recorded as waiting. "
+            f"Do not poll. Try narrower globs: drop the overlapping ones"
+            f"{' (' + ','.join(keep) + ' would be accepted)' if keep else ''}, "
+            f"name the exact files {other_id}'s holder does not change, or ask again when "
+            f"{other_id} is done."
         )
     if globs is not None:
         ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, globs, now)

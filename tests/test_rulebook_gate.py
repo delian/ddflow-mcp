@@ -223,8 +223,9 @@ def test_every_native_rules_file_is_a_rulebook_derived_not_retyped():
     books = E.rulebooks()
     for rule in NATIVE_RULES.values():
         assert rule.path in books, f"{rule.path} changing on the base would go unnoticed"
-    for fixed in ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml"):
+    for fixed in ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/rules/"):
         assert fixed in books
+    assert ".ddflow/config.toml" not in books  # a knob file, not a rulebook
 
 
 def test_a_native_rules_file_changed_on_the_base_counts(forked):
@@ -372,3 +373,31 @@ def test_behind_block_never_refuses_the_merge_that_catches_up(forked):
     _git(wt, "add", "src/app.py")
     r = _git(wt, "commit", "--no-edit")
     assert r.returncode == 0, f"the catching-up merge was refused: {r.stderr}"
+
+
+# -- knobs are not rules (B-stale-rules-hook-forces-main-merge) ----------------------------
+
+
+def test_a_config_knob_changed_on_the_base_is_not_staleness(forked):
+    """A `.ddflow/config.toml` knob (review.max_rounds) is read live from the primary; it is
+    not a rule the session was briefed on. FAILS before the fix: it refused the commit."""
+    repo, wt = forked
+    cfg = (repo / ".ddflow" / "config.toml").read_text()
+    _land(repo, ".ddflow/config.toml", cfg + "\n[review]\nmax_rounds = 4\n")
+    assert E.check_drift(repo, _cfg(), here=wt) == (0, "")
+
+
+def test_a_rule_file_changed_on_the_base_counts(forked):
+    repo, wt = forked
+    _land(repo, ".ddflow/rules/r-new.toml", 'id = "r-new"\n')
+    code, msg = E.check_drift(repo, _cfg(), here=wt)
+    assert code == 1 and ".ddflow/rules/r-new.toml" in msg, msg
+
+
+def test_the_refusal_names_the_one_supported_command(forked):
+    """B-stale-rules-escape-needs-file-copy: a dirty tree cannot `git merge`, and a hard
+    reset is hook-blocked; the refusal must name `ddflow sync --keep-local`."""
+    repo, wt = forked
+    _land(repo, "AGENTS.md", "# rules v2\n")
+    r = _commit_in(wt)
+    assert r.returncode != 0 and "ddflow sync --keep-local" in r.stderr, r.stderr
