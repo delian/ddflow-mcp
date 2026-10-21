@@ -93,3 +93,37 @@ def test_stash_back_survives_a_stash_pushed_between_its_lookup_and_its_drop(repo
     left = _stashes(wt)
     assert "tag-theirs" in left and "tag-mine" not in left, left
     assert (wt / "a.txt").read_text() == "mine\n"
+
+
+def test_every_find_during_the_drop_may_race_with_a_new_stranger(repo, monkeypatch):
+    """Two strangers push, one after each lookup: the verified, bounded drop loses neither."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    real = BS._stash_find
+    n = []
+
+    def racing(tree, tag):
+        found = real(tree, tag)
+        if len(n) < 2:
+            n.append(1)
+            (tree / f"s{len(n)}.txt").write_text("theirs\n")
+            _git(tree, "stash", "push", "-u", "-m", f"tag-theirs-{len(n)}", "--", f"s{len(n)}.txt")
+        return found
+
+    monkeypatch.setattr(BS, "_stash_find", racing)
+    assert BS._stash_back(wt, "tag-mine", mine) == ""
+    left = _stashes(wt)
+    assert "tag-theirs-1" in left and "tag-theirs-2" in left and "tag-mine" not in left, left
+
+
+def test_keep_local_work_that_conflicts_with_the_base_stays_in_a_kept_stash(repo):
+    wt = _claimed(repo)
+    _land(repo, "README.md", "base\n")
+    (wt / "README.md").write_text("local\n")
+    out = sync(repo, item="T1", keep_local=True, agent=ME)
+    assert out.data["status"] == "merged" and out.data["kept_stash"]
+    assert out.data["kept_stash"][:12] in out.reason or "kept in stash" in str(out.data)
+    assert "ddflow-sync-keep-local" in _stashes(wt)  # the work is not lost
