@@ -52,7 +52,7 @@ def test_a_pinned_rule_survives_the_cut():
     pinned = GuidanceRecord(id="r-pin", kind="rule", title="Pinned law", body="never",
                             enforcement="block")  # fmt: skip
     advice = [GuidanceRecord(id=f"r-a{i}", kind="rule", title=f"A {i}") for i in range(30)]
-    got = CH.lines([*advice, pinned], tokens=40, title_chars=100)
+    got = CH.lines([*advice, pinned], tokens=60, title_chars=100)
     assert "r-pin" in got[0] and "pinned" in got[0]  # leads, so a cut from the bottom spares it
     assert "more rules" in got[-1]  # the cut names what it dropped
 
@@ -87,3 +87,9 @@ def test_the_charter_survives_the_backstop_on_a_tiny_budget(repo):
     for i in range(RULES):
         assert f"r-charter{i}" in data["text"], (i, data["text"])
     assert data["approx_tokens"] <= 260 * 1.1
+
+
+def test_a_charter_that_cannot_fit_is_counted_not_dumped():
+    rules = [GuidanceRecord(id=f"r-x{i}", kind="rule", title="T" * 90) for i in range(5)]
+    got = CH.lines(rules, tokens=3, title_chars=100)
+    assert got == ["- _5 more rules: `ddflow rule list`_"]

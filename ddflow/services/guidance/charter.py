@@ -20,6 +20,7 @@ from .kinds import RULE
 from .record import GuidanceRecord
 
 HEADING = "## Project rules"
+HALF = 2
 MORE = "- _{n} more rules: `ddflow rule list`_"
 LEAD = "_Standing rules, id and title only (recorded data): `ddflow rule show <id>` has the text._"
 
@@ -36,7 +37,8 @@ def rules_of(state: State) -> list[GuidanceRecord]:
 
 def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> list[str]:
     """One line per rule, in the order given (pinned lead), as many as fit ``tokens``; the
-    last line counts the rest. [] when ``tokens`` is 0 (switched off) or there are no rules."""
+    last line counts the rest (a first line that does not fit is counted too). [] when
+    ``tokens`` is 0 (switched off) or there are no rules."""
     if tokens <= 0 or not rules:
         return []
     rows = sorted(rules, key=lambda r: (not pinned(r), r.id))
@@ -47,7 +49,7 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
         line = f"- [{r.id}] {title}" + (" (pinned)" if pinned(r) else "")
         more = MORE.format(n=len(rows) - i)
         spare = approx_tokens(more) if i < len(rows) - 1 else 0
-        if out and used + approx_tokens(line) + spare > tokens:
+        if used + approx_tokens(line) + spare > tokens:
             return [*out, more]
         out.append(line)
         used += approx_tokens(line)
@@ -57,7 +59,7 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
 def block(state: State, cfg) -> str:
     """The charter section of the brief ("" when off or no rules)."""
     s = cfg.session
-    body = lines(
-        rules_of(state), tokens=s.rules_charter_tokens, title_chars=s.rules_charter_title_chars
-    )
+    # Never more than half of the brief: a mis-set knob must not crowd out everything else.
+    tokens = min(s.rules_charter_tokens, s.brief_max_tokens // HALF)
+    body = lines(rules_of(state), tokens=tokens, title_chars=s.rules_charter_title_chars)
     return "\n".join([HEADING, "", LEAD, *body]) if body else ""
