@@ -89,3 +89,13 @@ def test_bracket_filenames_are_matched_literally(repo, monkeypatch):
     monkeypatch.setattr(L, "holder_changed_paths", lambda log, item: ["pkg/gates/f[1].py"])
     ok = AI.update(repo, "M1", AI.ItemEdit(globs=["mine.py", "pkg/gates/f1.py"]), agent=ME)
     assert ok.ok, ok.reason
+
+
+def test_holder_on_another_release_line_is_no_clash(repo):
+    _setup(repo)
+    log = EventLog(repo, "probe")
+    st = L._fold(log)
+    cfg = Config.load(repo)
+    st.items["H1"].line = "v9"
+    clash = L._clash_text(log, cfg, st, st.items["M1"], ["pkg/gates/x.py"], time.time())
+    assert clash is None

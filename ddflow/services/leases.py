@@ -32,6 +32,7 @@ from ..core import globs as GL
 from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.admission import conflicts, glob_conflict, shared_globs
+from ..core.flow import line_key
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
 from ..core.schedule import plan as _plan
@@ -187,14 +188,12 @@ def glob_clash(
     return (clash.item, clash.lease, clash.pair) if clash else None
 
 
-def holder_changed_paths(log: EventLog, item_id: str) -> list[str] | None:
-    """The paths the lease holder of ``item_id`` has actually changed, or None when git
-    cannot say (no worktree, unreadable): unknown never means "disjoint"."""
+def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:
+    """The paths the lease holder's item ``it`` has actually changed, or None when git
+    cannot say (no worktree, unreadable): unknown never means "disjoint". Run only for a
+    holder whose globs already clash, so the git reads cost a refusal, never a claim."""
     from . import completion  # late: completion imports this module's neighbours
 
-    it = _fold(log).items.get(item_id)
-    if it is None:
-        return None
     try:
         return completion.changed_paths(log.root, it)
     except Exception:
@@ -218,12 +217,14 @@ def _clash_text(
     }
     shared = shared_globs(cfg)
     mine = it.lease.holder if it.lease else ""
+    line = line_key(state, it, cfg)
     first, parts, bad = "", [], set()
     for other_id, lz in live.items():
-        if lz.holder == mine:
-            continue
+        other = state.items.get(other_id)
+        if lz.holder == mine or other is None or line_key(state, other, cfg) != line:
+            continue  # my own, or on another release line (another branch): no clash
         pairs = conflicts(globs, lz.globs, shared)
-        changed = holder_changed_paths(log, other_id) if pairs else None
+        changed = holder_changed_paths(log, other) if pairs else None
         if changed is not None:
             pairs = [(a, b) for a, b in pairs if any(GL.match(p, a) for p in changed)]
         if not pairs:
