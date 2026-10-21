@@ -90,3 +90,12 @@ def test_a_new_empty_file_is_not_mistaken_for_an_absent_path(tmp_path):
     (d / "new.txt").write_text("")  # empty: its entry is still `mode oid`, never ""
     (out,) = C.refine_stale_notes(_notes(), it, d, "", ["mine.py", "new.txt"])
     assert "new.txt" in out.why
+
+
+def test_a_file_deleted_after_the_round_is_a_moved_path(tmp_path):
+    """ "The round never saw it" and "it is deleted" are different (roborev standards)."""
+    d = _tree(tmp_path)
+    it = _item(path_snapshot(d, ["mine.py"]))
+    (d / "other.py").unlink()  # the item deletes a file after the review
+    (out,) = C.refine_stale_notes(_notes(), it, d, "", ["mine.py", "other.py"])
+    assert "other.py" in out.why

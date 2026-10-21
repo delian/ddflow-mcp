@@ -373,7 +373,7 @@ def refine_stale_notes(notes: list, it: Item, cwd: Path, landed: str, changed: l
         moved = sorted(
             p
             for p in recorded.keys() | set(changed)
-            if recorded.get(p, "") != (" ".join(entries[p]) if p in entries else "")
+            if recorded.get(p) != (" ".join(entries[p]) if p in entries else "")
         )
         if moved:
             shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
