@@ -118,11 +118,11 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     since: str = "",
     item: str = "",
     limit: int = V.DEFAULT_LIMIT,
-    offset: int = 0,
     all: bool = False,
     mode: str = "ranked",
     sources: str = "",
     source: str = "",
+    offset: int = 0,
 ) -> O.Outcome:
     """The one read over every viewer (task|phase|bug|research|session|search): the same
     rows and shape as the CLI's `list` / `session list|show` / `search` with `--json`.

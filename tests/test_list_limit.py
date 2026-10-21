@@ -74,3 +74,38 @@ def test_text_footer_names_the_cap_and_the_next_offset(seeded):
     text = buf.getvalue()
     assert "raise --limit" not in text
     assert "cut to 3" in text and "--offset 3" in text
+
+
+@pytest.fixture
+def cli(capsys):
+    """The CLI in this process, so the cap patched on the engine applies to it."""
+    from ddflow.surfaces.cli import main
+
+    def run(repo, *argv):
+        try:
+            code = main(["--repo", str(repo), *argv])
+        except SystemExit as exc:
+            code = int(exc.code or 0)
+        got = capsys.readouterr()
+        return code, got.out, got.err
+
+    return run
+
+
+def test_cli_limit_above_the_cap_footer_is_honest(seeded, cli):
+    code, out, _ = cli(seeded, "task", "list", "--limit", "5000")
+    assert code == 0
+    assert "raise --limit" not in out
+    assert "--limit 5000 cut to 3" in out and "--offset 3" in out
+
+
+def test_cli_limit_zero_lists_and_offset_pages(seeded, cli):
+    import json
+
+    code, out, _ = cli(seeded, "--json", "task", "list", "--limit", "0")
+    first = json.loads(out)
+    assert code == 0 and first["next"] == 3 and first["truncated"] is True
+    code, out, _ = cli(seeded, "--json", "list", "task", "--limit", "0", "--offset", "3")
+    second = json.loads(out)
+    assert code == 0 and second["offset"] == 3 and second["next"] == 6
+    assert not {r["id"] for r in first["rows"]} & {r["id"] for r in second["rows"]}
