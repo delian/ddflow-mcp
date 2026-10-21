@@ -81,3 +81,11 @@ def test_a_gate_without_reviewed_paths_or_unknown_changes_keeps_its_note(tmp_pat
     it = _item(path_snapshot(d, ["mine.py"]))
     assert C.refine_stale_notes(_notes("ci"), it, d, "", ["mine.py"]) == _notes("ci")
     assert C.refine_stale_notes(_notes(), it, d, "", None) == _notes()
+
+
+def test_a_new_empty_file_is_not_mistaken_for_an_absent_path(tmp_path):
+    d = _tree(tmp_path)
+    it = _item(path_snapshot(d, ["mine.py"]))
+    (d / "new.txt").write_text("")  # empty: its entry is still `mode oid`, never ""
+    (out,) = C.refine_stale_notes(_notes(), it, d, "", ["mine.py", "new.txt"])
+    assert "new.txt" in out.why
