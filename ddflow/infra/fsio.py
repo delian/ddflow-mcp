@@ -289,6 +289,11 @@ def temp_text(text: str, suffix: str = "") -> Iterator[Path]:
         path.unlink(missing_ok=True)
 
 
+def temp_root() -> Path:
+    """The system temporary directory, for a fixed-name file shared between processes."""
+    return Path(tempfile.gettempdir())
+
+
 def unused_dir(prefix: str, under: Path | None = None) -> Path:
     """A path in ``under`` (the system temp directory by default) that is free now: its
     name was reserved and the directory removed again, for a tool that wants to create
