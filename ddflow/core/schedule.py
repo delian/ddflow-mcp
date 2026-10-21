@@ -278,8 +278,9 @@ def _glob_is_docs(glob: str, docs: list[str]) -> bool:
         return True
     if "**" in glob:
         return False
-    probe = glob.replace("*", "x").replace("?", "x")
-    return any(path_in_glob(probe, d) for d in docs)
+    # Two different fillers: a doc glob like `docs/x*` covers `docs/x` but not `docs/y`.
+    probes = (glob.replace("*", "x").replace("?", "x"), glob.replace("*", "zq9").replace("?", "q"))
+    return all(any(path_in_glob(p, d) for d in docs) for p in probes)
 
 
 def inherited_deps(state: State, it: Item, cfg: Config | None = None) -> list[tuple[str, str]]:

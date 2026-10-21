@@ -72,3 +72,14 @@ def test_a_recursive_glob_is_not_docs_under_a_narrower_doc_glob(repo):
     assert ("P-next", "P-gate") in inherited_deps(st, it, cfg)
     it.globs = ["docs/*.md"]
     assert inherited_deps(st, it, cfg) == []
+
+
+def test_a_partly_covered_wildcard_is_not_docs(repo):
+    """`docs/*` also matches `docs/y`, which a doc glob of `docs/x*` does not cover."""
+    _queue(repo)
+    st = fold(EventLog(repo, "t").read_all(), strict=False)
+    cfg = Config()
+    cfg.gates.doc_globs = ["docs/x*"]
+    it = st.items["N-docs"]
+    it.globs = ["docs/*"]
+    assert ("P-next", "P-gate") in inherited_deps(st, it, cfg)
