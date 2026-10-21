@@ -10,10 +10,9 @@ from typing import Any
 
 from ...config import Config
 from ...core import blobref as B
-from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State, fold
+from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
-from .. import approval as AP
 from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
@@ -550,9 +549,6 @@ def approve(
 ) -> str:
     """A PERSON clears (or refuses) a human gate. Returns the line to print.
 
-    A gate that is not a human gate has one thing to approve: its recorded PARTIAL outcome
-    (`services.gate_accept`), which this accepts without rewriting it into a pass.
-
     Records the OS user rather than the agent id, and stamps `human: true` on the
     evidence. Neither makes forgery impossible — an agent with a shell can run this —
     but both make a forged approval *visible* in the log instead of identical to a real
@@ -566,26 +562,7 @@ def approve(
     if gdef is None:
         raise ValueError(f"no such gate {gate!r}")
     if not gdef.is_human_gate:
-        it = fold(log.read_all(), strict=False).items.get(item_id)
-        if it is not None and it.gate_outcome(gate) == GA.ACCEPTABLE and not reject:
-            if gate not in required_gates(cfg):
-                raise ValueError(
-                    f"{gate!r} is not a required gate ([gates].required): a partial outcome "
-                    f"of an advisory gate blocks nothing, so there is nothing to accept"
-                )
-            try:
-                got = GA.grant(log, it, gate, note=note, requested_agent=requested_agent)
-            except AP.ApprovalRefused as exc:
-                raise ValueError(str(exc)) from exc
-            return (
-                f"{item_id}.{gate} partial outcome ACCEPTED by {got.actor.user}; it stays "
-                f"partial on the record, and `complete` no longer counts it as a blocker"
-            )
-        raise ValueError(
-            f"{gate!r} is not a human-approval gate, so there is nothing for a person "
-            f"to approve. Set `[gate.{gate}] human = true` in .ddflow/gates.toml if it "
-            f"should be one; otherwise use `ddflow gate record`."
-        )
+        return GA.approve(log, cfg, item_id, gate, note=note, reject=reject, agent=requested_agent)
     if reject and not reason:
         raise ValueError("a rejection must carry --reason: 'no' with no reason cannot be acted on")
 
