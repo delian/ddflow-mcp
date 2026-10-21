@@ -971,6 +971,13 @@
           copies them to add one of its own freezes them; add yours here instead --
           e.g. private-network addresses, so an operator prompt naming a LAN host is
           masked before it reaches the committed log.
+      session.redact_lookup_network = True   [default]
+          Mark private-network addresses and private host names (.lan, .local,
+          .internal, .home.arpa) even in the event fields that are looked up rather
+          than read (urls, paths, branches, tags, globs), which are otherwise written
+          as given. The log is committed and pushed, so a LAN address in a pull-
+          request url is a leak; turn this off only if such a field must keep an
+          address byte for byte.
       session.brief_max_tokens = 1200   [default]
           Ceiling on the session-start brief. The brief replaces reading the rulebooks
           and the lessons file; it must stay small or it defeats itself.
