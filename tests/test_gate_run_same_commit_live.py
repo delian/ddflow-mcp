@@ -21,6 +21,8 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="signals are POSIX")
 
 
 def _reap(p) -> None:
+    if p.poll() is not None:
+        return
     os.killpg(p.pid, signal.SIGKILL)
     p.wait(timeout=30)
 
@@ -109,3 +111,32 @@ def test_live_run_judges_commit_liveness_and_host(tmp_path):
     data["pid"] = 2**22 + 7  # gone
     other_pid_marker.write_text(json.dumps(data))
     assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
+
+
+def test_start_lock_serialises_mark_and_look(tmp_path):
+    import threading
+
+    order: list[str] = []
+    inside = threading.Event()
+    release = threading.Event()
+
+    def holder():
+        with RUN.start_lock(tmp_path, "T1", "ci"):
+            order.append("a-in")
+            inside.set()
+            release.wait(10)
+            order.append("a-out")
+
+    t = threading.Thread(target=holder)
+    t.start()
+    assert inside.wait(10)
+    t2 = threading.Thread(
+        target=lambda: [RUN.start_lock(tmp_path, "T1", "ci").__enter__(), order.append("b-in")]
+    )
+    t2.start()
+    t2.join(0.5)
+    assert order == ["a-in"], "the second start must wait for the first"
+    release.set()
+    t.join(10)
+    t2.join(10)
+    assert order == ["a-in", "a-out", "b-in"]

@@ -132,6 +132,23 @@ def live_run(repo: Path, item: str, gate: str, sha: str) -> Marker | None:
 
 
 @contextlib.contextmanager
+def start_lock(repo: Path, item: str, gate: str) -> Iterator[None]:
+    """Serialise "mark, then look for a twin" across processes (an flock on a per-gate file),
+    so of two runs started together exactly one sees the other's marker. Advisory: where the
+    lock file cannot be opened the check goes on unlocked."""
+    try:
+        lock = fsio.file_lock(_dir(repo, item) / f"{gate}.lock", timeout_s=30)
+        lock.__enter__()
+    except (OSError, fsio.LockTimeout):
+        yield
+        return
+    try:
+        yield
+    finally:
+        lock.__exit__(None, None, None)
+
+
+@contextlib.contextmanager
 def terminating() -> Iterator[None]:
     """While active, SIGTERM and SIGHUP raise `RunTerminated` in the main thread instead
     of ending the process unrecorded. A no-op off the main thread (signals cannot be set

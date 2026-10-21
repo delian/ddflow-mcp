@@ -166,6 +166,7 @@ from .running import (  # noqa: F401
     dead_runs,
     live_run,
     mark_started,
+    start_lock,
     terminating,
 )
 from .testcmd import (  # noqa: F401
