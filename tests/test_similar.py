@@ -259,6 +259,37 @@ def test_the_knobs_steer_the_policy():
     assert similar.assess(_idx(), q, _cfg(show_floor=1.0)).action == "none"
 
 
+def test_research_note_and_the_task_it_informs_are_related_not_duplicates():
+    """B-dupe-research-vs-task: a note about a topic scores high against the task that will
+    implement it; it is listed, never refused. Same-kind and bug pairs still ask."""
+    note = {"kind": "research", "title": "", "body": LONG + " finding"}
+    tasks = similar.build([{"id": "T1", "kind": "task", "title": "x", "body": LONG}])
+    a = similar.assess(tasks, note, _cfg())
+    assert a.action == "show" and any(c.id == "T1" for c in a.candidates)
+    task = {"kind": "task", "title": "", "body": LONG + " finding"}
+    idx = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
+    assert similar.assess(idx, task, _cfg()).action == "show"
+    assert similar.assess(tasks, note, _cfg(research_task_asks=True)).action == "ask"
+    # identical text across the pair still asks (the knob's documented promise)
+    ident = {"kind": "research", "title": "x", "body": LONG}
+    assert similar.assess(tasks, ident, _cfg()).action == "ask"
+    # a note against a note is still a duplicate
+    two = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
+    assert similar.assess(two, note, _cfg()).action == "ask"
+    b = similar.assess(_idx(), {"kind": "bug", "title": "", "body": LONG + " again"}, _cfg())
+    assert b.action == "ask"
+
+
+def test_import_screen_keeps_a_note_and_its_task_but_drops_same_kind_copies():
+    """The import screen shares the add rule (is_duplicate): a note beside its task stays."""
+    t = {"id": "t", "kind": "task", "title": "", "body": LONG}
+    r = {"id": "r", "kind": "research", "title": "", "body": LONG + " finding"}
+    r2 = {**r, "id": "r2"}
+    cfg = _cfg()
+    assert similar.screen([t, r], None, cfg, compare=lambda a, b: True)[1] == []
+    assert similar.screen([r, r2], None, cfg, compare=lambda a, b: True)[1] != []
+
+
 # ------------------------------------------------------------------------------ config
 
 
