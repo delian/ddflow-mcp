@@ -254,3 +254,28 @@ def test_pins_regenerate_refuses_an_older_binary_than_the_log(repo: Path):
     assert out.exit == 3 and "0.5.7" in out.reason and RUNNING in out.reason
     # a check (read only) is not refused
     assert PF.pins_regenerate(repo, start=repo, agent="me", check=True).exit != 3
+
+
+def test_a_malformed_marker_only_repeats_the_notice(repo: Path, capsys: pytest.CaptureFixture[str]):
+    _stamp(repo, "0.5.7")
+    marker = repo / ".ddflow" / "local" / "skew-notice.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    for bad in ('{"seen": null}', '{"seen": 3}', "[1]", "not json"):
+        marker.write_text(bad)
+        LOG._SKEW_WARNED.clear()
+        EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+        assert "patch skew" in capsys.readouterr().err
+
+
+def test_two_projects_in_one_process_each_get_their_notice(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    import shutil
+
+    other = tmp_path / "other"
+    shutil.copytree(repo, other)
+    _stamp(repo, "0.5.7")
+    _stamp(other, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    EventLog(other, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err.count("patch skew") == 2
