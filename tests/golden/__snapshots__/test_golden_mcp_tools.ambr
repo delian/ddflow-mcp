@@ -3708,6 +3708,10 @@
           "type": "boolean",
           "description": "Queue a refused request (FIFO per file)."
          },
+         "landed": {
+          "type": "string",
+          "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
+         },
          "worktree": {
           "type": "string",
           "description": "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch."
