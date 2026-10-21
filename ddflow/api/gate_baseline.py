@@ -20,10 +20,16 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
     A command that exited 0 over output listing failing tests is settled first
     (`gate_passed_failures`): those tests are run alone, and without a passing rerun the gate
     is not ``passed``."""
-    result, why = PF.apply(repo, it, gdef, result, ev, rerun)
+    result, why = PF.apply(repo, cfg, it, gate, gdef, result, ev, rerun)
     if result != "failed":
         return result, why
-    ids = BR.candidate_ids(gate, gdef.command, ev, fail_fast) if result == "failed" else []
+    # After a rerun the tests in doubt are the ones that failed ALONE, not the whole listing.
+    seen = (
+        {**ev, "failed_tests": ev["rerun"]["still_failing"]}
+        if why and ev["rerun"].get("still_failing")
+        else ev
+    )
+    ids = BR.candidate_ids(gate, gdef.command, seen, fail_fast) if result == "failed" else []
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
