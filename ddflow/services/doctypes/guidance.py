@@ -77,6 +77,7 @@ def _unreadable(why: str) -> GuidanceRecord:
         f"The project's document type files could not be read ({why}); guidance from its own "
         "types is missing here. `ddflow docs check` says which file and why."
     )
+    # No scope on purpose: an always-scope note, so it reaches every claim, not only documents.
     return GuidanceRecord("dt-unreadable", RULE.kind, title="Document types unreadable", body=body)
 
 

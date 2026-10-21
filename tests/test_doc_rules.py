@@ -127,3 +127,13 @@ def test_a_review_of_a_document_is_sent_its_types_rules_to_verify_against(repo: 
     ctx = RVAPI._with_guidance("ctx", cfg, st, "DOC", "doc_review", said.append)
     assert "Verify the change complies" in ctx and 'id="dt-policy-r1"' in ctx
     assert any("dt-policy" in line for line in said)
+
+
+def test_a_non_utf8_type_makes_the_docs_check_unavailable_not_a_crash(repo: Path):
+    from ddflow import api
+
+    (repo / ".ddflow" / "doctypes").mkdir(parents=True, exist_ok=True)
+    (repo / ".ddflow/doctypes/bad.toml").write_bytes(b"\xff\xfe\x00bad")
+    (repo / "README.md").write_text("# x\n")
+    out = api.run_docs(repo, verb="check")
+    assert "doctypes" in out.data["unavailable"] and out.data["clean"] is False
