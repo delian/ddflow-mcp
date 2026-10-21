@@ -104,9 +104,7 @@ def dead_runs(repo: Path, item: str = "") -> list[Marker]:
             m = _read(path)
             if m is None or not H.same_host(m.host):
                 continue
-            now = proc_start(m.pid) if m.pid_start else ""
-            same = alive(m.pid) and not (m.pid_start and now and now != m.pid_start)
-            if m.pid > 0 and not same:
+            if m.pid > 0 and not _is_live(m):
                 out.append(m)
     return out
 
