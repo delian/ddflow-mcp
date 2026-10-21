@@ -543,15 +543,15 @@ def _superseded_run(
 
 
 def _mark_or_refuse_twin(repo, item, gate, started_on):
-    """Mark FIRST, then look: two runs started together both mark and both see the other, and
-    the one that started later (marker `at`, then pid) refuses, so exactly one goes on.
+    """Mark, then look, under one lock: of two runs started together the first to take it
+    marks and sees no twin; the second sees the first's marker and refuses.
     Returns (marker, None) to go on, or (marker, the refusal)."""
-    marker = RUN.mark_started(repo, item, gate, started_on)
-    twin = RUN.live_run(repo, item, gate, started_on)
-    if not twin or (marker is not None and (twin.at, twin.pid) > (marker.at, marker.pid)):
+    with RUN.start_lock(repo, item, gate):
+        twin = RUN.live_run(repo, item, gate, started_on)
+        marker = None if twin else RUN.mark_started(repo, item, gate, started_on)
+    if not twin:
         return marker, None
-    RUN.clear_started(marker)
-    return marker, O.nothing(
+    return None, O.nothing(
         "gate.run",
         f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
         f"{twin.at}); wait for it (`ddflow gate status {item}`) -- a second run would only "
