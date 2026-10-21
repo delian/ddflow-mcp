@@ -181,9 +181,10 @@ def add(
     requested_agent: str = "",
     gates: Collection[str],
 ) -> Grant:
-    """A PERSON grants ``count`` of ``kind`` on ``item``.``gate``. Raises `GrantRefused`:
-    under an agent identity (first, before anything is read), for an unknown kind,
-    predicate, item or gate (not in ``gates``), a count outside 1..`[grants].max_count`, or no reason."""
+    """A PERSON grants ``count`` of ``kind`` on ``item``.``gate``. Raises `GrantRefused`
+    under an agent identity (first, before anything is read), and `GrantInvalid` for an
+    unknown kind, predicate, item or gate (not in ``gates``), a count outside
+    1..`[grants].max_count`, or no reason."""
     if why := AP.agent_marker(requested_agent):
         raise GrantRefused(AP.refusal(why))
     k = KINDS.get(kind)
