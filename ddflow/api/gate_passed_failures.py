@@ -10,6 +10,7 @@ no recorded passing rerun cannot yield a pass.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,15 @@ SHOWN = 8
 def _names(ids: list[str]) -> str:
     shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
     return shown
+
+
+def _fail_fast(command: str) -> bool:
+    """Whether the command stops at its first failure, so the tests after it never ran."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return True
+    return any(t in ("-x", "--exitfirst") or t.startswith("--maxfail") for t in tokens)
 
 
 def _plural(n: int) -> str:
@@ -54,7 +64,7 @@ def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str
     ev["rerun"] = {
         "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
         "still_failing": still, "tail": rev.get("tail", "")[-800:],
-        "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" and still else [],
+        "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" and still and not _fail_fast(gdef.command) else [],
     }  # fmt: skip
     if ok:
         reason = f"passed after rerunning {_plural(len(ids))}: {_names(ids)}, each passed on rerun"
