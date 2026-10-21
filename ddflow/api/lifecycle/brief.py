@@ -124,7 +124,8 @@ def _contest_block(repo: Path, cfg, log, st) -> str:
 def _rules_block(governing, *, charter: bool = False) -> str:
     """The project's rules that govern the item's files, one fenced line each, "" for none.
     With the charter, a rule that applies to all work is left to it (its line is there); the
-    text is `ddflow rule show`, or the claim."""
+    text is `ddflow rule show`, or the claim. A PINNED rule keeps its whole text here too:
+    the charter names it, this hands it over."""
 
     rules = governing.records("rule")
     if charter:

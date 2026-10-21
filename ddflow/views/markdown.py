@@ -1120,15 +1120,15 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     room = budget * 4 - len("\n".join(head)) - len(note) - 1 - set_aside
     body, trimmed = _fit_sections(sections, room, item)
     text = "\n".join(head + body)
-    if charter:
-        text += "\n\n" + charter
-    # The backstop, for a heading that alone overran its share: the note counts too.
-    if len(text) + (len(note) if trimmed else 0) > budget * 4:
-        text = text[: max(0, budget * 4 - len(note))].rsplit("\n", 1)[0]
+    # The backstop, for a heading that alone overran its share: the note counts too. The
+    # charter's room is kept out of it, so the backstop cuts the sections, never the charter.
+    cap = budget * 4 - set_aside
+    if len(text) + (len(note) if trimmed else 0) > cap:
+        text = text[: max(0, cap - len(note))].rsplit("\n", 1)[0]
         trimmed = True
     if trimmed:
         text += note
-    return text
+    return text + ("\n\n" + charter if charter else "")
 
 
 #: Every generated view: its filename and how to render it. The ONE map. There were two
