@@ -627,9 +627,10 @@ STASH_RETRY_PAUSE_S = 0.25
 
 
 def _stash_failed(r: GitResult) -> bool:
-    """Is git's own `fatal: stash failed` line in the answer? A whole line, never the words
-    anywhere: a conflict in a file NAMED "stash failed" must not be taken for it."""
-    return any(ln.strip() == "fatal: stash failed" for ln in f"{r.err}\n{r.out}".splitlines())
+    """Is git's own `fatal: stash failed` line in the answer? A whole line from column 0 of
+    stderr, never the words anywhere: git lists file names indented (a tab), so a file NAMED
+    "stash failed" or "fatal: stash failed" cannot pass for it."""
+    return "fatal: stash failed" in r.err.splitlines()
 
 
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
