@@ -143,7 +143,7 @@ def _print_rows(kind: str, out, defaulted: bool) -> None:
     if d["truncated"]:
         print(
             f"\n(showing {d['shown']} of {d['total']} from {d['offset']}; "
-            f"next page: --offset {d['next']})"
+            f"next page: --limit {d['limit']} --offset {d['next']})"
         )
     if defaulted:
         what = "fixed and invalid" if kind == "bug" else "superseded"

@@ -73,7 +73,7 @@ def test_text_footer_names_the_cap_and_the_next_offset(seeded):
         VL._print_rows("task", out, False)
     text = buf.getvalue()
     assert "raise --limit" not in text
-    assert "cut to 3" in text and "--offset 3" in text
+    assert "cut to 3" in text and "--limit 3 --offset 3" in text
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def test_cli_limit_above_the_cap_footer_is_honest(seeded, cli):
     code, out, _ = cli(seeded, "task", "list", "--limit", "5000")
     assert code == 0
     assert "raise --limit" not in out
-    assert "--limit 5000 cut to 3" in out and "--offset 3" in out
+    assert "--limit 5000 cut to 3" in out and "--limit 3 --offset 3" in out
 
 
 def test_cli_limit_zero_lists_and_offset_pages(seeded, cli):
@@ -109,3 +109,11 @@ def test_cli_limit_zero_lists_and_offset_pages(seeded, cli):
     second = json.loads(out)
     assert code == 0 and second["offset"] == 3 and second["next"] == 6
     assert not {r["id"] for r in first["rows"]} & {r["id"] for r in second["rows"]}
+
+
+def test_offset_on_a_viewer_that_cannot_page_is_refused(seeded):
+    from ddflow.api import view_read
+
+    for kind in ("session", "search"):
+        out = view_read(seeded, kind, query="t", offset=5)
+        assert out.exit == 3 and "offset" in out.reason, kind

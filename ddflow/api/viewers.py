@@ -90,11 +90,11 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 #: The selector arguments each kind takes, beyond the state/owner/since filters, which the
 #: engines check themselves; any other one that is set is refused.
 _TAKES: dict[str, frozenset[str]] = {
-    "task": frozenset({"phase", "tag", "all"}),
-    "phase": frozenset({"tag", "all"}),
-    "bug": frozenset({"phase", "all", "item"}),
-    "research": frozenset({"phase", "tag", "all"}),
-    "lesson": frozenset({"tag", "all"}),
+    "task": frozenset({"phase", "tag", "all", "offset"}),
+    "phase": frozenset({"tag", "all", "offset"}),
+    "bug": frozenset({"phase", "all", "item", "offset"}),
+    "research": frozenset({"phase", "tag", "all", "offset"}),
+    "lesson": frozenset({"tag", "all", "offset"}),
     "session": frozenset({"id"}),
     "search": frozenset({"query", "mode", "sources", "source", "phase"}),
 }
@@ -143,6 +143,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         "source": source,
         "phase": phase,
         "item": item,
+        "offset": offset,
     }
     stray = sorted(k for k, v in given.items() if v and k not in _TAKES[kind])
     if stray:
