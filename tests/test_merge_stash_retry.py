@@ -6,8 +6,6 @@ retries a bounded number of times and, when it gives up, says what happened."""
 from __future__ import annotations
 
 import sys
-import threading
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -27,39 +25,51 @@ def _setup(repo):
     return cfg, wt
 
 
-def _hold_lock(repo, seconds):
+def _lock(repo) -> Path:
     lock = Path(_git(repo, "rev-parse", "--absolute-git-dir")) / "index.lock"
     lock.write_text("")
-
-    def release():
-        time.sleep(seconds)
-        lock.unlink(missing_ok=True)
-
-    t = threading.Thread(target=release)
-    t.start()
-    return t
+    return lock
 
 
 def test_a_stash_failure_from_a_briefly_held_index_lock_is_retried(repo, monkeypatch):
-    monkeypatch.setattr(W, "STASH_RETRY_PAUSE_S", 0.2, raising=False)
     cfg, wt = _setup(repo)
-    t = _hold_lock(repo, 0.5)
+    lock = _lock(repo)
+    pauses = []
+
+    def release_on_first_pause(seconds):  # only reached AFTER a failed attempt: deterministic
+        pauses.append(seconds)
+        lock.unlink(missing_ok=True)
+
+    monkeypatch.setattr(W.time, "sleep", release_on_first_pause)
     r = W.merge(repo, cfg, wt)
-    t.join()
+    assert pauses, "the first attempt must have failed on the lock, or this proves nothing"
     assert r.ok, r.err or r.out
     assert _git(repo, "show", "HEAD:f.py") == "x"
     assert (repo / "README.md").read_text() == "dirty tracked\n"
 
 
 def test_a_stash_failure_that_never_clears_is_reported_with_its_cause(repo, monkeypatch):
-    monkeypatch.setattr(W, "STASH_RETRY_PAUSE_S", 0.01, raising=False)
     cfg, wt = _setup(repo)
     head = _git(repo, "rev-parse", "HEAD")
-    t = _hold_lock(repo, 3)
+    _lock(repo)
+    pauses = []
+    monkeypatch.setattr(W.time, "sleep", pauses.append)
     r = W.merge(repo, cfg, wt)
-    t.join()
+    assert len(pauses) == W.STASH_RETRIES - 1  # bounded
     assert not r.ok
     msg = r.err or r.out
     assert "stash failed" in msg and "index.lock" in msg and "nothing was merged" in msg, msg
-    assert _git(repo, "show", "HEAD:g.py") == "y" and not (repo / "f.py").exists()  # unmerged
-    assert _git(repo, "rev-parse", "HEAD") == head
+    assert _git(repo, "rev-parse", "HEAD") == head and not (repo / "f.py").exists()
+
+
+def test_a_conflict_in_a_file_named_stash_failed_is_not_retried(repo, monkeypatch):
+    """rubber_duck round 1: only git's own `fatal: stash failed` line is transient."""
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "stash failed", "branch\n", "feat: f")
+    _commit(repo, "stash failed", "main\n", "main: same file")
+    pauses = []
+    monkeypatch.setattr(W.time, "sleep", pauses.append)
+    r = W.merge(repo, cfg, wt)
+    assert not r.ok and not pauses
+    assert "CONFLICT" in (r.err + r.out)
