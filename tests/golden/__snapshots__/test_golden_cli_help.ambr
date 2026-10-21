@@ -1296,10 +1296,10 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM] {task,phase,bug,research,lesson}
+  usage: ddflow list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
   
   positional arguments:
-    {task,phase,bug,research,lesson}
+    {task,phase,bug,research,lesson,session,search}
                           what to list
   
   options:
@@ -2955,8 +2955,8 @@
       search              search tasks, phases, bugs, research, decisions, lessons, sessions,
                           prompts, rules, skills, agents, jobs, schedules and the log (exit 2 = no
                           match)
-      list                list tasks, phases, bugs, research notes or lessons (what `<kind> list`
-                          shows)
+      list                list tasks, phases, bugs, research notes, lessons or sessions (what
+                          `<kind> list` shows)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
   
