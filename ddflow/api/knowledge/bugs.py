@@ -239,7 +239,8 @@ def _file_fix_task(
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
-    use, never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
+    use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first open or absent one,
+    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
     transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
@@ -251,7 +252,7 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase.
+    # globs are what makes a feature on them wait. The parent is the standing bugs phase, else its follow-up.
     src = st.items.get(item) if item else None
     # Never the item's own phase: a fix task there would hold that phase open and block its
     # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
