@@ -61,6 +61,7 @@ def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str
         ev["reason"] = reason
         return "passed", reason
     bad = still or ids
+    outcome = "failed" if still else outcome  # a rerun that still lists failures is a failure
     reason = (
         f"exit 0, but the output lists {_plural(len(ids))} failing and the rerun alone "
         f"{'failed' if outcome == 'failed' else 'did not run'} ({_names(bad)}). NOT a pass."
