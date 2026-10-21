@@ -433,20 +433,9 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if rec is None:
         return ""
     ev = rec.evidence or {}
-    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
     wt, _held = item_tree(repo, cfg, st, it, None)
-    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
-    if not was and dirt == "clean" and base and wt is not None and wt.exists():
-        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
-    now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
-    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
-    redo = (
-        f"the review budget is spent: ask the operator for one more round on the current tree "
-        f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
-        if spent
-        else f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
-        "current tree"
-    )
+    was, now = _round_and_current_tree(ev, wt)
+    redo = _redo_hint(cfg, it, item, gate)
     if not was:
         return f"the round names no tree it reviewed; {redo}"
     if not now:
@@ -461,6 +450,30 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
             f"content now{where}; {redo}"
         )
     return ""
+
+
+def _round_and_current_tree(ev: dict[str, Any], wt) -> tuple[str, str]:
+    """(the content id the round reviewed, the one ``wt`` holds now); "" for one not known."""
+    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
+    readable = wt is not None and wt.exists()
+    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
+    if not was and dirt == "clean" and base and readable:
+        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
+    return was, GE.source_tree(wt) if readable else ""
+
+
+def _redo_hint(cfg, it, item: str, gate: str) -> str:
+    """What to do about a round the item's tree has left behind."""
+    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
+    if spent:
+        return (
+            f"the review budget is spent: ask the operator for one more round on the current tree "
+            f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
+        )
+    return (
+        f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
+        "current tree"
+    )
 
 
 def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
