@@ -279,3 +279,19 @@ def test_sync_exits_non_zero_when_the_stash_could_not_be_cleaned_up(repo, monkey
     out = sync(repo, item="T1", keep_local=True, agent=ME)
     assert not out.ok and "STASH NOT CLEANED UP" in out.reason
     assert (wt / "README.md").read_text() == "dirty\n"
+
+
+def test_a_clean_tree_needs_no_stash_list_even_when_the_list_fails(repo, monkeypatch):
+    """Nothing to stash is not an unlocatable entry (rubber_duck round 1)."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    real = BS.W.git
+
+    def git(tree, *a, **kw):
+        if a[:2] in (("stash", "list"), ("rev-parse", "--verify")):
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    assert BS._stash_away(wt, "tag-mine") == ""
