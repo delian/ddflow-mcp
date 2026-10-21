@@ -270,6 +270,9 @@ def test_research_note_and_the_task_it_informs_are_related_not_duplicates():
     idx = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
     assert similar.assess(idx, task, _cfg()).action == "show"
     assert similar.assess(tasks, note, _cfg(research_task_asks=True)).action == "ask"
+    # identical text across the pair still asks (the knob's documented promise)
+    ident = {"kind": "research", "title": "x", "body": LONG}
+    assert similar.assess(tasks, ident, _cfg()).action == "ask"
     # a note against a note is still a duplicate
     two = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
     assert similar.assess(two, note, _cfg()).action == "ask"
