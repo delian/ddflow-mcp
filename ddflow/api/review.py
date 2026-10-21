@@ -1195,7 +1195,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     a = locals_
     item, gate = a["item"], a["gate"]
     if idle := _nothing_new(repo, cfg, st, it, a, say):
-        a["idle"] = True
+        a["refusal_exit"] = O.NOTHING  # nothing to review is exit 2, a budget refusal 3
         return "full", 0, "", "", "", idle, None
     delta = _wants_delta(repo, cfg, it, a, say)
     new, old = _superseded(repo, cfg, it, a) if it and item and not a["chunks"] else (set(), set())
@@ -2063,7 +2063,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         return O.Outcome(
             kind="review",
             data={"id": item, "gate": gate, "outcome": "", "findings": [], "how": how, "text": why},
-            exit=O.NOTHING if sargs.get("idle") else O.REFUSED,
+            exit=sargs.get("refusal_exit", O.REFUSED),
             reason=why,
         )
     diff, extra_evidence, skipped = REX.apply(
