@@ -139,7 +139,7 @@
 # ---
 # name: test_help[ddflow bug fixed]
   '''
-  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--landed LANDED] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
   
   positional arguments:
     id
@@ -162,6 +162,8 @@
                           the text in --mutation-file (once) that --mutation-new replaces
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
+    --landed LANDED       a commit already on the base that holds the fix: the test must fail on its
+                          first parent and pass on it; the bug's fix task is ended naming it
     --lesson LESSON
     --lesson-title LESSON_TITLE
     --lesson-rule LESSON_RULE
