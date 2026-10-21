@@ -51,6 +51,8 @@ def held_item(repo: Path, agent: str, where: Path | None) -> str:
     item's or not), whatever else the caller holds (B-gate-run-ci-wrong-tree)."""
     if not agent:
         return ""
+    # Any gate, not just ci (unlike the recording guard in run()): every gate command runs
+    # inside the tree of the item it is a gate for.
     if os.environ.get(IN_GATE_ENV):
         return ""
     _log, cfg, st = _load(repo, agent)
