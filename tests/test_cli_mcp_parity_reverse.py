@@ -59,3 +59,10 @@ def test_list_search_points_at_the_search_verb(repo):
     assert "invalid choice" not in err
     assert rc == 3
     assert "ddflow search" in err + out
+
+
+def test_identify_is_a_shell_verb(repo):
+    rc, out, err = run_cli(repo, "identify", "--help")
+    assert rc == 0 and "invalid choice" not in err
+    rc, out, err = run_cli(repo, "identify", agent="w1")
+    assert rc == 0 and "'w1'" in out
