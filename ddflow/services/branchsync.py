@@ -123,7 +123,7 @@ def _drop(tree: Path, ref: str, sha: str) -> None:
             if not ref:
                 return
             continue
-        got = re.search(r"\(([0-9a-f]{40})\)", r.out)
+        got = re.search(r"\(([0-9a-f]{40,64})\)", r.out)
         if not got or got.group(1) == sha:
             return
         was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
