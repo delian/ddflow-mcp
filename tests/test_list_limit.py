@@ -93,7 +93,7 @@ def cli(capsys):
 
 
 def test_cli_limit_above_the_cap_footer_is_honest(seeded, cli):
-    code, out, _ = cli(seeded, "task", "list", "--limit", "5000")
+    code, out, _ = cli(seeded, "list", "task", "--limit", "5000")
     assert code == 0
     assert "raise --limit" not in out
     assert "--limit 5000 cut to 3" in out and "--limit 3 --offset 3" in out
@@ -102,7 +102,7 @@ def test_cli_limit_above_the_cap_footer_is_honest(seeded, cli):
 def test_cli_limit_zero_lists_and_offset_pages(seeded, cli):
     import json
 
-    code, out, _ = cli(seeded, "--json", "task", "list", "--limit", "0")
+    code, out, _ = cli(seeded, "--json", "list", "task", "--limit", "0")
     first = json.loads(out)
     assert code == 0 and first["next"] == 3 and first["truncated"] is True
     code, out, _ = cli(seeded, "--json", "list", "task", "--limit", "0", "--offset", "3")
