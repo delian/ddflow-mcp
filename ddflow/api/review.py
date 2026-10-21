@@ -422,10 +422,11 @@ def triage(
 
 
 def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
-    """Why ``gate``'s recorded review round is of another tree than the item holds now, or ""
-    (bug B835d22b138). A triage settles the findings of THAT round; recording the gate passed
-    on it once the code has moved on would put a pass on work no reviewer saw. A round with no
-    tree on record, or a tree that cannot be read, is not reported (nothing to compare)."""
+    """Why ``gate``'s recorded review round cannot be passed on triage, or "" (bug B835d22b138).
+    A triage settles the findings of THAT round; recording the gate passed on it once the
+    code has moved on would put a pass on work no reviewer saw. Fails closed: a round that
+    names no tree, or a tree that cannot be read now, cannot show it reviewed what the item
+    holds, and a pass must name the head it reviewed."""
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
     if rec is None:
@@ -434,13 +435,17 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
     wt, _held = item_tree(repo, cfg, st, it, None)
     now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
-    if not was or not now or was == now:
-        return ""
-    return (
-        f"the round that raised these findings reviewed {(ev.get('tree_sha') or '')[:19]}, and "
-        f"{item} holds other content now: re-run `ddflow review {item} --gate {gate}` on the "
-        "current tree; a pass needs a round that saw it"
-    )
+    redo = f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the current tree"
+    if not was:
+        return f"the round names no tree it reviewed; {redo}"
+    if not now:
+        return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
+    if was != now:
+        return (
+            f"the round reviewed {(ev.get('tree_sha') or '')[:19]}, and {item} holds other "
+            f"content now; {redo}"
+        )
+    return ""
 
 
 def _settle_after_cap(

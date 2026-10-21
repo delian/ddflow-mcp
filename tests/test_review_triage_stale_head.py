@@ -42,4 +42,20 @@ def test_refuting_findings_of_the_current_tree_still_passes_and_names_it(repo, t
     last = _tri(repo, 2)
     gate = _state(repo).gates["critic"]
     assert gate.outcome == "passed" and last.data["passed_on_refutation"] is True
-    assert gate.evidence.get("tree_sha"), "a passed must name the tree it reviewed"
+    from ddflow.services.gates import evidence as GE
+
+    assert GE.recorded_content(gate.evidence.get("tree_sha", "")) == GE.source_tree(repo), (
+        "a passed must name the tree it reviewed, and that is the tree the item holds"
+    )
+
+
+def test_a_round_that_names_no_tree_cannot_be_passed_by_triage(repo, tmp_path, monkeypatch):
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    from ddflow.api import review as RV
+
+    monkeypatch.setattr(RV.GE, "recorded_content", lambda *_a, **_k: "")
+    _tri(repo, 1)
+    last = _tri(repo, 2)
+    assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "names no tree" in last.data["text"]
