@@ -23,6 +23,9 @@ def empty_list(kind: str, limit: int = V.DEFAULT_LIMIT) -> dict[str, Any]:
         "limit": limit,
         "truncated": False,
         "filters": {},
+        "offset": 0,
+        "next": None,
+        "clamped_from": None,
     }
 
 
@@ -37,6 +40,7 @@ def view_list(
     since: str = "",
     item: str = "",
     limit: int = V.DEFAULT_LIMIT,
+    offset: int = 0,
 ) -> O.Outcome:
     """Filtered, bounded rows of `kind` (task|phase|bug|research|lesson|session)."""
     _log, cfg, st = _load(repo)
@@ -52,6 +56,7 @@ def view_list(
             since=since,
             item=item,
             limit=limit,
+            offset=offset,
         )
     except V.ViewError as exc:
         # A refusal keeps the list shape (no rows), so a reader of `.rows` never meets a
@@ -65,6 +70,9 @@ def view_list(
         "limit": view.limit,
         "truncated": view.truncated,
         "filters": view.filters,
+        "offset": view.offset,
+        "next": view.next,
+        "clamped_from": view.clamped_from,
     }
     if not view.rows:
         which = f" matching {view.filters}" if view.filters else ""
@@ -110,6 +118,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     since: str = "",
     item: str = "",
     limit: int = V.DEFAULT_LIMIT,
+    offset: int = 0,
     all: bool = False,
     mode: str = "ranked",
     sources: str = "",
@@ -164,6 +173,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         since=since,
         item=item,
         limit=limit,
+        offset=offset,
     )
     if "filters" in out.data:
         out.data["filters"] = _filters(out.data["filters"])
