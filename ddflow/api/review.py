@@ -1112,6 +1112,70 @@ def _superseded(repo, cfg, it, a) -> tuple[set[str], set[str]]:
     return superseded_digests(list(found), diff) - old, old
 
 
+def _untriaged_numbers(it, gate: str, last: dict) -> list[int] | None:
+    """The numbers (as `review` printed them) of the last round's findings with no settled
+    verdict; None when the record cannot be read (then it counts as open)."""
+    found = last.get("chunk_findings")
+    if isinstance(found, B.Unavailable) or not isinstance(found, list):
+        return None if found is not None else []
+    mine = it.triage.get(gate, {})
+    return [
+        n
+        for n, f in enumerate(found, 1)
+        if mine.get(str(f.get("digest")), {}).get("verdict") not in _SETTLED
+    ]
+
+
+def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, str]:
+    """(is a round justified, why) for a call to review ``a['item']``'s ``a['gate']``
+    (``[review].require_new_work``, decision D-review-rounds-4): a round after a recorded one
+    needs new work -- the item's reviewed paths differ from that round's `reviewed_paths`, or
+    a finding of it is untriaged. Anything it cannot tell is justified: only a proven
+    repeat is refused."""
+    if not (it and a["item"]):
+        return True, ""
+    if not cfg.review.require_new_work:
+        return True, "not required ([review].require_new_work = false)"
+    if a["chunks"] or a["commit"] or a["base"] or a["delta"] or a["full"] or a["force"]:
+        return True, "asked for explicitly"
+    gate = a["gate"]
+    last = _last_review(it, gate)
+    if not last.get("reviewed_head"):
+        return True, "first round"
+    if str(last.get("status")) != "REVIEWED":
+        return True, "the last round did not cover the whole diff"
+    open_ = _untriaged_numbers(it, gate, last)
+    if open_ is None:
+        return True, "the last round's findings cannot be read"
+    if open_:
+        return True, "finding " + ", ".join(f"#{n}" for n in open_) + " untriaged"
+    wt, _held = item_tree(repo, cfg, st, it, a["called_from"])
+    moved = _moved_paths(repo, it, wt, last.get(RP.REVIEWED_PATHS_FIELD))
+    if moved is None:
+        return True, "the reviewed paths cannot be compared with the last round's"
+    if moved:
+        return True, f"reviewed paths changed ({_name_paths(moved)})"
+    return False, "reviewed paths unchanged, all findings triaged"
+
+
+def _nothing_new(it, a: dict[str, Any], ok: bool, why: str) -> str:
+    """Why no reviewer is called when the round is not justified (``ok`` False); none is
+    counted."""
+    item, gate = a["item"], a["gate"]
+    used = _rounds_used(it, gate) if it and item else 0
+    if ok:
+        return ""
+    return f"nothing new to review since round {used} ({why}); {item}.{gate} stays as recorded."
+
+
+def _rounds_report(cfg, it, a: dict[str, Any], why: str) -> str:
+    """The one-line report of a round that will run: rounds used counting it (a free fix
+    round counts none), against the cap, and why it is justified."""
+    used = _rounds_used(it, a["gate"]) + (0 if a.get("fix") else 1)
+    cap = cfg.review.max_rounds
+    return f"rounds used {used}/{cap if cap > 0 else 'unlimited'}, justified: {why}"
+
+
 def _is_fix_round(cfg, it, a) -> bool:
     """A pure fix round (``[review].fix_round_free``): commits since the reviewed head
     addressed EVERY finding of the last round -- its lines were rewritten, or the author
@@ -1137,6 +1201,10 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
+    ok, why_ok = _justification(repo, cfg, st, it, a)
+    if idle := _nothing_new(it, a, ok, why_ok):
+        a["refusal_exit"] = O.NOTHING  # nothing to review is exit 2, a budget refusal 3
+        return "full", 0, "", "", "", idle, None
     delta = _wants_delta(repo, cfg, it, a, say)
     new, old = _superseded(repo, cfg, it, a) if it and item and not a["chunks"] else (set(), set())
     a["supers"], a["supers_new"] = new | old, new
@@ -1152,6 +1220,8 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
+    if item:
+        say(_rounds_report(cfg, it, a, why_ok))
     if delta:
         diff, how, why = _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
     elif a["commit"]:
@@ -1618,7 +1688,14 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     plain = not (args["chunks"] or args["delta"] or args["commit"] or args["base"])
     alike = all(g in _LENSES for g in asked) and _same_reviewers(repo, asked)
     lines = _changed_lines(cfg, st, args) if plain and alike and under > 0 else 0
-    if 0 < lines < under and not _any_out_of_rounds(cfg, st.items.get(item), asked, args):
+    unjustified = any(
+        not _justification(repo, cfg, st, st.items.get(item), {**args, "gate": g})[0] for g in asked
+    )
+    if (
+        0 < lines < under
+        and not unjustified
+        and not _any_out_of_rounds(cfg, st.items.get(item), asked, args)
+    ):
         return _review_combined(asked, args, lines, under, log, cfg)
     return _review_each(asked, args)
 
@@ -1996,7 +2073,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         return O.Outcome(
             kind="review",
             data={"id": item, "gate": gate, "outcome": "", "findings": [], "how": how, "text": why},
-            exit=O.REFUSED,
+            exit=sargs.get("refusal_exit", O.REFUSED),
             reason=why,
         )
     diff, extra_evidence, skipped = REX.apply(
