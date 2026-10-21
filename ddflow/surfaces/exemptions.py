@@ -46,12 +46,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_identify",
-        reason="a CLI process is its own connection: its identity is `--agent` or DDFLOW_AGENT, "
-        "so a verb that declares one for a connection has nothing to act on there",
-    ),
-    Command(
-        path=(),
         tool="ddflow_list",
         flag_exempt={
             "--kind": "carried by `sources`: `kind` selects the viewer",

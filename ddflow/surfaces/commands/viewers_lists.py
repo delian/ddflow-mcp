@@ -17,6 +17,7 @@ from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
+from .identify import COMMAND as IDENTIFY
 from .reporting import cmd_bug_show
 from .viewers_search import COMMAND as SEARCH
 from .viewers_sessions import cmd_session_list
@@ -248,7 +249,7 @@ LIST_COMMAND = Command(
 def register(s) -> None:
     """Add `list` to the task, phase, bug, lesson and research parsers already on `s`, and
     the sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
-    add_commands(s, [SEARCH, LIST_COMMAND, *COMMANDS])
+    add_commands(s, [SEARCH, IDENTIFY, LIST_COMMAND, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
     verb.choices = ["add", "list"]
