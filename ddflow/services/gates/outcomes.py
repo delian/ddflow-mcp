@@ -568,6 +568,11 @@ def approve(
     if not gdef.is_human_gate:
         it = fold(log.read_all(), strict=False).items.get(item_id)
         if it is not None and it.gate_outcome(gate) == GA.ACCEPTABLE and not reject:
+            if gate not in required_gates(cfg):
+                raise ValueError(
+                    f"{gate!r} is not a required gate ([gates].required): a partial outcome "
+                    f"of an advisory gate blocks nothing, so there is nothing to accept"
+                )
             try:
                 got = GA.grant(log, it, gate, note=note, requested_agent=requested_agent)
             except AP.ApprovalRefused as exc:
