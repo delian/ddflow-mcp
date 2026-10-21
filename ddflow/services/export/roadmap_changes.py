@@ -120,7 +120,7 @@ def etas(q: Query, cfg: Any, phases: list[str]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     if not phases:
         return out
-    facts = collect(q.events, q.state)
+    facts = collect(q.events, q.state, cfg=cfg)
     now = _now(q)
     for pid in phases:
         f = forecast(facts, q.state, cfg, now, pid)

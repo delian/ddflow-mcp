@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "review.require_new_work"
+new = "true"
+why = "A plain review after a recorded round runs only when the item's reviewed paths changed or a finding is untriaged."
+impact = "additive"

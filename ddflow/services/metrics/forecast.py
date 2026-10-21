@@ -41,9 +41,9 @@ def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
     return out
 
 
-def _empty_reason(state: State, phase: str) -> str:
+def _empty_reason(state: State, phase: str, cfg: Config | None = None) -> str:
     """Why a phase has no critical path: a named cycle among open work, or no work."""
-    cycles = chain_cycles(state, phase)
+    cycles = chain_cycles(state, phase, cfg=cfg)
     if cycles:
         return (
             "the dependency graph has a cycle, so there is no longest chain: "
@@ -82,9 +82,9 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
     }
     if phase and phase not in state.items:
         return {**base, "reason": f"no phase {phase!r}"}
-    chain = critical_path(state, phase)
+    chain = critical_path(state, phase, cfg)
     if not chain:
-        return {**base, "reason": _empty_reason(state, phase)}
+        return {**base, "reason": _empty_reason(state, phase, cfg)}
     pools_by_kind = durations_by_kind(facts)
     kinds = [state.items[i].kind for i in chain]
     samples = {k: len(pools_by_kind.get(k, [])) for k in dict.fromkeys(kinds)}
