@@ -697,27 +697,60 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
 }
 
 
-def redact_leaves(value: object, redactor: Redactor) -> object:
-    """``value`` with every string leaf redacted, whatever its key: the keys of a text field
-    come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
+def _loop(m: re.Match[str], ip_type: type) -> bool:
+    return _parse(m.group(1), ip_type).is_loopback
+
+
+def redact_network(text: str) -> str:
+    """`text` with only its private addresses and private host names marked: the pass a
+    lookup field gets, since an id or a sha has neither and a URL or path may (Ba2df74d558)."""
+    p = _Pass(text)
+    for pat, kind, ip_type in (
+        (_IPV4, "ipv4", ipaddress.IPv4Address),
+        (_IPV6, "ipv6", ipaddress.IPv6Address),
+    ):
+        # loopback is the default of a local endpoint: not a leak, and the repo guard allows it
+        p.sub(pat, kind, keep=lambda m, t=ip_type: not _is_private(m.group(1), t) or _loop(m, t))
+    p.sub(_HOST, "host")
+    return p.text
+
+
+def _map_leaves(value: object, fn) -> object:
+    """``value`` with ``fn`` applied to every string leaf, whatever its key."""
     if isinstance(value, str):
-        return redactor.text(value).text
+        return fn(value)
     if isinstance(value, Mapping):
-        return {k: redact_leaves(v, redactor) for k, v in value.items()}
+        return {k: _map_leaves(v, fn) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [redact_leaves(v, redactor) for v in value]
+        return [_map_leaves(v, fn) for v in value]
     return value
 
 
-def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
+def network_leaves(value: object) -> object:
+    """``value`` with `redact_network` applied to every string leaf."""
+    return _map_leaves(value, redact_network)
+
+
+def redact_leaves(value: object, redactor: Redactor) -> object:
+    """``value`` with every string leaf redacted, whatever its key: the keys of a text field
+    come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
+    return _map_leaves(value, lambda s: redactor.text(s).text)
+
+
+def redact_event_data(
+    kind: str, data: dict, redactor: Redactor, *, lookup_network: bool = True
+) -> dict:
     """``data`` of an event of ``kind`` with its text redacted (a new dict).
 
     The declared text fields (`LOG_TEXT_FIELDS`) are redacted; so is every field that is not
-    a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free."""
+    a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free.
+    A lookup keeps its bytes except a private address or host in it, `lookup_network`
+    (`[session].redact_lookup_network`; bug Ba2df74d558)."""
     text = LOG_TEXT_FIELDS.get(kind, ())
-    return {
-        k: v
-        if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS)
-        else redact_leaves(v, redactor)
-        for k, v in data.items()
-    }
+    out = {}
+    for k, v in data.items():
+        if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS):
+            out[k] = network_leaves(v) if lookup_network else v
+        else:
+            out[k] = redact_leaves(v, redactor)
+    return out
