@@ -115,10 +115,10 @@ def test_live_run_judges_commit_liveness_and_host(tmp_path):
 
 def test_start_lock_serialises_mark_and_look(tmp_path):
     import threading
+    import time
 
     order: list[str] = []
-    inside = threading.Event()
-    release = threading.Event()
+    inside, second_started, release = threading.Event(), threading.Event(), threading.Event()
 
     def holder():
         with RUN.start_lock(tmp_path, "T1", "ci"):
@@ -127,14 +127,18 @@ def test_start_lock_serialises_mark_and_look(tmp_path):
             release.wait(10)
             order.append("a-out")
 
+    def second():
+        second_started.set()
+        with RUN.start_lock(tmp_path, "T1", "ci"):
+            order.append("b-in")
+
     t = threading.Thread(target=holder)
     t.start()
     assert inside.wait(10)
-    t2 = threading.Thread(
-        target=lambda: [RUN.start_lock(tmp_path, "T1", "ci").__enter__(), order.append("b-in")]
-    )
+    t2 = threading.Thread(target=second)
     t2.start()
-    t2.join(0.5)
+    assert second_started.wait(10)
+    time.sleep(1.5)  # long enough for an unserialised second to have got in
     assert order == ["a-in"], "the second start must wait for the first"
     release.set()
     t.join(10)
