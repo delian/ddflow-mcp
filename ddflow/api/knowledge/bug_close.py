@@ -57,8 +57,15 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     verify_regression: bool = True,
     verify_reason: str = "",
     mutation: dict[str, str] | None = None,
+    landed: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
+
+    `landed` (B256be593f0): a commit already on the base that holds the fix, for a fix task
+    claimed AFTER its fix reached the base by some other commit -- it has no branch of its
+    own and no landing, so the pre-fix source is otherwise unknowable. The test must FAIL on
+    the commit's first parent and PASS on the commit; the fix task, now pointless, is ended
+    naming the commit (unless somebody else holds it or another open bug needs it).
 
     `regression_test` is one test or several: a list (a repeated CLI flag, an MCP
     array), each entry itself split on ',' and ';' outside a parametrize id's brackets
@@ -109,6 +116,9 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             "recorded so a later reader knows the pre-fix check was skipped, and why.",
             id=item,
         )
+    landing, why = _landing(repo, cfg, landed) if landed.strip() else (None, "")
+    if why:
+        return O.refused("bug.fixed", f"--landed: {why}", id=item)
     verified, verify_ev = _verify_regression(
         repo,
         cfg,
@@ -118,6 +128,7 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         verify_regression=verify_regression,
         reason=verify_reason,
         mutation=mutation,
+        landing=landing,
     )
     if verified in ("passed-on-prefix", "failed-on-fix"):
         return O.refused(
@@ -127,18 +138,23 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             f"'<why>' (recorded).",
             id=item,
         )
-    log.append(
-        "bug.fixed",
-        item,
-        {
-            "regression_test": regression_test,
-            "regression_tests": tests,
-            "lesson": lesson,
-            "regression_verified": verified,
-            **({"regression_verify": verify_ev} if verify_ev else {}),
-            **({"changelog": entry} if entry else {}),
-        },
-    )
+    dropped: dict[str, Any] = {}
+    with log.transaction():
+        log.append(
+            "bug.fixed",
+            item,
+            {
+                "regression_test": regression_test,
+                "regression_tests": tests,
+                "lesson": lesson,
+                "regression_verified": verified,
+                **({"regression_verify": verify_ev} if verify_ev else {}),
+                **({"landed": landing[0]} if landing else {}),
+                **({"changelog": entry} if entry else {}),
+            },
+        )
+        if landing:
+            dropped = _end_fix_task_landed(log, item, landing[0])
     capture: dict[str, Any] = {}
     if cfg.lessons.auto_capture_on_bug and lesson_title:
         capture = _capture_lesson(repo, log, cfg, st, item, lesson_title, lesson_rule)
@@ -150,10 +166,49 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         regression_verified=verified,
         regression_verify=verify_ev,
         unchecked=unchecked,
+        **({"landed": landing[0], **dropped} if landing else {}),
         # The lesson that now holds the text: the new one, or the one it was added to.
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
     )
+
+
+def _landing(repo: Path, cfg, ref: str) -> tuple[tuple[str, str] | None, str]:
+    """``((sha, its first parent), "")`` of a commit named by ``--landed``, else
+    ``(None, why it cannot be used)``: it must exist, be on the base (a commit on some side
+    branch has not landed anywhere), and have a parent to be the pre-fix source."""
+    sha = W.rev(repo, ref.strip())
+    if not sha:
+        return None, f"{ref.strip()!r} names no commit in this repository"
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    if not W.git(repo, "merge-base", "--is-ancestor", sha, base).ok:
+        return None, f"{sha[:12]} is not on {base!r}: a fix has landed only once it is there"
+    parent = W.rev(repo, f"{sha}^1")
+    if not parent:
+        return None, f"{sha[:12]} has no parent, so there is no source from before the fix"
+    return (sha, parent), ""
+
+
+def _end_fix_task_landed(log, bug: str, sha: str) -> dict[str, Any]:
+    """End the bug's fix task, which has nothing left to do, naming the landing. Decided
+    from the log as it is NOW, under the lock, as `bug invalid` does."""
+    fresh = fold(log.read_all(), strict=False)
+    rec = fresh.bugs.get(bug)
+    if rec is None:
+        return {}
+    removed, kept = _drop_fix_task(
+        log, fresh, rec, reason=f"the fix already landed in {sha[:12]}", closed="as fixed"
+    )
+    abandoned = removed if removed and _ended_by_abandon(log, removed) else ""
+    task = fresh.items.get(rec.fix_task) if rec.fix_task else None
+    holder = task.lease.holder if kept == "held" and task and task.lease else ""
+    return {
+        "fix_task": rec.fix_task,
+        "fix_task_removed": "" if abandoned else removed,
+        "fix_task_abandoned": abandoned,
+        "fix_task_kept": kept,
+        "fix_task_holder": holder,
+    }
 
 
 def _capture_lesson(repo: Path, log, cfg, st, bug: str, title: str, rule: str) -> dict[str, Any]:
@@ -296,13 +351,17 @@ NOTHING_TO_REMOVE: dict[str, str] = {
 }
 
 
-def _drop_fix_task(log, st, rec, *, reason: str = "") -> tuple[str, str]:
-    removed, why = _drop_fix_task_unchecked(log, st, rec, reason=reason)
+def _drop_fix_task(
+    log, st, rec, *, reason: str = "", closed: str = "as invalid"
+) -> tuple[str, str]:
+    removed, why = _drop_fix_task_unchecked(log, st, rec, reason=reason, closed=closed)
     assert not why or why in STILL_QUEUED or why in NOTHING_TO_REMOVE, why
     return removed, why
 
 
-def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, str]:
+def _drop_fix_task_unchecked(
+    log, st, rec, *, reason: str = "", closed: str = "as invalid"
+) -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
     still OPEN -- or, under the CALLER's own lease, in any non-terminal state (RUNNING,
     BLOCKED), when it is abandoned and released rather than removed (B8f9668d27d); a task
@@ -332,7 +391,7 @@ def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, st
         not o.removed and t.id in o.needs for o in st.items.values()
     ):
         return "", "needed"
-    why = f"bug {rec.id} closed as invalid" + (f": {reason}" if reason else "")
+    why = f"bug {rec.id} closed {closed}" + (f": {reason}" if reason else "")
     if mine:  # the caller's own lease: end the task and release it, as `abandon` does
         log.append("item.abandoned", t.id, {"reason": why, "kind": t.kind})
         L.release(log, t.id, note=f"abandoned: {why}")
@@ -368,6 +427,7 @@ def _verify_regression(
     verify_regression: bool,
     reason: str,
     mutation: dict[str, str] | None = None,
+    landing: tuple[str, str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run a bug's regression test on the pre-fix and fixed trees (B-bugfix-verified).
 
@@ -386,6 +446,19 @@ def _verify_regression(
         return "not-applicable", {}
 
     fx = _fixing_item(st, bug_id)
+    if landing is not None:
+        # The caller named the commit that holds the fix: its first parent is the pre-fix
+        # source, whatever the fix task did or did not do (B256be593f0).
+        status, ev = G.verify_regression_test(
+            repo,
+            cfg,
+            tree=repo,
+            base=landing[1],
+            tests=module_tests,
+            after=landing[0],
+            mutation=mutation,
+        )
+        return _regression_status(status, ev, G)
     if fx is not None and fx.landed_before and fx.landed_after:
         # Merged already: the landing's own before and after, never the base by NAME,
         # which now holds the fix -- the driver merges first and completes after
