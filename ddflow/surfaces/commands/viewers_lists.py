@@ -194,14 +194,34 @@ COMMANDS = (
 _OTHER_VIEWERS = ("session", "search")
 
 
+#: The `list` flags each such verb takes (the rest of `list`'s flags are refused, not dropped).
+_OTHER_OWN = {
+    "session": {"state", "owner", "since", "limit"},
+    "search": {"query", "state", "phase", "owner", "since", "limit"},
+}
+
+
+def _refuse(a, c: Ctx, reason: str) -> int:
+    if c.json:
+        emit_json({"kind": a.kind, "rows": [], "reason": reason})
+    print(reason, file=sys.stderr)
+    return REFUSED
+
+
 def _other_viewer(a, c: Ctx) -> int:
     """`list session` is `session list`; `list search --query TEXT` is `ddflow search TEXT`."""
+    stray = [
+        f"--{p.name}"
+        for p in (*_union_params(), Param("query"))
+        if p.name not in _OTHER_OWN[a.kind] and getattr(a, p.name, None) not in (None, False)
+    ]
+    if stray:
+        return _refuse(
+            a, c, f"{a.kind} has no {', '.join(stray)} (`list {a.kind}` does not take it)"
+        )
     if a.kind == "search":
         if not a.query:
-            print(
-                "`list search` needs `--query TEXT` (or use `ddflow search TEXT`)", file=sys.stderr
-            )
-            return REFUSED
+            return _refuse(a, c, "`list search` needs `--query TEXT` (or use `ddflow search TEXT`)")
         ns = argparse.Namespace(**vars(a))
         ns.exact = ns.regex = False
         ns.kind = ns.source = ""
@@ -217,11 +237,10 @@ def _other_viewer(a, c: Ctx) -> int:
 
 def cmd_list_any(a, c: Ctx) -> int:
     """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
-    if a.kind != "search" and getattr(a, "query", None):
-        print(f"{a.kind} has no --query (only `list search` takes it)", file=sys.stderr)
-        return REFUSED
     if a.kind in _OTHER_VIEWERS:
         return _other_viewer(a, c)
+    if getattr(a, "query", None) is not None:
+        return _refuse(a, c, f"{a.kind} has no --query (only `list search` takes it)")
     a.list_kind = a.kind
     own = {p.name for p in _filter_params(a.kind)}
     stray = [

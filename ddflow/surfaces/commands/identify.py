@@ -19,7 +19,7 @@ def cmd_identify(a, c: Ctx) -> int:
         emit_json({"agent": who.id, "source": who.source})
         return OK
     print(f"identified as {who.id!r} ({who.source})")
-    if who.source in ("derived", "tree"):
+    if who.source in ("derived",):
         print(
             "Not declared: every agent in this working tree derives this same name. If you are "
             "one of several here, pass `--agent NAME` or set DDFLOW_AGENT."
