@@ -1227,8 +1227,8 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
             if spent
             else None
         )
-        a["grant"] = grant.id if grant else ""
         why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say, grant)
+        a["grant"] = grant.id if grant and forced else ""  # cited only if the round ran on it
     if why:
         return kind, done, forced, diff, how, why, None
     if item:

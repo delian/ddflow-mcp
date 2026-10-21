@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import outcome as O
+from ..services import gates as G
 from ..services import grants as GR
 from ._base import _load
 
@@ -19,7 +20,7 @@ def grant_add(
     try:
         g = GR.add(
             log, cfg, item=item, gate=gate, kind=kind, count=count, reason=reason,
-            when=when, requested_agent=agent,
+            when=when, requested_agent=agent, gates=G.load_gates(repo, cfg),
         )  # fmt: skip
     except GR.GrantRefused as exc:
         return O.refused("grant.add", str(exc))

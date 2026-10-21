@@ -241,13 +241,13 @@ def test_a_standing_grant_applies_mechanically_when_the_predicate_holds(proj):
     ],
 )
 def test_a_standing_grant_does_not_apply_when_the_predicate_fails(proj, ctx):
-    _add(proj, "--when", "tree_changed_after_triage")
+    assert _add(proj, "--when", "tree_changed_after_triage")[0] == 0
     st = _state(proj)
     assert GR.pick(st, "T1", "critic", force=False, ctx=ctx) is None
 
 
 def test_a_standing_grant_is_capped_by_its_count(proj):
-    _add(proj, "--when", "tree_changed_after_triage", count="1")
+    assert _add(proj, "--when", "tree_changed_after_triage", count="1")[0] == 0
     _round(proj, "G1")
     held = GR.Ctx(untriaged=0, reviewed_head="aaa", head="bbb")
     assert GR.pick(_state(proj), "T1", "critic", False, ctx=held) is None
@@ -306,3 +306,45 @@ def test_review_scope_without_force_is_still_refused(proj):
     _round(proj)
     a, got, _said = _scope(proj)
     assert got[5] and a["grant"] == ""
+
+
+# -- review round 1 findings -----------------------------------------------------------------
+
+
+def test_a_round_the_budget_allows_anyway_does_not_spend_a_grant(proj):
+    """Finding 1: on_exceed = warn lets the round run with no grant, so none is consumed."""
+    _grant(proj)
+    _round(proj)
+    cfg = _cfg(max_rounds=1, on_exceed="warn")
+    log = EventLog(proj, "probe")
+    st = fold(log.read_all(), strict=False)
+    a = {
+        "item": "T1", "gate": "critic", "chunks": None, "delta": False, "commit": "",
+        "base": "", "branch": "", "called_from": None, "force": True, "reason": "", "full": False,
+    }  # fmt: skip
+    RV._scope(proj, cfg, st, log, st.items["T1"], lambda _l: None, [], locals_=a)
+    assert a["grant"] == ""
+
+
+def test_a_grant_for_a_gate_the_project_does_not_have_is_refused(proj):
+    code, out, err = _add(proj, gate="no_such_gate")
+    assert code == 3 and "no_such_gate" in out + err
+    assert not [s for s in _state(proj).approvals if s.startswith("grant:")]
+
+
+def test_the_oldest_usable_grant_is_taken_first_standing_or_not(proj):
+    _add(proj)  # G1, plain
+    _add(proj, "--when", "tree_changed_after_triage")  # G2, standing
+    held = GR.Ctx(untriaged=0, reviewed_head="aaa", head="bbb")
+    assert GR.pick(_state(proj), "T1", "critic", force=True, ctx=held).id == "G1"
+
+
+def test_grants_order_by_their_number_not_their_text():
+    def row(n):
+        t = {"item": "T1", "gate": "critic", "kind": "review_round", "count": 1, "reason": "r"}
+        return {"human": True, "user": "u", "at": "2026-01-01T00:00:00Z", "terms": t}
+
+    st = fold([], strict=False)
+    for n in (10, 2, 1):
+        st.approvals[f"grant:G{n}"] = [row(n)]
+    assert [g.id for g in GR.grants(st)] == ["G1", "G2", "G10"]
