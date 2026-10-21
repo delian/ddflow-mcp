@@ -45,6 +45,10 @@ def pins_regenerate(
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
+    if not check:
+        refusal = _older_binary_refusal(primary, agent)
+        if refusal:
+            return O.refused("pins", refusal)
     files = PN.pin_files(repo, cfg)
     attrs = repo / ".gitattributes"
     # `.gitattributes` is watched with the pins: the line sync_attributes adds is a regeneration
@@ -66,10 +70,6 @@ def pins_regenerate(
         note = PM.after_merge(repo, cfg)
         _record_written(primary, repo, before, watched)
         return O.ok("pins", note=note)
-    if not check:
-        refusal = _older_binary_refusal(primary, agent)
-        if refusal:
-            return O.refused("pins", refusal)
     tick = _lease_tick(primary, agent)
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
