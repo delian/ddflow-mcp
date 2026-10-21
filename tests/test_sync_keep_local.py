@@ -396,3 +396,13 @@ def test_a_drop_that_does_not_say_what_it_dropped_is_not_a_clean_drop(repo, monk
 
     monkeypatch.setattr(BS.W, "git", git)
     assert BS._drop(wt, ref, mine).startswith(BS.DROP_INCOMPLETE)
+
+
+def test_a_clean_tree_is_nothing_to_stash_whatever_the_locale(repo, monkeypatch):
+    """critic round 4: git runs under LC_ALL=C (infra.git.run), so its words are not translated."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    monkeypatch.setenv("LANG", "de_DE.UTF-8")
+    monkeypatch.setenv("LC_MESSAGES", "de_DE.UTF-8")
+    assert BS._stash_away(wt, "tag-mine") == ""
