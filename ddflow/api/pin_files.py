@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import outcome as O
+from ..core.events import SkewRefused
 from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import leasekeep as LK
@@ -44,6 +45,9 @@ def pins_regenerate(
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
+    refused = _skew_refusal(primary, repo, agent, check=check, after_merge=after_merge)
+    if refused is not None:
+        return refused
     files = PN.pin_files(repo, cfg)
     attrs = repo / ".gitattributes"
     # `.gitattributes` is watched with the pins: the line sync_attributes adds is a regeneration
@@ -72,6 +76,36 @@ def pins_regenerate(
     if rep.problem:
         return O.failed("pins", rep.problem)
     return _regenerate_outcome(rep, check)
+
+
+def _skew_refusal(
+    primary: Path, repo: Path, agent: str, *, check: bool, after_merge: bool
+) -> O.Outcome | None:
+    """The refusal when an older binary would re-record pins, else None. A check writes
+    nothing, and a post-merge hook in a linked worktree records nothing: neither is refused."""
+    if check or (after_merge and _linked_worktree(repo)):
+        return None
+    reason = _older_binary_refusal(primary, agent)
+    return O.refused("pins", reason) if reason else None
+
+
+def _older_binary_refusal(primary: Path, agent: str) -> str:
+    """Why this ddflow must not re-record pins, "" when it may: the log was worked on by a
+    NEWER ddflow, whose pin outputs (brief, knob table, transcripts) this one would
+    re-record differently, a PATCH behind included (B-path-ddflow-version-skew-noise). The
+    skew policy and a recorded session override apply as for `adopt`. The message names the
+    cause: usually a stale `ddflow` on PATH, not the project's own."""
+    try:
+        log, _cfg, _st = _load(primary, agent)
+        log.check_skew()
+    except SkewRefused as exc:
+        return (
+            f"pins regenerate refused: the `ddflow` running is older than the log's "
+            f"(a stale ddflow on PATH?) and would re-record the pins differently. {exc}"
+        )
+    except Exception:  # a log this cannot read is not a version skew to refuse on
+        return ""
+    return ""
 
 
 def _linked_worktree(repo: Path) -> bool:

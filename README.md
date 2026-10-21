@@ -4791,6 +4791,11 @@ before X merges), the project's `gate.unit_tests` runner and a base ref; when th
 check is recorded `regression_verified = could-not-run`, never `verified`.
 `--skip-regression-verify --verify-reason "<why>"` (MCP `verify_regression` /
 `verify_reason`) records the override instead, and the reason is required.
+A fix task claimed **after** its fix reached the base through some other commit has no
+branch and no landing of its own: close its bug with `bug fixed <bug> --regression-test
+<node id> --landed <sha>` (MCP `landed`). The test must FAIL on the commit's first parent
+and PASS on the commit (`regression_verified = verified`), the commit must be on the base,
+and the fix task is ended naming it (a task somebody else holds stays).
 A completion closes only the bugs the task was **filed to fix** (its `fixes`, or the
 bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it with
 `--item`, a `scope = ddflow` report or a bug with a fix task of its own. Those stay
