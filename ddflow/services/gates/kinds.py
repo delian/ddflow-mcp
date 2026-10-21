@@ -9,7 +9,7 @@ from typing import Any
 
 from ...config import Config
 from ...config_sections._kinds import KINDS
-from ...core.globs import inside, overlap
+from ...core.globs import overlap
 from ...core.model import Item
 
 
@@ -22,18 +22,6 @@ def kind_pipeline(cfg: Config, kind: str) -> list[str]:
         return list(override)
     spec = KINDS.get(kind)
     return list(getattr(cfg.gates, spec.base if spec else "task_pipeline"))
-
-
-def diff_is_docs_only(item: Item, cfg: Config, paths: list[str] | None) -> bool:
-    """Did this TASK change only documents (every ACTUAL changed path inside
-    `[gates].doc_globs`)? Then it runs the doc pipeline: a research or docs task made through
-    the MCP, which has no `--kind`, has no code for `unit_tests` or an independent reviewer to
-    judge (B-research-task-cannot-complete-docs-only). The ACTUAL diff decides, never the
-    declared globs (B-na-required-gate): no readable diff, an empty one, a promotion and a
-    phase are never docs-only."""
-    if item.kind != "task" or item.promote_to or not paths or not cfg.gates.doc_globs:
-        return False
-    return all(any(inside(p, d) for d in cfg.gates.doc_globs) for p in paths)
 
 
 def kind_pipelines(cfg: Config) -> dict[str, list[str]]:

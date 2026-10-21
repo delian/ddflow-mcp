@@ -15,7 +15,7 @@ from ddflow.config import Config
 from ddflow.core.model import Item
 from ddflow.services import completion as CO
 from ddflow.services import gates as G
-from ddflow.services.gates.kinds import diff_is_docs_only
+from ddflow.services.docsonly import diff_is_docs_only
 
 
 def _task(*globs: str, **kw) -> Item:
