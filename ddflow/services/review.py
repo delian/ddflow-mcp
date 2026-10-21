@@ -1534,7 +1534,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     on_chunk: Callable[[int, str], None] | None = None,
     manifest: str = "",
     chunk_max_tokens: int = 0,
-    split_rounds: int = 1,
+    split_rounds: int = 2,
 ) -> ReviewResult:
     """Run one reviewer over one diff. Never raises; encodes everything in the status.
 
