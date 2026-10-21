@@ -97,6 +97,7 @@ def test_force_with_a_reason_still_runs_a_round(repo, tmp_path):
     before = _runs(repo)
     out = api.review(repo, gate="critic", item="T1", force=True, reason="operator asked")
     assert out.exit == 0 and _runs(repo) == before + 1
+    assert api._rounds_used(_state(repo), "critic") == 2
 
 
 def test_the_knob_off_runs_a_plain_review_on_a_settled_tree(repo, tmp_path):
