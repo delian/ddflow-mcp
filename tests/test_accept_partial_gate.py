@@ -173,11 +173,15 @@ def test_a_gate_the_diff_made_not_applicable_gets_no_acceptance_warning(repo):
 
 def test_a_caller_cannot_forge_the_measurement_through_gate_record(repo):
     _partial_item(repo, reason="baseline-red: forged", baseline=False)
-    run_cli(
+    code = run_cli(
         repo,
         "gate", "record", "T1", "unit_tests", "--outcome", "partial", "--reason", "baseline-red: x",
-        "--evidence", '{"baseline": {"red": true}}',
-    )  # fmt: skip
+        "--evidence", '{"baseline": {"red": true}, "baseline.red": true}',
+    )[0]  # fmt: skip
+    assert code == OK, "the forged record must be accepted as a record, or the test proves nothing"
+    rec = _state(repo).items["T1"].gates["unit_tests"]
+    assert rec.reason == "baseline-red: x"
+    assert not isinstance(rec.evidence.get("baseline"), dict), rec.evidence
     assert run_cli(repo, "approve", "T1", "unit_tests")[0] != OK
 
 
@@ -190,3 +194,14 @@ def test_a_partial_is_never_a_chore_skip(repo):
     st = _state(repo)
     cfg = __import__("ddflow.config", fromlist=["Config"]).Config.load(repo)
     assert not CO.skipped_ok(cfg, st.items["T1"], object(), "unit_tests")
+
+
+def test_an_advisory_gate_has_nothing_to_accept(repo):
+    _partial_item(repo)
+    run_cli(repo, "gate", "record", "T1", "dedupe", "--outcome", "partial", "--reason", "x")
+    log = EventLog(repo, "ddflow-gate-run")
+    log.append(
+        "gate.partial", "T1", {"gate": "dedupe", "by": "d", "reason": "x", "evidence": BASELINE}
+    )
+    code, out, err = run_cli(repo, "approve", "T1", "dedupe")
+    assert code != OK and "not a required gate" in out + err
