@@ -15,9 +15,9 @@ the full task pipeline) and neither letting declared globs decide (B-na-required
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..core.clock import epoch, iso_at
 from ..core.globs import inside
 from ..infra import worktree as W
 from . import changes as CH
@@ -46,11 +46,7 @@ def empty_tree(repo: Path) -> str:
 def _since(created_at: str) -> str:
     """The item's creation time less a margin: a commit date has whole seconds and the item's
     has fractions, and a clock a little behind must not hide the item's own commit."""
-    try:
-        t = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-    except ValueError:
-        return "1970-01-01"
-    return (t - timedelta(minutes=2)).isoformat()
+    return iso_at(max(epoch(created_at) - 120, 0), timespec="seconds")
 
 
 def cited_ranges(repo: Path, item, base: str) -> list[tuple[str, str]]:
