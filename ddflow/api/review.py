@@ -1155,19 +1155,18 @@ def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, st
     return False, "reviewed paths unchanged, all findings triaged"
 
 
-def _nothing_new(repo: Path, cfg, st, it, a: dict[str, Any], say) -> O.Outcome | None:
-    """The outcome of a review no reviewer is called for (exit 2, no round counted), or
-    None when the round is justified -- and then the one-line report of rounds used."""
+def _nothing_new(repo: Path, cfg, st, it, a: dict[str, Any], say) -> str:
+    """Why no reviewer is called (the round is not justified; none is counted), or "" when
+    the round runs -- and then the one-line report of rounds used."""
     ok, why = _justification(repo, cfg, st, it, a)
     item, gate = a["item"], a["gate"]
     used = _rounds_used(it, gate) if it and item else 0
     cap = cfg.review.max_rounds
-    if ok:
-        if item:
-            say(f"rounds used {used + 1}/{cap if cap > 0 else 'unlimited'}, justified: {why}")
-        return None
-    text = f"nothing new to review since round {used} ({why}); {item}.{gate} stays as recorded."
-    return O.nothing("review", text, id=item, gate=gate, outcome="", findings=[], text=text)
+    if not ok:
+        return f"nothing new to review since round {used} ({why}); {item}.{gate} stays as recorded."
+    if item:
+        say(f"rounds used {used + 1}/{cap if cap > 0 else 'unlimited'}, justified: {why}")
+    return ""
 
 
 def _is_fix_round(cfg, it, a) -> bool:
@@ -1195,6 +1194,9 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
+    if idle := _nothing_new(repo, cfg, st, it, a, say):
+        a["idle"] = True
+        return "full", 0, "", "", "", idle, None
     delta = _wants_delta(repo, cfg, it, a, say)
     new, old = _superseded(repo, cfg, it, a) if it and item and not a["chunks"] else (set(), set())
     a["supers"], a["supers_new"] = new | old, new
@@ -2035,10 +2037,6 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         )
 
     it = st.items.get(item)
-    sargs0 = {"item": item, "gate": gate, "chunks": chunks, "delta": delta, "commit": commit}
-    sargs0.update(base=base, called_from=called_from, force=force, full=full)
-    if (idle := _nothing_new(repo, cfg, st, it, sargs0, say)) is not None:
-        return idle
     # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
@@ -2065,7 +2063,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         return O.Outcome(
             kind="review",
             data={"id": item, "gate": gate, "outcome": "", "findings": [], "how": how, "text": why},
-            exit=O.REFUSED,
+            exit=O.NOTHING if sargs.get("idle") else O.REFUSED,
             reason=why,
         )
     diff, extra_evidence, skipped = REX.apply(
