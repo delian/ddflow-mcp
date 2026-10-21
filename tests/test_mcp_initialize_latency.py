@@ -40,3 +40,24 @@ def test_instructions_fold_the_log_once_per_initialize(repo, monkeypatch):
     text = _instructions(repo)
     assert "ddflow_brief" in text
     assert calls[0] <= 1, f"initialize folded the event log {calls[0]} times"
+
+
+def test_queue_counts_see_an_append_made_after_the_shared_load(repo, monkeypatch):
+    """An event landing between the shared load and the queue's own read is not missed."""
+    from ddflow.api import surf_mcp
+    from ddflow.config import Config
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "one")
+    real_load = surf_mcp._load
+
+    def load_then_append(r, agent=""):
+        out = real_load(r, agent)
+        run_cli(repo, "task", "add", "T2", "--title", "two")
+        return out
+
+    monkeypatch.setattr(surf_mcp, "_load", load_then_append)
+    v: dict = {}
+    with surf_mcp.load_scope():
+        surf_mcp.fill_queue(v, repo, Config.load(repo), "")
+    assert v["ready"] == 2, v

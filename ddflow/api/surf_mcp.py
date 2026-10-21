@@ -219,7 +219,7 @@ def fill_queue(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
         # The handshake's one load (`load_scope`): the upgrade line reads the same state.
         log, _loaded_cfg, st = _load(repo, agent)
         events = log.read_all()
-        if len(events) != st.event_count:  # another process appended between the two reads
+        if len(events) != st.event_count:  # appended between the two reads: a lighter refold
             st = localize(fold(events, strict=False), log, time.time())
     else:
         log = EventLog(repo, identity.resolve(repo, cfg, agent).id, log_cfg=cfg.log)
