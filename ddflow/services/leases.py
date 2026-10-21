@@ -227,7 +227,13 @@ def _clash_text(
         changed = holder_changed_paths(log, other) if pairs else None
         if changed is not None:
             real = [p for p in changed if not is_shared(p, shared)]
-            pairs = [(a, b) for a, b in pairs if any(GL.match(p, a) for p in real)]
+            # Only a WILDCARD lease glob can cover files its holder never touches: an exact
+            # path it claimed is declared work, changed yet or not.
+            pairs = [
+                (a, b)
+                for a, b in pairs
+                if not any(c in b for c in "*?[") or any(GL.match(p, a) for p in real)
+            ]
         if not pairs:
             continue
         listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
