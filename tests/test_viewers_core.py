@@ -138,7 +138,9 @@ def test_limit_truncates_and_says_so():
     assert len(v.rows) == 2 and v.total == 3 and v.truncated
     assert not V.list_view(_state(), CFG, "task", limit=3).truncated
     with pytest.raises(V.ViewError, match="limit"):
-        V.list_view(_state(), CFG, "task", limit=0)
+        V.list_view(_state(), CFG, "task", limit=-1)
+    with pytest.raises(V.ViewError, match="offset"):
+        V.list_view(_state(), CFG, "task", offset=-1)
 
 
 def test_rows_are_one_line_of_facts():
