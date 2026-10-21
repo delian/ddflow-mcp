@@ -672,7 +672,7 @@
     '''
         T1                 done       Tokenizer  [2026-01-01]
       
-      (showing 1 of 3 from 0; next page: --offset 1)
+      (showing 1 of 3 from 0; next page: the same command with --limit 1 --offset 1)
   
     ''',
     '',
@@ -1064,7 +1064,10 @@
         "truncated": false,
         "filters": {
           "state": "open"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1357,6 +1360,9 @@
         "filters": {
           "state": "done"
         },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "No phase records matching {'state': 'done'}."
       }
   
@@ -2214,7 +2220,10 @@
         "truncated": true,
         "filters": {
           "phase": "P1"
-        }
+        },
+        "offset": 0,
+        "next": 1,
+        "clamped_from": null
       }
   
     ''',
