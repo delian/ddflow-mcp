@@ -4,7 +4,7 @@
 kind = "knob_changed"
 key = "lease.new_file_globs"
 old = "[\"ddflow/templates/upgrade/unreleased/*.toml\"]"
-new = "[\"ddflow/templates/upgrade/unreleased/*.toml\", \"tests/**\"]"
+new = "[\"ddflow/templates/upgrade/unreleased/*.toml\", \"tests/test_*.py\"]"
 why = "A fix task's new regression test under tests/ needs no glob of its own."
 effect = "A project that never set the knob now also lets an item commit a NEW file under tests/ without a glob of its own; edits to existing tests still need a covering lease."
 impact = "additive"

@@ -110,3 +110,17 @@ def test_a_fix_task_commits_its_new_regression_test_without_widening(repo, cfg, 
     monkeypatch.chdir(a)
     code, msg = E.check_commit(repo, cfg, agent="ag-a")
     assert code == 0, msg
+
+
+def test_editing_an_existing_test_file_still_needs_a_lease(repo, cfg, monkeypatch):
+    assert run_cli(repo, "init")[0] == 0
+    cfg.enforce.commit_without_lease = "block"
+    a = _task(repo, cfg, "TA", "ag-a", "src/a/*")
+    t = "tests/test_existing.py"
+    _stage(a, t, "x = 1\n")
+    subprocess.run(["git", "-C", str(a), "commit", "-qm", "t", "--no-verify"], check=True)
+    (a / t).write_text("x = 2\n")
+    subprocess.run(["git", "-C", str(a), "add", "-A"], check=True)
+    monkeypatch.chdir(a)
+    code, msg = E.check_commit(repo, cfg, agent="ag-a")
+    assert code == 1 and "test_existing.py" in msg, msg
