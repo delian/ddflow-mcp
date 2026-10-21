@@ -179,14 +179,19 @@ def glob_clash(
         globs,
         holder,
         against="live",
-        # A finished item holds nothing: its lease may be unreleased, its files are free.
-        live={
-            i: lz
-            for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
-            if not (i in state.items and state.items[i].terminal)
-        },
+        live=_unfinished_leases(state, cfg, now),
     )
     return (clash.item, clash.lease, clash.pair) if clash else None
+
+
+def _unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]:
+    """The live leases of items still in progress. A finished item holds nothing: its
+    lease may be unreleased, but its files are free."""
+    return {
+        i: lz
+        for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
+        if not (i in state.items and state.items[i].terminal)
+    }
 
 
 def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:
@@ -216,10 +221,10 @@ def _clash_text(
     mine = it.lease.holder if it.lease else ""
     line = line_key(state, it, cfg)
     first, parts, bad = "", [], set()
-    for other_id, lz in state.active_leases(now, cfg.lease.grace_s).items():
+    for other_id, lz in _unfinished_leases(state, cfg, now).items():
         other = state.items.get(other_id)
-        if other_id == it.id or other is None or other.terminal or lz.holder == mine:
-            continue  # itself, my own, or a finished item's unreleased lease
+        if other_id == it.id or other is None or lz.holder == mine:
+            continue  # itself or my own
         if line_key(state, other, cfg) != line:
             continue  # another release line is another branch: no clash
         pairs = _live_pairs(log, other, lz, globs, shared)
