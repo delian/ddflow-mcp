@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.skew_notice"
+new = "\"once\""
+why = "The skew notice is said once per version pair per project and machine, names the upgrade command, and can be silenced. (B-path-ddflow-version-skew-noise.)"
+impact = "additive"

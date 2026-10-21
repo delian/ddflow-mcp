@@ -195,3 +195,151 @@ def test_an_older_adopt_is_refused_even_by_a_patch_skew(repo: Path):
     out = setup(repo, Adoption(agents="claude"))
     assert out.exit == 3, out
     assert not (repo / "AGENTS.md").exists()
+
+
+def test_the_patch_skew_notice_is_said_once_across_processes(repo: Path):
+    """B-path-ddflow-version-skew-noise: each CLI call is a new process, so a per-process
+    set repeated the warning on every write; a machine-local marker says it once."""
+    _stamp(repo, "0.5.7")
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    LOG._SKEW_WARNED.clear()  # a new process
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert (repo / ".ddflow" / "local" / "skew-notice.json").exists()
+
+
+def test_the_patch_skew_notice_names_the_fix_and_the_quiet_knob(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    err = capsys.readouterr().err
+    assert "skew_notice" in err and "0.5.7" in err and "pgrade" in err
+
+
+def test_a_second_process_stays_quiet_and_always_repeats(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    capsys.readouterr()
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert capsys.readouterr().err == ""
+
+
+def test_skew_notice_always_repeats_per_process_and_off_is_silent(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[upgrade]\nskew_notice = "off"\n')
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err == ""
+    cfg.write_text('[upgrade]\nskew_notice = "always"\n')
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert "patch skew" in capsys.readouterr().err
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P3", {"title": "p"})
+    assert "patch skew" in capsys.readouterr().err
+
+
+def test_pins_regenerate_refuses_an_older_binary_than_the_log(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")  # a PATCH ahead: appends warn, but pin output differs between patches
+    out = PF.pins_regenerate(repo, start=repo, agent="me")
+    assert out.exit == 3 and "0.5.7" in out.reason and RUNNING in out.reason
+    # a check (read only) is not refused
+    assert PF.pins_regenerate(repo, start=repo, agent="me", check=True).exit != 3
+
+
+def test_a_malformed_marker_only_repeats_the_notice(repo: Path, capsys: pytest.CaptureFixture[str]):
+    _stamp(repo, "0.5.7")
+    marker = repo / ".ddflow" / "local" / "skew-notice.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    for bad in ('{"seen": null}', '{"seen": 3}', "[1]", "not json"):
+        marker.write_text(bad)
+        LOG._SKEW_WARNED.clear()
+        EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+        assert "patch skew" in capsys.readouterr().err
+
+
+def test_two_projects_in_one_process_each_get_their_notice(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    import shutil
+
+    other = tmp_path / "other"
+    shutil.copytree(repo, other)
+    _stamp(repo, "0.5.7")
+    _stamp(other, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    EventLog(other, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err.count("patch skew") == 2
+
+
+def test_a_relative_root_is_told_apart_by_where_it_points(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    import shutil
+
+    a, b = tmp_path / "wa", tmp_path / "wb"
+    for d in (a, b):
+        d.mkdir()
+        shutil.copytree(repo, d / "proj")
+        _stamp(d / "proj", "0.5.7")
+    for d in (a, b):
+        monkeypatch.chdir(d)
+        EventLog(Path("proj"), "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err.count("patch skew") == 2
+
+
+def test_pins_regenerate_after_merge_is_refused_for_an_older_binary_too(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
+    assert out.exit == 3 and "0.5.7" in out.reason
+
+
+def test_skew_notice_off_silences_the_warn_policy_too(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.6.0")  # a minor ahead: not a patch skew, so `warn` is the path
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[upgrade]\nskew = "warn"\nskew_notice = "off"\n')
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err == ""
+
+
+def test_pins_regenerate_only_is_refused_for_an_older_binary_too(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    out = PF.pins_regenerate(repo, start=repo, agent="me", only="anything")
+    assert out.exit == 3 and "0.5.7" in out.reason
+
+
+def test_a_linked_worktree_post_merge_skip_is_not_refused(repo: Path, monkeypatch):
+    """The after-merge hook in a linked worktree writes no pins, so an older binary may
+    skip as before (roborev standards finding)."""
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    monkeypatch.setattr(PF, "_linked_worktree", lambda _r: True)
+    out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
+    assert out.exit == 0 and "skipped" in out.data["note"]
+
+
+def test_an_unreadable_log_does_not_make_pins_regenerate_refuse(repo: Path, monkeypatch):
+    from ddflow.api import pin_files as PF
+
+    def boom(*_a, **_k):
+        raise RuntimeError("log unreadable")
+
+    monkeypatch.setattr(PF, "_load", boom)
+    assert PF._older_binary_refusal(repo, "me") == ""
