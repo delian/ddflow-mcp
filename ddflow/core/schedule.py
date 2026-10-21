@@ -33,7 +33,7 @@ from .admission import Clash, conflicts, glob_conflict, is_shared, shared_globs 
 from .autoorder import is_decide
 from .flow import FEATURE, branch_kind, stack_base, unknown_line
 from .flowparams import params
-from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
+from .globs import inside as path_in_glob
 from .globs import overlap as globs_overlap  # used by `waves`; re-exported for callers
 from .graph import closure, find_cycles, longest_chains
 
@@ -256,7 +256,21 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     return False, f"{dep} is {it.state}"
 
 
-def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
+def _docs_only_exempt(it: Item, cfg: Config | None) -> bool:
+    """A research/doc task (or any task) whose declared globs are ALL documents writes no
+    code, so the phase's gates on other phases' code do not hold it back. A research or doc
+    task with no globs is exempt too. `[schedule].docs_ignore_phase_needs` turns it off;
+    `[gates].doc_globs` says what a document is. Its own `needs` still bind."""
+    cfg = cfg if cfg is not None else Config()
+    if not cfg.schedule.docs_ignore_phase_needs or not it.is_work:
+        return False
+    if not it.globs:
+        return it.kind in ("research", "doc")
+    docs = cfg.gates.doc_globs
+    return bool(docs) and all(any(path_in_glob(g, d) for d in docs) for g in it.globs)
+
+
+def inherited_deps(state: State, it: Item, cfg: Config | None = None) -> list[tuple[str, str]]:
     """Every dependency that binds ``it``: its own, plus every ancestor's.
 
     Returns ``(owner_id, dep_id)`` pairs so a refusal can say WHERE the dependency
@@ -285,7 +299,7 @@ def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
     ancestors = state.ancestors(it.id)
     # A decide task is the operator's first move and writes only a document, so a phase's
     # gates ("8 open tasks inherited from P-x") never hold it back; its own `needs` still do.
-    if not ancestors or is_decide(it.tags):
+    if not ancestors or is_decide(it.tags) or _docs_only_exempt(it, cfg):
         return pairs
     mine = state.descendants(it.id) | {it.id} | {a.id for a in ancestors}
     for anc in ancestors:
@@ -392,7 +406,7 @@ def plan_blocker(
 
     unmet: list[str] = []
     details: list[str] = []
-    for owner, dep in inherited_deps(state, it):
+    for owner, dep in inherited_deps(state, it, cfg):
         ok, why = dep_status(state, dep, cfg)
         if not ok:
             unmet.append(dep)
@@ -418,7 +432,7 @@ def plan_blocker(
             f"a port of {it.port_of}: waits for {src.id} to land ({src.state})",
             [src.id],
         )
-    stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it)])
+    stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it, cfg)])
     if stack.error:
         return Blocked(it.id, "deps", stack.error, [])
     return None
