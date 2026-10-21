@@ -36,6 +36,8 @@ def _round(repo: Path, tmp_path: Path) -> Path:
     wt = (repo / _state(repo).worktree).resolve()
     for name, mark in (("a.py", "FINDA"), ("b.py", "FINDB"), ("c.py", "clean")):
         (wt / name).write_text(f"x = 1  # {mark} " + "p" * 60 + "\n")
+    (wt / "pkg" / "sub").mkdir(parents=True)
+    (wt / "pkg" / "sub" / "n.py").write_text("y = 1  # clean\n")
     _git(wt, "add", "-A")  # the review sends tracked changes only
     out = api.review(repo, gate="critic", item="T1", full=True)
     assert out.data["outcome"] == "failed", out.reason
@@ -53,7 +55,12 @@ def _settle(repo: Path):
 
 def test_the_round_records_the_content_of_the_changed_set(repo, tmp_path):
     _round(repo, tmp_path)
-    assert set(_state(repo).gates["critic"].evidence["reviewed_paths"]) == {"a.py", "b.py", "c.py"}
+    assert set(_state(repo).gates["critic"].evidence["reviewed_paths"]) == {
+        "a.py",
+        "b.py",
+        "c.py",
+        "pkg/sub/n.py",
+    }
 
 
 def test_a_main_merge_and_other_files_do_not_invalidate_the_round(repo, tmp_path):
@@ -75,6 +82,15 @@ def test_an_edit_to_a_changed_file_after_the_round_still_blocks_the_pass(repo, t
     last = _settle(repo)
     assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
     assert "c.py" in last.data["text"] and "re-run" in last.data["text"]
+
+
+def test_an_edit_to_a_nested_changed_file_blocks_the_pass_and_names_its_path(repo, tmp_path):
+    wt = _round(repo, tmp_path)
+    assert "pkg/sub/n.py" in _state(repo).gates["critic"].evidence["reviewed_paths"]
+    (wt / "pkg" / "sub" / "n.py").write_text("y = 2\n")
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "pkg/sub/n.py" in last.data["text"]
 
 
 def test_a_new_file_the_item_adds_after_the_round_blocks_the_pass(repo, tmp_path):
