@@ -865,7 +865,7 @@
     --item ITEM      the item the grant is for
     --gate GATE      the gate it covers (rubber_duck, critic)
     --kind KIND      what is granted (review_round)
-    --count COUNT    how many rounds, up to [review].grant_max_count
+    --count COUNT    how many rounds, up to [grants].max_count
     --reason REASON  what the operator allowed and why
     --when WHEN      make it STANDING: apply it mechanically when this predicate holds
                      (tree_changed_after_triage)

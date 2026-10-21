@@ -172,7 +172,10 @@ def test_a_grant_is_not_spent_without_force(proj):
 
 
 def test_a_grant_does_not_cross_gates_or_items(proj):
-    st = _grant(proj)
+    _grant(proj)
+    run_cli(proj, "task", "add", "T2", "--globs", "u.py")
+    st = _state(proj)
+    assert "T2" in st.items
     assert GR.pick(st, "T1", "rubber_duck", force=True) is None
     assert GR.pick(st, "T2", "critic", force=True) is None
 
