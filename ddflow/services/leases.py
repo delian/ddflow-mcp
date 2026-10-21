@@ -28,6 +28,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import clock, schedule
+from ..core import globs as GL
 from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.admission import conflicts, glob_conflict, shared_globs
@@ -224,7 +225,7 @@ def _clash_text(
         pairs = conflicts(globs, lz.globs, shared)
         changed = holder_changed_paths(log, other_id) if pairs else None
         if changed is not None:
-            pairs = [(a, b) for a, b in pairs if any(conflicts([a], [p], shared) for p in changed)]
+            pairs = [(a, b) for a, b in pairs if any(GL.match(p, a) for p in changed)]
         if not pairs:
             continue
         listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
@@ -784,7 +785,7 @@ def plan_retarget(
             f"{item_id} is claimed, so its globs are its lease: {text}. The globs were not "
             f"changed; your lease stays as it is and the request is recorded as waiting. "
             f"Do not poll. Try narrower globs: drop the overlapping ones"
-            f"{' (' + ','.join(keep) + ' would be accepted)' if keep != globs else ''}, "
+            f"{' (' + ','.join(keep) + ' would be accepted)' if keep and keep != globs else ''}, "
             f"name the exact files {other_id}'s holder does not change, or ask again when "
             f"{other_id} is done."
         )
