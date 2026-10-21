@@ -1788,6 +1788,10 @@
           "type": "integer",
           "description": "Rows (default 25; 0 = the most: 1000, search 200)."
          },
+         "offset": {
+          "type": "integer",
+          "description": "Skip this many rows (paging; a cut list says `next`)."
+         },
          "all": {
           "type": "boolean",
           "description": "kind=bug|lesson: include fixed/invalid/superseded."
@@ -3707,6 +3711,10 @@
          "queue": {
           "type": "boolean",
           "description": "Queue a refused request (FIFO per file)."
+         },
+         "landed": {
+          "type": "string",
+          "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
          },
          "worktree": {
           "type": "string",
