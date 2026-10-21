@@ -89,3 +89,26 @@ def test_a_blocking_file_named_like_the_error_is_not_retried(repo, monkeypatch):
     r = W.merge(repo, cfg, wt)
     assert not r.ok and not pauses, (r.err, r.out)
     assert "index.lock" not in (r.err + r.out)
+
+
+def test_a_merge_already_begun_is_never_rerun_whatever_its_output_says(repo, monkeypatch):
+    """rubber_duck round 2: a path can make a CONFLICT's output carry the error line; the
+    merge then has MERGE_HEAD and the retry would hide the conflict."""
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "c.txt", "branch\n", "feat: c")
+    _commit(repo, "c.txt", "main\n", "main: c")
+    real = W.git
+    seen = []
+
+    def git(tree, *a, **kw):
+        r = real(tree, *a, **kw)
+        if a[:1] == ("merge",) and not r.ok:
+            seen.append(1)
+            return W.GitResult(r.code, r.out, r.err + "\nfatal: stash failed\n")
+        return r
+
+    monkeypatch.setattr(W, "git", git)
+    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    r = W.merge(repo, cfg, wt)
+    assert len(seen) == 1 and not r.ok  # attempted once; MERGE_HEAD existed: not retried
