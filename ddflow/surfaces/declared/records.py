@@ -242,10 +242,12 @@ COMMANDS: tuple[Command, ...] = (
             verify_regression=not a.get("skip_regression_verify", False),
             verify_reason=a.get("verify_reason", "") or "",
             mutation=mutation_of(a),
+            landed=a.get("landed", "") or "",
             agent=agent,
         ),
         payload=(
             "id",
+            "landed",
             "regression_verified",
             "regression_verify",
             "lesson_captured",
@@ -273,6 +275,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             *MUTATION_PARAMS,
+            Param(
+                "landed",
+                help="A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on its first parent and pass on it; the fix task is ended naming it.",
+                cli_help="a commit already on the base that holds the fix: the test must fail on its first parent and pass on it; the bug's fix task is ended naming it",
+                default="",
+            ),
             Param(
                 "lesson",
                 help="Id of an existing lesson this bug belongs to.",
@@ -311,6 +319,7 @@ COMMANDS: tuple[Command, ...] = (
             "changelog",
             "skip_regression_verify",
             "verify_reason",
+            "landed",
             *MUTATION_ORDER,
         ),
     ),

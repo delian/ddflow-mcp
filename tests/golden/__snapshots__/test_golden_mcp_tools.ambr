@@ -247,6 +247,10 @@
           "type": "string",
           "description": "Why the pre-fix check is skipped (recorded); required with skip_regression_verify."
          },
+         "landed": {
+          "type": "string",
+          "description": "A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on its first parent and pass on it; the fix task is ended naming it."
+         },
          "mutation": {
           "type": "string",
           "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
@@ -3481,6 +3485,10 @@
          "check": {
           "type": "boolean",
           "description": "Only measure the drift; merge nothing."
+         },
+         "keep_local": {
+          "type": "boolean",
+          "description": "Merge although the tree has uncommitted work: it is set aside (a tagged stash, untracked files included), the merge runs, and the work is put back."
          },
          "as_agent": {
           "type": "string",
