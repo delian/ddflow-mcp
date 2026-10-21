@@ -1461,7 +1461,8 @@ def _budget(cfg, item, gate, done, force, reason, say, grant=None) -> tuple[str,
         say(
             f"round {done + 1} of {item}.{gate} runs past max_rounds = {cap} on {GNT.describe(grant)}."
         )
-        return "", f"operator grant {grant.id}: {grant.reason}"
+        note = f"; agent: {reason.strip()}" if reason.strip() else ""
+        return "", f"operator grant {grant.id}: {grant.reason}{note}"
     if force and reason.strip():
         say(f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap}.")
         return "", reason.strip()

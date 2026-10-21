@@ -174,11 +174,11 @@ def add(
     reason: str,
     when: str = "",
     requested_agent: str = "",
-    gates: Collection[str] | None = None,
+    gates: Collection[str],
 ) -> Grant:
     """A PERSON grants ``count`` of ``kind`` on ``item``.``gate``. Raises `GrantRefused`:
     under an agent identity (first, before anything is read), for an unknown kind,
-    predicate, item or (when ``gates`` is given) gate, a count outside 1..`[grants].max_count`, or no reason."""
+    predicate, item or gate (not in ``gates``), a count outside 1..`[grants].max_count`, or no reason."""
     if why := AP.agent_marker(requested_agent):
         raise GrantRefused(AP.refusal(why))
     k = KINDS.get(kind)
@@ -190,7 +190,7 @@ def add(
     cap = cfg.grants.max_count
     if not 1 <= count <= cap:
         raise GrantRefused(f"count must be 1..{cap} ([grants].max_count); got {count}")
-    if gates is not None and gate not in gates:
+    if gate not in gates:
         raise GrantRefused(f"no such gate {gate!r}; the gates are {', '.join(sorted(gates))}")
     if not reason.strip():
         raise GrantRefused("a grant needs --reason: what the operator allowed and why")
