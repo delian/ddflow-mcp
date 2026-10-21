@@ -45,10 +45,10 @@ def _row(gate: str, rec, cfg) -> dict[str, Any]:
     return row
 
 
-def rows(st, cfg, it, events) -> list[dict[str, Any]]:
+def rows(st, cfg, it, events, order: list[str] | None = None) -> list[dict[str, Any]]:
     """One row per recorded gate, in pipeline order (then any gate outside it), with the
     triage counts of a review gate."""
-    order = G.pipeline_for(it, cfg)
+    order = G.pipeline_for(it, cfg) if order is None else order
     names = [g for g in order if g in it.gates] + [g for g in it.gates if g not in order]
     out = []
     for g in names:

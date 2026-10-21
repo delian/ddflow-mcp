@@ -2601,7 +2601,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2636,6 +2636,9 @@
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files
+    --landed LANDED       record the commit (or <before>..<after>) on the base that holds this
+                          item's work merged outside `ddflow merge`; refused unless it is on the
+                          base and touches the item's globs
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   
