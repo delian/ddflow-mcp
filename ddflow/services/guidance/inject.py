@@ -174,12 +174,15 @@ def inject(
     budget: Budget | None = None,
     verify: bool = False,
     heading: str = "## Guidance that governs this work",
+    reserve_rules: int = 0,
 ) -> Injection:
     """Select, rank, pack and fence the guidance that governs work on ``globs`` at ``gate``.
 
     ``budget`` bounds the UNPINNED guidance (None: no bound); pinned guidance is whole and
     comes off the budget first. ``verify`` is for a review gate: its block tells the reviewer
-    to check the change against each item and cite the id.
+    to check the change against each item and cite the id. ``reserve_rules`` rules that
+    govern the work (best ranked first) are quoted before the budget is spent on the rest
+    (B91e1d67c87): advisory, they would rank below every warning and never be shown.
     """
     applied = sorted(
         resolve(records, globs=globs, gate=gate, categories=categories, shared=shared),
@@ -189,8 +192,13 @@ def inject(
         return Injection()
     head = [a for a in applied if pinned(a.record)]
     lines = [_line(a, cap=None) for a in head]
-    kept, trimmed, duplicates = _fit([a for a in applied if not pinned(a.record)], lines, budget)
-    lines += [_line(a, cap=BODY_CHARS) for a in kept]
+    rest = [a for a in applied if not pinned(a.record)]
+    held = [a for a in rest if a.record.kind == RULE.kind][: max(0, reserve_rules)]
+    lines += [_line(a, cap=BODY_CHARS) for a in held]
+    rest = [a for a in rest if a not in held]
+    kept, trimmed, duplicates = _fit(rest, lines, budget)
+    kept = held + kept
+    lines += [_line(a, cap=BODY_CHARS) for a in kept[len(held) :]]
     if trimmed:
         lines.append(_cut_line(trimmed))
     intro = [heading, "", f"_{PV.DATA_RULE}_", "", f"_{VERIFY if verify else CITE}_", ""]
@@ -251,6 +259,7 @@ def for_work(
     budget: Budget | None = None,
     verify: bool = False,
     heading: str = "## Guidance that governs this work",
+    reserve_rules: int | None = None,
 ) -> Injection:
     """`inject` over everything the log holds and the project's document types say, for work
     on ``globs`` (tagged ``tags``)."""
@@ -263,6 +272,7 @@ def for_work(
         budget=budget,
         verify=verify,
         heading=heading,
+        reserve_rules=cfg.session.claim_rules_reserved if reserve_rules is None else reserve_rules,
     )
 
 
