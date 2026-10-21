@@ -80,3 +80,30 @@ def test_a_task_whose_diff_is_documents_runs_the_doc_pipeline(repo):
     s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
     assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
     assert G.status(st, cfg, "T1", None).pipeline == list(cfg.gates.task_pipeline)
+
+
+def test_complete_accepts_a_docs_only_change_with_the_doc_gates_alone(repo):
+    """End to end through `complete`: the doc pipeline's gates, no unit_tests, no reviewer."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "write a note", "--globs", "docs/**")
+    _worktree_with_change(repo, "docs/note.md")
+    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+        code, out, err = run_cli(
+            repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran it",
+            agent="a1",
+        )  # fmt: skip
+        assert code == 0, (gate, out, err)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
+    assert code == 0, out + err
+
+
+def test_complete_still_demands_unit_tests_for_a_code_change(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/**")
+    _worktree_with_change(repo, "src/code.py")
+    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+        run_cli(
+            repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "x", agent="a1"
+        )
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
+    assert code != 0 and "unit_tests" in out + err, out + err
