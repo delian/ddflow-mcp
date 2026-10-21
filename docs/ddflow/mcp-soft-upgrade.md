@@ -24,7 +24,7 @@ Reconnect is a fallback tier only: no client lets a server request one, exit-and
 
 ## 3. Learning client capability (D-soft-upgrade-capability)
 
-Client table by `clientInfo.name`, plus the 2026-07-28 `subscriptions/listen` opt-in, plus observation: one re-fetch within `[mcp].observe_timeout_s` (default 10) of a notification means honouring; `[mcp].observe_silent_sessions` (default 2) silent notifications in different sessions means ignoring. Both are knobs (file, CLI, MCP, prompt; `D-company-workflows`, `r-everything-configurable`). No handshake probe (it would add a round trip and a false signal for clients that answer without acting).
+Client table by `clientInfo.name`, plus the 2026-07-28 `subscriptions/listen` opt-in, plus observation: one re-fetch within `[mcp].observe_timeout_s` (default 10) of a notification means honouring; `[mcp].observe_silent_sessions` (default 2) silent notifications in different sessions means ignoring. Both are knobs to be declared by `SU-observe-client-capability` (not yet in `[mcp]`; file, CLI, MCP, prompt; `D-company-workflows`, `r-everything-configurable`). No handshake probe (it would add a round trip and a false signal for clients that answer without acting).
 
 ## Consequences
 
