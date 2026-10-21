@@ -205,13 +205,49 @@ def capability_message(name: str, since: str, kind: str, version: str, by: str =
 _SKEW_WARNED: set[tuple[str, str, int]] = set()
 
 
-def _warn_skew_once(version: str, highest: str, log_format: int = 0, format_level: int = 0) -> None:
+SKEW_NOTICE_MARKER = Path(".ddflow") / "local" / "skew-notice.json"
+
+
+def _notice_due(root: Path | None, key: tuple[str, str, int], mode: str) -> bool:
+    """Should the skew notice for ``key`` be said now? ``off`` never; ``always`` once per
+    process; ``once`` (default) once per key per machine and project, remembered in a
+    git-ignored marker so the next CLI process (one per call) stays quiet
+    (B-path-ddflow-version-skew-noise). A marker that cannot be read or written only
+    means the notice may repeat."""
+    if mode == "off" or key in _SKEW_WARNED:
+        return False
+    _SKEW_WARNED.add(key)
+    if mode == "always" or root is None:
+        return True
+    path = Path(root) / SKEW_NOTICE_MARKER
+    tag = "|".join(map(str, key))
+    try:
+        seen = json.loads(path.read_text("utf-8")).get("seen", [])
+    except (OSError, ValueError, AttributeError):
+        seen = []
+    if tag in seen:
+        return False
+    try:
+        fsio.ensure_ignored_dir(path.parent)
+        fsio.atomic_write(path, json.dumps({"seen": [*seen, tag][-20:]}) + "\n")
+    except OSError:
+        pass
+    return True
+
+
+def _warn_skew_once(
+    version: str,
+    highest: str,
+    log_format: int = 0,
+    format_level: int = 0,
+    *,
+    root: Path | None = None,
+    mode: str = "once",
+) -> None:
     """Say once per (version, log version, log format) that a policy of `warn` writes into a
     log that is ahead. The format is part of the key, so a later, higher format is said again."""
-    key = (version, highest, log_format)
-    if key in _SKEW_WARNED:
+    if not _notice_due(root, (version, highest, log_format), mode):
         return
-    _SKEW_WARNED.add(key)
     ahead = (
         f" (data format level {log_format}, this ddflow writes {format_level})"
         if (log_format > format_level > 0)
@@ -219,22 +255,25 @@ def _warn_skew_once(version: str, highest: str, log_format: int = 0, format_leve
     )
     print(
         f"ddflow: this log has been worked on by ddflow {highest}{ahead}; this ddflow is "
-        f"{version}. Writing anyway ([upgrade].skew = warn).",
+        f"{version}. Writing anyway ([upgrade].skew = warn). {upgrade_remedy(highest)}; "
+        f"[upgrade].skew_notice = off silences this.",
         file=sys.stderr,
     )
 
 
-def _warn_patch_skew_once(version: str, highest: str) -> None:
-    """Say once per (version, log version) that a PATCH skew -- same data format, same minor,
-    no capability gap -- was let through the guard. The event carries the older-ddflow mark."""
-    key = (version, highest, -1)
-    if key in _SKEW_WARNED:
+def _warn_patch_skew_once(
+    version: str, highest: str, *, root: Path | None = None, mode: str = "once"
+) -> None:
+    """Say once (per machine and project, see `_notice_due`) that a PATCH skew -- same data
+    format, same minor, no capability gap -- was let through the guard. The event carries the
+    older-ddflow mark."""
+    if not _notice_due(root, (version, highest, -1), mode):
         return
-    _SKEW_WARNED.add(key)
     print(
         f"ddflow: this log has been worked on by ddflow {highest}, a newer patch release; this "
         f"ddflow is {version}. Same data format, so writing anyway (patch skew); its events "
-        f"are marked as written by an older ddflow. Upgrade to >= {highest} when convenient.",
+        f"are marked as written by an older ddflow. {upgrade_remedy(highest)}. Said once; "
+        f"[upgrade].skew_notice = off silences it, always repeats it.",
         file=sys.stderr,
     )
 
@@ -1301,7 +1340,9 @@ class EventLog:
             and not strict
             and self._patch_skew(facts, version, fmt, kind)
         ):
-            _warn_patch_skew_once(version, facts.highest)
+            _warn_patch_skew_once(
+                version, facts.highest, root=self.root, mode=self._skew_notice_mode()
+            )
             extra[OLDER_MARK] = version
         elif policy == "refuse":
             if facts.override is None:
@@ -1319,7 +1360,14 @@ class EventLog:
                 )
             extra[OLDER_MARK] = version
         elif policy == "warn":
-            _warn_skew_once(version, facts.highest, facts.highest_format, fmt)
+            _warn_skew_once(
+                version,
+                facts.highest,
+                facts.highest_format,
+                fmt,
+                root=self.root,
+                mode=self._skew_notice_mode(),
+            )
         return extra
 
     def check_skew(self) -> None:
@@ -1358,6 +1406,13 @@ class EventLog:
             return str(Config.load(self.root).upgrade.skew)
         except Exception:
             return "refuse"
+
+    def _skew_notice_mode(self) -> str:
+        """`[upgrade].skew_notice`: once (default) | always | off."""
+        try:
+            return str(Config.load(self.root).upgrade.skew_notice)
+        except Exception:
+            return "once"
 
     def override_skew(self, reason: str) -> Event | None:
         """Record a session-scoped override: let this agent's open session write although
