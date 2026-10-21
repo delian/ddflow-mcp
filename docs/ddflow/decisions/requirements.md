@@ -7,7 +7,7 @@ Evidence: [requirements-management.md](../research/requirements-management.md) (
 ## 1. One kind, a class, three strengths (D-requirements-model)
 
 - ONE kind `requirement` (the shipped `ddflow/templates/kinds/requirement.toml`), field `class` = `product | constraint | standard | policy`.
-- `strength`: MUST (block; override = waive only), SHOULD (warn; deviate with a reason), MAY (advisory), the enforcement x override mapping of `D-goals-principles`.
+- `strength`: MUST (block; waive only), SHOULD (warn; deviate with a reason), MAY (advisory), as recorded verbatim in `D-requirements-model` and reusing the P-goals mapping of `D-goals-principles`. The recommended-default text in the task body read `waive|none`; the recorded decision says `waive only`, and the record wins.
 - Rejected: a second `standard` kind (a second engine, a second set of verbs, duplicate-check and search to keep in step; the class field separates them without that cost). Rejected: `priority` as the strength carrier (it orders, it does not oblige).
 
 ## 2. Layers and who may accept (D-requirements-layers)
@@ -21,7 +21,7 @@ Evidence: [requirements-management.md](../research/requirements-management.md) (
 
 | Tier | What | When |
 |---|---|---|
-| always-on charter | one line per MUST, never trimmed | session start, re-sent after compaction |
+| always-on charter | one line per MUST, never trimmed; over `[requirements].charter_tokens` the action is `[requirements].charter_overflow` (default `warn` = a doctor warning, no trim; a knob to be declared by `RQM-model`, not yet in config) | session start, re-sent after compaction |
 | contextual | by glob / context / gate | claim and pre-edit |
 | on-demand | search | agent asks |
 | periodic digest | changed or high-risk set | at the reinstruct cadence |
