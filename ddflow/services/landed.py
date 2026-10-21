@@ -37,7 +37,7 @@ def cited_ranges(repo: Path, item, base: str) -> list[tuple[str, str]]:
     if not item.globs or not base:
         return []
     r = W.git(
-        repo, "log", base, "--first-parent", "--reverse", "-F", f"--grep={item.id}:",
+        repo, "log", base, "--reverse", "-F", f"--grep={item.id}:",
         "--format=%H%x00%P%x00%s",
     )  # fmt: skip
     out: list[tuple[str, str]] = []

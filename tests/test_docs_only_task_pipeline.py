@@ -251,3 +251,24 @@ def test_diffless_callers_share_the_pipeline_from_the_diff(repo):
     it = _state(repo).items["T1"]
     assert G.pipeline_for(it, cfg) == list(cfg.gates.task_pipeline)
     assert effective_pipeline(repo, cfg, it) == list(cfg.gates.doc_pipeline)
+
+
+def test_a_cited_commit_on_a_side_branch_merged_by_plain_git_counts(repo):
+    """Roborev/rubber_duck: `--first-parent` hid the commits a plain `git merge` brought in."""
+    _unmerged_task(repo, "docs/note.md")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "docs/note.md", "T1: add the note")
+    _git(repo, "checkout", "-q", "-")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "Merge branch 'feature'", "feature")
+    cfg, s = _pipeline_of(repo)
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+
+
+def test_an_empty_worktree_diff_falls_back_to_the_cited_commits(repo):
+    """A claimed worktree whose branch was merged by plain git diffs to nothing, not 'unknown'."""
+    _unmerged_task(repo, "docs/note.md")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    _commit(repo, "docs/note.md", "merge T1: the note")
+    cfg, s = _pipeline_of(repo)
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
