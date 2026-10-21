@@ -19,7 +19,7 @@ from ..core import outcome as O
 from ..services import gates as GD
 from ..services import logblobs as LB
 from ._base import _load
-from .review import _rounds_used
+from .review import _rounds_used, reviewed_other_tree
 from .review import triage as _triage
 
 
@@ -37,6 +37,11 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
     counts = GD.triage_counts(it, gate) or {}
     if counts.get("untriaged", 1) or counts.get("confirmed") or not counts.get("refuted"):
         return out
+    if stale := reviewed_other_tree(repo, cfg, st, item, gate):
+        return O.ok(
+            "review.triage",
+            **{**out.data, "text": f"{out.data['text']}\n{gate} stays failed: {stale}"},
+        )
     mine = it.triage.get(gate, {})
     found = LB.full(rec.evidence or {}).get("chunk_findings") or []
     refutations = [
