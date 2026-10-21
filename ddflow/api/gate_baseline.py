@@ -33,7 +33,10 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
         return result, why
     bug = _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
-    return "partial", BR.reason_text(ids, bug)
+    reason = BR.reason_text(ids, bug)
+    if why:
+        ev["reason"] = reason  # the headline names the base, not the superseded "NOT a pass"
+    return "partial", reason
 
 
 def _file(
