@@ -23,6 +23,9 @@ def empty_list(kind: str, limit: int = V.DEFAULT_LIMIT) -> dict[str, Any]:
         "limit": limit,
         "truncated": False,
         "filters": {},
+        "offset": 0,
+        "next": None,
+        "clamped_from": None,
     }
 
 
@@ -37,6 +40,7 @@ def view_list(
     since: str = "",
     item: str = "",
     limit: int = V.DEFAULT_LIMIT,
+    offset: int = 0,
 ) -> O.Outcome:
     """Filtered, bounded rows of `kind` (task|phase|bug|research|lesson|session)."""
     _log, cfg, st = _load(repo)
@@ -52,6 +56,7 @@ def view_list(
             since=since,
             item=item,
             limit=limit,
+            offset=offset,
         )
     except V.ViewError as exc:
         # A refusal keeps the list shape (no rows), so a reader of `.rows` never meets a
@@ -65,6 +70,9 @@ def view_list(
         "limit": view.limit,
         "truncated": view.truncated,
         "filters": view.filters,
+        "offset": view.offset,
+        "next": view.next,
+        "clamped_from": view.clamped_from,
     }
     if not view.rows:
         which = f" matching {view.filters}" if view.filters else ""
@@ -82,11 +90,11 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 #: The selector arguments each kind takes, beyond the state/owner/since filters, which the
 #: engines check themselves; any other one that is set is refused.
 _TAKES: dict[str, frozenset[str]] = {
-    "task": frozenset({"phase", "tag", "all"}),
-    "phase": frozenset({"tag", "all"}),
-    "bug": frozenset({"phase", "all", "item"}),
-    "research": frozenset({"phase", "tag", "all"}),
-    "lesson": frozenset({"tag", "all"}),
+    "task": frozenset({"phase", "tag", "all", "offset"}),
+    "phase": frozenset({"tag", "all", "offset"}),
+    "bug": frozenset({"phase", "all", "item", "offset"}),
+    "research": frozenset({"phase", "tag", "all", "offset"}),
+    "lesson": frozenset({"tag", "all", "offset"}),
     "session": frozenset({"id"}),
     "search": frozenset({"query", "mode", "sources", "source", "phase"}),
 }
@@ -114,6 +122,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     mode: str = "ranked",
     sources: str = "",
     source: str = "",
+    offset: int = 0,
 ) -> O.Outcome:
     """The one read over every viewer (task|phase|bug|research|session|search): the same
     rows and shape as the CLI's `list` / `session list|show` / `search` with `--json`.
@@ -134,6 +143,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         "source": source,
         "phase": phase,
         "item": item,
+        "offset": offset,
     }
     stray = sorted(k for k, v in given.items() if v and k not in _TAKES[kind])
     if stray:
@@ -164,6 +174,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         since=since,
         item=item,
         limit=limit,
+        offset=offset,
     )
     if "filters" in out.data:
         out.data["filters"] = _filters(out.data["filters"])
