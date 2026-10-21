@@ -45,11 +45,9 @@ def pins_regenerate(
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
-    # A post-merge hook in a linked worktree records nothing (below): nothing to refuse.
-    if not check and not (after_merge and _linked_worktree(repo)):
-        refusal = _older_binary_refusal(primary, agent)
-        if refusal:
-            return O.refused("pins", refusal)
+    refused = _skew_refusal(primary, repo, agent, check=check, after_merge=after_merge)
+    if refused is not None:
+        return refused
     files = PN.pin_files(repo, cfg)
     attrs = repo / ".gitattributes"
     # `.gitattributes` is watched with the pins: the line sync_attributes adds is a regeneration
@@ -78,6 +76,17 @@ def pins_regenerate(
     if rep.problem:
         return O.failed("pins", rep.problem)
     return _regenerate_outcome(rep, check)
+
+
+def _skew_refusal(
+    primary: Path, repo: Path, agent: str, *, check: bool, after_merge: bool
+) -> O.Outcome | None:
+    """The refusal when an older binary would re-record pins, else None. A check writes
+    nothing, and a post-merge hook in a linked worktree records nothing: neither is refused."""
+    if check or (after_merge and _linked_worktree(repo)):
+        return None
+    reason = _older_binary_refusal(primary, agent)
+    return O.refused("pins", reason) if reason else None
 
 
 def _older_binary_refusal(primary: Path, agent: str) -> str:
