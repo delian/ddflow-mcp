@@ -310,7 +310,9 @@ def register(s) -> None:
         if a.verb == "list":
             a.list_kind = "research"
             return cmd_list(a, c)
-        stray = [f"--{f}" for f in (*_SHARED_FLAGS, "limit") if getattr(a, f, None) is not None]
+        stray = [
+            f"--{f}" for f in (*_SHARED_FLAGS, "limit", "offset") if getattr(a, f, None) is not None
+        ]
         if getattr(a, "all", False):
             stray.append("--all")
         if stray:
