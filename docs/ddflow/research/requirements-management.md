@@ -315,7 +315,7 @@ synced like rule files, a `requirements` document type and export.
 
 | # | Gap | Evidence | Task |
 |---|---|---|---|
-| 1 | Rules and advisory guidance are cut entirely from brief and claim; no pinned charter | brief output; claim computation (R-req-inject-timeline) | RQM-gap-rule-budget, RQM-inject |
+| 1 | Rules and advisory guidance are cut entirely from brief and claim; no pinned charter | brief output; claim computation (R-req-inject-timeline) | fix-B91e1d67c87, RQM-inject |
 | 2 | No requirement scope/strength/verify; kind inert; `applies` unused; `inject.collect` closed | `requirement.toml`; `inject.py:104` | RQM-model, RQM-provider, RQM-scope |
 | 3 | No compliance check; checks/waivers engine has no caller | grep | RQM-check, RQM-gate, RQM-strength |
 | 4 | No periodic or post-compaction re-instruction; prompt door silent; no PostCompact/SubagentStart | `api/setup.py:967-1028` | RQM-doors |
