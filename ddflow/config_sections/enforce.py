@@ -132,7 +132,7 @@ class EnforceConfig:
     #: block | warn | off
     stale_rules: str = knob(
         "block",
-        doc="What the pre-commit hook does when the branch the work merges into (the item's recorded base, else the default branch) changed a rulebook since this branch forked and the change is not merged in: AGENTS.md, CLAUDE.md, CLAUDE.local.md, .ddflow/config.toml, the driver docs under docs/ddflow/drivers/, or any agent's native rules file. A session loads its rules once, so the edit is silently ignored here until merged. 'block' refuses and says `git merge <base>` then re-read the named files, 'warn' prints and allows, 'off' disables. Default 'block': it is precise, and the commit concluding that merge is never refused. The SessionStart hook reports the same drift but only informs.",
+        doc="What the pre-commit hook does when the branch the work merges into (the item's recorded base, else the default branch) changed a rulebook since this branch forked and the change is not merged in: AGENTS.md, CLAUDE.md, CLAUDE.local.md, the project rules under .ddflow/rules/ (not config.toml knobs, which are read live), the driver docs under docs/ddflow/drivers/, or any agent's native rules file. A session loads its rules once, so the edit is silently ignored here until merged. 'block' refuses and says `git merge <base>` then re-read the named files, 'warn' prints and allows, 'off' disables. Default 'block': it is precise, and the commit concluding that merge is never refused. The SessionStart hook reports the same drift but only informs.",
         choices=BLOCK_WARN_OFF,
         strictest=("block", "the hook refuses"),
     )

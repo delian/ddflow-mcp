@@ -2116,7 +2116,13 @@ def rulebooks() -> tuple[str, ...]:
     The driver directory is `adopt`'s default `--docs` location, which the rules point at.
     """
 
-    fixed = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml")
+    # `.ddflow/rules/` (the project's rules) and not `.ddflow/config.toml`: that file holds
+    # KNOBS, which every tree reads live from the primary checkout -- a changed knob leaves
+    # no session working to old rules, yet refusing on it forced every in-flight worktree
+    # to merge the base and invalidated settled review rounds
+    # (B-stale-rules-hook-forces-main-merge). Decisions live in the event log, not in files
+    # a path diff can watch.
+    fixed = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/rules/")
     from .adopt import NATIVE_RULES  # deferred: services.adopt imports this module
 
     native = tuple(r.path for r in NATIVE_RULES.values())
