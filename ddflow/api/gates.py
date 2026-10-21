@@ -542,6 +542,26 @@ def _superseded_run(
     return ""
 
 
+def _mark_or_refuse_twin(repo, item, gate, started_on):
+    """Mark FIRST, then look: two runs started together both mark and both see the other, and
+    the one that started later (marker `at`, then pid) refuses, so exactly one goes on.
+    Returns (marker, None) to go on, or (marker, the refusal)."""
+    marker = RUN.mark_started(repo, item, gate, started_on)
+    twin = RUN.live_run(repo, item, gate, started_on)
+    if not twin or (marker is not None and (twin.at, twin.pid) > (marker.at, marker.pid)):
+        return marker, None
+    RUN.clear_started(marker)
+    return marker, O.nothing(
+        "gate.run",
+        f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
+        f"{twin.at}); wait for it (`ddflow gate status {item}`) -- a second run would only "
+        f"race it for the outcome. A run on a newer commit is allowed.",
+        gate=gate,
+        outcome="",
+        id=item,
+    )
+
+
 def run(
     repo: Path,
     item: str,
@@ -626,21 +646,9 @@ def run(
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)
-    # Mark FIRST, then look: two runs started together both mark and both see the other, and
-    # the one that started later (marker `at`, then pid) refuses, so exactly one goes on.
-    marker = RUN.mark_started(repo, item, gate, started_on)
-    twin = RUN.live_run(repo, item, gate, started_on)
-    if twin and (marker is None or (twin.at, twin.pid) < (marker.at, marker.pid)):
-        RUN.clear_started(marker)
-        return O.nothing(
-            "gate.run",
-            f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
-            f"{twin.at}); wait for it (`ddflow gate status {item}`) -- a second run would only "
-            f"race it for the outcome. A run on a newer commit is allowed.",
-            gate=gate,
-            outcome="",
-            id=item,
-        )
+    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+    if twin_refusal is not None:
+        return twin_refusal
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     done = _guarded(
