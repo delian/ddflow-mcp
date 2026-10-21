@@ -33,3 +33,11 @@ def test_a_commit_touching_the_items_paths_supersedes(tmp_path):
     (tmp_path / "mine.py").write_text("2")
     _git(tmp_path, "commit", "-qam", "mine")
     assert G.superseded_by(began, G.tree_identity(tmp_path), tmp_path, paths=["mine.py"])
+
+
+def test_a_non_ascii_path_is_matched_not_quoted(tmp_path):
+    began = _repo(tmp_path)
+    (tmp_path / "café.py").write_text("2")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "accent")
+    assert G.superseded_by(began, G.tree_identity(tmp_path), tmp_path, paths=["*.py"])
