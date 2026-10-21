@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "grants.ttl_h"
+new = '48'
+why = "How many hours a recorded operator grant stays usable (0 = never expires)."
+impact = "additive"

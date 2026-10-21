@@ -13,6 +13,7 @@ from . import (
     decide,
     docs,
     flow,
+    grants,
     health,
     jobs,
     knowledge,
@@ -35,6 +36,7 @@ from . import (
 REGISTER_ORDER = (
     queue.register,
     chore.register,
+    grants.register,
     plan.register,
     lifecycle.register,
     flow.register,

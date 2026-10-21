@@ -35,6 +35,7 @@ from ..core.plain import plain
 from ..infra import worktree as W
 from ..services import flakes as FK
 from ..services import gates as G
+from ..services import grants as GNT
 from ..services import leasekeep as LK
 from ..services import prompts as P
 from ..services import roborev as RR
@@ -183,6 +184,9 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     readme = readme_report(st, cfg, item, repo=repo)
     if readme:
         lines.append(f"\n  NOTE: {readme}")
+
+    if granted := GNT.lines(st, item):
+        lines.append("\n  " + "\n  ".join(granted))
 
     reports = new_reports_line(item, _new_report_count(st, item))
     if reports:
