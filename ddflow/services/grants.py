@@ -20,7 +20,7 @@ A new kind is `register_kind`; a new predicate is a key of its ``whens``.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -150,7 +150,13 @@ def grants(st: State) -> list[Grant]:
                     used=_used(st, t.get("item", ""), t.get("gate", ""), gid),
                 )
             )  # fmt: skip
-    return sorted(out, key=lambda g: (g.at, g.id))
+    return sorted(out, key=_number)
+
+
+def _number(g: Grant) -> int:
+    """A grant's sequence number (G10 is newer than G2; the text order says otherwise)."""
+    digits = g.id.lstrip("G")
+    return int(digits) if digits.isdigit() else 0
 
 
 def _next_id(st: State) -> str:
@@ -168,10 +174,11 @@ def add(
     reason: str,
     when: str = "",
     requested_agent: str = "",
+    gates: Collection[str] | None = None,
 ) -> Grant:
     """A PERSON grants ``count`` of ``kind`` on ``item``.``gate``. Raises `GrantRefused`:
     under an agent identity (first, before anything is read), for an unknown kind,
-    predicate, item or gate, a count outside 1..`[grants].max_count`, or no reason."""
+    predicate, item or (when ``gates`` is given) gate, a count outside 1..`[grants].max_count`, or no reason."""
     if why := AP.agent_marker(requested_agent):
         raise GrantRefused(AP.refusal(why))
     k = KINDS.get(kind)
@@ -183,6 +190,8 @@ def add(
     cap = cfg.grants.max_count
     if not 1 <= count <= cap:
         raise GrantRefused(f"count must be 1..{cap} ([grants].max_count); got {count}")
+    if gates is not None and gate not in gates:
+        raise GrantRefused(f"no such gate {gate!r}; the gates are {', '.join(sorted(gates))}")
     if not reason.strip():
         raise GrantRefused("a grant needs --reason: what the operator allowed and why")
     ttl = cfg.grants.ttl_h
@@ -219,17 +228,22 @@ def pick(
     """The grant a round past the budget may cite, or None.
 
     A STANDING grant applies when its predicate holds on ``ctx`` (a `None` ctx is not
-    "true": nothing is assumed); a plain grant applies to a ``force``d round. The oldest
-    usable one is taken first."""
+    "true": nothing is assumed); a plain grant applies to a ``force``d round. Of those that
+    apply, the oldest is taken first."""
     k = KINDS.get(kind)
+
+    def applies(g: Grant) -> bool:
+        if not g.standing:
+            return force
+        test = k.whens.get(g.when) if k else None
+        return test is not None and ctx is not None and test(ctx)
+
     live = [
-        g for g in grants(st) if (g.item, g.gate, g.kind) == (item, gate, kind) and g.usable(now)
+        g
+        for g in grants(st)
+        if (g.item, g.gate, g.kind) == (item, gate, kind) and g.usable(now) and applies(g)
     ]
-    for g in live:
-        test = k.whens.get(g.when) if k and g.standing else None
-        if test is not None and ctx is not None and test(ctx):
-            return g
-    return next((g for g in live if force and not g.standing), None)
+    return live[0] if live else None
 
 
 def describe(g: Grant, now: float | None = None) -> str:
