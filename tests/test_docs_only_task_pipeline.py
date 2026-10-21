@@ -145,3 +145,109 @@ def test_a_project_written_research_pipeline_is_respected():
     cfg.gates.kind_pipelines = {"research": ["implement", "unit_tests", "merge"]}
     it = Item(id="X", kind="research", title="t", globs=["docs/x.md"])
     assert not diff_is_docs_only(it, cfg, ["docs/x.md"])
+
+
+# --- B9eb92adafe / B4da2fc502b: work landed outside `ddflow merge` -------------------------
+
+
+def _git(repo, *a):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _commit(repo, path: str, msg: str) -> str:
+    f = repo / path
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(msg + "\n")
+    _git(repo, "add", path)
+    _git(repo, "commit", "-qm", msg)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _unmerged_task(repo, *globs: str) -> None:
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", ",".join(globs))
+
+
+def _pipeline_of(repo):
+    cfg = Config.load(repo)
+    st = _state(repo)
+    return cfg, G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
+
+
+def test_a_plain_git_merge_cited_by_the_item_gives_it_a_landed_range(repo):
+    """B9eb92adafe: no landed range and no branch left `changed_paths` None, so a doc-only
+    item whose work was merged by plain git kept the whole task pipeline."""
+    _unmerged_task(repo, "docs/note.md")
+    _commit(repo, "docs/note.md", "merge T1: the note")
+    cfg, s = _pipeline_of(repo)
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+
+
+def test_a_cited_commit_that_touched_code_keeps_the_task_pipeline(repo):
+    _unmerged_task(repo, "docs/note.md")
+    f = repo / "docs" / "note.md"
+    f.parent.mkdir(parents=True)
+    f.write_text("n\n")
+    (repo / "src").mkdir()
+    (repo / "src" / "c.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "merge T1: mixed")
+    _cfg, s = _pipeline_of(repo)
+    assert "unit_tests" in s.pipeline
+
+
+def test_a_cited_commit_outside_the_declared_globs_is_not_evidence(repo):
+    """Fail closed: the citation must touch what the item declared."""
+    _unmerged_task(repo, "docs/other.md")
+    _commit(repo, "docs/note.md", "merge T1: unrelated")
+    _cfg, s = _pipeline_of(repo)
+    assert "unit_tests" in s.pipeline
+
+
+def test_an_uncited_item_stays_on_the_task_pipeline(repo):
+    _unmerged_task(repo, "docs/note.md")
+    _commit(repo, "docs/note.md", "just a doc")
+    _cfg, s = _pipeline_of(repo)
+    assert "unit_tests" in s.pipeline
+
+
+def test_update_landed_records_a_verified_range(repo):
+    _unmerged_task(repo, "docs/note.md")
+    sha = _commit(repo, "docs/note.md", "some doc commit")
+    code, out, err = run_cli(repo, "update", "T1", "--landed", sha)
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    assert it.landed_after == sha and it.landed_before == _git(repo, "rev-parse", sha + "^")
+    cfg, s = _pipeline_of(repo)
+    assert s.pipeline == list(cfg.gates.doc_pipeline)
+
+
+def test_update_landed_refuses_what_it_cannot_verify(repo):
+    _unmerged_task(repo, "docs/note.md")
+    other = _commit(repo, "docs/else.md", "touches nothing declared")
+    code, out, err = run_cli(repo, "update", "T1", "--landed", other)
+    assert code != 0 and "declared globs" in out + err, out + err
+    code, out, err = run_cli(repo, "update", "T1", "--landed", "deadbeef")
+    assert code != 0, out + err
+    _git(repo, "checkout", "-q", "-b", "side")
+    off = _commit(repo, "docs/note.md", "not on main")
+    _git(repo, "checkout", "-q", "-")
+    code, out, err = run_cli(repo, "update", "T1", "--landed", off)
+    assert code != 0 and "ancestor" in out + err, out + err
+    assert _state(repo).items["T1"].landed_after == ""
+
+
+def test_diffless_callers_share_the_pipeline_from_the_diff(repo):
+    """B4da2fc502b: reports, the merge queue and test scope asked `pipeline_for` with no diff."""
+    from ddflow.services.pipeline_diff import effective_pipeline
+
+    _unmerged_task(repo, "docs/note.md")
+    _commit(repo, "docs/note.md", "merge T1: the note")
+    cfg = Config.load(repo)
+    it = _state(repo).items["T1"]
+    assert G.pipeline_for(it, cfg) == list(cfg.gates.task_pipeline)
+    assert effective_pipeline(repo, cfg, it) == list(cfg.gates.doc_pipeline)

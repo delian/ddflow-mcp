@@ -114,6 +114,9 @@ def _h_updated(st: State, ev: Event, kind: str) -> None:
             setattr(it, f, list(d[f]))
     if "priority" in d:
         it.priority = int(d["priority"])
+    for f in ("landed_before", "landed_after"):
+        if d.get(f):
+            setattr(it, f, str(d[f]))
 
 
 def _h_removed(st: State, ev: Event, kind: str) -> None:

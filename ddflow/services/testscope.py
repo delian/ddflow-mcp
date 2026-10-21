@@ -105,7 +105,7 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
     if not failed_sel and (why := _ci_not_passed_here(cfg, it, tree)):
-        return Scope("full", why, needs_ci="ci" in G.pipeline_for(it, cfg))
+        return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
@@ -117,6 +117,17 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
     return _selected(cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel)
+
+
+def _pipeline(cfg, it, tree: Path) -> list[str]:
+    """The item's pipeline by its ACTUAL diff (B4da2fc502b); the declared one when the
+    primary checkout cannot be found."""
+    from .pipeline_diff import effective_pipeline  # completion imports this module
+
+    try:
+        return effective_pipeline(W.repo_root(tree), cfg, it)
+    except W.GitError:
+        return G.pipeline_for(it, cfg)
 
 
 def _ci_failed_selected(it) -> bool:
@@ -139,7 +150,7 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
     ci = it.gates.get("ci")
     if ci is None or ci.outcome != "passed":
         state = "has no outcome" if ci is None else f"is {ci.outcome}"
-        if "ci" not in G.pipeline_for(it, cfg):
+        if "ci" not in _pipeline(cfg, it, tree):
             return "no ci gate in this item's pipeline runs the whole suite, so this gate runs it"
         return (
             f"the ci gate {state}: the whole suite has not passed on this tree, so this "

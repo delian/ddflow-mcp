@@ -41,6 +41,7 @@ from ..services.gates import (
     pipeline_for,
     required_gates,
 )
+from ..services.pipeline_diff import effective_pipeline
 from ..services.redact_report import redactor
 
 #: What every view's first line starts with, stamped or not.
@@ -677,7 +678,7 @@ def _brief_current(
             f" on `{it.branch}`"
         )
     required = required_gates(cfg)
-    pipe = pipeline_for(it, cfg)
+    pipe = effective_pipeline(repo, cfg, it)
     off = (
         not_applicable(
             it,

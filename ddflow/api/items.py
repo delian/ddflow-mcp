@@ -21,6 +21,7 @@ from ..core.records import ADD_RELATIONS, record_pools
 from ..infra import worktree as W
 from ..services import choices as CH
 from ..services import items as IT
+from ..services import landed as LD
 from ..services import leases as L
 from ..services import phase_close as PC
 from ..services import waiting as WG
@@ -61,6 +62,10 @@ class ItemEdit:
     worktree: str | None = None
     #: Keep a refused widening in the first-in-first-out line for its files (`--queue`).
     queue: bool = False
+    #: A commit (or ``<before>..<after>``) already on the base that holds this item's work,
+    #: for work merged outside `ddflow merge` (B9eb92adafe). Verified, then recorded as the
+    #: item's landed range.
+    landed: str | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -75,12 +80,35 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+    landed: dict[str, Any] = {}
+    if edit.landed is not None:
+        got = _landed_fields(repo, cfg, it, edit.landed)
+        if isinstance(got, O.Outcome):
+            return got
+        landed = got
     fields = plan_edit(cfg, st, it, edit)
     if isinstance(fields, O.Outcome):
-        return fields
+        if not (landed and fields.exit == O.NOTHING):
+            return fields
+        fields = {}
+    fields.update(landed)
     if edit.worktree is not None:
         return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
     return _record_update(log, cfg, it, fields, queue=edit.queue)
+
+
+def _landed_fields(repo: Path, cfg, it, spec: str) -> dict[str, Any] | O.Outcome:
+    """``landed_before``/``landed_after`` for ``--landed``, verified, or the refusal."""
+    if it.landed_before and it.landed_after:
+        return O.refused("item.updated", f"{it.id} already has a landed range", id=it.id)
+    got = LD.parse(repo, spec)
+    if isinstance(got, str):
+        return O.failed("item.updated", f"{it.id}: {got}", id=it.id)
+    base = it.base or cfg.worktree.base_ref or W.default_branch(repo)
+    bad = LD.check(repo, it, base, *got)
+    if bad:
+        return O.failed("item.updated", f"{it.id}: --landed {spec}: {bad}", id=it.id)
+    return {"landed_before": got[0], "landed_after": got[1]}
 
 
 def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
