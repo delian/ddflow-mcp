@@ -11,7 +11,7 @@ from ...config import Config, _is_code_tree
 from ...core.model import Item
 from ...infra import proc as P
 from ...infra import tomlcfg
-from .kinds import kind_pipeline, runs_doc_pipeline
+from .kinds import kind_pipeline
 
 # Exit vocabulary lives in ONE place: `cli.py`. It used to be declared here too, with a
 # different third name for the same code, and nothing imported this copy.
@@ -482,7 +482,7 @@ def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> t
 def pipeline_for(item: Item, cfg: Config) -> list[str]:
     if item.promote_to:
         return list(cfg.gates.promotion_pipeline)
-    return kind_pipeline(cfg, "doc" if runs_doc_pipeline(item, cfg) else item.kind)
+    return kind_pipeline(cfg, item.kind)
 
 
 def pipelines(cfg: Config, *, running: bool = False) -> dict[str, list[str]]:

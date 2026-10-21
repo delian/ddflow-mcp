@@ -28,7 +28,7 @@ from .evidence import (
     worktree_entries,
 )
 from .failed_gate import skipped_after_failure
-from .kinds import DiffPaths, evidence_problems, not_applicable
+from .kinds import DiffPaths, diff_is_docs_only, evidence_problems, kind_pipeline, not_applicable
 
 
 @dataclass
@@ -292,6 +292,11 @@ def status(
     if it is None:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
+    if diff is not None:
+        paths = diff()
+        diff = lambda: paths  # noqa: E731 -- read the diff once; `not_applicable` asks again
+        if diff_is_docs_only(it, cfg, paths):
+            gates = kind_pipeline(cfg, "doc")
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]

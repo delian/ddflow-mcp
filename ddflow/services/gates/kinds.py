@@ -24,15 +24,16 @@ def kind_pipeline(cfg: Config, kind: str) -> list[str]:
     return list(getattr(cfg.gates, spec.base if spec else "task_pipeline"))
 
 
-def runs_doc_pipeline(item: Item, cfg: Config) -> bool:
-    """Does this TASK write only documents (every declared glob inside `[gates].doc_globs`)?
-    Then it runs the doc pipeline: a research or docs task made through the MCP, which has no
-    `--kind`, has no code for `unit_tests` or an independent reviewer to judge
-    (B-research-task-cannot-complete-docs-only). A promotion, a phase and an item with no
-    globs are never docs-only."""
-    if item.kind != "task" or item.promote_to or not item.globs or not cfg.gates.doc_globs:
+def diff_is_docs_only(item: Item, cfg: Config, paths: list[str] | None) -> bool:
+    """Did this TASK change only documents (every ACTUAL changed path inside
+    `[gates].doc_globs`)? Then it runs the doc pipeline: a research or docs task made through
+    the MCP, which has no `--kind`, has no code for `unit_tests` or an independent reviewer to
+    judge (B-research-task-cannot-complete-docs-only). The ACTUAL diff decides, never the
+    declared globs (B-na-required-gate): no readable diff, an empty one, a promotion and a
+    phase are never docs-only."""
+    if item.kind != "task" or item.promote_to or not paths or not cfg.gates.doc_globs:
         return False
-    return all(any(inside(g, d) for d in cfg.gates.doc_globs) for g in item.globs)
+    return all(any(inside(p, d) for d in cfg.gates.doc_globs) for p in paths)
 
 
 def kind_pipelines(cfg: Config) -> dict[str, list[str]]:

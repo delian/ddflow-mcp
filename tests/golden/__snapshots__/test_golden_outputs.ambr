@@ -762,11 +762,13 @@
           `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when
           they appear here.
       gates.doc_globs = ['docs/**', '*.md', '**/*.md']   [default]
-          A TASK whose declared globs ALL fall inside these runs `doc_pipeline` and
-          needs no cross-family reviewer: a research or documentation task made
+          A TASK whose ACTUAL changed paths ALL fall inside these runs `doc_pipeline`
+          and needs no cross-family reviewer: a research or documentation task made
           without `--kind doc` (the MCP `task_add` has none) would otherwise need
-          `unit_tests` and an independent reviewer for work that changed no code. One
-          glob outside them keeps the task pipeline. Empty turns it off.
+          `unit_tests` and an independent reviewer for work that changed no code. The
+          diff decides, never the declared globs (a required gate is not excused by
+          what a task says it will touch); with no readable diff the task pipeline
+          applies. One path outside them keeps the task pipeline. Empty turns it off.
       gates.phase_pipeline = ['research', 'tasks', 'unit_tests', 'bug_hunt', 'dedupe', 'live_test', 'corrections', 'docs', 'merge']   [default]
           Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point
           where member tasks run (in parallel where dependencies allow). 'docs'
