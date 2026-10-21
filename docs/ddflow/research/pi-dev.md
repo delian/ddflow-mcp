@@ -83,7 +83,7 @@ Verdict: **a harness ddflow should support, and a complement to ddflow. Not a co
 | Evals | `packages/evals`: documentation-lift (with vs without docs in isolated containers) | `B-skills-adherence-eval` | same idea, planned |
 | Durable agents | `pi-durable` (experimental): commit-before-show, resume after crash, child tasks | event log + recovery | different layer; watch only |
 
-Already in the repository: `P-agent-parity.new-descriptors` lists `pi` among agents to add as data; `P-agent-parity.continuation` lists "plugin hooks (Kilo/opencode promptAsync, Amp agent.end, Pi)"; `docs/ddflow/research/openhands.md` notes OpenHands can run Pi over ACP. There is **no** `ddflow/harnesses/pi.toml`, no fixture and no delta note (`git grep` for `pi.dev`, `earendil` and `pi-coding-agent` finds only the event log).
+Already in the repository: `P-agent-parity.new-descriptors` lists `pi` among agents to add as data; `P-agent-parity.continuation` lists "plugin hooks (Kilo/opencode promptAsync, Amp agent.end, Pi)"; `docs/ddflow/research/openhands.md` notes OpenHands can run Pi over ACP. There is **no** `ddflow/harnesses/pi.toml`, no fixture and no delta note (before this document, `git grep` for `pi.dev`, `earendil` and `pi-coding-agent` found only the event log).
 
 ## Ideas to pick up, ranked
 
@@ -142,7 +142,7 @@ Pi already reads the same instruction files and skills, and the brief arrives th
 
 ## What leaves the machine
 
-Pi sends prompts, file contents and tool output to the operator's chosen provider (that is Pi's job, as for every agent). Pi also sends anonymous install and update telemetry by default and checks pi.dev for a new version; both can be switched off (`enableInstallTelemetry`, `PI_SKIP_VERSION_CHECK`, `--offline`). `/share` and `/bug` upload sessions, only when the user runs them; ddflow never triggers them. Session files can contain credentials the model saw: ddflow's transcript import redacts before storing. ddflow itself sends nothing to Pi's makers.
+Pi sends prompts, file contents and tool output to the operator's chosen provider (that is Pi's job, as for every agent). Pi also sends anonymous install and update telemetry by default and checks pi.dev for a new version; both can be switched off (`enableInstallTelemetry`, `PI_SKIP_VERSION_CHECK`, `--offline`). `/share` and `/bug` upload sessions, only when the user runs them; ddflow never triggers them. Session files can contain credentials the model saw: ddflow's transcript import (`B-am-ingest`, still planned and not built) is specified to redact before storing; until it exists, ddflow stores no Pi session content at all. ddflow itself sends nothing to Pi's makers.
 
 ## Opinion
 
