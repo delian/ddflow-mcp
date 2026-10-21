@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=349905bc56a9 -->
+<!-- ddflow:begin README/commands sha=b58e7b0d7534 -->
 <details><summary>All 87 commands</summary>
 
 | Command | What it does |
@@ -631,7 +631,7 @@ needs a line written by hand here.
 | `ddflow mcp` | run the MCP stdio server over this repository |
 | `ddflow search` | search tasks, phases, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs… |
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
-| `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows) |
+| `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
 
 </details>

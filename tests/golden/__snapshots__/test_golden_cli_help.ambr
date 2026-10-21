@@ -2968,7 +2968,7 @@
       identify            who this shell is and which layer named it (declaring is `--agent` /
                           DDFLOW_AGENT)
       list                list tasks, phases, bugs, research notes, lessons or sessions (what
-                          `<kind> list` shows)
+                          `<kind> list` shows); `search --query TEXT` is `ddflow search`
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
   
