@@ -91,5 +91,5 @@ def test_the_log_prints_one_verdict(repo) -> None:
     _project(repo, rerun_ok=True)
     _c, out, _e = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     verdicts = [ln for ln in out.splitlines() if ln.lower().startswith("unit_tests: passed")]
-    assert len(verdicts) <= 1, out
+    assert len(verdicts) == 1, out
     assert not any(ln.strip().lower() == "unit_tests: passed" for ln in out.splitlines()), out

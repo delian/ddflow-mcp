@@ -32,9 +32,9 @@ def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str
     """``(outcome, reason)`` for a gate whose command passed: ``result`` and "" when no test
     failed in its output; else the rerun's verdict. Notes the rerun in ``ev["rerun"]``."""
     ids = ev.get("failed_tests") or []
-    if result != "passed" or not ids:
-        return result, ""
     more = int(ev.get("failed_tests_more") or 0)
+    if result != "passed" or not (ids or more):
+        return result, ""
     cmd = "" if more else TS.run_command(gdef.command, ids, repo)
     if not cmd:
         why = (
@@ -54,7 +54,7 @@ def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str
     ev["rerun"] = {
         "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
         "still_failing": still, "tail": rev.get("tail", "")[-800:],
-        "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" else [],
+        "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" and still else [],
     }  # fmt: skip
     if ok:
         reason = f"passed after rerunning {_plural(len(ids))}: {_names(ids)}, each passed on rerun"
