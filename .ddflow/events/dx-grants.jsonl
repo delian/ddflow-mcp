@@ -92,3 +92,4 @@
 {"agent":"dx-grants","data":{"at":1792622306.097007,"holder":"dx-grants"},"id":"e8ff636cfe37c4183e540d7db","kind":"lease.renewed","lamport":90447,"schema":1,"subject":"DX-operator-grants-recorded","ts":"2026-10-21T22:38:26.143368Z"}
 {"agent":"dx-grants","data":{"at":1792622438.4867916,"holder":"dx-grants"},"id":"e44ece944a00dd77a10e62db0","kind":"lease.renewed","lamport":90471,"schema":1,"subject":"DX-operator-grants-recorded","ts":"2026-10-21T22:40:38.544339Z"}
 {"agent":"dx-grants","data":{"at":1792622569.1775384,"holder":"dx-grants"},"id":"e788a24ad32f65ab7930fdfed","kind":"lease.renewed","lamport":90499,"schema":1,"subject":"DX-operator-grants-recorded","ts":"2026-10-21T22:42:49.225032Z"}
+{"agent":"dx-grants","data":{"at":1792622695.1120665,"holder":"dx-grants"},"id":"e83e967e71ba22d815f6642c9","kind":"lease.renewed","lamport":90511,"schema":1,"subject":"DX-operator-grants-recorded","ts":"2026-10-21T22:44:55.155754Z"}
