@@ -98,7 +98,10 @@ class Ctx:
         # anywhere the derived name differs from `cfg.agent.id` ("") so the old code fired
         # and recorded `env` -- and `config --explain` then blamed the environment for a
         # variable nobody had exported.
-        ID.bind(self.cfg, ID.AgentId(who.id, "ddflow_identify" if harness else who.source))
+        #: Kept for `ddflow identify`: `bind` below rewrites `cfg.agent.id`, so resolving again
+        #: afterwards would report the config layer for every identity.
+        self.identity = ID.AgentId(who.id, "ddflow_identify" if harness else who.source)
+        ID.bind(self.cfg, self.identity)
         self.log = EventLog(
             self.repo,
             self.cfg.agent.id,
