@@ -119,12 +119,13 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     landing, why = _landing(repo, cfg, landed) if landed.strip() else (None, "")
     if why:
         return O.refused("bug.fixed", f"--landed: {why}", id=item)
-    if landing and verify_regression and not any(_is_node_id(t) for t in tests):
+    loose = [t for t in tests if not _is_node_id(t)]
+    if landing and verify_regression and loose:
         return O.refused(
             "bug.fixed",
-            "--landed checks the test on the commit's first parent and on the commit, which "
-            "needs a pytest node id (path/to/test_x.py::test_name) in --regression-test; "
-            "anything else could not be checked and would close the bug unverified.",
+            "--landed checks each test on the commit's first parent and on the commit, which "
+            "needs pytest node ids (path/to/test_x.py::test_name) in --regression-test; "
+            f"{'; '.join(loose)} could not be checked and would close the bug unverified.",
             id=item,
         )
     verified, verify_ev = _verify_regression(

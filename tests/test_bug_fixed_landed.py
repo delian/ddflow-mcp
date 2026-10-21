@@ -151,3 +151,13 @@ def test_landed_without_a_node_id_is_refused_not_closed_unverified(repo):
     assert res.exit == REFUSED, res
     assert "node id" in res.reason
     assert not _item(repo, "fix-B1").removed
+
+
+def test_a_mixed_list_with_one_unchecked_entry_is_refused(repo):
+    sha = _landed_elsewhere(repo)
+    res = api.bug_fixed(
+        repo, "B1", regression_test=["tests/test_f.py::test_f", "tests/test_f.py"], landed=sha
+    )
+    assert res.exit == REFUSED, res
+    assert "tests/test_f.py could not be checked" in res.reason
+    assert not _item(repo, "fix-B1").removed
