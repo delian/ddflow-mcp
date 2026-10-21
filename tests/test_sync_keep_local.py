@@ -341,3 +341,18 @@ def test_a_failing_list_is_recovered_through_the_newest_entry_when_it_is_ours(re
     monkeypatch.setattr(BS.W, "git", git)
     sha = BS._stash_away(wt, "tag-mine")
     assert sha == _git(wt, "rev-parse", "stash@{0}")
+
+
+def test_a_tag_the_list_cannot_show_is_refused_not_taken_for_no_work(repo):
+    """rubber_duck round 3: a multi-line tag is cut by `%gs`; the pushed stash must not be
+    reported as "nothing stashed" (the entry is located by tag or the sync refuses)."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    try:
+        sha = BS._stash_away(wt, "line1\nline2")
+    except RuntimeError as e:
+        assert "Nothing was merged" in str(e)
+    else:
+        assert sha, "a stash that exists was reported as no stash"
