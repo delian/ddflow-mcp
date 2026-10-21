@@ -506,7 +506,8 @@
       lease.new_file_globs = ['ddflow/templates/upgrade/unreleased/*.toml', 'tests/**']   [default]
           Files each item ADDS as a new file named after its own work -- an upgrade-
           manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per
-          knob, or the regression test a fix task adds under `tests/`. A NEW file
+          knob, or the NEW regression test file a fix task adds under `tests/` (an
+          edit to an existing test file still needs its glob in the claim). A NEW file
           matching one of these needs no glob of its own beyond holding some live
           lease (the commit hook covers it; claim globs are unaffected, so a lease you
           do take stays exclusive), so two tasks adding different knobs never collide
