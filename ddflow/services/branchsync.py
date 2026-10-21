@@ -95,11 +95,16 @@ def _stash_find(tree: Path, tag: str) -> tuple[str, str] | None:
     return "", ""
 
 
-def _stash_find_sure(tree: Path, tag: str, tries: int = 3) -> tuple[str, str] | None:
-    """`_stash_find`, retried a bounded number of times while the list fails; None = still unknown."""
+def _stash_find_sure(
+    tree: Path, tag: str, tries: int = 3, *, must_exist: bool = False
+) -> tuple[str, str] | None:
+    """`_stash_find`, retried a bounded number of times while the list fails; None = still
+    unknown. With ``must_exist`` an empty answer is retried too (the entry is known to have
+    been pushed: another session may have it out of the list for an instant) and, still empty,
+    is also None."""
     for _ in range(tries):
         found = _stash_find(tree, tag)
-        if found is not None:
+        if found is not None and (found[0] or not must_exist):
             return found
     return None
 
@@ -116,7 +121,7 @@ def _stash_away(tree: Path, tag: str) -> str:
     # directory ... On <branch>: <tag>", so a tag that spells this phrase cannot match.
     if f"{r.out}\n{r.err}".strip().lower().startswith("no local changes"):
         return ""
-    found = _stash_find_sure(tree, tag)
+    found = _stash_find_sure(tree, tag, must_exist=True)  # it WAS pushed: absent = unknown
     if found is not None:
         return found[0]
     top = W.git(tree, "rev-parse", "--verify", "-q", "refs/stash")  # newest entry, if it is ours

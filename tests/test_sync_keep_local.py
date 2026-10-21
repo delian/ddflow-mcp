@@ -231,6 +231,7 @@ def test_a_stranger_entry_that_cannot_be_stored_back_is_reported(repo, monkeypat
     why = BS._drop(wt, ref, mine)
     assert why.startswith(BS.DROP_INCOMPLETE)
     assert theirs[:12] in why and "stash store" in why
+    assert theirs not in _git(wt, "stash", "list", "--format=%H")  # truly dropped, and said so
 
 
 def test_giving_up_after_five_races_is_not_reported_as_done(repo, monkeypatch):
@@ -304,3 +305,21 @@ def test_a_tag_that_reads_like_the_nothing_to_save_message_is_still_stashed(repo
     (wt / "a.txt").write_text("mine\n")
     assert BS._stash_away(wt, "no local changes to save")  # a stash WAS made: not ""
     assert "no local changes to save" in _stashes(wt)
+
+
+def test_a_pushed_stash_missing_from_a_successful_list_is_not_taken_for_none(repo, monkeypatch):
+    """critic round 1: the list worked but the entry we just pushed is not in it (another
+    session has it out of the stack for an instant): unknown, not "there was no work"."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    real = BS._stash_find
+    calls = []
+
+    def find(tree, tag):
+        calls.append(1)
+        return ("", "") if len(calls) == 1 else real(tree, tag)
+
+    monkeypatch.setattr(BS, "_stash_find", find)
+    assert BS._stash_away(wt, "tag-mine")  # found on the retry
