@@ -202,7 +202,7 @@ def capability_message(name: str, since: str, kind: str, version: str, by: str =
     )
 
 
-_SKEW_WARNED: set[tuple[str, str, int]] = set()
+_SKEW_WARNED: set[tuple[str, str, int, str]] = set()
 
 
 SKEW_NOTICE_MARKER = Path(".ddflow") / "local" / "skew-notice.json"
@@ -214,9 +214,12 @@ def _notice_due(root: Path | None, key: tuple[str, str, int], mode: str) -> bool
     git-ignored marker so the next CLI process (one per call) stays quiet
     (B-path-ddflow-version-skew-noise). A marker that cannot be read or written only
     means the notice may repeat."""
-    if mode == "off" or key in _SKEW_WARNED:
+    if mode == "off":
         return False
-    _SKEW_WARNED.add(key)
+    process_key = (*key, str(root or ""))  # two projects in one process each hear it
+    if process_key in _SKEW_WARNED:
+        return False
+    _SKEW_WARNED.add(process_key)
     if mode == "always" or root is None:
         return True
     path = Path(root) / SKEW_NOTICE_MARKER
@@ -224,6 +227,8 @@ def _notice_due(root: Path | None, key: tuple[str, str, int], mode: str) -> bool
     try:
         seen = json.loads(path.read_text("utf-8")).get("seen", [])
     except (OSError, ValueError, AttributeError):
+        seen = []
+    if not isinstance(seen, list):  # a marker that parses but is not ours: say it again
         seen = []
     if tag in seen:
         return False
