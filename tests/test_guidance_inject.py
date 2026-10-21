@@ -161,8 +161,8 @@ def test_the_brief_leads_with_pinned_guidance_and_adds_the_rules(repo):
     setup(repo)
     (repo / "AGENTS.md").write_text("project instructions\n", encoding="utf-8")
     out = run_cli(repo, "brief", "--item", "T1")[1]
-    assert "## Project rules" in out and 'kind="rule" id="r-naming"' in out
-    assert out.index('id="r-naming"') < out.index("See `AGENTS.md`")  # the pointer is trimmed first
+    assert "## Project rules" in out and "[r-naming] Names" in out  # the charter line
+    assert "See `AGENTS.md`" in out  # the charter is set aside first, the pointer shares the rest
     assert out.index('id="D-all"') < out.index('id="D-infra"')
 
 

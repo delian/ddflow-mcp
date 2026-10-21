@@ -1069,6 +1069,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     reserve: int = 0,
     loops: list | None = None,
     agent: str = "",
+    charter: str = "",
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -1100,7 +1101,8 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
             f"`ddflow recall <topic>`._"
         )
     if rules:
-        part["rules"] += ["", "## Project rules", "", *rules.strip().split("\n")]
+        title = "## Rules for these files" if charter else "## Project rules"
+        part["rules"] += ["", title, "", *rules.strip().split("\n")]
     _brief_lessons(part["lessons"], cfg, lessons or [], state)
     _brief_skills(part["skills"], skills or [])
 
@@ -1114,9 +1116,12 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
         f"\n\n_[brief truncated at {budget} tokens "
         f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
     )
-    room = budget * 4 - len("\n".join(head)) - len(note) - 1
+    set_aside = len(charter) + 2 if charter else 0
+    room = budget * 4 - len("\n".join(head)) - len(note) - 1 - set_aside
     body, trimmed = _fit_sections(sections, room, item)
     text = "\n".join(head + body)
+    if charter:
+        text += "\n\n" + charter
     # The backstop, for a heading that alone overran its share: the note counts too.
     if len(text) + (len(note) if trimmed else 0) > budget * 4:
         text = text[: max(0, budget * 4 - len(note))].rsplit("\n", 1)[0]
