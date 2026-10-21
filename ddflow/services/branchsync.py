@@ -112,18 +112,21 @@ def _stash_back(tree: Path, tag: str, sha: str) -> str:
 
 
 def _drop(tree: Path, ref: str, sha: str) -> None:
-    """Drop ``ref`` (our entry). ``stash@{n}`` shifts when another worktree pushes between
-    the lookup and the drop, so what git says it dropped is checked, and a stranger's entry
-    taken by mistake is stored back."""
-    r = W.git(tree, "stash", "drop", ref)
-    got = re.search(r"\(([0-9a-f]{40})\)", r.out) if r.ok else None
-    if got and got.group(1) != sha:
+    """Drop the stash entry ``sha``, first trying ``ref`` (where it was found). ``stash@{n}``
+    shifts when another worktree pushes between lookup and drop, so what git says it dropped
+    is checked every time: a stranger's entry taken by mistake is stored back under its own
+    message, and ours is looked up again, until ours is the one gone (bounded)."""
+    for _ in range(5):
+        r = W.git(tree, "stash", "drop", ref)
+        got = re.search(r"\(([0-9a-f]{40})\)", r.out) if r.ok else None
+        if not got or got.group(1) == sha:
+            return
         was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
         message = was.out if was.ok and was.out else "restored by ddflow sync --keep-local"
         W.git(tree, "stash", "store", "-m", message, got.group(1))
-        _sha, again = _stash_find(tree, sha)  # ours moved: find it by its sha now
-        if again:
-            W.git(tree, "stash", "drop", again)
+        _sha, ref = _stash_find(tree, sha)  # ours moved: by its sha now
+        if not ref:
+            return
 
 
 def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:

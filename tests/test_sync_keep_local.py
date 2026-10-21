@@ -68,3 +68,28 @@ def test_a_stash_pushed_meanwhile_by_another_worktree_is_not_dropped(repo):
     BS._drop(wt, ref, mine)
     left = _stashes(wt)
     assert "tag-theirs" in left and "tag-mine" not in left, left
+
+
+def test_stash_back_survives_a_stash_pushed_between_its_lookup_and_its_drop(repo, monkeypatch):
+    """The race through `_stash_back` itself: another worktree pushes right after the lookup."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    real = BS._stash_find
+    pushed = []
+
+    def find_then_a_stranger_pushes(tree, tag):
+        found = real(tree, tag)
+        if tag == "tag-mine" and not pushed:
+            pushed.append(1)
+            (tree / "b.txt").write_text("theirs\n")
+            _git(tree, "stash", "push", "-u", "-m", "tag-theirs", "--", "b.txt")
+        return found
+
+    monkeypatch.setattr(BS, "_stash_find", find_then_a_stranger_pushes)
+    assert BS._stash_back(wt, "tag-mine", mine) == ""
+    left = _stashes(wt)
+    assert "tag-theirs" in left and "tag-mine" not in left, left
+    assert (wt / "a.txt").read_text() == "mine\n"
