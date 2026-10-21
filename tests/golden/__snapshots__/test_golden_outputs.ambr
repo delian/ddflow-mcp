@@ -984,8 +984,9 @@
       session.rules_charter_tokens = 300   [default]
           Tokens, inside brief_max_tokens, reserved FIRST for the rules charter: one
           line (id and title) for every live project rule, never cut by the sections
-          after it. It also heads the subagent launch brief. 0 turns the charter off.
-          What does not fit is counted and points to `ddflow rule list`.
+          after it. It also heads the subagent launch brief. 0 turns the charter off;
+          it never takes more than half of brief_max_tokens. What does not fit is
+          counted and points to `ddflow rule list`.
       session.rules_charter_title_chars = 100   [default]
           Characters of a rule's title the rules charter line keeps.
       session.claim_rules_reserved = 2   [default]

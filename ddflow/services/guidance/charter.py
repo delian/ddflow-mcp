@@ -37,10 +37,18 @@ def rules_of(state: State) -> list[GuidanceRecord]:
     return sorted(out, key=lambda r: (not pinned(r), r.id))
 
 
+def _more(left: Sequence[GuidanceRecord]) -> str:
+    """The closing line that counts and names the rules not listed, "" for none."""
+    if not left:
+        return ""
+    rest = f" and {len(left) - NAMED} more" if len(left) > NAMED else ""
+    return MORE.format(n=len(left), ids=", ".join(r.id for r in left[:NAMED]), rest=rest)
+
+
 def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> list[str]:
-    """One line per rule, in the order given (pinned lead, and never cut), as many as fit ``tokens``; the
-    last line counts the rest (a first line that does not fit is counted too). [] when
-    ``tokens`` is 0 (switched off) or there are no rules."""
+    """One line per rule, pinned first (a pinned rule is never cut), as many as fit ``tokens``;
+    the last line counts and names the rest. [] when ``tokens`` is 0 (switched off) or there
+    are no rules."""
     if tokens <= 0 or not rules:
         return []
     rows = sorted(rules, key=lambda r: (not pinned(r), r.id))
@@ -49,15 +57,10 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
     for i, r in enumerate(rows):
         title = clip(" ".join(r.title.split()), title_chars, marker=" …", boundary="word")
         line = f"- [{r.id}] {title}" + (" (pinned)" if pinned(r) else "")
-        left = rows[i:]
-        more = MORE.format(
-            n=len(left),
-            ids=", ".join(r.id for r in left[:NAMED]),
-            rest=f" and {len(left) - NAMED} more" if len(left) > NAMED else "",
-        )
-        spare = approx_tokens(more) if i < len(rows) - 1 else 0
-        if not pinned(r) and used + approx_tokens(line) + spare > tokens:
-            return [*out, more]
+        after = _more(rows[i + 1 :])
+        reserve = approx_tokens(after) if after else 0
+        if not pinned(r) and used + approx_tokens(line) + reserve > tokens:
+            return [*out, _more(rows[i:])]
         out.append(line)
         used += approx_tokens(line)
     return out
@@ -65,8 +68,7 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
 
 def block(state: State, cfg) -> str:
     """The charter section of the brief ("" when off or no rules)."""
-    s = cfg.session
     # Never more than half of the brief: a mis-set knob must not crowd out everything else.
-    tokens = min(s.rules_charter_tokens, s.brief_max_tokens // HALF)
-    body = lines(rules_of(state), tokens=tokens, title_chars=s.rules_charter_title_chars)
+    tokens = min(cfg.session.rules_charter_tokens, cfg.session.brief_max_tokens // HALF)
+    body = lines(rules_of(state), tokens=tokens, title_chars=cfg.session.rules_charter_title_chars)
     return "\n".join([HEADING, "", LEAD, *body]) if body else ""
