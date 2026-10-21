@@ -54,7 +54,7 @@ def test_a_pinned_rule_survives_the_cut():
     advice = [GuidanceRecord(id=f"r-a{i}", kind="rule", title=f"A {i}") for i in range(30)]
     got = CH.lines([*advice, pinned], tokens=60, title_chars=100)
     assert "r-pin" in got[0] and "pinned" in got[0]  # leads, so a cut from the bottom spares it
-    assert "more rules" in got[-1]  # the cut names what it dropped
+    assert "more rules: r-a" in got[-1]  # the cut names what it dropped
 
 
 def test_the_launch_brief_carries_the_charter(repo):
@@ -75,7 +75,9 @@ def test_the_claim_block_reserves_slots_for_rules(repo):
     _project(repo)
     _log, cfg, st = _load(repo, "a1")
     got = GI.for_item(cfg, st, "T1", budget=GI.door_budget(cfg))
-    assert len(got.records("rule")) >= cfg.session.claim_rules_reserved >= 1
+    held = [r.id for r in got.records("rule")]
+    assert len(held) == cfg.session.claim_rules_reserved == 2
+    assert all(i.startswith("r-charter") for i in held), held
     none = GI.for_item(cfg, st, "T1", budget=Budget(1, "tokens"), reserve_rules=0)
     assert none.records("rule") == []
 
@@ -90,6 +92,6 @@ def test_the_charter_survives_the_backstop_on_a_tiny_budget(repo):
 
 
 def test_a_charter_that_cannot_fit_is_counted_not_dumped():
-    rules = [GuidanceRecord(id=f"r-x{i}", kind="rule", title="T" * 90) for i in range(5)]
+    rules = [GuidanceRecord(id=f"r-x{i}", kind="rule", title="T" * 90) for i in range(8)]
     got = CH.lines(rules, tokens=3, title_chars=100)
-    assert got == ["- _5 more rules: `ddflow rule list`_"]
+    assert len(got) == 1 and "8 more rules: r-x0, r-x1" in got[0] and "and 2 more" in got[0]

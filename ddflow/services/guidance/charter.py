@@ -21,7 +21,9 @@ from .record import GuidanceRecord
 
 HEADING = "## Project rules"
 HALF = 2
-MORE = "- _{n} more rules: `ddflow rule list`_"
+#: How many cut-out rule ids the closing line names; the rest are counted.
+NAMED = 6
+MORE = "- _{n} more rules: {ids}{rest}; `ddflow rule list`_"
 LEAD = "_Standing rules, id and title only (recorded data): `ddflow rule show <id>` has the text._"
 
 
@@ -47,7 +49,12 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
     for i, r in enumerate(rows):
         title = clip(" ".join(r.title.split()), title_chars, marker=" …", boundary="word")
         line = f"- [{r.id}] {title}" + (" (pinned)" if pinned(r) else "")
-        more = MORE.format(n=len(rows) - i)
+        left = rows[i:]
+        more = MORE.format(
+            n=len(left),
+            ids=", ".join(r.id for r in left[:NAMED]),
+            rest=f" and {len(left) - NAMED} more" if len(left) > NAMED else "",
+        )
         spare = approx_tokens(more) if i < len(rows) - 1 else 0
         if used + approx_tokens(line) + spare > tokens:
             return [*out, more]
