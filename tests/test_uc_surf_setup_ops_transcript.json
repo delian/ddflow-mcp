@@ -1468,7 +1468,7 @@
    "review"
   ],
   0,
-  "flow.pr_reviewers = []   [default]\nimporter.preview_rows = 8   [default]\ncadence.architecture_review_every_phases = 2   [default]\nreview.max_rounds = 2   [default]\nreview.settle_all_refuted = True   [default]\nreview.on_exceed = 'refuse'   [default]\nreview.delta_default = False   [default]\nreview.fix_round_free = True   [default]\nreview.combined_under_lines = 150   [default]\nreview.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]\nreview.manifest_max_files = 40   [default]\nreview.exclude_pin_files = True   [default]\nprompts.review_system = ''   [default]\nprompts.review_user = ''   [default]\nagent.reviewer_family_must_differ = True   [default]\n",
+  "flow.pr_reviewers = []   [default]\nimporter.preview_rows = 8   [default]\ncadence.architecture_review_every_phases = 2   [default]\nreview.max_rounds = 2   [default]\nreview.settle_all_refuted = True   [default]\nreview.on_exceed = 'refuse'   [default]\nreview.delta_default = False   [default]\nreview.fix_round_free = True   [default]\nreview.combined_under_lines = 150   [default]\nreview.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]\nreview.manifest_max_files = 40   [default]\nreview.exclude_pin_files = True   [default]\nreview.chunk_max_tokens = 0   [default]\nreview.split_rounds = 2   [default]\nprompts.review_system = ''   [default]\nprompts.review_user = ''   [default]\nagent.reviewer_family_must_differ = True   [default]\n",
   ""
  ],
  [
