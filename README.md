@@ -5890,8 +5890,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b6f0adc23b4f -->
-<details><summary>All 364 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=50d5c7fb8130 -->
+<details><summary>All 366 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5990,6 +5990,7 @@ long default is left to `ddflow config --explain`.
 | `session.log_prompts` | `true` |  |
 | `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
 | `session.redact_extra` | `[]` |  |
+| `session.redact_lookup_network` | `true` |  |
 | `session.brief_max_tokens` | `1200` |  |
 | `session.brief_lesson_count` | `4` |  |
 | `session.first_call` | `true` |  |
@@ -6018,6 +6019,7 @@ long default is left to `ddflow config --explain`.
 | `schedule.signal_interval_s` | `60` |  |
 | `schedule.signals` | (long: see `ddflow config --explain`) |  |
 | `schedule.ready_policy` | `"deps_and_lease"` | `deps_and_lease` \| `deps_only` |
+| `schedule.docs_ignore_phase_needs` | `true` |  |
 | `schedule.cycle_policy` | `"error"` | `error` \| `warn` |
 | `schedule.unknown_dep_policy` | `"block"` | `block` \| `warn` |
 | `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
