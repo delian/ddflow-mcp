@@ -189,6 +189,10 @@ class ScheduleConfig:
         choices=("deps_and_lease", "deps_only"),
         strictest=("deps_and_lease", "an item another agent leased is not offered"),
     )
+    docs_ignore_phase_needs: bool = knob(
+        True,
+        doc="A task whose declared globs are all documents (`[gates].doc_globs`), or a research/doc task with no globs, does not inherit its phase's (or parent's) `needs`: a research or decision note under a phase that waits on another phase's code needs nothing from it, and was 'blocked' by '26 open task(s) inherited from P-x', claimable only with --force. Its own `needs` and the `decide` tag's rule are unchanged. `false` restores inheritance for every task.",
+    )
     cycle_policy: str = knob(
         "error",
         doc="What to do when the dependency graph has a cycle. 'error' refuses to schedule, naming the cycle; 'warn' schedules the rest.",
