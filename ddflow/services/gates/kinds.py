@@ -9,7 +9,7 @@ from typing import Any
 
 from ...config import Config
 from ...config_sections._kinds import KINDS
-from ...core.globs import overlap
+from ...core.globs import inside, overlap
 from ...core.model import Item
 
 
@@ -22,6 +22,17 @@ def kind_pipeline(cfg: Config, kind: str) -> list[str]:
         return list(override)
     spec = KINDS.get(kind)
     return list(getattr(cfg.gates, spec.base if spec else "task_pipeline"))
+
+
+def runs_doc_pipeline(item: Item, cfg: Config) -> bool:
+    """Does this TASK write only documents (every declared glob inside `[gates].doc_globs`)?
+    Then it runs the doc pipeline: a research or docs task made through the MCP, which has no
+    `--kind`, has no code for `unit_tests` or an independent reviewer to judge
+    (B-research-task-cannot-complete-docs-only). A promotion, a phase and an item with no
+    globs are never docs-only."""
+    if item.kind != "task" or item.promote_to or not item.globs or not cfg.gates.doc_globs:
+        return False
+    return all(any(inside(g, d) for d in cfg.gates.doc_globs) for g in item.globs)
 
 
 def kind_pipelines(cfg: Config) -> dict[str, list[str]]:
