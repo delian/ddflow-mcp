@@ -37,6 +37,9 @@ class SyncResult:
     #: `--keep-local`: the stash holding the uncommitted work when it could NOT be put back
     #: (apply conflicted); "" when nothing was stashed or it was restored and dropped.
     kept_stash: str = ""
+    #: `--keep-local`: the work is back but the stash bookkeeping is not finished (an entry
+    #: left behind, or another session's entry that could not be stored back); "" when clean.
+    stash_note: str = ""
 
 
 def tree_item(st, repo: Path, tree: Path):
@@ -79,61 +82,118 @@ def _unsafe(out: SyncResult, tree: Path, keep_local: bool = False) -> SyncResult
     return None
 
 
-def _stash_find(tree: Path, tag: str) -> tuple[str, str]:
-    """(sha, ``stash@{n}``) of the stash entry named ``tag``, or ("", "")."""
+def _stash_find(tree: Path, tag: str) -> tuple[str, str] | None:
+    """(sha, ``stash@{n}``) of the stash entry named ``tag``, ("", "") when the list holds
+    none, or None when ``git stash list`` itself failed: that is UNKNOWN, not "no entry"."""
     r = W.git(tree, "stash", "list", "--format=%H %gd %gs")
-    for line in r.out.splitlines() if r.ok else ():
+    if not r.ok:
+        return None
+    for line in r.out.splitlines():
         sha, ref, subject = [*line.split(" ", 2), "", ""][:3]
         if tag in subject or tag == sha:
             return sha, ref
     return "", ""
 
 
+def _stash_find_sure(tree: Path, tag: str, tries: int = 3) -> tuple[str, str] | None:
+    """`_stash_find`, retried a bounded number of times while the list fails; None = still unknown."""
+    for _ in range(tries):
+        found = _stash_find(tree, tag)
+        if found is not None:
+            return found
+    return None
+
+
 def _stash_away(tree: Path, tag: str) -> str:
     """Stash tracked, staged and untracked work under ``tag``; "" when there was none,
     else the entry's sha. Never a bare stash: the stack is shared by every worktree, so the
-    entry is found again BY TAG (another session may push meanwhile)."""
+    entry is found again BY TAG (another session may push meanwhile). RuntimeError when the
+    push failed, or succeeded but the entry cannot be located (then the message names the tag)."""
     r = W.git(tree, "stash", "push", "-u", "-m", tag)
     if not r.ok:
         raise RuntimeError(r.err or r.out)
-    return _stash_find(tree, tag)[0]
+    found = _stash_find_sure(tree, tag)
+    if found is not None:
+        return found[0]
+    top = W.git(tree, "rev-parse", "--verify", "-q", "refs/stash")  # newest entry, if it is ours
+    if top.ok and top.out:
+        subj = W.git(tree, "log", "-1", "--format=%s", top.out)
+        if subj.ok and tag in subj.out:
+            return top.out
+    raise RuntimeError(
+        f"`git stash list` failed after the stash was pushed, so the entry cannot be located. "
+        f"Nothing was merged. If `git stash list` shows an entry whose message contains "
+        f"{tag!r}, your uncommitted work is in it: `git stash apply` that entry. "
+        "If it shows none, nothing was stashed."
+    )
 
 
 def _stash_back(tree: Path, tag: str, sha: str) -> str:
     """Re-apply the stash ``sha`` and drop the entry named ``tag``. "" when restored, else
-    why not -- the entry then stays, holding the work."""
+    why not -- the entry then stays, holding the work. A drop that could not finish (the work
+    IS back) comes back as a string starting with DROP_INCOMPLETE."""
     r = W.git(tree, "stash", "apply", "--index", sha)  # staged stays staged
     if not r.ok:  # e.g. a conflict, or an index the merge made impossible: plain apply
         r = W.git(tree, "stash", "apply", sha)
     if not r.ok:
         return r.err or r.out or "git stash apply failed"
-    _sha, ref = _stash_find(tree, tag)
-    if ref:
-        _drop(tree, ref, sha)
+    found = _stash_find_sure(tree, tag)
+    if found is None:
+        return DROP_INCOMPLETE + (
+            f"`git stash list` failed, so the entry {sha[:12]} ({tag}) was not dropped; "
+            "your work is back in the tree. Drop it by hand once you have checked."
+        )
+    if found[1]:
+        return _drop(tree, found[1], sha)
     return ""
 
 
-def _drop(tree: Path, ref: str, sha: str) -> None:
+#: prefix of `_stash_back`'s answer when the work is restored but the stash bookkeeping is not.
+DROP_INCOMPLETE = "\x00drop-incomplete\x00"
+
+
+def _drop(tree: Path, ref: str, sha: str) -> str:
     """Drop the stash entry ``sha``, first trying ``ref`` (where it was found). ``stash@{n}``
     shifts when another worktree pushes between lookup and drop, so what git says it dropped
     is checked every time: a stranger's entry taken by mistake is stored back under its own
-    message, and ours is looked up again, until ours is the one gone (bounded)."""
+    message (and that must succeed), and ours is looked up again, until ours is the one gone
+    (bounded). "" when ours is gone and nothing else was lost; else DROP_INCOMPLETE + what is
+    left over, by sha, so nothing is reported as done that is not."""
     for _ in range(5):
         r = W.git(tree, "stash", "drop", ref)
         if not r.ok:  # the selector went stale (an entry below it was dropped): by sha
-            _sha, ref = _stash_find(tree, sha)
-            if not ref:
-                return
+            found = _stash_find_sure(tree, sha)
+            if found is None:
+                return DROP_INCOMPLETE + f"`git stash list` failed; entry {sha[:12]} may remain."
+            if not found[1]:
+                return ""
+            ref = found[1]
             continue
         got = re.search(r"\(([0-9a-f]{40,64})\)", r.out)
         if not got or got.group(1) == sha:
-            return
+            return ""
         was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
         message = was.out if was.ok and was.out else "restored by ddflow sync --keep-local"
-        W.git(tree, "stash", "store", "-m", message, got.group(1))
-        _sha, ref = _stash_find(tree, sha)  # ours moved: by its sha now
-        if not ref:
-            return
+        stored = W.git(tree, "stash", "store", "-m", message, got.group(1))
+        lost = (
+            ""
+            if stored.ok
+            else f" ANOTHER SESSION'S stash entry {got.group(1)[:12]} was dropped by mistake and "
+            f"could not be stored back ({(stored.err or stored.out).strip()}): "
+            f"`git stash store -m 'restored' {got.group(1)}` puts it back."
+        )
+        found = _stash_find_sure(tree, sha)  # ours moved: by its sha now
+        if found is None:
+            return DROP_INCOMPLETE + f"`git stash list` failed; entry {sha[:12]} may remain.{lost}"
+        if not found[1]:
+            return DROP_INCOMPLETE + lost.strip() if lost else ""
+        ref = found[1]
+        if lost:
+            return DROP_INCOMPLETE + f"entry {sha[:12]} was left in the stash.{lost}"
+    return DROP_INCOMPLETE + (
+        f"gave up after 5 races with other sessions' stash pushes; your work is back in the "
+        f"tree, and entry {sha[:12]} ({sha}) is still in `git stash list`: drop it by hand."
+    )
 
 
 def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
@@ -206,7 +266,10 @@ def _restore(out: SyncResult, tree: Path, tag: str, sha: str) -> SyncResult:
         out.kept_stash = sha
         return out
     why = _stash_back(tree, tag, sha)
-    if why:
+    if why.startswith(DROP_INCOMPLETE):
+        out.stash_note = why[len(DROP_INCOMPLETE) :].strip()
+        out.detail += f"\nstash left over: {out.stash_note}"
+    elif why:
         out.kept_stash = sha
         out.detail += f"\nputting your uncommitted work back failed: {why.strip()}"
     return out

@@ -137,3 +137,145 @@ def test_keep_local_keeps_staged_work_staged(repo):
     out = sync(repo, item="T1", keep_local=True, agent=ME)
     assert out.ok, out.reason
     assert _git(wt, "diff", "--cached", "--name-only") == "README.md"
+
+
+# --- B-sync-keep-local-stash-edges: git failures and races must be reported, never swallowed
+
+
+def _fail():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(ok=False, out="", err="simulated git failure", code=1)
+
+
+def test_a_failed_stash_list_after_the_push_is_not_taken_for_no_entry(repo, monkeypatch):
+    """(c) The push worked, `stash list` fails every time: refuse and name the tag."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    real = BS.W.git
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "list") or a[:2] == ("rev-parse", "--verify"):
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    try:
+        BS._stash_away(wt, "tag-mine")
+    except RuntimeError as e:
+        assert "tag-mine" in str(e) and "Nothing was merged" in str(e)
+    else:
+        raise AssertionError("an unlocatable stash must refuse, not return")
+    assert "tag-mine" in _stashes(wt)  # the work is there, and the message says so
+
+
+def test_a_transient_stash_list_failure_after_the_push_is_retried(repo, monkeypatch):
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    real = BS.W.git
+    seen = []
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "list") and not seen:
+            seen.append(1)
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    assert BS._stash_away(wt, "tag-mine")  # found on the retry, not "" (= no entry)
+
+
+def test_keep_local_with_an_unlocatable_stash_refuses_through_sync(repo, monkeypatch):
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    _land(repo, "src/a.py")
+    (wt / "README.md").write_text("dirty\n")
+    real = BS.W.git
+    head = _git(wt, "rev-parse", "HEAD")
+
+    def git(tree, *a, **kw):
+        if a[:2] in (("stash", "list"), ("rev-parse", "--verify")):
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    out = sync(repo, item="T1", keep_local=True, agent=ME)
+    assert out.data["status"] == "refused" and "ddflow-sync-keep-local" in out.reason
+    assert _git(wt, "rev-parse", "HEAD") == head  # nothing merged
+
+
+def test_a_stranger_entry_that_cannot_be_stored_back_is_reported(repo, monkeypatch):
+    """(a) The drop took a stranger's entry and `stash store` fails: say so, with the sha."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    _sha, ref = BS._stash_find(wt, "tag-mine")
+    (wt / "b.txt").write_text("theirs\n")
+    _git(wt, "stash", "push", "-u", "-m", "tag-theirs")
+    theirs = _git(wt, "rev-parse", "stash@{0}")
+    real = BS.W.git
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "store"):
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    why = BS._drop(wt, ref, mine)
+    assert why.startswith(BS.DROP_INCOMPLETE)
+    assert theirs[:12] in why and "stash store" in why
+
+
+def test_giving_up_after_five_races_is_not_reported_as_done(repo, monkeypatch):
+    """(b) A stranger pushes before every drop: the loop gives up, and says our entry remains."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    _sha, ref = BS._stash_find(wt, "tag-mine")
+    real = BS.W.git
+    n = []
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "drop"):
+            n.append(1)
+            (tree / f"s{len(n)}.txt").write_text("theirs\n")
+            real(tree, "stash", "push", "-u", "-m", f"tag-theirs-{len(n)}", "--", f"s{len(n)}.txt")
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    why = BS._drop(wt, ref, mine)
+    assert why.startswith(BS.DROP_INCOMPLETE) and mine[:12] in why, why
+    assert "tag-mine" in _stashes(wt)  # the leftover is real and was named
+
+
+def test_sync_exits_non_zero_when_the_stash_could_not_be_cleaned_up(repo, monkeypatch):
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    _land(repo, "src/a.py")
+    (wt / "README.md").write_text("dirty\n")
+    real = BS.W.git
+    out_ref = {}
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "drop"):
+            return _fail()
+        if a[:2] == ("stash", "list") and out_ref.get("after_apply"):
+            return _fail()
+        if a[:2] == ("stash", "apply"):
+            out_ref["after_apply"] = True
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    out = sync(repo, item="T1", keep_local=True, agent=ME)
+    assert not out.ok and "STASH NOT CLEANED UP" in out.reason
+    assert (wt / "README.md").read_text() == "dirty\n"

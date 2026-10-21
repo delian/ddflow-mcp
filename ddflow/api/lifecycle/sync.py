@@ -68,6 +68,9 @@ def sync(
             f"{r.kept_stash[:12]} (`git stash show -p {r.kept_stash}` shows it). The tree holds "
             "whatever was applied: resolve it there, then `git stash drop` that entry."
         )
+    if r.stash_note:  # merged and restored, but the stash is not as it should be: not a clean exit
+        text += f"\nSTASH NOT CLEANED UP: {r.stash_note}"
+        return O.refused("sync", text, **data)
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
     if r.status in ("unknown", "current"):
