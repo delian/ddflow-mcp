@@ -9,6 +9,7 @@ any OTHER conflict aborts the merge, so the branch is left exactly as it was.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,7 +84,7 @@ def _stash_find(tree: Path, tag: str) -> tuple[str, str]:
     r = W.git(tree, "stash", "list", "--format=%H %gd %gs")
     for line in r.out.splitlines() if r.ok else ():
         sha, ref, subject = [*line.split(" ", 2), "", ""][:3]
-        if tag in subject:
+        if tag in subject or tag == sha:
             return sha, ref
     return "", ""
 
@@ -106,8 +107,23 @@ def _stash_back(tree: Path, tag: str, sha: str) -> str:
         return r.err or r.out or "git stash apply failed"
     _sha, ref = _stash_find(tree, tag)
     if ref:
-        W.git(tree, "stash", "drop", ref)
+        _drop(tree, ref, sha)
     return ""
+
+
+def _drop(tree: Path, ref: str, sha: str) -> None:
+    """Drop ``ref`` (our entry). ``stash@{n}`` shifts when another worktree pushes between
+    the lookup and the drop, so what git says it dropped is checked, and a stranger's entry
+    taken by mistake is stored back."""
+    r = W.git(tree, "stash", "drop", ref)
+    got = re.search(r"\(([0-9a-f]{40})\)", r.out) if r.ok else None
+    if got and got.group(1) != sha:
+        was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
+        message = was.out if was.ok and was.out else "restored by ddflow sync --keep-local"
+        W.git(tree, "stash", "store", "-m", message, got.group(1))
+        _sha, again = _stash_find(tree, sha)  # ours moved: find it by its sha now
+        if again:
+            W.git(tree, "stash", "drop", again)
 
 
 def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
@@ -178,15 +194,11 @@ def _restore(out: SyncResult, tree: Path, tag: str, sha: str) -> SyncResult:
         return out
     if W.merging(tree) is not False:  # an abort that failed: the stash stays, untouched
         out.kept_stash = sha
-        out.detail += f"\nyour uncommitted work is kept in stash {sha[:12]} ({tag})"
         return out
     why = _stash_back(tree, tag, sha)
     if why:
         out.kept_stash = sha
-        out.detail += (
-            f"\nyour uncommitted work could not be put back ({why.strip()}); it is kept in "
-            f"stash {sha[:12]} ({tag}): `git stash apply {sha}`"
-        )
+        out.detail += f"\nputting your uncommitted work back failed: {why.strip()}"
     return out
 
 

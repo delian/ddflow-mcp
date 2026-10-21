@@ -63,7 +63,10 @@ def sync(
         data["gates_unverified"] = sorted(recorded & unverified)
     text = _text(r, data)
     if r.kept_stash:
-        text += f"\n{r.detail.strip()}"
+        text += (
+            f"\nYour uncommitted work is kept in stash {r.kept_stash[:12]}; "
+            f"`git stash apply {r.kept_stash}` puts it back."
+        )
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
     if r.status in ("unknown", "current"):
