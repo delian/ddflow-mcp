@@ -113,3 +113,14 @@ def test_a_rerun_that_also_exits_0_over_failures_is_not_a_pass(repo) -> None:
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code == 1, out + err
     assert _record(repo).outcome == "failed"
+
+
+def test_a_capped_failure_list_never_yields_passed(repo) -> None:
+    """More failures than the evidence keeps (50): the rest are unnamed, so none can be rerun."""
+    many = "; ".join(f"echo FAILED tests/test_x.py::test_{i}" for i in range(60))
+    _project(repo, command=f"sh -c '{many}'")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1 and "PASSED" not in out, out + err
+    rec = _record(repo)
+    assert rec.outcome == "failed"
+    assert "more failing tests were not named" in rec.evidence["reason"]
