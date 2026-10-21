@@ -98,3 +98,18 @@ def test_containment_rules_are_sound_and_cover_the_usual_shapes(repo):
     assert not _glob_is_docs("docs/*", ["docs/x*"])
     assert not _glob_is_docs("docs/*", ["docs/x", "docs/zq9"])
     assert not _glob_is_docs("docs/**", ["docs/*"])
+
+
+def test_reporting_views_follow_the_knob(repo):
+    """critical_path and the loop detector's wait graph agree with the scheduler."""
+    from ddflow.core.progress import _waits_on
+    from ddflow.core.schedule import critical_path
+
+    _queue(repo)
+    st = fold(EventLog(repo, "t").read_all(), strict=False)
+    on, off = Config(), Config()
+    off.schedule.docs_ignore_phase_needs = False
+    assert "G1" not in _waits_on(st, "N-res", on)
+    assert "G1" in _waits_on(st, "N-res", off)
+    assert "N-res" not in critical_path(st, "", on) or "G1" not in critical_path(st, "", on)
+    assert critical_path(st, "", off)

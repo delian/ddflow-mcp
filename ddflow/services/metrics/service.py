@@ -75,7 +75,7 @@ def run(
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
-    facts = collect(events, state, now)
+    facts = collect(events, state, now, cfg)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":
         f = forecast_view(facts, state, cfg, now, phase)

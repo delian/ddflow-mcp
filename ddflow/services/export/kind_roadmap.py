@@ -41,7 +41,9 @@ _LANE_LABELS = (
 
 def waits_on(state: State, it: Item, cfg: Config) -> list[str]:
     """The ids ``it`` is waiting for, sorted (own and inherited dependencies not met)."""
-    return sorted({d for _, d in inherited_deps(state, it, cfg) if not dep_status(state, d, cfg)[0]})
+    return sorted(
+        {d for _, d in inherited_deps(state, it, cfg) if not dep_status(state, d, cfg)[0]}
+    )
 
 
 def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
