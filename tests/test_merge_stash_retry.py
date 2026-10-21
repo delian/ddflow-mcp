@@ -73,3 +73,19 @@ def test_a_conflict_in_a_file_named_stash_failed_is_not_retried(repo, monkeypatc
     r = W.merge(repo, cfg, wt)
     assert not r.ok and not pauses
     assert "CONFLICT" in (r.err + r.out)
+
+
+def test_a_blocking_file_named_like_the_error_is_not_retried(repo, monkeypatch):
+    """critic round 2: git lists a blocking file indented, so its NAME is not the error line."""
+    cfg = Config()
+    name = "fatal: stash failed"
+    _commit(repo, name, "base\n", "main: add")
+    wt = W.create(repo, cfg, "T1")
+    _commit(repo, name, "main moved\n", "main: edit")
+    _commit(wt.path, name, "branch\n", "feat: edit")
+    (repo / name).write_text("dirty local\n")  # the merge would overwrite it: git refuses
+    pauses = []
+    monkeypatch.setattr(W.time, "sleep", pauses.append)
+    r = W.merge(repo, cfg, wt)
+    assert not r.ok and not pauses, (r.err, r.out)
+    assert "index.lock" not in (r.err + r.out)
