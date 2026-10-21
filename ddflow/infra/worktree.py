@@ -626,16 +626,22 @@ STASH_RETRIES = 4
 STASH_RETRY_PAUSE_S = 0.25
 
 
+def _stash_failed(r: GitResult) -> bool:
+    """Is git's own `fatal: stash failed` line in the answer? A whole line, never the words
+    anywhere: a conflict in a file NAMED "stash failed" must not be taken for it."""
+    return any(ln.strip() == "fatal: stash failed" for ln in f"{r.err}\n{r.out}".splitlines())
+
+
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
     """`git <args>`, retried only while git says ``stash failed`` (it merged nothing then).
     When it never clears, the error names the cause and says nothing was merged."""
     r = git(tree, *args)
     tries = 1
-    while not r.ok and "stash failed" in f"{r.err} {r.out}" and tries < STASH_RETRIES:
+    while not r.ok and _stash_failed(r) and tries < STASH_RETRIES:
         time.sleep(STASH_RETRY_PAUSE_S * 2 ** (tries - 1))
         r = git(tree, *args)
         tries += 1
-    if not r.ok and "stash failed" in f"{r.err} {r.out}":
+    if not r.ok and _stash_failed(r):
         return GitResult(
             r.code,
             r.out,
