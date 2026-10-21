@@ -106,3 +106,6 @@ new = "import json\nimport math\nimport re\n"
 
 [gates]
 task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]
+
+[review]
+max_rounds = 4
