@@ -137,3 +137,11 @@ def test_a_research_item_that_changed_code_keeps_the_task_pipeline(repo):
     st = _state(repo)
     s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
     assert "unit_tests" in s.pipeline
+
+
+def test_a_project_written_research_pipeline_is_respected():
+    """`[gates].kind_pipelines.research` is the project's own choice; the diff does not override it."""
+    cfg = Config()
+    cfg.gates.kind_pipelines = {"research": ["implement", "unit_tests", "merge"]}
+    it = Item(id="X", kind="research", title="t", globs=["docs/x.md"])
+    assert not diff_is_docs_only(it, cfg, ["docs/x.md"])
