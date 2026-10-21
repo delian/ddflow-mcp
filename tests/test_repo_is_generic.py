@@ -194,7 +194,7 @@ def test_a_four_part_version_is_not_a_host():
 #: not rewritten, so those stay; every event stamped later is scanned, and one that leaks
 #: fails here. Write-time redaction of every kind landed 2026-10-08 06:22Z (B5deba76d04); the last
 #: known leaks are 2026-10-08 04:10Z, before it.
-_HOST_RE = r"[\\w.-]+\\.(?:lan|local|internal|home\\.arpa)\\b"
+_HOST_RE = r"[\w.-]+\.(?:lan|local|internal|home\.arpa)\b"
 EVENT_LOG_CLEAN_FROM = "2026-10-09T00:00:00Z"
 
 
@@ -245,6 +245,6 @@ def test_the_event_log_scan_can_see_one(tmp_path):
     host = "nas" + ".home.arpa"
     ms = f'{{"ts": "2026-10-09T00:00:00.001Z", "data": {{"text": "see {host}"}}}}'
     (events / "a.jsonl").write_text(ms + "\n")
-    assert list(_event_log_leaks(tmp_path)) == ["a.jsonl:1"]
+    assert _event_log_leaks(tmp_path) == {"a.jsonl:1": [host]}
     with pytest.raises(AssertionError, match="no event shards"):
         _event_log_leaks(tmp_path / "nowhere")
