@@ -697,6 +697,10 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
 }
 
 
+def _loop(m: re.Match[str], ip_type: type) -> bool:
+    return _parse(m.group(1), ip_type).is_loopback
+
+
 def redact_network(text: str) -> str:
     """`text` with only its private addresses and private host names marked: the pass a
     lookup field gets, since an id or a sha has neither and a URL or path may (Ba2df74d558)."""
@@ -705,7 +709,8 @@ def redact_network(text: str) -> str:
         (_IPV4, "ipv4", ipaddress.IPv4Address),
         (_IPV6, "ipv6", ipaddress.IPv6Address),
     ):
-        p.sub(pat, kind, keep=lambda m, t=ip_type: not _is_private(m.group(1), t))
+        # loopback is the default of a local endpoint: not a leak, and the repo guard allows it
+        p.sub(pat, kind, keep=lambda m, t=ip_type: not _is_private(m.group(1), t) or _loop(m, t))
     p.sub(_HOST, "host")
     return p.text
 
