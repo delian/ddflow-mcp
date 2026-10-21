@@ -77,3 +77,15 @@ def test_a_docs_only_task_completes_with_the_doc_gates_alone(repo):
         assert code == 0, (gate, out, err)
     code, out, err = run_cli(repo, "complete", "D1", "--model", "claude-sonnet-5-5")
     assert code == 0, out + err
+
+
+def test_declared_doc_globs_do_not_hide_a_code_change():
+    """Globs are agent-editable: the actual diff must stay inside the doc globs too."""
+    cfg = Config()
+    it = _task("docs/x.md")
+    assert CO.docs_only_strays(it, cfg, ["docs/x.md", "README.md"]) == []
+    assert CO.docs_only_strays(it, cfg, ["docs/x.md", "ddflow/api/review.py"]) == [
+        "ddflow/api/review.py"
+    ]
+    assert CO.docs_only_strays(_task("ddflow/x.py"), cfg, ["ddflow/x.py"]) == []  # task pipeline
+    assert CO.docs_only_strays(it, cfg, None) == []
