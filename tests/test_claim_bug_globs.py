@@ -20,6 +20,9 @@ from ddflow.infra.log import EventLog
 
 def _seed(repo: Path) -> EventLog:
     run_cli(repo, "init")
+    for f in ["src/p.py"]:
+        (repo / f).parent.mkdir(parents=True, exist_ok=True)
+        (repo / f).write_text("")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "Phase one"})
     return log
