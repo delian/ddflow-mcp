@@ -672,7 +672,7 @@
     '''
         T1                 done       Tokenizer  [2026-01-01]
       
-      (showing 1 of 3; raise --limit)
+      (showing 1 of 3 from 0; next page: the same command with --limit 1 --offset 1)
   
     ''',
     '',
@@ -987,7 +987,10 @@
         "shown": 1,
         "limit": 50,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1023,7 +1026,10 @@
         "filters": {
           "state": "open",
           "item": "T1"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1058,7 +1064,10 @@
         "truncated": false,
         "filters": {
           "state": "open"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1281,7 +1290,10 @@
         "shown": 1,
         "limit": 50,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1313,7 +1325,10 @@
         "truncated": false,
         "filters": {
           "state": "live"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1345,6 +1360,9 @@
         "filters": {
           "state": "done"
         },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "No phase records matching {'state': 'done'}."
       }
   
@@ -1380,7 +1398,10 @@
         "shown": 1,
         "limit": 50,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1616,7 +1637,10 @@
         "shown": 1,
         "limit": 1,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1646,7 +1670,10 @@
         "shown": 1,
         "limit": 50,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -1708,6 +1735,9 @@
         "limit": 20,
         "truncated": false,
         "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "regex refused: a repeat of variable length inside another repeat can take exponential time"
       }
   
@@ -2150,6 +2180,9 @@
         "filters": {
           "owner": "nobody"
         },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "No task records matching {'agent': 'nobody'}."
       }
   
@@ -2187,7 +2220,10 @@
         "truncated": true,
         "filters": {
           "phase": "P1"
-        }
+        },
+        "offset": 0,
+        "next": 1,
+        "clamped_from": null
       }
   
     ''',
@@ -2258,7 +2294,10 @@
         "truncated": false,
         "filters": {
           "since": "2020-01-01"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -2280,6 +2319,9 @@
         "filters": {
           "state": "bogus"
         },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "No task records matching {'state': 'bogus'}."
       }
   
@@ -2317,7 +2359,10 @@
         "truncated": false,
         "filters": {
           "state": "done"
-        }
+        },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',
@@ -2339,6 +2384,9 @@
         "filters": {
           "tag": "x"
         },
+        "offset": 0,
+        "next": null,
+        "clamped_from": null,
         "reason": "No task records matching {'tag': 'x'}."
       }
   
@@ -2408,7 +2456,10 @@
         "shown": 3,
         "limit": 50,
         "truncated": false,
-        "filters": {}
+        "filters": {},
+        "offset": 0,
+        "next": null,
+        "clamped_from": null
       }
   
     ''',

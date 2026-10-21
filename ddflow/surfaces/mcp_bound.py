@@ -257,9 +257,16 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             note = f"{note} {more}" if note else more
         return out, note
     if body.get("truncated") is True and isinstance(body.get("rows"), list):
+        # Only the record lists page; a search or session list carries no `next`.
+        how = (
+            f"repeat the call with limit={body.get('limit')} offset={body['next']}"
+            if body.get("next") is not None
+            else "raise limit"
+        )
         return body, (
             f"truncated: showing {body.get('shown')} of {body.get('total')}; "
-            "narrow the filters, or raise limit (0 = the most a list gives: 1000, a search 200)."
+            f"narrow the filters, or {how} "
+            "(limit 0 = the most a list gives: 1000, a search 200)."
         )
     return body, None
 

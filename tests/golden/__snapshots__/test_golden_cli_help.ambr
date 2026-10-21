@@ -216,16 +216,17 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM]
   
   options:
-    -h, --help     show this help message and exit
-    --state STATE  only rows in this state
-    --phase PHASE  only rows under this phase id
-    --since SINCE  only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT  most rows to show (default 50)
-    --all          include fixed and invalid bugs
-    --item ITEM    only bugs filed in or against this queue item id
+    -h, --help       show this help message and exit
+    --state STATE    only rows in this state
+    --phase PHASE    only rows under this phase id
+    --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --offset OFFSET  skip this many rows (paging)
+    --all            include fixed and invalid bugs
+    --item ITEM      only bugs filed in or against this queue item id
   
   '''
 # ---
@@ -1237,16 +1238,17 @@
 # ---
 # name: test_help[ddflow lesson list]
   '''
-  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all]
+  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
-    -h, --help     show this help message and exit
-    --state STATE  only rows in this state
-    --tag TAG      only rows carrying this tag
-    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
-    --since SINCE  only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT  most rows to show (default 50)
-    --all          include superseded lessons
+    -h, --help       show this help message and exit
+    --state STATE    only rows in this state
+    --tag TAG        only rows carrying this tag
+    --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --offset OFFSET  skip this many rows (paging)
+    --all            include superseded lessons
   
   '''
 # ---
@@ -1305,7 +1307,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1319,7 +1321,9 @@
     --tag TAG             only rows carrying this tag
     --owner OWNER         only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE         only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT         most rows to show (default 50)
+    --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
+                          most)
+    --offset OFFSET       skip this many rows (paging)
     --all                 accepted for every list kind; this kind lists all its rows already
     --item ITEM           only bugs filed in or against this queue item id
   
@@ -1515,16 +1519,17 @@
 # ---
 # name: test_help[ddflow phase list]
   '''
-  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all]
+  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
-    -h, --help     show this help message and exit
-    --state STATE  only rows in this state
-    --tag TAG      only rows carrying this tag
-    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
-    --since SINCE  only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT  most rows to show (default 50)
-    --all          accepted for every list kind; this kind lists all its rows already
+    -h, --help       show this help message and exit
+    --state STATE    only rows in this state
+    --tag TAG        only rows carrying this tag
+    --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --offset OFFSET  skip this many rows (paging)
+    --all            accepted for every list kind; this kind lists all its rows already
   
   '''
 # ---
@@ -1976,7 +1981,7 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--all] [{add,list}]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
   
   positional arguments:
     {add,list}            optional: `research add` = `research`; `research list` lists the notes
@@ -2005,7 +2010,9 @@
     --phase PHASE         only rows under this phase id
     --tag TAG             only rows carrying this tag
     --since SINCE         only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT         most rows to show (default 50)
+    --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
+                          most)
+    --offset OFFSET       skip this many rows (paging)
     --all                 accepted for every list kind; this kind lists all its rows already
   
   '''
@@ -2535,17 +2542,18 @@
 # ---
 # name: test_help[ddflow task list]
   '''
-  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all]
+  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
-    -h, --help     show this help message and exit
-    --state STATE  only rows in this state
-    --phase PHASE  only rows under this phase id
-    --tag TAG      only rows carrying this tag
-    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
-    --since SINCE  only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT  most rows to show (default 50)
-    --all          accepted for every list kind; this kind lists all its rows already
+    -h, --help       show this help message and exit
+    --state STATE    only rows in this state
+    --phase PHASE    only rows under this phase id
+    --tag TAG        only rows carrying this tag
+    --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --offset OFFSET  skip this many rows (paging)
+    --all            accepted for every list kind; this kind lists all its rows already
   
   '''
 # ---
@@ -2593,7 +2601,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2628,6 +2636,9 @@
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files
+    --landed LANDED       record the commit (or <before>..<after>) on the base that holds this
+                          item's work merged outside `ddflow merge`; refused unless it is on the
+                          base and touches the item's globs
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   

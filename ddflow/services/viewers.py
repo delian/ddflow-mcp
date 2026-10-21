@@ -42,10 +42,18 @@ class View:
     total: int = 0
     limit: int = DEFAULT_LIMIT
     filters: dict[str, str] = field(default_factory=dict)
+    #: Where this page starts, and the limit asked for when `MAX_LIMIT` cut it (else None).
+    offset: int = 0
+    clamped_from: int | None = None
 
     @property
     def truncated(self) -> bool:
-        return self.total > len(self.rows)
+        return self.total > self.offset + len(self.rows)
+
+    @property
+    def next(self) -> int | None:
+        """The `offset` of the following page, None on the last."""
+        return self.offset + len(self.rows) if self.truncated else None
 
 
 #: Which filters each kind can honour. A filter a kind has no data for is REFUSED, not
@@ -180,7 +188,7 @@ def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     return [_session_row(s, cfg) for s in st.sessions.values()]
 
 
-def list_view(
+def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     st: State,
     cfg: Config,
     kind: str,
@@ -192,6 +200,7 @@ def list_view(
     since: str = "",
     item: str = "",
     limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
 ) -> View:
     """Rows of `kind`, newest change first (ties by id), at most `limit` of them."""
     if kind not in KINDS:
@@ -211,9 +220,13 @@ def list_view(
             f"{kind} has no {', '.join(unsupported)} to filter by "
             f"(it supports: {', '.join(sorted(_FILTERS[kind]))})"
         )
-    if limit < 1:
-        raise ViewError(f"limit must be at least 1, got {limit}")
-    limit = min(limit, MAX_LIMIT)
+    if limit < 0:
+        raise ViewError(f"limit must be at least 0 (0 = the most, {MAX_LIMIT}), got {limit}")
+    if offset < 0:
+        raise ViewError(f"offset must be at least 0, got {offset}")
+    # 0 is "the most a list gives", as over MCP; a larger one is cut to it and says so.
+    clamped_from = limit if limit > MAX_LIMIT else None
+    limit = min(limit, MAX_LIMIT) or MAX_LIMIT
     if phase and not (phase in st.items and st.items[phase].kind == "phase"):
         raise ViewError(f"no phase {phase!r}")
 
@@ -240,4 +253,14 @@ def list_view(
     # Two stable sorts: id ascending, then newest first, so equal timestamps keep id order.
     rows.sort(key=lambda r: r["id"])
     rows.sort(key=lambda r: r["updated"], reverse=True)
-    return View(kind=kind, rows=rows[:limit], total=len(rows), limit=limit, filters=given)
+    if offset and offset >= len(rows):
+        raise ViewError(f"offset {offset} is past the end: {len(rows)} {kind} rows match")
+    return View(
+        kind=kind,
+        rows=rows[offset : offset + limit],
+        total=len(rows),
+        limit=limit,
+        filters=given,
+        offset=offset,
+        clamped_from=clamped_from,
+    )

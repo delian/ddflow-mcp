@@ -14,9 +14,9 @@ from typing import Any
 from ..core.records import State
 from ..infra import worktree as W
 from . import forbidden as FB
-from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
+from .pipeline_diff import effective_pipeline
 
 
 def _title(*texts: str | None, cap: int) -> str:
@@ -204,7 +204,8 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
         return None
     led = LG.build(events, item_id) or {}
     who = agent or led.get("completed_by", "") or (it.lease.holder if it.lease else "")
-    rows = RG.rows(st, cfg, it, events)
+    pipeline = effective_pipeline(repo, cfg, it)
+    rows = RG.rows(st, cfg, it, events, pipeline)
     landed = it.merged_sha or led.get("sha", "")
     stale = RG.earlier_tree(st, cfg, item_id, repo, landed)
     for r in rows:
@@ -213,7 +214,6 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     filed = _filed(events, st, item_id, who, sc.report_title_chars)
     tests = _bug_tests(events, st, item_id, sc.report_summary_chars)
     overrides = RG.overrides(it, led, tests, rows) + _refusals(events, item_id, who)
-    pipeline = G.pipeline_for(it, cfg)
     not_done = RG.not_done(it, led, rows, pipeline, tests)
     follow = [f"{b['id']} (bug, open)" for b in filed["bugs"] if b["open"]]
     follow += [f"{t['id']} (task, open)" for t in filed["tasks"] if t["open"]]

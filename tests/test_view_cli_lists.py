@@ -141,6 +141,6 @@ def test_json_carries_the_reason_when_nothing_matches(proj):
     assert code == 2 and "No task records" in json.loads(out)["reason"]
 
 
-def test_limit_zero_is_refused_not_defaulted(proj):
-    code, _, err = run_cli(proj, "task", "list", "--limit", "0")
-    assert code == 3 and "limit must be at least 1" in err
+def test_negative_limit_is_refused(proj):
+    code, _, err = run_cli(proj, "task", "list", "--limit", "-1")
+    assert code == 3 and "limit must be at least 0" in err
