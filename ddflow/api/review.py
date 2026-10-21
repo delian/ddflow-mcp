@@ -48,13 +48,13 @@ from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
 from ..services.guidance import inject as GI
 from ..views import human
-from . import review_findings as _FR
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import item_tree
 from .knowledge.regression import _unresolved_tests
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
+from .review_findings import _rows as _numbered_findings
 from .review_supersede import carry, round_evidence, superseded_digests
 
 
@@ -1219,16 +1219,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
         used = _rounds_used(it, gate)
-        for line in GNT.lines(st, item, gate):
-            say(line)
-        spent = 0 < cfg.review.max_rounds <= used
-        grant = (
-            GNT.pick(st, item, gate, a["force"], ctx=_grant_ctx(repo, it, gate, a))
-            if spent
-            else None
-        )
-        why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say, grant)
-        a["grant"] = grant.id if grant and forced else ""  # cited only if the round ran on it
+        why, forced = _budget_on_grants(repo, cfg, st, it, a, used, say)
     if why:
         return kind, done, forced, diff, how, why, None
     if item:
@@ -1248,6 +1239,21 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     return kind, done, forced, diff, how, why, rerun
 
 
+def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
+    """`_budget` for this call, with the operator grant (`services.grants.pick`) a round past
+    the budget may cite. Says the item's grants for the gate; ``a["grant"]`` is the id the
+    round ran on (set only when it did: a round the budget allows anyway spends none)."""
+    item, gate = a["item"], a["gate"]
+    for line in GNT.lines(st, item, gate):
+        say(line)
+    grant = None
+    if 0 < cfg.review.max_rounds <= used:
+        grant = GNT.pick(st, item, gate, a["force"], ctx=_grant_ctx(repo, it, gate, a))
+    why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say, grant)
+    a["grant"] = grant.id if grant and forced else ""
+    return why, forced
+
+
 def _cite_grant(extra: dict[str, Any] | None, grant_id: str) -> dict[str, Any] | None:
     """``extra`` evidence naming the operator grant the round ran on (`services.grants`
     counts a grant's use from it)."""
@@ -1259,7 +1265,7 @@ def _grant_ctx(repo, it, gate: str, a: dict[str, Any]) -> GNT.Ctx:
     # No numbered findings on record (a clean or hand-recorded gate: `_rows` says why in text)
     # reads as "untriaged", so a standing grant never fires on what it cannot see: a clean
     # round has nothing left to triage and needs no extra round.
-    rows = _FR._rows(it, gate)
+    rows = _numbered_findings(it, gate)
     return GNT.Ctx(
         untriaged=(
             sum(1 for r in rows if r["triage"] == "untriaged") if isinstance(rows, list) else 1

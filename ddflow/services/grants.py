@@ -14,7 +14,7 @@ recorded gate runs that cite it. A ``when`` makes the grant STANDING: `pick` app
 without ``--force`` when its predicate holds on facts the review computed (`Ctx`), so the
 operator's "extra round once the tree changed after triage" is checked, not trusted.
 
-A new kind is `register_kind`; a new predicate is a key of its ``whens``.
+A new kind is `KINDS.register`; a new predicate is a key of its ``whens``.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from typing import Any
 from ..core import clock
 from ..core.digest import content_digest
 from ..core.model import State, fold
+from ..core.registry import Registry
 from . import approval as AP
 
 PREFIX = "grant:"
@@ -70,15 +71,10 @@ class GrantKind:
     unit: str = "extra round"
 
 
-KINDS: dict[str, GrantKind] = {}
+#: The grant kinds, by name: a new kind is `KINDS.register(GrantKind(...))`.
+KINDS: Registry[GrantKind] = Registry("grant kind", key=lambda k: k.name, order="registered")
 
-
-def register_kind(kind: GrantKind) -> GrantKind:
-    KINDS[kind.name] = kind
-    return kind
-
-
-register_kind(
+KINDS.register(
     GrantKind(
         "review_round",
         "one more review round of a gate past [review].max_rounds",
@@ -109,20 +105,20 @@ class Grant:
     def remaining(self) -> int:
         return max(0, self.count - self.used)
 
-    def expired(self, now: float | None = None) -> bool:
+    def lapsed(self, now: float | None = None) -> bool:
         return bool(self.expires) and parse_expiry(self.expires) <= (
             time.time() if now is None else now
         )
 
     def usable(self, now: float | None = None) -> bool:
-        return self.remaining > 0 and not self.expired(now)
+        return self.remaining > 0 and not self.lapsed(now)
 
     def row(self, now: float | None = None) -> dict[str, Any]:
         return {
             "id": self.id, "item": self.item, "gate": self.gate, "kind": self.kind,
             "count": self.count, "used": self.used, "remaining": self.remaining,
             "reason": self.reason, "when": self.when, "expires": self.expires,
-            "expired": self.expired(now), "by": self.by, "at": self.at,
+            "expired": self.lapsed(now), "by": self.by, "at": self.at,
         }  # fmt: skip
 
 
@@ -256,7 +252,7 @@ def describe(g: Grant, now: float | None = None) -> str:
     kind = KINDS.get(g.kind)
     unit = kind.unit if kind else g.kind
     tail = f" ({g.when})" if g.standing else ""
-    state = "expired" if g.expired(now) else "spent" if not g.remaining else ""
+    state = "expired" if g.lapsed(now) else "spent" if not g.remaining else ""
     return (
         f"grant {g.id}: {g.count} {unit}{'' if g.count == 1 else 's'}, {g.used} used"
         f"{tail}{', ' + state if state else ''}"
