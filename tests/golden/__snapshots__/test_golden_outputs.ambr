@@ -1630,17 +1630,18 @@
           What the pre-commit hook does when the branch the work merges into (the
           item's recorded base, else the default branch) changed a rulebook since this
           branch forked and the change is not merged in: AGENTS.md, CLAUDE.md,
-          CLAUDE.local.md, .ddflow/config.toml, the driver docs under
-          docs/ddflow/drivers/, or any agent's native rules file. A session loads its
-          rules once, so the edit is silently ignored here until merged. 'block'
-          refuses and says `git merge <base>` then re-read the named files, 'warn'
-          prints and allows, 'off' disables. Default 'block': it is precise, and the
-          commit concluding that merge is never refused. The SessionStart hook reports
-          the same drift but only informs. An unrecognised value in a config file is
-          warned about, reported by `doctor` and falls back to 'block', the strictest
-          (the hook refuses); `config --set`, `ddflow_configure` and the environment
-          refuse it, and so does loading ddflow's own source tree, where the file and
-          the code are one commit.
+          CLAUDE.local.md, the project rules under .ddflow/rules/ (not config.toml
+          knobs, which are read live), the driver docs under docs/ddflow/drivers/, or
+          any agent's native rules file. A session loads its rules once, so the edit
+          is silently ignored here until merged. 'block' refuses and says `git merge
+          <base>` then re-read the named files, 'warn' prints and allows, 'off'
+          disables. Default 'block': it is precise, and the commit concluding that
+          merge is never refused. The SessionStart hook reports the same drift but
+          only informs. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'block', the strictest (the hook
+          refuses); `config --set`, `ddflow_configure` and the environment refuse it,
+          and so does loading ddflow's own source tree, where the file and the code
+          are one commit.
       enforce.readme_with_code = 'warn'   [default]
           What `complete`, `gate status` and `brief` do about a TASK whose diff
           changes a path in readme_code_globs but none of readme_files, with no 'docs'

@@ -1249,6 +1249,14 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     mcp_instructions`). That is the difference between a tool whose behaviour you
     configure and one you have to fork.
     """
+    # One load of the project for the whole handshake (B-mcp-initialize-folds-log): the queue
+    # counts and each upgrade reader share it instead of folding the log once apiece.
+    with _surf().load_scope():
+        return _instructions_text(repo, agent, tier)
+
+
+def _instructions_text(repo: Path, agent: str, tier: str) -> str:
+    """`_instructions`, inside its load scope."""
     vars_ = _instruction_vars(repo, agent)
     vars_["tool_tier_note"] = tier_note(tier, names=False)
     overrides: dict[str, str] = {}
