@@ -95,16 +95,13 @@ def _stash_find(tree: Path, tag: str) -> tuple[str, str] | None:
     return "", ""
 
 
-def _stash_find_sure(
-    tree: Path, tag: str, tries: int = 3, *, must_exist: bool = False
-) -> tuple[str, str] | None:
-    """`_stash_find`, retried a bounded number of times while the list fails; None = still
-    unknown. With ``must_exist`` an empty answer is retried too (the entry is known to have
-    been pushed: another session may have it out of the list for an instant) and, still empty,
-    is also None."""
+def _stash_find_sure(tree: Path, tag: str, tries: int = 3) -> tuple[str, str] | None:
+    """`_stash_find` for an entry KNOWN to exist (just pushed, or applied): retried a bounded
+    number of times while the list fails or does not show it (another session may have it out
+    of the stack for an instant). None = still unknown, never "there is none"."""
     for _ in range(tries):
         found = _stash_find(tree, tag)
-        if found is not None and (found[0] or not must_exist):
+        if found is not None and found[0]:
             return found
     return None
 
@@ -121,7 +118,7 @@ def _stash_away(tree: Path, tag: str) -> str:
     # directory ... On <branch>: <tag>", so a tag that spells this phrase cannot match.
     if f"{r.out}\n{r.err}".strip().lower().startswith("no local changes"):
         return ""
-    found = _stash_find_sure(tree, tag, must_exist=True)  # it WAS pushed: absent = unknown
+    found = _stash_find_sure(tree, tag)  # it WAS pushed: absent = unknown
     if found is not None:
         return found[0]
     top = W.git(tree, "rev-parse", "--verify", "-q", "refs/stash")  # newest entry, if it is ours
@@ -146,7 +143,7 @@ def _stash_back(tree: Path, tag: str, sha: str) -> str:
         r = W.git(tree, "stash", "apply", sha)
     if not r.ok:
         return r.err or r.out or "git stash apply failed"
-    found = _stash_find_sure(tree, tag, must_exist=True)  # it exists: apply keeps the entry
+    found = _stash_find_sure(tree, tag)  # it exists: apply keeps the entry
     if found is None:
         return DROP_INCOMPLETE + (
             f"`git stash list` failed or did not show the entry {sha[:12]} ({tag}), so it was not dropped; "
@@ -171,7 +168,7 @@ def _drop(tree: Path, ref: str, sha: str) -> str:
     for _ in range(5):
         r = W.git(tree, "stash", "drop", ref)
         if not r.ok:  # the selector went stale (an entry below it was dropped): by sha
-            found = _stash_find_sure(tree, sha, must_exist=True)
+            found = _stash_find_sure(tree, sha)
             if found is None:
                 return (
                     DROP_INCOMPLETE
@@ -180,7 +177,12 @@ def _drop(tree: Path, ref: str, sha: str) -> str:
             ref = found[1]
             continue
         got = re.search(r"\(([0-9a-f]{40,64})\)", r.out)
-        if not got or got.group(1) == sha:
+        if not got:  # cannot tell WHICH entry went: never a clean answer
+            return DROP_INCOMPLETE + (
+                f"`git stash drop` did not say which entry it dropped; entry {sha[:12]} ({sha}) "
+                "may be gone or still in `git stash list`: check it."
+            )
+        if got.group(1) == sha:
             return ""
         was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
         message = was.out if was.ok and was.out else "restored by ddflow sync --keep-local"
@@ -192,7 +194,7 @@ def _drop(tree: Path, ref: str, sha: str) -> str:
             f"could not be stored back ({(stored.err or stored.out).strip()}): "
             f"`git stash store -m 'restored' {got.group(1)}` puts it back."
         )
-        found = _stash_find_sure(tree, sha, must_exist=True)  # ours moved: by its sha now
+        found = _stash_find_sure(tree, sha)  # ours moved: by its sha now
         if found is None:
             return (
                 DROP_INCOMPLETE
