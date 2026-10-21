@@ -61,7 +61,7 @@ def apply(
     ev["rerun"] = {
         "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
         "still_failing": still, "tail": rev.get("tail", "")[-800:],
-        "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" and still and not _fail_fast(gdef.command) else [],
+        "flaked": ids if ok else [t for t in ids if t not in still] if still and not _fail_fast(gdef.command) else [],
     }  # fmt: skip
     flaked = ev["rerun"]["flaked"]
     n = FK.record(
