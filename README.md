@@ -3109,6 +3109,14 @@ Opt-in: the shipped pipeline has no human gate, and a test keeps it that way. Wh
 no outcome for that gate (`merge_gate_human` is true in its result, and the CLI names the
 `ddflow approve <id> merge` to ask for).
 
+**A required gate recorded `partial`** (a baseline-red `unit_tests`, a `partial_exits`
+command) blocks `complete`, and `--force` is not the way past. Re-run the part that is
+missing, or have a PERSON run `ddflow approve <id> <gate>`: that accepts the one recorded
+partial outcome by digest (`approval.granted`, refused under an agent identity, no MCP
+tool). The gate stays `partial` in the record and in `gate status`; `complete` warns that
+it settled only on that acceptance, and `verify` notes it. A re-recorded outcome needs its
+own acceptance, and `failed` and `unavailable` cannot be accepted this way.
+
 ---
 
 ## Parallelism and coordination
