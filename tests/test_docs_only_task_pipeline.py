@@ -60,3 +60,20 @@ def test_a_docs_only_task_needs_no_independent_reviewer():
     code = _task("ddflow/x.py")
     assert not CO.needs_independent_reviewer(docs, cfg)
     assert CO.needs_independent_reviewer(code, cfg)
+
+
+def test_a_docs_only_task_completes_with_the_doc_gates_alone(repo):
+    """End to end: the doc pipeline's gates, no unit_tests, no independent reviewer."""
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "D1", "--title", "write a note", "--globs", "docs/note.md")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "note.md").write_text("# note\n")
+    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+        code, out, err = run_cli(
+            repo, "gate", "record", "D1", gate, "--outcome", "passed", "--evidence", "ran it"
+        )
+    code, out, err = run_cli(repo, "complete", "D1", "--model", "claude-sonnet-5-5")
+    text = out + err
+    assert "unit_tests" not in text and "independence" not in text, text
