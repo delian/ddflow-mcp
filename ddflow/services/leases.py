@@ -235,8 +235,8 @@ def _clash_text(
 
 
 def _age(now: float, lz: Lease) -> str:
-    hours = max(now - lz.acquired_at, 0) / 3600
-    return f"{hours:.1f} h" if hours >= 1 else f"{hours * 60:.0f} min"
+    held = max(now - lz.acquired_at, 0)
+    return clock.fmt_age(held, "h", places=1) if held >= 3600 else clock.fmt_age(held, "min")
 
 
 def _live_pairs(
@@ -803,7 +803,7 @@ def plan_retarget(
             f"{item_id} is claimed, so its globs are its lease: {text}. The globs were not "
             f"changed; your lease stays as it is and the request is recorded as waiting. "
             f"Do not poll. Try narrower globs: drop the overlapping ones"
-            f"{' (' + ','.join(keep) + ' would be accepted)' if keep and keep != globs else ''}, "
+            f"{' (' + ','.join(keep) + ' would be accepted)' if keep else ''}, "
             f"name the exact files {other_id}'s holder does not change, or ask again when "
             f"{other_id} is done."
         )
