@@ -19,12 +19,15 @@ REVIEWED_PATHS_FIELD = "reviewed_paths"
 
 
 def path_snapshot(wt: Path | str, paths: Iterable[str]) -> dict[str, str] | None:
-    """{path: "mode oid"} of ``paths`` as ``wt`` holds them (a path it lacks is left out), or
-    None when the tree cannot be read."""
+    """{path: "mode oid"} of ``paths`` as ``wt`` holds them, or None when the tree cannot be
+    read. A path ``wt`` lacks (deleted) is "": absent is a state to compare, not a key to
+    drop, or a file deleted after the round would match a snapshot that never named it."""
     entries = GE.worktree_entries(wt)
     if entries is None:
         return None
-    return {p: f"{entries[p][0]} {entries[p][1]}" for p in sorted(set(paths)) if p in entries}
+    return {
+        p: f"{entries[p][0]} {entries[p][1]}" if p in entries else "" for p in sorted(set(paths))
+    }
 
 
 def snapshot_differing(
