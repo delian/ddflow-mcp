@@ -392,3 +392,12 @@ def test_a_rule_file_changed_on_the_base_counts(forked):
     _land(repo, ".ddflow/rules/r-new.toml", 'id = "r-new"\n')
     code, msg = E.check_drift(repo, _cfg(), here=wt)
     assert code == 1 and ".ddflow/rules/r-new.toml" in msg, msg
+
+
+def test_the_refusal_names_the_one_supported_command(forked):
+    """B-stale-rules-escape-needs-file-copy: a dirty tree cannot `git merge`, and a hard
+    reset is hook-blocked; the refusal must name `ddflow sync --keep-local`."""
+    repo, wt = forked
+    _land(repo, "AGENTS.md", "# rules v2\n")
+    r = _commit_in(wt)
+    assert r.returncode != 0 and "ddflow sync --keep-local" in r.stderr, r.stderr
