@@ -15,10 +15,10 @@ from pathlib import Path
 from . import evidence as GE
 
 #: The evidence field a review round carries.
-FIELD = "reviewed_paths"
+REVIEWED_PATHS_FIELD = "reviewed_paths"
 
 
-def snapshot(wt: Path | str, paths: Iterable[str]) -> dict[str, str] | None:
+def path_snapshot(wt: Path | str, paths: Iterable[str]) -> dict[str, str] | None:
     """{path: "mode oid"} of ``paths`` as ``wt`` holds them (a path it lacks is left out), or
     None when the tree cannot be read."""
     entries = GE.worktree_entries(wt)
@@ -27,12 +27,12 @@ def snapshot(wt: Path | str, paths: Iterable[str]) -> dict[str, str] | None:
     return {p: f"{entries[p][0]} {entries[p][1]}" for p in sorted(set(paths)) if p in entries}
 
 
-def differing(
+def snapshot_differing(
     recorded: dict[str, str], wt: Path | str, now_changed: Iterable[str]
 ) -> list[str] | None:
     """The paths whose content differs between the round's ``recorded`` snapshot and ``wt``
     now, over the recorded paths and ``now_changed``; None when ``wt`` cannot be read."""
-    now = snapshot(wt, [*recorded, *now_changed])
+    now = path_snapshot(wt, [*recorded, *now_changed])
     if now is None:
         return None
     return sorted(p for p in recorded.keys() | now.keys() if recorded.get(p) != now.get(p))
