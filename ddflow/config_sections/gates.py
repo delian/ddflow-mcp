@@ -34,6 +34,10 @@ class GatesConfig:
         factory=lambda: ["rules", "implement", "standards", "dedupe", "merge"],
         doc="Ordered gate ids a DOC item passes through (`task add --kind doc`): documents and generated output, so no unit_tests, critic or bug hunt. `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when they appear here.",
     )
+    doc_globs: list[str] = knob(
+        factory=lambda: ["docs/**", "*.md", "**/*.md"],
+        doc="A TASK whose ACTUAL changed paths ALL fall inside these runs `doc_pipeline` and needs no cross-family reviewer: a research or documentation task made without `--kind doc` (the MCP `task_add` has none) would otherwise need `unit_tests` and an independent reviewer for work that changed no code. The diff decides, never the declared globs (a required gate is not excused by what a task says it will touch); with no readable diff the task pipeline applies. One path outside them keeps the task pipeline. Empty turns it off.",
+    )
     phase_pipeline: list[str] = knob(
         factory=lambda: [
             "research",

@@ -18,7 +18,7 @@ def _ahead(repo, cfg, diff):
 
 def test_an_excused_required_gate_is_not_ahead(repo):
     cfg = _setup(repo)
-    _worktree_with_change(repo, "docs/x.md")
+    _worktree_with_change(repo, "lib/x.py")
     st = _state(repo)
     ahead = _ahead(repo, cfg, lambda: CM.changed_paths(repo, st.items["T1"]))
     assert "unit_tests" not in ahead, ahead
@@ -28,7 +28,7 @@ def test_an_excused_required_gate_is_not_ahead(repo):
 def test_block_policy_does_not_refuse_on_an_excused_gate(repo):
     _setup(repo)
     run_cli(repo, "config", "--set", "gates.enforce_order", "block")
-    _worktree_with_change(repo, "docs/x.md")
+    _worktree_with_change(repo, "lib/x.py")
     for g in ("research", "rules", "implement", "rubber_duck", "critic", "standards"):
         code, out, err = run_cli(repo, "gate", "skip", "T1", g, "--reason", "t", agent="a1")
         assert code == 0, out + err
@@ -50,7 +50,7 @@ def test_block_policy_does_not_refuse_on_an_excused_gate(repo):
 def test_block_policy_still_refuses_on_a_gate_the_diff_does_not_excuse(repo):
     _setup(repo)
     run_cli(repo, "config", "--set", "gates.enforce_order", "block")
-    _worktree_with_change(repo, "docs/x.md")
+    _worktree_with_change(repo, "lib/x.py")
     code, out, err = run_cli(
         repo,
         "gate",

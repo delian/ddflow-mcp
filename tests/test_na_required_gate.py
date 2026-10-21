@@ -75,16 +75,16 @@ def test_a_diff_that_touches_the_gate_paths_keeps_it_owed_whatever_the_globs_say
 
 def test_a_diff_that_misses_the_patterns_excuses_the_required_gate_with_evidence(repo):
     cfg = _setup(repo)
-    _worktree_with_change(repo, "docs/x.md")
+    _worktree_with_change(repo, "lib/x.py")
     st = _state(repo)
     s = G.status(
         st, cfg, "T1", G.load_gates(repo, cfg), diff=lambda: CM.changed_paths(repo, st.items["T1"])
     )
     why = s.not_applicable.get("unit_tests", "")
-    assert "src/**" in why and "docs/x.md" in why, s.not_applicable
+    assert "src/**" in why and "lib/x.py" in why, s.not_applicable
     v = CM.verdict(st, cfg, "T1", repo=repo)
     assert not any("unit_tests" in b for b in v.blockers), v.blockers
-    assert any("unit_tests" in n and "docs/x.md" in n for n in v.na_evidence), v.na_evidence
+    assert any("unit_tests" in n and "lib/x.py" in n for n in v.na_evidence), v.na_evidence
 
 
 def test_an_unreadable_diff_never_excuses_a_required_gate(repo):
@@ -118,7 +118,7 @@ def test_brief_keeps_the_required_gate_in_gates_remaining(repo):
 def test_brief_drops_the_required_gate_when_the_actual_diff_misses_it(repo):
     """The brief's `diff` wiring, excusing direction: a docs-only change excuses the gate."""
     _setup(repo)
-    _worktree_with_change(repo, "docs/x.md")
+    _worktree_with_change(repo, "lib/x.py")
     out = run_cli(repo, "brief", "--item", "T1", agent="a1")[1]
     remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
     assert "unit_tests" not in remaining, remaining
