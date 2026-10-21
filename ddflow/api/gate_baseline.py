@@ -9,12 +9,20 @@ from typing import Any
 
 from ..infra import worktree as W
 from ..services.gates import baseline_red as BR
+from . import gate_passed_failures as PF
 from .knowledge.bugs import bug_found
 
 
 def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tuple[str, str]:
     """``(outcome, reason)``: ``partial`` plus the baseline-red reason when every failing
-    test fails on the base too, else ``result`` and "". Notes the check in ``ev``."""
+    test fails on the base too, else ``result`` and "". Notes the check in ``ev``.
+
+    A command that exited 0 over output listing failing tests is settled first
+    (`gate_passed_failures`): those tests are run alone, and without a passing rerun the gate
+    is not ``passed``."""
+    result, why = PF.apply(repo, gdef, result, ev, rerun)
+    if why or result != "failed":  # settled by the rerun: the base has nothing to add
+        return result, why
     ids = BR.candidate_ids(gate, gdef.command, ev, fail_fast) if result == "failed" else []
     if not ids:
         return result, ""

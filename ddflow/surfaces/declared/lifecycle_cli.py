@@ -161,12 +161,22 @@ def run_shown(out) -> bool:
     return out.exit != REFUSED and (bool(out.data.get("outcome")) or out.exit == OK)
 
 
+def _without_own_verdict(tail: str, gate: str) -> str:
+    """``tail`` minus a last line that only says ``<gate>: passed`` (the nested `ddflow ci`
+    prints one): the log carries ONE verdict, the gate's own, which also says what was
+    rerun (B-ci-gate-prints-passed-with-failing-tests)."""
+    lines = tail.rstrip().splitlines()
+    if lines and lines[-1].strip().lower() == f"{gate}: passed".lower():
+        return "\n".join(lines[:-1])
+    return tail
+
+
 def run_text(out, a) -> str:
     ev = out.data.get("evidence") or {}
     head = f"{a['gate']}: {out.data['outcome'].upper()}" + (
         f" — {ev['reason']}" if ev.get("reason") else ""
     )
-    tail = ev.get("tail", "")
+    tail = _without_own_verdict(ev.get("tail", ""), a["gate"])
     body = f"{tail[-1200:]}\n{head}" if tail else head
     # Which tests failed and why: the tail is the END of the output, and under xdist the
     # failures are not at the end (B-uc-gate-failure-evidence).
