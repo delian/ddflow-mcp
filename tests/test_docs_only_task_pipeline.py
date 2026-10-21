@@ -309,3 +309,36 @@ def test_a_research_item_with_a_cited_docs_commit_runs_the_doc_pipeline(repo):
     st = _state(repo)
     s = G.status(st, cfg, "R1", None, diff=lambda: CO.changed_paths(repo, st.items["R1"]))
     assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+
+
+def test_update_landed_with_new_globs_checks_the_new_globs(repo):
+    """critic: `--globs docs/** --landed c` is judged against the globs the edit sets."""
+    _unmerged_task(repo, "src/**")
+    sha = _commit(repo, "docs/note.md", "some doc commit")
+    code, out, err = run_cli(repo, "update", "T1", "--landed", sha)
+    assert code != 0, out + err
+    code, out, err = run_cli(repo, "update", "T1", "--globs", "docs/**", "--landed", sha)
+    assert code == 0, out + err
+    assert _state(repo).items["T1"].landed_after == sha
+
+
+def test_update_landed_accepts_a_root_commit(repo):
+    _unmerged_task(repo, "README.md")
+    root = _git(repo, "rev-list", "--max-parents=0", "HEAD").splitlines()[-1]
+    _code, out, err = run_cli(repo, "update", "T1", "--landed", root)
+    # whatever the root commit holds, it must be read, not refused for having no parent
+    assert "no parent" not in out + err and "not an ancestor" not in out + err, out + err
+
+
+def test_the_real_diffless_callers_use_the_diff_pipeline(repo):
+    """critic: the merge queue's checks and test scope's ci question see the doc pipeline."""
+    from ddflow.api import mergequeue_run as MR
+    from ddflow.services import testscope as TSC
+
+    _unmerged_task(repo, "docs/note.md")
+    _commit(repo, "docs/note.md", "merge T1: the note")
+    cfg = Config.load(repo)
+    it = _state(repo).items["T1"]
+    # no ci/unit_tests in a docs-only pipeline: nothing is run (a task pipeline would run ci)
+    assert MR._run_checks(repo, cfg, it, None, {}, unit_tests=True, timeout_s=1, agent="a") == ""
+    assert "ci" not in TSC._pipeline(cfg, it, repo)
