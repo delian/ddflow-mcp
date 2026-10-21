@@ -99,3 +99,11 @@ def test_holder_on_another_release_line_is_no_clash(repo):
     st.items["H1"].line = "v9"
     clash = L._clash_text(log, cfg, st, st.items["M1"], ["pkg/gates/x.py"], time.time())
     assert clash is None
+
+
+def test_a_shared_file_the_holder_changed_is_inert(repo, monkeypatch):
+    _setup(repo)
+    monkeypatch.setattr(L, "holder_changed_paths", lambda log, item: ["pkg/gates/CHANGELOG.md"])
+    monkeypatch.setattr(L, "shared_globs", lambda cfg: ["pkg/gates/CHANGELOG.md"])
+    ok = AI.update(repo, "M1", AI.ItemEdit(globs=["mine.py", "pkg/gates/**"]), agent=ME)
+    assert ok.ok, ok.reason
