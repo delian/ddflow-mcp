@@ -99,3 +99,14 @@ def test_a_new_fragment_another_agent_holds_is_refused(repo, cfg, monkeypatch):
     monkeypatch.chdir(a)
     code, msg = E.check_commit(repo, cfg, agent="ag-a")
     assert code == 1 and "held by" in msg, msg
+
+
+def test_a_fix_task_commits_its_new_regression_test_without_widening(repo, cfg, monkeypatch):
+    """B-fixtask-globs-omit-test: the test a fix task adds is outside its source globs."""
+    assert run_cli(repo, "init")[0] == 0
+    cfg.enforce.commit_without_lease = "block"
+    a = _task(repo, cfg, "TA", "ag-a", "src/a/*")
+    _stage(a, "tests/test_regression_for_a.py", "def test_x(): ...\n")
+    monkeypatch.chdir(a)
+    code, msg = E.check_commit(repo, cfg, agent="ag-a")
+    assert code == 0, msg
