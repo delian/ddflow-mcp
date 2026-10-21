@@ -12,7 +12,7 @@ Evidence: [mcp-client-matrix.md](research/mcp-client-matrix.md) (parts 1 and 2) 
 
 ## 2. The five-rung soft/hard rule (D-soft-upgrade-rule)
 
-An upgrade is SOFT when any of: the interface digest is unchanged; the client honours `list_changed`; facade mode (`ddflow_search` / `ddflow_call`) is on.
+An upgrade is SOFT when any of: the interface digest is unchanged; the client honours `list_changed`; facade mode (`ddflow_search` / `ddflow_call`) is on; or the change is purely additive (rung 3: new tools appear after a restart for clients that ignore `list_changed`).
 
 1. digest unchanged: soft, nothing to announce.
 2. client honours `list_changed`: soft, announce.
