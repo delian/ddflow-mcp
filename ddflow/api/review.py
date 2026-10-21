@@ -42,6 +42,7 @@ from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ..services.enforce import SELF_MANAGED
+from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
@@ -405,7 +406,9 @@ def triage(
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
-    settled = _settle_after_cap(log, cfg, st.items[item], gate, counts)
+    settled = _settle_after_cap(
+        log, cfg, st.items[item], gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
+    )
     return O.ok(
         "review.triage",
         id=item,
@@ -418,7 +421,44 @@ def triage(
     )
 
 
-def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
+def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
+    """Why ``gate``'s recorded review round cannot be passed on triage, or "" (bug B835d22b138).
+    A triage settles the findings of THAT round; recording the gate passed on it once the
+    code has moved on would put a pass on work no reviewer saw. Fails closed: a round that
+    names no tree, or a tree that cannot be read now, cannot show it reviewed what the item
+    holds, and a pass must name the head it reviewed."""
+    it = st.items.get(item)
+    rec = it.gates.get(gate) if it else None
+    if rec is None:
+        return ""
+    ev = rec.evidence or {}
+    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
+    wt, _held = item_tree(repo, cfg, st, it, None)
+    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
+    if not was and dirt == "clean" and base and wt is not None and wt.exists():
+        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
+    now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
+    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
+    redo = (
+        f"the review budget is spent: ask the operator for one more round on the current tree "
+        f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
+        if spent
+        else f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
+        "current tree"
+    )
+    if not was:
+        return f"the round names no tree it reviewed; {redo}"
+    if not now:
+        return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
+    if was != now:
+        return (
+            f"the round reviewed {(ev.get('tree_sha') or '')[:19]}, and {item} holds other "
+            f"content now; {redo}"
+        )
+    return ""
+
+
+def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
 
@@ -433,6 +473,8 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
     rec = it.gates.get(gate)
     if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
         return ""
+    if stale:
+        return f"{gate} stays {rec.outcome}: {stale}"
     if counts.get("untriaged", 1):
         return (
             f"the review budget is spent ({used} of {cap} rounds) and "

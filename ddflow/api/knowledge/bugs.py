@@ -14,7 +14,7 @@ from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
 from ...services import reprobundle as RB
-from ...services.bug_globs import inherit_globs
+from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
@@ -64,7 +64,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     A bug is an item in the queue (B-bugs-as-items): unless ``no_task`` (a bug fixed in
     the commit that found it) or ``[bugs].file_task`` is off, the same transaction files
     its fix task -- `_file_fix_task` -- and the reply carries ``fix_task``. ``globs`` are
-    the fix task's files; absent, the item's. An OPEN bug-fix task named as ``item`` is
+    the fix task's files, kept verbatim; absent, the item's that exist in the tree. An OPEN bug-fix task named as ``item`` is
     the fix itself and nothing new is filed."""
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
@@ -238,8 +238,8 @@ def _file_fix_task(
     """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
-    `bugs_first` and gitflow both see it), under the item's open phase -- else the standing
-    `[bugs] phase`, made on first use -- carrying ``globs`` or the item's, the item's
+    `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
+    use, never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
     transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
@@ -251,31 +251,31 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. Only the parent needs an OPEN phase.
+    # globs are what makes a feature on them wait. The parent is the standing bugs phase.
     src = st.items.get(item) if item else None
-    parent = _open_phase_of(st, item)
+    # Never the item's own phase: a fix task there would hold that phase open and block its
+    # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
     phase_made = ""
-    if not parent:
-        standing = st.items.get(cfg.bugs.phase)
-        if standing is None or standing.removed:
-            phase_made = cfg.bugs.phase
-            log.append(
-                "phase.added",
-                phase_made,
-                {
-                    "title": "Bugs",
-                    "needs": [],
-                    "globs": [],
-                    "body": "Fix tasks for bugs found outside any open phase (`bug found`).",
-                    "tags": [],
-                    "priority": DEFAULT_PRIORITY,
-                    "line": "",
-                },
-            )
-            st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
-            parent = phase_made
-        else:
-            parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
+    standing = st.items.get(cfg.bugs.phase)
+    if standing is None or standing.removed:
+        phase_made = cfg.bugs.phase
+        log.append(
+            "phase.added",
+            phase_made,
+            {
+                "title": "Bugs",
+                "needs": [],
+                "globs": [],
+                "body": "Fix tasks for bugs filed by `bug found`.",
+                "tags": [],
+                "priority": DEFAULT_PRIORITY,
+                "line": "",
+            },
+        )
+        st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
+        parent = phase_made
+    else:
+        parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
@@ -290,14 +290,17 @@ def _file_fix_task(
         f"`ddflow complete {tid} --regression-test <test>` closes the bug with the task "
         f"(or `ddflow bug fixed {bug_id} --regression-test <test>` first)."
     )
+    kept, dropped = fix_task_globs(
+        log.root, globs, src.globs if src else [], summary, tool_bug=scope == "ddflow"
+    )
+    if dropped:
+        body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
     draft = TaskDraft(
         tid,
         parent=parent,
         title=full_title,
         needs=[],
-        globs=GS.parse(globs)
-        if globs
-        else inherit_globs(src.globs if src else [], summary, tool_bug=scope == "ddflow"),
+        globs=kept,
         body=body,
         tags=[tag],
         # the item's own priority when it set one; the bug band when it sits at the generic default

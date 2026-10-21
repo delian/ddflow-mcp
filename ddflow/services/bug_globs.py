@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 from fnmatch import fnmatch
+from pathlib import Path
 from posixpath import basename
 
 from ..config import Config
+from ..core import globspec as GS
 from ..core.model import State
 from .completion import fixes_of
 
@@ -54,3 +56,32 @@ def inherit_globs(source_globs: list[str], text: str, *, tool_bug: bool = False)
     if not named:
         return list(source_globs)
     return [g for g in source_globs if any(_names(p, g) for p in named)]
+
+
+def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
+    """``(kept, dropped)``: the globs that name something in the tree at ``root`` (a path
+    that exists, or a pattern that matches one), and those that name nothing.
+
+    A fix task's globs protect files; one guessed from a bug's text that matches no file
+    protects nothing and sends the implementer off to widen it (Be305b7d6ea)."""
+    kept: list[str] = []
+    dropped: list[str] = []
+    for g in globs:
+        rel = g.lstrip("/")  # `/a.md` is anchored to the repo root, not the host's
+        try:
+            hit = (root / rel).exists() if not any(c in rel for c in "*?[") else any(root.glob(rel))
+        except (ValueError, OSError, NotImplementedError):
+            hit = True  # could not check: keep it, never call an unchecked glob empty
+        (kept if hit else dropped).append(g)
+    return kept, dropped
+
+
+def fix_task_globs(
+    root: Path, globs: str, source_globs: list[str], text: str, *, tool_bug: bool = False
+) -> tuple[list[str], list[str]]:
+    """``(kept, dropped)`` for a fix task: the reporter's ``globs`` verbatim (an explicit
+    scope may name a file the fix creates), else the ones inherited from the source item,
+    cut to those that exist in the tree (only a guess can be wrong about the tree)."""
+    if globs:
+        return GS.parse(globs), []
+    return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
