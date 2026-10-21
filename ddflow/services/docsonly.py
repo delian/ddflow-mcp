@@ -18,8 +18,11 @@ def diff_is_docs_only(item: Item, cfg: Config, paths: list[str] | None) -> bool:
     the MCP, which has no `--kind`, has no code for `unit_tests` or an independent reviewer to
     judge (B-research-task-cannot-complete-docs-only). The ACTUAL diff decides, never the
     declared globs (B-na-required-gate): no readable diff, an empty one, a promotion and a
-    phase are never docs-only."""
-    if item.kind != "task" or item.promote_to or not paths or not cfg.gates.doc_globs:
+    phase are never docs-only. A `research` item whose kind the project pinned in
+    `[gates].kind_pipelines` keeps that pipeline."""
+    if item.kind not in ("task", "research") or item.kind in cfg.gates.kind_pipelines:
+        return False
+    if item.promote_to or not paths or not cfg.gates.doc_globs:
         return False
     return all(any(inside(p, d) for d in cfg.gates.doc_globs) for p in paths)
 
