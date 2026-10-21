@@ -4,9 +4,9 @@ The default pre-push command is `pre-commit run --hook-stage pre-push --all-file
 `tests` hook runs the whole suite (about 12000 tests). For ONE item the run skips that hook
 and runs the tests its change reaches instead -- the same selector the unit_tests gate and
 `ddflow tests --item` use (`testselect`), with the same hub cut, budget and whole-suite
-fallbacks. The whole suite stays for `--full`, the merge queue integrator (a batch), a ref that
-is no item, and every change the selector cannot map. The scope is recorded as one marker line
-in the run's output, from which the `ci` gate's evidence takes it (`ci_marker`).
+fallbacks. The whole suite stays for `--full`, the merge queue integrator (a batch) and every
+change the selector cannot map. The scope is recorded as one marker line in the run's output,
+from which the `ci` gate's evidence takes it (`ci_marker`).
 """
 
 from __future__ import annotations

@@ -114,7 +114,9 @@ def run(
     is being run BY that gate, which records the outcome itself. ``log_to`` receives the whole
     output of the command (the integrator keeps it for a parked entry). An item's run takes
     only the tests its change reaches (`[ci].tests_scope`, D-test-economy-r2); ``full`` (the
-    integrator's batch, `--full`) takes the whole suite, and so does a ref that is no item."""
+    integrator's batch, `--full`) takes the whole suite. A ref that is no item (a bare sha, a
+    branch whose item is gone) takes the selected tests too: the selection needs only the diff
+    against the base (B-ci-selected-runs-full-suite); it just records no gate."""
     log, cfg, st = _load(repo, agent)
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
@@ -123,7 +125,7 @@ def run(
         ref = st.items[ref].branch
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
-        for_item=bool(item), full=full, tick=lease_tick(log, cfg, st, item),
+        for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
     )  # fmt: skip
     data = res.as_data()
     if res.scope:
