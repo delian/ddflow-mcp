@@ -2472,14 +2472,16 @@
 # ---
 # name: test_help[ddflow sync]
   '''
-  usage: ddflow sync [-h] [--check] [item]
+  usage: ddflow sync [-h] [--check] [--keep-local] [item]
   
   positional arguments:
-    item        The item (default: the item whose worktree this is).
+    item          The item (default: the item whose worktree this is).
   
   options:
-    -h, --help  show this help message and exit
-    --check     Only measure the drift; merge nothing.
+    -h, --help    show this help message and exit
+    --check       Only measure the drift; merge nothing.
+    --keep-local  Merge although the tree has uncommitted work: it is set aside (a tagged stash,
+                  untracked files included), the merge runs, and the work is put back.
   
   '''
 # ---

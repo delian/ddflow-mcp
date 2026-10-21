@@ -8,6 +8,9 @@ any OTHER conflict aborts the merge, so the branch is left exactly as it was.
 
 from __future__ import annotations
 
+import os
+import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +34,9 @@ class SyncResult:
     detail: str = ""
     #: False only when `git merge --abort` itself failed after a conflict.
     aborted: bool = True
+    #: `--keep-local`: the stash holding the uncommitted work when it could NOT be put back
+    #: (apply conflicted); "" when nothing was stashed or it was restored and dropped.
+    kept_stash: str = ""
 
 
 def tree_item(st, repo: Path, tree: Path):
@@ -50,7 +56,7 @@ def _last_author(tree: Path, base: str, path: str) -> str:
     return r.out if r.ok and r.out else "unknown"
 
 
-def _unsafe(out: SyncResult, tree: Path) -> SyncResult | None:
+def _unsafe(out: SyncResult, tree: Path, keep_local: bool = False) -> SyncResult | None:
     """The refusal that stops a merge before it starts, or None when the tree is safe."""
     if W.merging(tree) is not False:
         return _stop(
@@ -59,10 +65,75 @@ def _unsafe(out: SyncResult, tree: Path) -> SyncResult | None:
     st = G.status(tree, untracked="no")
     if st is None:
         return _stop(out, "refused", detail="git could not read the working tree status")
-    if st:
+    if st and not keep_local:
         dirty = [e.path for e in st]
-        return _stop(out, "refused", dirty=dirty, detail="uncommitted changes; commit them first")
+        return _stop(
+            out,
+            "refused",
+            dirty=dirty,
+            detail=(
+                "uncommitted changes; commit them first, or `ddflow sync --keep-local` "
+                "merges anyway and puts them back"
+            ),
+        )
     return None
+
+
+def _stash_find(tree: Path, tag: str) -> tuple[str, str]:
+    """(sha, ``stash@{n}``) of the stash entry named ``tag``, or ("", "")."""
+    r = W.git(tree, "stash", "list", "--format=%H %gd %gs")
+    for line in r.out.splitlines() if r.ok else ():
+        sha, ref, subject = [*line.split(" ", 2), "", ""][:3]
+        if tag in subject or tag == sha:
+            return sha, ref
+    return "", ""
+
+
+def _stash_away(tree: Path, tag: str) -> str:
+    """Stash tracked, staged and untracked work under ``tag``; "" when there was none,
+    else the entry's sha. Never a bare stash: the stack is shared by every worktree, so the
+    entry is found again BY TAG (another session may push meanwhile)."""
+    r = W.git(tree, "stash", "push", "-u", "-m", tag)
+    if not r.ok:
+        raise RuntimeError(r.err or r.out)
+    return _stash_find(tree, tag)[0]
+
+
+def _stash_back(tree: Path, tag: str, sha: str) -> str:
+    """Re-apply the stash ``sha`` and drop the entry named ``tag``. "" when restored, else
+    why not -- the entry then stays, holding the work."""
+    r = W.git(tree, "stash", "apply", "--index", sha)  # staged stays staged
+    if not r.ok:  # e.g. a conflict, or an index the merge made impossible: plain apply
+        r = W.git(tree, "stash", "apply", sha)
+    if not r.ok:
+        return r.err or r.out or "git stash apply failed"
+    _sha, ref = _stash_find(tree, tag)
+    if ref:
+        _drop(tree, ref, sha)
+    return ""
+
+
+def _drop(tree: Path, ref: str, sha: str) -> None:
+    """Drop the stash entry ``sha``, first trying ``ref`` (where it was found). ``stash@{n}``
+    shifts when another worktree pushes between lookup and drop, so what git says it dropped
+    is checked every time: a stranger's entry taken by mistake is stored back under its own
+    message, and ours is looked up again, until ours is the one gone (bounded)."""
+    for _ in range(5):
+        r = W.git(tree, "stash", "drop", ref)
+        if not r.ok:  # the selector went stale (an entry below it was dropped): by sha
+            _sha, ref = _stash_find(tree, sha)
+            if not ref:
+                return
+            continue
+        got = re.search(r"\(([0-9a-f]{40,64})\)", r.out)
+        if not got or got.group(1) == sha:
+            return
+        was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
+        message = was.out if was.ok and was.out else "restored by ddflow sync --keep-local"
+        W.git(tree, "stash", "store", "-m", message, got.group(1))
+        _sha, ref = _stash_find(tree, sha)  # ours moved: by its sha now
+        if not ref:
+            return
 
 
 def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
@@ -87,7 +158,16 @@ def _failed_merge(out: SyncResult, tree: Path, base: str, r) -> SyncResult:
     return _stop(out, "conflict", detail=detail)
 
 
-def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: bool) -> SyncResult:
+def sync(
+    repo: Path,
+    cfg,
+    tree: Path,
+    base: str,
+    globs: list[str],
+    *,
+    check: bool,
+    keep_local: bool = False,
+) -> SyncResult:
     rep = D.measure(repo, tree, base, cfg=cfg, globs=globs)
     if rep.behind is None:
         return SyncResult(rep.base, "unknown", None, detail=rep.detail)
@@ -96,16 +176,39 @@ def sync(repo: Path, cfg, tree: Path, base: str, globs: list[str], *, check: boo
     out = SyncResult(rep.base, "behind", rep.behind, len(rep.relevant))
     if check:
         return out
-    if (refusal := _unsafe(out, tree)) is not None:
+    if (refusal := _unsafe(out, tree, keep_local)) is not None:
         return refusal
+    tag = ""
+    sha = ""
+    if keep_local:
+        tag = f"ddflow-sync-keep-local-{os.getpid()}-{time.time_ns()}"
+        try:
+            sha = _stash_away(tree, tag)
+        except RuntimeError as e:
+            return _stop(out, "refused", detail=f"could not set the uncommitted work aside: {e}")
     r = W.git(tree, "merge", "--no-edit", rep.base)
     if not r.ok:
-        return _failed_merge(out, tree, rep.base, r)
+        out = _failed_merge(out, tree, rep.base, r)
+        return _restore(out, tree, tag, sha)
     out.status = "merged"
+    out = _restore(out, tree, tag, sha)
     moved = {p for c in rep.commits for p in c.paths}
     out.merged_pins = sorted(
         f for f in set(pin_files(repo, cfg)) if f in moved or _inside_dir(f, moved)
     )
+    return out
+
+
+def _restore(out: SyncResult, tree: Path, tag: str, sha: str) -> SyncResult:
+    if not sha:
+        return out
+    if W.merging(tree) is not False:  # an abort that failed: the stash stays, untouched
+        out.kept_stash = sha
+        return out
+    why = _stash_back(tree, tag, sha)
+    if why:
+        out.kept_stash = sha
+        out.detail += f"\nputting your uncommitted work back failed: {why.strip()}"
     return out
 
 

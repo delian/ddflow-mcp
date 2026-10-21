@@ -3486,6 +3486,10 @@
           "type": "boolean",
           "description": "Only measure the drift; merge nothing."
          },
+         "keep_local": {
+          "type": "boolean",
+          "description": "Merge although the tree has uncommitted work: it is set aside (a tagged stash, untracked files included), the merge runs, and the work is put back."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
