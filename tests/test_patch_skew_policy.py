@@ -322,3 +322,14 @@ def test_pins_regenerate_only_is_refused_for_an_older_binary_too(repo: Path):
     _stamp(repo, "0.5.7")
     out = PF.pins_regenerate(repo, start=repo, agent="me", only="anything")
     assert out.exit == 3 and "0.5.7" in out.reason
+
+
+def test_a_linked_worktree_post_merge_skip_is_not_refused(repo: Path, monkeypatch):
+    """The after-merge hook in a linked worktree writes no pins, so an older binary may
+    skip as before (roborev standards finding)."""
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    monkeypatch.setattr(PF, "_linked_worktree", lambda _r: True)
+    out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
+    assert out.exit == 0 and "skipped" in out.data["note"]
