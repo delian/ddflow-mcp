@@ -279,3 +279,19 @@ def test_two_projects_in_one_process_each_get_their_notice(
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
     EventLog(other, "me").append("phase.added", "P1", {"title": "p"})
     assert capsys.readouterr().err.count("patch skew") == 2
+
+
+def test_a_relative_root_is_told_apart_by_where_it_points(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    import shutil
+
+    a, b = tmp_path / "wa", tmp_path / "wb"
+    for d in (a, b):
+        d.mkdir()
+        shutil.copytree(repo, d / "proj")
+        _stamp(d / "proj", "0.5.7")
+    for d in (a, b):
+        monkeypatch.chdir(d)
+        EventLog(Path("proj"), "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err.count("patch skew") == 2
