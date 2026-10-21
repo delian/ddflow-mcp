@@ -303,8 +303,8 @@ def test_a_tag_that_reads_like_the_nothing_to_save_message_is_still_stashed(repo
 
     wt = _claimed(repo)
     (wt / "a.txt").write_text("mine\n")
-    assert BS._stash_away(wt, "no local changes to save")  # a stash WAS made: not ""
-    assert "no local changes to save" in _stashes(wt)
+    assert BS._stash_away(wt, "No local changes to save")  # a stash WAS made: not ""
+    assert "No local changes to save" in _stashes(wt)
 
 
 def test_a_pushed_stash_missing_from_a_successful_list_is_not_taken_for_none(repo, monkeypatch):
@@ -356,3 +356,22 @@ def test_a_tag_the_list_cannot_show_is_refused_not_taken_for_no_work(repo):
         assert "Nothing was merged" in str(e)
     else:
         assert sha, "a stash that exists was reported as no stash"
+
+
+def test_an_entry_missing_from_one_good_list_after_the_apply_is_looked_for_again(repo, monkeypatch):
+    """critic round 2: our entry exists after `stash apply`; an empty answer is not "gone"."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    real = BS._stash_find
+    calls = []
+
+    def find(tree, tag):
+        calls.append(1)
+        return ("", "") if len(calls) == 1 else real(tree, tag)
+
+    monkeypatch.setattr(BS, "_stash_find", find)
+    assert BS._stash_back(wt, "tag-mine", mine) == ""
+    assert "tag-mine" not in _stashes(wt)  # dropped, not reported done while still there

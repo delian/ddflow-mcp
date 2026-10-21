@@ -146,10 +146,10 @@ def _stash_back(tree: Path, tag: str, sha: str) -> str:
         r = W.git(tree, "stash", "apply", sha)
     if not r.ok:
         return r.err or r.out or "git stash apply failed"
-    found = _stash_find_sure(tree, tag)
+    found = _stash_find_sure(tree, tag, must_exist=True)  # it exists: apply keeps the entry
     if found is None:
         return DROP_INCOMPLETE + (
-            f"`git stash list` failed, so the entry {sha[:12]} ({tag}) was not dropped; "
+            f"`git stash list` failed or did not show the entry {sha[:12]} ({tag}), so it was not dropped; "
             "your work is back in the tree. Drop it by hand once you have checked."
         )
     if found[1]:
@@ -171,11 +171,12 @@ def _drop(tree: Path, ref: str, sha: str) -> str:
     for _ in range(5):
         r = W.git(tree, "stash", "drop", ref)
         if not r.ok:  # the selector went stale (an entry below it was dropped): by sha
-            found = _stash_find_sure(tree, sha)
+            found = _stash_find_sure(tree, sha, must_exist=True)
             if found is None:
-                return DROP_INCOMPLETE + f"`git stash list` failed; entry {sha[:12]} may remain."
-            if not found[1]:
-                return ""
+                return (
+                    DROP_INCOMPLETE
+                    + f"`git stash list` failed or did not show entry {sha[:12]}; it may remain."
+                )
             ref = found[1]
             continue
         got = re.search(r"\(([0-9a-f]{40,64})\)", r.out)
@@ -191,11 +192,12 @@ def _drop(tree: Path, ref: str, sha: str) -> str:
             f"could not be stored back ({(stored.err or stored.out).strip()}): "
             f"`git stash store -m 'restored' {got.group(1)}` puts it back."
         )
-        found = _stash_find_sure(tree, sha)  # ours moved: by its sha now
+        found = _stash_find_sure(tree, sha, must_exist=True)  # ours moved: by its sha now
         if found is None:
-            return DROP_INCOMPLETE + f"`git stash list` failed; entry {sha[:12]} may remain.{lost}"
-        if not found[1]:
-            return DROP_INCOMPLETE + lost.strip() if lost else ""
+            return (
+                DROP_INCOMPLETE
+                + f"`git stash list` failed or did not show entry {sha[:12]}; it may remain.{lost}"
+            )
         ref = found[1]
         if lost:
             return DROP_INCOMPLETE + f"entry {sha[:12]} was left in the stash.{lost}"
