@@ -270,7 +270,7 @@ def _union_params() -> tuple[Param, ...]:
 #: `ddflow list <kind>`: the CLI half of `ddflow_list` for the record kinds.
 LIST_COMMAND = Command(
     path=("list",),
-    summary="list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows)",
+    summary="list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query TEXT` is `ddflow search`",
     params=(
         Param("kind", positional=True, choices=(*_LISTS, *_OTHER_VIEWERS), help="what to list"),
         Param("query", default=None, help="the text to look for (kind search)"),
