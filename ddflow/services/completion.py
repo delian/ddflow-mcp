@@ -34,6 +34,7 @@ from . import chore as CO
 from . import gates as G
 from . import testselect as TS
 from .cadence import phase_overdue
+from .docsonly import diff_is_docs_only
 from .gates.evidence import tree_being_completed as _tree_being_completed
 
 
@@ -153,7 +154,19 @@ def _unsettled(cfg: Config, it: Item, excused, s, required) -> list[str]:
     ]
 
 
-def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excused):
+def needs_independent_reviewer(it: Item, cfg: Config, paths: list[str] | None = None) -> bool:
+    """Is a reviewer from another family required of ``it``? Only of a task that writes code:
+    not a promotion, and not a task whose ACTUAL change is documents only (`paths`), which
+    runs the doc pipeline."""
+    return (
+        cfg.agent.reviewer_family_must_differ
+        and it.kind == "task"
+        and not it.promote_to
+        and not diff_is_docs_only(it, cfg, paths)
+    )
+
+
+def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None):
     """(why, blockers): whether a reviewer from another family ran. The project's own
     reviewer gates count, as their definitions declare (B0e1330bf74).
 
@@ -163,7 +176,7 @@ def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excuse
     review gate to satisfy it with. Not for a chore either (D-chore-class): a person
     approved its file list instead."""
     ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
-    needed = cfg.agent.reviewer_family_must_differ and it.kind == "task" and not it.promote_to
+    needed = needs_independent_reviewer(it, cfg, paths)
     if needed and not ok and excused is None:
         return why, [f"reviewer independence not satisfied: {why}"]
     return why, []
@@ -270,7 +283,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
         )
 
-    v.independence, no_reviewer = _independence(state, cfg, it, model, gdefs, excused)
+    v.independence, no_reviewer = _independence(
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it)
+    )
     v.blockers += no_reviewer
 
     if s.unavailable:

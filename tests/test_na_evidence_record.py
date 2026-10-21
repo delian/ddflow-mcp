@@ -32,13 +32,13 @@ def _completed(repo):
 
 
 def test_a_diff_excused_required_gate_is_recorded_on_the_completion(repo):
-    _setup(repo, "docs/x.md")
+    _setup(repo, "lib/x.py")
     pass_pipeline(repo, "T1", omit=("unit_tests",))
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", agent="a1")
     assert code == 0, out + err
     na = _completed(repo).data.get("not_applicable")
     assert isinstance(na, dict) and set(na) == {"unit_tests"}, na
-    assert "src/**" in na["unit_tests"] and "docs/x.md" in na["unit_tests"], na
+    assert "src/**" in na["unit_tests"] and "lib/x.py" in na["unit_tests"], na
     shown = run_cli(repo, "show", "T1")[1]
     assert "not applicable on the change: unit_tests" in shown, shown
     # an older reader folds the event exactly as before
