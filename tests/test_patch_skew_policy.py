@@ -295,3 +295,22 @@ def test_a_relative_root_is_told_apart_by_where_it_points(
         monkeypatch.chdir(d)
         EventLog(Path("proj"), "me").append("phase.added", "P1", {"title": "p"})
     assert capsys.readouterr().err.count("patch skew") == 2
+
+
+def test_pins_regenerate_after_merge_is_refused_for_an_older_binary_too(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    out = PF.pins_regenerate(repo, start=repo, agent="me", after_merge=True)
+    assert out.exit == 3 and "0.5.7" in out.reason
+
+
+def test_skew_notice_off_silences_the_warn_policy_too(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.6.0")  # a minor ahead: not a patch skew, so `warn` is the path
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[upgrade]\nskew = "warn"\nskew_notice = "off"\n')
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err == ""
