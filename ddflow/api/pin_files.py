@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import outcome as O
+from ..core.events import SkewRefused
 from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import leasekeep as LK
@@ -65,6 +66,10 @@ def pins_regenerate(
         note = PM.after_merge(repo, cfg)
         _record_written(primary, repo, before, watched)
         return O.ok("pins", note=note)
+    if not check:
+        refusal = _older_binary_refusal(primary, agent)
+        if refusal:
+            return O.refused("pins", refusal)
     tick = _lease_tick(primary, agent)
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
@@ -72,6 +77,23 @@ def pins_regenerate(
     if rep.problem:
         return O.failed("pins", rep.problem)
     return _regenerate_outcome(rep, check)
+
+
+def _older_binary_refusal(primary: Path, agent: str) -> str:
+    """Why this ddflow must not re-record pins, "" when it may: the log was worked on by a
+    NEWER ddflow, whose pin outputs (brief, knob table, transcripts) this one would
+    re-record differently, a PATCH behind included (B-path-ddflow-version-skew-noise). The
+    skew policy and a recorded session override apply as for `adopt`. The message names the
+    cause: usually a stale `ddflow` on PATH, not the project's own."""
+    try:
+        log, _cfg, _st = _load(primary, agent)
+        log.check_skew()
+    except SkewRefused as exc:
+        return (
+            f"pins regenerate refused: the `ddflow` running is older than the log's "
+            f"(a stale ddflow on PATH?) and would re-record the pins differently. {exc}"
+        )
+    return ""
 
 
 def _linked_worktree(repo: Path) -> bool:

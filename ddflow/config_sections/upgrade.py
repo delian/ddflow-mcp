@@ -10,6 +10,8 @@ from ._docs import declare, knob
 
 #: What `[upgrade].skew` accepts (decision D-upgrade-skew-guard).
 UPGRADE_SKEW_POLICIES = ("refuse", "warn", "off")
+#: What `[upgrade].skew_notice` accepts (B-path-ddflow-version-skew-noise).
+UPGRADE_SKEW_NOTICES = ("once", "always", "off")
 #: What `[upgrade].backup` accepts (decision D-upgrade-backups).
 UPGRADE_BACKUPS = ("local", "snapshot", "none")
 #: What `[upgrade].config_changes` accepts (decision D-upgrade-config-changes).
@@ -35,6 +37,13 @@ class UpgradeConfig:
         doc='What happens when a ddflow OLDER than the one that last worked on this project\'s log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse` (default): the write is refused with exit 3 and the message `Upgrade ddflow-mcp to >= X` (an installed ddflow; a source checkout is told to merge main, naming the version); reads always work; an agent that cannot upgrade asks the user and, only if the user insists, reruns with `--allow-older-version --reason "..."` (CLI) or the `allow_older_version` argument (MCP), which records a `skew.overridden` event for THAT session and marks its events as written by an older version. A skew of PATCH releases only (the same minor, the same data format level, no recorded capability this ddflow lacks) is not refused: the write goes through with a one-time warning and the event is marked as written by an older version. The commands that rewrite tracked files without appending an event (`adopt`, `adopt --refresh-docs`) are still refused by any older stamp, a patch included. `warn`: write anyway and say so on stderr. `off`: no check. The older version still stamps itself, so the log records that it wrote. Only a ddflow that ships this guard can refuse: releases before it cannot.',
         choices=UPGRADE_SKEW_POLICIES,
         strictest=("refuse", "an older ddflow's write is refused"),
+    )
+
+    skew_notice: str = knob(
+        "once",
+        doc="How often the stderr notice for a write let through an older ddflow (a PATCH skew under `refuse`, or `[upgrade].skew = warn`) is said. `once` (default): once per version pair for this project on this machine (a git-ignored marker, `.ddflow/local/skew-notice.json`), so a `ddflow` on PATH older than the log does not repeat it on every call; the notice names the upgrade command. `always`: once per process, as before. `off`: never. It never touches the refusal itself, which is always shown.",
+        choices=UPGRADE_SKEW_NOTICES,
+        strictest=("always", "the notice repeats"),
     )
 
     backup: str = knob(
