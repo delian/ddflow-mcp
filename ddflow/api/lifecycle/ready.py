@@ -83,7 +83,7 @@ def next_(
         "running": [i.id for i in p.running],
         "cycles": p.cycles,
         "interrupted": p.interrupted,
-        "critical_path": critical_path(st, phase),
+        "critical_path": critical_path(st, phase, cfg),
         "finished_phases": p.finished,
         "_render": {"plan": p},
     }

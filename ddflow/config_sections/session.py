@@ -67,6 +67,10 @@ class SessionConfig:
         factory=list,
         doc="More redaction regexes, applied IN ADDITION to redact_patterns. Setting redact_patterns replaces the built-in secret patterns, so a project that copies them to add one of its own freezes them; add yours here instead -- e.g. private-network addresses, so an operator prompt naming a LAN host is masked before it reaches the committed log.",
     )
+    redact_lookup_network: bool = knob(
+        True,
+        doc="Mark private-network addresses and private host names (.lan, .local, .internal, .home.arpa) even in the event fields that are looked up rather than read (urls, paths, branches, tags, globs), which are otherwise written as given. The log is committed and pushed, so a LAN address in a pull-request url is a leak; turn this off only if such a field must keep an address byte for byte.",
+    )
     brief_max_tokens: int = knob(
         1200,
         doc="Ceiling on the session-start brief. The brief replaces reading the rulebooks and the lessons file; it must stay small or it defeats itself.",

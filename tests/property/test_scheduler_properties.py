@@ -76,13 +76,19 @@ def _deps_met(state, item_id: str) -> bool:
     its own child is met by running it -- `inherited_deps`, B43447abfc8), names a live
     item that is DONE (the default `unknown_dep_policy = "block"`; no external or
     stacked needs are generated)."""
+    item = state.items.get(item_id)
+    # A task whose globs are all documents inherits no ancestor's needs (`[schedule].
+    # docs_ignore_phase_needs`, default on); the generator's document globs are these.
+    docs_only = bool(item and item.globs) and all(
+        g in ("docs/", "README.md", "CHANGELOG.md") for g in item.globs
+    )
     own_subtree = state.descendants(item_id) | {item_id} | {a.id for a in state.ancestors(item_id)}
     seen: set[str] = set()
     cur = state.items.get(item_id)
     while cur is not None and cur.id not in seen:
         seen.add(cur.id)
         for dep in cur.needs:
-            if cur.id != item_id and dep in own_subtree:
+            if cur.id != item_id and (docs_only or dep in own_subtree):
                 continue
             d = state.items.get(dep)
             if d is None or d.removed or d.state != DONE:

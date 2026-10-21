@@ -533,7 +533,7 @@ def _superseded_run(
         (G.tree_identity(cwd), "the tree is now at"),
         (recorded, "a newer outcome is recorded on"),
     ):
-        if newer and G.superseded_by(started_on, newer, asked):
+        if newer and G.superseded_by(started_on, newer, asked, paths=(it.globs if it else None)):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
                 f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "

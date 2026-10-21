@@ -971,6 +971,13 @@
           copies them to add one of its own freezes them; add yours here instead --
           e.g. private-network addresses, so an operator prompt naming a LAN host is
           masked before it reaches the committed log.
+      session.redact_lookup_network = True   [default]
+          Mark private-network addresses and private host names (.lan, .local,
+          .internal, .home.arpa) even in the event fields that are looked up rather
+          than read (urls, paths, branches, tags, globs), which are otherwise written
+          as given. The log is committed and pushed, so a LAN address in a pull-
+          request url is a leak; turn this off only if such a field must keep an
+          address byte for byte.
       session.brief_max_tokens = 1200   [default]
           Ceiling on the session-start brief. The brief replaces reading the rulebooks
           and the lessons file; it must stay small or it defeats itself.
@@ -1130,6 +1137,14 @@
           offered); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      schedule.docs_ignore_phase_needs = True   [default]
+          A task whose declared globs are all documents (`[gates].doc_globs`), or a
+          research/doc task with no globs, does not inherit its phase's (or parent's)
+          `needs`: a research or decision note under a phase that waits on another
+          phase's code needs nothing from it, and was 'blocked' by '26 open task(s)
+          inherited from P-x', claimable only with --force. Its own `needs` and the
+          `decide` tag's rule are unchanged. `false` restores inheritance for every
+          task.
       schedule.cycle_policy = 'error'   [default]
           What to do when the dependency graph has a cycle. 'error' refuses to
           schedule, naming the cycle; 'warn' schedules the rest. An unrecognised value
@@ -1615,17 +1630,18 @@
           What the pre-commit hook does when the branch the work merges into (the
           item's recorded base, else the default branch) changed a rulebook since this
           branch forked and the change is not merged in: AGENTS.md, CLAUDE.md,
-          CLAUDE.local.md, .ddflow/config.toml, the driver docs under
-          docs/ddflow/drivers/, or any agent's native rules file. A session loads its
-          rules once, so the edit is silently ignored here until merged. 'block'
-          refuses and says `git merge <base>` then re-read the named files, 'warn'
-          prints and allows, 'off' disables. Default 'block': it is precise, and the
-          commit concluding that merge is never refused. The SessionStart hook reports
-          the same drift but only informs. An unrecognised value in a config file is
-          warned about, reported by `doctor` and falls back to 'block', the strictest
-          (the hook refuses); `config --set`, `ddflow_configure` and the environment
-          refuse it, and so does loading ddflow's own source tree, where the file and
-          the code are one commit.
+          CLAUDE.local.md, the project rules under .ddflow/rules/ (not config.toml
+          knobs, which are read live), the driver docs under docs/ddflow/drivers/, or
+          any agent's native rules file. A session loads its rules once, so the edit
+          is silently ignored here until merged. 'block' refuses and says `git merge
+          <base>` then re-read the named files, 'warn' prints and allows, 'off'
+          disables. Default 'block': it is precise, and the commit concluding that
+          merge is never refused. The SessionStart hook reports the same drift but
+          only informs. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'block', the strictest (the hook
+          refuses); `config --set`, `ddflow_configure` and the environment refuse it,
+          and so does loading ddflow's own source tree, where the file and the code
+          are one commit.
       enforce.readme_with_code = 'warn'   [default]
           What `complete`, `gate status` and `brief` do about a TASK whose diff
           changes a path in readme_code_globs but none of readme_files, with no 'docs'
