@@ -167,7 +167,12 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
     accepted that outcome (Bb999d5e20f): it is audited here, and it was not passed."""
     out = []
     for g in s.pipeline:
-        if g in required and g not in missing and it.gate_outcome(g) == GA.ACCEPTABLE:
+        if (
+            g in required
+            and g not in missing
+            and g not in s.not_applicable
+            and it.gate_outcome(g) == GA.ACCEPTABLE
+        ):
             got = GA.accepted(state, it, g)
             if got.ok:
                 out.append(

@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from types import SimpleNamespace
+
 import pytest
 from conftest import run_cli
 
@@ -123,3 +125,47 @@ def test_a_remeasured_baseline_red_needs_a_fresh_acceptance(repo):
     assert run_cli(repo, "complete", "T1")[0] != OK, "the old acceptance carried over"
     assert run_cli(repo, "approve", "T1", "unit_tests")[0] == OK
     assert run_cli(repo, "complete", "T1")[0] == OK
+
+
+def test_the_evidence_gate_run_writes_is_what_acceptance_reads(repo, monkeypatch):
+    """The real producer (`gate_baseline.apply`) nests the measurement as `baseline.red`
+    in the gate's evidence; acceptance must read exactly that shape."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.core.records import GateRecord
+    from ddflow.services import gate_accept as GA
+    from ddflow.services.gates import baseline_red as BR
+
+    monkeypatch.setattr(BR, "candidate_ids", lambda *a: ["t.py::test_x"])
+    monkeypatch.setattr(BR, "on_base", lambda *a: {"red": True, "base_sha": "abc"})
+    monkeypatch.setattr(GB, "_file", lambda *a, **k: "B1")
+    ev: dict = {}
+    it = SimpleNamespace(id="T1", base="main")
+    outcome, why = GB.apply(
+        repo,
+        None,
+        "a",
+        it,
+        "unit_tests",
+        SimpleNamespace(command="pytest"),
+        "failed",
+        ev,
+        None,
+        False,
+    )
+    assert outcome == "partial"
+    task = SimpleNamespace(
+        id="T1",
+        gates={"unit_tests": GateRecord("unit_tests", "partial", "t", "a", why, ev)},
+        gate_outcome=lambda g: "partial",
+    )
+    assert GA.refusal(task, "unit_tests") == ""
+
+
+def test_a_gate_the_diff_made_not_applicable_gets_no_acceptance_warning(repo):
+    from ddflow.services import completion as CM
+
+    _partial_item(repo)
+    assert run_cli(repo, "approve", "T1", "unit_tests")[0] == OK
+    s = SimpleNamespace(pipeline=["unit_tests"], not_applicable={"unit_tests": "docs only"})
+    st = _state(repo)
+    assert CM._accepted_warnings(st, st.items["T1"], s, {"unit_tests"}, []) == []
