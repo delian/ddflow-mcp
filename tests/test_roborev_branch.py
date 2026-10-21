@@ -277,14 +277,26 @@ def test_the_recorded_model_is_the_jobs_model_when_it_names_one(tmp_path, monkey
     assert "--model glm-5" in capsys.readouterr().out
 
 
-def test_findings_and_unknown_agent_print_no_passed_line(tmp_path, monkeypatch, capsys):
+def test_findings_print_a_failed_record_line_and_an_unknown_agent_none(
+    tmp_path, monkeypatch, capsys
+):
     repo, _log = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_AGENT", "kilo")
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
     out = capsys.readouterr().out
-    assert "--outcome passed" not in out and "kilo" in out  # the agent is still named
+    assert "--outcome passed" not in out
+    assert "standards --outcome failed" in out and "--model kilo" in out
     monkeypatch.setenv("FAKE_WAIT_EXIT", "0")
     monkeypatch.setenv("FAKE_AGENT", "")
     RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
-    assert "--outcome passed" not in capsys.readouterr().out
+    assert "standards --outcome" not in capsys.readouterr().out
+
+
+def test_the_printed_label_is_the_one_the_family_check_judges_by(tmp_path, monkeypatch):
+    from ddflow.services import roborev as RR
+
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_MODEL", "glm-5")
+    assert RB.run(repo, "main", 5).reviewer == RR.Review(7, "kilo", "glm-5").reviewer

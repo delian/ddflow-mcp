@@ -107,7 +107,10 @@ def _reviewer(exe: str, where: Path, job: int) -> str:
     `roborev.Review.reviewer`), "" when the job record cannot be read."""
     for j in _list(exe, where):
         if RR._job_id(j) == job:
-            return str(j.get("model") or j.get("agent") or "")
+            # the same name `roborev.Review.reviewer` judges the family by
+            return RR.Review(
+                job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")
+            ).reviewer
     return ""
 
 
@@ -272,9 +275,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"roborev job: {r.job}")
     if r.reviewer:
         print(f"reviewer: {r.reviewer} (the agent roborev ran; pass it as --model)")
-        if r.outcome == "clean":
+        verdict = "passed" if r.outcome == "clean" else "failed"
+        if r.outcome in ("clean", "findings"):
             print(
-                f"record: ddflow gate record <id> standards --outcome passed "
+                f"record: ddflow gate record <id> standards --outcome {verdict} "
                 f"--reviewed-sha {r.sha} --model {r.reviewer}"
             )
     if r.pending_rerun:
