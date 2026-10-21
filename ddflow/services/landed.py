@@ -89,7 +89,7 @@ def cited_paths(repo: Path, item, base: str) -> list[str] | None:
 
 def parse(repo: Path, spec: str) -> tuple[str, str] | str:
     """``(before, after)`` for ``--landed <sha>`` (the commit and its first parent) or
-    ``<before>..<after>``; else why it is not one."""
+    ``<before>..<after>`` (a root commit's "before" is the empty tree); else why it is not one."""
     spec = spec.strip()
     if ".." in spec:
         a, _, b = spec.partition("..")
@@ -100,19 +100,16 @@ def parse(repo: Path, spec: str) -> tuple[str, str] | str:
     after = W.rev(repo, spec)
     if not after:
         return f"--landed {spec!r} is not a commit here"
-    before = W.rev(repo, f"{after}^1")
-    if not before:
-        return f"--landed {spec!r} has no parent to diff against: give <before>..<after>"
-    return before, after
+    return W.rev(repo, f"{after}^1") or _EMPTY_TREE, after
 
 
 def check(repo: Path, item, base: str, before: str, after: str) -> str:
     """Why ``before..after`` may not be recorded as ``item``'s landing, or ``""``: both ends
     on ``base``, in order, and the change touching the item's declared globs."""
     for sha in (before, after):
-        if not W.git(repo, "merge-base", "--is-ancestor", sha, base).ok:
+        if sha != _EMPTY_TREE and not W.git(repo, "merge-base", "--is-ancestor", sha, base).ok:
             return f"{sha[:12]} is not an ancestor of {base}: only work that landed there counts"
-    if not W.git(repo, "merge-base", "--is-ancestor", before, after).ok:
+    if before != _EMPTY_TREE and not W.git(repo, "merge-base", "--is-ancestor", before, after).ok:
         return f"{before[:12]} is not an ancestor of {after[:12]}"
     paths = CH.changed_paths(repo, before, tip=after, include=("committed",), fork=False)
     if not paths:

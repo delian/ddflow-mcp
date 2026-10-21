@@ -80,18 +80,19 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
-    landed: dict[str, Any] = {}
-    if edit.landed is not None:
-        got = _landed_fields(repo, cfg, it, edit.landed)
-        if isinstance(got, O.Outcome):
-            return got
-        landed = got
     fields = plan_edit(cfg, st, it, edit)
     if isinstance(fields, O.Outcome):
-        if not (landed and fields.exit == O.NOTHING):
+        if not (edit.landed is not None and fields.exit == O.NOTHING):
             return fields
         fields = {}
-    fields.update(landed)
+    if edit.landed is not None:
+        # Checked against the globs this same edit leaves the item with.
+        landed = _landed_fields(
+            repo, cfg, replace(it, globs=fields.get("globs", it.globs)), edit.landed
+        )
+        if isinstance(landed, O.Outcome):
+            return landed
+        fields.update(landed)
     if edit.worktree is not None:
         return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
     return _record_update(log, cfg, it, fields, queue=edit.queue)
