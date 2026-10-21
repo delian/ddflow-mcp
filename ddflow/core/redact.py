@@ -715,27 +715,26 @@ def redact_network(text: str) -> str:
     return p.text
 
 
+def _map_leaves(value: object, fn) -> object:
+    """``value`` with ``fn`` applied to every string leaf, whatever its key."""
+    if isinstance(value, str):
+        return fn(value)
+    if isinstance(value, Mapping):
+        return {k: _map_leaves(v, fn) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_map_leaves(v, fn) for v in value]
+    return value
+
+
 def network_leaves(value: object) -> object:
     """``value`` with `redact_network` applied to every string leaf."""
-    if isinstance(value, str):
-        return redact_network(value)
-    if isinstance(value, Mapping):
-        return {k: network_leaves(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [network_leaves(v) for v in value]
-    return value
+    return _map_leaves(value, redact_network)
 
 
 def redact_leaves(value: object, redactor: Redactor) -> object:
     """``value`` with every string leaf redacted, whatever its key: the keys of a text field
     come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
-    if isinstance(value, str):
-        return redactor.text(value).text
-    if isinstance(value, Mapping):
-        return {k: redact_leaves(v, redactor) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [redact_leaves(v, redactor) for v in value]
-    return value
+    return _map_leaves(value, lambda s: redactor.text(s).text)
 
 
 def redact_event_data(
