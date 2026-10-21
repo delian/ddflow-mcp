@@ -12,19 +12,19 @@ Evidence: [mcp-client-matrix.md](research/mcp-client-matrix.md) (parts 1 and 2) 
 
 ## 2. The five-rung soft/hard rule (D-soft-upgrade-rule)
 
-An upgrade is SOFT when any of: the interface digest is unchanged; the client honours `list_changed`; facade mode (`ddflow_search` / `ddflow_call`) is on; the change is purely additive (rung 3: new tools appear after a restart for clients that ignore `list_changed`); or a changed schema of an existing tool is covered by one version of schema grace (rung 4).
+Precedence: rung 5's shim or protocol change is HARD and overrides every other rung, including a digest-unchanged or facade-on result. Otherwise an upgrade is SOFT when any of: the interface digest is unchanged; the client honours `list_changed`; facade mode (`ddflow_search` / `ddflow_call`) is on; the change is purely additive (rung 3: new tools appear after a restart for clients that ignore `list_changed`); or a changed schema of an existing tool is covered by one version of schema grace (rung 4).
 
 1. digest unchanged: soft, nothing to announce.
 2. client honours `list_changed`: soft, announce.
 3. additive change: soft for every client; new tools appear after restart for clients that ignore `list_changed`.
 4. changed schema of an existing tool: soft only if the worker accepts the previous arguments for one version (schema grace).
-5. HARD: an incompatible change to an existing tool or prompt for a client that does not honour `list_changed`, or the shim or protocol itself changed.
+5. HARD: the shim or protocol itself changed (always, overriding rungs 1-4); or an incompatible change to an existing tool or prompt for a client that does not honour `list_changed`, with facade mode off and no schema grace.
 
 Reconnect is a fallback tier only: no client lets a server request one, exit-and-respawn drops the in-flight call, and most clients keep the stale list. Rejected: treating every client that ignores `list_changed` as hard (the facade makes it soft).
 
 ## 3. Learning client capability (D-soft-upgrade-capability)
 
-Client table by `clientInfo.name`, plus the 2026-07-28 `subscriptions/listen` opt-in, plus observation: one re-fetch within 10 s of a notification means honouring; two silent notifications in different sessions means ignoring. No handshake probe (it would add a round trip and a false signal for clients that answer without acting).
+Client table by `clientInfo.name`, plus the 2026-07-28 `subscriptions/listen` opt-in, plus observation: one re-fetch within `[mcp].observe_timeout_s` (default 10) of a notification means honouring; `[mcp].observe_silent_sessions` (default 2) silent notifications in different sessions means ignoring. Both are knobs (file, CLI, MCP, prompt; `D-company-workflows`, `r-everything-configurable`). No handshake probe (it would add a round trip and a false signal for clients that answer without acting).
 
 ## Consequences
 
