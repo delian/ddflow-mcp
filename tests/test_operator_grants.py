@@ -359,10 +359,17 @@ def test_the_agents_reason_is_kept_beside_the_grant(proj):
     assert "G1" in forced and "flaky test" in forced
 
 
-def test_add_cannot_skip_the_gate_check():
-    import inspect
-
-    assert inspect.signature(GR.add).parameters["gates"].default is inspect.Parameter.empty
+def test_add_refuses_a_gate_outside_the_given_gates(proj):
+    with pytest.raises(GR.GrantRefused, match="no_such_gate"):
+        GR.add(
+            EventLog(proj, "probe"), _cfg(), item="T1", gate="no_such_gate",
+            kind="review_round", count=1, reason="r", gates={"critic"},
+        )  # fmt: skip
+    with pytest.raises(TypeError):
+        GR.add(  # type: ignore[call-arg]
+            EventLog(proj, "probe"), _cfg(), item="T1", gate="critic",
+            kind="review_round", count=1, reason="r",
+        )  # fmt: skip
 
 
 def test_a_grant_for_a_gate_gone_from_the_item_does_not_break_listing():
