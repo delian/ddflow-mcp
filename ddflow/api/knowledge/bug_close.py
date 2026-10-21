@@ -116,18 +116,9 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             "recorded so a later reader knows the pre-fix check was skipped, and why.",
             id=item,
         )
-    landing, why = _landing(repo, cfg, landed) if landed.strip() else (None, "")
+    landing, why = _landing_for(repo, cfg, landed, tests, verify_regression)
     if why:
-        return O.refused("bug.fixed", f"--landed: {why}", id=item)
-    loose = [t for t in tests if not _is_node_id(t)]
-    if landing and verify_regression and loose:
-        return O.refused(
-            "bug.fixed",
-            "--landed checks each test on the commit's first parent and on the commit, which "
-            "needs pytest node ids (path/to/test_x.py::test_name) in --regression-test; "
-            f"{'; '.join(loose)} could not be checked and would close the bug unverified.",
-            id=item,
-        )
+        return O.refused("bug.fixed", why, id=item)
     verified, verify_ev = _verify_regression(
         repo,
         cfg,
@@ -147,23 +138,15 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             f"'<why>' (recorded).",
             id=item,
         )
-    dropped: dict[str, Any] = {}
-    with log.transaction():
-        log.append(
-            "bug.fixed",
-            item,
-            {
-                "regression_test": regression_test,
-                "regression_tests": tests,
-                "lesson": lesson,
-                "regression_verified": verified,
-                **({"regression_verify": verify_ev} if verify_ev else {}),
-                **({"landed": landing[0]} if landing else {}),
-                **({"changelog": entry} if entry else {}),
-            },
-        )
-        if landing:
-            dropped = _end_fix_task_landed(log, item, landing[0])
+    payload = {
+        "regression_test": regression_test,
+        "regression_tests": tests,
+        "lesson": lesson,
+        "regression_verified": verified,
+        **({"regression_verify": verify_ev} if verify_ev else {}),
+        **({"changelog": entry} if entry else {}),
+    }
+    dropped = _record_fixed(log, item, payload, landing)
     capture: dict[str, Any] = {}
     if cfg.lessons.auto_capture_on_bug and lesson_title:
         capture = _capture_lesson(repo, log, cfg, st, item, lesson_title, lesson_rule)
@@ -185,6 +168,35 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
 def _is_node_id(test: str) -> bool:
     """A pytest node id of a python file: ``path/to/test_x.py::test_name``."""
     return "::" in test and test.split("::", 1)[0].endswith(".py")
+
+
+def _landing_for(
+    repo: Path, cfg, landed: str, tests: list[str], verify_regression: bool
+) -> tuple[tuple[str, str] | None, str]:
+    """`_landing` of ``--landed`` (none given: no landing, no refusal), plus the rule that
+    every named test must be a node id it can run on the two trees; ``(None, refusal)``."""
+    if not landed.strip():
+        return None, ""
+    landing, why = _landing(repo, cfg, landed)
+    if why:
+        return None, f"--landed: {why}"
+    loose = [t for t in tests if not _is_node_id(t)]
+    if verify_regression and loose:
+        return None, (
+            "--landed checks each test on the commit's first parent and on the commit, which "
+            "needs pytest node ids (path/to/test_x.py::test_name) in --regression-test; "
+            f"{'; '.join(loose)} could not be checked and would close the bug unverified."
+        )
+    return landing, ""
+
+
+def _record_fixed(
+    log, item: str, payload: dict[str, Any], landing: tuple[str, str] | None
+) -> dict[str, Any]:
+    """Append ``bug.fixed`` and, for a landed fix, end its fix task in the same transaction."""
+    with log.transaction():
+        log.append("bug.fixed", item, {**payload, **({"landed": landing[0]} if landing else {})})
+        return _end_fix_task_landed(log, item, landing[0]) if landing else {}
 
 
 def _landing(repo: Path, cfg, ref: str) -> tuple[tuple[str, str] | None, str]:
