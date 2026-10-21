@@ -74,6 +74,6 @@ def test_a_docs_only_task_completes_with_the_doc_gates_alone(repo):
         code, out, err = run_cli(
             repo, "gate", "record", "D1", gate, "--outcome", "passed", "--evidence", "ran it"
         )
+        assert code == 0, (gate, out, err)
     code, out, err = run_cli(repo, "complete", "D1", "--model", "claude-sonnet-5-5")
-    text = out + err
-    assert "unit_tests" not in text and "independence" not in text, text
+    assert code == 0, out + err
