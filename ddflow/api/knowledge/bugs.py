@@ -232,30 +232,11 @@ def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
     return have is not None and not have.removed
 
 
-def _file_fix_task(
-    log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
-) -> dict[str, Any]:
-    """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
-
-    The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
-    `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
-    use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first open or absent one,
-    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
-    priority and release line, and `fixes = [bug]`. Appends inside the caller's
-    transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
-    ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
-    names, or a `fix-<bug>` already in the queue.
-    """
-
-    tid = _fix_task_id(st, cfg, bug_id, item)
-    if _has_fix_task(st, cfg, bug_id, item):
-        return {"fix_task": tid, "filed": False, "phase_made": ""}
-    # A removed source still lends its files, priority and line: the bug is in those files
-    # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase, else its follow-up.
-    src = st.items.get(item) if item else None
-    # Never the item's own phase: a fix task there would hold that phase open and block its
-    # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+def _bugs_parent(log, cfg, st) -> tuple[str, str]:
+    """``(parent, phase_made)``: the open standing bugs phase for a fix task, made when
+    absent. Once the standing phase is done (nothing reopens a phase) the follow-ups
+    `<phase>-2`, `-3`, ... are tried in turn: the first open one is reused, the first
+    absent one is made. By id convention only."""
     phase_made = ""
     parent = ""
     n = 1
@@ -282,6 +263,34 @@ def _file_fix_task(
         else:
             parent = _open_phase_of(st, pid) if standing.kind == "phase" else ""
         n += 1
+    return parent, phase_made
+
+
+def _file_fix_task(
+    log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
+) -> dict[str, Any]:
+    """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
+
+    The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
+    `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
+    use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first open or absent one,
+    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
+    priority and release line, and `fixes = [bug]`. Appends inside the caller's
+    transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
+    ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
+    names, or a `fix-<bug>` already in the queue.
+    """
+
+    tid = _fix_task_id(st, cfg, bug_id, item)
+    if _has_fix_task(st, cfg, bug_id, item):
+        return {"fix_task": tid, "filed": False, "phase_made": ""}
+    # A removed source still lends its files, priority and line: the bug is in those files
+    # whether or not the item that touched them is still in the queue, and the fix task's
+    # globs are what makes a feature on them wait. The parent is the standing bugs phase, else its follow-up.
+    src = st.items.get(item) if item else None
+    # Never the item's own phase: a fix task there would hold that phase open and block its
+    # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+    parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
