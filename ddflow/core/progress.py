@@ -139,6 +139,9 @@ class ItemWork:
     state: str = "open"
     attempts: list[Attempt] = field(default_factory=list)
     gate_outcomes: dict[str, list[str]] = field(default_factory=dict)
+    #: gate -> the decisive verdicts of each round, a round opened by `gate.started`. A
+    #: failed round and the triage that settles it share a round; see `_gate_flapping`.
+    gate_rounds: dict[str, list[list[str]]] = field(default_factory=dict)
     #: gate -> (outcome, output digest, tree fingerprint) of each passed/failed run, in
     #: order. What the repeated-failure detector reads; "" where a run recorded none.
     gate_runs_evidence: dict[str, list[tuple[str, str, str]]] = field(default_factory=dict)
@@ -241,15 +244,21 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             att.ended_at = att.ended_at or _epoch(ev.ts)
             att.ended_by = "released" if kind.endswith("released") else "expired"
         rec(subj).last_touched = ev.ts
+    elif kind == "gate.started":
+        rec(subj).gate_rounds.setdefault(str(d.get("gate") or "?"), []).append([])
     elif kind.startswith("gate.") and kind.split(".", 1)[1] in GATE_OUTCOMES:
         # The membership test, not the prefix. `gate.` is a namespace and
         # `gate.out_of_order` is in it without being an outcome; matching the prefix
         # counted it as a gate run and inflated `gate_runs` for every item that ever
         # recorded one early.
         outcome = kind.split(".", 1)[1]
-        if outcome == "started":
-            return
+        gate = str(d.get("gate") or "?")
         r = rec(subj)
+        if outcome in ("passed", "failed"):
+            rounds = r.gate_rounds.setdefault(gate, [])
+            if not rounds:
+                rounds.append([])
+            rounds[-1].append(outcome)
         # What the item's gates said is `Item.gate_history`, read in `work` once the pass
         # is over; only the attempt's own tallies are counted as events go by.
         att = open_attempt.get(subj)
@@ -409,8 +418,11 @@ def _gate_flapping(tracked: dict[str, ItemWork], lc, sev: str) -> list[LoopFindi
     """A gate that keeps changing its mind. Usually a flaky test or a moving target."""
     out = []
     for r in tracked.values():
-        for gate, outcomes in r.gate_outcomes.items():
-            decisive = [o for o in outcomes if o in ("passed", "failed")]
+        for gate, rounds in r.gate_rounds.items():
+            # A round's verdict is the LAST decisive one before the next round starts: a
+            # failed review round settled by its own triage is one `passed` round, not a
+            # flip (docs/ddflow/research/gate-flapping.md).
+            decisive = [rd[-1] for rd in rounds if rd]
             flips = sum(1 for a, b in itertools.pairwise(decisive) if a != b)
             if flips < lc.max_gate_flaps:
                 continue
