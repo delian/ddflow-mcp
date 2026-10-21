@@ -378,8 +378,8 @@ In-phase waves (every need outside the phase counted as done):
 | 8 | SPEC-e2e |
 | 9 | SPEC-docs |
 
-Open outside chains lengthen three tasks and what follows them; every other task keeps its
-in-phase wave. Counting each open outside item as one step per level of its own needs (a lower
+Open outside chains lengthen two tasks and what follows them (`SPEC-gate`, `SPEC-baseline`);
+every other task keeps its in-phase wave. Counting each open outside item as one step per level of its own needs (a lower
 bound, because an open phase is counted as one step): `SPEC-gate` is at least wave 8 (it waits on
 the `B-pipe-*` chain), `SPEC-baseline` at least wave 11 (it waits on `PD-req-kind` -> `PD-trace` ->
 `PD-baseline`), so `SPEC-e2e` is at least wave 12 and `SPEC-docs` at least wave 13. `SPEC-decide`
