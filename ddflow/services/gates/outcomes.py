@@ -13,6 +13,7 @@ from ...core import blobref as B
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
+from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
@@ -544,6 +545,7 @@ def approve(
     note: str = "",
     reject: bool = False,
     reason: str = "",
+    requested_agent: str = "",
 ) -> str:
     """A PERSON clears (or refuses) a human gate. Returns the line to print.
 
@@ -560,11 +562,7 @@ def approve(
     if gdef is None:
         raise ValueError(f"no such gate {gate!r}")
     if not gdef.is_human_gate:
-        raise ValueError(
-            f"{gate!r} is not a human-approval gate, so there is nothing for a person "
-            f"to approve. Set `[gate.{gate}] human = true` in .ddflow/gates.toml if it "
-            f"should be one; otherwise use `ddflow gate record`."
-        )
+        return GA.approve(log, cfg, item_id, gate, note=note, reject=reject, agent=requested_agent)
     if reject and not reason:
         raise ValueError("a rejection must carry --reason: 'no' with no reason cannot be acted on")
 

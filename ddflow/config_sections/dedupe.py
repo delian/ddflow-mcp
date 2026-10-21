@@ -77,6 +77,11 @@ class DedupeConfig:
             else "must be an integer >= 0"
         ),
     )
+    research_task_asks: bool = knob(
+        False,
+        doc="Whether a research note and a task or phase (either added against the other) that score at or above ask_threshold make the add ask. Default false: a note about a topic and the work item that implements it are related, not duplicates, so the pair is listed and the add goes ahead (bug B-dupe-research-vs-task). Identical text still asks. Notes against notes, and tasks against tasks, always use ask_threshold.",
+        check=lambda v: "" if isinstance(v, bool) else "must be true or false",
+    )
     kinds: list[str] = knob(
         factory=lambda: list(DEDUPE_KINDS),
         members=_kinds_members,

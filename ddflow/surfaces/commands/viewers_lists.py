@@ -8,6 +8,7 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from typing import Any
 
@@ -17,8 +18,11 @@ from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
+from .identify import COMMAND as IDENTIFY
 from .reporting import cmd_bug_show
 from .viewers_search import COMMAND as SEARCH
+from .viewers_search import cmd_search
+from .viewers_sessions import cmd_session_list
 
 _HELP = {
     "state": "only rows in this state",
@@ -185,8 +189,58 @@ COMMANDS = (
 )
 
 
+#: `ddflow_list` kinds whose CLI form is a verb of its own, not a `list` filter set: the word is
+#: accepted so the two surfaces share vocabulary (Bf9b9abac5b), and answered by that verb.
+_OTHER_VIEWERS = ("session", "search")
+
+
+#: The `list` flags each such verb takes (the rest of `list`'s flags are refused, not dropped).
+_OTHER_OWN = {
+    "session": {"state", "owner", "since", "limit"},
+    "search": {"query", "state", "phase", "owner", "since", "limit"},
+}
+
+
+def _refuse(a, c: Ctx, reason: str) -> int:
+    if c.json:
+        emit_json({**empty_list(a.kind), "reason": reason})
+    print(reason, file=sys.stderr)
+    return REFUSED
+
+
+def _other_viewer(a, c: Ctx) -> int:
+    """`list session` is `session list`; `list search --query TEXT` is `ddflow search TEXT`."""
+    stray = [
+        f"--{p.name}"
+        for p in (*_union_params(), Param("query"))
+        if p.name not in _OTHER_OWN[a.kind] and getattr(a, p.name, None) not in (None, False)
+    ]
+    if stray:
+        return _refuse(
+            a, c, f"{a.kind} has no {', '.join(stray)} (`list {a.kind}` does not take it)"
+        )
+    if a.kind == "search":
+        if not a.query:
+            return _refuse(a, c, "`list search` needs `--query TEXT` (or use `ddflow search TEXT`)")
+        ns = argparse.Namespace(**vars(a))
+        ns.exact = ns.regex = False
+        ns.kind = ns.source = ""
+        for name in ("state", "phase", "owner", "since"):
+            setattr(ns, name, getattr(a, name, None) or "")
+        ns.limit = R.SEARCH_DEFAULT_LIMIT if a.limit is None else a.limit
+        return cmd_search(ns, c)
+    for name, default in (("state", ""), ("owner", ""), ("since", ""), ("limit", None)):
+        if getattr(a, name, None) is None:
+            setattr(a, name, default if default is not None else R.SESSION_DEFAULT_LIMIT)
+    return cmd_session_list(a, c)
+
+
 def cmd_list_any(a, c: Ctx) -> int:
     """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
+    if a.kind in _OTHER_VIEWERS:
+        return _other_viewer(a, c)
+    if getattr(a, "query", None) is not None:
+        return _refuse(a, c, f"{a.kind} has no --query (only `list search` takes it)")
     a.list_kind = a.kind
     own = {p.name for p in _filter_params(a.kind)}
     stray = [
@@ -216,9 +270,10 @@ def _union_params() -> tuple[Param, ...]:
 #: `ddflow list <kind>`: the CLI half of `ddflow_list` for the record kinds.
 LIST_COMMAND = Command(
     path=("list",),
-    summary="list tasks, phases, bugs, research notes or lessons (what `<kind> list` shows)",
+    summary="list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query TEXT` is `ddflow search`",
     params=(
-        Param("kind", positional=True, choices=tuple(_LISTS), help="what to list"),
+        Param("kind", positional=True, choices=(*_LISTS, *_OTHER_VIEWERS), help="what to list"),
+        Param("query", default=None, help="the text to look for (kind search)"),
         *_union_params(),
     ),
     handler=cmd_list_any,
@@ -229,7 +284,7 @@ LIST_COMMAND = Command(
 def register(s) -> None:
     """Add `list` to the task, phase, bug, lesson and research parsers already on `s`, and
     the sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
-    add_commands(s, [SEARCH, LIST_COMMAND, *COMMANDS])
+    add_commands(s, [SEARCH, IDENTIFY, LIST_COMMAND, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
     verb.choices = ["add", "list"]

@@ -189,9 +189,10 @@ def test_a_completed_item_is_never_reported_as_thrashing():
 def test_gate_flapping_is_detected():
     evs = [ev(1, "task.added", "T", {"parent": "P"})]
     for i in range(6):
+        evs.append(ev(2 + 2 * i, "gate.started", "T", {"gate": "unit_tests"}))
         evs.append(
             ev(
-                2 + i,
+                3 + 2 * i,
                 "gate.passed" if i % 2 == 0 else "gate.failed",
                 "T",
                 {"gate": "unit_tests", "reason": "x"},

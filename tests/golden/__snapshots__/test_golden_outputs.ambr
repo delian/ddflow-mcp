@@ -762,13 +762,15 @@
           `[gates].kind_pipelines.doc` replaces it. `required` gates still bind when
           they appear here.
       gates.doc_globs = ['docs/**', '*.md', '**/*.md']   [default]
-          A TASK whose ACTUAL changed paths ALL fall inside these runs `doc_pipeline`
-          and needs no cross-family reviewer: a research or documentation task made
-          without `--kind doc` (the MCP `task_add` has none) would otherwise need
-          `unit_tests` and an independent reviewer for work that changed no code. The
-          diff decides, never the declared globs (a required gate is not excused by
-          what a task says it will touch); with no readable diff the task pipeline
-          applies. One path outside them keeps the task pipeline. Empty turns it off.
+          A TASK (or `research` item) whose ACTUAL changed paths ALL fall inside these
+          runs `doc_pipeline` and needs no cross-family reviewer: a research or
+          documentation task made without `--kind doc` (the MCP `task_add` has none)
+          would otherwise need `unit_tests` and an independent reviewer for work that
+          changed no code. The diff decides, never the declared globs (a required gate
+          is not excused by what a task says it will touch); with no readable diff the
+          task pipeline applies. One path outside them keeps the task pipeline, and so
+          does a `research` item whose kind `[gates].kind_pipelines` names itself.
+          Empty turns it off.
       gates.phase_pipeline = ['research', 'tasks', 'unit_tests', 'bug_hunt', 'dedupe', 'live_test', 'corrections', 'docs', 'merge']   [default]
           Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point
           where member tasks run (in parallel where dependencies allow). 'docs'
@@ -1396,6 +1398,13 @@
           Distinct content words a record needs before a score alone makes an add ask.
           A two-word title shares most of its words with something; asking on it is
           noise. Shorter records still list candidates.
+      dedupe.research_task_asks = False   [default]
+          Whether a research note and a task or phase (either added against the other)
+          that score at or above ask_threshold make the add ask. Default false: a note
+          about a topic and the work item that implements it are related, not
+          duplicates, so the pair is listed and the add goes ahead (bug B-dupe-
+          research-vs-task). Identical text still asks. Notes against notes, and tasks
+          against tasks, always use ask_threshold.
       dedupe.kinds = ['bug', 'task', 'phase', 'lesson', 'decision', 'research', 'memory', 'rule']   [default]
           Record kinds checked on add, and offered as candidates -- across kinds, so a
           new bug is shown the open task that fixes it. Default: bug, task, phase,
@@ -2480,14 +2489,15 @@
           selected count and the cut set in the gate evidence, and runs the whole
           suite instead when the selector says so (a hub, conftest, pyproject, the
           pre-commit config, an unknown file type, or no test reaches the change);
-          full runs the whole suite. `ddflow ci run --full`, the merge queue
-          integrator (one run per batch) and a run of a ref that is no item always run
-          the whole suite. Applies to the default pre-push command only: an explicit
-          [ci].command runs as written. An unrecognised value in a config file is
-          warned about, reported by `doctor` and falls back to 'full', the strictest
-          (every item's ci run takes the whole suite); `config --set`,
-          `ddflow_configure` and the environment refuse it, and so does loading
-          ddflow's own source tree, where the file and the code are one commit.
+          full runs the whole suite. `ddflow ci run --full`, and the merge queue
+          integrator (one run per batch) always run the whole suite; a ref that is no
+          item (a bare sha) takes the same selection. Applies to the default pre-push
+          command only: an explicit [ci].command runs as written. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'full', the strictest (every item's ci run takes the whole suite);
+          `config --set`, `ddflow_configure` and the environment refuse it, and so
+          does loading ddflow's own source tree, where the file and the code are one
+          commit.
       ci.always_tests = ['tests/test_constants_ratchet.py', 'tests/test_layering*.py', 'tests/golden/**', 'tests/test_uc_surf_setup_ops_transcript.py', 'tests/test_uc_surf_loop_transcript.py', 'tests/test_readme_*.py', 'tests/test_mcp_tool_budget.py']   [default]
           Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for
           EVERY item in addition to the tests its change reaches, plus any test file
