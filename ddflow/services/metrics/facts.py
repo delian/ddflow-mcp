@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from ...config import Config
 from ...core import progress as PR
 from ...core.events import Event
 from ...core.model import State
@@ -150,7 +151,7 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
             facts.outcomes.append(out)
 
 
-def _dependencies_done(facts: Facts, state: State) -> None:
+def _dependencies_done(facts: Facts, state: State, cfg: Config | None = None) -> None:
     """``ready_at``: the latest first-completion among every dependency that binds the item
     (its own and its ancestors'), floored at its filing. None when a dependency has no
     completion event (imported as done, or still open): then the wait is not known."""
@@ -160,7 +161,7 @@ def _dependencies_done(facts: Facts, state: State) -> None:
             continue
         span.kind = it.kind
         times: list[float] = [span.added_at]
-        for _owner, dep in inherited_deps(state, it):
+        for _owner, dep in inherited_deps(state, it, cfg):
             done = facts.spans.get(dep)
             if done is None or done.completed_at is None:
                 times = []
@@ -169,7 +170,9 @@ def _dependencies_done(facts: Facts, state: State) -> None:
         span.ready_at = max(times) if times else None
 
 
-def collect(events: Sequence[Event], state: State, now: float | None = None) -> Facts:
+def collect(
+    events: Sequence[Event], state: State, now: float | None = None, cfg: Config | None = None
+) -> Facts:
     """Fold ``events`` into ``Facts``. ``now`` closes the leases still held (None: they stay
     open, and callers treat an open end as 'until the facts were read')."""
     facts = Facts(state=state)
@@ -177,7 +180,7 @@ def collect(events: Sequence[Event], state: State, now: float | None = None) -> 
     for at, ev in _ordered(events):
         facts.agents.setdefault(ev.agent, []).append(at)
         _absorb(facts, at, ev, held)
-    _dependencies_done(facts, state)
+    _dependencies_done(facts, state, cfg)
     for lease in held.values():
         lease.end = now
     return facts
