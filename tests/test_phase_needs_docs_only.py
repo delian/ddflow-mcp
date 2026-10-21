@@ -59,3 +59,16 @@ def test_inherited_deps_reports_the_exemption(repo):
     cfg = Config()
     assert inherited_deps(st, st.items["N-res"], cfg) == []
     assert ("P-next", "P-gate") in inherited_deps(st, st.items["N-code"], cfg)
+
+
+def test_a_recursive_glob_is_not_docs_under_a_narrower_doc_glob(repo):
+    """`docs/**` reaches code in subdirectories; a doc glob of `docs/*` must not excuse it."""
+    _queue(repo)
+    st = fold(EventLog(repo, "t").read_all(), strict=False)
+    cfg = Config()
+    cfg.gates.doc_globs = ["docs/*"]
+    it = st.items["N-docs"]
+    it.globs = ["docs/**"]
+    assert ("P-next", "P-gate") in inherited_deps(st, it, cfg)
+    it.globs = ["docs/*.md"]
+    assert inherited_deps(st, it, cfg) == []

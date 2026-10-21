@@ -267,7 +267,19 @@ def _docs_only_exempt(it: Item, cfg: Config | None) -> bool:
     if not it.globs:
         return it.kind in ("research", "doc")
     docs = cfg.gates.doc_globs
-    return bool(docs) and all(any(path_in_glob(g, d) for d in docs) for g in it.globs)
+    return bool(docs) and all(_glob_is_docs(g, docs) for g in it.globs)
+
+
+def _glob_is_docs(glob: str, docs: list[str]) -> bool:
+    """Is every file ``glob`` can match a document? A glob matching `**` is trusted only
+    when it IS a document glob (it could reach any depth); otherwise `*`/`?` stand for one
+    plain character, and that representative path must fall inside a document glob."""
+    if glob in docs:
+        return True
+    if "**" in glob:
+        return False
+    probe = glob.replace("*", "x").replace("?", "x")
+    return any(path_in_glob(probe, d) for d in docs)
 
 
 def inherited_deps(state: State, it: Item, cfg: Config | None = None) -> list[tuple[str, str]]:
