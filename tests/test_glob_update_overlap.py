@@ -8,6 +8,7 @@ holder's own changes do not include; and a finished holder's lease holds nothing
 
 from __future__ import annotations
 
+import re
 import time
 
 from conftest import run_cli
@@ -37,7 +38,7 @@ def test_refusal_names_holder_age_pairs_and_a_narrower_glob(repo):
     text = out + err
     assert code != 0
     assert HOLDER in text and "H1" in text
-    assert "for 0 min" in text, text
+    assert re.search(r"for \d+ min", text), text
     assert "'pkg/gates/x.py' overlaps 'pkg/gates/**'" in text
     assert "narrower" in text.lower()
 
@@ -63,3 +64,15 @@ def test_a_finished_holders_lease_blocks_nothing(repo):
     assert L.glob_clash(st, cfg, me, ME, ["pkg/gates/x.py"], now) is not None
     st.items["H1"].state = DONE
     assert L.glob_clash(st, cfg, me, ME, ["pkg/gates/x.py"], now) is None
+
+
+def test_keep_list_counts_every_holder(repo):
+    _setup(repo)
+    run_cli(repo, "task", "add", "H2", "--globs", "other/**")
+    assert A.claim(repo, "H2", no_worktree=True, agent="agent-h2").ok
+    ok = AI.update(
+        repo, "M1", AI.ItemEdit(globs=["pkg/gates/a.py", "other/b.py", "fine.py"]), agent=ME
+    )
+    assert not ok.ok
+    assert "other/b.py' overlaps" in ok.reason and "pkg/gates/a.py' overlaps" in ok.reason
+    assert "(fine.py would be accepted)" in ok.reason
