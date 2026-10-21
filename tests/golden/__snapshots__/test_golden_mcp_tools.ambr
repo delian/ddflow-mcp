@@ -1788,6 +1788,10 @@
           "type": "integer",
           "description": "Rows (default 25; 0 = the most: 1000, search 200)."
          },
+         "offset": {
+          "type": "integer",
+          "description": "Skip this many rows (paging; a cut list says `next`)."
+         },
          "all": {
           "type": "boolean",
           "description": "kind=bug|lesson: include fixed/invalid/superseded."

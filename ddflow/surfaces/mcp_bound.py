@@ -259,7 +259,8 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     if body.get("truncated") is True and isinstance(body.get("rows"), list):
         return body, (
             f"truncated: showing {body.get('shown')} of {body.get('total')}; "
-            "narrow the filters, or raise limit (0 = the most a list gives: 1000, a search 200)."
+            f"narrow the filters, or page with offset={body.get('next')} "
+            "(limit 0 = the most a list gives: 1000, a search 200)."
         )
     return body, None
 

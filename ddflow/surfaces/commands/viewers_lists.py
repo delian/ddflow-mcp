@@ -65,9 +65,10 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
             "limit",
             type="integer",
             default=None,
-            help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT})",
+            help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT}; 0 or above {R.LIST_MAX_LIMIT} = the {R.LIST_MAX_LIMIT} a list gives at most)",
         )
     )
+    out.append(Param("offset", type="integer", default=None, help="skip this many rows (paging)"))
     # Every kind takes --all so one command line works for any kind; only bugs and lessons
     # narrow by default, so for the others it changes nothing.
     out.append(Param("all", type="boolean", help=_ALL_HELP.get(kind, _ALL_HELP[""])))
@@ -121,6 +122,7 @@ def _query(a, kind: str) -> tuple[dict[str, Any], bool]:
         "since": getattr(a, "since", "") or "",
         "item": getattr(a, "item", "") or "",
         "limit": R.LIST_DEFAULT_LIMIT if a.limit is None else a.limit,
+        "offset": getattr(a, "offset", None) or 0,
     }, defaulted
 
 
@@ -135,8 +137,14 @@ def _json_body(out) -> dict[str, Any]:
 def _print_rows(kind: str, out, defaulted: bool) -> None:
     for r in out.data["rows"]:
         print(_line(kind, r))
-    if out.data["truncated"]:
-        print(f"\n(showing {out.data['shown']} of {out.data['total']}; raise --limit)")
+    d = out.data
+    if d["clamped_from"]:
+        print(f"\n(--limit {d['clamped_from']} cut to {d['limit']}, the most a list gives)")
+    if d["truncated"]:
+        print(
+            f"\n(showing {d['shown']} of {d['total']} from {d['offset']}; "
+            f"next page: --offset {d['next']})"
+        )
     if defaulted:
         what = "fixed and invalid" if kind == "bug" else "superseded"
         print(f"\n({_NARROW_TO[kind]} {kind}s only; --all includes {what})")
