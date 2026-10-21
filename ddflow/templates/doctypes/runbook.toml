@@ -5,6 +5,11 @@ pattern = "docs/runbooks/{slug}.md"
 multi = true
 genre = "howto"
 
+[doctype.guidance]
+audience = "an on-call engineer at 3 a.m. who has never seen this system"
+tone = "imperative and exact; no background reading"
+style = "Each step is one command or one check with the output to expect."
+
 [[doctype.section]]
 id = "when"
 heading = "When to use"
