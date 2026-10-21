@@ -21,7 +21,7 @@ comes back as a `warning` and the surfaces show it before the verdict.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..config import Config
@@ -37,6 +37,7 @@ from . import landed as LD
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
+from .gates.evidence import commit_tree_entries, worktree_entries
 from .gates.evidence import tree_being_completed as _tree_being_completed
 
 
@@ -334,7 +335,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         (v.blockers if blocks else v.warnings).append(readme)
 
     cwd, landed = _tree_being_completed(repo, it)
-    for note in G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed):
+    stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)
+    for note in refine_stale_notes(stale, it, cwd, landed, changed_paths(repo, it)):
         if note.unverified:
             v.warnings.append(
                 f"{note.gate} passed, but whether on the tree you are completing could "
@@ -346,6 +348,39 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
+
+
+def refine_stale_notes(notes: list, it: Item, cwd: Path, landed: str, changed: list[str] | None):
+    """Narrow the "passed on a different tree" notes of review gates to the item's own paths
+    (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
+    the files the item changed -- so a merge of main, an event-log commit or an edit to a file
+    the item never touched is not a different tree FOR THE REVIEW: its note is dropped, and one
+    that stays names the paths that moved. Anything not comparable (no snapshot, the changed
+    set or the tree unreadable, an unverified note) keeps its note as it was."""
+    entries = None
+    out = []
+    for note in notes:
+        rec = it.gates.get(note.gate)
+        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        if note.unverified or not isinstance(recorded, dict) or changed is None:
+            out.append(note)
+            continue
+        if entries is None:
+            entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
+        if entries is None:
+            out.append(note)
+            continue
+        moved = sorted(
+            p
+            for p in recorded.keys() | set(changed)
+            if recorded.get(p, "") != (" ".join(entries[p]) if p in entries else "")
+        )
+        if moved:
+            shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
+            out.append(
+                replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
+            )
+    return out
 
 
 def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> list[str]:
