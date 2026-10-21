@@ -20,7 +20,7 @@ COMMANDS: tuple[Command, ...] = (
                 "count",
                 type="integer",
                 default=1,
-                cli_help="how many rounds, up to [review].grant_max_count",
+                cli_help="how many rounds, up to [grants].max_count",
             ),
             Param("reason", required=True, cli_help="what the operator allowed and why"),
             Param(
