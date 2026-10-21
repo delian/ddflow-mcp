@@ -50,7 +50,7 @@ def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str
         return "unavailable", reason
     outcome, rev = rerun(replace(gdef, command=cmd))
     still = rev.get("failed_tests") or []
-    ok = outcome == "passed" and not still
+    ok = outcome == "passed" and not still and not rev.get("failed_tests_more")
     ev["rerun"] = {
         "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
         "still_failing": still, "tail": rev.get("tail", "")[-800:],
