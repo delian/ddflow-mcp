@@ -94,7 +94,7 @@ def _older_binary_refusal(primary: Path, agent: str) -> str:
             f"pins regenerate refused: the `ddflow` running is older than the log's "
             f"(a stale ddflow on PATH?) and would re-record the pins differently. {exc}"
         )
-    except Exception:  # noqa: BLE001 -- a log this cannot read is not a version skew to refuse on
+    except Exception:  # a log this cannot read is not a version skew to refuse on
         return ""
     return ""
 
