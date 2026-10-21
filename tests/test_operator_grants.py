@@ -258,7 +258,7 @@ def test_a_standing_grant_is_capped_by_its_count(proj):
 
 def test_kinds_are_extensible_through_the_registry(proj):
     assert "review_round" in GR.KINDS
-    GR.register_kind(GR.GrantKind("extra_thing", "a test kind", whens={}))
+    GR.KINDS.register(GR.GrantKind("extra_thing", "a test kind", whens={}))
     try:
         g = GR.add(
             EventLog(proj, "probe"), _cfg(), item="T1", gate="critic", kind="extra_thing",
@@ -266,7 +266,7 @@ def test_kinds_are_extensible_through_the_registry(proj):
         )  # fmt: skip
         assert g.kind == "extra_thing" and GR.describe(g).startswith("grant G1: 1 ")
     finally:
-        GR.KINDS.pop("extra_thing")
+        GR.KINDS.unregister("extra_thing")
 
 
 # -- shown ---------------------------------------------------------------------------------
