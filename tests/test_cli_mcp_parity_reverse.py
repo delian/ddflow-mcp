@@ -72,3 +72,22 @@ def test_identify_is_a_shell_verb(repo):
     assert rc == 0 and "invalid choice" not in err
     rc, out, err = run_cli(repo, "identify", agent="w1")
     assert rc == 0 and "'w1'" in out
+
+
+def test_identify_names_the_layer_that_won(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    _, out, _ = run_cli(repo, "identify")
+    assert "(derived)" in out and "Not declared" in out
+    _, out, _ = run_cli(repo, "identify", agent="w1")
+    assert "'w1' (explicit)" in out and "Not declared" not in out
+    monkeypatch.setenv("DDFLOW_AGENT", "envname")
+    _, out, _ = run_cli(repo, "identify")
+    assert "'envname' (env)" in out
+
+
+def test_a_refused_json_list_keeps_the_list_envelope(repo):
+    import json
+
+    rc, out, _ = run_cli(repo, "--json", "list", "session", "--tag", "x")
+    d = json.loads(out)
+    assert rc == 3 and d["total"] == 0 and d["truncated"] is False and d["reason"]

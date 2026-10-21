@@ -7,14 +7,13 @@ identity a harness declared over MCP, or the working tree. This reports the winn
 
 from __future__ import annotations
 
-from ...services import identity as ID
 from ..context import OK, Ctx
 from ..registry import Command
 from ..render import emit_json
 
 
 def cmd_identify(a, c: Ctx) -> int:
-    who = ID.resolve(c.repo, c.cfg, c.requested_agent)
+    who = c.identity
     if c.json:
         emit_json({"agent": who.id, "source": who.source})
         return OK

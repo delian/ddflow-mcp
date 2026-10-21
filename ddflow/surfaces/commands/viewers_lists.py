@@ -203,7 +203,7 @@ _OTHER_OWN = {
 
 def _refuse(a, c: Ctx, reason: str) -> int:
     if c.json:
-        emit_json({"kind": a.kind, "rows": [], "reason": reason})
+        emit_json({**empty_list(a.kind), "reason": reason})
     print(reason, file=sys.stderr)
     return REFUSED
 
