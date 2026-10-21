@@ -118,7 +118,12 @@ def _drop(tree: Path, ref: str, sha: str) -> None:
     message, and ours is looked up again, until ours is the one gone (bounded)."""
     for _ in range(5):
         r = W.git(tree, "stash", "drop", ref)
-        got = re.search(r"\(([0-9a-f]{40})\)", r.out) if r.ok else None
+        if not r.ok:  # the selector went stale (an entry below it was dropped): by sha
+            _sha, ref = _stash_find(tree, sha)
+            if not ref:
+                return
+            continue
+        got = re.search(r"\(([0-9a-f]{40})\)", r.out)
         if not got or got.group(1) == sha:
             return
         was = W.git(tree, "log", "-1", "--format=%s", got.group(1))
