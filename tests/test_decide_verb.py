@@ -63,8 +63,9 @@ def test_a_decide_task_does_not_inherit_its_phases_needs(proj):
 
 def test_other_tasks_still_inherit_them(proj):
     _queue(proj, "docs")
+    run_cli(proj, "task", "add", "X-code", "--phase", "P-next", "--globs", "core/x.py")
     st = _state(proj)
-    assert ("P-next", "P-gate") in inherited_deps(st, st.items["X-decide"])
+    assert ("P-next", "P-gate") in inherited_deps(st, st.items["X-code"])
 
 
 def test_decide_writes_lands_and_completes(proj):
