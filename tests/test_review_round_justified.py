@@ -67,10 +67,10 @@ def test_a_main_merge_outside_the_items_paths_is_not_new_work(repo, tmp_path):
     _git(repo, "add", "other.txt")
     _git(repo, "commit", "-qm", "main work")
     _git(wt, "merge", "-q", "--no-edit", "main")
-    before = _runs(repo)
+    before, used = _runs(repo), api._rounds_used(_state(repo), "critic")
     out, text = _plain(repo)
     assert out.exit == NOTHING, text
-    assert _runs(repo) == before
+    assert _runs(repo) == before and api._rounds_used(_state(repo), "critic") == used
 
 
 def test_an_untriaged_finding_allows_a_re_review(repo, tmp_path):
@@ -92,6 +92,13 @@ def test_full_still_runs_a_round(repo, tmp_path):
     assert api._rounds_used(_state(repo), "critic") == 2
 
 
+def test_force_with_a_reason_still_runs_a_round(repo, tmp_path):
+    _triaged(repo, tmp_path)
+    before = _runs(repo)
+    out = api.review(repo, gate="critic", item="T1", force=True, reason="operator asked")
+    assert out.exit == 0 and _runs(repo) == before + 1
+
+
 def test_the_knob_off_runs_a_plain_review_on_a_settled_tree(repo, tmp_path):
     _triaged(repo, tmp_path)
     assert _plain(repo)[0].exit == NOTHING  # on: nothing new
@@ -109,7 +116,10 @@ def test_the_report_line_names_rounds_used_and_the_cap(repo, tmp_path):
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("max_rounds = 0", "max_rounds = 4"))
     _tri(repo, 1)
-    _out, text = _plain(repo)
+    before = _runs(repo)
+    out, text = _plain(repo)
+    assert out.exit == 0 and _runs(repo) == before + 1, text
+    assert api._rounds_used(_state(repo), "critic") == 2
     assert "rounds used 2/4, justified" in text
 
 
