@@ -41,6 +41,7 @@ from ..services import review as RV
 from ..services.leaseclock import localize
 from ..services.macros import MacroError  # noqa: F401  (re-exported for the engine)
 from . import identity
+from ._base import _load, load_scope  # noqa: F401  (load_scope: re-exported for the handshake)
 from .lifecycle import plan_for
 
 TemplateError = P.TemplateError
@@ -193,7 +194,7 @@ def fill_companions(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> N
         )
 
 
-def _recoverable(log: EventLog, cfg: Config, repo: Path) -> int:
+def _recoverable(log: EventLog, cfg: Config, repo: Path, st: State | None = None) -> int:
     """Trees that may hold work: one per tree (path compared after `normpath`), not per
     item, and never a tree measured clean (B904edd649c). One that could not be measured
     (None) counts: `recover` says to treat it as containing work until someone has looked.
@@ -201,7 +202,7 @@ def _recoverable(log: EventLog, cfg: Config, repo: Path) -> int:
     return len(
         {
             os.path.normpath(r.worktree)
-            for r in L.scan(log, cfg, repo)
+            for r in L.scan(log, cfg, repo, state=st)
             if r.worktree and r.salvageable is not False
         }
     )
@@ -214,9 +215,16 @@ def fill_queue(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
     # identity here decides which items `plan()` counts as "already mine", so with
     # DDFLOW_AGENT set the handshake reported the connection's OWN claimed work as
     # someone else's, at the one moment the agent is told what to do next.
-    log = EventLog(repo, identity.resolve(repo, cfg, agent).id, log_cfg=cfg.log)
-    events = log.read_all()
-    st: State = localize(fold(events, strict=False), log, time.time())
+    if (Path(repo) / ".ddflow").is_dir():
+        # The handshake's one load (`load_scope`): the upgrade line reads the same state.
+        log, _loaded_cfg, st = _load(repo, agent)
+        events = log.read_all()
+        if len(events) != st.event_count:  # appended between the two reads: a lighter refold
+            st = localize(fold(events, strict=False), log, time.time())
+    else:
+        log = EventLog(repo, identity.resolve(repo, cfg, agent).id, log_cfg=cfg.log)
+        events = log.read_all()
+        st = localize(fold(events, strict=False), log, time.time())
     # The ready set as `next` offers it (the waiters' reservation hold and the
     # parallelism limit), not the bare scheduler's: the handshake is where an agent is
     # told what to do next, so it must not promise an item `next` withholds.
@@ -234,7 +242,7 @@ def fill_queue(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
     v["blocked"] = len(p.blocked)
     v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
     v["loops"] = len(PR.detect(events, st, cfg))
-    v["recoverable"] = _recoverable(log, cfg, repo)
+    v["recoverable"] = _recoverable(log, cfg, repo, st)
 
 
 #: The handshake readers by the name the engine's `_FILLERS` gives them.

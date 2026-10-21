@@ -66,7 +66,7 @@ def fork_point(repo: Path, cfg: Config, st: State, it: Item) -> tuple[str, str]:
     """(base, branch) for a new worktree: stacked on a dependency, or off the target."""
 
     branch = F.branch_name(it, cfg)
-    stack = F.stack_base(st, it, cfg, [d for _, d in inherited_deps(st, it)])
+    stack = F.stack_base(st, it, cfg, [d for _, d in inherited_deps(st, it, cfg)])
     if stack.base:
         return stack.base, branch
     base = target(repo, cfg, it, st)
