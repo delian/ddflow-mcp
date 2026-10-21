@@ -39,13 +39,14 @@ CURRENT_SCHEMA = 1
 
 _TOP = {
     "name", "title", "path", "pattern", "multi", "genre", "owner", "skeleton", "triggers",
-    "validate", "schema_version", "extends", "contract", "review", "section",
+    "validate", "schema_version", "extends", "contract", "review", "section", "guidance",
 }  # fmt: skip
 _SECTION = {
     "id", "heading", "match", "level", "order", "required", "ownership", "source", "prompt",
     "guidance", "rules", "depends_on", "remove", "template",
 }  # fmt: skip
 _REVIEW = {"review_requires", "full_review_every_days", "stamp"}
+_GUIDANCE = {"audience", "tone", "style", "text", "rules"}
 _NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
@@ -102,6 +103,7 @@ class DocType:
     extends: str = ""
     contract: str = "evergreen"
     review: Mapping[str, Any] = field(default_factory=dict)
+    guidance: Mapping[str, Any] = field(default_factory=dict)  #: audience, tone, style, text, rules
     source: str = ""
 
     def expand(self, *, seq: int = 0, slug: str = "", date: str = "") -> str:
@@ -129,7 +131,7 @@ class DocType:
         out["multi"], out["schema_version"] = self.multi, self.schema_version
         if self.triggers:
             out["triggers"] = list(self.triggers)
-        for k in ("validate", "review"):
+        for k in ("validate", "review", "guidance"):
             if getattr(self, k):
                 out[k] = dict(getattr(self, k))
         out["section"] = [
@@ -230,6 +232,16 @@ def _review(src: _Src, tab: Any) -> dict[str, Any]:
     return out
 
 
+def _guidance(src: _Src, tab: Any) -> dict[str, Any]:
+    if not isinstance(tab, dict):
+        raise src.err("guidance must be a table", "guidance")
+    src.unknown(tab, _GUIDANCE, "guidance")
+    for k in sorted(_GUIDANCE - {"rules"}):
+        _typed(src, tab, k, str, "guidance", "")
+    _strs(src, "guidance.rules", tab.get("rules", []))
+    return dict(tab)
+
+
 def _section(src: _Src, raw: Any, after: int) -> tuple[Section, int]:
     if not isinstance(raw, dict):
         raise src.err("a section must be a table", "section", after)
@@ -291,7 +303,7 @@ def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
         raise src.err("the file is one [doctype] table", "doctype")
     raw = top["doctype"]
     src.unknown(raw, _TOP, "doctype")
-    for k in ("validate", "review"):
+    for k in ("validate", "review", "guidance"):
         if k in raw and not isinstance(raw[k], dict):
             raise src.err(f"{k} must be a table", k)
     if not isinstance(raw.get("section", []), list):
@@ -305,9 +317,11 @@ def read_raw(text: str, source: str) -> tuple[dict[str, Any], _Src]:
 def _merge(parent: dict[str, Any], child: dict[str, Any], src: _Src) -> dict[str, Any]:
     out = {
         **parent,
-        **{k: v for k, v in child.items() if k not in ("section", "validate", "review")},
+        **{
+            k: v for k, v in child.items() if k not in ("section", "validate", "review", "guidance")
+        },
     }
-    for k in ("validate", "review"):
+    for k in ("validate", "review", "guidance"):
         if k in child:
             out[k] = {**parent.get(k, {}), **child[k]}
     secs = {
@@ -398,6 +412,7 @@ def build(raw: dict[str, Any], src: _Src) -> DocType:
         extends=_typed(src, raw, "extends", str, where, ""),
         contract=_choice(src, raw, "contract", CONTRACTS, where, "evergreen"),
         review=_review(src, raw.get("review", {})),
+        guidance=_guidance(src, raw.get("guidance", {})),
         source=src.source,
     )
 
