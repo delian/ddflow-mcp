@@ -181,6 +181,7 @@ WRITERS_EXEMPT: dict[str, str] = {
     "api/rename.py:rename": "re-files an existing item under a new id: its text is the "
     "original's, which the duplicate hunt would match against itself",
     "api/items.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",
+    "api/knowledge/bugs.py:_bugs_parent": "the standing bugs phase of a fix task: made on first use, a follow-up once it is done",
     "api/knowledge/bugs.py:_file_fix_task": "the fix task of a bug that was itself just checked",
     "api/knowledge/pairs.py:link_record": "merges a lesson INTO the one it duplicates: the answer "
     "to a duplicate, not a new record",
