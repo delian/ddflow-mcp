@@ -54,11 +54,13 @@ def test_list_session_is_the_session_list(repo):
     assert (rc, out) == (rc2, out2)
 
 
-def test_list_search_points_at_the_search_verb(repo):
-    rc, out, err = run_cli(repo, "list", "search")
-    assert "invalid choice" not in err
-    assert rc == 3
-    assert "ddflow search" in err + out
+def test_list_search_is_the_search_verb(repo):
+    rc, _, err = run_cli(repo, "list", "search")
+    assert rc == 3 and "--query" in err
+    rc, out, _ = run_cli(repo, "list", "search", "--query", "zzzznomatch")
+    rc2, out2, _ = run_cli(repo, "search", "zzzznomatch")
+    assert (rc, out) == (rc2, out2)
+    assert run_cli(repo, "list", "task", "--query", "x")[0] == 3
 
 
 def test_identify_is_a_shell_verb(repo):

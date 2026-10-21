@@ -1305,7 +1305,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1313,6 +1313,7 @@
   
   options:
     -h, --help            show this help message and exit
+    --query QUERY         the text to look for (kind search)
     --state STATE         only rows in this state
     --phase PHASE         only rows under this phase id
     --tag TAG             only rows carrying this tag

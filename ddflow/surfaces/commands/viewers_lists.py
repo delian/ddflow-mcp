@@ -8,6 +8,7 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from typing import Any
 
@@ -20,6 +21,7 @@ from ..render import emit_json
 from .identify import COMMAND as IDENTIFY
 from .reporting import cmd_bug_show
 from .viewers_search import COMMAND as SEARCH
+from .viewers_search import cmd_search
 from .viewers_sessions import cmd_session_list
 
 _HELP = {
@@ -193,10 +195,20 @@ _OTHER_VIEWERS = ("session", "search")
 
 
 def _other_viewer(a, c: Ctx) -> int:
-    """`list session` is `session list`; `list search` needs a query `list` has no slot for."""
+    """`list session` is `session list`; `list search --query TEXT` is `ddflow search TEXT`."""
     if a.kind == "search":
-        print("`list search` needs a query: use `ddflow search QUERY`", file=sys.stderr)
-        return REFUSED
+        if not a.query:
+            print(
+                "`list search` needs `--query TEXT` (or use `ddflow search TEXT`)", file=sys.stderr
+            )
+            return REFUSED
+        ns = argparse.Namespace(**vars(a))
+        ns.exact = ns.regex = False
+        ns.kind = ns.source = ""
+        for name in ("state", "phase", "owner", "since"):
+            setattr(ns, name, getattr(a, name, None) or "")
+        ns.limit = a.limit or R.SEARCH_DEFAULT_LIMIT
+        return cmd_search(ns, c)
     for name, default in (("state", ""), ("owner", ""), ("since", ""), ("limit", None)):
         if getattr(a, name, None) is None:
             setattr(a, name, default if default is not None else R.SESSION_DEFAULT_LIMIT)
@@ -207,6 +219,9 @@ def cmd_list_any(a, c: Ctx) -> int:
     """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
     if a.kind in _OTHER_VIEWERS:
         return _other_viewer(a, c)
+    if getattr(a, "query", None):
+        print(f"{a.kind} has no --query (only `list search` takes it)", file=sys.stderr)
+        return REFUSED
     a.list_kind = a.kind
     own = {p.name for p in _filter_params(a.kind)}
     stray = [
@@ -239,6 +254,7 @@ LIST_COMMAND = Command(
     summary="list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows)",
     params=(
         Param("kind", positional=True, choices=(*_LISTS, *_OTHER_VIEWERS), help="what to list"),
+        Param("query", default=None, help="the text to look for (kind search)"),
         *_union_params(),
     ),
     handler=cmd_list_any,
