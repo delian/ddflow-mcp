@@ -93,3 +93,16 @@ def test_a_round_on_a_clean_commit_is_compared_by_that_commits_tree(repo, tmp_pa
     assert RV.reviewed_other_tree(repo, None, st, "T1", "critic") == ""
     (repo / "a.py").write_text("x = 2\n")  # the tree moves on from that commit
     assert "holds other content" in RV.reviewed_other_tree(repo, None, st, "T1", "critic")
+
+
+def test_a_spent_budget_on_a_stale_round_says_so_once_and_points_at_the_operator(repo, tmp_path):
+    _setup(repo, tmp_path)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("max_rounds = 0", "max_rounds = 1"))
+    _full_review(repo)
+    (repo / "c.py").write_text("x = 2  # edited after the review\n")
+    _tri(repo, 1)
+    last = _tri(repo, 2)
+    text = last.data["text"]
+    assert _state(repo).gates["critic"].outcome == "failed"
+    assert text.count("stays failed") == 1 and "--force --reason" in text, text

@@ -438,7 +438,14 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if not was and dirt == "clean" and base and wt is not None and wt.exists():
         was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
     now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
-    redo = f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the current tree"
+    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
+    redo = (
+        f"the review budget is spent: ask the operator for one more round on the current tree "
+        f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
+        if spent
+        else f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
+        "current tree"
+    )
     if not was:
         return f"the round names no tree it reviewed; {redo}"
     if not now:
@@ -451,9 +458,7 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     return ""
 
 
-def _settle_after_cap(
-    log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = ""
-) -> str:
+def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
 
