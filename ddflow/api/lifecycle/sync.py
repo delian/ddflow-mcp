@@ -64,8 +64,9 @@ def sync(
     text = _text(r, data)
     if r.kept_stash:
         text += (
-            f"\nYour uncommitted work is kept in stash {r.kept_stash[:12]}; "
-            f"`git stash apply {r.kept_stash}` puts it back."
+            f"\nYour uncommitted work could not be put back cleanly; a copy is kept in stash "
+            f"{r.kept_stash[:12]} (`git stash show -p {r.kept_stash}` shows it). The tree holds "
+            "whatever was applied: resolve it there, then `git stash drop` that entry."
         )
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
