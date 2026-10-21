@@ -125,5 +125,5 @@ def test_keep_local_work_that_conflicts_with_the_base_stays_in_a_kept_stash(repo
     (wt / "README.md").write_text("local\n")
     out = sync(repo, item="T1", keep_local=True, agent=ME)
     assert out.data["status"] == "merged" and out.data["kept_stash"]
-    assert out.data["kept_stash"][:12] in out.reason or "kept in stash" in str(out.data)
+    assert "git stash show -p" in out.data["text"] and "git stash apply" not in out.data["text"]
     assert "ddflow-sync-keep-local" in _stashes(wt)  # the work is not lost
