@@ -34,8 +34,8 @@ from . import chore as CO
 from . import gates as G
 from . import testselect as TS
 from .cadence import phase_overdue
+from .docsonly import diff_is_docs_only
 from .gates.evidence import tree_being_completed as _tree_being_completed
-from .gates.kinds import diff_is_docs_only
 
 
 @dataclass

@@ -15,6 +15,7 @@ from ...infra import hostinfo as H
 from ...infra.log import EventLog
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
+from ..docsonly import pipeline_by_diff
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -28,7 +29,7 @@ from .evidence import (
     worktree_entries,
 )
 from .failed_gate import skipped_after_failure
-from .kinds import DiffPaths, diff_is_docs_only, evidence_problems, kind_pipeline, not_applicable
+from .kinds import DiffPaths, evidence_problems, kind_pipeline, not_applicable
 
 
 @dataclass
@@ -291,12 +292,7 @@ def status(
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
-    gates = pipeline_for(it, cfg)
-    if diff is not None:
-        paths = diff()
-        diff = lambda: paths  # noqa: E731 -- read the diff once; `not_applicable` asks again
-        if diff_is_docs_only(it, cfg, paths):
-            gates = kind_pipeline(cfg, "doc")
+    gates, diff = pipeline_by_diff(it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"))
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
