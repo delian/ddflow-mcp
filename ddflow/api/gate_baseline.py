@@ -21,16 +21,16 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
     (`gate_passed_failures`): those tests are run alone, and without a passing rerun the gate
     is not ``passed``."""
     result, why = PF.apply(repo, gdef, result, ev, rerun)
-    if why or result != "failed":  # settled by the rerun: the base has nothing to add
+    if result != "failed":
         return result, why
     ids = BR.candidate_ids(gate, gdef.command, ev, fail_fast) if result == "failed" else []
     if not ids:
-        return result, ""
+        return result, why
     base = it.base or W.default_branch(repo)
     found = BR.on_base(repo, base, gdef, ids, rerun)
     ev["baseline"] = found
     if not found["red"]:
-        return result, ""
+        return result, why
     bug = _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
     return "partial", BR.reason_text(ids, bug)

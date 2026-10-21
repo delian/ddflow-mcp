@@ -176,7 +176,9 @@ def run_text(out, a) -> str:
     head = f"{a['gate']}: {out.data['outcome'].upper()}" + (
         f" — {ev['reason']}" if ev.get("reason") else ""
     )
-    tail = _without_own_verdict(ev.get("tail") or "", a["gate"])
+    tail = ev.get("tail") or ""
+    if out.data["outcome"] == "passed":  # a failed run's last line is evidence, not a repeat
+        tail = _without_own_verdict(tail, a["gate"])
     body = f"{tail[-1200:]}\n{head}" if tail else head
     # Which tests failed and why: the tail is the END of the output, and under xdist the
     # failures are not at the end (B-uc-gate-failure-evidence).
