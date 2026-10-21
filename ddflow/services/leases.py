@@ -234,9 +234,12 @@ def _clash_text(
     return first, " | ".join(parts), [g for g in globs if g not in bad]
 
 
+_HOUR_S = 3600
+
+
 def _age(now: float, lz: Lease) -> str:
     held = max(now - lz.acquired_at, 0)
-    return clock.fmt_age(held, "h", places=1) if held >= 3600 else clock.fmt_age(held, "min")
+    return clock.fmt_age(held, "h", places=1) if held >= _HOUR_S else clock.fmt_age(held, "min")
 
 
 def _live_pairs(
