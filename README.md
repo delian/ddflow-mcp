@@ -5879,8 +5879,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=bae732e41d27 -->
-<details><summary>All 363 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=b6f0adc23b4f -->
+<details><summary>All 364 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6047,6 +6047,7 @@ long default is left to `ddflow config --explain`.
 | `dedupe.ask_threshold` | `0.55` |  |
 | `dedupe.max_candidates` | `3` |  |
 | `dedupe.min_words` | `8` |  |
+| `dedupe.research_task_asks` | `false` |  |
 | `dedupe.kinds` | (long: see `ddflow config --explain`) |  |
 | `evaluation.max_miss_rate` | `0.0` |  |
 | `evaluation.min_fixtures` | `1` |  |
