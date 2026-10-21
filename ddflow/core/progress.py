@@ -361,7 +361,7 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
     found += _gate_flapping(tracked, lc, sev)
     found += _repeated_failures(tracked, lc, sev)
     found += _reopened(tracked, lc, sev)
-    found += _duplicate_work(state, lc, sev)
+    found += _duplicate_work(state, lc, sev, cfg)
     found += _no_progress(events, lc, sev)
     return found
 
@@ -520,7 +520,7 @@ def _reopened(tracked: dict[str, ItemWork], lc, sev: str) -> list[LoopFinding]:
     return out
 
 
-def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
+def _duplicate_work(state: State, lc, sev: str, cfg: Config | None = None) -> list[LoopFinding]:
     """Two live items that declare exactly the same files: a conflict, not a duplicate.
 
     Identical globs say the items cannot run at once. They do not say the work is the
@@ -543,7 +543,7 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
             continue
         for i in ids:
             if i not in waits:
-                waits[i] = _waits_on(state, i)
+                waits[i] = _waits_on(state, i, cfg)
         loose = sorted(
             {
                 x
@@ -585,7 +585,7 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
     return out
 
 
-def _waits_on(state: State, item_id: str) -> set[str]:
+def _waits_on(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
     """Every live item whose work must come before ``item_id``'s, transitively.
 
     The graph readiness uses, not a re-derived one: ``inherited_deps`` (an item's own
@@ -605,7 +605,7 @@ def _waits_on(state: State, item_id: str) -> set[str]:
 
     def waits(i: str) -> list[str]:
         out: list[str] = []
-        for _owner, dep in inherited_deps(state, state.items[i]):
+        for _owner, dep in inherited_deps(state, state.items[i], cfg):
             if live(dep):
                 out += [n for n in (dep, *sorted(state.descendants(dep))) if live(n)]
         return out
