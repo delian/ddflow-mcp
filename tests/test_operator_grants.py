@@ -19,7 +19,7 @@ from conftest import run_cli
 
 from ddflow.api import review as RV
 from ddflow.config import Config
-from ddflow.core.model import fold
+from ddflow.core.model import Item, fold
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
 from ddflow.services import grants as GR
@@ -259,7 +259,7 @@ def test_kinds_are_extensible_through_the_registry(proj):
     try:
         g = GR.add(
             EventLog(proj, "probe"), _cfg(), item="T1", gate="critic", kind="extra_thing",
-            count=1, reason="r",
+            count=1, reason="r", gates={"critic"},
         )  # fmt: skip
         assert g.kind == "extra_thing" and GR.describe(g).startswith("grant G1: 1 ")
     finally:
@@ -322,8 +322,8 @@ def test_a_round_the_budget_allows_anyway_does_not_spend_a_grant(proj):
         "item": "T1", "gate": "critic", "chunks": None, "delta": False, "commit": "",
         "base": "", "branch": "", "called_from": None, "force": True, "reason": "", "full": False,
     }  # fmt: skip
-    RV._scope(proj, cfg, st, log, st.items["T1"], lambda _l: None, [], locals_=a)
-    assert a["grant"] == ""
+    got = RV._scope(proj, cfg, st, log, st.items["T1"], lambda _l: None, [], locals_=a)
+    assert a["grant"] == "" and got[2] == "" and got[5] == "", "the round runs, citing nothing"
 
 
 def test_a_grant_for_a_gate_the_project_does_not_have_is_refused(proj):
@@ -333,8 +333,8 @@ def test_a_grant_for_a_gate_the_project_does_not_have_is_refused(proj):
 
 
 def test_the_oldest_usable_grant_is_taken_first_standing_or_not(proj):
-    _add(proj)  # G1, plain
-    _add(proj, "--when", "tree_changed_after_triage")  # G2, standing
+    assert _add(proj)[0] == 0  # G1, plain
+    assert _add(proj, "--when", "tree_changed_after_triage")[0] == 0  # G2, standing
     held = GR.Ctx(untriaged=0, reviewed_head="aaa", head="bbb")
     assert GR.pick(_state(proj), "T1", "critic", force=True, ctx=held).id == "G1"
 
@@ -348,3 +348,28 @@ def test_grants_order_by_their_number_not_their_text():
     for n in (10, 2, 1):
         st.approvals[f"grant:G{n}"] = [row(n)]
     assert [g.id for g in GR.grants(st)] == ["G1", "G2", "G10"]
+
+
+def test_the_agents_reason_is_kept_beside_the_grant(proj):
+    st = _grant(proj)
+    g = GR.pick(st, "T1", "critic", force=True)
+    _why, forced = RV._budget(
+        _cfg(max_rounds=1), "T1", "critic", 1, True, "flaky test", lambda _l: None, grant=g
+    )
+    assert "G1" in forced and "flaky test" in forced
+
+
+def test_add_cannot_skip_the_gate_check():
+    import inspect
+
+    assert inspect.signature(GR.add).parameters["gates"].default is inspect.Parameter.empty
+
+
+def test_a_grant_for_a_gate_gone_from_the_item_does_not_break_listing():
+    t = {"item": "foo", "gate": "removed_gate", "kind": "review_round", "count": 1, "reason": "r"}
+    st = fold([], strict=False)
+    st.items["foo"] = Item(id="foo", kind="task")
+    st.approvals["grant:G1"] = [
+        {"human": True, "user": "u", "at": "2026-01-01T00:00:00Z", "terms": t}
+    ]
+    assert [(g.id, g.used) for g in GR.grants(st)] == [("G1", 0)]
