@@ -107,3 +107,33 @@ def test_complete_still_demands_unit_tests_for_a_code_change(repo):
         )
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
     assert code != 0 and "unit_tests" in out + err, out + err
+
+
+def test_a_research_item_with_a_docs_diff_runs_the_doc_pipeline_and_completes(repo):
+    """Bug B75d2b12ff1: a `research`-kind item whose diff is a note kept `unit_tests` required,
+    so `complete` refused it even though the gate was skipped with a reason."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "r", "--kind", "research", "--globs", "docs/**")
+    _worktree_with_change(repo, "docs/note.md")
+    cfg = Config.load(repo)
+    st = _state(repo)
+    s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+        code, out, err = run_cli(
+            repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran it",
+            agent="a1",
+        )  # fmt: skip
+        assert code == 0, (gate, out, err)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
+    assert code == 0, out + err
+
+
+def test_a_research_item_that_changed_code_keeps_the_task_pipeline(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "r", "--kind", "research", "--globs", "docs/**")
+    _worktree_with_change(repo, "src/code.py")
+    cfg = Config.load(repo)
+    st = _state(repo)
+    s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
+    assert "unit_tests" in s.pipeline
