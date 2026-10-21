@@ -112,6 +112,7 @@ def cmd_approve(a, c: Ctx) -> int:
             note=a.note or "",
             reject=bool(a.reject),
             reason=a.reason or "",
+            requested_agent=c.requested_agent,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

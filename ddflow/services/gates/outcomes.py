@@ -10,9 +10,11 @@ from typing import Any
 
 from ...config import Config
 from ...core import blobref as B
-from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
+from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State, fold
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
+from .. import approval as AP
+from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
@@ -544,8 +546,12 @@ def approve(
     note: str = "",
     reject: bool = False,
     reason: str = "",
+    requested_agent: str = "",
 ) -> str:
     """A PERSON clears (or refuses) a human gate. Returns the line to print.
+
+    A gate that is not a human gate has one thing to approve: its recorded PARTIAL outcome
+    (`services.gate_accept`), which this accepts without rewriting it into a pass.
 
     Records the OS user rather than the agent id, and stamps `human: true` on the
     evidence. Neither makes forgery impossible — an agent with a shell can run this —
@@ -560,6 +566,16 @@ def approve(
     if gdef is None:
         raise ValueError(f"no such gate {gate!r}")
     if not gdef.is_human_gate:
+        it = fold(log.read_all(), strict=False).items.get(item_id)
+        if it is not None and it.gate_outcome(gate) == GA.ACCEPTABLE and not reject:
+            try:
+                got = GA.grant(log, it, gate, note=note, requested_agent=requested_agent)
+            except AP.ApprovalRefused as exc:
+                raise ValueError(str(exc)) from exc
+            return (
+                f"{item_id}.{gate} partial outcome ACCEPTED by {got.actor.user}; it stays "
+                f"partial on the record, and `complete` no longer counts it as a blocker"
+            )
         raise ValueError(
             f"{gate!r} is not a human-approval gate, so there is nothing for a person "
             f"to approve. Set `[gate.{gate}] human = true` in .ddflow/gates.toml if it "

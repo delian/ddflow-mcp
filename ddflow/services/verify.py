@@ -30,6 +30,7 @@ from ..core.model import GateOutcome, State
 from ..core.schedule import path_in_glob
 from ..infra.worktree import default_branch, git, git_paths
 from . import backfill as BF
+from . import gate_accept as GA
 from . import gates as G
 from . import ledger as LG
 from .completion import changed_paths, fixes_of
@@ -258,7 +259,15 @@ def _regression(
     return Claim("regression", OK, f"{len(bugs)} bug(s) closed with a regression test that exists")
 
 
-def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
+def _accepted(st: State, item_id: str, pipeline: Sequence[str]) -> list[str]:
+    """The pipeline gates whose recorded partial outcome a person accepted (Bb999d5e20f)."""
+    it = st.items.get(item_id)
+    return [g for g in pipeline if it is not None and GA.accepted(st, it, g).ok]
+
+
+def _gates(
+    cfg: Config, led: dict[str, Any], pipeline: Sequence[str], accepted: Sequence[str] = ()
+) -> Claim:
     """What `complete` itself enforces, asked again of the record: every pipeline gate
     carries an outcome, every required gate PASSED, and a skip has a reason. A failed
     gate that is not required (a review whose findings were triaged) does not block a
@@ -268,7 +277,9 @@ def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
     required_bad = [
         g
         for g in G.required_gates(cfg)
-        if g in pipeline and not GateOutcome.settled(gates.get(g, {}).get("outcome", ""), True)
+        if g in pipeline
+        and g not in accepted
+        and not GateOutcome.settled(gates.get(g, {}).get("outcome", ""), True)
     ]
     unreasoned = [
         g for g, v in gates.items() if v["outcome"] == GateOutcome.SKIPPED and not v.get("reason")
@@ -295,6 +306,8 @@ def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
         notes.append(
             f"completed with --force, overriding: {_trim(led['overridden']) or 'unspecified'}"
         )
+    if accepted:
+        notes.append(f"partial, accepted by a person (still not passed): {_trim(list(accepted))}")
     if notes:
         return Claim("gates", WARN, "; ".join(notes))
     return Claim("gates", OK, f"{len(gates)} gate(s) recorded, none blocking")
@@ -378,7 +391,7 @@ def check(
         _landed(repo, cfg, led),
         _declared(repo, led, tracked),
         _tests(led, tracked),
-        _gates(cfg, led, pipeline),
+        _gates(cfg, led, pipeline, _accepted(st, item_id, pipeline)),
         _survives(led, tracked),
     ]
     if reg := _regression(st, item_id, tracked, cfg):
