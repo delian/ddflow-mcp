@@ -295,3 +295,12 @@ def test_a_clean_tree_needs_no_stash_list_even_when_the_list_fails(repo, monkeyp
 
     monkeypatch.setattr(BS.W, "git", git)
     assert BS._stash_away(wt, "tag-mine") == ""
+
+
+def test_a_tag_that_reads_like_the_nothing_to_save_message_is_still_stashed(repo):
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    assert BS._stash_away(wt, "no local changes to save")  # a stash WAS made: not ""
+    assert "no local changes to save" in _stashes(wt)
