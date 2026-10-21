@@ -123,7 +123,7 @@ def test_mcp_note_pages_a_record_list_and_never_says_offset_none():
     from ddflow.surfaces.mcp_bound import bound_list
 
     rec = {"truncated": True, "rows": [1], "shown": 1, "total": 5, "next": 1}
-    assert "offset=1" in bound_list(rec, {})[1]
+    assert "limit=7 offset=1" in bound_list({**rec, "limit": 7}, {})[1]
     search = {"truncated": True, "rows": [1], "shown": 1, "total": 5}
     note = bound_list(search, {})[1]
     assert "None" not in note and "raise limit" in note
