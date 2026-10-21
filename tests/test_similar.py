@@ -259,6 +259,24 @@ def test_the_knobs_steer_the_policy():
     assert similar.assess(_idx(), q, _cfg(show_floor=1.0)).action == "none"
 
 
+def test_research_note_and_the_task_it_informs_are_related_not_duplicates():
+    """B-dupe-research-vs-task: a note about a topic scores high against the task that will
+    implement it; it is listed, never refused. Same-kind and bug pairs still ask."""
+    note = {"kind": "research", "title": "", "body": LONG + " finding"}
+    tasks = similar.build([{"id": "T1", "kind": "task", "title": "x", "body": LONG}])
+    a = similar.assess(tasks, note, _cfg())
+    assert a.action == "show" and any(c.id == "T1" for c in a.candidates)
+    task = {"kind": "task", "title": "", "body": LONG + " finding"}
+    idx = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
+    assert similar.assess(idx, task, _cfg()).action == "show"
+    assert similar.assess(tasks, note, _cfg(research_task_asks=True)).action == "ask"
+    # a note against a note is still a duplicate
+    two = similar.build([{"id": "R1", "kind": "research", "title": "", "body": LONG}])
+    assert similar.assess(two, note, _cfg()).action == "ask"
+    b = similar.assess(_idx(), {"kind": "bug", "title": "", "body": LONG + " again"}, _cfg())
+    assert b.action == "ask"
+
+
 # ------------------------------------------------------------------------------ config
 
 

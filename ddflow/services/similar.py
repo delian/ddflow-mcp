@@ -265,6 +265,15 @@ class Assessment:
         return next((c for c in self.candidates if "identical" in c.flags), None)
 
 
+#: Work items: a research note and one of these are `related` (the note informs the work),
+#: so a score between them lists the pair and never asks (B-dupe-research-vs-task).
+_WORK = ("task", "phase")
+
+
+def _note_vs_work(a: str, b: str) -> bool:
+    return {a, b} <= {"research", *_WORK} and "research" in (a, b) and a != b
+
+
 def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
     """Does this candidate make the add ask? An identical record of the SAME kind always
     does (it is merged, not asked about, but it is the strongest match there is); a record
@@ -275,6 +284,8 @@ def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
     if "identical" in c.flags and c.kind == kind:
         return True
     if "filed_against" in c.flags:
+        return False
+    if not dd.research_task_asks and _note_vs_work(kind, c.kind) and "identical" not in c.flags:
         return False
     return "identical" in c.flags or (c.score >= dd.ask_threshold and words >= dd.min_words)
 
