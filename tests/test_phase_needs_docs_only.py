@@ -111,5 +111,8 @@ def test_reporting_views_follow_the_knob(repo):
     off.schedule.docs_ignore_phase_needs = False
     assert "G1" not in _waits_on(st, "N-res", on)
     assert "G1" in _waits_on(st, "N-res", off)
-    assert "N-res" not in critical_path(st, "", on) or "G1" not in critical_path(st, "", on)
+    from ddflow.core.schedule import _chain_scope
+
+    assert "P-gate" not in _chain_scope(st, "", on)[1](st.items["N-res"])
+    assert "P-gate" in _chain_scope(st, "", off)[1](st.items["N-res"])
     assert critical_path(st, "", off)
