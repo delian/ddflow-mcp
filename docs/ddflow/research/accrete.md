@@ -27,7 +27,8 @@ Tags: **VERIFIED** = seen on an Accrete page or in ddflow code; **REPORTED** = a
 | "Forward-deployed engineering model with MCP servers" | VERIFIED as one sentence; endpoints, schemas, auth UNKNOWN | blog "knowledge engine revolution" |
 | Public API, SDK, OpenAPI, webhooks | none found (R-accrete-no-public-interface); catalog says none | api-evangelist catalog (REPORTED), searches |
 | Security: SOC 2 Type 1 and 2, CMMC, DoD IL4/IL5, HIPAA, ITAR listed; Argus "built to the FedRAMP High standard" (design target, authorisation not stated) | VERIFIED as listed; detailed documents are on request | trust.accrete.ai, /government |
-| Data residency, which cloud, on-prem option, retention, training on customer data | UNKNOWN | trust page: AWS and Azure named, no detail |
+| Cloud: AWS and Azure are named as infrastructure | REPORTED (trust page, which one is used is not stated) | trust.accrete.ai |
+| Data residency, on-prem option, retention, training on customer data | UNKNOWN | no evidence found |
 | Pricing, rate limits, trial | UNKNOWN | demo-only |
 | Results: 92% time saving, 2 weeks to 6 minutes, 58% lower token cost, 2x tasks, 19 of 34 tacit facts vs 1 for RAG, "zero hallucinations" | REPORTED, vendor numbers with no method (R-accrete-vendor-benchmarks); the page labels its chart illustrative | /enterprise |
 | Customers | named only as types (entertainment company, fund, insurer); government via contract vehicles | /enterprise, /government |
@@ -129,5 +130,5 @@ Defects and gaps met while doing this research, checked against the open bugs fi
 
 - `B-claim-research-inherits-phase-deps` (already open, not re-filed): this very task, `ACF-research`, was refused because it inherits the docs-wave hold of its phase and needed `claim --force`.
 - `Bf9b9abac5b` (filed): the CLI `ddflow list` rejects kind `search` and `session`, which the MCP `ddflow_list` accepts. Fix task `fix-Bf9b9abac5b`.
-- `ddflow complete` on a docs-only task still requires `implement`, `unit_tests` and `merge`; the docs-only pipeline fix by another session is not on main yet. Recorded honestly, not forced (see the task's gate record).
+- `ddflow complete` on a docs-only task still requires `implement`, `unit_tests` and `merge`; already open as `B-research-task-cannot-complete-docs-only` and `B75d2b12ff1` (not re-filed); the fix by another session is not on main yet. Recorded honestly, not forced (see the task's gate record).
 - Not a ddflow defect: the shell has `ls` aliased to a missing `exa`, which prints noise in every directory listing.
