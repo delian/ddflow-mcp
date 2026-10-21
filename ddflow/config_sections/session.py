@@ -78,7 +78,7 @@ class SessionConfig:
     )
     rules_charter_tokens: int = knob(
         300,
-        doc="Tokens, inside brief_max_tokens, reserved FIRST for the rules charter: one line (id and title) for every live project rule, never cut by the sections after it. It also heads the subagent launch brief. 0 turns the charter off. What does not fit is counted and points to `ddflow rule list`.",
+        doc="Tokens, inside brief_max_tokens, reserved FIRST for the rules charter: one line (id and title) for every live project rule, never cut by the sections after it. It also heads the subagent launch brief. 0 turns the charter off; it never takes more than half of brief_max_tokens. What does not fit is counted and points to `ddflow rule list`.",
     )
     rules_charter_title_chars: int = knob(
         100,
