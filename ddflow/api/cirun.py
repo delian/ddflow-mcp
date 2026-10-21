@@ -46,8 +46,14 @@ def held_item(repo: Path, agent: str, where: Path | None) -> str:
     """The item this caller is working on when it stands in no item's tree: the one live
     lease ``agent`` holds that has a branch to test (a claim without a worktree has none),
     else "" (none, or several -- then the tree decides, as before).
-    A caller standing in a tree that is an item's own keeps that tree's HEAD."""
+    A caller standing in a tree that is an item's own keeps that tree's HEAD, and so does a
+    gate's command: `gate run <item> ci` runs in the tree it was given (recognised as an
+    item's or not), whatever else the caller holds (B-gate-run-ci-wrong-tree)."""
     if not agent:
+        return ""
+    # Any gate, not just ci (unlike the recording guard in run()): every gate command runs
+    # inside the tree of the item it is a gate for.
+    if os.environ.get(IN_GATE_ENV):
         return ""
     _log, cfg, st = _load(repo, agent)
     now = time.time()
