@@ -159,10 +159,12 @@ def _lanes(split: tuple[list, list, list], cap: int, cut: int) -> tuple[list[dic
     return lanes, omitted
 
 
-def _mark_critical(q: Query, phase: str, by_id: dict[str, dict], ranked: list[str]) -> list[str]:
+def _mark_critical(
+    q: Query, phase: str, by_id: dict[str, dict], ranked: list[str], cfg: Config
+) -> list[str]:
     """Rank each phase row, flag the ones on the critical path, and return the listed chain."""
     listed = set(by_id) | {t["id"] for r in by_id.values() for t in r["all_tasks"]}
-    chain = [i for i in critical_path(q.state, phase) if i in listed]
+    chain = [i for i in critical_path(q.state, phase, cfg) if i in listed]
     path = set(chain)
     for rank, pid in enumerate(ranked):
         r = by_id[pid]
@@ -182,7 +184,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     key = lambda i: (q.state.items[i].priority, i)  # noqa: E731
     before = _phase_before(q, cfg, set(by_id))
     ranked = RC.order(by_id, before, key)
-    chain = _mark_critical(q, f.phase, by_id, ranked)
+    chain = _mark_critical(q, f.phase, by_id, ranked, cfg)
     phases = [by_id[i] for i in ranked]
     split = RC.split_lanes(phases, st.next_n)
     shown = {
