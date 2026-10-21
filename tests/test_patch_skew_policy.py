@@ -195,3 +195,62 @@ def test_an_older_adopt_is_refused_even_by_a_patch_skew(repo: Path):
     out = setup(repo, Adoption(agents="claude"))
     assert out.exit == 3, out
     assert not (repo / "AGENTS.md").exists()
+
+
+def test_the_patch_skew_notice_is_said_once_across_processes(repo: Path):
+    """B-path-ddflow-version-skew-noise: each CLI call is a new process, so a per-process
+    set repeated the warning on every write; a machine-local marker says it once."""
+    _stamp(repo, "0.5.7")
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    LOG._SKEW_WARNED.clear()  # a new process
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert (repo / ".ddflow" / "local" / "skew-notice.json").exists()
+
+
+def test_the_patch_skew_notice_names_the_fix_and_the_quiet_knob(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    err = capsys.readouterr().err
+    assert "skew_notice" in err and "0.5.7" in err and "pgrade" in err
+
+
+def test_a_second_process_stays_quiet_and_always_repeats(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    capsys.readouterr()
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert capsys.readouterr().err == ""
+
+
+def test_skew_notice_always_repeats_per_process_and_off_is_silent(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+):
+    _stamp(repo, "0.5.7")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[upgrade]\nskew_notice = "off"\n')
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+    assert capsys.readouterr().err == ""
+    cfg.write_text('[upgrade]\nskew_notice = "always"\n')
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
+    assert "patch skew" in capsys.readouterr().err
+    LOG._SKEW_WARNED.clear()
+    EventLog(repo, "me").append("phase.added", "P3", {"title": "p"})
+    assert "patch skew" in capsys.readouterr().err
+
+
+def test_pins_regenerate_refuses_an_older_binary_than_the_log(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")  # a PATCH ahead: appends warn, but pin output differs between patches
+    out = PF.pins_regenerate(repo, start=repo, agent="me")
+    assert out.exit == 3 and "0.5.7" in out.reason and RUNNING in out.reason
+    # a check (read only) is not refused
+    assert PF.pins_regenerate(repo, start=repo, agent="me", check=True).exit != 3

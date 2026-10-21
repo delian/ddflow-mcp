@@ -2091,6 +2091,18 @@
           older ddflow's write is refused); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      upgrade.skew_notice = 'once'   [default]
+          How often the stderr notice for a write let through an older ddflow (a PATCH
+          skew under `refuse`, or `[upgrade].skew = warn`) is said. `once` (default):
+          once per version pair for this project on this machine (a git-ignored
+          marker, `.ddflow/local/skew-notice.json`), so a `ddflow` on PATH older than
+          the log does not repeat it on every call; the notice names the upgrade
+          command. `always`: once per process, as before. `off`: never. It never
+          touches the refusal itself, which is always shown. An unrecognised value in
+          a config file is warned about, reported by `doctor` and falls back to
+          'always', the strictest (the notice repeats); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       upgrade.backup = 'local'   [default]
           Where `ddflow upgrade --apply` saves the files it is about to rewrite
           (decision D-upgrade-backups). `local` (default): a copy under
