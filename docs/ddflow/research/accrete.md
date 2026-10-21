@@ -122,3 +122,12 @@ The task graph was checked over the folded state: no cycles, every need exists.
 ## 6. Still UNKNOWN
 
 Any Accrete API, SDK, MCP server, webhook or ingestion format; auth model and per-user permissions; deployment options and data residency; retention and training-on-customer-data policy; pricing and limits; the schema of the graph and how rationale is inferred and validated; independent evidence for any benchmark. `ACF-verify` lists the questions to put to Accrete.
+
+## 7. ddflow self-assessment (D-ddflow-self-assessment-r2)
+
+Defects and gaps met while doing this research, checked against the open bugs first:
+
+- `B-claim-research-inherits-phase-deps` (already open, not re-filed): this very task, `ACF-research`, was refused because it inherits the docs-wave hold of its phase and needed `claim --force`.
+- `Bf9b9abac5b` (filed): the CLI `ddflow list` rejects kind `search` and `session`, which the MCP `ddflow_list` accepts. Fix task `fix-Bf9b9abac5b`.
+- `ddflow complete` on a docs-only task still requires `implement`, `unit_tests` and `merge`; the docs-only pipeline fix by another session is not on main yet. Recorded honestly, not forced (see the task's gate record).
+- Not a ddflow defect: the shell has `ls` aliased to a missing `exa`, which prints noise in every directory listing.
