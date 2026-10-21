@@ -102,3 +102,14 @@ def test_a_pinned_rule_is_listed_even_when_the_charter_has_no_room():
     plain = [GuidanceRecord(id=f"r-p{i}", kind="rule", title="x") for i in range(4)]
     got = CH.lines([*plain, pinned], tokens=1, title_chars=100)
     assert got[0].startswith("- [r-pin]") and "more rules: r-p0" in got[-1]
+
+
+def test_the_cut_line_is_reserved_only_for_the_rules_after_the_one_listed():
+    rules = [GuidanceRecord(id=f"r-{c}", kind="rule", title="t") for c in "ab"]
+    exact = (
+        CH.approx_tokens(CH.LEAD)
+        + CH.approx_tokens("- [r-a] t")
+        + CH.approx_tokens(CH._more(rules[1:]))
+    )
+    got = CH.lines(rules, tokens=exact, title_chars=100)
+    assert got[0] == "- [r-a] t" and "1 more rules: r-b" in got[1]

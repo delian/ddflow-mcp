@@ -1051,6 +1051,30 @@ def _fit_sections(
     return out, trimmed
 
 
+def _assemble(
+    head: list[str],
+    sections: list[tuple[str, list[str]]],
+    chars: int,
+    note: str,
+    charter: str,
+    item: str,
+) -> str:
+    """The brief's text within ``chars``: the sections cut to what the charter (set aside
+    first, appended whole) leaves, then the backstop for a heading that alone overran its
+    share -- the note counts too, and the backstop cuts the sections, never the charter."""
+    set_aside = len(charter) + 2 if charter else 0
+    room = chars - len("\n".join(head)) - len(note) - 1 - set_aside
+    body, trimmed = _fit_sections(sections, room, item)
+    text = "\n".join(head + body)
+    cap = chars - set_aside
+    if len(text) + (len(note) if trimmed else 0) > cap:
+        text = text[: max(0, cap - len(note))].rsplit("\n", 1)[0]
+        trimmed = True
+    if trimmed:
+        text += note
+    return text + ("\n\n" + charter if charter else "")
+
+
 def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/suggested decide the heading
     state: State,
     cfg: Config,
@@ -1116,19 +1140,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
         f"\n\n_[brief truncated at {budget} tokens "
         f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
     )
-    set_aside = len(charter) + 2 if charter else 0
-    room = budget * 4 - len("\n".join(head)) - len(note) - 1 - set_aside
-    body, trimmed = _fit_sections(sections, room, item)
-    text = "\n".join(head + body)
-    # The backstop, for a heading that alone overran its share: the note counts too. The
-    # charter's room is kept out of it, so the backstop cuts the sections, never the charter.
-    cap = budget * 4 - set_aside
-    if len(text) + (len(note) if trimmed else 0) > cap:
-        text = text[: max(0, cap - len(note))].rsplit("\n", 1)[0]
-        trimmed = True
-    if trimmed:
-        text += note
-    return text + ("\n\n" + charter if charter else "")
+    return _assemble(head, sections, budget * 4, note, charter, item)
 
 
 #: Every generated view: its filename and how to render it. The ONE map. There were two
