@@ -40,7 +40,7 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
     if stale := reviewed_other_tree(repo, cfg, st, item, gate):
         return O.ok(
             "review.triage",
-            **{**out.data, "text": f"{out.data['text']}\n{gate} stays failed: {stale}"},
+            **{**out.data, "text": f"{out.data['text']}\n{gate} stays {rec.outcome}: {stale}"},
         )
     mine = it.triage.get(gate, {})
     found = LB.full(rec.evidence or {}).get("chunk_findings") or []
