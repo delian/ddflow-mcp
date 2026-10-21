@@ -1256,6 +1256,9 @@ def _cite_grant(extra: dict[str, Any] | None, grant_id: str) -> dict[str, Any] |
 
 def _grant_ctx(repo, it, gate: str, a: dict[str, Any]) -> GNT.Ctx:
     """The facts a standing operator grant's predicate reads (`services.grants.Ctx`)."""
+    # No numbered findings on record (a clean or hand-recorded gate: `_rows` says why in text)
+    # reads as "untriaged", so a standing grant never fires on what it cannot see: a clean
+    # round has nothing left to triage and needs no extra round.
     rows = _FR._rows(it, gate)
     return GNT.Ctx(
         untriaged=(
@@ -1769,6 +1772,8 @@ def _any_out_of_rounds(cfg, it, gates: list[str], args: dict[str, Any]) -> bool:
     """Would a full round of any of ``gates`` be refused? Then none is combined."""
     if it is None:
         return False
+    # Operator grants are item.gate scoped; a combined round spans several gates, so none is
+    # consulted here: past the cap the gates are reviewed one by one, and each cites its own.
     quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
     return any(
         _budget(cfg, it.id, g, _rounds_used(it, g), args["force"], args["reason"], quiet)[0]
