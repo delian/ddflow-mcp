@@ -15,7 +15,13 @@ from .._base import _load
 
 
 def sync(
-    repo: Path, *, item: str = "", check: bool = False, agent: str = "", called_from=None
+    repo: Path,
+    *,
+    item: str = "",
+    check: bool = False,
+    keep_local: bool = False,
+    agent: str = "",
+    called_from=None,
 ) -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     if item:
@@ -31,7 +37,7 @@ def sync(
     if not it.worktree:
         return O.failed("sync", f"{it.id} has no worktree to bring up to date")
     tree = W.load_path(repo, it.worktree)
-    r = BS.sync(repo, cfg, tree, it.base, list(it.globs), check=check)
+    r = BS.sync(repo, cfg, tree, it.base, list(it.globs), check=check, keep_local=keep_local)
     data = {
         "item": it.id,
         "base": r.base,
@@ -43,6 +49,7 @@ def sync(
         "dirty": r.dirty,
         "detail": r.detail,
         "aborted": r.aborted,
+        "kept_stash": r.kept_stash,
     }
     if r.status == "merged":
         notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
@@ -55,6 +62,8 @@ def sync(
         data["gates_not_passing"] = sorted(g for g, r in it.gates.items() if r.outcome != "passed")
         data["gates_unverified"] = sorted(recorded & unverified)
     text = _text(r, data)
+    if r.kept_stash:
+        text += f"\n{r.detail.strip()}"
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
     if r.status in ("unknown", "current"):
