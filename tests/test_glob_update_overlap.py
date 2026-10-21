@@ -76,3 +76,16 @@ def test_keep_list_counts_every_holder(repo):
     assert not ok.ok
     assert "other/b.py' overlaps" in ok.reason and "pkg/gates/a.py' overlaps" in ok.reason
     assert "(fine.py would be accepted)" in ok.reason
+
+
+def test_all_globs_clashing_does_not_promise_an_empty_acceptance(repo):
+    _setup(repo)
+    bad = AI.update(repo, "M1", AI.ItemEdit(globs=["pkg/gates/a.py"]), agent=ME)
+    assert not bad.ok and "would be accepted" not in bad.reason
+
+
+def test_bracket_filenames_are_matched_literally(repo, monkeypatch):
+    _setup(repo)
+    monkeypatch.setattr(L, "holder_changed_paths", lambda log, item: ["pkg/gates/f[1].py"])
+    ok = AI.update(repo, "M1", AI.ItemEdit(globs=["mine.py", "pkg/gates/f1.py"]), agent=ME)
+    assert ok.ok, ok.reason
