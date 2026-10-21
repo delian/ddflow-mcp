@@ -102,7 +102,9 @@ def _stash_away(tree: Path, tag: str) -> str:
 def _stash_back(tree: Path, tag: str, sha: str) -> str:
     """Re-apply the stash ``sha`` and drop the entry named ``tag``. "" when restored, else
     why not -- the entry then stays, holding the work."""
-    r = W.git(tree, "stash", "apply", sha)
+    r = W.git(tree, "stash", "apply", "--index", sha)  # staged stays staged
+    if not r.ok:  # e.g. a conflict, or an index the merge made impossible: plain apply
+        r = W.git(tree, "stash", "apply", sha)
     if not r.ok:
         return r.err or r.out or "git stash apply failed"
     _sha, ref = _stash_find(tree, tag)
