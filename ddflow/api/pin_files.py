@@ -45,7 +45,8 @@ def pins_regenerate(
         if not actions:
             return O.nothing("pins", "nothing to install: no pin recipes, or already installed")
         return O.ok("pins", installed=actions)
-    if not check:
+    # A post-merge hook in a linked worktree records nothing (below): nothing to refuse.
+    if not check and not (after_merge and _linked_worktree(repo)):
         refusal = _older_binary_refusal(primary, agent)
         if refusal:
             return O.refused("pins", refusal)

@@ -225,20 +225,26 @@ def _notice_due(root: Path | None, key: tuple[str, str, int], mode: str) -> bool
     _SKEW_WARNED.add(process_key)
     if mode == "always" or root is None:
         return True
-    path = Path(root) / SKEW_NOTICE_MARKER
-    tag = "|".join(map(str, key))
-    try:
-        seen = json.loads(path.read_text("utf-8")).get("seen", [])
-    except (OSError, ValueError, AttributeError):
-        seen = []
-    if not isinstance(seen, list):  # a marker that parses but is not ours: say it again
-        seen = []
-    if tag in seen:
-        return False
+    return _marker_is_new(Path(root) / SKEW_NOTICE_MARKER, "|".join(map(str, key)))
+
+
+def _marker_is_new(path: Path, tag: str) -> bool:
+    """Record ``tag`` in the marker at ``path``; False when it was already there. The read
+    and the write are one step under a lock, so two processes do not lose each other's tag;
+    a marker that cannot be read or written is treated as new (the notice repeats)."""
     try:
         fsio.ensure_ignored_dir(path.parent)
-        fsio.atomic_write(path, json.dumps({"seen": [*seen, tag][-20:]}) + "\n")
-    except OSError:
+        with fsio.file_lock(path.with_suffix(".lock"), 5.0):
+            try:
+                seen = json.loads(path.read_text("utf-8")).get("seen", [])
+            except (OSError, ValueError, AttributeError):
+                seen = []
+            if not isinstance(seen, list):  # parses but is not ours: say it again
+                seen = []
+            if tag in seen:
+                return False
+            fsio.atomic_write(path, json.dumps({"seen": [*seen, tag][-20:]}) + "\n")
+    except (OSError, fsio.LockTimeout):
         pass
     return True
 
