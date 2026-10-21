@@ -13,7 +13,7 @@ echo "$@" >> "$FAKE_LOG"
 case "$1" in
   review) echo "Enqueued job 7 for range" ;;
   wait) [ -n "$FAKE_HANG" ] && sleep 30; exit "${FAKE_WAIT_EXIT:-0}" ;;
-  list) [ -n "$FAKE_LIST_EMPTY" ] && { echo "[]"; exit 0; }; echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS-done}\", \"git_ref\": \"x..abcdef0\"}]" ;;
+  list) [ -n "$FAKE_LIST_EMPTY" ] && { echo "[]"; exit 0; }; echo "[{\"id\": 7, \"status\": \"${FAKE_STATUS-done}\", \"git_ref\": \"x..abcdef0\", \"agent\": \"${FAKE_AGENT-}\", \"model\": \"${FAKE_MODEL-}\"}]" ;;
   show) [ -n "$FAKE_SHOW_FAIL" ] && exit 1; echo "Review for job 7: ${FAKE_VERDICT:-no issues}" ;;
 esac
 """
@@ -249,3 +249,54 @@ def test_concurrent_callers_enqueue_one_job_for_one_sha(tmp_path, monkeypatch):
     [t.join() for t in ts]
     assert [r.job for r in out] == [7, 7]
     assert sum(c.startswith("review") for c in log.read_text().splitlines()) == 1
+
+
+def test_the_output_prints_the_gate_record_line_with_the_agent_roborev_ran(
+    tmp_path, monkeypatch, capsys
+):
+    """B-standards-gate-model-label-not-printed: dec-finisher typed --model kimi although
+    roborev ran kilo; the exact line to record comes from the job's own agent field."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    assert RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"]) == 0
+    out = capsys.readouterr().out
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    assert (
+        f"ddflow gate record <id> standards --outcome passed --reviewed-sha {head} --model kilo"
+        in out
+    )
+
+
+def test_the_recorded_model_is_the_jobs_model_when_it_names_one(tmp_path, monkeypatch, capsys):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_MODEL", "glm-5")
+    RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
+    assert "--model glm-5" in capsys.readouterr().out
+
+
+def test_findings_print_a_failed_record_line_and_an_unknown_agent_none(
+    tmp_path, monkeypatch, capsys
+):
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
+    out = capsys.readouterr().out
+    assert "--outcome passed" not in out
+    assert "standards --outcome failed" in out and "--model kilo" in out
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "0")
+    monkeypatch.setenv("FAKE_AGENT", "")
+    RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
+    assert "standards --outcome" not in capsys.readouterr().out
+
+
+def test_the_printed_label_is_the_one_the_family_check_judges_by(tmp_path, monkeypatch):
+    from ddflow.services import roborev as RR
+
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_MODEL", "glm-5")
+    assert RB.run(repo, "main", 5).reviewer == RR.Review(7, "kilo", "glm-5").reviewer

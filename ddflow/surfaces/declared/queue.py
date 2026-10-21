@@ -47,6 +47,7 @@ def item_edit(a: dict):
         resources=_list_or_none(a, "resources"),
         worktree=a.get("worktree"),
         queue=bool(a.get("queue")),
+        landed=a.get("landed"),
     )
 
 
@@ -456,6 +457,11 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="keep a refused --globs widening in the first-in-first-out line for its files",
             ),
             Param(
+                "landed",
+                help="Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`.",
+                cli_help="record the commit (or <before>..<after>) on the base that holds this item's work merged outside `ddflow merge`; refused unless it is on the base and touches the item's globs",
+            ),
+            Param(
                 "worktree",
                 help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch.",
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
@@ -481,6 +487,7 @@ COMMANDS: tuple[Command, ...] = (
             "line",
             "resources",
             "queue",
+            "landed",
             "worktree",
         ),
     ),

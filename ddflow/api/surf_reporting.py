@@ -18,6 +18,7 @@ from ..services import viewers as V
 
 #: Most rows a `<kind> list` shows unless asked for more.
 LIST_DEFAULT_LIMIT = V.DEFAULT_LIMIT
+LIST_MAX_LIMIT = V.MAX_LIMIT
 SEARCH_DEFAULT_LIMIT = S.DEFAULT_LIMIT
 SEARCH_MAX_LIMIT = S.MAX_LIMIT
 #: The kinds of row `search` covers, and the names of the sources behind them.

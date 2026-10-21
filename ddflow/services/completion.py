@@ -33,6 +33,7 @@ from . import changes as CH
 from . import chore as CO
 from . import gate_accept as GA
 from . import gates as G
+from . import landed as LD
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
@@ -464,16 +465,31 @@ def changed_paths(repo: Path, it) -> list[str] | None:
             repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
         )
     base = it.base or W.default_branch(repo)
+    found, may_cite = _unlanded_paths(repo, it, base)
+    if found or not may_cite:
+        return found
+    # Landed by a plain git merge or a mixed commit, so the branch (if any) differs from the
+    # base by nothing: the commits that cite the item, checked.
+    return LD.cited_paths(repo, it, base) or found
+
+
+def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:
+    """The item's worktree (or, with none, its branch) against its base, and whether
+    the item's cited commits may stand in for it. They may when nothing is left to read: a
+    worktree that differs from the base by nothing, a branch already merged into its base, or
+    no worktree and no branch at all. They may not when the item claims a worktree or branch
+    that git cannot read (None): its real work is unseen, so never guess."""
     path = W.load_path(repo, it.worktree) if it.worktree else None
     if path and path.is_dir():
-        return TS.changed_files(path, base)
+        seen = TS.changed_files(path, base)
+        return seen, seen == []
     # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
     if it.branch and W.rev(repo, it.branch):
         out = CH.changed_paths(repo, base, tip=it.branch, include=("committed",))
         # Empty is not "nothing changed" here: a branch already merged into its base, or
         # the base itself, diffs to nothing whatever the task did.
-        return sorted(out) if out else None
-    return None
+        return (sorted(out) if out else None), True
+    return None, not (it.worktree or it.branch)
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
