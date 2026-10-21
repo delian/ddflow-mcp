@@ -83,3 +83,18 @@ def test_a_partly_covered_wildcard_is_not_docs(repo):
     it = st.items["N-docs"]
     it.globs = ["docs/*"]
     assert ("P-next", "P-gate") in inherited_deps(st, it, cfg)
+
+
+def test_containment_rules_are_sound_and_cover_the_usual_shapes(repo):
+    from ddflow.core.schedule import _glob_is_docs
+
+    docs = ["docs/**", "**/*.md"]
+    assert _glob_is_docs("docs/**/*.md", docs)
+    assert _glob_is_docs("docs/x*", docs)
+    assert _glob_is_docs("src/readme.md", docs)
+    assert _glob_is_docs("src/*.md", docs)
+    assert not _glob_is_docs("src/*.py", docs)
+    assert not _glob_is_docs("docs/../src/a.py", docs)
+    assert not _glob_is_docs("docs/*", ["docs/x*"])
+    assert not _glob_is_docs("docs/*", ["docs/x", "docs/zq9"])
+    assert not _glob_is_docs("docs/**", ["docs/*"])

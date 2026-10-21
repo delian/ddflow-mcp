@@ -271,16 +271,29 @@ def _docs_only_exempt(it: Item, cfg: Config | None) -> bool:
 
 
 def _glob_is_docs(glob: str, docs: list[str]) -> bool:
-    """Is every file ``glob`` can match a document? A glob matching `**` is trusted only
-    when it IS a document glob (it could reach any depth); otherwise `*`/`?` stand for one
-    plain character, and that representative path must fall inside a document glob."""
+    """Is every file ``glob`` can match a document? Decided by containment rules that
+    cannot over-claim, never by sampling: the glob IS a doc glob; a doc glob `dir/**`
+    holds everything under `dir/`; a doc glob `**/*.ext` (or `*.ext`) holds every path
+    whose last component ends `.ext`; and a doc glob `dir/*` holds a single-level glob under `dir/`; a glob with no wildcard is one path to test."""
+    if ".." in glob.split("/"):
+        return False
     if glob in docs:
         return True
-    if "**" in glob:
-        return False
-    # Two different fillers: a doc glob like `docs/x*` covers `docs/x` but not `docs/y`.
-    probes = (glob.replace("*", "x").replace("?", "x"), glob.replace("*", "zq9").replace("?", "q"))
-    return all(any(path_in_glob(p, d) for d in docs) for p in probes)
+    last = glob.rsplit("/", 1)[-1]
+    for d in docs:
+        if d.endswith("/**") and glob.startswith(d[:-2]):
+            return True
+        if d.endswith("/*") and not d.endswith("**") and glob.startswith(d[:-1]):
+            if "/" not in glob[len(d) - 1 :] and "**" not in glob:
+                return True
+        tail = d[len("**/") :] if d.startswith("**/") else d
+        if (
+            tail.startswith("*")
+            and not any(c in tail[1:] for c in "*?[/")
+            and last.endswith(tail[1:])
+        ):
+            return True
+    return not any(c in glob for c in "*?[") and any(path_in_glob(glob, d) for d in docs)
 
 
 def inherited_deps(state: State, it: Item, cfg: Config | None = None) -> list[tuple[str, str]]:
