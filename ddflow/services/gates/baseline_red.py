@@ -3,8 +3,8 @@
 
 When `ci` or `unit_tests` fails with test ids read from its output, only those ids are run
 again in a scratch worktree of the base. If every one of them fails there too, the failure
-is not this change's: the gate is recorded `partial` (a coverage gap `complete` accepts, for
-exactly those ids) with the reason ``baseline-red: <ids>, bug <id>``. Any id that passes on
+is not this change's: the gate is recorded `partial` (which `complete` accepts only once a person
+has accepted it, `services.gate_accept`) with the reason ``baseline-red: <ids>, bug <id>``. Any id that passes on
 the base, any id the output did not name (a capped list, a fail-fast run) or a command that
 does not run pytest leaves the gate FAILED.
 """

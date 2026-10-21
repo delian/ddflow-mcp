@@ -237,9 +237,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             + ")"
             + "".join(
                 f"; {g} is partial: re-run it, or a person runs `ddflow approve {item_id} {g}` "
-                f"to accept that outcome (it stays partial on the record)"
+                f"to accept that baseline-red outcome (it stays partial on the record)"
                 for g in missing
-                if it.gate_outcome(g) == GA.ACCEPTABLE
+                if it.gate_outcome(g) == GA.ACCEPTABLE and not GA.refusal(it, g)
             )
         )
 
