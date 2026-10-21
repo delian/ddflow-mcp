@@ -1158,18 +1158,22 @@ def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, st
     return False, "reviewed paths unchanged, all findings triaged"
 
 
-def _nothing_new(repo: Path, cfg, st, it, a: dict[str, Any], say) -> str:
-    """Why no reviewer is called (the round is not justified; none is counted), or "" when
-    the round runs -- and then the one-line report of rounds used."""
-    ok, why = _justification(repo, cfg, st, it, a)
+def _nothing_new(it, a: dict[str, Any], ok: bool, why: str) -> str:
+    """Why no reviewer is called when the round is not justified (``ok`` False); none is
+    counted."""
     item, gate = a["item"], a["gate"]
     used = _rounds_used(it, gate) if it and item else 0
+    if ok:
+        return ""
+    return f"nothing new to review since round {used} ({why}); {item}.{gate} stays as recorded."
+
+
+def _rounds_report(cfg, it, a: dict[str, Any], why: str) -> str:
+    """The one-line report of a round that will run: rounds used counting it (a free fix
+    round counts none), against the cap, and why it is justified."""
+    used = _rounds_used(it, a["gate"]) + (0 if a.get("fix") else 1)
     cap = cfg.review.max_rounds
-    if not ok:
-        return f"nothing new to review since round {used} ({why}); {item}.{gate} stays as recorded."
-    if item:
-        say(f"rounds used {used + 1}/{cap if cap > 0 else 'unlimited'}, justified: {why}")
-    return ""
+    return f"rounds used {used}/{cap if cap > 0 else 'unlimited'}, justified: {why}"
 
 
 def _is_fix_round(cfg, it, a) -> bool:
@@ -1197,7 +1201,8 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
-    if idle := _nothing_new(repo, cfg, st, it, a, say):
+    ok, why_ok = _justification(repo, cfg, st, it, a)
+    if idle := _nothing_new(it, a, ok, why_ok):
         a["refusal_exit"] = O.NOTHING  # nothing to review is exit 2, a budget refusal 3
         return "full", 0, "", "", "", idle, None
     delta = _wants_delta(repo, cfg, it, a, say)
@@ -1215,6 +1220,8 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
+    if item:
+        say(_rounds_report(cfg, it, a, why_ok))
     if delta:
         diff, how, why = _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
     elif a["commit"]:
