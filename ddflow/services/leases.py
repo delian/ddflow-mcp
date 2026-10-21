@@ -31,7 +31,7 @@ from ..core import clock, schedule
 from ..core import globs as GL
 from ..core import globspec as GS
 from ..core import outcome as O
-from ..core.admission import conflicts, glob_conflict, shared_globs
+from ..core.admission import conflicts, glob_conflict, is_shared, shared_globs
 from ..core.flow import line_key
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
@@ -226,7 +226,8 @@ def _clash_text(
         pairs = conflicts(globs, lz.globs, shared)
         changed = holder_changed_paths(log, other) if pairs else None
         if changed is not None:
-            pairs = [(a, b) for a, b in pairs if any(GL.match(p, a) for p in changed)]
+            real = [p for p in changed if not is_shared(p, shared)]
+            pairs = [(a, b) for a, b in pairs if any(GL.match(p, a) for p in real)]
         if not pairs:
             continue
         listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
