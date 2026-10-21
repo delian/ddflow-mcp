@@ -20,10 +20,10 @@ from ..infra import git as G
 from ..infra import worktree as W
 from ..services import flakes as FL
 from ..services import flow as FS
-from ..services import gates as GS
 from ..services import mergequeue as MQ
 from ..services import pins as PN
 from ..services import pins_text as PT
+from ..services.pipeline_diff import effective_pipeline
 from ._base import _load
 from .cirun import run as ci_run
 from .gates import run as run_gate
@@ -124,13 +124,14 @@ def _run_checks(
 ) -> str:
     """The checks the integrator runs once on the merged result: ci, and unit_tests when
     asked. "" when they pass, else why the entry is parked (``detail`` then holds what failed)."""
-    if "ci" in GS.pipeline_for(it, cfg):
+    pipe = effective_pipeline(repo, cfg, it)
+    if "ci" in pipe:
         log = MQ.log_path(repo, e)
         out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log, full=True)
         if out.exit != O.OK:
             detail.update(_ci_detail(repo, e, out, log))
             return f"ci {out.data.get('status', 'did not pass')}: {out.reason}"
-    if unit_tests and "unit_tests" in GS.pipeline_for(it, cfg):
+    if unit_tests and "unit_tests" in pipe:
         out = run_gate(repo, it.id, "unit_tests", agent=agent)
         if out.exit != O.OK or out.data.get("outcome") not in ("", "passed", None):
             return f"unit_tests {out.data.get('outcome', 'did not pass')}: {out.reason}"
