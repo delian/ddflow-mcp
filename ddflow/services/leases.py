@@ -216,24 +216,26 @@ def _clash_text(
         if i != it.id and not (i in state.items and state.items[i].terminal)
     }
     shared = shared_globs(cfg)
+    mine = it.lease.holder if it.lease else ""
+    first, parts, bad = "", [], set()
     for other_id, lz in live.items():
-        if lz.holder == it.lease.holder if it.lease else False:
+        if lz.holder == mine:
             continue
         pairs = conflicts(globs, lz.globs, shared)
-        if not pairs:
-            continue
-        changed = holder_changed_paths(log, other_id)
+        changed = holder_changed_paths(log, other_id) if pairs else None
         if changed is not None:
             pairs = [(a, b) for a, b in pairs if any(conflicts([a], [p], shared) for p in changed)]
-            if not pairs:
-                continue
+        if not pairs:
+            continue
         listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
         hours = max(now - lz.acquired_at, 0) / 3600
         age = f"{hours:.1f} h" if hours >= 1 else f"{hours * 60:.0f} min"
-        bad = {a for a, _ in pairs}
-        keep = [g for g in globs if g not in bad]
-        return other_id, (f"held by {lz.holder} on {other_id} for {age}: {listed}"), keep
-    return None
+        parts.append(f"held by {lz.holder} on {other_id} for {age}: {listed}")
+        first = first or other_id
+        bad |= {a for a, _ in pairs}
+    if not first:
+        return None
+    return first, " | ".join(parts), [g for g in globs if g not in bad]
 
 
 def acquire(
