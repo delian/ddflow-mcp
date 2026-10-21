@@ -1,91 +1,82 @@
-"""A task that writes only documents runs the doc pipeline (bug B-research-task-cannot-complete-docs-only).
+"""A task whose ACTUAL change is documents only runs the doc pipeline (bug B-research-task-cannot-complete-docs-only).
 
 A research or documentation task made through the MCP (`task_add` has no kind) is a `task`, so it
-ran the code pipeline: `implement` and `unit_tests` are required, a skip does not satisfy
-them, and `complete` demanded a cross-family reviewer for work that changed no code.
+ran the code pipeline: `unit_tests` is required, a skip does not satisfy it, and `complete`
+demanded a cross-family reviewer for work that changed no code. The ACTUAL diff decides, never
+the declared globs (B-na-required-gate).
 """
 
 from __future__ import annotations
 
+from conftest import run_cli
+from test_na_required_gate import _state, _worktree_with_change
+
 from ddflow.config import Config
 from ddflow.core.model import Item
 from ddflow.services import completion as CO
-from ddflow.services.gates import pipeline_for
-from ddflow.services.gates.kinds import runs_doc_pipeline
+from ddflow.services import gates as G
+from ddflow.services.gates.kinds import diff_is_docs_only
 
 
 def _task(*globs: str, **kw) -> Item:
     return Item(id="X", kind="task", title="t", globs=list(globs), **kw)
 
 
-def test_a_task_that_writes_only_docs_runs_the_doc_pipeline():
+def test_a_diff_of_documents_only_is_docs_only():
     cfg = Config()
-    it = _task("docs/ddflow/research/x.md", "README.md")
-    assert runs_doc_pipeline(it, cfg)
-    assert pipeline_for(it, cfg) == list(cfg.gates.doc_pipeline)
+    assert diff_is_docs_only(_task("src/**"), cfg, ["docs/a.md", "README.md", "docs/x/y.md"])
 
 
-def test_one_code_glob_keeps_the_task_pipeline():
+def test_one_code_path_keeps_the_task_pipeline():
     cfg = Config()
-    it = _task("docs/ddflow/research/x.md", "ddflow/api/review.py")
-    assert not runs_doc_pipeline(it, cfg)
-    assert pipeline_for(it, cfg) == list(cfg.gates.task_pipeline)
+    assert not diff_is_docs_only(_task("docs/**"), cfg, ["docs/a.md", "ddflow/api/review.py"])
 
 
-def test_a_task_with_no_globs_keeps_the_task_pipeline():
+def test_no_readable_or_empty_diff_is_never_docs_only():
     cfg = Config()
-    assert pipeline_for(_task(), cfg) == list(cfg.gates.task_pipeline)
+    assert not diff_is_docs_only(_task("docs/a.md"), cfg, None)
+    assert not diff_is_docs_only(_task("docs/a.md"), cfg, [])
 
 
 def test_the_knob_turns_it_off():
     cfg = Config()
     cfg.gates.doc_globs = []
-    it = _task("docs/x.md")
-    assert not runs_doc_pipeline(it, cfg)
-    assert pipeline_for(it, cfg) == list(cfg.gates.task_pipeline)
+    assert not diff_is_docs_only(_task("docs/x.md"), cfg, ["docs/x.md"])
 
 
 def test_a_promotion_and_a_phase_are_never_docs_only():
     cfg = Config()
-    assert pipeline_for(_task("docs/x.md", promote_to="prod"), cfg) == list(
-        cfg.gates.promotion_pipeline
-    )
+    assert not diff_is_docs_only(_task("docs/x.md", promote_to="prod"), cfg, ["docs/x.md"])
     phase = Item(id="P", kind="phase", title="p", globs=["docs/x.md"])
-    assert pipeline_for(phase, cfg) == list(cfg.gates.phase_pipeline)
+    assert not diff_is_docs_only(phase, cfg, ["docs/x.md"])
 
 
-def test_a_docs_only_task_needs_no_independent_reviewer():
+def test_a_docs_only_change_needs_no_independent_reviewer():
     cfg = Config()
-    docs = _task("docs/x.md")
-    code = _task("ddflow/x.py")
-    assert not CO.needs_independent_reviewer(docs, cfg)
-    assert CO.needs_independent_reviewer(code, cfg)
+    assert not CO.needs_independent_reviewer(_task("src/**"), cfg, ["docs/x.md"])
+    assert CO.needs_independent_reviewer(_task("docs/x.md"), cfg, ["ddflow/x.py"])
+    assert CO.needs_independent_reviewer(
+        _task("docs/x.md"), cfg, None
+    )  # declared globs never decide
 
 
-def test_a_docs_only_task_completes_with_the_doc_gates_alone(repo):
-    """End to end: the doc pipeline's gates, no unit_tests, no independent reviewer."""
-    from conftest import run_cli
-
+def test_declared_doc_globs_alone_keep_the_task_pipeline(repo):
+    """Globs are agent-editable: a task declaring docs but changing code keeps `unit_tests`."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "D1", "--title", "write a note", "--globs", "docs/note.md")
-    (repo / "docs").mkdir()
-    (repo / "docs" / "note.md").write_text("# note\n")
-    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
-        code, out, err = run_cli(
-            repo, "gate", "record", "D1", gate, "--outcome", "passed", "--evidence", "ran it"
-        )
-        assert code == 0, (gate, out, err)
-    code, out, err = run_cli(repo, "complete", "D1", "--model", "claude-sonnet-5-5")
-    assert code == 0, out + err
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/x.md")
+    _worktree_with_change(repo, "src/code.py")
+    cfg = Config.load(repo)
+    st = _state(repo)
+    s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
+    assert "unit_tests" in s.pipeline
 
 
-def test_declared_doc_globs_do_not_hide_a_code_change():
-    """Globs are agent-editable: the actual diff must stay inside the doc globs too."""
-    cfg = Config()
-    it = _task("docs/x.md")
-    assert CO.docs_only_strays(it, cfg, ["docs/x.md", "README.md"]) == []
-    assert CO.docs_only_strays(it, cfg, ["docs/x.md", "ddflow/api/review.py"]) == [
-        "ddflow/api/review.py"
-    ]
-    assert CO.docs_only_strays(_task("ddflow/x.py"), cfg, ["ddflow/x.py"]) == []  # task pipeline
-    assert CO.docs_only_strays(it, cfg, None) == []
+def test_a_task_whose_diff_is_documents_runs_the_doc_pipeline(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/**")
+    _worktree_with_change(repo, "docs/note.md")
+    cfg = Config.load(repo)
+    st = _state(repo)
+    s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
+    assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
+    assert G.status(st, cfg, "T1", None).pipeline == list(cfg.gates.task_pipeline)

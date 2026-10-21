@@ -36,7 +36,7 @@ class GatesConfig:
     )
     doc_globs: list[str] = knob(
         factory=lambda: ["docs/**", "*.md", "**/*.md"],
-        doc="A TASK whose declared globs ALL fall inside these runs `doc_pipeline` and needs no cross-family reviewer: a research or documentation task made without `--kind doc` (the MCP `task_add` has none) would otherwise need `unit_tests` and an independent reviewer for work that changed no code. One glob outside them keeps the task pipeline. Empty turns it off.",
+        doc="A TASK whose ACTUAL changed paths ALL fall inside these runs `doc_pipeline` and needs no cross-family reviewer: a research or documentation task made without `--kind doc` (the MCP `task_add` has none) would otherwise need `unit_tests` and an independent reviewer for work that changed no code. The diff decides, never the declared globs (a required gate is not excused by what a task says it will touch); with no readable diff the task pipeline applies. One path outside them keeps the task pipeline. Empty turns it off.",
     )
     phase_pipeline: list[str] = knob(
         factory=lambda: [
