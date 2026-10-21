@@ -30,7 +30,10 @@ def _state(repo):
     return fold(EventLog(repo).read_all(), strict=False)
 
 
-def _partial_item(repo, reason="base is red: test_x also fails on main"):
+BASELINE = {"baseline": {"red": True, "base": "main", "ids": ["tests/t.py::test_x"]}}
+
+
+def _partial_item(repo, reason="baseline-red: test_x, bug B1", baseline=True):
     run_cli(repo, "init")
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
         fh.write("\n[agent]\nreviewer_family_must_differ = false\n")
@@ -43,6 +46,17 @@ def _partial_item(repo, reason="base is red: test_x also fails on main"):
         repo, "gate", "record", "T1", "unit_tests", "--outcome", "partial", "--reason", reason
     )
     assert code == OK, err
+    if baseline:  # what `gate run` measures; a caller's `gate record` cannot write it
+        _remeasure(repo, reason)
+
+
+def _remeasure(repo, reason):
+    log = EventLog(repo, "ddflow-gate-run")
+    log.append(
+        "gate.partial",
+        "T1",
+        {"gate": "unit_tests", "by": "ddflow", "reason": reason, "evidence": BASELINE},
+    )
 
 
 def test_a_person_can_accept_a_partial_required_gate_and_complete_follows(repo):
@@ -88,3 +102,24 @@ def test_verify_notes_the_acceptance_and_does_not_fail_the_completion(repo):
     _code, out, err = run_cli(repo, "verify", "T1", "--json")
     assert "required gate(s) not passed" not in out + err, out + err
     assert "accepted by a person" in out + err, out + err
+
+
+def test_a_partial_not_measured_baseline_red_cannot_be_accepted(repo):
+    _partial_item(repo, reason="ran only some tests", baseline=False)
+    code, out, err = run_cli(repo, "approve", "T1", "unit_tests")
+    assert code != OK and "baseline-red" in out + err
+    assert run_cli(repo, "complete", "T1")[0] != OK
+
+
+def test_a_hand_claimed_baseline_reason_is_not_the_measurement(repo):
+    _partial_item(repo, reason="baseline-red: everything, trust me", baseline=False)
+    assert run_cli(repo, "approve", "T1", "unit_tests")[0] != OK
+
+
+def test_a_remeasured_baseline_red_needs_a_fresh_acceptance(repo):
+    _partial_item(repo)
+    assert run_cli(repo, "approve", "T1", "unit_tests")[0] == OK
+    _remeasure(repo, "baseline-red: test_y, bug B2")
+    assert run_cli(repo, "complete", "T1")[0] != OK, "the old acceptance carried over"
+    assert run_cli(repo, "approve", "T1", "unit_tests")[0] == OK
+    assert run_cli(repo, "complete", "T1")[0] == OK

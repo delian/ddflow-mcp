@@ -14,7 +14,11 @@ becoming a way to turn partial into passed:
   counting it as a blocker, and says so (a warning, and `verify` notes it);
 * the digest covers the outcome, its time and its reason, so a re-run or a re-record is a
   different outcome and needs its own acceptance;
-* only `partial` can be accepted: `failed` and `unavailable` are not this path.
+* only a `partial` that ddflow MEASURED as baseline-red can be accepted (operator decision
+  D-accept-baseline-red-partial): the failing tests also fail on the base branch
+  (`services.gates.baseline_red`, evidence `baseline.red`, written only by `gate run`: the
+  caller's `gate record` cannot set it). `failed`, `unavailable` and a hand-recorded or
+  `partial_exits` partial are not this path.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from __future__ import annotations
 from ..core.digest import content_digest
 from ..core.model import Item, State
 from . import approval as AP
+from .gates import baseline_red as BR
 
 ACCEPTABLE = "partial"
 
@@ -45,6 +50,12 @@ def refusal(it: Item, gate: str) -> str:
         return (
             f"{it.id}.{gate} is {got or 'not run'}, not {ACCEPTABLE}: only a partial outcome "
             f"can be accepted by a person. Re-run the gate, or record it honestly"
+        )
+    base = (it.gates[gate].evidence or {}).get("baseline")
+    if gate not in BR.GATES or not (isinstance(base, dict) and base.get("red") is True):
+        return (
+            f"{it.id}.{gate} is partial but was not measured baseline-red (the failing tests "
+            f"also fail on the base branch): only that partial can be accepted. Re-run the gate"
         )
     return ""
 
