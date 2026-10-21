@@ -279,6 +279,7 @@ def test_sync_exits_non_zero_when_the_stash_could_not_be_cleaned_up(repo, monkey
     monkeypatch.setattr(BS.W, "git", git)
     out = sync(repo, item="T1", keep_local=True, agent=ME)
     assert not out.ok and "STASH NOT CLEANED UP" in out.reason
+    assert out.data["stash_note"] and out.data["status"] == "merged"  # structured, not prose
     assert (wt / "README.md").read_text() == "dirty\n"
 
 
