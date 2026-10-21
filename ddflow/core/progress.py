@@ -156,6 +156,19 @@ class ItemWork:
         if sha not in self.commits:
             self.commits.append(sha)
 
+    def open_gate_round(self, gate: str) -> None:
+        """`gate.started` opens a round of the gate's reviews."""
+        self.gate_rounds.setdefault(gate, []).append([])
+
+    def add_round_verdict(self, gate: str, outcome: str) -> None:
+        """File a decisive verdict under the gate's open round (one is made if none was)."""
+        if outcome not in ("passed", "failed"):
+            return
+        rounds = self.gate_rounds.setdefault(gate, [])
+        if not rounds:
+            rounds.append([])
+        rounds[-1].append(outcome)
+
     def add_gate_run(self, gate: str, outcome: str, evidence: Any) -> None:
         """Keep a decisive run's output digest and tree, for the repeated-failure check."""
         if outcome not in ("passed", "failed"):
@@ -245,20 +258,15 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             att.ended_by = "released" if kind.endswith("released") else "expired"
         rec(subj).last_touched = ev.ts
     elif kind == "gate.started":
-        rec(subj).gate_rounds.setdefault(str(d.get("gate") or "?"), []).append([])
+        rec(subj).open_gate_round(str(d.get("gate") or "?"))
     elif kind.startswith("gate.") and kind.split(".", 1)[1] in GATE_OUTCOMES:
         # The membership test, not the prefix. `gate.` is a namespace and
         # `gate.out_of_order` is in it without being an outcome; matching the prefix
         # counted it as a gate run and inflated `gate_runs` for every item that ever
         # recorded one early.
         outcome = kind.split(".", 1)[1]
-        gate = str(d.get("gate") or "?")
         r = rec(subj)
-        if outcome in ("passed", "failed"):
-            rounds = r.gate_rounds.setdefault(gate, [])
-            if not rounds:
-                rounds.append([])
-            rounds[-1].append(outcome)
+        r.add_round_verdict(str(d.get("gate") or "?"), outcome)
         # What the item's gates said is `Item.gate_history`, read in `work` once the pass
         # is over; only the attempt's own tallies are counted as events go by.
         att = open_attempt.get(subj)
