@@ -115,7 +115,7 @@ Not worth adopting: Codemode (a sandboxed scripting layer for tool composition; 
 | Session start, prompt, pre-tool, post-tool | `session_start`, `input`, `tool_call` (block), `tool_result` | maps cleanly |
 | Pre-compact handoff | `session_before_compact` (may supply the summary) | maps cleanly |
 | Stop-to-continue | `agent_before_settle` returns `continue: true`; guard against loops | maps; reuse the continuation engine |
-| Session identity | `PI_SESSION_ID` in bash-tool children; extension has the session manager | EASY; `ddflow identify` is an MCP tool (no CLI verb exists), so the extension passes the id in the payload |
+| Session identity | `PI_SESSION_ID` in bash-tool children; extension has the session manager | EASY; `ddflow identify` reports the shell's identity but declaring one over MCP needs a connection, so the extension passes the id in the payload |
 | Subagents | none | `none = true` |
 | Worktree and lease | none native; the agent's cwd is the worktree; Pi cannot refuse a write by itself | enforcement is the extension's `tool_call` gate, only when the extension loaded |
 | Soft upgrade | honours tools `list_changed` | EASY, row above |
