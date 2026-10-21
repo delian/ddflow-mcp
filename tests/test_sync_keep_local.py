@@ -323,3 +323,21 @@ def test_a_pushed_stash_missing_from_a_successful_list_is_not_taken_for_none(rep
 
     monkeypatch.setattr(BS, "_stash_find", find)
     assert BS._stash_away(wt, "tag-mine")  # found on the retry
+
+
+def test_a_failing_list_is_recovered_through_the_newest_entry_when_it_is_ours(repo, monkeypatch):
+    """roborev: the refs/stash fallback of `_stash_away` returns our entry, by its tag."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    real = BS.W.git
+
+    def git(tree, *a, **kw):
+        if a[:2] == ("stash", "list"):
+            return _fail()
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(BS.W, "git", git)
+    sha = BS._stash_away(wt, "tag-mine")
+    assert sha == _git(wt, "rev-parse", "stash@{0}")
