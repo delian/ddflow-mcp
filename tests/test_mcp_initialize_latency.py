@@ -61,3 +61,33 @@ def test_queue_counts_see_an_append_made_after_the_shared_load(repo, monkeypatch
     with surf_mcp.load_scope():
         surf_mcp.fill_queue(v, repo, Config.load(repo), "")
     assert v["ready"] == 2, v
+
+
+def test_every_handshake_reader_shares_one_project_load(repo, monkeypatch):
+    """The queue counts and the three upgrade readers ask `_load` for the same project; inside
+    one scope it loads (and folds) once, outside it each asks afresh."""
+    from ddflow.api import _base, setup, surf_mcp
+    from ddflow.config import Config
+
+    run_cli(repo, "init")
+    loads = [0]
+    real = _base._load_fresh
+
+    def counting(r, agent=""):
+        loads[0] += 1
+        return real(r, agent)
+
+    monkeypatch.setattr(_base, "_load_fresh", counting)
+
+    def readers() -> None:
+        surf_mcp.fill_queue({}, repo, Config.load(repo), "")
+        setup.upgrade_start(repo)
+        setup.upgrade_notice(repo)
+        setup.release_proposal(repo)
+
+    with surf_mcp.load_scope():
+        readers()
+    assert loads[0] == 1, loads[0]
+    loads[0] = 0
+    readers()
+    assert loads[0] > 1, "the unscoped path must stay fresh per reader"
