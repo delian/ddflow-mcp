@@ -112,3 +112,28 @@ def test_a_merge_already_begun_is_never_rerun_whatever_its_output_says(repo, mon
     monkeypatch.setattr(W.time, "sleep", lambda s: None)
     r = W.merge(repo, cfg, wt)
     assert len(seen) == 1 and not r.ok  # attempted once; MERGE_HEAD existed: not retried
+
+
+def test_a_refusal_listing_a_file_named_with_the_error_line_is_not_retried(repo, monkeypatch):
+    """rubber_duck round 3: a listed file whose name embeds a newline can put the sentence on
+    a line of its own; the surrounding refusal (indented file, stdout) says it is not the error."""
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "f.py", "x\n", "feat: f")
+    seen = []
+    real = W.git
+
+    def git(tree, *a, **kw):
+        if a[:1] == ("merge",):
+            seen.append(1)
+            err = (
+                "error: The following untracked working tree files would be overwritten by "
+                "merge:\n\ta\nfatal: stash failed\nPlease move or remove them.\nAborting\n"
+            )
+            return W.GitResult(1, "", err)
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(W, "git", git)
+    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    r = W.merge(repo, cfg, wt)
+    assert len(seen) == 1 and not r.ok
