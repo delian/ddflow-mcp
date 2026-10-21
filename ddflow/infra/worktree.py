@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -566,7 +567,7 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
         args.append("--squash")
     args += ["-m", message, source]
     was_merging = merging(tree)
-    r = git(tree, *args)
+    r = _merge_retrying_stash(tree, args)
     if not r.ok and was_merging is True:
         r = GitResult(r.code, r.out, r.err, attempted=False)  # someone else's merge is open
     # Not `not was_merging`: None ("could not tell" before) still gets the re-probe and
@@ -613,6 +614,36 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
                 GIT_REFUSED, c.out, f"squash staged but commit failed: {c.err or c.out}\n\n{state}"
             )
         return c
+    return r
+
+
+#: B-merge-stash-failed-transient: a real merge into a tree with uncommitted tracked work makes
+#: git run `git stash create` first; while another process holds `.git/index.lock` (another
+#: agent's `git status`/`add` in the primary) that dies with `fatal: stash failed` BEFORE
+#: anything is merged. The next attempt, moments later, succeeds. So the merge is attempted a
+#: bounded number of times, pausing ``STASH_RETRY_PAUSE_S * 2**n`` between them.
+STASH_RETRIES = 4
+STASH_RETRY_PAUSE_S = 0.25
+
+
+def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
+    """`git <args>`, retried only while git says ``stash failed`` (it merged nothing then).
+    When it never clears, the error names the cause and says nothing was merged."""
+    r = git(tree, *args)
+    tries = 1
+    while not r.ok and "stash failed" in f"{r.err} {r.out}" and tries < STASH_RETRIES:
+        time.sleep(STASH_RETRY_PAUSE_S * 2 ** (tries - 1))
+        r = git(tree, *args)
+        tries += 1
+    if not r.ok and "stash failed" in f"{r.err} {r.out}":
+        return GitResult(
+            r.code,
+            r.out,
+            f"{r.err or r.out}\n\ngit could not save the uncommitted state of {tree} before "
+            f"merging, {tries} times (usually another process holding the git `index.lock` of {tree} "
+            "or rewriting a tracked file as git read it); nothing was merged. Retry the merge "
+            "once that process is done, or commit or move the uncommitted changes.",
+        )
     return r
 
 
