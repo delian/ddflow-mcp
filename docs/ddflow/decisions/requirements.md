@@ -21,7 +21,7 @@ Evidence: [requirements-management.md](../research/requirements-management.md) (
 
 | Tier | What | When |
 |---|---|---|
-| always-on charter | one line per MUST, never trimmed; over `[requirements].charter_tokens` the action is `[requirements].charter_overflow` (default `warn` = a doctor warning, no trim) | session start, re-sent after compaction |
+| always-on charter | one line per MUST, never trimmed; over `[requirements].charter_tokens` the action is `[requirements].charter_overflow` (default `warn` = a doctor warning, no trim; a knob to be declared by `RQM-model`, not yet in config) | session start, re-sent after compaction |
 | contextual | by glob / context / gate | claim and pre-edit |
 | on-demand | search | agent asks |
 | periodic digest | changed or high-risk set | at the reinstruct cadence |
