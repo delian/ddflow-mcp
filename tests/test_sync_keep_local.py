@@ -375,3 +375,23 @@ def test_an_entry_missing_from_one_good_list_after_the_apply_is_looked_for_again
     monkeypatch.setattr(BS, "_stash_find", find)
     assert BS._stash_back(wt, "tag-mine", mine) == ""
     assert "tag-mine" not in _stashes(wt)  # dropped, not reported done while still there
+
+
+def test_a_drop_that_does_not_say_what_it_dropped_is_not_a_clean_drop(repo, monkeypatch):
+    """roborev: an unparseable answer is "could not tell", never success."""
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    _sha, ref = BS._stash_find(wt, "tag-mine")
+    real = BS.W.git
+
+    def git(tree, *a, **kw):
+        r = real(tree, *a, **kw)
+        if a[:2] == ("stash", "drop"):
+            return BS.W.GitResult(r.code, "Dropped (no sha shown)", r.err)
+        return r
+
+    monkeypatch.setattr(BS.W, "git", git)
+    assert BS._drop(wt, ref, mine).startswith(BS.DROP_INCOMPLETE)
