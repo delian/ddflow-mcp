@@ -218,7 +218,9 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "that is not your branch. On a loaded host review the COMBINED diff with a "
             "bounded wait: `python -m ddflow.services.roborev_branch` (one range job over "
             "the whole branch; waits `[gates].standards_wait_s`; exit 2 names why it gave "
-            "nothing, and that is recorded `unavailable` WITH the reason)."
+            "nothing, and that is recorded `unavailable` WITH the reason and the job id; "
+            "re-run it once the queue drains with `--job <id>`, a sha with a job is never "
+            "enqueued twice)."
         ),
     ),
     "ci": GateDef(
