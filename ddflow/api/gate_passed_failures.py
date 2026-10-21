@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra import worktree as W
+from ..services import flakes as FK
 from ..services import testselect as TS
 
 SHOWN = 8
@@ -29,7 +30,9 @@ def _plural(n: int) -> str:
     return f"{n} test" + ("" if n == 1 else "s")
 
 
-def apply(repo: Path, it, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str, str]:
+def apply(
+    repo: Path, cfg, it, gate: str, gdef, result: str, ev: dict[str, Any], rerun
+) -> tuple[str, str]:
     """``(outcome, reason)`` for a gate whose command passed: ``result`` and "" when no test
     failed in its output; else the rerun's verdict. Notes the rerun in ``ev["rerun"]``."""
     from .gates import _fail_fast  # late: gates imports this module through gate_baseline
@@ -60,6 +63,14 @@ def apply(repo: Path, it, gdef, result: str, ev: dict[str, Any], rerun) -> tuple
         "still_failing": still, "tail": rev.get("tail", "")[-800:],
         "flaked": ids if ok else [t for t in ids if t not in still] if outcome == "failed" and still and not _fail_fast(gdef.command) else [],
     }  # fmt: skip
+    flaked = ev["rerun"]["flaked"]
+    n = FK.record(
+        repo, flaked, item=it.id, gate=gate, commit=W.head_sha(root) if root.exists() else "",
+        how="the listed failures passed on a rerun", why=ev.get("failed_reasons"),
+        tails=ev.get("failure_tails"), cfg=cfg,
+    ) if flaked else 0  # fmt: skip
+    if n:
+        ev["flakes_logged"] = n
     if ok:
         reason = f"passed after rerunning {_plural(len(ids))}: {_names(ids)}, each passed on rerun"
         ev["reason"] = reason
