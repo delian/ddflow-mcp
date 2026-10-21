@@ -127,3 +127,8 @@ def test_mcp_note_pages_a_record_list_and_never_says_offset_none():
     search = {"truncated": True, "rows": [1], "shown": 1, "total": 5}
     note = bound_list(search, {})[1]
     assert "None" not in note and "raise limit" in note
+
+
+def test_research_add_refuses_a_list_only_offset(seeded, cli):
+    code, _out, err = cli(seeded, "research", "--offset", "3")
+    assert code != 0 and "--offset" in err
