@@ -322,12 +322,33 @@ def test_update_landed_with_new_globs_checks_the_new_globs(repo):
     assert _state(repo).items["T1"].landed_after == sha
 
 
-def test_update_landed_accepts_a_root_commit(repo):
-    _unmerged_task(repo, "README.md")
+def test_update_landed_accepts_a_root_commit_and_only_a_root_commit(repo):
     root = _git(repo, "rev-list", "--max-parents=0", "HEAD").splitlines()[-1]
-    _code, out, err = run_cli(repo, "update", "T1", "--landed", root)
-    # whatever the root commit holds, it must be read, not refused for having no parent
-    assert "no parent" not in out + err and "not an ancestor" not in out + err, out + err
+    held = _git(repo, "show", "--name-only", "--format=", root).splitlines()[0]
+    _unmerged_task(repo, held)
+    code, out, err = run_cli(repo, "update", "T1", "--landed", root)
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    from ddflow.services import landed as LD
+
+    assert it.landed_after == root and it.landed_before == LD.empty_tree(repo)
+    # the empty tree starts only a root commit's range
+    sha = _commit(repo, held, "touch it again")
+    run_cli(repo, "task", "add", "T2", "--title", "t", "--globs", held)
+    code, out, err = run_cli(repo, "update", "T2", "--landed", f"{LD.empty_tree(repo)}..{sha}")
+    assert code != 0 and "root commit" in out + err, out + err
+
+
+def test_an_unreadable_claimed_worktree_never_lets_citations_stand_in(repo):
+    from ddflow.core.model import Item
+    from ddflow.services.completion import _unlanded_paths
+
+    _unmerged_task(repo, "docs/note.md")
+    it = Item(id="T1", kind="task", title="t", globs=["docs/note.md"], worktree="gone")
+    assert _unlanded_paths(repo, it, "HEAD") == (None, False)
+    it = Item(id="T1", kind="task", title="t", globs=["docs/note.md"], branch="typo")
+    assert _unlanded_paths(repo, it, "HEAD") == (None, False)
+    assert _unlanded_paths(repo, Item(id="T1", kind="task", title="t"), "HEAD") == (None, True)
 
 
 def test_the_real_diffless_callers_use_the_diff_pipeline(repo):
