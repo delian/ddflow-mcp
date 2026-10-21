@@ -394,7 +394,8 @@ a `SPEC-decide` question.
 `P-docs-search`) by design (`D-old-work-behind-core-docs-accepted`); lift the hold with
 `ddflow update SPEC-decide --needs ...` only if the operator says so.
 
-Linked (not re-added): `SPEC-model` extends `SDD-model` and `CN-spec-kind`; `SPEC-surfaces`,
+Linked (not re-added; all recorded as `related`, `SPEC-reconcile` decides whether `SDD-model` and
+`CN-spec-kind` become `extends` of the spec kind): `SPEC-model` to `SDD-model` and `CN-spec-kind`; `SPEC-surfaces`,
 `SPEC-dupes`, `SPEC-inject`, `SPEC-check`, `SPEC-trace`, `SPEC-gate` relate to their `RQM-*`
 counterparts; `SPEC-trace` to `PD-trace`, `TF-trace`, `SDD-trace`, `CN-trace`; `SPEC-baseline` to
 `PD-baseline`, `CN-baseline`; `SPEC-review` to `B-dt-drafts`; `SPEC-report` to `B-dt-health`;
