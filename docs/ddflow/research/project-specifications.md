@@ -378,12 +378,13 @@ In-phase waves (every need outside the phase counted as done):
 | 8 | SPEC-e2e |
 | 9 | SPEC-docs |
 
-Waves when the open outside dependencies are counted (relative to the earliest moment each task
-can start; the four open hold phases must finish before `SPEC-decide` starts at all, so wave numbers
-here count steps AFTER that point, and an open phase is counted as one step in the others): `SPEC-model` 3,
-wave 4 and 5 as above, `SPEC-inject`, `SPEC-notify`, `SPEC-trace`, `SPEC-contract`, `SPEC-review` 6,
-`SPEC-report` 7, `SPEC-gate` 8 (waits on the `B-pipe-*` chain), `SPEC-baseline` 11 (waits on
-`PD-req-kind` -> `PD-trace` -> `PD-baseline`), `SPEC-e2e` 12, `SPEC-docs` 13. Consequence: the first usable slice is waves 1-5 (record, surfaces,
+Open outside chains lengthen three tasks and what follows them; every other task keeps its
+in-phase wave. Counting each open outside item as one step per level of its own needs (a lower
+bound, because an open phase is counted as one step): `SPEC-gate` is at least wave 8 (it waits on
+the `B-pipe-*` chain), `SPEC-baseline` at least wave 11 (it waits on `PD-req-kind` -> `PD-trace` ->
+`PD-baseline`), so `SPEC-e2e` is at least wave 12 and `SPEC-docs` at least wave 13. `SPEC-decide`
+itself waits on the four open hold phases (below), which delays the whole phase but not the
+numbering. Consequence: the first usable slice is waves 1-5 (record, surfaces,
 file sync, binding, checks, lint, plan); `SPEC-gate` and `SPEC-baseline` arrive with the pipeline and
 product-docs work, and `SPEC-e2e` should not be started until they do. If the operator wants the
 slice earlier, `SPEC-e2e` can be split into a slice test (waves 1-6) and a full test; that choice is
