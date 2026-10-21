@@ -227,7 +227,7 @@ def _other_viewer(a, c: Ctx) -> int:
         ns.kind = ns.source = ""
         for name in ("state", "phase", "owner", "since"):
             setattr(ns, name, getattr(a, name, None) or "")
-        ns.limit = a.limit or R.SEARCH_DEFAULT_LIMIT
+        ns.limit = R.SEARCH_DEFAULT_LIMIT if a.limit is None else a.limit
         return cmd_search(ns, c)
     for name, default in (("state", ""), ("owner", ""), ("since", ""), ("limit", None)):
         if getattr(a, name, None) is None:

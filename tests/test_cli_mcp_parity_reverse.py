@@ -17,16 +17,20 @@ from test_mcp_parity import cli_commands, cli_leaves
 
 from ddflow.surfaces import exemptions as X
 from ddflow.surfaces.mcp import TOOLS
-from ddflow.surfaces.registry import CLI_FLAG_COMMANDS
+from ddflow.surfaces.registry import CLI_COMMAND_NAMES, CLI_FLAG_COMMANDS
 
 
 def _has_cli_twin(tool: str) -> bool:
     stem = tool.removeprefix("ddflow_")
     for path in cli_leaves():
         joined = "_".join(path).replace("-", "_")
-        if joined == stem or joined.startswith(stem + "_") or stem.startswith(joined + "_"):
+        if joined == stem:
             return True
     if any(c.via and c.via[0] == tool for c in X.DECLARATIONS if c.path):
+        return True
+    #: Served by a command GROUP's word (`workflow ...`), or by a verb-form of a command
+    #: (`review triage ITEM`): named, never inferred from a shared name prefix.
+    if stem in {*CLI_COMMAND_NAMES.values(), "workflow", "review_triage"}:
         return True
     if stem in CLI_FLAG_COMMANDS.values():
         return True  # a flag of a command: `companions --verify`
@@ -91,3 +95,12 @@ def test_a_refused_json_list_keeps_the_list_envelope(repo):
     rc, out, _ = run_cli(repo, "--json", "list", "session", "--tag", "x")
     d = json.loads(out)
     assert rc == 3 and d["total"] == 0 and d["truncated"] is False and d["reason"]
+
+
+def test_list_search_keeps_an_explicit_limit_of_zero(repo):
+    """The engine refuses a limit below 1; `list search` must say so as `search` does, not
+    swap the 0 for the default and answer as if no limit was asked for."""
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py", "--title", "zebrafinch")
+    a = run_cli(repo, "list", "search", "--query", "zebrafinch", "--limit", "0")
+    b = run_cli(repo, "search", "zebrafinch", "--limit", "0")
+    assert b[0] != 0 and a[:2] == b[:2]
