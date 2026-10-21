@@ -212,7 +212,7 @@ the same implementation, so neither drifts from the other.
 | **find records filed twice** | `ddflow dupes [--kind bug,task,...] [--open-only] [--floor F] [--limit N] [--json]` -- exit 0 with pairs, 2 with none | `ddflow_dupes` |
 | **settle a near-duplicate pair** | `ddflow link <a> --duplicate-of\|--extends\|--related\|--distinct <b> [--reason ...]` | `ddflow_link` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
-| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
+| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--offset N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `offset`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find which earlier test file makes a test fail only in full-suite order** | `ddflow bisect VICTIM --cmd 'pytest -q {tests}' [--candidates a,b] [--glob G] [--timeout S] [--repeat N] [--max-runs N]` -- delta-debugs the files before the victim, running your command many times (exit 0 = found, 2 = nothing to report); see [Finding a test polluter](#finding-a-test-polluter) | `ddflow_bisect` (`glob`, `repeat` and `max_runs` are CLI-only) |
@@ -1099,7 +1099,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 365 knobs.
+cadences, and the rest of the 366 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -4837,8 +4837,10 @@ queue can be audited from `--json` without opening the sqlite index.
 
 Filters are `--state`, `--phase`, `--tag`, `--owner` (the leaseholder; not `--agent`, which is
 always who *you* are), `--since` (an ISO
-date or timestamp, compared with the last change) and `--limit` (default 50, at most
-1000; a cut list says how many matched). A kind offers only the filters it has data for:
+date or timestamp, compared with the last change) and `--limit` (default 50; 0 or a value above
+1000 gives the 1000 a list gives at most, and says it was cut) and `--offset` (paging: a cut list
+says how many matched and the `--offset` of the next page; `--json` has `total`, `truncated`, `offset`,
+`next`, `clamped_from`). A kind offers only the filters it has data for:
 bugs have no tag or owner, so `bug list --tag x` is an unknown option rather than a
 silent "everything" (and the list flags are refused on `research` when recording a finding). Titles and tags are redacted as the export documents are. Exit
 codes: 0 rows, 2 none matched (the message, and `reason` in `--json`, name the filters), 3 a refused value such
@@ -5278,7 +5280,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 365): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 366): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5821,7 +5823,7 @@ declared once and persists — see
 
 ## Configuration
 
-365 knobs across 40 sections, every one documented in place and listed, with its default
+366 knobs across 40 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5888,8 +5890,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2a5079a4ae70 -->
-<details><summary>All 365 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=50d5c7fb8130 -->
+<details><summary>All 366 knobs across 40 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6017,6 +6019,7 @@ long default is left to `ddflow config --explain`.
 | `schedule.signal_interval_s` | `60` |  |
 | `schedule.signals` | (long: see `ddflow config --explain`) |  |
 | `schedule.ready_policy` | `"deps_and_lease"` | `deps_and_lease` \| `deps_only` |
+| `schedule.docs_ignore_phase_needs` | `true` |  |
 | `schedule.cycle_policy` | `"error"` | `error` \| `warn` |
 | `schedule.unknown_dep_policy` | `"block"` | `block` \| `warn` |
 | `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |

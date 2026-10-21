@@ -68,7 +68,7 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
         phase=phase,
         phases=phases,
         unphased=loose,
-        critical_path=critical_path(st, phase),
+        critical_path=critical_path(st, phase, cfg),
     )
 
 

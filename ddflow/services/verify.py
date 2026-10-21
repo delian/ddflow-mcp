@@ -34,6 +34,7 @@ from . import gate_accept as GA
 from . import gates as G
 from . import ledger as LG
 from .completion import changed_paths, fixes_of
+from .pipeline_diff import effective_pipeline
 
 OK, WARN, FAIL, UNKNOWN = "ok", "warn", "fail", "unknown"
 _WILD = re.compile(r"[*?\[]")
@@ -375,7 +376,7 @@ def check(
                 )
             )
         return Report(item_id, claims)
-    pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
+    pipeline = effective_pipeline(repo, cfg, st.items[item_id]) if item_id in st.items else []
     if pipeline:
         # A gate that did not apply to the item's declared work was never owed an outcome.
         item = st.items[item_id]

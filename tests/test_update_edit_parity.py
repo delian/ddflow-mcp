@@ -29,6 +29,7 @@ SAMPLE = {
     "resources": ["gpu:1"],
     "worktree": "/w",
     "queue": True,
+    "landed": "abc123",
 }
 
 
@@ -55,7 +56,7 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
         "--add-needs", "b", "--remove-needs", "c", "--add-tags", "x",
         "--remove-tags", "y", "--globs", "g/**", "--add-globs", "h/**",
         "--remove-globs", "i/**", "--tags", "z", "--priority", "7",
-        "--line", "v2", "--resources", "gpu:1", "--worktree", "/w", "--queue",
+        "--line", "v2", "--resources", "gpu:1", "--worktree", "/w", "--queue", "--landed", "abc123",
     ]  # fmt: skip
     cli.main(argv)
     assert seen, "the CLI never reached the api"
