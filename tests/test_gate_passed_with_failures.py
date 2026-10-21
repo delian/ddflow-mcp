@@ -87,9 +87,9 @@ def test_a_failure_that_cannot_be_rerun_never_yields_passed(repo) -> None:
     cmd = f"{sys.executable} -c \"print('FAILED {ID} - boom')\""
     _project(repo, command=cmd)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
-    assert code != 0, out + err
+    assert code == 1, out + err
     rec = _record(repo)
-    assert rec.outcome in ("failed", "unavailable")
+    assert rec.outcome == "failed"  # found failures are never relabelled "could not run"
     assert "no recorded passing rerun" in rec.evidence["reason"] or ID in rec.reason
 
 

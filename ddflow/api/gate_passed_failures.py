@@ -54,7 +54,7 @@ def apply(
         )
         ev["rerun"] = {"outcome": "not run", "tests": ids, "note": why}
         ev["reason"] = reason
-        return "unavailable", reason
+        return "failed", reason
     outcome, rev = rerun(replace(gdef, command=cmd))
     still = rev.get("failed_tests") or []
     ok = outcome == "passed" and not still and not rev.get("failed_tests_more")
@@ -76,10 +76,9 @@ def apply(
         ev["reason"] = reason
         return "passed", reason
     bad = still or ids
-    outcome = "failed" if still else outcome  # a rerun that still lists failures is a failure
     reason = (
         f"exit 0, but the output lists {_plural(len(ids))} failing and the rerun alone "
-        f"{'failed' if outcome == 'failed' else 'did not run'} ({_names(bad)}). NOT a pass."
+        f"{'failed' if outcome == 'failed' or still else 'did not run'} ({_names(bad)}). NOT a pass."
     )
     ev["reason"] = reason
-    return ("failed" if outcome == "failed" else "unavailable"), reason
+    return "failed", reason
