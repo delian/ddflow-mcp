@@ -274,7 +274,9 @@ def main(argv: list[str] | None = None) -> int:
     if r.job is not None:
         print(f"roborev job: {r.job}")
     if r.reviewer:
-        print(f"reviewer: {r.reviewer} (the agent roborev ran; pass it as --model)")
+        print(
+            f"reviewer: {r.reviewer} (the model roborev ran the job with, else its agent; pass it as --model)"
+        )
         verdict = "passed" if r.outcome == "clean" else "failed"
         if r.outcome in ("clean", "findings"):
             print(
