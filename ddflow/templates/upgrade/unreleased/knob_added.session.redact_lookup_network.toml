@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.redact_lookup_network"
+new = 'true'
+why = "Private addresses and hosts are marked in event lookup fields (urls, paths, branches, tags, globs) too."
+impact = "additive"
