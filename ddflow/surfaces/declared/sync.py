@@ -11,6 +11,7 @@ def _call(repo, a, agent, called_from=None):
         repo,
         item=a.get("item") or "",
         check=bool(a.get("check")),
+        keep_local=bool(a.get("keep_local")),
         agent=agent,
         called_from=called_from,
     )
@@ -42,6 +43,7 @@ COMMANDS: tuple[Command, ...] = (
             "dirty",
             "detail",
             "aborted",
+            "kept_stash",
             "gates_valid",
             "gates_stale",
             "gates_unverified",
@@ -57,6 +59,12 @@ COMMANDS: tuple[Command, ...] = (
                 nargs="?",
             ),
             Param("check", type="boolean", help="Only measure the drift; merge nothing."),
+            Param(
+                "keep_local",
+                type="boolean",
+                help="Merge although the tree has uncommitted work: it is set aside (a tagged "
+                "stash, untracked files included), the merge runs, and the work is put back.",
+            ),
         ),
     ),
 )
