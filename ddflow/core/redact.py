@@ -697,6 +697,30 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
 }
 
 
+def redact_network(text: str) -> str:
+    """`text` with only its private addresses and private host names marked: the pass a
+    lookup field gets, since an id or a sha has neither and a URL or path may (Ba2df74d558)."""
+    p = _Pass(text)
+    for pat, kind, ip_type in (
+        (_IPV4, "ipv4", ipaddress.IPv4Address),
+        (_IPV6, "ipv6", ipaddress.IPv6Address),
+    ):
+        p.sub(pat, kind, keep=lambda m, t=ip_type: not _is_private(m.group(1), t))
+    p.sub(_HOST, "host")
+    return p.text
+
+
+def network_leaves(value: object) -> object:
+    """``value`` with `redact_network` applied to every string leaf."""
+    if isinstance(value, str):
+        return redact_network(value)
+    if isinstance(value, Mapping):
+        return {k: network_leaves(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [network_leaves(v) for v in value]
+    return value
+
+
 def redact_leaves(value: object, redactor: Redactor) -> object:
     """``value`` with every string leaf redacted, whatever its key: the keys of a text field
     come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
@@ -709,15 +733,20 @@ def redact_leaves(value: object, redactor: Redactor) -> object:
     return value
 
 
-def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
+def redact_event_data(
+    kind: str, data: dict, redactor: Redactor, *, lookup_network: bool = True
+) -> dict:
     """``data`` of an event of ``kind`` with its text redacted (a new dict).
 
     The declared text fields (`LOG_TEXT_FIELDS`) are redacted; so is every field that is not
-    a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free."""
+    a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free.
+    A lookup keeps its bytes except a private address or host in it, `lookup_network`
+    (`[session].redact_lookup_network`; bug Ba2df74d558)."""
     text = LOG_TEXT_FIELDS.get(kind, ())
-    return {
-        k: v
-        if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS)
-        else redact_leaves(v, redactor)
-        for k, v in data.items()
-    }
+    out = {}
+    for k, v in data.items():
+        if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS):
+            out[k] = network_leaves(v) if lookup_network else v
+        else:
+            out[k] = redact_leaves(v, redactor)
+    return out
