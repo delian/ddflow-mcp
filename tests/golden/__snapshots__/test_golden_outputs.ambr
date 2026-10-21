@@ -503,16 +503,17 @@
           file interleaves it. Regenerate it after merging, or declare a driver
           yourself in .gitattributes; doctor notes a shared glob that has none. For
           append-only files (a changelog) use append_only_globs instead.
-      lease.new_file_globs = ['ddflow/templates/upgrade/unreleased/*.toml']   [default]
+      lease.new_file_globs = ['ddflow/templates/upgrade/unreleased/*.toml', 'tests/test_*.py']   [default]
           Files each item ADDS as a new file named after its own work -- an upgrade-
           manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per
-          knob. A NEW file matching one of these needs no glob of its own beyond
-          holding some live lease (the commit hook covers it; claim globs are
-          unaffected, so a lease you do take stays exclusive), so two tasks adding
-          different knobs never collide on the directory. An EDIT, rename or delete of
-          an existing file still needs a lease that covers it: another agent's
-          fragment stays theirs. Set [] to require the directory in the task globs
-          again.
+          knob, or the NEW regression test file a fix task adds as `tests/test_*.py`
+          (an edit to an existing test file still needs its glob in the claim). A NEW
+          file matching one of these needs no glob of its own beyond holding some live
+          lease (the commit hook covers it; claim globs are unaffected, so a lease you
+          do take stays exclusive), so two tasks adding different knobs never collide
+          on the directory. An EDIT, rename or delete of an existing file still needs
+          a lease that covers it: another agent's fragment stays theirs. Set [] to
+          require the directory in the task globs again.
       lease.append_only_globs = []   [default]
           Files every item APPENDS to -- a changelog, a research log:
           ["docs/CHANGELOG.md"]. Shared like shared_globs (no lease-overlap check;
@@ -1219,20 +1220,19 @@
           repository mid-decision. An unobserved external dependency is unmet.
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
-          `fix-<bug id>`, tagged as a bug fix, under the phase of the item the bug
-          names (or `[bugs] phase`), carrying that item's globs unless `--globs` says
-          otherwise, and linked to the bug. `bugs_first` offers it before features and
-          a feature on the same files waits behind it, so bugs do not pile up under
-          new work. `complete <fix task>` refuses while the bug is open and
-          `--regression-test` closes it; `bug found --no-task` files no task (a bug
-          fixed in the same commit); `bug file-tasks` files one for every open bug
-          that has none. When the item named is itself an OPEN bug-fix task, that task
-          is the fix and nothing new is filed. `false`: bugs are flat records, as
-          before.
+          `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
+          (never the found item's own phase, which it would hold open), carrying that
+          item's globs unless `--globs` says otherwise, and linked to the bug.
+          `bugs_first` offers it before features and a feature on the same files waits
+          behind it, so bugs do not pile up under new work. `complete <fix task>`
+          refuses while the bug is open and `--regression-test` closes it; `bug found
+          --no-task` files no task (a bug fixed in the same commit); `bug file-tasks`
+          files one for every open bug that has none. When the item named is itself an
+          OPEN bug-fix task, that task is the fix and nothing new is filed. `false`:
+          bugs are flat records, as before.
       bugs.phase = 'bugs'   [default]
-          The standing phase (default `bugs`) a fix task is filed under when the bug
-          names no item, or names one whose phase is already finished. Made on first
-          use, with the title `Bugs`.
+          The standing phase (default `bugs`) every fix task is filed under, whatever
+          item the bug names. Made on first use, with the title `Bugs`.
       bugs.repro_capture = 'full'   [default]
           How much of a reproduction bundle `bug found` stores with the bug (default
           `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch

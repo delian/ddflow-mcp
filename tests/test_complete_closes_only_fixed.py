@@ -63,7 +63,7 @@ def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(rep
     assert out.data["bugs_refiled"] == {"Bflake": "fix-Bflake", "Bup": "fix-Bup"}, out.data
     st = state(repo)
     assert st.bugs["Bup"].fix_task == "fix-Bup" and st.items["fix-Bup"].fixes == ["Bup"]
-    assert st.items["fix-Bup"].state == "open" and st.items["fix-Bup"].parent == "P1"
+    assert st.items["fix-Bup"].state == "open" and st.items["fix-Bup"].parent == "bugs"
     assert K.bug_file_tasks(repo, agent="a").exit == 2, "nothing left without a fix task"
 
 

@@ -8,6 +8,8 @@
 
 line-length = 100
 target-version = "py311"
+# reference snapshots of operator/coordinator helpers, not maintained code
+extend-exclude = ["docs/ddflow/research/scripts"]
 
 [lint]
 select = ["E", "F", "W", "B", "C4", "C90", "I", "UP", "PL", "RUF"]

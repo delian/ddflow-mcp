@@ -139,6 +139,8 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 
 [exempt]
+"ddflow/infra/log.py:_HOLDER_SCANS_MAX" = "a bound on a diagnostic-only rescan of /proc/locks while a lock-timeout message is built; it shapes an error note, never behaviour, so no operator needs the knob"
+"ddflow/infra/log.py:_HOLDER_SCAN_S" = "the time cap of the same diagnostic rescan (companion of _HOLDER_SCANS_MAX)"
 "ddflow/infra/docindex.py:MIN_SUBSTRING" = "a format fact: a trigram index matches no fewer than 3 characters, so shorter substrings fall back to LIKE"
 "ddflow/infra/docindex.py:LOCK_TIMEOUT_S" = "the default of DocIndex.lock_timeout_s, a field every caller sets; the docs verb will pass its [docs] config (it is not read anywhere as a bare constant)"
 "ddflow/services/docsearch/scope.py:MAX_BYTES" = "the default of Scope.max_bytes, a field the caller sets; the docs verb will pass its [docs] config"
