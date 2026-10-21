@@ -256,26 +256,31 @@ def _file_fix_task(
     # Never the item's own phase: a fix task there would hold that phase open and block its
     # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
     phase_made = ""
-    standing = st.items.get(cfg.bugs.phase)
-    if standing is None or standing.removed:
-        phase_made = cfg.bugs.phase
-        log.append(
-            "phase.added",
-            phase_made,
-            {
-                "title": "Bugs",
-                "needs": [],
-                "globs": [],
-                "body": "Fix tasks for bugs filed by `bug found`.",
-                "tags": [],
-                "priority": DEFAULT_PRIORITY,
-                "line": "",
-            },
-        )
-        st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
-        parent = phase_made
-    else:
-        parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
+    parent = ""
+    n = 1
+    while not parent:  # the standing phase, else its follow-ups (`bugs-2`, ...) once it is done
+        pid = cfg.bugs.phase if n == 1 else f"{cfg.bugs.phase}-{n}"
+        standing = st.items.get(pid)
+        if standing is None or (standing.removed and n == 1):
+            phase_made = pid
+            log.append(
+                "phase.added",
+                phase_made,
+                {
+                    "title": "Bugs",
+                    "needs": [],
+                    "globs": [],
+                    "body": "Fix tasks for bugs filed by `bug found`.",
+                    "tags": [],
+                    "priority": DEFAULT_PRIORITY,
+                    "line": "",
+                },
+            )
+            st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
+            parent = phase_made
+        else:
+            parent = _open_phase_of(st, pid) if standing.kind == "phase" else ""
+        n += 1
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     first = summary.strip().splitlines()[0] if summary.strip() else ""
