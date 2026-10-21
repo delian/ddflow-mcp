@@ -259,7 +259,7 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     if body.get("truncated") is True and isinstance(body.get("rows"), list):
         # Only the record lists page; a search or session list carries no `next`.
         how = (
-            f"page with limit={body.get('limit')} offset={body['next']}"
+            f"repeat the call with limit={body.get('limit')} offset={body['next']}"
             if body.get("next") is not None
             else "raise limit"
         )
