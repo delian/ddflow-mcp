@@ -105,7 +105,7 @@ def test_full_runs_the_whole_suite_through_the_unmodified_hook(project, stubs):
     assert _calls(stubs, "precommit") == ["SKIP="] and not _calls(stubs, "pytest")
 
 
-def test_the_knob_full_and_a_ref_that_is_no_item_run_the_whole_suite(project, stubs):
+def test_the_knob_full_and_a_call_not_for_an_item_run_the_whole_suite(project, stubs):
     _branch(project, {"pkg/mod.py": "A = 2\n"})
     cfg = Config.load(project)
     cfg.ci.tests_scope = "full"
@@ -269,3 +269,18 @@ def test_a_missing_test_runner_is_unavailable_not_a_failed_run(project, stubs):
     res = CI.run(project, Config.load(project), base="main", for_item=True)
     assert res.status == "unavailable", res.reason
     assert res.scope["scope"] == "selected"
+
+
+def test_a_bare_sha_ref_runs_the_selected_tests_not_the_whole_suite(project, stubs):
+    """B-ci-selected-runs-full-suite: `ci run --ref <sha>` named no item, so it ran the whole
+    suite (14064 tests) for a one-file change; the selection needs only the diff against base."""
+    _branch(project, {"pkg/mod.py": "A = 2\n"})
+    sha = _git(project, "rev-parse", "HEAD").strip()
+    res = A.run(project, ref=sha, base="main")
+    assert res.data["scope"]["scope"] == "selected", res.data["scope"]
+    (call,) = _calls(stubs, "pytest")
+    assert "tests/test_mod.py" in call and "test_other" not in call
+    assert _calls(stubs, "precommit") == ["SKIP=tests,scenarios"]
+    assert "recorded" not in res.data  # no item: nothing to record, scope only
+    full = A.run(project, ref=sha, base="main", full=True)
+    assert full.data["scope"]["scope"] == "full"
