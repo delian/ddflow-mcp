@@ -1112,12 +1112,12 @@ def _superseded(repo, cfg, it, a) -> tuple[set[str], set[str]]:
     return superseded_digests(list(found), diff) - old, old
 
 
-def _untriaged_numbers(it, gate: str, last: dict) -> list[int]:
+def _untriaged_numbers(it, gate: str, last: dict) -> list[int] | None:
     """The numbers (as `review` printed them) of the last round's findings with no settled
-    verdict; None-like unknowns (a record that cannot be read) count as open."""
+    verdict; None when the record cannot be read (then it counts as open)."""
     found = last.get("chunk_findings")
     if isinstance(found, B.Unavailable) or not isinstance(found, list):
-        return [0] if found is not None else []
+        return None if found is not None else []
     mine = it.triage.get(gate, {})
     return [
         n
@@ -1144,7 +1144,10 @@ def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, st
         return True, "first round"
     if str(last.get("status")) != "REVIEWED":
         return True, "the last round did not cover the whole diff"
-    if open_ := _untriaged_numbers(it, gate, last):
+    open_ = _untriaged_numbers(it, gate, last)
+    if open_ is None:
+        return True, "the last round's findings cannot be read"
+    if open_:
         return True, "finding " + ", ".join(f"#{n}" for n in open_) + " untriaged"
     wt, _held = item_tree(repo, cfg, st, it, a["called_from"])
     moved = _moved_paths(repo, it, wt, last.get(RP.REVIEWED_PATHS_FIELD))
