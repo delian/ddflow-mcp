@@ -16,7 +16,7 @@ becoming a way to turn partial into passed:
   different outcome and needs its own acceptance;
 * only a `partial` that ddflow MEASURED as baseline-red can be accepted (operator decision
   D-accept-baseline-red-partial): the failing tests also fail on the base branch
-  (`services.gates.baseline_red`, evidence `baseline.red`, written only by `gate run`: the
+  (`services.gates.baseline_red`, evidence `baseline` -> `red` (ev['baseline']['red']), written only by `gate run`: the
   caller's `gate record` cannot set it). `failed`, `unavailable` and a hand-recorded or
   `partial_exits` partial are not this path.
 """
