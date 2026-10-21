@@ -274,6 +274,11 @@ def _note_vs_work(a: str, b: str) -> bool:
     return {a, b} <= {"research", *_WORK} and "research" in (a, b) and a != b
 
 
+def _related_only(c: Candidate, kind: str, dd) -> bool:
+    """A non-identical research-note / task-or-phase pair: listed as related, never asked."""
+    return not dd.research_task_asks and _note_vs_work(kind, c.kind) and "identical" not in c.flags
+
+
 def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
     """Does this candidate make the add ask? An identical record of the SAME kind always
     does (it is merged, not asked about, but it is the strongest match there is); a record
@@ -285,7 +290,7 @@ def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
         return True
     if "filed_against" in c.flags:
         return False
-    if not dd.research_task_asks and _note_vs_work(kind, c.kind) and "identical" not in c.flags:
+    if _related_only(c, kind, dd):
         return False
     return "identical" in c.flags or (c.score >= dd.ask_threshold and words >= dd.min_words)
 
@@ -350,11 +355,13 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
     return Assessment("ask" if dd.on_match == "ask" else "warn", out, words)
 
 
-def is_duplicate(candidate: Candidate, assessment: Assessment, cfg: Config) -> bool:
+def is_duplicate(candidate: Candidate, assessment: Assessment, cfg: Config, kind: str = "") -> bool:
     """The rule an add uses: an identical record, or a near match with enough content
     words (`[dedupe]`). ONE implementation, shared by the import path and the add check,
     so a threshold change cannot land in one and miss the other (dedupe on 5c9fc38)."""
     dd = cfg.dedupe
+    if _related_only(candidate, kind, dd):
+        return False
     return "identical" in candidate.flags or (
         candidate.score >= dd.ask_threshold and assessment.words >= dd.min_words
     )
@@ -458,7 +465,7 @@ def _repeat_of(
         peer = peers.get(c.id)
         if peer is not None and not (compare and compare(batch[i], batch[peer])):
             continue
-        if is_duplicate(c, a, cfg):
+        if is_duplicate(c, a, cfg, str(probe.get("kind") or "")):
             of = str(batch[peer]["id"]) if peer is not None else c.id
             return Screened(
                 i, of, c.score, "identical" in c.flags, "queue" if peer is None else "import"
