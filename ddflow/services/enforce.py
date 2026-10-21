@@ -2243,8 +2243,10 @@ def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = No
                 "",
                 "A session loads its rules once; edits landing on the base afterwards are",
                 "silently ignored here. Merge the base, then RE-READ the files named above:",
-                f"    git merge {shlex.quote(d.base)}",
-                "(the commit concluding that merge is never refused)",
+                "    ddflow sync --keep-local",
+                "(merges the base even with uncommitted work, which it sets aside and puts",
+                f"back; or `git merge {shlex.quote(d.base)}` on a clean tree. The commit",
+                "concluding that merge is never refused)",
             ],
             "stale_rules",
         )
