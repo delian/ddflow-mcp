@@ -940,6 +940,7 @@ class EventLog:
         self._lamport = 0
         self._meta: SMT.ShardMeta | None = None
         self._redactor: Any = None
+        self._lookup_net = True
         self._caps_active: set[str] | None = None
         self.skipped_lines = 0
 
@@ -1181,8 +1182,10 @@ class EventLog:
         if red is None:
             names: list[str] = []
             cached = True
+            self._lookup_net = True
             try:
                 cfg = Config.load(self.root)
+                self._lookup_net = bool(cfg.session.redact_lookup_network)
                 patterns = [*cfg.session.redact_patterns, *cfg.session.redact_extra]
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
                 up = getattr(cfg, "upstream", None)
@@ -1203,7 +1206,7 @@ class EventLog:
             )
             if cached:
                 self._redactor = red
-        return R.redact_event_data(kind, data, red)
+        return R.redact_event_data(kind, data, red, lookup_network=self._lookup_net)
 
     # -- the version stamp and the skew guard -----------------------------------------
     def _shard_meta(self) -> SMT.ShardMeta | None:

@@ -13,11 +13,17 @@ config, fails the suite.
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 import subprocess
 import sys
 import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
+
+from ddflow.core.redact import redact_network
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -181,3 +187,64 @@ def test_a_four_part_version_is_not_a_host():
     tag = "v" + _ip(0, 11, 0, 1)
     assert _private_addresses(f"rev: {tag}") == set()
     assert _private_addresses(f"rev: {tag}, host {_ip(10, 0, 0, 7)}") == {_ip(10, 0, 0, 7)}
+
+
+#: Events written before write-time redaction reached every field (bug Ba2df74d558,
+#: D-event-log-redaction-forward) carry LAN addresses in recorded text. Pushed history is
+#: not rewritten, so those stay; every event stamped later is scanned, and one that leaks
+#: fails here. Write-time redaction of every kind landed 2026-10-08 06:22Z (B5deba76d04); the last
+#: known leaks are 2026-10-08 04:10Z, before it.
+_HOST_RE = r"[\w.-]+\.(?:lan|local|internal|home\.arpa)\b"
+EVENT_LOG_CLEAN_FROM = "2026-10-09T00:00:00Z"
+
+
+def _stamp(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(UTC)
+
+
+def _event_log_leaks(root: Path = ROOT, since: str = EVENT_LOG_CLEAN_FROM) -> dict[str, list[str]]:
+    """Lines of events stamped at or after `since` that `core.redact.redact_network` (the
+    rules the write path applies: private IPv4/IPv6 and private host names) would still
+    change. Raises when there is no shard to scan: an absent log must not read as a clean one."""
+    shards = sorted((root / ".ddflow" / "events").rglob("*.jsonl"))
+    assert shards, "no event shards to scan"
+    hits: dict[str, list[str]] = {}
+    for shard in shards:
+        text = shard.read_text(encoding="utf-8", errors="replace")
+        for n, line in enumerate(text.splitlines(), 1):
+            try:
+                ts = str(json.loads(line).get("ts", ""))
+                if ts and _stamp(ts) < _stamp(since):
+                    continue
+            except ValueError:
+                pass
+            if redact_network(line) != line:
+                hits[f"{shard.name}:{n}"] = sorted(
+                    _private_addresses(line) | set(re.findall(_HOST_RE, line))
+                )
+    return hits
+
+
+def test_no_new_event_names_a_private_network_host():
+    hits = _event_log_leaks()
+    assert not hits, (
+        f"private-network hosts in events written since {EVENT_LOG_CLEAN_FROM}: {hits}. "
+        "The write path (EventLog._write -> core.redact.redact_event_data) must redact them."
+    )
+
+
+def test_the_event_log_scan_can_see_one(tmp_path):
+    lan = _ip(10, 220, 1, 8)
+    events = tmp_path / ".ddflow" / "events"
+    events.mkdir(parents=True)
+    old = f'{{"ts": "2026-09-01T00:00:00Z", "data": {{"text": "{lan}"}}}}'
+    new = f'{{"ts": "2026-10-20T00:00:00Z", "data": {{"url": "http://{lan}:80"}}}}'
+    (events / "a.jsonl").write_text(old + "\n" + new + "\n")
+    assert _event_log_leaks(tmp_path) == {"a.jsonl:2": [lan]}
+    # a millisecond after the cutover is after it; a private host name and an absent log count
+    host = "nas" + ".home.arpa"
+    ms = f'{{"ts": "2026-10-09T00:00:00.001Z", "data": {{"text": "see {host}"}}}}'
+    (events / "a.jsonl").write_text(ms + "\n")
+    assert _event_log_leaks(tmp_path) == {"a.jsonl:1": [host]}
+    with pytest.raises(AssertionError, match="no event shards"):
+        _event_log_leaks(tmp_path / "nowhere")
