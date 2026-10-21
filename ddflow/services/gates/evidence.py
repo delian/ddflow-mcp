@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from ...core.bookkeeping import STATE_EXCLUDE, is_state
+from ...core import globs
 from ...core.digest import content_digest
 from ...infra import git as GIT
 from ...infra import worktree as W
@@ -289,15 +291,28 @@ def head_of(tree_sha: str) -> str:
     return head if sep else ""
 
 
-def superseded_by(started_on: str, newer: str, cwd: Path) -> bool:
+def superseded_by(
+    started_on: str, newer: str, cwd: Path, paths: Sequence[str] | None = None
+) -> bool:
     """Is a run that began on tree ``started_on`` older than ``newer`` (a recorded or current
     `tree_identity`)? True when the commits differ and the run's commit is an ancestor of the
     other: its outcome describes source that has since moved on (B27a236a534). Unknown
-    commits, or ones neither of which descends from the other, are not superseded."""
+    commits, or ones neither of which descends from the other, are not superseded.
+
+    ``paths`` (the item's globs) scope it to content: commits that touch none of them -- other
+    agents' merges moving a shared checkout's HEAD -- leave the run's verdict standing
+    (B-e47bb1cade). Empty/None: ancestry alone. Git unable to list the diff: superseded."""
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
-    return _is_ancestor(cwd, a, b) is True
+    if _is_ancestor(cwd, a, b) is not True:
+        return False
+    if not paths:
+        return True
+    changed = W.git(cwd, "diff", "--name-only", a, b)
+    if not changed.ok:
+        return True
+    return any(globs.match(f, g) for f in changed.out.splitlines() if f for g in paths)
 
 
 def _is_ancestor(cwd: Path, a: str, b: str) -> bool | None:
