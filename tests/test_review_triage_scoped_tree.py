@@ -101,14 +101,31 @@ def test_a_new_file_the_item_adds_after_the_round_blocks_the_pass(repo, tmp_path
     assert "d.py" in last.data["text"]
 
 
-def test_an_older_round_without_reviewed_paths_still_compares_the_whole_tree(
+def test_a_file_deleted_after_the_round_blocks_the_pass_and_is_named(repo, tmp_path):
+    wt = _round(repo, tmp_path)
+    (wt / "README.md").unlink()  # tracked and unchanged until now: not in the reviewed set
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "README.md" in last.data["text"]
+
+
+def test_an_older_round_without_reviewed_paths_compares_the_items_whole_tree(
     repo, tmp_path, monkeypatch
 ):
     wt = _round(repo, tmp_path)
-    monkeypatch.setattr(
-        api.RP, "REVIEWED_PATHS_FIELD", "no_such_field"
-    )  # the round's record has no snapshot
-    (repo / "other.txt").write_text("elsewhere\n")  # untracked in the primary: not the item's tree
-    (wt / "notes.md").write_text("an untracked file\n")
-    last = _settle(repo)
+    monkeypatch.setattr(api.RP, "REVIEWED_PATHS_FIELD", "no_such_field")  # no snapshot recorded
+    (repo / "other.txt").write_text("elsewhere\n")  # the primary's file: not the item's tree
+    _tri(repo, 1)
+    assert _state(repo).gates["critic"].outcome == "failed"
+    (wt / "notes.md").write_text("an untracked file in the item's tree\n")
+    last = _tri(repo, 2)
     assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "holds other content" in last.data["text"]
+
+
+def test_an_older_round_with_the_item_tree_unchanged_still_passes(repo, tmp_path, monkeypatch):
+    _round(repo, tmp_path)
+    monkeypatch.setattr(api.RP, "REVIEWED_PATHS_FIELD", "no_such_field")
+    (repo / "other.txt").write_text("elsewhere\n")  # the primary's file: not the item's tree
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "passed", last.data["text"]
