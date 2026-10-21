@@ -10,6 +10,7 @@ from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
 from ..infra import worktree as W
 from . import gates as G
+from .pipeline_diff import effective_pipeline
 from .testselect import Selected, run_command, select
 
 
@@ -122,8 +123,6 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
 def _pipeline(cfg, it, tree: Path) -> list[str]:
     """The item's pipeline by its ACTUAL diff (B4da2fc502b); the declared one when the
     primary checkout cannot be found."""
-    from .pipeline_diff import effective_pipeline  # completion imports this module
-
     try:
         return effective_pipeline(W.repo_root(tree), cfg, it)
     except W.GitError:
