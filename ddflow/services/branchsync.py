@@ -112,7 +112,9 @@ def _stash_away(tree: Path, tag: str) -> str:
     r = W.git(tree, "stash", "push", "-u", "-m", tag)
     if not r.ok:
         raise RuntimeError(r.err or r.out)
-    if "no local changes" in f"{r.out} {r.err}".lower():  # git saved nothing: no entry to find
+    # git saved nothing: no entry to find. Anchored: a saved stash says "Saved working
+    # directory ... On <branch>: <tag>", so a tag that spells this phrase cannot match.
+    if f"{r.out}\n{r.err}".strip().lower().startswith("no local changes"):
         return ""
     found = _stash_find_sure(tree, tag)
     if found is not None:
