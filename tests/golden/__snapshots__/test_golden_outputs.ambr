@@ -1937,10 +1937,11 @@
           as the last round recorded them) differ now, or a finding of that round is
           still untriaged; otherwise it says 'nothing new to review since round N
           (reviewed paths unchanged, all findings triaged)', exits 2, calls no
-          reviewer and counts no round. A merge of main or an edit outside the item's
-          files is not new work. `--full` and `--force --reason` still run a round;
-          false runs every plain review as before. Every review prints a one-line
-          'rounds used n/cap, justified: ...' report. Change it for the project
+          reviewer and counts no round. A merge of main or an edit that leaves every
+          one of the item's files as the last round saw it is not new work (a merge
+          that changes one of them is). `--full` and `--force --reason` still run a
+          round; false runs every plain review as before. Every review prints a one-
+          line 'rounds used n/cap, justified: ...' report. Change it for the project
           (`ddflow config --set review.require_new_work false`), for this machine (add
           --local), per run (DDFLOW_REVIEW_REQUIRE_NEW_WORK=0), or over MCP with
           `ddflow_configure` (the operator is told when an agent does).
