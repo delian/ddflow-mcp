@@ -123,3 +123,15 @@ def test_a_close_without_landed_records_no_landing_and_leaves_the_task(repo):
     ev = [e.data for e in EventLog(repo).read_all() if e.kind == "bug.fixed"][-1]
     assert "landed" not in ev, ev
     assert not _item(repo, "fix-B1").removed
+
+
+def test_the_callers_own_claim_on_the_fix_task_is_ended_and_released(repo):
+    """The bug's own scenario: the fix task was CLAIMED before the close, by the closer."""
+    sha = _landed_elsewhere(repo)
+    code, out, err = run_cli(repo, "claim", "fix-B1")
+    assert code == OK, out + err
+    res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f", landed=sha)
+    assert res.exit == OK, res.reason
+    assert res.data["fix_task_abandoned"] == "fix-B1", res.data
+    task = _item(repo, "fix-B1")
+    assert task.lease is None and task.state == "abandoned", (task.state, task.lease)
