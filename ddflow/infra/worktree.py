@@ -637,7 +637,8 @@ def _stash_failed(r: GitResult, tree: Path) -> bool:
         return False
     if any(ln[0].isspace() for ln in lines):
         return False
-    return not git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok
+    probe = git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+    return not probe.ok and not probe.unavailable  # "could not run" is not "no merge begun"
 
 
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
