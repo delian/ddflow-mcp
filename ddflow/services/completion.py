@@ -33,6 +33,7 @@ from . import changes as CH
 from . import chore as CO
 from . import gate_accept as GA
 from . import gates as G
+from . import landed as LD
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
@@ -473,7 +474,8 @@ def changed_paths(repo: Path, it) -> list[str] | None:
         # Empty is not "nothing changed" here: a branch already merged into its base, or
         # the base itself, diffs to nothing whatever the task did.
         return sorted(out) if out else None
-    return None
+    # Landed by a plain git merge or a mixed commit: the commits that cite the item, checked.
+    return LD.cited_paths(repo, it, base)
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
