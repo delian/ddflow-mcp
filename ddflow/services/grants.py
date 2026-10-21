@@ -33,7 +33,12 @@ PREFIX = "grant:"
 
 
 class GrantRefused(ValueError):
-    """A grant that cannot be recorded; the message says why."""
+    """A grant asked for under an agent identity: a person's act, refused (exit 3)."""
+
+
+class GrantInvalid(ValueError):
+    """A grant whose arguments are wrong (unknown kind, item or gate, a bad count, no
+    reason); the message says which. A failure (exit 1), not a refusal."""
 
 
 @dataclass(frozen=True)
@@ -183,17 +188,17 @@ def add(
         raise GrantRefused(AP.refusal(why))
     k = KINDS.get(kind)
     if k is None:
-        raise GrantRefused(f"unknown grant kind {kind!r}; the kinds are {', '.join(KINDS)}")
+        raise GrantInvalid(f"unknown grant kind {kind!r}; the kinds are {', '.join(KINDS)}")
     if when and when not in k.whens:
         known = ", ".join(k.whens) or "none"
-        raise GrantRefused(f"{kind} has no predicate {when!r}; the predicates are {known}")
+        raise GrantInvalid(f"{kind} has no predicate {when!r}; the predicates are {known}")
     cap = cfg.grants.max_count
     if not 1 <= count <= cap:
-        raise GrantRefused(f"count must be 1..{cap} ([grants].max_count); got {count}")
+        raise GrantInvalid(f"count must be 1..{cap} ([grants].max_count); got {count}")
     if gate not in gates:
-        raise GrantRefused(f"no such gate {gate!r}; the gates are {', '.join(sorted(gates))}")
+        raise GrantInvalid(f"no such gate {gate!r}; the gates are {', '.join(sorted(gates))}")
     if not reason.strip():
-        raise GrantRefused("a grant needs --reason: what the operator allowed and why")
+        raise GrantInvalid("a grant needs --reason: what the operator allowed and why")
     ttl = cfg.grants.ttl_h
     terms = {
         "item": item, "gate": gate, "kind": kind, "count": count, "reason": reason.strip(),
@@ -203,7 +208,7 @@ def add(
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         if item not in st.items:
-            raise GrantRefused(f"no such item {item!r}")
+            raise GrantInvalid(f"no such item {item!r}")
         gid = _next_id(st)
         try:
             AP.grant(

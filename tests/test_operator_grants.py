@@ -331,7 +331,7 @@ def test_a_round_the_budget_allows_anyway_does_not_spend_a_grant(proj):
 
 def test_a_grant_for_a_gate_the_project_does_not_have_is_refused(proj):
     code, out, err = _add(proj, gate="no_such_gate")
-    assert code == 3 and "no_such_gate" in out + err
+    assert code == 1 and "no_such_gate" in out + err
     assert not [s for s in _state(proj).approvals if s.startswith("grant:")]
 
 
@@ -363,7 +363,7 @@ def test_the_agents_reason_is_kept_beside_the_grant(proj):
 
 
 def test_add_refuses_a_gate_outside_the_given_gates(proj):
-    with pytest.raises(GR.GrantRefused, match="no_such_gate"):
+    with pytest.raises(GR.GrantInvalid, match="no_such_gate"):
         GR.add(
             EventLog(proj, "probe"), _cfg(), item="T1", gate="no_such_gate",
             kind="review_round", count=1, reason="r", gates={"critic"},
@@ -383,3 +383,20 @@ def test_a_grant_for_a_gate_gone_from_the_item_does_not_break_listing():
         {"human": True, "user": "u", "at": "2026-01-01T00:00:00Z", "terms": t}
     ]
     assert [(g.id, g.used) for g in GR.grants(st)] == [("G1", 0)]
+
+
+def test_argument_errors_fail_and_only_the_agent_identity_is_refused(proj):
+    code, _o, _e = _add(proj, count="0")
+    assert code == 1, "a bad argument is a failure, not a coordination refusal"
+    code, _o, _e = run_cli(
+        proj, "--agent", "bot", "grant", "add", "--item", "T1", "--gate", "critic",
+        "--kind", "review_round", "--count", "1", "--reason", "r",
+    )  # fmt: skip
+    assert code == 3
+
+
+def test_the_grant_reaches_the_recorded_evidence():
+    assert RV._cite_grant(None, "G1") == {"budget_grant": "G1"}
+    assert RV._cite_grant({"x": 1}, "G1") == {"x": 1, "budget_grant": "G1"}
+    assert RV._cite_grant({"x": 1}, "") == {"x": 1}
+    assert RV._cite_grant(None, "") is None
