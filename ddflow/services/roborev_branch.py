@@ -45,6 +45,7 @@ class Result:
     sha: str = ""
     text: str = ""
     pending_rerun: bool = False  #: the job may still finish: collect it with --job N
+    reviewer: str = ""  #: what the job's own record says ran it (its model, else its agent)
 
     @property
     def exit(self) -> int:
@@ -99,6 +100,18 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
             continue  # a single commit, or a range from elsewhere, is not the branch review
         ids.append(RR._job_id(j))
     return max(ids) if ids else None  # type: ignore[type-var]
+
+
+def _reviewer(exe: str, where: Path, job: int) -> str:
+    """The agent roborev ACTUALLY ran job ``job`` with (its model when it records one, as
+    `roborev.Review.reviewer`), "" when the job record cannot be read."""
+    for j in _list(exe, where):
+        if RR._job_id(j) == job:
+            # the same name `roborev.Review.reviewer` judges the family by
+            return RR.Review(
+                job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")
+            ).reviewer
+    return ""
 
 
 def _secs(a: str, b: str) -> float | None:
@@ -222,11 +235,18 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
     shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=RR._TIMEOUT_S)
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.returncode == 0:
-        return Result("clean", job=job, sha=head, text=text)
+        return Result("clean", job=job, sha=head, text=text, reviewer=_reviewer(exe, where, job))
     # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
     status = _job_status(exe, where, job)
     if status == "done":
-        return Result("findings", f"roborev wait exited {w.returncode}", job, head, text)
+        return Result(
+            "findings",
+            f"roborev wait exited {w.returncode}",
+            job,
+            head,
+            text,
+            reviewer=_reviewer(exe, where, job),
+        )
     return Result(
         "unavailable",
         f"roborev job {job} ended {status or 'in an unknown state (its status could not be read; the text below, if any, is unjudged)'} with no review (wait exit {w.returncode})",
@@ -253,6 +273,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"reviewed_sha: {r.sha} (record with `gate record --reviewed-sha {r.sha}`)")
     if r.job is not None:
         print(f"roborev job: {r.job}")
+    if r.reviewer:
+        print(
+            f"reviewer: {r.reviewer} (the model roborev ran the job with, else its agent; pass it as --model)"
+        )
+        verdict = "passed" if r.outcome == "clean" else "failed"
+        if r.outcome in ("clean", "findings"):
+            print(
+                f"record: ddflow gate record <id> standards --outcome {verdict} "
+                f"--reviewed-sha {r.sha} --model {r.reviewer}"
+            )
     if r.pending_rerun:
         print(f"standards-pending-rerun: job {r.job}")
     if r.text:
