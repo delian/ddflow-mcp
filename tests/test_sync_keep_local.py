@@ -54,3 +54,17 @@ def test_keep_local_conflicting_with_the_base_restores_the_tree(repo):
     assert _git(wt, "rev-parse", "HEAD") == head
     assert (wt / "README.md").read_text() == "dirty\n"
     assert "ddflow-sync-keep-local" not in _stashes(wt)
+
+
+def test_a_stash_pushed_meanwhile_by_another_worktree_is_not_dropped(repo):
+    from ddflow.services import branchsync as BS
+
+    wt = _claimed(repo)
+    (wt / "a.txt").write_text("mine\n")
+    mine = BS._stash_away(wt, "tag-mine")
+    _sha, ref = BS._stash_find(wt, "tag-mine")  # the selector, as _stash_back held it
+    (wt / "b.txt").write_text("theirs\n")
+    _git(wt, "stash", "push", "-u", "-m", "tag-theirs")  # another session, in between
+    BS._drop(wt, ref, mine)
+    left = _stashes(wt)
+    assert "tag-theirs" in left and "tag-mine" not in left, left
