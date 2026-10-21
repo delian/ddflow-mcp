@@ -33,7 +33,7 @@ from .admission import Clash, conflicts, glob_conflict, is_shared, shared_globs 
 from .autoorder import is_decide
 from .flow import FEATURE, branch_kind, stack_base, unknown_line
 from .flowparams import params
-from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
+from .globs import inside as path_in_glob
 from .globs import overlap as globs_overlap  # used by `waves`; re-exported for callers
 from .graph import closure, find_cycles, longest_chains
 
@@ -256,7 +256,47 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     return False, f"{dep} is {it.state}"
 
 
-def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
+def _docs_only_exempt(it: Item, cfg: Config | None) -> bool:
+    """A research/doc task (or any task) whose declared globs are ALL documents writes no
+    code, so the phase's gates on other phases' code do not hold it back. A research or doc
+    task with no globs is exempt too. `[schedule].docs_ignore_phase_needs` turns it off;
+    `[gates].doc_globs` says what a document is. Its own `needs` still bind."""
+    cfg = cfg if cfg is not None else Config()
+    if not cfg.schedule.docs_ignore_phase_needs or not it.is_work:
+        return False
+    if not it.globs:
+        return it.kind in ("research", "doc")
+    docs = cfg.gates.doc_globs
+    return bool(docs) and all(_glob_is_docs(g, docs) for g in it.globs)
+
+
+def _glob_is_docs(glob: str, docs: list[str]) -> bool:
+    """Is every file ``glob`` can match a document? Decided by containment rules that
+    cannot over-claim, never by sampling: the glob IS a doc glob; a doc glob `dir/**`
+    holds everything under `dir/`; a doc glob `**/*.ext` (or `*.ext`) holds every path
+    whose last component ends `.ext`; and a doc glob `dir/*` holds a single-level glob under `dir/`; a glob with no wildcard is one path to test."""
+    if ".." in glob.split("/"):
+        return False
+    if glob in docs:
+        return True
+    last = glob.rsplit("/", 1)[-1]
+    for d in docs:
+        if d.endswith("/**") and glob.startswith(d[:-2]):
+            return True
+        if d.endswith("/*") and not d.endswith("**") and glob.startswith(d[:-1]):
+            if "/" not in glob[len(d) - 1 :] and "**" not in glob:
+                return True
+        tail = d[len("**/") :] if d.startswith("**/") else d
+        if (
+            tail.startswith("*")
+            and not any(c in tail[1:] for c in "*?[/")
+            and last.endswith(tail[1:])
+        ):
+            return True
+    return not any(c in glob for c in "*?[") and any(path_in_glob(glob, d) for d in docs)
+
+
+def inherited_deps(state: State, it: Item, cfg: Config | None = None) -> list[tuple[str, str]]:
     """Every dependency that binds ``it``: its own, plus every ancestor's.
 
     Returns ``(owner_id, dep_id)`` pairs so a refusal can say WHERE the dependency
@@ -285,7 +325,7 @@ def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
     ancestors = state.ancestors(it.id)
     # A decide task is the operator's first move and writes only a document, so a phase's
     # gates ("8 open tasks inherited from P-x") never hold it back; its own `needs` still do.
-    if not ancestors or is_decide(it.tags):
+    if not ancestors or is_decide(it.tags) or _docs_only_exempt(it, cfg):
         return pairs
     mine = state.descendants(it.id) | {it.id} | {a.id for a in ancestors}
     for anc in ancestors:
@@ -392,7 +432,7 @@ def plan_blocker(
 
     unmet: list[str] = []
     details: list[str] = []
-    for owner, dep in inherited_deps(state, it):
+    for owner, dep in inherited_deps(state, it, cfg):
         ok, why = dep_status(state, dep, cfg)
         if not ok:
             unmet.append(dep)
@@ -418,7 +458,7 @@ def plan_blocker(
             f"a port of {it.port_of}: waits for {src.id} to land ({src.state})",
             [src.id],
         )
-    stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it)])
+    stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it, cfg)])
     if stack.error:
         return Blocked(it.id, "deps", stack.error, [])
     return None
@@ -942,7 +982,9 @@ def parallel_line(
     return f"parallel: {limit} (auto: ceiling {ceiling}; limited by {_words(by)})"
 
 
-def _chain_scope(state: State, phase: str) -> tuple[dict[str, Item], Callable[[Item], list[str]]]:
+def _chain_scope(
+    state: State, phase: str, cfg: Config | None = None
+) -> tuple[dict[str, Item], Callable[[Item], list[str]]]:
     """The live items a critical path walks (a phase's whole closure, or all) and the edge
     function it uses: what must finish before an item can."""
 
@@ -951,7 +993,7 @@ def _chain_scope(state: State, phase: str) -> tuple[dict[str, Item], Callable[[I
         -- an umbrella, task or phase, closing only when what is under it does -- its
         children (B79c2f6e17a: without them a split task's chain, or the chain inside a
         phase another depends on, read one step short per level)."""
-        deps = [d for _owner, d in inherited_deps(state, it)]
+        deps = [d for _owner, d in inherited_deps(state, it, cfg)]
         return deps + [c.id for c in state.children(it.id) if not c.removed]
 
     live = state.live_by_id()
@@ -971,29 +1013,30 @@ def chain_cycles(
     state: State,
     phase: str = "",
     scope: tuple[dict[str, Item], Callable[[Item], list[str]]] | None = None,
+    cfg: Config | None = None,
 ) -> list[list[str]]:
     """Cycles among the NOT-DONE items of a critical path's scope, by the edges it walks.
 
     Finished work cannot be waited on, so a loop that runs through it is no cycle
     (Bbbcbfc4bbb: a whole-project forecast refused over one, while `next` found none)."""
-    live, before = scope or _chain_scope(state, phase)
+    live, before = scope or _chain_scope(state, phase, cfg)
     open_items = {k: v for k, v in live.items() if v.state != DONE}
     return find_cycles(open_items, edges=lambda it: [d for d in before(it) if d in open_items])
 
 
-def critical_path(state: State, phase: str = "") -> list[str]:
+def critical_path(state: State, phase: str = "", cfg: Config | None = None) -> list[str]:
     """Longest dependency chain among not-done items — the true wall-clock floor.
 
     Reporting it is what stops an operator adding a fifth parallel agent to a phase
     whose runtime is set by a four-deep chain: total time equals the longest path, not
     the sum of the work.
     """
-    items, before = _chain_scope(state, phase)
+    items, before = _chain_scope(state, phase, cfg)
 
     # The longest chain is only defined on an acyclic graph: on a cyclic one a chain
     # computed for one node is reused where it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
     # than return a confidently wrong number.
-    if chain_cycles(state, phase, (items, before)):
+    if chain_cycles(state, phase, (items, before), cfg):
         return []
     # INHERITED dependencies, like readiness uses. The path used to walk `it.needs`
     # alone, so a phase-level dependency did not lengthen the reported floor at all --
