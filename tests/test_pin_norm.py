@@ -3,7 +3,7 @@ nothing else (B-pin-argparse-format)."""
 
 from __future__ import annotations
 
-from tests.pin_norm import argparse_stable, stable
+from tests.pin_norm import argparse_stable, option_headings, stable
 
 WRAPPED_NEW = (
     "usage: ddflow link [-h]\n"
@@ -93,3 +93,36 @@ def test_whitespace_after_a_usage_block_still_matters():
     assert argparse_stable(base) != argparse_stable(base.replace("error: one", "error:  one"))
     assert argparse_stable(base) != argparse_stable(base.replace("\nddflow link", "\n ddflow link"))
     assert argparse_stable(base + "\n\n  indented  help\n").endswith("\n\n  indented  help\n")
+
+
+def test_option_headings_with_both_forms_and_a_value_read_the_same():
+    old = "options:\n  -m MESSAGE, --message MESSAGE\n  -n [N], --num [N]  text\n"
+    new = "options:\n  -m, --message MESSAGE\n  -n, --num [N]  text\n"
+    assert option_headings(old) == new == option_headings(new)
+    assert argparse_stable(old) == argparse_stable(new)
+
+
+def test_option_headings_leave_other_lines_alone():
+    text = "  -a A, --bee B\n  -h, --help  x\n  --only ONLY\nuse -m M, --message M here\n"
+    assert option_headings(text) == text
+
+
+def test_option_headings_with_a_spaced_metavar_long_first_or_many_strings():
+    old = (
+        "  -f [FILE ...], --file [FILE ...]  input\n"
+        "  --message MESSAGE, -m MESSAGE\n"
+        "  -p A B, --pair A B  x\n"
+        "  -a A, --bee A, --cee A  y\n"
+    )
+    new = (
+        "  -f, --file [FILE ...]  input\n"
+        "  --message, -m MESSAGE\n"
+        "  -p, --pair A B  x\n"
+        "  -a, --bee, --cee A  y\n"
+    )
+    assert option_headings(old) == new == option_headings(new)
+
+
+def test_option_headings_with_a_metavar_that_holds_a_comma_and_dash():
+    old = "  -p X, -y, --pair X, -y  help\n"
+    assert option_headings(old) == "  -p, --pair X, -y  help\n"

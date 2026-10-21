@@ -36,6 +36,7 @@ from ...core.model import State
 from ...core.schedule import shared_globs
 from ...core.textcut import clip
 from ..contextpack import Candidate, pack
+from ..doctypes.guidance import records as doctype_records
 from . import deffields as DF
 from .kinds import RULE, decision_record
 from .record import GuidanceRecord
@@ -234,6 +235,12 @@ def _cut_line(trimmed: list[str]) -> str:
     )
 
 
+def _document_types(cfg) -> list[GuidanceRecord]:
+    """The guidance the project's document types carry (B-dt-rules): scoped to a type's
+    documents, so it governs an item whose files overlap one."""
+    return doctype_records(getattr(cfg, "root", None))
+
+
 def for_work(
     cfg,
     state: State,
@@ -245,9 +252,10 @@ def for_work(
     verify: bool = False,
     heading: str = "## Guidance that governs this work",
 ) -> Injection:
-    """`inject` over everything the log holds, for work on ``globs`` (tagged ``tags``)."""
+    """`inject` over everything the log holds and the project's document types say, for work
+    on ``globs`` (tagged ``tags``)."""
     return inject(
-        collect(state),
+        [*collect(state), *_document_types(cfg)],
         globs=list(globs),
         gate=gate,
         categories=list(tags),

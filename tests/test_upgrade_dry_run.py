@@ -905,3 +905,52 @@ def test_the_apply_step_describes_what_held_in_a_clean_rehearsal(clean) -> None:
     assert check.status == DR.PASS, check.detail
     assert "users' records unchanged" in check.detail
     assert "second apply a no-op" in check.detail and "restore exact" in check.detail
+
+
+# -- Bca3a5c599c: the upgrade is judged by the problems it ADDS, not by the old queue's hygiene --
+
+
+def _doctor_rehearsal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runs: list):
+    """A rehearsal whose `doctor` answers come from ``runs`` (exit code, problems) in order:
+    the untouched clone first (the baseline), then each check after the upgrade."""
+    rehearsal = DR.Rehearsal(options(tmp_path, project(tmp_path, confirm_free=True)))
+    monkeypatch.setattr(DR.Rehearsal, "clone", lambda self, name, src=None: tmp_path)
+
+    def fake(self, cmd, repo, *args, **kw):
+        code, found = runs.pop(0)
+        return DR.P.Captured(code, json.dumps({"problems": found}), "")
+
+    monkeypatch.setattr(DR.Rehearsal, "ddflow", fake)
+    return rehearsal
+
+
+OLD = [
+    "orphan_worktree: W1 — INSPECT FIRST — 1 unmerged commit(s).",
+    "stuck: AI-roles needs CN-manifest, which is abandoned and will never be done",
+]
+
+
+def test_problems_the_previous_release_already_had_do_not_fail_the_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # exit 1 on 67 old problems both before and after: the old queue's hygiene, not the upgrade
+    changed = [OLD[0].replace("1 unmerged", "2 unmerged"), OLD[1]]
+    r = _doctor_rehearsal(tmp_path, monkeypatch, [(1, OLD), (1, changed), (1, OLD)])
+    assert r.doctor_verdict(tmp_path, "a") == ""
+    assert r.doctor_verdict(tmp_path, "b") == ""
+    assert r.report.facts["doctor_preexisting"] == 2
+
+
+def test_a_problem_the_upgrade_adds_fails_the_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = _doctor_rehearsal(tmp_path, monkeypatch, [(1, OLD), (1, [*OLD, "lost_events: shard x"])])
+    assert "NEW problem" in r.doctor_verdict(tmp_path, "a")
+
+
+def test_a_doctor_that_crashes_or_prints_nothing_fails_the_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = _doctor_rehearsal(tmp_path, monkeypatch, [(1, OLD), (2, []), (1, [])])
+    assert "no readable report" in r.doctor_verdict(tmp_path, "a")
+    assert "no readable report" in r.doctor_verdict(tmp_path, "b")  # exit 1 with no problem
