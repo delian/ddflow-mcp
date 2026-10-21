@@ -22,7 +22,7 @@ from ._base import _load
 from .items import ItemEdit, plan_edit
 
 #: ItemEdit fields a batch entry may not set: they act on the checkout, not on the plan.
-_NOT_BATCHABLE = ("worktree", "queue")
+_NOT_BATCHABLE = ("worktree", "queue", "landed")
 _LISTS = (
     "needs",
     "add_needs",
