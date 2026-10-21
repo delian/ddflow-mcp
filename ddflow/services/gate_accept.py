@@ -24,9 +24,10 @@ becoming a way to turn partial into passed:
 from __future__ import annotations
 
 from ..core.digest import content_digest
-from ..core.model import Item, State
+from ..core.model import Item, State, fold
 from . import approval as AP
 from .gates import baseline_red as BR
+from .gates.defs import required_gates
 
 ACCEPTABLE = "partial"
 
@@ -79,4 +80,31 @@ def grant(log, it: Item, gate: str, *, note: str = "", requested_agent: str = ""
         digest(it, gate),
         note=note or f"accepted partial: {rec.reason[:200]}",
         requested_agent=requested_agent,
+    )
+
+
+def approve(
+    log, cfg, item_id: str, gate: str, *, note: str = "", reject: bool = False, agent: str = ""
+) -> str:
+    """`ddflow approve` of a gate that is not a human gate: accept its baseline-red partial.
+    Returns the line to print; raises `ValueError` (the CLI prints it) when there is none."""
+    it = fold(log.read_all(), strict=False).items.get(item_id)
+    if it is None or reject or it.gate_outcome(gate) != ACCEPTABLE:
+        raise ValueError(
+            f"{gate!r} is not a human-approval gate, so there is nothing for a person "
+            f"to approve. Set `[gate.{gate}] human = true` in .ddflow/gates.toml if it "
+            f"should be one; otherwise use `ddflow gate record`."
+        )
+    if gate not in required_gates(cfg):
+        raise ValueError(
+            f"{gate!r} is not a required gate ([gates].required): a partial outcome of an "
+            f"advisory gate blocks nothing, so there is nothing to accept"
+        )
+    try:
+        got = grant(log, it, gate, note=note, requested_agent=agent)
+    except AP.ApprovalRefused as exc:
+        raise ValueError(str(exc)) from exc
+    return (
+        f"{it.id}.{gate} partial outcome ACCEPTED by {got.actor.user}; it stays "
+        f"partial on the record, and `complete` no longer counts it as a blocker"
     )
