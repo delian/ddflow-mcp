@@ -24,6 +24,8 @@ def grant_add(
         )  # fmt: skip
     except GR.GrantRefused as exc:
         return O.refused("grant.add", str(exc))
+    except GR.GrantInvalid as exc:
+        return O.failed("grant.add", str(exc))
     return O.ok(
         "grant.add", grant=g.row(), text=f"recorded {GR.describe(g)} -- {item}.{gate}, {g.by}"
     )
