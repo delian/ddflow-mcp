@@ -628,14 +628,14 @@ STASH_RETRY_PAUSE_S = 0.25
 
 def _stash_failed(r: GitResult, tree: Path) -> bool:
     """Is this git's own `fatal: stash failed`, the pre-merge save of the dirty tree? Its whole
-    answer is on stderr: only `error:`/`fatal:` lines, the last one that sentence, and NOTHING
-    on stdout. A conflict reports on stdout, and a refusal that lists files (indented, so
-    never an `error:`/`fatal:` line) is not it, whatever a file is NAMED. Git saves state
+    answer is on stderr (with the lock explanation before it), the last line that sentence,
+    NOTHING on stdout (a conflict reports there) and no indented line (git lists files
+    indented, so a refusal naming files is not it, whatever a file is NAMED). Git saves state
     BEFORE it merges anything, so a merge already begun (MERGE_HEAD) is never this."""
     lines = [ln for ln in r.err.splitlines() if ln.strip()]
     if r.out.strip() or not lines or lines[-1] != "fatal: stash failed":
         return False
-    if not all(ln.startswith(("error:", "fatal:")) for ln in lines):
+    if any(ln[0].isspace() for ln in lines):
         return False
     return not git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok
 

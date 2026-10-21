@@ -137,3 +137,29 @@ def test_a_refusal_listing_a_file_named_with_the_error_line_is_not_retried(repo,
     monkeypatch.setattr(W.time, "sleep", lambda s: None)
     r = W.merge(repo, cfg, wt)
     assert len(seen) == 1 and not r.ok
+
+
+def test_the_multi_line_lock_explanation_before_the_sentence_is_still_retried(repo, monkeypatch):
+    """rubber_duck round 4: git explains the lock in unprefixed lines before the sentence."""
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "f.py", "x\n", "feat: f")
+    real = W.git
+    seen = []
+    err = (
+        "fatal: Unable to create '.git/index.lock': File exists.\n"
+        "Another git process seems to be running in this repository, e.g.\n"
+        "an editor opened by 'git commit'. Please make sure all processes\n"
+        "are finished and then try again.\nfatal: stash failed\n"
+    )
+
+    def git(tree, *a, **kw):
+        if a[:1] == ("merge",) and not seen:
+            seen.append(1)
+            return W.GitResult(128, "", err)
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(W, "git", git)
+    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    r = W.merge(repo, cfg, wt)
+    assert r.ok, r.err or r.out  # the second attempt ran and merged
