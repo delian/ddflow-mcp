@@ -72,3 +72,24 @@ def test_an_unreadable_current_tree_cannot_be_passed_by_triage(repo, tmp_path, m
     gate = _state(repo).gates["critic"]
     assert gate.outcome == "failed", last.data["text"]
     assert "cannot be read" in last.data["text"] and "stays failed" in last.data["text"]
+
+
+def test_a_round_on_a_clean_commit_is_compared_by_that_commits_tree(repo, tmp_path, monkeypatch):
+    """A round recorded as `<head>+clean` names the commit's own tree (no `st:` content id)."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    for cmd in (["add", "-A"], ["commit", "-qm", "work"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    rec = NS(evidence={"tree_sha": f"{head[:12]}+clean"})
+    st = NS(items={"T1": NS(gates={"critic": rec})})
+    monkeypatch.setattr(RV, "item_tree", lambda *_a, **_k: (repo, ""))
+    assert RV.reviewed_other_tree(repo, None, st, "T1", "critic") == ""
+    (repo / "a.py").write_text("x = 2\n")  # the tree moves on from that commit
+    assert "holds other content" in RV.reviewed_other_tree(repo, None, st, "T1", "critic")

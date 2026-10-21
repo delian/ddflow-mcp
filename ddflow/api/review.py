@@ -434,6 +434,9 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     ev = rec.evidence or {}
     was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
     wt, _held = item_tree(repo, cfg, st, it, None)
+    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
+    if not was and dirt == "clean" and base and wt is not None and wt.exists():
+        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
     now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
     redo = f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the current tree"
     if not was:
