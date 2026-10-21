@@ -393,3 +393,13 @@ def test_ci_run_as_a_gate_checks_the_tree_it_runs_in_not_another_item_the_agent_
     body = json.loads(_cli_in(tree, repo, agent="holder-w").stdout)
     assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip(), body
     assert body["sha"] != _git(t2, "rev-parse", "HEAD").strip(), body
+
+
+def test_a_gate_run_ignores_the_held_item_even_from_an_unrecognised_tree(
+    repo, monkeypatch, tmp_path
+):
+    """Same bug: the escape must not depend on `where` being a worktree ddflow knows."""
+    _item_with_ci(repo, monkeypatch, agent="holder-w")
+    assert A.held_item(repo, "holder-w", tmp_path) == "T1"  # outside a gate: the held item
+    monkeypatch.setenv(A.IN_GATE_ENV, "ci")
+    assert A.held_item(repo, "holder-w", tmp_path) == ""
