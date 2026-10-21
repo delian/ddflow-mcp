@@ -37,7 +37,9 @@ def _project(repo: Path, *, broken: str = "", command: str = "./bin/pytest -q te
         "#!/bin/sh\n"
         'case "$*" in *::*)\n'
         '  if [ -e "$(dirname "$0")/../broken" ]; then\n'
-        f'    echo "FAILED {ID} - boom"; echo "1 failed in 0.1s"; exit 1\n'
+        f'    echo "FAILED {ID} - boom"; echo "1 failed in 0.1s"\n'
+        '    grep -q mask "$(dirname "$0")/../broken" && exit 0\n'
+        "    exit 1\n"
         "  fi\n"
         '  echo "1 passed in 0.1s"; exit 0;;\n'
         "esac\n"
@@ -53,8 +55,8 @@ def _project(repo: Path, *, broken: str = "", command: str = "./bin/pytest -q te
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
-    if broken == "tree":
-        (repo / "broken").write_text("")
+    if broken in ("tree", "mask"):
+        (repo / "broken").write_text(broken)
 
 
 def _record(repo: Path):
@@ -104,3 +106,10 @@ def test_a_failure_that_fails_alone_and_on_the_base_is_baseline_red(repo) -> Non
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code != 1 and "PASSED" not in out, out + err
     assert _record(repo).outcome == "partial"
+
+
+def test_a_rerun_that_also_exits_0_over_failures_is_not_a_pass(repo) -> None:
+    _project(repo, broken="mask")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1, out + err
+    assert _record(repo).outcome == "failed"
