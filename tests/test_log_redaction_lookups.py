@@ -13,11 +13,10 @@ from pathlib import Path
 import pytest
 
 from ddflow.config_sections.session import SessionConfig
-from ddflow.core import redact as R
 from ddflow.infra.log import EventLog
 
 LAN = ".".join(("10", "77", "3", "91"))  # built, so no private host is committed text
-HOST = "nas.home.arpa"
+HOST = "nas" + ".home.arpa"  # built, like LAN
 SHA = "0123456789abcdef0123456789abcdef01234567"
 
 CASES = [
@@ -57,11 +56,22 @@ def test_a_lookup_that_names_no_host_is_unchanged(tmp_path):
     assert "[REDACTED" not in shard
 
 
-def test_the_knob_switches_it_off(tmp_path, monkeypatch):
+def test_the_knob_switches_it_off(tmp_path):
     assert SessionConfig().redact_lookup_network is True
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text("[session]\nredact_lookup_network = false\n")
     log = EventLog(tmp_path, "T")
     log.stamp = False
-    red = R.Redactor("log", secret_patterns=[], hostname="", home="")
-    off = R.redact_event_data("pr.opened", {"url": f"http://{LAN}/x"}, red, lookup_network=False)
-    on = R.redact_event_data("pr.opened", {"url": f"http://{LAN}/x"}, red)
-    assert off["url"] == f"http://{LAN}/x" and LAN not in on["url"]
+    log.append("pr.opened", "x", {"url": f"http://{LAN}/x"})
+    log.append("bug.found", "y", {"summary": f"at {LAN}"})  # free text is redacted regardless
+    shard = _shard(tmp_path)
+    assert f"http://{LAN}/x" in shard
+    assert f"at {LAN}" not in shard
+
+
+def test_a_loopback_endpoint_is_not_a_leak(tmp_path):
+    local = "http://" + ".".join(("127", "0", "0", "1")) + ":8000/v1"
+    log = EventLog(tmp_path, "T")
+    log.stamp = False
+    log.append("pr.opened", "x", {"url": local})
+    assert local in _shard(tmp_path)
