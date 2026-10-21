@@ -1,0 +1,146 @@
+"""A second `gate run` of the same gate on the SAME commit is refused while the first is alive
+(DX-gate-run-same-commit-live; left over from B58842554a7). A run on a newer commit stays
+allowed. Two runs would race for one outcome and, for `ci`, queue behind one another."""
+
+from __future__ import annotations
+
+import os
+import signal
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+from test_gate_run_killed import _setup, _start
+
+from ddflow.services.gates import running as RUN
+
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="signals are POSIX")
+
+
+def _reap(p) -> None:
+    if p.poll() is not None:
+        return
+    os.killpg(p.pid, signal.SIGKILL)
+    p.wait(timeout=30)
+
+
+def test_a_second_run_on_the_same_commit_is_refused_naming_the_first(repo, tmp_path):
+    repo, began = _setup(repo, tmp_path)  # the agent's tree, as in test_gate_run_killed
+    first = _start(repo, began)
+    try:
+        code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+        text = out + err
+        assert code == 2, text
+        assert "already running" in text and f"pid {first.pid}" in text, text
+    finally:
+        _reap(first)
+
+
+def test_a_run_on_a_newer_commit_is_allowed_while_the_first_lives(repo, tmp_path):
+    import subprocess
+    import time
+
+    from helpers import git as _git
+
+    root = repo  # markers live under the project root, not the agent's tree
+    repo, began = _setup(repo, tmp_path)
+    first = _start(repo, began)
+    second = None
+    try:
+        (repo / "b.py").write_text("b = 1\n")
+        _git(repo, "add", "b.py")
+        _git(repo, "commit", "-qm", "newer commit")
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+        second = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "ddflow",
+                "--repo",
+                str(repo),
+                "gate",
+                "run",
+                "T1",
+                "unit_tests",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            start_new_session=True,
+        )
+        markers = root / ".ddflow" / "runs" / "T1"
+        deadline = time.monotonic() + 60
+        while (
+            len(list(markers.glob("unit_tests.running.*.json"))) < 2 and time.monotonic() < deadline
+        ):
+            time.sleep(0.2)
+        assert second.poll() is None, "refused: a newer commit is no twin"
+        assert len(list(markers.glob("unit_tests.running.*.json"))) == 2
+    finally:
+        for p in (first, second):
+            if p is not None:
+                _reap(p)
+
+
+def test_live_run_judges_commit_liveness_and_host(tmp_path):
+    repo = tmp_path
+    m = RUN.mark_started(repo, "T1", "ci", "tree-aaa")
+    assert m is not None and m.sha == "tree-aaa"
+    other_pid_marker = Path(m.path)
+    # this process is the run itself: not its own twin
+    assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
+    # a live OTHER process on the same commit is a twin; a newer commit or another gate is not
+    import json
+
+    data = json.loads(other_pid_marker.read_text())
+    data["pid"] = os.getppid()
+    data["pid_start"] = RUN.proc_start(os.getppid())
+    other_pid_marker.write_text(json.dumps(data))
+    assert RUN.live_run(repo, "T1", "ci", "tree-aaa").pid == os.getppid()
+    assert RUN.live_run(repo, "T1", "ci", "tree-bbb") is None
+    assert RUN.live_run(repo, "T1", "unit_tests", "tree-aaa") is None
+    assert RUN.live_run(repo, "T1", "ci", "") is None
+    data["host"] = "some-other-host.invalid"  # not judged from here
+    other_pid_marker.write_text(json.dumps(data))
+    assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
+    data["host"] = RUN.H.hostname()
+    data["pid"] = 2**22 + 7  # gone
+    other_pid_marker.write_text(json.dumps(data))
+    assert RUN.live_run(repo, "T1", "ci", "tree-aaa") is None
+
+
+def test_start_lock_serialises_mark_and_look(tmp_path):
+    import threading
+    import time
+
+    order: list[str] = []
+    inside, second_started, release = threading.Event(), threading.Event(), threading.Event()
+
+    def holder():
+        with RUN.start_lock(tmp_path, "T1", "ci"):
+            order.append("a-in")
+            inside.set()
+            release.wait(10)
+            order.append("a-out")
+
+    def second():
+        second_started.set()
+        with RUN.start_lock(tmp_path, "T1", "ci"):
+            order.append("b-in")
+
+    t = threading.Thread(target=holder)
+    t.start()
+    assert inside.wait(10)
+    t2 = threading.Thread(target=second)
+    t2.start()
+    assert second_started.wait(10)
+    time.sleep(1.5)  # long enough for an unserialised second to have got in
+    assert order == ["a-in"], "the second start must wait for the first"
+    release.set()
+    t.join(10)
+    t2.join(10)
+    assert order == ["a-in", "a-out", "b-in"]

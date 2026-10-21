@@ -48,17 +48,18 @@ class Marker:
     host: str
     at: str
     path: str = ""
+    sha: str = ""  #: the tree identity the run started on ("" for a marker written before this)
 
 
 def _dir(repo: Path, item: str) -> Path:
     return Path(repo) / ".ddflow" / RUNS_DIR / item
 
 
-def mark_started(repo: Path, item: str, gate: str) -> Marker | None:
+def mark_started(repo: Path, item: str, gate: str, sha: str = "") -> Marker | None:
     """Write this process's started-marker. None where it cannot be written: advisory, the
     run goes on (the sweeper then has nothing to find, as before)."""
     pid = os.getpid()
-    m = Marker(item, gate, pid, proc_start(pid), H.hostname(), clock.now_iso())
+    m = Marker(item, gate, pid, proc_start(pid), H.hostname(), clock.now_iso(), sha=sha)
     try:
         fsio.ensure_ignored_dir(
             Path(repo) / ".ddflow" / RUNS_DIR,
@@ -103,11 +104,47 @@ def dead_runs(repo: Path, item: str = "") -> list[Marker]:
             m = _read(path)
             if m is None or not H.same_host(m.host):
                 continue
-            now = proc_start(m.pid) if m.pid_start else ""
-            same = alive(m.pid) and not (m.pid_start and now and now != m.pid_start)
-            if m.pid > 0 and not same:
+            if m.pid > 0 and not _is_live(m):
                 out.append(m)
     return out
+
+
+def _is_live(m: Marker) -> bool:
+    now = proc_start(m.pid) if m.pid_start else ""
+    return alive(m.pid) and not (m.pid_start and now and now != m.pid_start)
+
+
+def live_run(repo: Path, item: str, gate: str, sha: str) -> Marker | None:
+    """A run of ``gate`` on ``item`` still going on THIS host for the SAME ``sha`` (the tree
+    identity), else None: a second one would only race the first for the one outcome
+    (DX-gate-run-same-commit-live). A run on another commit is not this one's twin, and
+    neither is a marker with no recorded sha or one on another host (not judged from here)."""
+    d = _dir(repo, item)
+    if not sha or not d.is_dir():
+        return None
+    for path in sorted(d.glob(f"{gate}.running.*.json")):
+        m = _read(path)
+        if m and m.sha == sha and m.pid != os.getpid() and H.same_host(m.host) and _is_live(m):
+            return m
+    return None
+
+
+@contextlib.contextmanager
+def start_lock(repo: Path, item: str, gate: str) -> Iterator[None]:
+    """Serialise "mark, then look for a twin" across processes (an flock on a per-gate file),
+    so of two runs started together exactly one sees the other's marker. The holder keeps it
+    for milliseconds and the kernel drops it if the holder dies, so waiting is unbounded.
+    Advisory only where the lock file cannot be opened: the check then goes on unlocked."""
+    try:
+        lock = fsio.file_lock(_dir(repo, item) / f"{gate}.lock")
+        lock.__enter__()
+    except OSError:
+        yield
+        return
+    try:
+        yield
+    finally:
+        lock.__exit__(None, None, None)
 
 
 @contextlib.contextmanager

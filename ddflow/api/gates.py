@@ -542,6 +542,26 @@ def _superseded_run(
     return ""
 
 
+def _mark_or_refuse_twin(repo, item, gate, started_on):
+    """Mark, then look, under one lock: of two runs started together the first to take it
+    marks and sees no twin; the second sees the first's marker and refuses.
+    Returns (marker, None) to go on, or (marker, the refusal)."""
+    with RUN.start_lock(repo, item, gate):
+        twin = RUN.live_run(repo, item, gate, started_on)
+        marker = None if twin else RUN.mark_started(repo, item, gate, started_on)
+    if not twin:
+        return marker, None
+    return None, O.nothing(
+        "gate.run",
+        f"{gate} is already running on {G.head_of(started_on)} (pid {twin.pid}, since "
+        f"{twin.at}); wait for it (`ddflow gate status {item}`) -- a second run would only "
+        f"race it for the outcome. A run on a newer commit is allowed.",
+        gate=gate,
+        outcome="",
+        id=item,
+    )
+
+
 def run(
     repo: Path,
     item: str,
@@ -626,6 +646,9 @@ def run(
     if covered is not None:
         return covered
     started_on = G.tree_identity(cwd)
+    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+    if twin_refusal is not None:
+        return twin_refusal
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     done = _guarded(
@@ -644,6 +667,7 @@ def run(
         rerun_failed=rerun_failed,
         started_on=started_on,
         started_at=started_at,
+        marker=marker,
     )
     if isinstance(done, O.Outcome):
         return done
@@ -668,7 +692,7 @@ def _guarded(log, cfg, repo, agent, it, item, gate, **run):
         run["gates"],
         run["forced"],
     )
-    marker = RUN.mark_started(repo, item, gate)
+    marker = run.pop("marker")
     try:
         with RUN.terminating():
             return _execute(log, cfg, repo, agent, it, item, gate, **run)
