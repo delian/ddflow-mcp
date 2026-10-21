@@ -80,14 +80,20 @@ def test_an_untriaged_finding_allows_a_re_review(repo, tmp_path):
     assert "untriaged" in text
 
 
-def test_full_and_the_knob_still_run_a_round(repo, tmp_path):
+def test_full_still_runs_a_round(repo, tmp_path):
     _triaged(repo, tmp_path)
     assert api.review(repo, gate="critic", item="T1", full=True).exit == 0
+    assert api._rounds_used(_state(repo), "critic") == 2
+
+
+def test_the_knob_off_runs_a_plain_review_on_a_settled_tree(repo, tmp_path):
+    _triaged(repo, tmp_path)
+    assert _plain(repo)[0].exit == NOTHING  # on: nothing new
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("[review]\n", "[review]\nrequire_new_work = false\n"))
     out, text = _plain(repo)
     assert out.exit == 0, text
-    assert api._rounds_used(_state(repo), "critic") == 3
+    assert api._rounds_used(_state(repo), "critic") == 2
 
 
 def test_the_report_line_names_rounds_used_and_the_cap(repo, tmp_path):
