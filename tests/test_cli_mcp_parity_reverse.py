@@ -61,6 +61,7 @@ def test_list_search_is_the_search_verb(repo):
     rc2, out2, _ = run_cli(repo, "search", "zzzznomatch")
     assert (rc, out) == (rc2, out2)
     assert run_cli(repo, "list", "task", "--query", "x")[0] == 3
+    assert run_cli(repo, "list", "session", "--query", "x")[0] == 3
 
 
 def test_identify_is_a_shell_verb(repo):

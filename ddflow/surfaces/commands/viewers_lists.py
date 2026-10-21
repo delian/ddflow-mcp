@@ -217,11 +217,11 @@ def _other_viewer(a, c: Ctx) -> int:
 
 def cmd_list_any(a, c: Ctx) -> int:
     """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
-    if a.kind in _OTHER_VIEWERS:
-        return _other_viewer(a, c)
-    if getattr(a, "query", None):
+    if a.kind != "search" and getattr(a, "query", None):
         print(f"{a.kind} has no --query (only `list search` takes it)", file=sys.stderr)
         return REFUSED
+    if a.kind in _OTHER_VIEWERS:
+        return _other_viewer(a, c)
     a.list_kind = a.kind
     own = {p.name for p in _filter_params(a.kind)}
     stray = [
