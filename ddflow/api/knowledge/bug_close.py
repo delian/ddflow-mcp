@@ -119,6 +119,14 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     landing, why = _landing(repo, cfg, landed) if landed.strip() else (None, "")
     if why:
         return O.refused("bug.fixed", f"--landed: {why}", id=item)
+    if landing and verify_regression and not any(_is_node_id(t) for t in tests):
+        return O.refused(
+            "bug.fixed",
+            "--landed checks the test on the commit's first parent and on the commit, which "
+            "needs a pytest node id (path/to/test_x.py::test_name) in --regression-test; "
+            "anything else could not be checked and would close the bug unverified.",
+            id=item,
+        )
     verified, verify_ev = _verify_regression(
         repo,
         cfg,
@@ -171,6 +179,11 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
     )
+
+
+def _is_node_id(test: str) -> bool:
+    """A pytest node id of a python file: ``path/to/test_x.py::test_name``."""
+    return "::" in test and test.split("::", 1)[0].endswith(".py")
 
 
 def _landing(repo: Path, cfg, ref: str) -> tuple[tuple[str, str] | None, str]:
@@ -441,7 +454,7 @@ def _verify_regression(
     """
     if not verify_regression:
         return "overridden", {"reason": reason.strip()}
-    module_tests = [t for t in tests if "::" in t and t.split("::", 1)[0].endswith(".py")]
+    module_tests = [t for t in tests if _is_node_id(t)]
     if not module_tests:
         return "not-applicable", {}
 
