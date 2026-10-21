@@ -280,6 +280,16 @@ def test_research_note_and_the_task_it_informs_are_related_not_duplicates():
     assert b.action == "ask"
 
 
+def test_import_screen_keeps_a_note_and_its_task_but_drops_same_kind_copies():
+    """The import screen shares the add rule (is_duplicate): a note beside its task stays."""
+    t = {"id": "t", "kind": "task", "title": "", "body": LONG}
+    r = {"id": "r", "kind": "research", "title": "", "body": LONG + " finding"}
+    r2 = {**r, "id": "r2"}
+    cfg = _cfg()
+    assert similar.screen([t, r], None, cfg, compare=lambda a, b: True)[1] == []
+    assert similar.screen([r, r2], None, cfg, compare=lambda a, b: True)[1] != []
+
+
 # ------------------------------------------------------------------------------ config
 
 
