@@ -95,3 +95,10 @@ def test_a_charter_that_cannot_fit_is_counted_not_dumped():
     rules = [GuidanceRecord(id=f"r-x{i}", kind="rule", title="T" * 90) for i in range(8)]
     got = CH.lines(rules, tokens=3, title_chars=100)
     assert len(got) == 1 and "8 more rules: r-x0, r-x1" in got[0] and "and 2 more" in got[0]
+
+
+def test_a_pinned_rule_is_listed_even_when_the_charter_has_no_room():
+    pinned = GuidanceRecord(id="r-pin", kind="rule", title="Pinned law", enforcement="block")
+    plain = [GuidanceRecord(id=f"r-p{i}", kind="rule", title="x") for i in range(4)]
+    got = CH.lines([*plain, pinned], tokens=1, title_chars=100)
+    assert got[0].startswith("- [r-pin]") and "more rules: r-p0" in got[-1]
