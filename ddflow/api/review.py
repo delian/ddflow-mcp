@@ -44,6 +44,7 @@ from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edi
 from ..services.enforce import SELF_MANAGED
 from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
+from ..services.gates import reviewed_paths as RP
 from ..services.guidance import inject as GI
 from ..views import human
 from ._base import _load
@@ -432,30 +433,69 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if rec is None:
         return ""
     ev = rec.evidence or {}
-    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
     wt, _held = item_tree(repo, cfg, st, it, None)
-    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
-    if not was and dirt == "clean" and base and wt is not None and wt.exists():
-        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
-    now = GE.source_tree(wt) if wt is not None and wt.exists() else ""
-    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
-    redo = (
-        f"the review budget is spent: ask the operator for one more round on the current tree "
-        f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
-        if spent
-        else f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
-        "current tree"
-    )
+    was, now = _round_and_current_tree(ev, wt)
+    redo = _redo_hint(cfg, it, item, gate)
     if not was:
         return f"the round names no tree it reviewed; {redo}"
     if not now:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
+        moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
+        if moved == []:  # only files outside what the item changed and the round saw
+            return ""
+        where = f" ({_name_paths(moved)})" if moved else ""
         return (
             f"the round reviewed {(ev.get('tree_sha') or '')[:19]}, and {item} holds other "
-            f"content now; {redo}"
+            f"content now{where}; {redo}"
         )
     return ""
+
+
+def _round_and_current_tree(ev: dict[str, Any], wt) -> tuple[str, str]:
+    """(the content id the round reviewed, the one ``wt`` holds now); "" for one not known."""
+    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
+    readable = wt is not None and wt.exists()
+    base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
+    if not was and dirt == "clean" and base and readable:
+        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
+    return was, GE.source_tree(wt) if readable else ""
+
+
+def _redo_hint(cfg, it, item: str, gate: str) -> str:
+    """What to do about a round the item's tree has left behind."""
+    spent = 0 < cfg.review.max_rounds <= _rounds_used(it, gate) if cfg is not None else False
+    if spent:
+        return (
+            f"the review budget is spent: ask the operator for one more round on the current tree "
+            f'(`ddflow review {item} --gate {gate} --force --reason "..."`)'
+        )
+    return (
+        f"re-run `ddflow review {item} --gate {gate}`: a pass needs a round that saw the "
+        "current tree"
+    )
+
+
+def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
+    """The `reviewed_paths` evidence of a round: the content of the item's changed set, so a
+    later triage compares those files and not the whole tree. {} when it cannot be read."""
+    wt, _held = item_tree(repo, cfg, st, it, called_from)
+    paths = changed_paths(repo, it) if wt is not None and wt.exists() else None
+    snap = RP.path_snapshot(wt, paths) if paths is not None and wt is not None else None
+    return {} if snap is None else {RP.REVIEWED_PATHS_FIELD: snap}
+
+
+def _moved_paths(repo: Path, it, wt, recorded) -> list[str] | None:
+    """The changed-set paths whose content differs from the round's `reviewed_paths`; None
+    when the round has none (an older round: the whole tree stands) or they cannot be read."""
+    if not isinstance(recorded, dict) or wt is None or not wt.exists():
+        return None
+    now_changed = changed_paths(repo, it)
+    return None if now_changed is None else RP.snapshot_differing(recorded, wt, now_changed)
+
+
+def _name_paths(paths: list[str], cap: int = 5) -> str:
+    return ", ".join(paths[:cap]) + (f" and {len(paths) - cap} more" if len(paths) > cap else "")
 
 
 def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
@@ -1733,6 +1773,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **_round_evidence(taken, kind, done, best.status, forced, _delta_rounds(it, gate)),
         **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
         **(extra_evidence or {}),
+        **_reviewed_snapshot(repo, cfg, st, it, called_from),
     }
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
