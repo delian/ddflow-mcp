@@ -452,7 +452,7 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if not now:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
-        moved = _moved_paths(repo, it, wt, ev.get(RP.FIELD))
+        moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
@@ -468,8 +468,8 @@ def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     later triage compares those files and not the whole tree. {} when it cannot be read."""
     wt, _held = item_tree(repo, cfg, st, it, called_from)
     paths = changed_paths(repo, it) if wt is not None and wt.exists() else None
-    snap = RP.snapshot(wt, paths) if paths is not None and wt is not None else None
-    return {} if snap is None else {RP.FIELD: snap}
+    snap = RP.path_snapshot(wt, paths) if paths is not None and wt is not None else None
+    return {} if snap is None else {RP.REVIEWED_PATHS_FIELD: snap}
 
 
 def _moved_paths(repo: Path, it, wt, recorded) -> list[str] | None:
@@ -478,7 +478,7 @@ def _moved_paths(repo: Path, it, wt, recorded) -> list[str] | None:
     if not isinstance(recorded, dict) or wt is None or not wt.exists():
         return None
     now_changed = changed_paths(repo, it)
-    return None if now_changed is None else RP.differing(recorded, wt, now_changed)
+    return None if now_changed is None else RP.snapshot_differing(recorded, wt, now_changed)
 
 
 def _name_paths(paths: list[str], cap: int = 5) -> str:

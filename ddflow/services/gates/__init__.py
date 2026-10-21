@@ -136,6 +136,11 @@ from .regression_testfix import (  # noqa: F401
     Tools,
     verify_test_only_fix,
 )
+from .reviewed_paths import (  # noqa: F401
+    REVIEWED_PATHS_FIELD,
+    path_snapshot,
+    snapshot_differing,
+)
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,
     family_for,

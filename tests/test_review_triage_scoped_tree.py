@@ -89,7 +89,9 @@ def test_an_older_round_without_reviewed_paths_still_compares_the_whole_tree(
     repo, tmp_path, monkeypatch
 ):
     wt = _round(repo, tmp_path)
-    monkeypatch.setattr(api.RP, "FIELD", "no_such_field")  # the round's record has no snapshot
+    monkeypatch.setattr(
+        api.RP, "REVIEWED_PATHS_FIELD", "no_such_field"
+    )  # the round's record has no snapshot
     (repo / "other.txt").write_text("elsewhere\n")  # untracked in the primary: not the item's tree
     (wt / "notes.md").write_text("an untracked file\n")
     last = _settle(repo)
