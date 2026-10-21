@@ -216,7 +216,10 @@ def _notice_due(root: Path | None, key: tuple[str, str, int], mode: str) -> bool
     means the notice may repeat."""
     if mode == "off":
         return False
-    process_key = (*key, str(root or ""))  # two projects in one process each hear it
+    process_key = (
+        *key,
+        str(Path(root).resolve()) if root else "",
+    )  # two projects in one process each hear it
     if process_key in _SKEW_WARNED:
         return False
     _SKEW_WARNED.add(process_key)
