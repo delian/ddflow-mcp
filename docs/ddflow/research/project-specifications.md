@@ -44,7 +44,7 @@ more than 120 s, so no full test suite was run). Research notes: `R-specs-*` in 
    spec (`inject.collect` returns rules and decisions only); (d) no spec-to-plan step that carries
    section ids and acceptance criteria into tasks; (e) no spec review and approval step; (f) no
    spec-versus-code drift or contract check; (g) no acceptance-criterion to test to commit trace.
-5. **Proposal**: phase `P-specs`, 21 small tasks (one is this research), 8 in-phase waves, held
+5. **Proposal**: phase `P-specs`, 21 small tasks (one is this research), 9 in-phase waves, held
    behind the P-gaps core and the docs wave through `SPEC-decide` like `PI-decide`, no new MCP
    tool, one decision task with recommended defaults. Section 10.
 
@@ -378,11 +378,12 @@ In-phase waves (every need outside the phase counted as done):
 | 8 | SPEC-e2e |
 | 9 | SPEC-docs |
 
-Waves when the open outside dependencies are counted (a lower bound, since an open phase is counted
-as one step): `SPEC-decide` 2, `SPEC-model` 3, wave 4 and 5 as above, `SPEC-inject`, `SPEC-notify`,
-`SPEC-trace`, `SPEC-contract`, `SPEC-review` 6, `SPEC-report` 7, `SPEC-gate` 8 (waits on the
-`B-pipe-*` chain), `SPEC-baseline` 11 (waits on `PD-req-kind` -> `PD-trace` -> `PD-baseline`),
-`SPEC-e2e` 12, `SPEC-docs` 13. Consequence: the first usable slice is waves 1-5 (record, surfaces,
+Waves when the open outside dependencies are counted (relative to the earliest moment each task
+can start; the four open hold phases must finish before `SPEC-decide` starts at all, so wave numbers
+here count steps AFTER that point, and an open phase is counted as one step in the others): `SPEC-model` 3,
+wave 4 and 5 as above, `SPEC-inject`, `SPEC-notify`, `SPEC-trace`, `SPEC-contract`, `SPEC-review` 6,
+`SPEC-report` 7, `SPEC-gate` 8 (waits on the `B-pipe-*` chain), `SPEC-baseline` 11 (waits on
+`PD-req-kind` -> `PD-trace` -> `PD-baseline`), `SPEC-e2e` 12, `SPEC-docs` 13. Consequence: the first usable slice is waves 1-5 (record, surfaces,
 file sync, binding, checks, lint, plan); `SPEC-gate` and `SPEC-baseline` arrive with the pipeline and
 product-docs work, and `SPEC-e2e` should not be started until they do. If the operator wants the
 slice earlier, `SPEC-e2e` can be split into a slice test (waves 1-6) and a full test; that choice is
