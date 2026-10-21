@@ -309,10 +309,10 @@ def superseded_by(
         return False
     if not paths:
         return True
-    changed = W.git(cwd, "diff", "--name-only", a, b)
+    changed = W.git(cwd, "diff", "--name-only", "-z", a, b)
     if not changed.ok:
         return True
-    return any(globs.match(f, g) for f in changed.out.splitlines() if f for g in paths)
+    return any(globs.match(f, g) for f in changed.out.split("\0") if f for g in paths)
 
 
 def _is_ancestor(cwd: Path, a: str, b: str) -> bool | None:
