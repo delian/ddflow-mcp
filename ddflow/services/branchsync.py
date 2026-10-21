@@ -112,6 +112,8 @@ def _stash_away(tree: Path, tag: str) -> str:
     r = W.git(tree, "stash", "push", "-u", "-m", tag)
     if not r.ok:
         raise RuntimeError(r.err or r.out)
+    if "no local changes" in f"{r.out} {r.err}".lower():  # git saved nothing: no entry to find
+        return ""
     found = _stash_find_sure(tree, tag)
     if found is not None:
         return found[0]
