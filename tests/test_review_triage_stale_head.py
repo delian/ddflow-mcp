@@ -59,3 +59,16 @@ def test_a_round_that_names_no_tree_cannot_be_passed_by_triage(repo, tmp_path, m
     last = _tri(repo, 2)
     assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
     assert "names no tree" in last.data["text"]
+
+
+def test_an_unreadable_current_tree_cannot_be_passed_by_triage(repo, tmp_path, monkeypatch):
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    from ddflow.api import review as RV
+
+    monkeypatch.setattr(RV.GE, "source_tree", lambda *_a, **_k: "")
+    _tri(repo, 1)
+    last = _tri(repo, 2)
+    gate = _state(repo).gates["critic"]
+    assert gate.outcome == "failed", last.data["text"]
+    assert "cannot be read" in last.data["text"] and "stays failed" in last.data["text"]
