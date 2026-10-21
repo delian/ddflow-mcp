@@ -39,6 +39,7 @@ from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
+from . import changes as CH
 from . import leasebreak as LB
 from . import waiting as WG
 from .leaseclock import foreign, localize
@@ -192,10 +193,11 @@ def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:
     """The paths the lease holder's item ``it`` has actually changed, or None when git
     cannot say (no worktree, unreadable): unknown never means "disjoint". Run only for a
     holder whose globs already clash, so the git reads cost a refusal, never a claim."""
-    from . import completion  # late: completion imports this module's neighbours
-
     try:
-        return completion.changed_paths(log.root, it)
+        path = W.load_path(log.root, it.worktree) if it.worktree else None
+        if path is None or not path.is_dir():
+            return None
+        return CH.changed_paths(path, it.base or W.default_branch(log.root))
     except Exception:
         return None
 
@@ -210,41 +212,49 @@ def _clash_text(
     holder's changed paths say which. Each requested glob that overlaps a live lease is
     kept as a clash only when it overlaps one of those changed paths (or they are unknown).
     """
-    live = {
-        i: lz
-        for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
-        if i != it.id and not (i in state.items and state.items[i].terminal)
-    }
     shared = shared_globs(cfg)
     mine = it.lease.holder if it.lease else ""
     line = line_key(state, it, cfg)
     first, parts, bad = "", [], set()
-    for other_id, lz in live.items():
+    for other_id, lz in state.active_leases(now, cfg.lease.grace_s).items():
         other = state.items.get(other_id)
-        if lz.holder == mine or other is None or line_key(state, other, cfg) != line:
-            continue  # my own, or on another release line (another branch): no clash
-        pairs = conflicts(globs, lz.globs, shared)
-        changed = holder_changed_paths(log, other) if pairs else None
-        if changed is not None:
-            real = [p for p in changed if not is_shared(p, shared)]
-            # Only a WILDCARD lease glob can cover files its holder never touches: an exact
-            # path it claimed is declared work, changed yet or not.
-            pairs = [
-                (a, b)
-                for a, b in pairs
-                if not any(c in b for c in "*?[") or any(GL.match(p, a) for p in real)
-            ]
+        if other_id == it.id or other is None or other.terminal or lz.holder == mine:
+            continue  # itself, my own, or a finished item's unreleased lease
+        if line_key(state, other, cfg) != line:
+            continue  # another release line is another branch: no clash
+        pairs = _live_pairs(log, other, lz, globs, shared)
         if not pairs:
             continue
         listed = "; ".join(f"{a!r} overlaps {b!r}" for a, b in pairs)
-        hours = max(now - lz.acquired_at, 0) / 3600
-        age = f"{hours:.1f} h" if hours >= 1 else f"{hours * 60:.0f} min"
-        parts.append(f"held by {lz.holder} on {other_id} for {age}: {listed}")
+        parts.append(f"held by {lz.holder} on {other_id} for {_age(now, lz)}: {listed}")
         first = first or other_id
         bad |= {a for a, _ in pairs}
     if not first:
         return None
     return first, " | ".join(parts), [g for g in globs if g not in bad]
+
+
+def _age(now: float, lz: Lease) -> str:
+    hours = max(now - lz.acquired_at, 0) / 3600
+    return f"{hours:.1f} h" if hours >= 1 else f"{hours * 60:.0f} min"
+
+
+def _live_pairs(
+    log: EventLog, other: Item, lz: Lease, globs: list[str], shared: list[str]
+) -> list[tuple[str, str]]:
+    """The (mine, theirs) glob pairs that really clash with ``lz``, once the files its
+    holder has changed are compared. Only a WILDCARD lease glob can cover files its holder
+    never touches: an exact path it claimed is declared work, changed yet or not."""
+    pairs = conflicts(globs, lz.globs, shared)
+    changed = holder_changed_paths(log, other) if pairs else None
+    if changed is None:
+        return pairs
+    real = [p for p in changed if not is_shared(p, shared)]
+    return [
+        (a, b)
+        for a, b in pairs
+        if not any(c in b for c in "*?[") or any(GL.match(p, a) for p in real)
+    ]
 
 
 def acquire(
