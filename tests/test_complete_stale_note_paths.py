@@ -73,6 +73,7 @@ def test_a_landed_commit_is_compared_by_its_own_tree(tmp_path):
     head = subprocess.run(
         ["git", "-C", str(d), "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
+    (d / "mine.py").write_text("scratch\n")  # the checkout differs; the landed commit does not
     assert C.refine_stale_notes(_notes(), it, d, head, ["mine.py"]) == []
 
 
