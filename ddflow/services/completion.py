@@ -27,6 +27,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import ids as IDS
 from ..core.admission import is_shared
+from ..core.globs import inside
 from ..core.model import Item, State
 from ..infra import worktree as W
 from . import changes as CH
@@ -154,6 +155,37 @@ def _unsettled(cfg: Config, it: Item, excused, s, required) -> list[str]:
     ]
 
 
+def docs_only_strays(it: Item, cfg: Config, paths: list[str] | None) -> list[str]:
+    """The changed paths outside `[gates].doc_globs` of a task that runs the doc pipeline
+    only because its DECLARED globs are documents. Declared globs are agent-editable, so
+    they alone must not move `unit_tests` and the independent reviewer out of scope (the
+    B-na-required-gate class): the actual change is checked here."""
+    if not paths or not runs_doc_pipeline(it, cfg):
+        return []
+    return [p for p in paths if not any(inside(p, d) for d in cfg.gates.doc_globs)]
+
+
+_STRAYS_SHOWN = 6
+
+
+def _docs_only_check(repo: Path, it: Item, cfg: Config, v: Verdict) -> None:
+    """Block a docs-only task that changed more than documents; warn when git cannot say."""
+    paths = changed_paths(repo, it)
+    if stray := docs_only_strays(it, cfg, paths):
+        more = " ..." if len(stray) > _STRAYS_SHOWN else ""
+        v.blockers.append(
+            f"{it.id} declares only document globs, so it runs the doc pipeline, but it changed "
+            f"{', '.join(stray[:_STRAYS_SHOWN])}{more}: a code change needs the task pipeline. "
+            f"Widen its globs to what it changed (`ddflow update {it.id} --globs ...`) and run "
+            "the gates that then apply."
+        )
+    elif paths is None and runs_doc_pipeline(it, cfg):
+        v.warnings.append(
+            "git could not say what this docs-only task changed: it was not checked to have "
+            "touched only documents"
+        )
+
+
 def needs_independent_reviewer(it: Item, cfg: Config) -> bool:
     """Is a reviewer from another family required of ``it``? Only of a task that writes code:
     not a promotion, and not a docs-only task, which runs the doc pipeline."""
@@ -203,6 +235,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # on the record, even a required one, and the reviewer.
     excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
     v.warnings += why_not
+
+    _docs_only_check(repo, it, cfg, v)
 
     missing = _unsettled(cfg, it, excused, s, required)
     if missing:
