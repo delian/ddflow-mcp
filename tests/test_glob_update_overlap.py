@@ -107,3 +107,31 @@ def test_a_shared_file_the_holder_changed_is_inert(repo, monkeypatch):
     monkeypatch.setattr(L, "shared_globs", lambda cfg: ["pkg/gates/CHANGELOG.md"])
     ok = AI.update(repo, "M1", AI.ItemEdit(globs=["mine.py", "pkg/gates/**"]), agent=ME)
     assert ok.ok, ok.reason
+
+
+def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "H1", "--globs", "pkg/exact.py")
+    run_cli(repo, "task", "add", "M1", "--globs", "mine.py")
+    assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
+    assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
+    monkeypatch.setattr(L, "holder_changed_paths", lambda log, item: [])
+    bad = AI.update(repo, "M1", AI.ItemEdit(globs=["mine.py", "pkg/exact.py"]), agent=ME)
+    assert not bad.ok
+
+
+def test_holder_changed_paths_reads_the_real_worktree(repo):
+    import subprocess
+
+    _setup(repo)
+    log = EventLog(repo, "probe")
+    item = L._fold(log).items["H1"]
+    wt = repo / ".ddflow" / "wt-h1"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "h1-br", str(wt)], check=True
+    )
+    (wt / "pkg" / "gates").mkdir(parents=True)
+    (wt / "pkg" / "gates" / "other.py").write_text("x = 1\n")
+    item.worktree = str(wt)
+    item.branch = "h1-br"
+    assert L.holder_changed_paths(log, item) == ["pkg/gates/other.py"]
