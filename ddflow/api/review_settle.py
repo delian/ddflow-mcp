@@ -38,6 +38,8 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
     if counts.get("untriaged", 1) or counts.get("confirmed") or not counts.get("refuted"):
         return out
     if stale := reviewed_other_tree(repo, cfg, st, item, gate):
+        if stale in out.data["text"]:  # the budget-spent path already said it
+            return out
         return O.ok(
             "review.triage",
             **{**out.data, "text": f"{out.data['text']}\n{gate} stays {rec.outcome}: {stale}"},
