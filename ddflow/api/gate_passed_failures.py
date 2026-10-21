@@ -10,11 +10,11 @@ no recorded passing rerun cannot yield a pass.
 
 from __future__ import annotations
 
-import shlex
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from ..infra import worktree as W
 from ..services import testselect as TS
 
 SHOWN = 8
@@ -25,27 +25,21 @@ def _names(ids: list[str]) -> str:
     return shown
 
 
-def _fail_fast(command: str) -> bool:
-    """Whether the command stops at its first failure, so the tests after it never ran."""
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return True
-    return any(t in ("-x", "--exitfirst") or t.startswith("--maxfail") for t in tokens)
-
-
 def _plural(n: int) -> str:
     return f"{n} test" + ("" if n == 1 else "s")
 
 
-def apply(repo: Path, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str, str]:
+def apply(repo: Path, it, gdef, result: str, ev: dict[str, Any], rerun) -> tuple[str, str]:
     """``(outcome, reason)`` for a gate whose command passed: ``result`` and "" when no test
     failed in its output; else the rerun's verdict. Notes the rerun in ``ev["rerun"]``."""
+    from .gates import _fail_fast  # late: gates imports this module through gate_baseline
+
     ids = ev.get("failed_tests") or []
     more = int(ev.get("failed_tests_more") or 0)
     if result != "passed" or not (ids or more):
         return result, ""
-    cmd = "" if more else TS.run_command(gdef.command, ids, repo)
+    root = W.load_path(repo, it.worktree) if gdef.cwd == "worktree" and it.worktree else repo
+    cmd = "" if more else TS.run_command(gdef.command, ids, root)
     if not cmd:
         why = (
             f"{more} more failing tests were not named" if more
