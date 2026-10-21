@@ -135,3 +135,19 @@ def test_the_callers_own_claim_on_the_fix_task_is_ended_and_released(repo):
     assert res.data["fix_task_abandoned"] == "fix-B1", res.data
     task = _item(repo, "fix-B1")
     assert task.lease is None and task.state == "abandoned", (task.state, task.lease)
+
+
+def test_the_base_tip_itself_can_be_the_landing(repo):
+    sha = _landed_elsewhere(repo)
+    subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", sha], check=True)
+    res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f", landed=sha)
+    assert res.exit == OK, res.reason
+    assert res.data["regression_verified"] == "verified", res.data
+
+
+def test_landed_without_a_node_id_is_refused_not_closed_unverified(repo):
+    sha = _landed_elsewhere(repo)
+    res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py", landed=sha)
+    assert res.exit == REFUSED, res
+    assert "node id" in res.reason
+    assert not _item(repo, "fix-B1").removed
