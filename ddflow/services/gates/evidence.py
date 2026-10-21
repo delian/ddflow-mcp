@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ...core.bookkeeping import STATE_EXCLUDE, is_state
 from ...core import globs
+from ...core.bookkeeping import STATE_EXCLUDE, is_state
 from ...core.digest import content_digest
 from ...infra import git as GIT
 from ...infra import worktree as W
