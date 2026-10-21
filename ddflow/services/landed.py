@@ -33,8 +33,14 @@ def _cites(item_id: str, subject: str) -> bool:
     return subject.startswith((f"merge {item_id}:", f"{item_id}:"))
 
 
-#: git's empty tree: the "before" of a root commit, which has no parent to diff against.
+#: git's empty tree in a SHA-1 repository: the "before" of a root commit, which has no parent
+#: to diff against. `empty_tree` asks the repository, whose object format may differ.
 _EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+
+def empty_tree(repo: Path) -> str:
+    r = W.git(repo, "hash-object", "-t", "tree", "/dev/null")
+    return r.out if r.ok and r.out else _EMPTY_TREE
 
 
 def _since(created_at: str) -> str:
@@ -67,7 +73,7 @@ def cited_ranges(repo: Path, item, base: str) -> list[tuple[str, str]]:
         sha, _, rest = line.partition("\x00")
         parents, _, subject = rest.partition("\x00")
         if _cites(item.id, subject):
-            out.append(((parents.split() or [_EMPTY_TREE])[0], sha))
+            out.append(((parents.split() or [empty_tree(repo)])[0], sha))
     return out
 
 
@@ -93,23 +99,30 @@ def parse(repo: Path, spec: str) -> tuple[str, str] | str:
     spec = spec.strip()
     if ".." in spec:
         a, _, b = spec.partition("..")
-        before, after = W.rev(repo, a), W.rev(repo, b)
+        before = a if a == empty_tree(repo) else W.rev(repo, a)
+        after = W.rev(repo, b)
         if not before or not after:
             return f"--landed {spec!r}: {'the start' if not before else 'the end'} is not a commit here"
         return before, after
     after = W.rev(repo, spec)
     if not after:
         return f"--landed {spec!r} is not a commit here"
-    return W.rev(repo, f"{after}^1") or _EMPTY_TREE, after
+    return W.rev(repo, f"{after}^1") or empty_tree(repo), after
 
 
 def check(repo: Path, item, base: str, before: str, after: str) -> str:
     """Why ``before..after`` may not be recorded as ``item``'s landing, or ``""``: both ends
-    on ``base``, in order, and the change touching the item's declared globs."""
-    for sha in (before, after):
-        if sha != _EMPTY_TREE and not W.git(repo, "merge-base", "--is-ancestor", sha, base).ok:
+    on ``base``, in order, and the change touching the item's declared globs. A root commit's
+    range starts at the empty tree, and only a root commit's."""
+    root = before == empty_tree(repo)
+    if root and W.rev(repo, f"{after}^1"):
+        return (
+            f"{after[:12]} is not a root commit: the empty tree starts only a root commit's range"
+        )
+    for sha in (after,) if root else (before, after):
+        if not W.git(repo, "merge-base", "--is-ancestor", sha, base).ok:
             return f"{sha[:12]} is not an ancestor of {base}: only work that landed there counts"
-    if before != _EMPTY_TREE and not W.git(repo, "merge-base", "--is-ancestor", before, after).ok:
+    if not root and not W.git(repo, "merge-base", "--is-ancestor", before, after).ok:
         return f"{before[:12]} is not an ancestor of {after[:12]}"
     paths = CH.changed_paths(repo, before, tip=after, include=("committed",), fork=False)
     if not paths:

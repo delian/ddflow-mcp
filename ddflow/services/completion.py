@@ -476,8 +476,9 @@ def changed_paths(repo: Path, it) -> list[str] | None:
 def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:
     """The item's worktree (or, with none, its branch) against its base, and whether
     the item's cited commits may stand in for it. They may when nothing is left to read: a
-    worktree that differs from the base by nothing, a branch already merged into its base or
-    none. They may not when git could not read a live worktree (None): never guess then."""
+    worktree that differs from the base by nothing, a branch already merged into its base, or
+    no worktree and no branch at all. They may not when the item claims a worktree or branch
+    that git cannot read (None): its real work is unseen, so never guess."""
     path = W.load_path(repo, it.worktree) if it.worktree else None
     if path and path.is_dir():
         seen = TS.changed_files(path, base)
@@ -488,7 +489,7 @@ def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:
         # Empty is not "nothing changed" here: a branch already merged into its base, or
         # the base itself, diffs to nothing whatever the task did.
         return (sorted(out) if out else None), True
-    return None, True
+    return None, not (it.worktree or it.branch)
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
