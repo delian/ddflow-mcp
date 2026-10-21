@@ -314,3 +314,11 @@ def test_skew_notice_off_silences_the_warn_policy_too(
     cfg.write_text('[upgrade]\nskew = "warn"\nskew_notice = "off"\n')
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
     assert capsys.readouterr().err == ""
+
+
+def test_pins_regenerate_only_is_refused_for_an_older_binary_too(repo: Path):
+    from ddflow.api import pin_files as PF
+
+    _stamp(repo, "0.5.7")
+    out = PF.pins_regenerate(repo, start=repo, agent="me", only="anything")
+    assert out.exit == 3 and "0.5.7" in out.reason
