@@ -47,6 +47,7 @@ from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import leases as L
 from .leaseclock import localize
+from .pins import pin_files
 
 
 @dataclass
@@ -541,7 +542,42 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
-def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: str) -> None:
+def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[str]) -> bool:
+    """Did ``item`` land on ``base`` (its recorded ``merged_sha`` is reachable from it), with
+    only merge-main commits and pin regenerations left on the tree (Bfc4ac64c9c)?
+
+    A crash after the merge gate leaves the item abandoned and its tree a few such commits
+    ahead of the base: none of it is work. A merge commit counts only when every parent
+    beyond the first is already on the base; any other commit only when it touches nothing
+    but pin files. Unknown (git failing, no recorded merge) is False."""
+    if not item or not item.merged_sha:
+        return False
+    here = Path(path)
+    if not W.git(here, "merge-base", "--is-ancestor", item.merged_sha, base).ok:
+        return False
+    log = W.git(here, "log", "--format=%H %P", f"{base}..HEAD")
+    if not log.ok:
+        return False
+    for line in log.out.splitlines():
+        sha, *parents = line.split()
+        if len(parents) > 1:
+            if not all(W.git(here, "merge-base", "--is-ancestor", p, base).ok for p in parents[1:]):
+                return False
+            continue
+        files = W.git(here, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+        if not files.ok or not set(files.out.split()) <= set(pins):
+            return False
+    return True
+
+
+def _classify(
+    t: TreeState,
+    item: Item | None,
+    unknown: str,
+    base: str,
+    path: str,
+    leftovers: bool = False,
+) -> None:
     """Kind, action and advice for a tree nobody holds or adopted cleanly."""
     if unknown:
         t.kind = "unreadable"
@@ -556,6 +592,13 @@ def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: st
         t.done = (
             f"LEAVE ALONE — inspect first: `git -C {path} diff {base}`. "
             f"Uncommitted edits are the one thing that exists nowhere else."
+        )
+    elif t.ahead and leftovers:
+        t.kind = "merged"
+        t.action = "remove"
+        t.done = (
+            f"item {t.item} landed on {base} ({item.merged_sha[:8] if item else ''}); the "
+            f"{t.ahead} commit(s) left are merge-main/pin commits only — safe to remove"
         )
     elif t.ahead:
         t.kind = "unmerged"
@@ -651,6 +694,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
+    pins = pin_files(repo, cfg)
     for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)):
         if x.branch:
             guard.stranded[x.branch] = x.render()
@@ -674,7 +718,10 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
         else:
-            _classify(t, item, unknown, base, path)
+            lone = bool(t.ahead and not t.dirty_files and not unknown) and landed_leftovers_only(
+                path, item, base, pins
+            )
+            _classify(t, item, unknown, base, path, lone)
         plan.trees.append(t)
 
     for branch in W.branches(root):
@@ -686,6 +733,31 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             continue
         plan.stale_branches.append(_stale_branch(root, branch, base, guard, own, by_branch))
     return plan
+
+
+def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
+    """Carry out one planned ``remove``; the lines for the report (and ``t`` updated when kept).
+
+    A tree with commits ahead is only here as a landed item's merge/pin leftovers
+    (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
+    root = W.repo_root(repo)
+    wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
+    proof = ""
+    if t.ahead:
+        it = fold(log.read_all(), strict=False).items.get(t.item)
+        if not landed_leftovers_only(t.path, it, base, pin_files(repo, cfg)):
+            return [f"kept {t.name}: no longer only landed leftovers"]
+        proof = f"{t.item} landed; only merge-main/pin commits left"
+    d = dispose_tree(repo, cfg, log, wt, forced_by=proof)
+    if proof and d.removed and d.branch_left and W.git(root, "branch", "-D", t.branch).ok:
+        d = Disposal("removed", had_branch=True)
+    if d.outcome == "refused":
+        t.action, t.kind, t.done = "", d.kind, d.why
+        return [f"kept {t.name}: {d.kind} since the survey"]
+    return [
+        f"{'removed' if d.removed else 'kept'} worktree {t.name}"
+        + ("" if d.removed else f": {d.why.splitlines()[0][:120]}")
+    ]
 
 
 def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
@@ -737,16 +809,7 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
                 continue
             t.action = "remove"
         if t.action == "remove":
-            wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
-            d = dispose_tree(repo, cfg, log, wt)
-            if d.outcome == "refused":
-                t.action, t.kind, t.done = "", d.kind, d.why
-                done.append(f"kept {t.name}: {d.kind} since the survey")
-                continue
-            done.append(
-                f"{'removed' if d.removed else 'kept'} worktree {t.name}"
-                + ("" if d.removed else f": {d.why.splitlines()[0][:120]}")
-            )
+            done.extend(_remove_planned(repo, cfg, log, t, base))
     for t in plan.stale_branches:
         if t.action == "delete_branch":
             with unless_claimed() as guard:
