@@ -132,3 +132,16 @@ def test_loading_the_mcp_server_runs_the_family_check():
         "sys.exit(0 if 'ddflow.surfaces.tools.families' in sys.modules else 1)"
     )
     assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
+
+
+def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
+    import subprocess
+    import sys
+
+    code = (
+        "import ddflow.surfaces.tools as T; T.TOOLS['ddflow_zed_go'] = {}; "
+        "import ddflow.surfaces.tools.families"
+    )
+    run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert run.returncode != 0
+    assert "ddflow_zed_go" in run.stderr
