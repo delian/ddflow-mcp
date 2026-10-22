@@ -207,7 +207,7 @@ def _answers(repo: Path) -> Check:
     """`brief` and `next` answer on stdout. Exit 2 means nothing READY for `next` (a
     real answer with text); `brief` exiting 2 is a failure to run, never a pass."""
     brief = P.capture(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "brief"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo.resolve()), "brief"],
         timeout=120,
         cwd=_own_code_root(),  # python -m puts cwd first on sys.path: never another tree
         env=_own_code_env(),
@@ -221,7 +221,7 @@ def _answers(repo: Path) -> Check:
     if not (brief.stdout or "").strip():
         return Check("brief/next answer", "failed", "brief printed nothing")
     nxt = P.capture(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "next"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo.resolve()), "next"],
         timeout=120,
         cwd=_own_code_root(),  # python -m puts cwd first on sys.path: never another tree
         env=_own_code_env(),
