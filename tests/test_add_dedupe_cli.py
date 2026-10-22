@@ -150,9 +150,9 @@ def test_new_files_it_and_records_the_answer(filed_as):
     assert state(filed).links["B-new"].answer["answer"] == "new"
 
 
-def test_extends_an_open_record_adds_to_it_and_files_nothing(filed_as):
+def test_merge_into_an_open_record_adds_to_it_and_files_nothing(filed_as):
     filed = filed_as("task")
-    code, out, err = run_cli(filed, *ADDS["task"], "--extends", "T-old")
+    code, out, err = run_cli(filed, *ADDS["task"], "--merge-into", "T-old")
     assert code == 0, err
     assert "T-old" in out and "no new record" in out
     st = state(filed)
@@ -284,7 +284,7 @@ def test_on_a_terminal_a_duplicate_asks_and_extends_on_the_reply(filed_as):
     assert "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort" in shown
     assert "T-old" in shown
     st = state(filed)
-    assert "T-new" not in st.items and st.links["T-old"].extensions
+    assert "T-new" in st.items and st.links["T-new"].linked("extends") == {"T-old"}
 
 
 def test_on_a_terminal_new_files_the_record(filed_as):
@@ -314,7 +314,7 @@ def test_on_a_terminal_a_bad_reply_asks_again(filed_as):
     code, shown = _on_a_terminal(filed, ADDS["task"], ["what", "e"])
     assert code == 0, shown
     assert "Not understood" in shown
-    assert state(filed).links["T-old"].extensions
+    assert state(filed).links["T-new"].linked("extends") == {"T-old"}
 
 
 def test_a_flag_on_a_terminal_does_not_prompt(filed_as):

@@ -100,7 +100,7 @@ def test_item_extends_unions_the_globs(repo, kind):
     assert add(repo, "T1", title=FIRST, globs="src/a.py", agent="a").exit == 0
     out = add(
         repo, "T2", title=SECOND, globs="src/a.py,src/b.py",
-        answer=DD.Answer("extends", "T1"), agent="a",
+        answer=DD.Answer("merge_into", "T1"), agent="a",
     )  # fmt: skip
     assert out.exit == 0 and out.data["extended"] == "T1", out
     assert out.data["globs_added"] == ["src/b.py"]
