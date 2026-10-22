@@ -17,6 +17,7 @@ import os
 import re
 import shlex
 import sys
+import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -87,6 +88,8 @@ class Result:
     failures: dict = field(default_factory=dict)
     #: which tests ran (`ci_scope.Plan.evidence`); empty when the command ran as written
     scope: dict = field(default_factory=dict)
+    #: seconds queued for the host-wide suite lock; None when the run took no lock (B1d51fb9da1)
+    waited_s: float | None = None
 
     @property
     def ok(self) -> bool:
@@ -105,6 +108,7 @@ class Result:
             "why": self.reason,
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "output_tail": self.output_tail,
+            **({"waited_s": self.waited_s} if self.waited_s is not None else {}),
             **({"scope": self.scope} if self.scope else {}),
             **self.failures,
             **({"failure_text": failure_text(self.failures)} if self.failures else {}),
@@ -385,16 +389,25 @@ def run(
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
         full_suite = not command.strip() and _runs_whole_suite(cmd, scope)
+        waited: float | None = None
+        queued_at = time.monotonic()
         try:
             with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+                if full_suite:  # the lock is held: everything before this was queueing
+                    waited = round(time.monotonic() - queued_at, 1)
                 p, out_prefix = _execute(
                     cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used
                 )
         except SL.SuiteBusy as busy:
-            return Result("unavailable", command=cmd, sha=sha, reason=str(busy))
+            return Result(
+                "unavailable", command=cmd, sha=sha, reason=str(busy),
+                waited_s=round(busy.waited_s, 1),
+            )  # fmt: skip
         if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+            unfinished.waited_s = waited
             return unfinished
     res = _result(p, out_prefix, cmd, sha, base, scope)
+    res.waited_s = waited
     if scope is None and used:
         res.scope = {"workers": used}
     return res

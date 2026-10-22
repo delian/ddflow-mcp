@@ -63,6 +63,8 @@ class GateStatus:
     after_failure: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
     #: gate -> its recorded reason, for an `unavailable` or `partial` outcome (B305db5608b).
     why: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> "queued 28m of 41m for the host lock" for a run that recorded its wait (B1d51fb9da1).
+    queued: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -76,6 +78,7 @@ class GateStatus:
             + (f"  -- {self.local_command[g]}" if g in self.local_command else "")
             + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
             + (f"  -- {self.why[g]}" if g in self.why else "")
+            + (f"  -- {self.queued[g]}" if g in self.queued else "")
             for g, o in self.rows
         )
 
@@ -274,6 +277,24 @@ def local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     return out
 
 
+def _queued_notes(it, rows) -> dict[str, str]:
+    """gate -> how long its recorded run queued for the host lock, of its elapsed time. Only a
+    run that recorded ``waited_s`` and waited at all: an older log says nothing."""
+    out: dict[str, str] = {}
+    for g, _o in rows:
+        rec = it.gates.get(g)
+        ev = (rec.evidence or {}) if rec is not None else {}
+        w, took = ev.get("waited_s"), ev.get("elapsed_s")
+        if isinstance(w, int | float) and not isinstance(w, bool) and w >= 1:
+            of = f" of {_mins(took)}" if isinstance(took, int | float) else ""
+            out[g] = f"queued {_mins(w)}{of} for the host lock"
+    return out
+
+
+def _mins(seconds) -> str:
+    return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
+
+
 def status(
     state: State,
     cfg: Config,
@@ -321,6 +342,7 @@ def status(
         not_applicable=na,
         local_command=local_command_notes(it, rows),
         why=_unavailable_reasons(it, rows),
+        queued=_queued_notes(it, rows),
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
