@@ -600,7 +600,7 @@ def _classify(
     unknown: str,
     base: str,
     path: str,
-    leftovers: bool = False,
+    pins: list[str],
 ) -> None:
     """Kind, action and advice for a tree nobody holds or adopted cleanly."""
     if unknown:
@@ -617,7 +617,7 @@ def _classify(
             f"LEAVE ALONE — inspect first: `git -C {path} diff {base}`. "
             f"Uncommitted edits are the one thing that exists nowhere else."
         )
-    elif t.ahead and leftovers:
+    elif t.ahead and landed_leftovers_only(path, item, base, pins):
         t.kind = "merged"
         t.action = "remove"
         t.done = (
@@ -742,10 +742,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
         else:
-            lone = bool(t.ahead and not t.dirty_files and not unknown) and landed_leftovers_only(
-                path, item, base, pins
-            )
-            _classify(t, item, unknown, base, path, lone)
+            _classify(t, item, unknown, base, path, pins)
         plan.trees.append(t)
 
     for branch in W.branches(root):
