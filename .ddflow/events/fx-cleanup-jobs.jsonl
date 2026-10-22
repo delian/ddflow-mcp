@@ -318,3 +318,4 @@
 {"agent":"fx-cleanup-jobs","data":{"at":1792694882.0922792,"holder":"fx-cleanup-jobs"},"id":"e7d86a421f775ccb683eccde5","kind":"lease.renewed","lamport":94184,"schema":1,"subject":"fix-Bfc4ac64c9c","ts":"2026-10-22T18:48:02.199594Z"}
 {"agent":"fx-cleanup-jobs","data":{"at":1792695132.9588468,"holder":"fx-cleanup-jobs"},"id":"e90a3a0b9de33f6bf86d104b4","kind":"lease.renewed","lamport":94213,"schema":1,"subject":"fix-Bfc4ac64c9c","ts":"2026-10-22T18:52:13.017877Z"}
 {"agent":"fx-cleanup-jobs","data":{"at":1792695139.7892969,"holder":"fx-cleanup-jobs"},"id":"ee185db40ba0f716f07a9c85d","kind":"lease.renewed","lamport":94214,"schema":1,"subject":"fix-B-uncommitted-blobs-owner-unknown","ts":"2026-10-22T18:52:19.839300Z"}
+{"agent":"fx-cleanup-jobs","data":{"at":1792695783.0423064,"holder":"fx-cleanup-jobs"},"id":"e75ba9f9c3446b0891d7fc1a1","kind":"lease.renewed","lamport":94287,"schema":1,"subject":"fix-Bfc4ac64c9c","ts":"2026-10-22T19:03:03.072214Z"}
