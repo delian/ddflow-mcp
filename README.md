@@ -2522,9 +2522,13 @@ prompt or note — runs the same check against the log **before it writes**, wit
   not asked about it.
 - **An answer** lifts the refusal. `new`: it is a different record, filed as asked.
   `extends X` / `duplicate_of X`: it is the same thing. While X is **open and unclaimed**
-  (an open task or phase, an unfixed bug, a lesson or decision not superseded, research, a
-  live memory) the text is appended to X as a `record.extended` — verbatim, with who, when
-  and the score — and **no new id is made**; a bug's own summary is never replaced. If X
+  (an unfixed bug, a lesson or decision not superseded, a live memory -- and, for
+  `duplicate_of` or the explicit `merge_into X` / `--merge-into X`, an open task, phase or
+  research note) the text is appended to X as a `record.extended` — verbatim, with who, when
+  and the score — and **no new id is made**; a bug's own summary is never replaced.
+  `extends X` on a task, phase or research note files a **new record** linked to X instead:
+  appending to something another agent owns, and writing the new task's globs onto it, is
+  never implied (`merge_into` on a claimed or closed X is refused). If X
   is claimed, running, done, fixed or superseded, a **new record** is filed linked to X
   (`extends` / `duplicate_of` on its add event), so nothing is lost, and the result names X
   and its state so the holder can be told. `related X` files a new record linked **both
@@ -2535,7 +2539,7 @@ prompt or note — runs the same check against the log **before it writes**, wit
 - **Answering a refusal, on every surface.**
   - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
     `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
-    `--duplicate-of ID`, `--related ID` and `--check`; at most one of the five (argparse refuses two, and
+    `--duplicate-of ID`, `--related ID`, `--merge-into ID` and `--check`; at most one of the six (argparse refuses two, and
     over MCP `relation` with `check_only` is a failure).
     `--check` is a dry run: it writes nothing, prints the candidates and whether the add
     would be refused, and exits 0 with candidates or 2 with none (`--json` prints
@@ -2559,7 +2563,7 @@ prompt or note — runs the same check against the log **before it writes**, wit
     before its usual line.
   - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
     `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
-    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
+    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID`, `related:ID` or `merge_into:ID` -- and
     `check_only` (the dry run). The refusal leads the reply as `{"refusal": {...}}` with
     `candidates` and `options` beside it; answer it by calling the tool again with
     `relation`. An answer that lands on an existing record returns `extended` (the record
