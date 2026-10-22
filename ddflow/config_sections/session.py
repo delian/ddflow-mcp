@@ -94,12 +94,12 @@ class SessionConfig:
     )
     context_budget_tokens: int = knob(
         40000,
-        doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief. `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
+        doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints; a pending one-line upgrade notice is not counted, since counting would use it up). `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
         check=int_at_least(0),
     )
     start_chars_per_token: float = knob(
         4.0,
-        doc="Characters to a token in the session start cost estimate (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs nearer three, so lower it to be stricter. No tokenizer is imported.",
+        doc="Bytes (UTF-8) to a token in the session start cost estimate (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs nearer three, so lower it to be stricter. No tokenizer is imported.",
         check=lambda v: (
             ""
             if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v < float("inf")
