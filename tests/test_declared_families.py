@@ -121,3 +121,14 @@ def test_a_hot_single_command_may_not_declare_a_family_or_action(extra):
     c = Command(path=("identify",), tool="ddflow_identify", **extra)
     with pytest.raises(RuntimeError, match="hot single"):
         F.resolve({"ddflow_identify": c}, legacy={})
+
+
+def test_loading_the_mcp_server_runs_the_family_check():
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, ddflow.surfaces.mcp; "
+        "sys.exit(0 if 'ddflow.surfaces.tools.families' in sys.modules else 1)"
+    )
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
