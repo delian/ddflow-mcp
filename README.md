@@ -1100,7 +1100,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 373 knobs.
+cadences, and the rest of the 374 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2522,9 +2522,13 @@ prompt or note — runs the same check against the log **before it writes**, wit
   not asked about it.
 - **An answer** lifts the refusal. `new`: it is a different record, filed as asked.
   `extends X` / `duplicate_of X`: it is the same thing. While X is **open and unclaimed**
-  (an open task or phase, an unfixed bug, a lesson or decision not superseded, research, a
-  live memory) the text is appended to X as a `record.extended` — verbatim, with who, when
-  and the score — and **no new id is made**; a bug's own summary is never replaced. If X
+  (an unfixed bug, a lesson or decision not superseded, a live memory -- and, for
+  `duplicate_of` or the explicit `merge_into X` / `--merge-into X`, an open task, phase or
+  research note) the text is appended to X as a `record.extended` — verbatim, with who, when
+  and the score — and **no new id is made**; a bug's own summary is never replaced.
+  `extends X` on a task, phase or research note files a **new record** linked to X instead:
+  appending to something another agent owns, and writing the new task's globs onto it, is
+  never implied (`merge_into` on a claimed or closed X is refused). If X
   is claimed, running, done, fixed or superseded, a **new record** is filed linked to X
   (`extends` / `duplicate_of` on its add event), so nothing is lost, and the result names X
   and its state so the holder can be told. `related X` files a new record linked **both
@@ -2535,7 +2539,7 @@ prompt or note — runs the same check against the log **before it writes**, wit
 - **Answering a refusal, on every surface.**
   - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
     `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
-    `--duplicate-of ID`, `--related ID` and `--check`; at most one of the five (argparse refuses two, and
+    `--duplicate-of ID`, `--related ID`, `--merge-into ID` and `--check`; at most one of the six (argparse refuses two, and
     over MCP `relation` with `check_only` is a failure).
     `--check` is a dry run: it writes nothing, prints the candidates and whether the add
     would be refused, and exits 0 with candidates or 2 with none (`--json` prints
@@ -2559,7 +2563,7 @@ prompt or note — runs the same check against the log **before it writes**, wit
     before its usual line.
   - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
     `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
-    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
+    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID`, `related:ID` or `merge_into:ID` -- and
     `check_only` (the dry run). The refusal leads the reply as `{"refusal": {...}}` with
     `candidates` and `options` beside it; answer it by calling the tool again with
     `relation`. An answer that lands on an existing record returns `extended` (the record
@@ -5286,7 +5290,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 373): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 374): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5467,7 +5471,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=dce53e105504 -->
+<!-- ddflow:begin README/agents sha=a7756cc6cc85 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -5492,6 +5496,7 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | OpenHands | `openhands` | none | claude | native hook |
 | Goose | `goose` | none | claude | native hook |
 | Sourcegraph Cody | `cody` | none | not verified | nv |
+| dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
@@ -5829,7 +5834,7 @@ declared once and persists — see
 
 ## Configuration
 
-373 knobs across 41 sections, every one documented in place and listed, with its default
+374 knobs across 41 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5896,8 +5901,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=24129c4ed17c -->
-<details><summary>All 373 knobs across 41 sections</summary>
+<!-- ddflow:begin README/knobs sha=91fbfca5e53b -->
+<details><summary>All 374 knobs across 41 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6209,6 +6214,7 @@ long default is left to `ddflow config --explain`.
 | `mcp.stale_check_every_s` | `60.0` |  |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |
+| `ci.pins_precheck` | `true` |  |
 | `ci.timeout_s` | `3600` |  |
 | `ci.workers` | `"auto"` |  |
 | `ci.min_workers` | `1` |  |

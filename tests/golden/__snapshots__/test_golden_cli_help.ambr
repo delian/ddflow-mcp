@@ -23,7 +23,7 @@
     -h, --help            show this help message and exit
     --agents AGENTS       comma-separated: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,openc
                           ode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,op
-                          enhands,goose,cody (default: all)
+                          enhands,goose,cody,dsh (default: all)
     --docs DOCS           where to write the drivers
     --launch {auto,uvx,docker,python}
                           how agents spawn the MCP server: 'auto' prefers uvx for an install from a
@@ -139,7 +139,7 @@
 # ---
 # name: test_help[ddflow bug fixed]
   '''
-  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--landed LANDED] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] [--landed LANDED] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
   
   positional arguments:
     id
@@ -162,6 +162,9 @@
                           the text in --mutation-file (once) that --mutation-new replaces
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
+    --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
+                          three mutation-file/-old/-new flags in one (as the MCP parameter); wins
+                          when both forms are given
     --landed LANDED       a commit already on the base that holds the fix: the test must fail on its
                           first parent and pass on it; the bug's fix task is ended naming it
     --lesson LESSON
@@ -174,7 +177,7 @@
 # ---
 # name: test_help[ddflow bug found]
   '''
-  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
   
   options:
     -h, --help            show this help message and exit
@@ -193,8 +196,11 @@
                           off | basic | full: how much repro bundle to store (default [bugs]
                           repro_capture)
     --new                 answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
-                          unclaimed, else filed as a new record linked to it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
     --related ID          answer it: a different record that is related to ID; linked both ways
     --check               dry run: print the existing records this would be refused as a duplicate
@@ -426,7 +432,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -450,6 +456,9 @@
                           the text in --mutation-file (once) that --mutation-new replaces
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
+    --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
+                          three mutation-file/-old/-new flags in one (as the MCP parameter); wins
+                          when both forms are given
   
   '''
 # ---
@@ -491,7 +500,7 @@
 # ---
 # name: test_help[ddflow decision add]
   '''
-  usage: ddflow decision add [-h] [--id ID] --title TITLE --decision DECISION [--context CONTEXT] [--consequences CONSEQUENCES] [--alternatives ALTERNATIVES] [--globs GLOBS] [--tags TAGS] [--sources SOURCES] [--item ITEM] [--by BY] [--status {proposed,accepted,superseded}] [--supersedes SUPERSEDES] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow decision add [-h] [--id ID] --title TITLE --decision DECISION [--context CONTEXT] [--consequences CONSEQUENCES] [--alternatives ALTERNATIVES] [--globs GLOBS] [--tags TAGS] [--sources SOURCES] [--item ITEM] [--by BY] [--status {proposed,accepted,superseded}] [--supersedes SUPERSEDES] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
   
   options:
     -h, --help            show this help message and exit
@@ -511,8 +520,11 @@
     --status {proposed,accepted,superseded}
     --supersedes SUPERSEDES
     --new                 answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
-                          unclaimed, else filed as a new record linked to it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
     --related ID          answer it: a different record that is related to ID; linked both ways
     --check               dry run: print the existing records this would be refused as a duplicate
@@ -624,7 +636,10 @@
 # ---
 # name: test_help[ddflow dupes]
   '''
-  usage: ddflow dupes [-h] [--kind KIND] [--open-only] [--floor FLOOR] [--limit LIMIT]
+  usage: ddflow dupes [-h] [--kind KIND] [--open-only] [--floor FLOOR] [--limit LIMIT] [item]
+  
+  positional arguments:
+    item           only the pairs this record id is in (default: the whole sweep)
   
   options:
     -h, --help     show this help message and exit
@@ -1178,13 +1193,15 @@
 # ---
 # name: test_help[ddflow job end]
   '''
-  usage: ddflow job end [-h] [--exit-code EXIT_CODE] [--note NOTE] [--force] job
+  usage: ddflow job end [-h] [--all-finished] [--item ITEM] [--exit-code EXIT_CODE] [--note NOTE] [--force] [job]
   
   positional arguments:
     job
   
   options:
     -h, --help            show this help message and exit
+    --all-finished        end every finished job
+    --item ITEM
     --exit-code EXIT_CODE
                           default: the one its log recorded
     --note NOTE
@@ -1250,7 +1267,7 @@
 # ---
 # name: test_help[ddflow lesson add]
   '''
-  usage: ddflow lesson add [-h] [--id ID] --title TITLE [--rule RULE] [--why WHY] [--how HOW] [--summary SUMMARY] [--tags TAGS] [--seen-in SEEN_IN] [--supersedes SUPERSEDES] [--pattern PATTERN] [--globs GLOBS] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow lesson add [-h] [--id ID] --title TITLE [--rule RULE] [--why WHY] [--how HOW] [--summary SUMMARY] [--tags TAGS] [--seen-in SEEN_IN] [--supersedes SUPERSEDES] [--pattern PATTERN] [--globs GLOBS] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
   
   options:
     -h, --help            show this help message and exit
@@ -1269,8 +1286,11 @@
                           worse
     --globs GLOBS         comma-separated globs to scan (default: all tracked files)
     --new                 answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
-                          unclaimed, else filed as a new record linked to it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
     --related ID          answer it: a different record that is related to ID; linked both ways
     --check               dry run: print the existing records this would be refused as a duplicate
@@ -1391,7 +1411,7 @@
 # ---
 # name: test_help[ddflow memory add]
   '''
-  usage: ddflow memory add [-h] [--tags TAGS] [--id ID] [--new | --extends ID | --duplicate-of ID | --related ID | --check] text
+  usage: ddflow memory add [-h] [--tags TAGS] [--id ID] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] text
   
   positional arguments:
     text
@@ -1401,8 +1421,11 @@
     --tags TAGS
     --id ID            re-record (correct) an existing memory
     --new              answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID       answer it: this adds to record ID -- appended to ID while it is open and
-                       unclaimed, else filed as a new record linked to it
+    --extends ID       answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                       lesson, decision or bug is appended to instead; use --merge-into to append to
+                       a task, phase or research note)
+    --merge-into ID    answer it: append this to record ID instead of filing it (ID must be open and
+                       unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID  answer it: this is the same thing as record ID (handled like --extends)
     --related ID       answer it: a different record that is related to ID; linked both ways
     --check            dry run: print the existing records this would be refused as a duplicate of
@@ -1519,7 +1542,7 @@
 # ---
 # name: test_help[ddflow phase add]
   '''
-  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] id
+  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
   
   positional arguments:
     id
@@ -1537,8 +1560,11 @@
     --readd              file a REMOVED item's id again. An id still in the queue is always refused:
                          change it with `ddflow update`
     --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
-                         unclaimed, else filed as a new record linked to it
+    --extends ID         answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                         lesson, decision or bug is appended to instead; use --merge-into to append
+                         to a task, phase or research note)
+    --merge-into ID      answer it: append this to record ID instead of filing it (ID must be open
+                         and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
     --related ID         answer it: a different record that is related to ID; linked both ways
     --check              dry run: print the existing records this would be refused as a duplicate of
@@ -2023,7 +2049,7 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
   
   positional arguments:
     {add,list}            optional: `research add` = `research`; `research list` lists the notes
@@ -2042,8 +2068,11 @@
     --budget BUDGET
     --item ITEM
     --new                 answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
-                          unclaimed, else filed as a new record linked to it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
     --related ID          answer it: a different record that is related to ID; linked both ways
     --check               dry run: print the existing records this would be refused as a duplicate
@@ -2216,10 +2245,10 @@
 # ---
 # name: test_help[ddflow rule add]
   '''
-  usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--priority PRIORITY] [--globs GLOBS] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--priority PRIORITY] [--globs GLOBS] [--enforcement ENFORCEMENT] [--pin] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --id ID
     --title TITLE
     --content CONTENT
@@ -2227,31 +2256,37 @@
     --scope SCOPE
     --priority PRIORITY
     --globs GLOBS
-    --new                a different rule, file it
+    --enforcement ENFORCEMENT
+    --pin                 pin it: enforcement block for ALL work (no globs), so it is handed over
+                          whole whatever the budget (the rules charter's pinned rules)
+    --new                 a different rule, file it
     --extends ID
     --duplicate-of ID
     --related ID
-    --check              dry run: list duplicates only
+    --check               dry run: list duplicates only
   
   '''
 # ---
 # name: test_help[ddflow rule edit]
   '''
-  usage: ddflow rule edit [-h] [--title TITLE] [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--globs GLOBS] [--priority PRIORITY] [--new | --related ID] id
+  usage: ddflow rule edit [-h] [--title TITLE] [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--globs GLOBS] [--priority PRIORITY] [--enforcement ENFORCEMENT] [--pin] [--new | --related ID] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --content CONTENT
     --tags TAGS
     --scope SCOPE
     --globs GLOBS
     --priority PRIORITY
-    --new                answer the duplicate check: different
-    --related ID         answer it: related to ID
+    --enforcement ENFORCEMENT
+    --pin                 pin it: enforcement block for ALL work (no globs), so it is handed over
+                          whole whatever the budget (the rules charter's pinned rules)
+    --new                 answer the duplicate check: different
+    --related ID          answer it: related to ID
   
   '''
 # ---
@@ -2527,7 +2562,7 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
@@ -2552,8 +2587,11 @@
     --readd               file a REMOVED item's id again. An id still in the queue is always
                           refused: change it with `ddflow update`
     --new                 answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
-                          unclaimed, else filed as a new record linked to it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
     --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
     --related ID          answer it: a different record that is related to ID; linked both ways
     --check               dry run: print the existing records this would be refused as a duplicate

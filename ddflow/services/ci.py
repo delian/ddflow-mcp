@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import sys
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
 from .pins import pin_files
+from .pins import regenerate as regenerate_pins
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
@@ -373,6 +375,8 @@ def run(
         if tree is None:
             status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
+        if stale := _stale_pins(tree, cfg, base, custom=bool(command.strip())):
+            return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
@@ -388,26 +392,56 @@ def run(
                 )
         except SL.SuiteBusy as busy:
             return Result("unavailable", command=cmd, sha=sha, reason=str(busy))
-        if p.kind == TIMEOUT:
-            return Result(
-                "unavailable",
-                command=cmd,
-                sha=sha,
-                reason=f"{p.reason}: raise [ci].timeout_s",
-                scope=_scope_evidence(scope, sha),
-            )
-        if not p.ran:  # the runner is missing, the slots are taken, the process did not start
-            return Result(
-                "unavailable",
-                command=cmd,
-                sha=sha,
-                reason=p.reason,
-                scope=_scope_evidence(scope, sha),
-            )
+        if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+            return unfinished
     res = _result(p, out_prefix, cmd, sha, base, scope)
     if scope is None and used:
         res.scope = {"workers": used}
     return res
+
+
+def _unfinished(p, cmd: str, sha: str, scope) -> Result | None:
+    """The result of a run that never reached a verdict: it timed out, or its process did not
+    start (the runner is missing, the slots are taken). None when the command ran."""
+    if p.kind == TIMEOUT:
+        return Result(
+            "unavailable",
+            command=cmd,
+            sha=sha,
+            reason=f"{p.reason}: raise [ci].timeout_s",
+            scope=_scope_evidence(scope, sha),
+        )
+    if not p.ran:  # the runner is missing, the slots are taken, the process did not start
+        return Result(
+            "unavailable",
+            command=cmd,
+            sha=sha,
+            reason=p.reason,
+            scope=_scope_evidence(scope, sha),
+        )
+    return None
+
+
+def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> str:
+    """Why the merge result's pinned outputs are stale, or "" (current, none, or not checkable).
+
+    A read-only `pins regenerate --check` in the scratch tree, each recipe bounded by
+    `[pins].after_merge_timeout_s`: one that cannot finish is unknown, and never fails the run.
+    Not for a custom ``--command``, nor with `[ci].pins_precheck` off."""
+    if custom or not cfg.ci.pins_precheck:
+        return ""
+    try:
+        rep = regenerate_pins(tree, cfg, check=True, bounded=True)
+    except Exception as exc:  # a precheck must not be what stops a run -- but it says so
+        print(f"ci: the pins precheck could not run ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return ""
+    if not rep.stale:  # a run-wide problem beside a stale pin does not hide it
+        return ""
+    names = ", ".join(p.name for p in rep.stale)
+    return (
+        f"pins stale after merging {base or 'the base'}: re-record them ({names}) with "
+        "`ddflow pins regenerate`, commit, and run ci again"
+    )
 
 
 def _default_with_tripwires(

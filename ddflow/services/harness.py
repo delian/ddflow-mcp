@@ -26,6 +26,7 @@ from ..infra.fsio import Unreadable, read_json
 from . import hookwriters as HW
 from .adopt import SHAPE_MCP_SERVERS, SHAPE_TOML, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
+from .mcpconfig import SHAPE_CORDIS_PATCH, cordis_rows, cordis_servers
 
 #: Claude Code's COMMITTED project settings. Deliberately not `settings.local.json`:
 #: approval has to reach every clone and every worktree session, and an untracked local
@@ -61,6 +62,14 @@ def project_servers(
         if not isinstance(servers, dict):
             raise HarnessError(f"{mcp_rel}: `mcp_servers` is not a table; fix it by hand")
         return dict(servers)
+    if shape == SHAPE_CORDIS_PATCH:
+        try:
+            rows = cordis_rows(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HarnessError(f"{mcp_rel} could not be read ({exc}); fix it by hand") from exc
+        if rows is None:
+            raise HarnessError(f"{mcp_rel}: a ddflow-row line is not JSON; fix it by hand")
+        return cordis_servers(rows)
     data = read_json(path)
     if isinstance(data, Unreadable) and data.kind == "not-object":
         raise HarnessError(f"{mcp_rel} is not a JSON object; fix it by hand")
@@ -142,6 +151,12 @@ def mcp_registered(repo: Path, h: Any) -> bool | None:
             return None
         servers = data.get("mcp_servers", {})
         return "ddflow" in servers if isinstance(servers, dict) else None
+    if h.mcp.shape == SHAPE_CORDIS_PATCH:
+        try:
+            rows = cordis_rows(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return None if rows is None else "ddflow" in cordis_servers(rows)
     data = read_json(path)
     if isinstance(data, Unreadable):
         return None
