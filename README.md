@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=b58e7b0d7534 -->
-<details><summary>All 87 commands</summary>
+<!-- ddflow:begin README/commands sha=37eeebee418c -->
+<details><summary>All 88 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -555,6 +555,7 @@ needs a line written by hand here.
 | `ddflow batch` | apply many item edits in one all-or-nothing transaction |
 | `ddflow rename` | move an item to a new id (and phase), re-pointing every needs edge |
 | `ddflow chore` | commit or approve chore files (no reviewer) |
+| `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow plan` | check, file (proposed) and confirm a plan |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
@@ -1099,7 +1100,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 372 knobs.
+cadences, and the rest of the 374 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5285,7 +5286,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 372): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 374): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5828,7 +5829,7 @@ declared once and persists — see
 
 ## Configuration
 
-372 knobs across 40 sections, every one documented in place and listed, with its default
+374 knobs across 41 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5895,8 +5896,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=1163197cedbe -->
-<details><summary>All 372 knobs across 40 sections</summary>
+<!-- ddflow:begin README/knobs sha=50e875ceaf4d -->
+<details><summary>All 374 knobs across 41 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6197,6 +6198,8 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.keep_history` | `50` |  |
 | `chore.globs` | (long: see `ddflow config --explain`) |  |
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
+| `grants.max_count` | `3` |  |
+| `grants.ttl_h` | `48` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
