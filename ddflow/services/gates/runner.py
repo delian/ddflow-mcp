@@ -86,7 +86,7 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
 def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
     """Seconds the run queued: the suite lock a `ci run` reported on its output, plus the
     admission slot the runner itself waited for."""
-    slot = round(p.waited_s, 1) if p.waited_s else 0.0
+    slot = p.waited_s if p.waited_s and p.waited_s > 0 else 0.0
     lock = parse_wait(out) if gdef.id == "ci" else None
     return None if lock is None and not slot else round((lock or 0.0) + slot, 1)
 
