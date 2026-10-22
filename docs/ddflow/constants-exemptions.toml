@@ -141,6 +141,9 @@
 "ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = "worktree.stash_retry_pause_s"
 
 [exempt]
+"ddflow/services/suitelock.py:QUEUE_POLL_S" = "the sweep and heartbeat period of a queued suite waiter, the same kind of constant as the slot lock's own poll (slots.POLL_S); the wait it bounds is [ci].suite_wait_s"
+"ddflow/services/suitelock.py:NEW_S" = "how long an unlocked ticket is taken for one whose owner has not locked it yet: a race window of microseconds made safe by a second, not a tuning choice"
+"ddflow/services/suitelock.py:LOCK_S" = "how long a new waiter waits for its own ticket's lock while a scan holds it for an instant; a race guard, never reached in practice"
 "ddflow/services/gates/reasons.py:WHY_CHARS" = "how much of a recorded reason one `gate status` row shows; a display cut of a line, the whole reason stays in the record and in `show`"
 "ddflow/infra/log.py:_HOLDER_SCANS_MAX" = "a bound on a diagnostic-only rescan of /proc/locks while a lock-timeout message is built; it shapes an error note, never behaviour, so no operator needs the knob"
 "ddflow/infra/log.py:_HOLDER_SCAN_S" = "the time cap of the same diagnostic rescan (companion of _HOLDER_SCANS_MAX)"
