@@ -23,6 +23,7 @@ from ...services import progress_line as PL
 from ...services import umbrella as UM
 from ...services.export import refresh as RF
 from ...services.gates import failed_review as GO
+from .. import jobs as JB
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
@@ -378,12 +379,20 @@ def _rename():
 def _dispose(repo: Path, cfg, log, item: str, callers) -> dict[str, Any]:
     """The item's own worktree and branch, removed when it is finished with and nothing is
     in them (B79319c6ada, B4757c428f4): ``worktree_removed`` and ``kept_reason`` ("" when
-    there is nothing to say), the same two fields `merge` reports."""
+    there is nothing to say), the same two fields `merge` reports; and ``jobs_ended``, the item's
+    jobs whose process is over, recorded as ended (absent when there were none), and ``jobs_note``
+    when collecting them could not run."""
     it = fold(log.read_all(), strict=False).items.get(item)
     removed, why = (
         CL.dispose_finished(repo, cfg, log, it, callers=callers) if it is not None else (False, "")
     )
-    return {"worktree_removed": removed, "kept_reason": why}
+    ended, problem = JB.collect_for_item(log, item)  # its finished jobs end with it (B5127aa5436)
+    return {
+        "worktree_removed": removed,
+        "kept_reason": why,
+        **({"jobs_ended": ended} if ended else {}),
+        **({"jobs_note": problem} if problem else {}),
+    }
 
 
 def remove(
