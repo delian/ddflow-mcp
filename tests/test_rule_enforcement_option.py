@@ -60,7 +60,8 @@ def test_pin_with_globs_is_refused(repo):
     run_cli(repo, "init")
     code, _out, err = run_cli(repo, *ADD, "--pin", "--globs", "src/**")
     assert code != 0 and "pin" in err
-    assert run_cli(repo, "--json", "rule", "list")[1].count("r-one") == 0
+    with pytest.raises(FileNotFoundError):
+        RulesStorage(repo).get("r-one")
 
 
 def test_an_unknown_enforcement_is_refused(repo):
@@ -103,3 +104,11 @@ def test_edit_with_an_unknown_enforcement_is_refused_and_changes_nothing(repo):
     code, _out, err = run_cli(repo, "rule", "edit", "r-one", "--enforcement", "strict")
     assert code != 0 and "block" in err, err
     assert _rec(repo).enforcement == "advisory"
+
+
+def test_edit_pin_says_what_it_changed(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, *ADD)[0] == 0
+    code, out, err = run_cli(repo, "rule", "edit", "r-one", "--pin")
+    assert code == 0, err
+    assert "pin" in out and "nothing" not in out
