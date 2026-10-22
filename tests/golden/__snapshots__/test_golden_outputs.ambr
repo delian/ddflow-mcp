@@ -1420,12 +1420,14 @@
           A two-word title shares most of its words with something; asking on it is
           noise. Shorter records still list candidates.
       dedupe.research_task_asks = False   [default]
-          Whether a research note and a task or phase (either added against the other)
-          that score at or above ask_threshold make the add ask. Default false: a note
-          about a topic and the work item that implements it are related, not
-          duplicates, so the pair is listed and the add goes ahead (bug B-dupe-
-          research-vs-task). Identical text still asks. Notes against notes, and tasks
-          against tasks, always use ask_threshold.
+          Whether a research note or a decision and a task or phase (either added
+          against the other) that score at or above ask_threshold make the add ask.
+          Default false: a note or decision about a topic and the work item that
+          implements or governs it are related, not duplicates, so the pair is listed
+          and the add goes ahead (bugs B-dupe-research-vs-task, B-decision-add-
+          duplicate-vs-own-task). Identical text still asks. Notes against notes,
+          decisions against decisions, and tasks against tasks, always use
+          ask_threshold.
       dedupe.kinds = ['bug', 'task', 'phase', 'lesson', 'decision', 'research', 'memory', 'rule']   [default]
           Record kinds checked on add, and offered as candidates -- across kinds, so a
           new bug is shown the open task that fixes it. Default: bug, task, phase,
