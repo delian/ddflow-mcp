@@ -26,7 +26,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..config import Config
-from ..core import globs
 from ..core import ids as IDS
 from ..core.admission import is_shared
 from ..core.model import Item, State
@@ -41,6 +40,7 @@ from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
 from .gates.evidence import commit_tree_entries, worktree_entries
 from .gates.evidence import tree_being_completed as _tree_being_completed
+from .gates.reviewed_paths import ignorable
 
 
 @dataclass
@@ -367,8 +367,8 @@ def refine_stale_notes(
     the files the item changed -- so a merge of main, an event-log commit or an edit to a file
     the item never touched is not a different tree FOR THE REVIEW: its note is dropped, and one
     that stays names the paths that moved. Anything not comparable (no snapshot, the changed
-    set or the tree unreadable, an unverified note) keeps its note as it was. A file ADDED
-    since the round that matches ``ignore`` (`[review].triage_ignore_globs`: tests) is not a
+    set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
+    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) is not a
     difference, as it is not at triage."""
     entries = None
     out = []
@@ -387,7 +387,7 @@ def refine_stale_notes(
             p
             for p in recorded.keys() | set(changed)
             if recorded.get(p) != (" ".join(entries[p]) if p in entries else "")
-            and (p in recorded or not any(globs.match(p, g) for g in ignore))
+            and not ignorable(p, recorded, ignore)
         )
         if moved:
             shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
