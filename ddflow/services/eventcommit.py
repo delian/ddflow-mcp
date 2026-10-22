@@ -262,8 +262,8 @@ def _read_plan(repo: Path, reason: str, template: str):
             left.append(rel)
         else:
             taken[rel] = data
-    loose, orphans = split_loose_blobs(repo)
-    for rel in loose:
+    named_loose, orphans = split_loose_blobs(repo)  # only the NAMED half is ever taken
+    for rel in named_loose:
         try:
             taken[rel] = (repo / rel).read_bytes()
         except OSError:
