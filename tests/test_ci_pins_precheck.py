@@ -141,3 +141,29 @@ def test_gate_status_says_why_a_gate_could_not_run(repo, outcome):
     assert "wrapper killed by SIGTERM" in row, out
     _code, out, _ = run_cli(repo, "--json", "gate", "status", "T1")
     assert json.loads(out)["why"]["ci"] == "wrapper killed by SIGTERM"
+
+
+@pytest.mark.usefixtures("fake_precommit")
+def test_one_pin_that_cannot_be_checked_does_not_hide_a_stale_one(repo, monkeypatch):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    default = _pinned_project(repo)
+    recipes = (
+        '[[pin]]\nname = "broken"\nfiles = ["x.txt"]\n'
+        'check = ["/no/such/checker"]\nregen = ["/no/such/checker"]\n\n' + RECIPES
+    )
+    _commit(repo, {".ddflow/pins.toml": recipes}, "a pin whose checker is gone")
+    _drift(repo, default)
+    res = CI.run(repo, Config.load(repo), base=default)
+    assert res.status == "failed" and "knobs" in res.reason, res.reason
+
+
+def test_a_whitespace_only_reason_still_reads_as_no_reason():
+    from ddflow.services.gates.outcomes import unavailable_reasons
+
+    class Rec:
+        reason = "  \n "
+
+    class It:
+        gates = {"ci": Rec()}
+
+    assert unavailable_reasons(It(), [("ci", "unavailable")]) == {"ci": "no reason was recorded"}
