@@ -184,4 +184,8 @@ def test_a_hooks_row_in_the_one_insert_list_is_kept_beside_the_mcp_row(tmp_path)
     path = tmp_path / "o.yml"
     path.write_text('- insert:\n    - {"id": "h", "name": "hooks"}  # ddflow-row:hooks\n')
     assert MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)[0] == "written"
-    assert set(MC.cordis_rows(path.read_text())) == {"hooks", "ddflow"}
+    text = path.read_text()
+    assert set(MC.cordis_rows(text)) == {"hooks", "ddflow"}
+    assert text.count("- insert:") == 1
+    first, second = (text.index(f"ddflow-row:{n}") for n in ("hooks", "ddflow"))
+    assert text.index("- insert:") < min(first, second)
