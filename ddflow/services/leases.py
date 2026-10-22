@@ -179,12 +179,12 @@ def glob_clash(
         globs,
         holder,
         against="live",
-        live=_unfinished_leases(state, cfg, now),
+        live=unfinished_leases(state, cfg, now),
     )
     return (clash.item, clash.lease, clash.pair) if clash else None
 
 
-def _unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]:
+def unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]:
     """The live leases of items still in progress. A finished item holds nothing: its
     lease may be unreleased, but its files are free."""
     return {
@@ -221,7 +221,7 @@ def _clash_text(
     mine = it.lease.holder if it.lease else ""
     line = line_key(state, it, cfg)
     first, parts, bad = "", [], set()
-    for other_id, lz in _unfinished_leases(state, cfg, now).items():
+    for other_id, lz in unfinished_leases(state, cfg, now).items():
         other = state.items.get(other_id)
         if other_id == it.id or other is None or lz.holder == mine:
             continue  # itself or my own
