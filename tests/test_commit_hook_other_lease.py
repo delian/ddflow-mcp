@@ -341,3 +341,31 @@ def test_a_shared_file_is_never_contested(repo, cfg, monkeypatch):
     _other_holds(repo, "src/new.py")
     monkeypatch.chdir(tree)
     assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_my_exact_lease_over_a_wildcard_that_never_touched_the_file_commits(repo, cfg, monkeypatch):
+    """`update` granted the exact glob because the wildcard's holder never changed the file."""
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--globs", "src/new.py")[0] == 0
+    from ddflow.infra import worktree as W
+
+    wt = W.create(repo, cfg, "T1")
+    EventLog(repo, "owner").append(
+        "lease.acquired",
+        "T1",
+        {
+            "holder": "owner",
+            "at": time.time(),
+            "ttl_s": 1800,
+            "globs": ["src/new.py"],
+            "worktree": W.store_path(repo, wt.path),
+            "branch": wt.branch,
+        },
+    )
+    cfg.enforce.commit_without_lease = "block"
+    _other_holds(repo, "src/n*")
+    (wt.path / "src").mkdir(exist_ok=True)
+    (wt.path / "src" / "new.py").write_text("m = 1\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
+    monkeypatch.chdir(wt.path)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
