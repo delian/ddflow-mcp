@@ -157,3 +157,22 @@ def test_a_ticket_not_yet_locked_by_its_owner_still_holds_its_place(tmp_path: Pa
     (queue / "00000000000000000001-early.ticket").write_text("")  # created, not locked yet
     live = SL._live(queue, 120, 120)
     assert live == ["00000000000000000001-early.ticket"]
+
+
+def test_a_scan_holding_a_new_tickets_lock_for_an_instant_does_not_abort_its_owner(tmp_path: Path):
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = SL._Ticket(queue, "agent-a", 120)
+    gate = threading.Event()
+
+    def scanner():
+        with fsio.file_lock(ticket.path, 0):  # what `_live` does to an unlocked ticket
+            gate.set()
+            time.sleep(0.4)
+
+    threading.Thread(target=scanner, daemon=True).start()
+    gate.wait(5)
+    with ticket:  # waits out the scan instead of raising LockTimeout
+        assert ticket.path.exists()
