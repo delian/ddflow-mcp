@@ -82,9 +82,16 @@ def _requires(tool: str) -> list[str]:
 
 
 def missing_required(routed: Routed) -> list[str]:
-    """The arguments the routed member requires and the call lacks, in the member's own names."""
+    """The arguments the routed member requires and the call lacks, by their family names.
+
+    Missing is absent, ``None`` or ``""`` -- what the engine's own check calls missing -- while
+    ``0`` and ``False`` are values."""
     props = TOOLS[routed.tool]["properties"]
-    return [n for n, (_t, _d, req) in props.items() if req and routed.args.get(n) in (None, "")]
+    return [
+        OP if n == ACTION else n
+        for n, (_t, _d, req) in props.items()
+        if req and routed.args.get(n) in (None, "")
+    ]
 
 
 def _description(family: Family) -> str:
