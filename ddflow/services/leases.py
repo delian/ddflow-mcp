@@ -1201,7 +1201,8 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
             + f"`ddflow complete {it.id}` is refused for now: "
             + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:3])
             + (f" (+{len(v.blockers) - 3} more)" if len(v.blockers) > 3 else "")
-            + f". Settle what `ddflow gate status {it.id}` shows, then complete it."
+            + f". Settle what `ddflow gate status {it.id}` shows, then "
+            + f"`ddflow complete {it.id} --model <author model>`."
         )
 
 
