@@ -125,6 +125,37 @@ def test_a_review_cut_from_an_explicit_base_is_completed_with_that_base(repo, tm
     assert out.exit == OK and out.data["outcome"] == "passed", out.reason
 
 
+def test_a_chunk_re_run_drops_the_delta_s_own_finding_of_that_chunk(repo, tmp_path):
+    flaky = _setup(repo, tmp_path)
+    _review(repo)
+    _commit(repo, {"a.py": "x = 1  # FINDME", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
+    assert _review(repo).data["outcome"] == "partial"
+    (own,) = _gate(repo).evidence["chunk_findings"]
+    flaky.unlink()
+    (tmp_path / "fake-reviewer").write_text(
+        "#!/bin/sh\ncat >/dev/null\necho 'STATUS: NO FINDINGS'\n"
+    )
+    (bad,) = (g["chunk"] for g in _gate(repo).evidence["unreviewed"])
+    out = _review(repo, chunks=[own["chunk"], bad])  # the reviewer no longer sees the finding
+    assert out.data["outcome"] == "passed" and _gate(repo).evidence["chunk_findings"] == []
+
+
+def test_a_finding_the_delta_raised_again_stays_where_the_full_round_numbered_it(repo, tmp_path):
+    _setup(repo, tmp_path, base={"a0.py": "q = 0", "x0.py": "x = 0  # FINDME"})
+    assert _review(repo).data["outcome"] == "failed"
+    (carried,) = _gate(repo).evidence["chunk_findings"]
+    # the delta touches the same line again: byte-identical finding, so it is the same one
+    _commit(repo, {"x0.py": "x = 9  # FINDME", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
+    assert _review(repo).data["outcome"] == "partial"
+    ev = _gate(repo).evidence
+    assert [f["digest"] for f in ev["chunk_findings"]] == [carried["digest"]]
+    assert ev["delta_reraised"] == [carried["digest"]]
+    out = _review(repo, chunks=[carried["chunk"]])
+    assert [f["digest"] for f in _gate(repo).evidence["chunk_findings"]] == [carried["digest"]], (
+        out.data
+    )
+
+
 def test_a_delta_that_cannot_be_cut_says_so(repo, tmp_path, monkeypatch):
     flaky = _setup(repo, tmp_path)
     _review(repo)

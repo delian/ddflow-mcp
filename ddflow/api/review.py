@@ -631,6 +631,8 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
+        else:  # the earlier copy stays, numbered in the earlier cut (`merge_rerun`)
+            ev["delta_reraised"] = [*ev.get("delta_reraised", []), f.get("digest")]
     gone = carry(ev, prior)
     ev["chunk_findings"] = kept
     ev["findings"] = len(kept)
@@ -652,7 +654,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
 
 _SETTLED = ("refuted", "confirmed")
 #: what a delta record says about its own cut; a `--chunk` re-run of it carries them on
-_DELTA_KEYS = ("delta_from", "delta_raised", "delta_findings", "full_coverage")
+_DELTA_KEYS = ("delta_from", "delta_raised", "delta_reraised", "delta_findings", "full_coverage")
 
 
 def _hold(outcome: str, reason: str, untriaged: int, say) -> tuple[str, str]:
