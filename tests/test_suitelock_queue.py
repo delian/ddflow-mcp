@@ -99,7 +99,7 @@ def test_a_killed_waiter_drops_out_of_the_queue(tmp_path: Path):
     code = (
         "import sys; from types import SimpleNamespace as NS; from pathlib import Path\n"
         "from ddflow.services import suitelock as SL\n"
-        "c = NS(ci=NS(max_concurrent_suites=1, suite_wait_s=600))\n"
+        "c = NS(ci=NS(max_concurrent_suites=1, suite_wait_s=600, suite_queue_stale_s=120, suite_queue_grace_s=120))\n"
         "with SL.hold(c, 'doomed', Path(sys.argv[1]), say=lambda _t: None): pass\n"
     )
     order: list[str] = []
@@ -176,3 +176,13 @@ def test_a_scan_holding_a_new_tickets_lock_for_an_instant_does_not_abort_its_own
     gate.wait(5)
     with ticket:  # waits out the scan instead of raising LockTimeout
         assert ticket.path.exists()
+
+
+def test_two_retries_racing_for_one_parked_ticket_get_it_once(tmp_path: Path):
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    (queue / "00000000000000000001-agent-a.parked").write_text("")
+    first = SL._Ticket(queue, "agent-a", 120)
+    second = SL._Ticket(queue, "agent-a", 120)
+    assert first.name == "00000000000000000001-agent-a.ticket"
+    assert second.name != first.name  # the loser queues anew, it does not share or clobber
