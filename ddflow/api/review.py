@@ -480,7 +480,10 @@ def _redo_hint(cfg, it, item: str, gate: str) -> str:
 
 def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     """The `reviewed_paths` evidence of a round: the content of the item's changed set, so a
-    later triage compares those files and not the whole tree. {} when it cannot be read."""
+    later triage compares those files and not the whole tree. {} when it cannot be read, or
+    for a review of no item."""
+    if it is None:
+        return {}
     wt, _held = item_tree(repo, cfg, st, it, called_from)
     paths = changed_paths(repo, it) if wt is not None and wt.exists() else None
     snap = RP.path_snapshot(wt, paths) if paths is not None and wt is not None else None
@@ -2167,7 +2170,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     taken = _head_of(repo, it, branch, commit)
     # ...and the content the reviewer is sent is read now too (B44548e189d): `reviewed_paths`
     # taken when the round is recorded would claim as reviewed what changed meanwhile.
-    snapshot = _reviewed_snapshot(repo, cfg, st, it, called_from) if item else {}
+    snapshot = _reviewed_snapshot(repo, cfg, st, it, called_from)
     sargs: dict[str, Any] = {
         "item": item,
         "gate": gate,
