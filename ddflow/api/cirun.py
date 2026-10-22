@@ -118,7 +118,7 @@ def run(
     command: str = "",
     agent: str = "",
     called_from: Path | None = None,
-    timeout_s: int = 0,
+    timeout_s: int | None = None,
     log_to: Path | None = None,
     full: bool = False,
 ) -> O.Outcome:
@@ -133,7 +133,7 @@ def run(
     branch whose item is gone) takes the selected tests too: the selection needs only the diff
     against the base (B-ci-selected-runs-full-suite); it just records no gate."""
     log, cfg, st = _load(repo, agent)
-    if timeout_s and not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
+    if timeout_s is not None and not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
         return O.refused(
             "ci",
             f"--timeout {timeout_s} is outside 1..{cfg.gates.max_run_timeout_s} seconds "
@@ -147,7 +147,7 @@ def run(
         if why:
             return O.nothing("ci.run", why, status="unavailable")
     res = CI.run(
-        repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
+        repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s or 0,
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
     )  # fmt: skip
     data = res.as_data()
@@ -184,7 +184,7 @@ def ci_tool(
     agent: str = "",
     called_from: Path | None = None,
     full: bool = False,
-    timeout_s: int = 0,
+    timeout_s: int | None = None,
 ) -> O.Outcome:
     """The `ddflow_ci` tool: action run | status. ``ref`` empty is no ref (the held item's
     branch, Be81c39acb8); a ref named, `HEAD` included, is taken at its word (B8f41346d9f)."""

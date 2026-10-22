@@ -57,7 +57,7 @@ def cmd_ci(a, c: Ctx) -> int:
     )
     out = AR.run(c.repo, ref=ref, agent=c.log.agent_id, base=a.base, command=a.command, called_from=where,
                  full=bool(getattr(a, "full", False)),
-                timeout_s=int(getattr(a, "timeout", 0) or 0))  # fmt: skip
+                timeout_s=getattr(a, "timeout", None))  # fmt: skip
     if c.json:
         emit_json(out.body(""))
         return out.exit
