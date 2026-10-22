@@ -155,3 +155,20 @@ def test_a_command_gate_run_writes_the_wait_into_its_evidence(tmp_path):
     assert "waited_s" not in R.run_command_gate(quiet, tmp_path)[1]
     tiny = GateDef(id="ci", command=f"echo {CM.wait_line(0.0004)}")
     assert R.run_command_gate(tiny, tmp_path)[1]["waited_s"] == 0.0004
+
+
+def test_a_non_ci_command_gate_records_the_slot_wait_it_was_admitted_after(tmp_path, monkeypatch):
+    from ddflow.services import cmdrunner
+    from ddflow.services.gates import runner as R
+    from ddflow.services.gates.defs import GateDef
+
+    real = cmdrunner.CommandRunner.run
+
+    def slow(self, *a, **kw):
+        run = real(self, *a, **kw)
+        run.waited_s = 3.2  # as if an admission slot had been waited for
+        return run
+
+    monkeypatch.setattr(cmdrunner.CommandRunner, "run", slow)
+    outcome, ev = R.run_command_gate(GateDef(id="unit_tests", command="echo ok"), tmp_path)
+    assert outcome == "passed" and ev["waited_s"] == 3.2
