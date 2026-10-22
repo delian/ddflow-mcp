@@ -213,3 +213,37 @@ def test_the_commits_own_tree_decides_which_item_it_is_for(repo, cfg, monkeypatc
     _lined_other(repo, "src/new.py")
     monkeypatch.chdir(tree)
     assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_an_exact_lease_of_the_committers_other_item_does_not_hide_the_contest(
+    repo, cfg, monkeypatch
+):
+    """The committer's line-"1" item names src/new.py exactly, but this commit is for the
+    tree's own wildcard item on the default line, where another agent names it exactly too."""
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/new.py"]},
+    )
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(tree)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_outside_any_linked_tree_a_treeless_lease_is_not_the_commits_own(repo, cfg, monkeypatch):
+    """`here` None must not equal a lease's missing tree."""
+    _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "new.py").write_text("q = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
