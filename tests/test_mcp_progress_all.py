@@ -148,6 +148,7 @@ def test_an_unhashable_progress_token_does_not_fail_a_finished_call(repo, monkey
     monkeypatch.setitem(TOOLS, "ddflow_wait", spec)
     srv = mcp.Server(repo, called_from=repo)
     srv.notify = lambda frame: None
+    srv._says["another call"] = print  # a dict with entries hashes the key it is asked to pop
     reply = srv.handle(
         {
             "jsonrpc": "2.0",
