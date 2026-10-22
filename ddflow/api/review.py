@@ -1982,20 +1982,24 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
             GD.record(log, cfg, item, g, "unavailable", reason=out.reason, gates=gates)
             say(f"recorded {item}.{g} = unavailable (the combined review {rid} could not run)")
     _l, _c, st = _load(args["repo"], args["agent"])
-    if line := _charged_line(cfg, st.items.get(item), asked):
+    if line := _charged_line(cfg, st.items.get(item), asked, rec):
         say(line)
     data = {**out.data, "gates": asked, "review_id": rid}
     data["text"] = "\n".join([say_out[0], data.get("text", ""), *say_out[1:]]).strip()
     return O.Outcome(kind=out.kind, data=data, exit=out.exit, reason=out.reason)
 
 
-def _charged_line(cfg, it, asked: list[str]) -> str:
-    """What a combined review cost EACH gate (one 'rounds used' line cannot say which)."""
+def _charged_line(cfg, it, asked: list[str], rec) -> str:
+    """What a combined review cost EACH gate (one 'rounds used' line cannot say which): a
+    full round, unless it reached no reviewer or was the free retry of a partial one."""
     if it is None:
         return ""
     cap = cfg.review.max_rounds
     each = ", ".join(f"{g} {_rounds_used(it, g)}/{cap if cap > 0 else 'unlimited'}" for g in asked)
-    return f"combined review charged one full round to each gate: rounds used now {each}"
+    ev = (rec.evidence or {}) if rec is not None else {}
+    charged = ev.get("review_kind") == "full" and not ev.get("retry_of_partial")
+    what = "one full round to each gate" if charged else "no round to any gate"
+    return f"combined review charged {what}: rounds used now {each}"
 
 
 def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
