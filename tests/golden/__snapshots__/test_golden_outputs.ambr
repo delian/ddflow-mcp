@@ -1000,12 +1000,13 @@
       session.context_budget_tokens = 40000   [default]
           Ceiling, in tokens, on what ddflow itself costs a session before its first
           turn: the MCP instructions, `tools/list` for the active `[mcp].tools`
-          profile and the session brief. `ddflow doctor` prints `session start cost: N
-          tokens (budget M)` and says OVER when it is past;
-          tests/test_session_start_budget.py ratchets the same measurement. 0 sets no
-          budget (the cost is still shown).
+          profile and the session brief (what the SessionStart hook prints; a pending
+          one-line upgrade notice is not counted, since counting would use it up).
+          `ddflow doctor` prints `session start cost: N tokens (budget M)` and says
+          OVER when it is past; tests/test_session_start_budget.py ratchets the same
+          measurement. 0 sets no budget (the cost is still shown).
       session.start_chars_per_token = 4.0   [default]
-          Characters to a token in the session start cost estimate
+          Bytes (UTF-8) to a token in the session start cost estimate
           (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs
           nearer three, so lower it to be stricter. No tokenizer is imported.
       session.first_call = True   [default]
