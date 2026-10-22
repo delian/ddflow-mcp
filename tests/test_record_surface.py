@@ -90,7 +90,7 @@ def test_the_tool_schema_has_the_verb_enum_and_every_field_but_no_cli_flag():
     assert props["verb"]["enum"] == list(R.VERBS)
     assert props["tags"] == {"type": "array", "description": "Labels.", "items": {"type": "string"}}
     assert props["weight"]["type"] == "integer" and props["pinned"]["type"] == "boolean"
-    for cli_only in ("new", "extends", "duplicate_of", "related", "check"):
+    for cli_only in ("new", "extends", "duplicate_of", "related", "merge_into", "check"):
         assert cli_only not in props
     assert {"relation", "check_only", "where", "unset", "reason", AS_AGENT} <= set(props)
 
@@ -106,7 +106,16 @@ def test_a_verb_command_carries_only_the_parameters_its_verb_takes():
     fields = {f.name for f in NOTE.all_fields}
     assert by["list"] == {"where", "all", "limit"}
     assert by["show"] == {"id"}
-    assert by["add"] == {"id", *fields, "new", "extends", "duplicate_of", "related", "check"}
+    assert by["add"] == {
+        "id",
+        *fields,
+        "new",
+        "extends",
+        "duplicate_of",
+        "related",
+        "merge_into",
+        "check",
+    }
     assert by["edit"] == {"id", "unset", *fields}
     assert by["remove"] == {"id", "reason"}
     assert by["search"] == {"query", "mode", "where", "all", "limit"}

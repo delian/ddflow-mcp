@@ -1,0 +1,21 @@
+{
+ "command": "dsh --profile headless --dump-config-schema",
+ "exit": 0,
+ "bytes": 602329,
+ "top_level_keys": [
+  "$schema",
+  "title",
+  "description",
+  "$comment",
+  "type",
+  "items",
+  "$defs",
+  "x-cordis"
+ ],
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Cordis configuration for profile headless",
+ "defs_count": 76,
+ "defs_mentioning_mcp": [],
+ "has_patchList": true,
+ "note": "full 600 KB schema not committed; regenerate with the command above (it imports the composed plugins' schema modules: read the safety note in apps/cli/reference/README.md first)"
+}
