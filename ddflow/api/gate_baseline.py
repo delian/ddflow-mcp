@@ -25,7 +25,11 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
         return result, why
     # After a rerun the tests in doubt are the ones that failed ALONE, not the whole listing.
     seen = (
-        {**ev, "failed_tests": ev["rerun"]["still_failing"]}
+        {
+            **ev,
+            "failed_tests": ev["rerun"]["still_failing"],
+            "failed_tests_more": ev["rerun"].get("failed_tests_more", 0),
+        }
         if why and ev["rerun"].get("still_failing")
         else ev
     )

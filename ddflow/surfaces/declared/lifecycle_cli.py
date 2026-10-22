@@ -7,6 +7,7 @@ executor (`surfaces/cliexec.py`) prints what these return. It imports nothing th
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -166,7 +167,7 @@ def _without_own_verdict(tail: str, gate: str) -> str:
     prints one): the log carries ONE verdict, the gate's own, which also says what was
     rerun (B-ci-gate-prints-passed-with-failing-tests)."""
     lines = tail.rstrip().splitlines()
-    if lines and lines[-1].strip().lower() == f"{gate}: passed".lower():
+    if lines and re.match(rf"{re.escape(gate)}: passed(\s+—.*)?$", lines[-1].strip(), re.I):
         return "\n".join(lines[:-1])
     return tail
 

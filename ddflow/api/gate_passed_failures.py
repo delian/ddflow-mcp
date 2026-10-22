@@ -60,7 +60,7 @@ def apply(
     ok = outcome == "passed" and not still and not rev.get("failed_tests_more")
     ev["rerun"] = {
         "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
-        "still_failing": still, "tail": rev.get("tail", "")[-800:],
+        "still_failing": still, "failed_tests_more": rev.get("failed_tests_more", 0), "tail": rev.get("tail", "")[-800:],
         "flaked": ids if ok else [t for t in ids if t not in still] if still and not _fail_fast(gdef.command) else [],
     }  # fmt: skip
     flaked = ev["rerun"]["flaked"]
@@ -69,7 +69,9 @@ def apply(
         how="the listed failures passed on a rerun", why=ev.get("failed_reasons"),
         tails=ev.get("failure_tails"), cfg=cfg,
     ) if flaked else 0  # fmt: skip
-    if n:
+    if n is None:
+        ev["flakes_log_error"] = "the flake log could not be written (.ddflow/local/flakes.jsonl)"
+    elif n:
         ev["flakes_logged"] = n
     if ok:
         reason = f"passed after rerunning {_plural(len(ids))}: {_names(ids)}, each passed on rerun"
