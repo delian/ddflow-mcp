@@ -825,7 +825,8 @@
    "kinds",
    "open_only",
    "floor",
-   "limit"
+   "limit",
+   "item"
   ],
   "output_schema": {
    "type": "object",
@@ -839,6 +840,7 @@
     "open_only": {},
     "floor": {},
     "limit": {},
+    "item": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

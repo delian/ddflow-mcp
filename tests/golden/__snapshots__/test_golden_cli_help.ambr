@@ -630,7 +630,10 @@
 # ---
 # name: test_help[ddflow dupes]
   '''
-  usage: ddflow dupes [-h] [--kind KIND] [--open-only] [--floor FLOOR] [--limit LIMIT]
+  usage: ddflow dupes [-h] [--kind KIND] [--open-only] [--floor FLOOR] [--limit LIMIT] [item]
+  
+  positional arguments:
+    item           only the pairs this record id is in (default: the whole sweep)
   
   options:
     -h, --help     show this help message and exit
