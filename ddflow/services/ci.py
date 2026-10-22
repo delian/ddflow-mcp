@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import sys
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -431,7 +432,8 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
         return ""
     try:
         rep = regenerate_pins(tree, cfg, check=True, bounded=True)
-    except Exception:  # a precheck must not be what stops a run
+    except Exception as exc:  # a precheck must not be what stops a run -- but it says so
+        print(f"ci: the pins precheck could not run ({type(exc).__name__}: {exc})", file=sys.stderr)
         return ""
     if rep.problem or not rep.stale:
         return ""
