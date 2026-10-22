@@ -861,7 +861,9 @@ class _Vetted:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
-def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) -> str:
+def _implement_without_commits(
+    repo: Path, cfg, it, gate: str, result: str, wt, *, has_note: bool = False
+) -> str:
     """A refusal when `implement` is passed for an item whose own worktree has no commit
     ahead of its base, else "" (bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
@@ -869,6 +871,8 @@ def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) 
     be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
+    if it.kind == "research" and has_note:
+        return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
     if not (r.ok and r.out.strip() == "0"):
@@ -1214,7 +1218,17 @@ def record(
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
-    if not force and (why := _implement_without_commits(repo, cfg, it, gate, result, wt)):
+    if not force and (
+        why := _implement_without_commits(
+            repo,
+            cfg,
+            it,
+            gate,
+            result,
+            wt,
+            has_note=any(n.item == it.id for n in st.research.values()),
+        )
+    ):
         return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
     ev.update(vetted.evidence)
     warning = " ".join(filter(None, [warning, vetted.note]))
