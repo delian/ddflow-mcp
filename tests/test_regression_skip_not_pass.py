@@ -98,3 +98,4 @@ def test_a_run_that_ended_without_a_test_failure_did_not_fail_before():
     assert not_a_failure({"exit": 1, "summary": ["1 failed in 0.1s"]}, where="x") == ""
     # an interrupted run that had already failed the test still shows it failing
     assert not_a_failure({"exit": 2, "summary": ["1 failed, 1 passed in 1s"]}, where="x") == ""
+    assert not_a_failure({"exit": 1, "summary": ["1 failed, 1 xpassed in 1s"]}, where="x")
