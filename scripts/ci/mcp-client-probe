@@ -72,7 +72,7 @@ PENDING = (
     "cursor",
     "copilot",
     "antigravity",
-    "grok",
+    "grok-build",
     "windsurf",
     "amp",
     "droid",
@@ -120,6 +120,11 @@ def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) ->
         if row["list_changed"] == "unknown":
             return {**_unavailable(harness, row["reason"])}, 1
         return row, 1
+    if row["list_changed"] == "unknown" and done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:]
+        return _unavailable(
+            harness, f"exit {done.returncode} before the probe ran: {tail[0] if tail else ''}"
+        ), 2
     if row["list_changed"] == "unknown":
         row["reason"] = (
             f"exit {done.returncode}: the probe never sent list_changed "
