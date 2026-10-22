@@ -1204,6 +1204,7 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
             head
             + f"Finish it: `ddflow complete {it.id} --model <author model>`"
             + (" (it also clears the lease)." if rec.kind == "expired_lease" else ".")
+            + " (An advisory read: `complete` also runs the phase-suite and review checks.)"
         )
     else:
         rec.advice = (
