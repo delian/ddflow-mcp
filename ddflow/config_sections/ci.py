@@ -57,7 +57,7 @@ class CiConfig:
     )
     suite_queue_stale_s: int = knob(
         120,
-        doc="Seconds a run queued for the full-suite lock may go without a heartbeat before the queue passes over it (a stopped process). A waiter killed outright leaves the queue at once. Waiters are served first in, first out.",
+        doc="Seconds a run queued for the full-suite lock may go without a heartbeat before the queue passes over it (a stopped process). A waiter killed outright leaves the queue within about a second. Waiters are served first in, first out.",
     )
     suite_queue_grace_s: int = knob(
         120,
