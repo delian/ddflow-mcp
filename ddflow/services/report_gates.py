@@ -8,11 +8,21 @@ from pathlib import Path
 from typing import Any
 
 from . import gates as G
+from .gates.handrecord import RAN_BY
 from .gates.reviewers import family_of
 
 #: Evidence keys that show a tool or a reviewer produced the outcome. A gate with none of them
-#: was recorded by hand (`gate record ... --evidence`) and its note is all there is.
-TOOL_KEYS = ("command", "reviewer", "covered_by", "roborev", "branch_head", "ci_scope", "scope")
+#: was recorded by hand (`gate record ... --evidence`) and its note is all there is. A bare
+#: `command` string is the caller's word, not a run: only `command_digest` (`gate run`) counts.
+TOOL_KEYS = (
+    "command_digest",
+    "reviewer",
+    "covered_by",
+    "roborev",
+    "branch_head",
+    "ci_scope",
+    "scope",
+)
 
 
 def _family(ev: dict[str, Any], cfg) -> str:
@@ -23,7 +33,8 @@ def _family(ev: dict[str, Any], cfg) -> str:
 
 def _row(gate: str, rec, cfg) -> dict[str, Any]:
     ev = rec.evidence or {}
-    hand = rec.outcome in ("passed", "failed", "partial") and not any(k in ev for k in TOOL_KEYS)
+    by_tool = any(k in ev for k in TOOL_KEYS) or ev.get("ran_by") in RAN_BY
+    hand = rec.outcome in ("passed", "failed", "partial") and not by_tool
     row: dict[str, Any] = {
         "gate": gate,
         "outcome": rec.outcome,

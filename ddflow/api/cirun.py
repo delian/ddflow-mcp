@@ -13,6 +13,7 @@ from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
+from ..services.gates.handrecord import CI_RUN
 from ._base import _load
 from .ci import lease_tick, status
 from .gates import Evidence, record
@@ -88,6 +89,7 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
             command=res.command,
             exit_code={"passed": 0, "failed": 1}.get(res.status, 2),
             ci_scope=res.scope or None,
+            ran_by=CI_RUN,
         ),
         agent=agent,
         called_from=called_from,
