@@ -603,3 +603,26 @@ def test_a_cli_that_fails_after_the_probe_concluded_says_so(tmp_path):
         os.environ["PATH"] = old
     assert row["list_changed"] == "honours" and code == 1
     assert "exit 3" in row["reason"]
+
+
+def test_a_timeout_that_concluded_nothing_is_could_not_run_exit_2(tmp_path):
+    mod = _script()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "claude").write_text("#!/bin/sh\nsleep 30\n")
+    (fake / "claude").chmod(0o755)
+    import os
+
+    old = os.environ["PATH"]
+    os.environ["PATH"] = str(fake) + os.pathsep + old
+    try:
+        row, code = mod.probe_row("claude", timeout=1)
+    finally:
+        os.environ["PATH"] = old
+    assert row["list_changed"] == "unavailable" and code == 2
+    assert "timed out" in row["reason"]
+
+
+def test_unavailable_rows_and_analysis_rows_share_one_key_set():
+    mod = _script()
+    assert set(mod._unavailable("x", "why")) == set(_analyze()("")) | {"harness", "reason"}
