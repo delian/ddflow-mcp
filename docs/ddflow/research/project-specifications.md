@@ -44,7 +44,7 @@ more than 120 s, so no full test suite was run). Research notes: `R-specs-*` in 
    spec (`inject.collect` returns rules and decisions only); (d) no spec-to-plan step that carries
    section ids and acceptance criteria into tasks; (e) no spec review and approval step; (f) no
    spec-versus-code drift or contract check; (g) no acceptance-criterion to test to commit trace.
-5. **Proposal**: phase `P-specs`, 21 small tasks (one is this research), 8 in-phase waves, held
+5. **Proposal**: phase `P-specs`, 21 small tasks (one is this research), 9 in-phase waves, held
    behind the P-gaps core and the docs wave through `SPEC-decide` like `PI-decide`, no new MCP
    tool, one decision task with recommended defaults. Section 10.
 
@@ -378,11 +378,13 @@ In-phase waves (every need outside the phase counted as done):
 | 8 | SPEC-e2e |
 | 9 | SPEC-docs |
 
-Waves when the open outside dependencies are counted (a lower bound, since an open phase is counted
-as one step): `SPEC-decide` 2, `SPEC-model` 3, wave 4 and 5 as above, `SPEC-inject`, `SPEC-notify`,
-`SPEC-trace`, `SPEC-contract`, `SPEC-review` 6, `SPEC-report` 7, `SPEC-gate` 8 (waits on the
-`B-pipe-*` chain), `SPEC-baseline` 11 (waits on `PD-req-kind` -> `PD-trace` -> `PD-baseline`),
-`SPEC-e2e` 12, `SPEC-docs` 13. Consequence: the first usable slice is waves 1-5 (record, surfaces,
+Open outside chains lengthen two tasks and what follows them (`SPEC-gate`, `SPEC-baseline`);
+every other task keeps its in-phase wave. Counting each open outside item as one step per level of its own needs (a lower
+bound, because an open phase is counted as one step): `SPEC-gate` is at least wave 8 (it waits on
+the `B-pipe-*` chain), `SPEC-baseline` at least wave 11 (it waits on `PD-req-kind` -> `PD-trace` ->
+`PD-baseline`), so `SPEC-e2e` is at least wave 12 and `SPEC-docs` at least wave 13. `SPEC-decide`
+itself waits on the four open hold phases (below), which delays the whole phase but not the
+numbering. Consequence: the first usable slice is waves 1-5 (record, surfaces,
 file sync, binding, checks, lint, plan); `SPEC-gate` and `SPEC-baseline` arrive with the pipeline and
 product-docs work, and `SPEC-e2e` should not be started until they do. If the operator wants the
 slice earlier, `SPEC-e2e` can be split into a slice test (waves 1-6) and a full test; that choice is
@@ -392,7 +394,8 @@ a `SPEC-decide` question.
 `P-docs-search`) by design (`D-old-work-behind-core-docs-accepted`); lift the hold with
 `ddflow update SPEC-decide --needs ...` only if the operator says so.
 
-Linked (not re-added): `SPEC-model` extends `SDD-model` and `CN-spec-kind`; `SPEC-surfaces`,
+Linked (not re-added; all recorded as `related`, `SPEC-reconcile` decides whether `SDD-model` and
+`CN-spec-kind` become `extends` of the spec kind): `SPEC-model` to `SDD-model` and `CN-spec-kind`; `SPEC-surfaces`,
 `SPEC-dupes`, `SPEC-inject`, `SPEC-check`, `SPEC-trace`, `SPEC-gate` relate to their `RQM-*`
 counterparts; `SPEC-trace` to `PD-trace`, `TF-trace`, `SDD-trace`, `CN-trace`; `SPEC-baseline` to
 `PD-baseline`, `CN-baseline`; `SPEC-review` to `B-dt-drafts`; `SPEC-report` to `B-dt-health`;
