@@ -8,6 +8,8 @@ import stat
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git as _git
@@ -105,15 +107,21 @@ def test_a_chunk_re_run_keeps_the_findings_the_delta_carried_from_the_full_round
     assert _gate(repo).evidence["delta_from"]
 
 
-def test_a_delta_cut_from_an_explicit_base_is_completed_with_that_base(repo, tmp_path):
+@pytest.mark.parametrize("at", ["HEAD", "HEAD~1", "MID"])
+def test_a_review_cut_from_an_explicit_base_is_completed_with_that_base(repo, tmp_path, at):
+    """The user's own ref wins over the recorded delta start: with `--base` the cut is the
+    base's, a delta (the reviewed head) or not (a commit before it)."""
     flaky = _setup(repo, tmp_path)
     assert _review(repo).data["outcome"] == "passed"
-    reviewed = _git(repo, "rev-parse", "HEAD")
+    if at == "MID":  # a base AFTER the reviewed head but before the rest of the delta
+        _commit(repo, {"m.py": "m = 0"})
+        at = "HEAD"
+    base = _git(repo, "rev-parse", at)
     _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
-    assert _review(repo, base=reviewed).data["outcome"] == "partial"
+    assert _review(repo, base=base).data["outcome"] == "partial"
     (bad,) = (g["chunk"] for g in _gate(repo).evidence["unreviewed"])
     flaky.unlink()
-    out = _review(repo, chunks=[bad], base=reviewed)
+    out = _review(repo, chunks=[bad], base=base)
     assert out.exit == OK and out.data["outcome"] == "passed", out.reason
 
 
