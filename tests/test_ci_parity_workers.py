@@ -35,6 +35,8 @@ def cfg(wait=0.0, limit=1):
             command="",
             max_concurrent_suites=limit,
             suite_wait_s=wait,
+            suite_queue_stale_s=120,
+            suite_queue_grace_s=120,
         ),
         schedule=NS(signals={"load_per_core": {"high": 0.75}}),
     )
