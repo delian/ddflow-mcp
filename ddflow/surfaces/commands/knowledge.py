@@ -455,7 +455,7 @@ def _session_text(a, c: Ctx) -> str | None:
 
 
 #: How long a piped stdin may stay silent before it is judged to carry no text.
-_STDIN_WAIT_S = 3.0
+_STDIN_WAIT_S = 15.0
 
 
 def _stdin_speaks() -> bool:
