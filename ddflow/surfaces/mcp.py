@@ -59,6 +59,7 @@ from . import mcp_upgrade as _upgrade
 from . import projectkinds as PK
 from . import registry as _REGISTRY
 from .mcp_bound import BOUNDS
+from .mcp_heartbeat import heartbeat
 from .mcp_protocol import (  # noqa: F401
     CACHE_SCOPE,
     CACHE_TTL_MS,
@@ -557,6 +558,8 @@ class Server:
         #: Writes one JSON-RPC frame to the client; `serve` sets it. Without it (a bare
         #: `handle` call) a long tool simply sends no progress.
         self.notify: Callable[[dict[str, Any]], None] | None = None
+        #: The progress sender of each call in flight, by its token (`_progress`).
+        self._says: dict[Any, Callable[[str], None]] = {}
 
     def _structured(self, modern: bool) -> bool:
         """Whether this request is served with `outputSchema` / `structuredContent`: the knob
@@ -573,6 +576,8 @@ class Server:
         send = self.notify
         if token is None or send is None:
             return None
+        if (known := self._says.get(token)) is not None:
+            return known  # one counter per call: progress must only ever increase
         count = [0]
 
         def say(line: str) -> None:
@@ -592,6 +597,7 @@ class Server:
             except Exception:  # a closed pipe must not fail the review
                 pass
 
+        self._says[token] = say
         return say
 
     def _someone_else(self, per_call: str) -> bool:
@@ -903,7 +909,10 @@ class Server:
         try:
             if call.allow_older is not None:
                 self._override_skew(call.allow_older, agent)
-            result = self._invoke(spec, args, agent, call.per_call, call.params)
+            with heartbeat(
+                self.repo, name, self._progress(call.params) if name in OFFLOADED else None
+            ):
+                result = self._invoke(spec, args, agent, call.per_call, call.params)
         except Exception as exc:
             # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
             # class declaring exit 3 -- is a result to act on, not a failed call;
@@ -921,6 +930,9 @@ class Server:
             failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
             body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
             return _ok(mid, _text(body, error=failed, meta={"exit": code}))
+        finally:
+            meta = call.params.get("_meta")
+            self._says.pop(meta.get("progressToken") if isinstance(meta, dict) else None, None)
         # `text` may be a bool or a predicate on the arguments: `render`
         # returns a document with `--show` and a file list without it, and which
         # it is cannot be known until the call.
