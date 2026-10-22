@@ -72,3 +72,4 @@
 {"agent":"impl-soft-upgrade","data":{"at":1792686121.681255,"holder":"impl-soft-upgrade"},"id":"e2ab6dbc3ec11938f0ea59e00","kind":"lease.renewed","lamport":93228,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T16:22:01.731793Z"}
 {"agent":"impl-soft-upgrade","data":{"at":1792686629.2837288,"holder":"impl-soft-upgrade"},"id":"e161c64210c8dafc1a1216b10","kind":"lease.renewed","lamport":93296,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T16:30:29.332755Z"}
 {"agent":"impl-soft-upgrade","data":{"at":1792687154.8621702,"holder":"impl-soft-upgrade"},"id":"eabec63433ad0bdc661e63cb6","kind":"lease.renewed","lamport":93343,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T16:39:14.912689Z"}
+{"agent":"impl-soft-upgrade","data":{"gate":"critic"},"id":"e000e19455bb186a3ec9f6482","kind":"gate.started","lamport":93348,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T16:39:41.970063Z"}
