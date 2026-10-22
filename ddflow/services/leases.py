@@ -1187,7 +1187,11 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     v = CM.verdict(state, cfg, it.id, repo=repo, model=model)
     head = f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
     if v.may_complete:
-        rec.advice = head + f"Finish it: `ddflow complete {it.id}` (it also clears the lease)."
+        rec.advice = (
+            head
+            + f"Finish it: `ddflow complete {it.id}`"
+            + (" (it also clears the lease)." if rec.kind == "expired_lease" else ".")
+        )
     else:
         rec.advice = (
             head
