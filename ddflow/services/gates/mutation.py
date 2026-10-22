@@ -14,6 +14,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .defs import GateDef, load_gates
 from .regression_diag import describe_run
+from .regression_run import not_a_failure, not_a_pass
 from .regression_testfix import (
     REGRESSION_COULD_NOT_RUN,
     REGRESSION_FAILS_ON_FIX,
@@ -346,6 +347,9 @@ def verify_regression_test(
             **{f"fix_{k}": v for k, v in extra.items()},
         }
 
+    unproven = not_a_pass(fix_ev, where="the fixed tree", strict=True)
+    if unproven:
+        return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": unproven}
     try:
         base_sha = W.rev(repo, base)
     except W.GitError as exc:
@@ -405,6 +409,13 @@ def _prefix_check(
             "reason": pre_why,
             **{f"pre_{k}": v for k, v in pre_extra.items()},
         }
+    unproven = (
+        not_a_pass(pre_ev, where="the pre-fix tree", strict=False)
+        if pre_outcome == "passed"
+        else not_a_failure(pre_ev, where="the pre-fix tree")
+    )
+    if unproven:
+        return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": unproven}
     if pre_outcome == "passed":
         testfix = verify_test_only_fix(
             repo,

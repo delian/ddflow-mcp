@@ -14,6 +14,8 @@ Needs: {{ needs }}
 
 Note from the coordinator: {{ note }}
 {% endif %}
+<!-- section: rules -->
+{{ rules_text }}
 <!-- section: decisions -->
 {{ decisions_text }}
 <!-- section: lessons -->
