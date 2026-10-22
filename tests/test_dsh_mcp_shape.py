@@ -22,7 +22,7 @@ def _write(tmp: Path, name: str = "ddflow", entry: dict | None = None, **kw):
         tmp / ".ddflow/harness/dsh.cordis.yml",
         MC.SHAPE_CORDIS_PATCH,
         name,
-        entry or ENTRY,
+        ENTRY if entry is None else entry,
         rel=".ddflow/harness/dsh.cordis.yml",
         **kw,
     )
@@ -68,7 +68,7 @@ def test_patch_entries_without_an_insert_list_are_refused_not_guessed(tmp_path):
     path = tmp_path / "o.yml"
     path.write_text("- id: llm-pi-ai\n  config: {x: 1}\n")
     status, msg = MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)
-    assert status == "refused" and "no `- insert:`" in msg
+    assert status == "refused" and "`- insert:`" in msg
     assert path.read_text() == "- id: llm-pi-ai\n  config: {x: 1}\n"
 
 
@@ -123,3 +123,56 @@ def test_rows_are_valid_json_per_line(tmp_path):
     for line in (tmp_path / ".ddflow/harness/dsh.cordis.yml").read_text().splitlines():
         if line.startswith("    - "):
             json.loads(line.split("- ", 1)[1].rsplit("  #", 1)[0])
+
+
+def test_a_missing_overlay_is_no_servers_not_an_error(tmp_path):
+    assert (
+        harness.project_servers(
+            tmp_path, mcp_rel=".ddflow/harness/dsh.cordis.yml", shape=MC.SHAPE_CORDIS_PATCH
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize("bad", [None, "ddflow\n", 5])
+def test_server_name_must_be_exactly_a_string_of_the_allowed_characters(tmp_path, bad):
+    path = tmp_path / "o.yml"
+    status, _ = MC._register_cordis(path, "o.yml", bad, ENTRY, False, "ddflow")
+    assert status == "refused" and not path.exists()
+
+
+def test_the_name_argument_wins_over_a_serverName_in_the_entry():
+    assert MC.cordis_entry("ddflow", {"serverName": "evil", "command": "x"})["id"] == "ddflow"
+
+
+def test_two_rows_for_one_name_are_unknown_not_resolved_by_position(tmp_path):
+    path = tmp_path / "o.yml"
+    path.write_text(
+        "- insert:\n"
+        '    - {"id": "ddflow"}  # ddflow-row:ddflow\n'
+        '    - {"id": "ddflow"}  # ddflow-row:ddflow\n'
+    )
+    assert MC.cordis_rows(path.read_text()) is None
+    assert MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)[0] == "refused"
+
+
+def test_two_insert_lists_are_refused_not_guessed(tmp_path):
+    path = tmp_path / "o.yml"
+    path.write_text("- insert:\n    - {}\n- insert:\n    - {}\n")
+    assert MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)[0] == "refused"
+
+
+def test_a_row_without_an_insert_list_is_not_reported_as_refreshed(tmp_path):
+    path = tmp_path / "o.yml"
+    path.write_text('    - {"id": "x"}  # ddflow-row:ddflow\n')
+    assert MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)[0] == "refused"
+
+
+def test_non_server_rows_are_not_listed_as_mcp_servers(tmp_path):
+    _write(tmp_path)
+    path = tmp_path / ".ddflow/harness/dsh.cordis.yml"
+    path.write_text(path.read_text() + '    - {"id": "h", "name": "hooks"}  # ddflow-row:hooks\n')
+    servers = harness.project_servers(
+        tmp_path, mcp_rel=".ddflow/harness/dsh.cordis.yml", shape=MC.SHAPE_CORDIS_PATCH
+    )
+    assert list(servers) == ["ddflow"]

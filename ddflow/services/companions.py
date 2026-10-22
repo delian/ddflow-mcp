@@ -58,6 +58,7 @@ from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     _serves,
     _toml_without,
     cordis_rows,
+    cordis_servers,
 )
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
@@ -705,7 +706,7 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
         rows = cordis_rows(text)
         if rows is None:
             return None  # a tagged line that is not JSON: unreadable, not empty
-        return {n: r.get("config", {}) for n, r in rows.items()}, text
+        return cordis_servers(rows), text
     try:
         data = json.loads(text or "{}")
     except json.JSONDecodeError:

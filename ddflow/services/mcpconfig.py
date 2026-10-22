@@ -77,7 +77,8 @@ def server_entry_for(shape: str, entry: dict) -> dict:
             out["environment"] = entry["env"]
         return out
     if shape == SHAPE_CORDIS_PATCH:
-        if not _CORDIS_SERVER_NAME.match(str(entry.get("serverName", ""))):
+        server = entry.get("serverName")
+        if not isinstance(server, str) or not _CORDIS_SERVER_NAME.fullmatch(server):
             raise ValueError("a dsh serverName is 1-32 characters of [A-Za-z0-9_-]")
         config: dict = {k: v for k, v in entry.items() if v not in (None, {}, [])}
         config.setdefault("transport", "stdio")
@@ -102,7 +103,7 @@ def cordis_entry(name: str, entry: dict) -> dict:
     The ambient environment of the stdio child is scrubbed by dsh (`*KEY*`, `*TOKEN*`,
     `*SECRET*`, `*PASSWORD*`, every `DSH_*`), so anything the server needs goes in ``env``.
     """
-    return server_entry_for(SHAPE_CORDIS_PATCH, {"serverName": name, **entry})
+    return server_entry_for(SHAPE_CORDIS_PATCH, {**entry, "serverName": name})
 
 
 def cordis_rows(text: str) -> dict[str, dict] | None:
@@ -117,21 +118,29 @@ def cordis_rows(text: str) -> dict[str, dict] | None:
             row = json.loads(m["json"])
         except json.JSONDecodeError:
             return None
-        if not isinstance(row, dict):
-            return None
+        if not isinstance(row, dict) or m["name"] in rows:
+            return None  # not a row, or two rows for one name: which is current is unknown
         rows[m["name"]] = row
     return rows
+
+
+def cordis_servers(rows: dict[str, dict]) -> dict[str, dict]:
+    """The MCP servers among ``rows`` (the dsh-mcp-client rows), name -> launch config; the
+    overlay also carries other ddflow rows (the hooks bridge) that are not servers."""
+    return {n: r.get("config") or {} for n, r in rows.items() if r.get("name") == CORDIS_MCP_PLUGIN}
 
 
 def _cordis_place(lines: list[str], name: str, new_line: str) -> tuple[list[str], bool] | None:
     """``lines`` with ``new_line`` as ``name``'s row, and whether it replaced one; None when
     the file holds patch entries but no `- insert:` list to put a row in (never guessed)."""
+    inserts = [i for i, ln in enumerate(lines) if _CORDIS_INSERT.match(ln)]
     for i, ln in enumerate(lines):
         if (m := _CORDIS_ROW.match(ln)) and m["name"] == name:
-            return [*lines[:i], new_line, *lines[i + 1 :]], True
-    for i, ln in enumerate(lines):
-        if _CORDIS_INSERT.match(ln):
-            return [*lines[: i + 1], new_line, *lines[i + 1 :]], False
+            return ([*lines[:i], new_line, *lines[i + 1 :]], True) if inserts else None
+    if len(inserts) > 1:
+        return None  # which list is ours is unknowable from outside
+    if inserts:
+        return [*lines[: inserts[0] + 1], new_line, *lines[inserts[0] + 1 :]], False
     body = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
     if body and body != ["[]"]:
         return None
@@ -157,8 +166,7 @@ def _register_cordis(
     placed = _cordis_place(lines, name, f"    - {json.dumps(row)}  # ddflow-row:{name}")
     if placed is None:
         return "refused", (
-            f"SKIPPED {rel}: it holds patch entries but no `- insert:` list to add to; "
-            f"add {manual} by hand"
+            f"SKIPPED {rel}: it needs exactly one `- insert:` list to add to; add {manual} by hand"
         )
     out, replaced = "\n".join(placed[0]) + "\n", placed[1]
     if dry_run:
