@@ -56,10 +56,16 @@ def attestations(path: Path) -> list[dict]:
                     continue
                 result = row.get("toolUseResult") or {}
                 decision = (row.get("permissionDecision") or {}).get("decision")
-                ok = (
+                answers = result.get("answers")
+                ok = bool(
                     decision == "accept"
+                    and use["uuid"]
                     and row.get("sourceToolAssistantUUID") == use["uuid"]
-                    and isinstance(result.get("answers"), dict)
+                    and isinstance(answers, dict)
+                    and use["questions"]
+                    and all(
+                        isinstance(answers.get(q), str) and answers[q] for q in use["questions"]
+                    )
                 )
                 out.append(
                     {
@@ -100,6 +106,23 @@ def _selftest() -> int:
             "toolUseResult": {"answers": {"Q?": "Yes"}},
             "message": {"content": [{"type": "tool_result", "tool_use_id": "U1", "content": "x"}]},
         },
+        # accepted, but no answers / the wrong question / no row ids: nothing is attested
+        {
+            "type": "user",
+            "uuid": "R3",
+            "sourceToolAssistantUUID": "A1",
+            "permissionDecision": {"decision": "accept"},
+            "toolUseResult": {},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "U1", "content": "x"}]},
+        },
+        {
+            "type": "user",
+            "uuid": "R4",
+            "sourceToolAssistantUUID": "A1",
+            "permissionDecision": {"decision": "accept"},
+            "toolUseResult": {"answers": {"Other?": "Yes"}},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "U1", "content": "x"}]},
+        },
         # a result nobody asked for (a different tool_use id) and one with the wrong source row
         {
             "type": "user",
@@ -114,8 +137,34 @@ def _selftest() -> int:
         p = Path(d) / "t.jsonl"
         p.write_text("\n".join(json.dumps(r) for r in rows))
         got = attestations(p)
-    assert [g["attested"] for g in got] == [True, False], got
+    assert [g["attested"] for g in got] == [True, False, False, False], got
     assert got[0]["answers"] == {"Q?": "Yes"}
+    # rows without ids on both sides must not match each other (None == None)
+    bare = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "U9",
+                        "name": TOOL,
+                        "input": {"questions": [{"question": "Q?"}]},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "permissionDecision": {"decision": "accept"},
+            "toolUseResult": {"answers": {"Q?": "Yes"}},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "U9", "content": "x"}]},
+        },
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "b.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in bare))
+        assert [g["attested"] for g in attestations(p)] == [False]
     print("selftest ok")
     return 0
 
