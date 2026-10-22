@@ -12,7 +12,7 @@ Read on 2026-10-22: the GitHub page (WebFetch), a web search (third-party write-
 | REPORTED | a vendor or third-party statement not checked in the code |
 | UNKNOWN | not found; never guessed |
 
-Nothing here is VERIFIED by running dsh. `DSH-facts` is the task that runs it, in a scratch directory, with the operator's consent.
+Nothing in this document was run. `DSH-facts` ran dsh 0.2.1-rc.2 in a scratch directory with the operator's consent: results, corrections and what stays UNKNOWN are in `docs/ddflow/research/dsh-probe.md` (which supersedes any row below it contradicts).
 
 ## Does it exist, and is it what the operator described?
 
@@ -35,7 +35,7 @@ Yes, and the description fits, with three refinements.
 | Entry modes: `dsh <profile>`, `dsh --profile headless "job"`, `--profile acp`, `--profile sdk` (JSON-RPC stdio), `--profile sdk-minimal`, `dsh web`, `dsh plugin ...` | VERIFIED | `apps/cli/README.md` |
 | Released 2026-08-13 | REPORTED | search results |
 | Desktop (Electron) app exists | VERIFIED | `apps/desktop`, `package.json` scripts |
-| Product telemetry is a Desktop analytics consumer with a launch-time switch; "Ordinary Web clients do not collect product events" | VERIFIED | `docs/subsystems/product-telemetry.md` |
+| Product telemetry is a Desktop analytics consumer with a launch-time switch; "Ordinary Web clients do not collect product events" | VERIFIED, **but incomplete**: the base composition also mounts a feedback-gated `session-telemetry-otel` exporter (default `FEEDBACK_ONLY`, `DSH_TELEMETRY_MODE=DISABLED` turns it off); see dsh-probe.md | `docs/subsystems/product-telemetry.md` |
 | Whether the npm package phones home for a version check | UNKNOWN | not found |
 
 ## Harness facts
@@ -74,7 +74,7 @@ Yes, and the description fits, with three refinements.
 | Compaction | `compaction-basic`, `/compact` command, tool-result pruner, image offload | VERIFIED | `apps/cli/composition.md` |
 | Identity | bash-tool children get `DSH_HOME`, `DSH_SHELL=1`, `DSH_SESSION_ID`, `DSH_PROFILE`, `DSH_PROFILE_DIR` (reserved; plugins cannot override); MCP stdio children get **none** of them (scrubbed) | VERIFIED | `packages/shell/shell-env/README.md`, `mcp-client/README.md` |
 | Generic `AI_AGENT` marker | not found | UNKNOWN | grep not exhaustive |
-| First-turn token cost with ddflow | not measured | UNKNOWN | dsh's own system prompt and tool declarations were not counted; feeds `LS-measure` |
+| First-turn token cost with ddflow | about 154k chars (about 38k tokens) against 6k native: 123 `mcp__ddflow__*` tools, 115k chars of tool JSON | MEASURED in chars with a stub (dsh-probe.md) | dsh's own system prompt and tool declarations were not counted; feeds `LS-measure` |
 | Web search and fetch tools | `web-search-deepseek`, `web-fetch-http` are in the base composition | VERIFIED | `apps/cli/composition.md` |
 
 ### Client-matrix row (own section; not an edit of `mcp-client-matrix.md`)
@@ -176,14 +176,11 @@ Against, honestly: it is a developer preview that promises breaking changes, so 
 
 ## Stays UNKNOWN
 
-- Behaviour of anything above under a real run (nothing executed).
-- Whether `SessionStart` context from the detached hook always arrives before turn 1.
-- Exact tool names dsh gives its own tools (the matcher subject) and the shape of `PreToolUse` `tool_input`.
-- Session file location and layout, and whether it is readable without zstd tooling.
-- Whether the web-search and web-fetch tools are active in the headless profile by default.
+Resolved by `DSH-facts` (see `dsh-probe.md`): hook matcher names and `PreToolUse` shape, `SessionStart` ordering (headless), session file layout (readable with `zstd -dc`), web tools active in headless, first-turn size, MCP tool names. Still unknown:
+
+- Behaviour under a real model and real token counts (probe used a stub).
 - Whether any deferred or searched MCP tool exposure exists in dsh outside the docs read.
 - Subagent definition files, if any.
-- First-turn token cost of dsh itself and with ddflow.
 - Stability across 0.2.x; whether `engines.dsh` is meaningful for a profile row.
 - Windows behaviour (the base composition disables the bash sandbox on win32).
 - Whether the npm package makes any network call besides the configured provider.
