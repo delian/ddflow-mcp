@@ -90,7 +90,7 @@ def _armed(owner_pid: int) -> bool:
     longer waiting in the kernel on a pipe (/proc/<pid>/wchan names what a sleeper waits in)."""
     for pid in _watchers_of(owner_pid):
         try:
-            wchan = Path(f"/proc/{pid}/wchan").read_text()
+            wchan = Path(f"/proc/{pid}/wchan").read_text().strip()
         except OSError:
             continue
         if wchan not in ("", "0") and "pipe" not in wchan:
