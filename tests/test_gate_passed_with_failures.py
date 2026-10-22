@@ -1,0 +1,126 @@
+"""A command gate that exits 0 with failing tests in its output is not a plain pass
+(B-ci-gate-prints-passed-with-failing-tests).
+
+A gate listed 5 failing tests and was recorded `passed`. Now each failing test is run alone
+by ddflow: `passed` only when every one of them passed on that rerun, and the verdict says
+which were rerun. A failure with no recorded passing rerun is never `passed`. The log
+prints ONE verdict line (the command's own `ci: passed` and the gate's `ci: PASSED` used to
+be printed one after the other).
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+
+ID = "tests/test_x.py::test_a"
+
+
+def _project(repo: Path, *, broken: str = "", command: str = "./bin/pytest -q tests/") -> None:
+    """A fake pytest that lists ``test_a`` as FAILED yet exits 0 (a wrapper that masks the
+    exit) when run on the suite, and passes it on the node id alone unless a file `broken`
+    exists: ``broken="tree"`` makes it only in the item's tree, ``"base"`` in the base too."""
+    run_cli(repo, "init")
+    (repo / "bin").mkdir()
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text("def test_a():\n    pass\n")
+    script = repo / "bin" / "pytest"
+    script.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in *::*)\n'
+        '  if [ -e "$(dirname "$0")/../broken" ]; then\n'
+        f'    echo "FAILED {ID} - boom"; echo "1 failed in 0.1s"\n'
+        '    grep -q mask "$(dirname "$0")/../broken" && exit 0\n'
+        "    exit 1\n"
+        "  fi\n"
+        '  echo "1 passed in 0.1s"; exit 0;;\n'
+        "esac\n"
+        f'printf "FAILED {ID} - boom\\n1 failed, 3 passed in 0.1s\\nunit_tests: passed\\n"; exit 0\n'
+    )
+    script.chmod(0o755)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        f'[gate.unit_tests]\ncommand = {json.dumps(command)}\ncwd = "repo"\n'
+    )
+    if broken == "base":
+        (repo / "broken").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
+    if broken in ("tree", "mask"):
+        (repo / "broken").write_text(broken)
+
+
+def _record(repo: Path):
+    return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["unit_tests"]
+
+
+def test_failures_that_pass_alone_pass_and_the_verdict_names_them(repo) -> None:
+    _project(repo)
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 0, out + err
+    rec = _record(repo)
+    assert rec.outcome == "passed"
+    assert f"passed after rerunning 1 test: {ID}, each passed on rerun" in rec.evidence["reason"]
+    assert rec.evidence["rerun"]["flaked"] == [ID]
+    assert f"passed after rerunning 1 test: {ID}" in out
+
+
+def test_a_failure_that_fails_alone_never_yields_passed(repo) -> None:
+    _project(repo, broken="tree")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1, out + err
+    rec = _record(repo)
+    assert rec.outcome == "failed"
+    assert ID in rec.reason
+
+
+def test_a_failure_that_cannot_be_rerun_never_yields_passed(repo) -> None:
+    cmd = f"{sys.executable} -c \"print('FAILED {ID} - boom')\""
+    _project(repo, command=cmd)
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1, out + err
+    rec = _record(repo)
+    assert rec.outcome == "failed"  # found failures are never relabelled "could not run"
+    assert "no recorded passing rerun" in rec.evidence["reason"] or ID in rec.reason
+
+
+def test_the_log_prints_one_verdict(repo) -> None:
+    _project(repo)
+    _c, out, _e = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    verdicts = [ln for ln in out.splitlines() if ln.lower().startswith("unit_tests: passed")]
+    assert len(verdicts) == 1, out
+    assert not any(ln.strip().lower() == "unit_tests: passed" for ln in out.splitlines()), out
+
+
+def test_a_failure_that_fails_alone_and_on_the_base_is_baseline_red(repo) -> None:
+    _project(repo, broken="base")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code != 1 and "PASSED" not in out, out + err
+    assert _record(repo).outcome == "partial"
+
+
+def test_a_rerun_that_also_exits_0_over_failures_is_not_a_pass(repo) -> None:
+    _project(repo, broken="mask")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1, out + err
+    assert _record(repo).outcome == "failed"
+
+
+def test_a_capped_failure_list_never_yields_passed(repo) -> None:
+    """More failures than the evidence keeps (50): the rest are unnamed, so none can be rerun."""
+    many = "; ".join(f"echo FAILED tests/test_x.py::test_{i}" for i in range(60))
+    _project(repo, command=f"sh -c '{many}'")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    assert code == 1 and "PASSED" not in out, out + err
+    rec = _record(repo)
+    assert rec.outcome == "failed"
+    assert "more failing tests were not named" in rec.evidence["reason"]
