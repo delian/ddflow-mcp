@@ -1238,23 +1238,33 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         return kind, done, forced, diff, how, why, None
     if item:
         say(_rounds_report(cfg, it, a, why_ok))
-    if delta:
-        diff, how, why = _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
-    elif (a["chunks"] and not a["commit"] and not a["base"]) and (
-        found := _delta_cut(repo, cfg, it, a)
-    ):
-        diff, how, why = found
-    elif a["commit"]:
-        diff, how = commit_diff(repo, a["commit"])
-    else:
-        diff, how = diff_for(
-            repo, cfg, st, item, a["base"], branch=a["branch"], called_from=a["called_from"]
-        )
+    diff, how, why = _pick_diff(repo, cfg, st, it, a, delta)
     rerun = None
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
+
+
+def _pick_diff(repo, cfg, st, it, a: dict[str, Any], delta: bool) -> tuple[str, str, str]:
+    """(diff, how, why not): what this call reviews -- the delta, a `--chunk` re-run of a
+    recorded delta (`_delta_cut`), a commit, or the item's whole change."""
+    item, gate = a["item"], a["gate"]
+    if delta:
+        return _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
+    if (
+        a["chunks"]
+        and not a["commit"]
+        and not a["base"]
+        and (found := _delta_cut(repo, cfg, it, a))
+    ):
+        return found
+    if a["commit"]:
+        return (*commit_diff(repo, a["commit"]), "")
+    diff, how = diff_for(
+        repo, cfg, st, item, a["base"], branch=a["branch"], called_from=a["called_from"]
+    )
+    return diff, how, ""
 
 
 def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str, str] | None:
