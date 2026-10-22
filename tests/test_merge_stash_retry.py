@@ -180,14 +180,16 @@ def test_other_threads_sleeping_do_not_count_as_the_merge_pauses(repo, monkeypat
     _lock(repo)
     pauses = []
     _patch_sleep(monkeypatch, pauses.append)
-    stop = threading.Event()
+    stop, sleeping = threading.Event(), threading.Event()
 
     def neighbour():
         while not stop.is_set():
             time.sleep(0.0005)
+            sleeping.set()
 
     t = threading.Thread(target=neighbour)
     t.start()
+    assert sleeping.wait(10), "the neighbour must be sleeping before the merge starts"
     try:
         r = W.merge(repo, cfg, wt)
     finally:
