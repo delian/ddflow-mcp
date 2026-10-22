@@ -133,6 +133,12 @@ def run(
     branch whose item is gone) takes the selected tests too: the selection needs only the diff
     against the base (B-ci-selected-runs-full-suite); it just records no gate."""
     log, cfg, st = _load(repo, agent)
+    if timeout_s and not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
+        return O.refused(
+            "ci",
+            f"--timeout {timeout_s} is outside 1..{cfg.gates.max_run_timeout_s} seconds "
+            f"([gates].max_run_timeout_s bounds a per-run timeout)",
+        )
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
@@ -178,6 +184,7 @@ def ci_tool(
     agent: str = "",
     called_from: Path | None = None,
     full: bool = False,
+    timeout_s: int = 0,
 ) -> O.Outcome:
     """The `ddflow_ci` tool: action run | status. ``ref`` empty is no ref (the held item's
     branch, Be81c39acb8); a ref named, `HEAD` included, is taken at its word (B8f41346d9f)."""
@@ -192,6 +199,7 @@ def ci_tool(
             agent=agent,
             called_from=called_from,
             full=full,
+            timeout_s=timeout_s,
         )
     if action == "status":
         if base or command or ref not in ("", "HEAD"):
