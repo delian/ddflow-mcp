@@ -163,3 +163,51 @@ def test_the_same_line_by_name_and_by_default_is_one_branch(repo, cfg, monkeypat
     _other_holds(repo, "src/new.py")
     monkeypatch.chdir(tree)
     assert E.check_commit(repo, cfg, agent="owner")[0] == 1
+
+
+def _lined_other(repo: Path, glob: str) -> None:
+    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    other = EventLog(repo, "other")
+    other.append("task.updated", "T2", {"line": "1"})
+    other.append(
+        "lease.acquired",
+        "T2",
+        {"holder": "other", "at": time.time(), "ttl_s": 1800, "globs": [glob]},
+    )
+    other.append("item.started", "T2", {})
+
+
+def test_only_the_lines_of_the_leases_covering_the_path_count(repo, cfg, monkeypatch):
+    """The committer also holds a line-1 lease, but on other files: it does not make the
+    other agent's line-1 lease on src/new.py a rival of this commit."""
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "docs/*")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["docs/*"]},
+    )
+    _lined_other(repo, "src/new.py")
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_the_commits_own_tree_decides_which_item_it_is_for(repo, cfg, monkeypatch):
+    """Two items of the committer cover src/new.py, on lines "" and "1"; the tree being
+    committed in is the line-"" item's, so a line-1 rival is another branch."""
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/*"]},
+    )
+    _lined_other(repo, "src/new.py")
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
