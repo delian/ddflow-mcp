@@ -113,9 +113,11 @@ def test_harness_readers_understand_the_shape(tmp_path):
     assert harness.mcp_registered(tmp_path, h) is None
 
 
-def test_get_server_helpers_do_not_crash_on_the_yaml_shape():
-    assert MC.get_servers({}, MC.SHAPE_CORDIS_PATCH) == {}
-    assert MC.get_server({}, MC.SHAPE_CORDIS_PATCH, "ddflow") is None
+def test_json_readers_decline_the_yaml_shape_instead_of_reporting_no_servers():
+    with pytest.raises(ValueError, match="cordis_rows"):
+        MC.get_servers({}, MC.SHAPE_CORDIS_PATCH)
+    with pytest.raises(ValueError, match="cordis_rows"):
+        MC.get_server({}, MC.SHAPE_CORDIS_PATCH, "ddflow")
 
 
 def test_rows_are_valid_json_per_line(tmp_path):
