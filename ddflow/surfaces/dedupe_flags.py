@@ -77,7 +77,7 @@ def _interactive() -> bool:
         return False
 
 
-MENU = "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort"
+MENU = "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [m]erge into # / [a]bort"
 
 
 def ask(rows: list[dict[str, Any]], *, tries: int = 5) -> Answer | None:
@@ -117,6 +117,8 @@ def parse_reply(reply: str, rows: list[dict[str, Any]]) -> Answer | bool | None:
         "duplicate": "duplicate_of",
         "r": "related",
         "related": "related",
+        "m": "merge_into",
+        "merge": "merge_into",
     }.get(head)
     if rel is None:
         return False
