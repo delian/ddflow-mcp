@@ -164,3 +164,29 @@ def test_a_whitespace_only_reason_still_reads_as_no_reason():
 
     it = NS(gates={"ci": NS(reason="  \n ")})
     assert _unavailable_reasons(it, [("ci", "unavailable")]) == {"ci": "no reason was recorded"}
+
+
+@pytest.mark.usefixtures("fake_precommit")
+def test_a_custom_command_is_never_prechecked(repo, monkeypatch):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    default = _pinned_project(repo)
+    _drift(repo, default)
+    res = CI.run(repo, Config.load(repo), base=default, command="true")
+    assert res.ok, res.reason
+
+
+@pytest.mark.usefixtures("fake_precommit")
+def test_a_broken_precheck_says_so_and_the_run_goes_on(repo, monkeypatch, capsys):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    default = _pinned_project(repo)
+    _drift(repo, default)
+
+    def boom(*a, **k):
+        raise RuntimeError("recipes unreadable")
+
+    monkeypatch.setattr(CI, "regenerate_pins", boom)
+    res = CI.run(repo, Config.load(repo), base=default)
+    assert res.ok, res.reason
+    assert (
+        "pins precheck could not run (RuntimeError: recipes unreadable)" in capsys.readouterr().err
+    )
