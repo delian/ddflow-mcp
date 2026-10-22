@@ -55,15 +55,15 @@ def test_the_json_report_carries_the_numbers(repo):
 
 
 def test_a_cost_past_the_budget_says_over():
-    cost = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=50)
+    cost = SC.measure({"a": "x" * 400}, bytes_per_token=4.0, budget=50)
     assert (cost.tokens, cost.over) == (100, 50)
     assert cost.line().startswith("session start cost: 100 tokens (budget 50) -- OVER by 50")
-    assert SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0).over == 0
+    assert SC.measure({"a": "x" * 400}, bytes_per_token=4.0, budget=0).over == 0
 
 
 def test_the_ratio_is_the_knobs_not_a_constant():
-    a = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0).tokens
-    b = SC.measure({"a": "x" * 400}, chars_per_token=2.0, budget=0).tokens
+    a = SC.measure({"a": "x" * 400}, bytes_per_token=4.0, budget=0).tokens
+    b = SC.measure({"a": "x" * 400}, bytes_per_token=2.0, budget=0).tokens
     assert (a, b) == (100, 200)
 
 
@@ -80,7 +80,7 @@ def test_the_start_cost_stays_under_its_ceiling(repo):
     cfg = Config.load(repo)
     cost = SC.measure(
         start_texts(repo, "x"),
-        chars_per_token=cfg.session.start_bytes_per_token,
+        bytes_per_token=cfg.session.start_bytes_per_token,
         budget=cfg.session.context_budget_tokens,
     )
     assert all(cost.parts.values()), cost.parts  # a part that measured 0 is a part that broke
@@ -100,7 +100,7 @@ def test_measuring_leaves_the_once_per_version_notice_alone(repo):
 
 
 def test_the_cost_is_counted_in_bytes_not_code_points():
-    cost = SC.measure({"a": "é" * 400}, chars_per_token=4.0, budget=0)
+    cost = SC.measure({"a": "é" * 400}, bytes_per_token=4.0, budget=0)
     assert (cost.bytes["a"], cost.tokens) == (800, 200)
 
 
@@ -126,8 +126,8 @@ def test_a_failing_surface_leaves_an_empty_cost_not_a_failed_doctor(repo):
 
 def test_a_pending_notice_is_covered_by_a_reserve_so_the_first_session_fits():
     """The notice cannot be counted without being used up, so the cost holds a reserve for it."""
-    plain = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0)
-    held = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0, reserve=100)
+    plain = SC.measure({"a": "x" * 400}, bytes_per_token=4.0, budget=0)
+    held = SC.measure({"a": "x" * 400}, bytes_per_token=4.0, budget=0, reserve=100)
     assert (plain.tokens, held.tokens) == (100, 200)
     assert "upgrade notice (reserve) 100" in held.line()
 
@@ -150,7 +150,7 @@ def test_the_ratio_knob_is_in_bytes():
 
 
 def test_nothing_measured_reserves_nothing():
-    cost = SC.measure({}, chars_per_token=4.0, budget=50, reserve=100)
+    cost = SC.measure({}, bytes_per_token=4.0, budget=50, reserve=100)
     assert (cost.tokens, cost.over, cost.notes()) == (0, 0, [])
 
 
@@ -206,7 +206,7 @@ def test_the_real_notice_the_hook_prints_fits_the_default_reserve(tmp_path):
 
 
 def test_only_empty_texts_reserve_nothing():
-    cost = SC.measure({"brief": ""}, chars_per_token=4.0, budget=100, reserve=64)
+    cost = SC.measure({"brief": ""}, bytes_per_token=4.0, budget=100, reserve=64)
     assert cost.tokens == 0 and cost.over == 0
 
 
@@ -232,3 +232,21 @@ def test_measuring_a_pending_notice_neither_shows_nor_uses_it_up(tmp_path):
     assert "Upgraded ddflow" not in measured
     real = brief(old, check_recovery=False, agent="x").data["text"]
     assert "Upgraded ddflow" in real
+
+
+def test_one_part_that_fails_is_said_not_counted_as_zero(repo, monkeypatch):
+    _adopted(repo)
+
+    def boom(*a, **k):
+        raise RuntimeError("no handshake")
+
+    monkeypatch.setattr(mcp, "_instructions", boom)
+    cost = SC.report(repo, Config.load(repo), "x", start_texts)
+    assert cost.notes() == [
+        "session start cost: could not be measured (RuntimeError: no handshake)"
+    ]
+
+
+def test_the_reserve_has_a_byte_size_beside_its_tokens():
+    cost = SC.measure({"a": "x" * 40}, bytes_per_token=4.0, budget=0, reserve=100)
+    assert cost.bytes["upgrade notice (reserve)"] == 400 and set(cost.parts) == set(cost.bytes)

@@ -4,7 +4,7 @@ A spawned agent pays, in tokens, for the MCP `initialize` instructions, for `too
 (the active `[mcp].tools` profile) and for the session brief the SessionStart hook prints.
 They were measured one at a time (tests/test_mcp_tool_budget.py), never together, so a
 64K first turn was invisible. This module only counts: the surface that owns each text
-passes it in (the service layer imports no surface), and the estimate is characters over a
+passes it in (the service layer imports no surface), and the estimate is bytes over a
 ratio (`[session].start_bytes_per_token`), so no tokenizer is imported.
 
 Measuring must not CHANGE anything: the upgrade notice is said once per version and the brief
@@ -88,16 +88,17 @@ class StartCost:
 
 
 def measure(
-    texts: Mapping[str, str], *, chars_per_token: float, budget: int, reserve: int = 0
+    texts: Mapping[str, str], *, bytes_per_token: float, budget: int, reserve: int = 0
 ) -> StartCost:
-    """The cost of ``texts`` (name -> what the session is handed), at ``chars_per_token``."""
-    ratio = chars_per_token if chars_per_token > 0 else 4.0
+    """The cost of ``texts`` (name -> what the session is handed), at ``bytes_per_token``."""
+    ratio = bytes_per_token if bytes_per_token > 0 else 4.0
     sizes = {name: len(text.encode("utf-8")) for name, text in texts.items()}  # bytes
     parts = {name: max(1, round(n / ratio)) if n else 0 for name, n in sizes.items()}
     if reserve > 0 and any(
         sizes.values()
     ):  # a pending notice cannot be counted without being used up
         parts["upgrade notice (reserve)"] = reserve
+        sizes["upgrade notice (reserve)"] = round(reserve * ratio)
     return StartCost(parts=parts, bytes=sizes, budget=budget)
 
 
@@ -113,7 +114,7 @@ def report(repo, cfg, agent: str, start_texts) -> StartCost:
             texts = start_texts(repo, agent)
         return measure(
             texts,
-            chars_per_token=cfg.session.start_bytes_per_token,
+            bytes_per_token=cfg.session.start_bytes_per_token,
             budget=cfg.session.context_budget_tokens,
             reserve=cfg.session.start_notice_reserve_tokens,
         )
