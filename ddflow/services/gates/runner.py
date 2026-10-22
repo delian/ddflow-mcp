@@ -280,6 +280,16 @@ class Classified(NamedTuple):
     reason: str = ""
 
 
+_BLOCKED_ON = re.compile(r"blocked on [^\n]+")
+
+
+def _blocked_on(output: str) -> str:
+    """The last "blocked on <holder> since <time>, you are #k in the queue" line of a command's
+    output (`ddflow ci run` says it when the host suite lock stayed taken), else ""."""
+    found = _BLOCKED_ON.findall(output)
+    return found[-1].strip() if found else ""
+
+
 def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     """`(outcome, reason)` for a command that RAN. The reason is "" for a plain pass/fail.
 
@@ -288,6 +298,15 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     rule decides nothing, and guessing either way would be a verdict nobody gave.
     """
     if code in gdef.unavailable_exits:
+        blocked = _blocked_on(output)
+        if blocked:  # the host suite lock: say who, not only that exit 2 means unavailable
+            return Classified(
+                GateOutcome.UNAVAILABLE,
+                (
+                    f"{blocked} (the full-suite lock, wait limit [ci].suite_wait_s; exit {code} is "
+                    f"declared UNAVAILABLE for this gate): the tool could not run. NOT a failing check."
+                ),
+            )
         return Classified(
             GateOutcome.UNAVAILABLE,
             (
