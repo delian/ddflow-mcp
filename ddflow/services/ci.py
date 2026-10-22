@@ -35,6 +35,7 @@ from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
 from .pins import pin_files
+from .pins import regenerate as regenerate_pins
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
@@ -373,6 +374,8 @@ def run(
         if tree is None:
             status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
+        if cfg.ci.pins_precheck and not command.strip() and (stale := _stale_pins(tree, cfg, base)):
+            return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
@@ -408,6 +411,24 @@ def run(
     if scope is None and used:
         res.scope = {"workers": used}
     return res
+
+
+def _stale_pins(tree: Path, cfg: Config, base: str) -> str:
+    """Why the merge result's pinned outputs are stale, or "" (current, none, or not checkable).
+
+    A read-only `pins regenerate --check` in the scratch tree, each recipe bounded by
+    `[pins].after_merge_timeout_s`: one that cannot finish is unknown, and never fails the run."""
+    try:
+        rep = regenerate_pins(tree, cfg, check=True, bounded=True)
+    except Exception:  # a precheck must not be what stops a run
+        return ""
+    if rep.problem or not rep.stale:
+        return ""
+    names = ", ".join(p.name for p in rep.stale)
+    return (
+        f"pins stale after merging {base or 'the base'}: re-record them ({names}) with "
+        "`ddflow pins regenerate`, commit, and run ci again"
+    )
 
 
 def _default_with_tripwires(
