@@ -425,11 +425,12 @@ def _shell_group(
         raise
 
 
-#: The watcher: started BY the owner BEFORE the command (so there is no gap in which the command
-#: exists and nothing watches it) and told the command's process group on its stdin once that
-#: exists. It polls whether the owner is still its parent; when the owner is gone it kills the
-#: group until it is gone, and it ends when the group is gone (or at once if the owner died before
-#: it was told a group). The last argv element names it for `ps` and the tests.
+#: The watcher: started BY the owner BEFORE the command and told the command's process group on
+#: its stdin once that exists, so the only moment the command runs unwatched is the pipe write
+#: after it starts: microseconds (bug Bdced4d9917). It polls whether the owner is still its
+#: parent; when the owner is gone it kills the group until it is gone, and it ends when the
+#: group is gone (or at once if the owner died before it was told a group). The last argv element
+#: names it for `ps` and the tests.
 _WATCHER = (
     "import os, signal, sys, time\n"
     "owner = int(sys.argv[1])\n"
