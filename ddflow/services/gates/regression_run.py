@@ -49,10 +49,16 @@ def not_a_pass(ev: dict[str, Any], *, where: str, strict: bool) -> str:
 def not_a_failure(ev: dict[str, Any], *, where: str) -> str:
     """Why a run that exited non-zero did not FAIL the test ("" when it did): no test was
     collected, or it errored (a fixture, a collection error) rather than failed."""
-    if ev.get("exit") in NO_TEST_RAN:
+    code = ev.get("exit")
+    if code in NO_TEST_RAN:
         return (
-            f"no test ran on {where} (pytest exited {ev.get('exit')}: the named test was not "
+            f"no test ran on {where} (pytest exited {code}: the named test was not "
             f"collected), so it did not fail before the fix"
+        )
+    if isinstance(code, int) and code != 1:  # 2 interrupted / collection error, 3 internal
+        return (
+            f"the run on {where} ended without a test failure (pytest exited {code}: "
+            f"interrupted or an internal error), so the test is not shown to fail before the fix"
         )
     counts = _counts(ev)
     if counts and not counts.get("failed"):

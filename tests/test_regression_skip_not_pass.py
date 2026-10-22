@@ -88,3 +88,11 @@ def test_a_test_not_collected_on_the_pre_fix_tree_did_not_fail_before(repo):
 
 def test_a_test_that_errors_on_the_pre_fix_tree_did_not_fail_before(repo):
     _assert_gap(repo, "error_before")
+
+
+def test_a_run_that_ended_without_a_test_failure_did_not_fail_before():
+    from ddflow.services.gates import not_a_failure
+
+    for code in (2, 3, 4, 5):  # interrupted/collection error, internal error, not found, none
+        assert not_a_failure({"exit": code, "summary": []}, where="the pre-fix tree"), code
+    assert not_a_failure({"exit": 1, "summary": ["1 failed in 0.1s"]}, where="x") == ""
