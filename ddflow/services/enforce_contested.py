@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..config import Config
+from ..core.flow import line_key
 from ..core.globs import inside as path_in_glob
 from ..core.model import Lease, State
 from ..core.schedule import is_shared, shared_globs
@@ -46,23 +47,40 @@ def contested(
     ]
     if not subject:
         return {}
+    leases = L.unfinished_leases(state, cfg, now)
+    lines = {
+        line_key(state, state.items[i], cfg)
+        for i, lz in leases.items()
+        if i in state.items and is_mine(lz)
+    }
     out: dict[str, str] = {}
-    for item_id, lz in L.unfinished_leases(state, cfg, now).items():
+    for item_id, lz in leases.items():
         other = state.items.get(item_id)
         if other is None or is_mine(lz):
             continue
-        held = [p for p in subject if p not in out and _holds(log, other, lz, p, shared)]
-        out.update(dict.fromkeys(held, f"{item_id} ({lz.holder})"))
+        if lines and line_key(state, other, cfg) not in lines:
+            continue  # another release line is another branch: no clash, as for `update`
+        changed: list[str] | None = None
+        loaded = False
+        for p in subject:
+            if p in out:
+                continue
+            names = _names(lz, p, shared)
+            if not names:
+                continue
+            if any(not _wild(g) for g in names):
+                hit = True
+            else:
+                if not loaded:  # one git read per lease, not per path
+                    changed, loaded = L.holder_changed_paths(log, other), True
+                hit = changed is None or p in changed
+            if hit:
+                out[p] = f"{item_id} ({lz.holder})"
     return out
 
 
-def _holds(log: EventLog, other, lz: Lease, path: str, shared: list[str]) -> bool:
-    """Does ``lz`` claim ``path`` as `update` would count it: an exact glob always, a wildcard
-    only once its holder has changed that path (or git cannot say what they changed)."""
-    names = [g for g in lz.globs if not is_shared(g, shared) and path_in_glob(path, g)]
-    if not names:
-        return False
-    if any(not _wild(g) for g in names):
-        return True
-    changed = L.holder_changed_paths(log, other)
-    return changed is None or path in changed
+def _names(lz: Lease, path: str, shared: list[str]) -> list[str]:
+    """The globs of ``lz`` that claim ``path`` and are not shared. An exact one always holds
+    it; a wildcard only once its holder has changed that path (or git cannot say), as
+    `update` counts it."""
+    return [g for g in lz.globs if not is_shared(g, shared) and path_in_glob(path, g)]

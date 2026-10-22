@@ -73,3 +73,68 @@ def test_a_finished_items_lease_is_not_named_as_the_holder_of_an_uncovered_path(
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1, msg
     assert "ANOTHER agent" not in msg and "T2 (other)" not in msg, msg
+
+
+def _other_holds_wild(repo: Path, cfg, glob: str, *, changed: str | None) -> None:
+    """T2 held by "other" on a wildcard, in a tree of its own that changed ``changed``."""
+    from ddflow.infra import worktree as W
+
+    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    wt = W.create(repo, cfg, "T2")
+    EventLog(repo, "other").append(
+        "lease.acquired",
+        "T2",
+        {
+            "holder": "other",
+            "at": time.time(),
+            "ttl_s": 1800,
+            "globs": [glob],
+            "worktree": W.store_path(repo, wt.path),
+            "branch": wt.branch,
+        },
+    )
+    if changed:
+        (wt.path / changed).parent.mkdir(parents=True, exist_ok=True)
+        (wt.path / changed).write_text("z = 1\n")
+        subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(wt.path),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-qm",
+                "c",
+            ],
+            check=True,
+        )
+
+
+def test_a_wildcard_holder_who_changed_the_file_holds_it(repo, cfg, monkeypatch):
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    _other_holds_wild(repo, cfg, "src/n*", changed="src/new.py")
+    monkeypatch.chdir(tree)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_a_wildcard_holder_who_never_touched_the_file_does_not(repo, cfg, monkeypatch):
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    _other_holds_wild(repo, cfg, "src/n*", changed="docs/readme.md")
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_the_holders_own_finished_lease_still_covers_its_last_commit(repo, cfg, monkeypatch):
+    """Deliberate: only ANOTHER agent's finished lease is ignored; the holder's own stays."""
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    EventLog(repo, "owner").append("item.abandoned", "T1", {"reason": "done"})
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
