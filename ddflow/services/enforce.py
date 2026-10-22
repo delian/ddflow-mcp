@@ -62,7 +62,7 @@ from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirec
 from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
-from . import docsync
+from . import docsync, leases
 from . import drift as D
 from . import enforce_contested as EC
 from . import pins_written as PW
@@ -1357,15 +1357,13 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
 
 
 def _split_leases(
-    repo: Path, state, me: str, here: Path, now: float, grace_s: float
+    repo: Path, state, cfg: Config, me: str, here: Path, now: float
 ) -> tuple[list[str], dict[str, str], bool]:
     """(globs I hold, glob -> "item (holder)" of every other live lease, whether I hold any)."""
     mine: list[str] = []
     others: dict[str, str] = {}
     holds_any = False
-    for item_id, lease in state.active_leases(now, grace_s).items():
-        if item_id in state.items and state.items[item_id].terminal:
-            continue  # a finished item holds nothing, as for `update` (Bb7df2561a1)
+    for item_id, lease in leases.unfinished_leases(state, cfg, now).items():  # as for `update`
         if _counts_as_mine(repo, lease, me, here):
             holds_any = True
             mine.extend(lease.globs)
@@ -1590,7 +1588,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)
-    mine, others, holds_any = _split_leases(repo, state, me, here, now, cfg.lease.grace_s)
+    mine, others, holds_any = _split_leases(repo, state, cfg, me, here, now)
 
     # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.

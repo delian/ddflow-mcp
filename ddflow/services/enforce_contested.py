@@ -47,8 +47,8 @@ def contested(
             continue
         other_line = line_key(state, other, cfg)
         cache: dict[str, list[str] | None] = {}  # one git read per lease, not per path
-        for p, mine_line in lines.items():
-            if p in out or other_line != mine_line:
+        for p, mine_lines in lines.items():
+            if p in out or other_line not in mine_lines:
                 continue  # taken already, or another release line: another branch, as for `update`
             if _holds_path(log, other, lz, p, shared, cache):
                 out[p] = f"{item_id} ({lz.holder})"
@@ -63,13 +63,14 @@ def _commit_lines(
     is_mine: Callable[[Lease], bool],
     in_tree: Callable[[Lease], bool],
     shared: list[str],
-) -> dict[str, str]:
-    """path -> the release line its commit is for, for each path the committer covers by
+) -> dict[str, set[str]]:
+    """path -> the release line(s) its commit can be for, for each path the committer covers by
     WILDCARDS only. The leases covering a path are the committer's; the one made for the tree
     being committed in is the commit's own item, and when there is one only it counts, so
-    the lines of the committer's other items never decide. A path two lines claim, or one an
-    exact glob covers, is left out: an exact holder is never overlapped."""
-    out: dict[str, str] = {}
+    the lines of the committer's other items never decide. A path the committer covers on two lines with no
+    tree to tell them apart is for either, so a rival on any of them contests it; one an exact
+    glob covers is left out: an exact holder is never overlapped."""
+    out: dict[str, set[str]] = {}
     for p in paths:
         if is_shared(p, shared):
             continue
@@ -86,8 +87,8 @@ def _commit_lines(
         if any(here for _, here, _ in cover):
             cover = [c for c in cover if c[1]]
         lines = {line for line, _, _ in cover}
-        if len(lines) == 1 and all(_wild(g) for _, _, gs in cover for g in gs):
-            out[p] = lines.pop()
+        if lines and all(_wild(g) for _, _, gs in cover for g in gs):
+            out[p] = lines
     return out
 
 

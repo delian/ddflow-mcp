@@ -247,3 +247,26 @@ def test_outside_any_linked_tree_a_treeless_lease_is_not_the_commits_own(repo, c
     subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_a_path_two_of_the_committers_lines_cover_is_contested_by_a_rival_on_either(
+    repo, cfg, monkeypatch
+):
+    """Outside any linked tree nothing says which item the commit is for."""
+    _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/*"]},
+    )
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "new.py").write_text("w = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
