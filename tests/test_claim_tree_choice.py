@@ -81,3 +81,23 @@ def test_the_cli_names_the_reason_for_a_new_tree(repo):
     code, out, err = run_cli(repo, "claim", "T1", agent="a")
     assert code == 0, out + err
     assert "a tree of its own" in out and "primary" in out, out
+
+
+def test_the_cli_from_a_free_linked_worktree_adopts_it_and_says_so(repo):
+    import os
+    import subprocess
+
+    tree = _seed(repo)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    env.pop("DDFLOW_AGENT", None)
+    p = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--agent", "a", "claim", "T1"],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+    )
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "adopted" in p.stdout and "a tree of its own" not in p.stdout, p.stdout
+    assert str(tree.resolve()) in p.stdout, p.stdout
