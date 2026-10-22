@@ -120,3 +120,13 @@ def test_a_tree_that_moved_after_the_proof_is_kept(repo, tmp_path, monkeypatch):
     done = CL.apply(repo, Config.load(repo), plan, EventLog(repo, "sweeper"))
     assert tree.exists(), done
     assert "ddflow/T1" in _g(repo, "branch", "--format=%(refname:short)").split()
+
+
+def test_allow_ahead_still_refuses_a_file_written_after_the_proof(repo, tmp_path):
+    from ddflow.infra import worktree as W
+
+    tree = _landed_then_abandoned(repo, tmp_path)
+    (tree / "scratch.txt").write_text("written after the check\n")
+    wt = W.Worktree(item="T1", path=tree, branch="ddflow/T1", base="main")
+    r = W.remove(repo, Config.load(repo), wt, allow_ahead=True)
+    assert not r.ok and tree.exists()
