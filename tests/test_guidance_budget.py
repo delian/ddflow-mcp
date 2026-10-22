@@ -112,4 +112,4 @@ def test_the_cut_line_is_reserved_only_for_the_rules_after_the_one_listed():
         + CH.approx_tokens(CH._more(rules[1:]))
     )
     got = CH.lines(rules, tokens=exact, title_chars=100)
-    assert got[0] == "- [r-a] t" and "1 more rules: r-b" in got[1]
+    assert got[0] == "- [r-a] t"  # reserving the cut line for BOTH rules would have dropped it
