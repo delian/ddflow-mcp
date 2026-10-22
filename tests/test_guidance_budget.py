@@ -84,11 +84,11 @@ def test_the_claim_block_reserves_slots_for_rules(repo):
 
 def test_the_charter_survives_the_backstop_on_a_tiny_budget(repo):
     _project(repo)
-    assert run_cli(repo, "config", "session.brief_max_tokens", "260")[0] == 0
+    assert run_cli(repo, "config", "session.brief_max_tokens", "420")[0] == 0
     data = lifecycle.brief(repo, item="T1", agent="a1").data
     for i in range(RULES):
         assert f"r-charter{i}" in data["text"], (i, data["text"])
-    assert data["approx_tokens"] <= 260 * 1.1
+    assert data["approx_tokens"] <= 420 * 1.1
 
 
 def test_a_charter_that_cannot_fit_is_counted_not_dumped():
@@ -127,3 +127,8 @@ def test_a_rule_the_charter_cut_keeps_its_text_in_the_rules_block():
     gov = SimpleNamespace(records=lambda kind: [listed, cut])
     got = _rules_block(gov, charter="- [r-listed] L\n- _1 more rules: r-cut; `ddflow rule list`_")
     assert "r-cut" in got and "r-listed" not in got
+
+
+def test_listed_reads_the_ids_of_charter_lines_not_of_the_cut_line():
+    text = "- [r-a] A\n- [r-b] B (pinned)\n- _2 more rules: r-c, r-d; `ddflow rule list`_"
+    assert CH.listed(text) == {"r-a", "r-b"}

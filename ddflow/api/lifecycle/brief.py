@@ -277,9 +277,6 @@ def brief(
             break
 
     recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
-    charter = CH.block(st, cfg)
-    decisions, rules = _governing(cfg, st, item, rules, charter=charter)
-
     live = sorted(
         (m for m in st.memories.values() if m.live),
         key=lambda m: (m.origin_at or m.at, m.at),
@@ -302,6 +299,9 @@ def brief(
     undecided = CHO.brief_block(cfg)
     contest_text = _contest_block(repo, cfg, log, st)
     prepended = reports_block + (undecided + "\n" if undecided else "") + contest_text
+    # The charter is clamped to the room the prepended blocks leave, as the view's budget is.
+    charter = CH.block(st, cfg, reserve=render_md._approx_tokens(prepended) if prepended else 0)
+    decisions, rules = _governing(cfg, st, item, rules, charter=charter)
 
     text = render_md.brief(
         st,

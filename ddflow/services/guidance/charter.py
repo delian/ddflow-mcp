@@ -9,6 +9,7 @@ Bounded by ``[session].rules_charter_tokens``; what does not fit is counted, not
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from ...core.budget import approx_tokens
@@ -22,6 +23,7 @@ from .record import GuidanceRecord
 HEADING = "## Project rules"
 HALF = 2
 MORE = "- _{n} more rules: {ids}{rest}; `ddflow rule list`_"
+LISTED = re.compile(r"^- \[([^\]]+)\] ", re.M)
 LEAD = "_Standing rules, id and title only (recorded data): `ddflow rule show <id>` has the text._"
 
 
@@ -64,9 +66,16 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
     return out
 
 
-def block(state: State, cfg) -> str:
-    """The charter section of the brief ("" when off or no rules)."""
+def listed(text: str) -> set[str]:
+    """The ids of the rules the charter ``text`` lists (not those its closing line only names)."""
+    return set(LISTED.findall(text))
+
+
+def block(state: State, cfg, *, reserve: int = 0) -> str:
+    """The charter section of the brief ("" when off or no rules). ``reserve`` is what the
+    caller prepends to the brief, in tokens: the charter never takes more than half of the rest."""
     # Never more than half of the brief: a mis-set knob must not crowd out everything else.
-    tokens = min(cfg.session.rules_charter_tokens, cfg.session.brief_max_tokens // HALF)
+    room = max(1, cfg.session.brief_max_tokens - reserve)
+    tokens = min(cfg.session.rules_charter_tokens, room // HALF)
     body = lines(rules_of(state), tokens=tokens, title_chars=cfg.session.rules_charter_title_chars)
     return "\n".join([HEADING, "", LEAD, *body]) if body else ""
