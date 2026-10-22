@@ -15,6 +15,7 @@ from .gates.reviewers import family_of
 #: `command` string is the caller's word, not a run: only `command_digest` (`gate run`) counts.
 TOOL_KEYS = (
     "command_digest",
+    "ran_by",
     "reviewer",
     "covered_by",
     "roborev",
