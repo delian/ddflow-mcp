@@ -132,3 +132,4 @@
 {"agent":"impl-soft-upgrade","data":{"at":1792702495.1528637,"holder":"impl-soft-upgrade"},"id":"ebef38f6e85c4aa76dec985af","kind":"lease.renewed","lamport":94949,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T20:54:55.192430Z"}
 {"agent":"impl-soft-upgrade","data":{"at":1792702675.1629927,"holder":"impl-soft-upgrade"},"id":"ed78decc73aaba21f7e216ea1","kind":"lease.renewed","lamport":94971,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T20:57:55.209723Z"}
 {"agent":"impl-soft-upgrade","data":{"at":1792703215.3935523,"holder":"impl-soft-upgrade"},"id":"e3f512d9babe41a5160855118","kind":"lease.renewed","lamport":95025,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T21:06:55.440856Z"}
+{"agent":"impl-soft-upgrade","data":{"at":1792703396.3441064,"holder":"impl-soft-upgrade"},"id":"e9543c8a1f6eb1b52ef398a82","kind":"lease.renewed","lamport":95045,"schema":1,"subject":"SU-client-probe-ci","ts":"2026-10-22T21:09:56.390536Z"}
