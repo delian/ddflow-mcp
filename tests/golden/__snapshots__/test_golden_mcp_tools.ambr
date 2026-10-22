@@ -877,6 +877,10 @@
        "inputSchema": {
         "type": "object",
         "properties": {
+         "item": {
+          "type": "string",
+          "description": "Only the pairs this record is in."
+         },
          "kind": {
           "type": "string",
           "description": "Comma-separated subset of the configured kinds: bug,task,phase,lesson,decision,research,memory. Default: all of them."
