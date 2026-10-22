@@ -17,8 +17,10 @@ Claude app while the CLI process, its tools and its files live on this host. The
    `AskUserQuestion` calls in this session the transcript holds an assistant row with the `tool_use` and a later `user`
    row with a `tool_result` for its id, `sourceToolAssistantUUID` equal to the assistant row's uuid,
    `permissionDecision = {"decision": "accept", "source": "user_temporary"}`, and `toolUseResult.answers`, a map from the
-   exact question text to the chosen label (or typed text). The model sees the same answer only as the tool result string.
-   `probes/approvals/transcript_attest.py` extracts and checks these: 24 of 24 attested on this transcript.
+   exact question text to the chosen label (or typed text; a list of labels for a multi-select question; a question the
+   person skipped is absent). The model sees the same answer only as the tool result string.
+   `probes/approvals/transcript_attest.py` extracts and checks these: 24 of 24 attested on this transcript (a call counts when at least one of its questions has a non-empty answer and
+   the row ids line up; the caller looks up the one question it rendered).
 3. **CONFIRMED: typed human prompts carry their origin.** `user` rows for what the operator typed have
    `origin.kind = "human"`, `promptSource = "sdk"`, `turnOrigin = "human"`; background notices have
    `origin.kind = "task-notification"`. A relayed message from another agent session is a `human`-origin row too in
