@@ -150,3 +150,14 @@ def test_the_description_never_asks_for_an_argument_the_schema_lacks():
         for tool in F.FAMILIES[family].members.values():
             for name in FS._requires(tool):
                 assert name in props
+
+
+def test_a_falsy_but_present_required_value_is_not_missing(monkeypatch):
+    props = dict(TOOLS["ddflow_gate_list"]["properties"])
+    props["n"] = ("integer", "a count", True)
+    props["flag"] = ("boolean", "a flag", True)
+    monkeypatch.setitem(TOOLS["ddflow_gate_list"], "properties", props)
+    r = FS.route("ddflow_gate", {"action": "list", "n": 0, "flag": False})
+    assert FS.missing_required(r) == []
+    r = FS.route("ddflow_gate", {"action": "list", "n": None, "flag": ""})
+    assert FS.missing_required(r) == ["n", "flag"]
