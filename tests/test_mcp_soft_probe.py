@@ -362,31 +362,57 @@ def test_delaybump_adds_the_tool_with_its_notification(tmp_path):
 
 def test_add_and_notify_are_one_step_under_the_lock():
     """critic: a tools/list handled between the add and the notification would show the tool
-    before the notification. While the notification is being sent, a concurrent snapshot of
-    the tool list must be blocked -- and must not see the tool before the send."""
+    before the notification. A snapshot requested the moment the tool is appended must not
+    complete before the notification has been sent."""
     import io
     import threading
 
     from ddflow.mcpshim import probe_server as ps
 
     probe = ps._Probe(io.StringIO(), io.StringIO(), 0)
-    snaps, state = [], []
+    events, threads = [], []
+
+    class Tools(list):
+        def append(self, item):
+            super().append(item)
+            t = threading.Thread(target=lambda: (probe._snapshot(), events.append("snapshot")))
+            threads.append(t)
+            t.start()
+
+    class YieldingLock:
+        """Gives a waiting thread a window every time the lock is released."""
+
+        def __init__(self):
+            self._l = threading.RLock()
+
+        def __enter__(self):
+            self._l.acquire()
+
+        def __exit__(self, *exc):
+            self._l.release()
+            time.sleep(0.1)
+
+    probe.lock = YieldingLock()
+    probe.tools = Tools(probe.tools)
     real_send = probe.send
-    threads = []
-
-    def spy(m):
-        t = threading.Thread(target=lambda: snaps.append(probe._snapshot()))
-        threads.append(t)
-        t.start()
-        t.join(timeout=0.3)
-        state.append("blocked" if t.is_alive() else "NOT-BLOCKED")
-        real_send(m)
-
-    probe.send = spy
+    probe.send = lambda m: (events.append("notify"), real_send(m))
     probe._add_and_notify()
     threads[0].join(timeout=5)
-    assert state == ["blocked"], state
-    assert ps._ADDED in snaps[0]
+    assert events == ["notify", "snapshot"], events
+
+
+def test_every_unavailable_row_has_the_documented_keys():
+    mod = _script()
+    row = mod._unavailable("x", "why")
+    assert {
+        "harness",
+        "list_changed",
+        "reason",
+        "client",
+        "revision",
+        "probed_discover",
+        "listen",
+    } <= set(row)
 
 
 def test_logging_is_not_truncated(tmp_path):
