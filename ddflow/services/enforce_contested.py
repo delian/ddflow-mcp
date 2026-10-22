@@ -33,6 +33,7 @@ def contested(
     paths: list[str],
     mine: list[str],
     is_mine: Callable[[Lease], bool],
+    in_tree: Callable[[Lease], bool],
     now: float,
 ) -> dict[str, str]:
     """path -> "item (holder)" for each of ``paths`` the committer covers by wildcard only
@@ -47,7 +48,7 @@ def contested(
     ]
     if not subject:
         return {}
-    mine_lines = _lines_of_mine(state, cfg, subject, is_mine, now)
+    mine_lines = _lines_of_mine(state, cfg, subject, is_mine, in_tree, now)
     out: dict[str, str] = {}
     for item_id, lz in L.unfinished_leases(state, cfg, now).items():
         other = state.items.get(item_id)
@@ -64,20 +65,30 @@ def contested(
 
 
 def _lines_of_mine(
-    state: State, cfg: Config, paths: list[str], is_mine: Callable[[Lease], bool], now: float
+    state: State,
+    cfg: Config,
+    paths: list[str],
+    is_mine: Callable[[Lease], bool],
+    in_tree: Callable[[Lease], bool],
+    now: float,
 ) -> dict[str, set[str]]:
-    """path -> the release lines of the committer's leases that cover it (finished ones too:
-    the holder's own last commits stand on them)."""
-    out: dict[str, set[str]] = {p: set() for p in paths}
+    """path -> the release lines the commit can be for: those of the committer's leases that
+    cover it (finished ones too: the holder's own last commits stand on them). A lease made
+    for the tree being committed in is the commit's own item, so when one covers the path
+    only its line counts, not the lines of the committer's other items."""
+    seen: dict[str, list[tuple[str, bool]]] = {p: [] for p in paths}
     for item_id, lz in state.active_leases(now, cfg.lease.grace_s).items():
         it = state.items.get(item_id)
         if it is None or not is_mine(lz):
             continue
-        line = line_key(state, it, cfg)
+        line, here = line_key(state, it, cfg), in_tree(lz)
         for p in paths:
             if any(path_in_glob(p, g) for g in lz.globs):
-                out[p].add(line)
-    return out
+                seen[p].append((line, here))
+    return {
+        p: {ln for ln, here in hits if here or not any(h for _, h in hits)}
+        for p, hits in seen.items()
+    }
 
 
 def _names(lz: Lease, path: str, shared: list[str]) -> list[str]:

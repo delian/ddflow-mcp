@@ -1115,6 +1115,11 @@ _UNKNOWN_STAGED = (
 )
 
 
+def _made_tree(repo: Path, lease: Lease) -> Path | None:
+    """The tree ``lease`` made, resolved; None for a lease with no tree."""
+    return W.load_path(repo, lease.worktree).resolve() if lease.worktree else None
+
+
 def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> bool:
     """A lease is "mine" if I hold it, OR if it created the very tree this commit is
     happening in. The second test is the robust one: the hook runs inside a worktree,
@@ -1549,7 +1554,14 @@ def _with_contested(
     """``uncovered`` plus the paths a wildcard of mine covers that another live lease holds
     too (`enforce_contested`), and those paths with their holders."""
     twice = EC.contested(
-        log, cfg, state, paths, mine, lambda lz: _counts_as_mine(repo, lz, me, here), now
+        log,
+        cfg,
+        state,
+        paths,
+        mine,
+        lambda lz: _counts_as_mine(repo, lz, me, here),
+        lambda lz: _made_tree(repo, lz) == here,
+        now,
     )
     return uncovered + [p for p in twice if p not in uncovered], twice
 
