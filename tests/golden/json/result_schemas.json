@@ -35,6 +35,7 @@
    "base",
    "rebound",
    "here",
+   "tree",
    "port",
    "port_advice",
    "broke"
@@ -52,6 +53,7 @@
     "base": {},
     "rebound": {},
     "here": {},
+    "tree": {},
     "port": {},
     "port_advice": {},
     "broke": {},
@@ -823,7 +825,8 @@
    "kinds",
    "open_only",
    "floor",
-   "limit"
+   "limit",
+   "item"
   ],
   "output_schema": {
    "type": "object",
@@ -837,6 +840,7 @@
     "open_only": {},
     "floor": {},
     "limit": {},
+    "item": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -2744,6 +2748,7 @@
    "detail",
    "aborted",
    "kept_stash",
+   "stash_note",
    "gates_valid",
    "gates_stale",
    "gates_unverified",
@@ -2767,6 +2772,7 @@
     "detail": {},
     "aborted": {},
     "kept_stash": {},
+    "stash_note": {},
     "gates_valid": {},
     "gates_stale": {},
     "gates_unverified": {},
