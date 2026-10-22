@@ -158,9 +158,9 @@ def test_one_pin_that_cannot_be_checked_does_not_hide_a_stale_one(repo, monkeypa
 
 
 def test_a_whitespace_only_reason_still_reads_as_no_reason():
-    from ddflow.services.gates.outcomes import unavailable_reasons
-
     from types import SimpleNamespace as NS
+
+    from ddflow.services.gates.outcomes import unavailable_reasons
 
     it = NS(gates={"ci": NS(reason="  \n ")})
     assert unavailable_reasons(it, [("ci", "unavailable")]) == {"ci": "no reason was recorded"}
