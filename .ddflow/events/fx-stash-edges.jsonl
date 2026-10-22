@@ -128,3 +128,4 @@
 {"agent":"fx-stash-edges","data":{"at":1792663693.924285,"holder":"fx-stash-edges"},"id":"e194841153988901cb9f6c0df","kind":"lease.renewed","lamport":91007,"schema":1,"subject":"fix-B-sync-keep-local-stash-edges","ts":"2026-10-22T10:08:13.972067Z"}
 {"agent":"fx-stash-edges","data":{"at":1792663702.6459785,"holder":"fx-stash-edges"},"id":"e179a1479713d4ad9147ec008","kind":"lease.renewed","lamport":91011,"schema":1,"subject":"fix-B-merge-stash-failed-transient","ts":"2026-10-22T10:08:22.693618Z"}
 {"agent":"fx-stash-edges","data":{"gate":"ci"},"id":"e170f7a4b6a5f3a97712ac923","kind":"gate.started","lamport":91016,"schema":1,"subject":"fix-B-merge-stash-failed-transient","ts":"2026-10-22T10:08:38.816925Z"}
+{"agent":"fx-stash-edges","data":{"at":1792663928.6839244,"holder":"fx-stash-edges"},"id":"e806b9c133e772dcf4918d56c","kind":"lease.renewed","lamport":91058,"schema":1,"subject":"fix-B-merge-stash-failed-transient","ts":"2026-10-22T10:12:08.734448Z"}
