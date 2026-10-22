@@ -27,7 +27,7 @@ def test_the_transcripts_and_the_readme_command_list_each_have_a_recipe():
         r for r in PN.load_recipes(ROOT, Config.load(ROOT)) if r.name == "knowledge-pin"
     )
     assert knowledge.files == ("tests/data/uc_surf_knowledge_pin.json",)
-    assert "tests/test_uc_surf_knowledge_pin.py" in knowledge.regen
+    assert knowledge.regen[1:4] == ("-m", "pytest", "tests/test_uc_surf_knowledge_pin.py")
     assert dict(knowledge.env).get("U1_PIN_RECORD") == "1"
 
 
