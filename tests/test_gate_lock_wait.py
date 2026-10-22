@@ -1,0 +1,98 @@
+"""B1d51fb9da1: the time a gate queued for the host lock is recorded and readable, apart
+from the time it ran; a log from before the field replays and reports no figure, not a zero."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pytest
+from lanes_fixture import T0, Log
+from metrics_fixture import frozen
+
+from ddflow.services import ci_marker as CM
+from ddflow.services import metrics as M
+from ddflow.services.metrics import facts as F
+
+
+def _log(waited: list[float | None], gate: str = "ci") -> Log:
+    log = Log()
+    log.task("T1", "a.py")
+    log.claim("a1", "T1", T0, "a.py")
+    t = T0
+    for w in waited:
+        t += 4000
+        log.add("gate.started", "T1", "a1", t, gate=gate)
+        ev: dict = {"elapsed_s": 3000.0, "exit": 0}
+        if w is not None:
+            ev["waited_s"] = w
+        log.add("gate.passed", "T1", "a1", t + 3000, gate=gate, by="a1", evidence=ev)
+        t += 3000
+    return log
+
+
+def _ci_row(log: Log, **cfg):
+    st, c, now = frozen(log)
+    c.metrics.min_samples = 1
+    return {r["gate"]: r for r in M.run(log.events, st, c, now).metrics["gate_time"]}["ci"]
+
+
+def test_a_recorded_wait_is_readable_in_the_facts_and_in_metrics():
+    log = _log([1700.0, 300.0])
+    st, _cfg, _now = frozen(log)
+    assert [o.waited_s for o in F.collect(log.events, st).outcomes if o.gate == "ci"] == [
+        1700.0,
+        300.0,
+    ]
+    row = _ci_row(log)
+    assert row["wait_n"] == 2 and row["wait_max_s"] == 1700.0
+
+
+def test_a_log_without_the_field_replays_and_reports_no_wait_not_zero():
+    row = _ci_row(_log([None]))
+    assert row["n"] == 1 and row["wait_n"] == 0 and row["wait_p50_s"] is None
+
+
+def test_the_wait_line_roundtrips_and_the_last_one_wins():
+    assert CM.parse_wait(CM.wait_line(12.5)) == 12.5
+    assert CM.parse_wait(f"x\n{CM.wait_line(3)}\n{CM.wait_line(7.0)}\ny") == 7.0
+    assert CM.parse_wait("no marker") is None
+
+
+def test_a_ci_result_carries_the_wait_only_when_it_queued():
+    from ddflow.services import ci as CI
+
+    res = CI.Result("passed")
+    assert "waited_s" not in res.as_data()
+    res.waited_s = 7.5
+    assert res.as_data()["waited_s"] == 7.5
+
+
+def test_the_runner_records_waited_s_from_the_ci_wait_line_and_the_slot_wait():
+    from ddflow.services.cmdrunner import CommandRun
+    from ddflow.services.gates import runner as R
+
+    gdef = type("G", (), {"id": "ci"})()
+    p = CommandRun("ran", "x", code=0, elapsed_s=5.0, waited_s=0.0)
+    assert R._waited(gdef, p, f"out\n{CM.wait_line(1700.4)}\n") == pytest.approx(1700.4)
+    assert R._waited(gdef, p, "out") is None
+    slot = CommandRun("ran", "x", code=0, elapsed_s=5.0, waited_s=3.2)
+    assert R._waited(type("G", (), {"id": "unit_tests"})(), slot, "") == 3.2
+
+
+def test_gate_status_shows_how_long_a_run_queued_for_the_host_lock():
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.services.gates import outcomes as O
+
+    log = _log([1700.0], "research")
+    st = fold(list(log.events), strict=False)
+    s = O.status(st, Config(), "T1")
+    assert s.queued == {"research": "queued 28m of 50m for the host lock"}
+    assert "queued 28m of 50m for the host lock" in s.render()
+    assert (
+        O.status(fold(list(_log([None], "research").events), strict=False), Config(), "T1").queued
+        == {}
+    )

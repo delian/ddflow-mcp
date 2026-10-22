@@ -7,6 +7,7 @@ import sys
 from ...api import ci as A
 from ...api import cirun as AR
 from ...api import surf_setup as SS
+from ...services import ci_marker as CM
 from ..context import Ctx
 from ..render import emit_json
 
@@ -62,6 +63,10 @@ def cmd_ci(a, c: Ctx) -> int:
             f"  [{'ok  ' if ch['ok'] else 'FAIL'}] {ch['id']}"
             + (f"  {ch['detail']}" if ch["detail"] else "")
         )
+    if (
+        d.get("waited_s") is not None
+    ):  # seconds queued for the suite lock, for the gate that records it
+        print(CM.wait_line(d["waited_s"]))
     if d.get("scope_line"):
         print(d["scope_line"])  # the scope, for the ci gate that records it from the output
     if out.exit == 0:
