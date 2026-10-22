@@ -362,3 +362,6 @@
 {"agent":"fx-mcp-ci","data":{"at":1792699382.7204204,"holder":"fx-mcp-ci"},"id":"e50041959e26c97a3402a1764","kind":"lease.renewed","lamport":94685,"schema":1,"subject":"LS-measure","ts":"2026-10-22T20:03:02.760436Z"}
 {"agent":"fx-mcp-ci","data":{"at":1792699431.5521443,"holder":"fx-mcp-ci"},"id":"e40e04e655692279933661ec0","kind":"lease.renewed","lamport":94689,"schema":1,"subject":"fix-B8f41346d9f","ts":"2026-10-22T20:03:51.602468Z"}
 {"agent":"fx-mcp-ci","data":{"at":1792699438.0139837,"holder":"fx-mcp-ci"},"id":"ea1ca9a70b0ac9163b42119ae","kind":"lease.renewed","lamport":94690,"schema":1,"subject":"fix-B-ci-run-item-id-branch-gone","ts":"2026-10-22T20:03:58.064091Z"}
+{"agent":"fx-mcp-ci","data":{"at":1792700283.6683333,"holder":"fx-mcp-ci"},"id":"e03478d691a3b79a15e2686e4","kind":"lease.renewed","lamport":94778,"schema":1,"subject":"LS-measure","ts":"2026-10-22T20:18:03.713926Z"}
+{"agent":"fx-mcp-ci","data":{"at":1792700357.829653,"holder":"fx-mcp-ci"},"id":"e7e93216a3383692704da99c6","kind":"lease.renewed","lamport":94785,"schema":1,"subject":"fix-B8f41346d9f","ts":"2026-10-22T20:19:17.879434Z"}
+{"agent":"fx-mcp-ci","data":{"at":1792700364.2806215,"holder":"fx-mcp-ci"},"id":"ea310a22419914440b26ee5a4","kind":"lease.renewed","lamport":94786,"schema":1,"subject":"fix-B-ci-run-item-id-branch-gone","ts":"2026-10-22T20:19:24.330354Z"}
