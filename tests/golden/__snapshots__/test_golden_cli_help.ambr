@@ -856,6 +856,46 @@
   
   '''
 # ---
+# name: test_help[ddflow grant add]
+  '''
+  usage: ddflow grant add [-h] --item ITEM --gate GATE [--kind KIND] [--count COUNT] --reason REASON [--when WHEN]
+  
+  options:
+    -h, --help       show this help message and exit
+    --item ITEM      the item the grant is for
+    --gate GATE      the gate it covers (rubber_duck, critic)
+    --kind KIND      what is granted (review_round)
+    --count COUNT    how many rounds, up to [grants].max_count
+    --reason REASON  what the operator allowed and why
+    --when WHEN      make it STANDING: apply it mechanically when this predicate holds
+                     (tree_changed_after_triage)
+  
+  '''
+# ---
+# name: test_help[ddflow grant list]
+  '''
+  usage: ddflow grant list [-h] [--item ITEM]
+  
+  options:
+    -h, --help   show this help message and exit
+    --item ITEM  only this item's grants
+  
+  '''
+# ---
+# name: test_help[ddflow grant]
+  '''
+  usage: ddflow grant [-h] {add,list} ...
+  
+  positional arguments:
+    {add,list}
+      add       a PERSON records a grant of extra review rounds (refused under an agent identity)
+      list      every recorded grant: who, when, rounds used
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow harness doctor]
   '''
   usage: ddflow harness doctor [-h] [id]
@@ -2870,13 +2910,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2887,6 +2927,7 @@
       batch               apply many item edits in one all-or-nothing transaction
       rename              move an item to a new id (and phase), re-pointing every needs edge
       chore               commit or approve chore files (no reviewer)
+      grant               record or list the operator's grants (extra review rounds)
       plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
@@ -3057,6 +3098,9 @@
     'ddflow gate skip',
     'ddflow gate status',
     'ddflow gate verify',
+    'ddflow grant',
+    'ddflow grant add',
+    'ddflow grant list',
     'ddflow harness',
     'ddflow harness doctor',
     'ddflow harness list',

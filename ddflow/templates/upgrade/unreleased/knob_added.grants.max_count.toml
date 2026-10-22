@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "grants.max_count"
+new = '3'
+why = "The most extra rounds one recorded operator grant (ddflow grant add) may carry."
+impact = "additive"
