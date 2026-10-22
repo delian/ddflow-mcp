@@ -110,3 +110,13 @@ def test_a_file_named_like_two_pins_is_not_a_pin(repo, tmp_path):
     _g(tree, "commit", "-qm", "odd name")
     item = fold(EventLog(repo).read_all(), strict=False).items["T1"]
     assert not CL.landed_leftovers_only(str(tree), item, "main", ["a.pin", "b.pin"])
+
+
+def test_a_tree_that_moved_after_the_proof_is_kept(repo, tmp_path, monkeypatch):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    plan = _plan(repo)
+    # the proof was of another commit than the tree now stands on
+    monkeypatch.setattr(CL, "proved_leftover_tip", lambda *a, **k: "0" * 40)
+    done = CL.apply(repo, Config.load(repo), plan, EventLog(repo, "sweeper"))
+    assert tree.exists(), done
+    assert "ddflow/T1" in _g(repo, "branch", "--format=%(refname:short)").split()
