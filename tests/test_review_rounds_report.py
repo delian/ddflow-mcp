@@ -31,3 +31,14 @@ def test_a_combined_review_says_what_it_charged_each_gate(repo, tmp_path):
     assert "combined review" in text, text
     line = next(ln for ln in text.splitlines() if ln.startswith("combined review charged"))
     assert "rubber_duck 1/4" in line and "critic 1/4" in line, line
+
+
+def test_a_combined_review_that_reached_no_reviewer_charges_nothing(repo, tmp_path):
+    GE._setup(repo, tmp_path, "[review]\nmax_rounds = 4\n")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace('gates = ["critic", "rubber_duck"]', 'gates = ["docs"]'))
+    out = api.review(repo, gate=GE.GATES, item="T1", branch="feat")
+    line = next(
+        ln for ln in out.data["text"].splitlines() if ln.startswith("combined review charged")
+    )
+    assert "no round to any gate" in line and "rubber_duck 0/4" in line, line
