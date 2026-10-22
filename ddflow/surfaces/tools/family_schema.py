@@ -146,7 +146,7 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     if family is None or family.single:
         return None
     action = args.get(ACTION)
-    if action is None and name in TOOLS:
+    if ACTION not in args and name in TOOLS:
         return None
     acts = ", ".join(family.members)
     if not isinstance(action, str) or not action:
