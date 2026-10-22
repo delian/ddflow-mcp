@@ -27,6 +27,10 @@ class CiConfig:
         "",
         doc="The branch merged into the task's branch before the checks run, so an interaction with what the base has become is tested (a parallel merge's effect). Empty (default): the repository's default branch.",
     )
+    pins_precheck: bool = knob(
+        True,
+        doc="Before the default CI command runs, check the project's pinned outputs (`ddflow pins regenerate --check`, the recipes in `[pins].recipes_file`) in the merge result. A pin that was current on the branch can be stale once the base moved (README tables, snapshots); the run then ends at once as failed, naming the stale pins and the fix (`ddflow pins regenerate`), instead of running the whole suite to a failure that does not say so. A pin that cannot be checked is skipped, never a failure. false: go straight to the command. A custom `--command` is never prechecked.",
+    )
     timeout_s: int = knob(
         3600,
         doc="Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: sized for the whole test suite (`ci run --full`, the merge queue's batch); an item's selected run is far shorter.",
