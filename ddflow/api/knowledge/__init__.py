@@ -46,6 +46,7 @@ from .sessions import (  # noqa: F401
     history,
     session_adopt_orphans,
     session_end,
+    session_known,
     session_note,
     session_prompt,
     session_start,
