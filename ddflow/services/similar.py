@@ -270,12 +270,18 @@ class Assessment:
 _WORK = ("task", "phase")
 
 
+#: Kinds that describe work without BEING the work: beside the task that implements or
+#: governs them they are related, not copies.
+_ABOUT_WORK = ("research", "decision")
+
+
 def _note_vs_work(a: str, b: str) -> bool:
-    return {a, b} <= {"research", *_WORK} and "research" in (a, b) and a != b
+    """A research note or a decision against a task or phase (either way round)."""
+    return (a in _ABOUT_WORK and b in _WORK) or (b in _ABOUT_WORK and a in _WORK)
 
 
 def _related_only(c: Candidate, kind: str, dd) -> bool:
-    """A non-identical research-note / task-or-phase pair: listed as related, never asked."""
+    """A non-identical research-note-or-decision / task-or-phase pair: listed as related, never asked."""
     return not dd.research_task_asks and _note_vs_work(kind, c.kind) and "identical" not in c.flags
 
 
