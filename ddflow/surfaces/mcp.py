@@ -574,7 +574,8 @@ class Server:
         meta = params.get("_meta")
         token = meta.get("progressToken") if isinstance(meta, dict) else None
         send = self.notify
-        if token is None or send is None:
+        # MCP: a string or a number. Anything else is no token (it is also a dict key below).
+        if send is None or isinstance(token, bool) or not isinstance(token, (str, int, float)):
             return None
         if (known := self._says.get(token)) is not None:
             return known  # one counter per call: progress must only ever increase
@@ -1492,6 +1493,22 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     return t
 
 
+def _frame_writer(out) -> Callable[[dict[str, Any]], None]:
+    """Write one JSON-RPC frame per call to ``out``; calls from several threads (the
+    answer, a heartbeat that outlived its call) never interleave their bytes."""
+    lock = threading.Lock()
+
+    def write(frame: dict[str, Any]) -> None:
+        with lock:
+            try:
+                out.write(json.dumps(frame) + "\n")
+                out.flush()
+            except (OSError, ValueError):
+                pass
+
+    return write
+
+
 def _worker_main() -> None:
     """A worker process: one offloaded call, read as a job from stdin (see `_offload`).
 
@@ -1504,12 +1521,7 @@ def _worker_main() -> None:
     os.dup2(2, 1)
     sys.stdout = sys.stderr
 
-    def write(frame: dict[str, Any]) -> None:
-        try:
-            out.write(json.dumps(frame) + "\n")
-            out.flush()
-        except (OSError, ValueError):
-            pass
+    write = _frame_writer(out)
 
     msg = job["msg"]
     if job.get("state_key"):
