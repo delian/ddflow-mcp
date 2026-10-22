@@ -79,7 +79,7 @@ RESERVED = frozenset(
     }
 )
 #: The answer flags on the CLI's add, and the same two ideas on the tool.
-_ANSWER_CLI = ("new", "extends", "duplicate_of", "related", "check")
+_ANSWER_CLI = ("new", "extends", "duplicate_of", "related", "merge_into", "check")
 _ANSWER_TOOL = ("relation", "check_only")
 #: What each verb takes beyond the kind's fields.
 _TAKES: dict[str, tuple[str, ...]] = {

@@ -197,8 +197,12 @@ def test_a_duplicate_pointing_at_a_claim_names_its_holder_only_while_it_is_live(
     from ddflow.api import _dedupe as DD
 
     rec = DD.Record(kind="task", event_kind="task.added", rid="T2", title="t", body="")
-    ans = DD.Answer("extends", "T1")
-    for at, holder, extension in ((time.time(), "gone", False), (time.time() - 864000, "", True)):
+    # live claim: `extends` files a linked record and tells the holder; a lapsed one is
+    # merged into only on the explicit `merge_into`.
+    for at, holder, extension, ans in (
+        (time.time(), "gone", False, DD.Answer("extends", "T1")),
+        (time.time() - 864000, "", True, DD.Answer("merge_into", "T1")),
+    ):
         st, cfg = _lapsed_unrecorded(repo, at=at)
         out = DD._point(st, rec, ans, {"score": 1.0}, DD.Checked(), cfg.lease.grace_s)
         assert bool(out.extension) is extension

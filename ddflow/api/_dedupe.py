@@ -39,6 +39,12 @@ from ._dedupe_reason import reason as _reason
 #: What an add can be answered with. ``new``: not a duplicate, record it. The others point
 #: at an existing record (``Answer.target``).
 RELATIONS = ("new", "extends", "duplicate_of", "related")
+#: Also accepted as an answer, never offered: append to the target instead of filing a
+#: record (the old behaviour of ``extends``, now explicit -- B-extends-merges-into-open-target).
+MERGE_INTO = "merge_into"
+#: Records whose OWNER decides what is on them: ``extends`` files a new record linked to
+#: one of these instead of writing onto it.
+LINK_ONLY_KINDS = ("task", "phase", "research")
 #: Words listed to explain one match: enough to see why, few enough to read at a glance.
 SHARED_WORDS = 5
 
@@ -56,7 +62,7 @@ def split_answer(spec: str) -> tuple[str, str]:
 @dataclass(frozen=True)
 class Answer:
     """What the adder says about a possible duplicate: ``new``, or ``extends`` /
-    ``duplicate_of`` / ``related`` plus the record it points at."""
+    ``duplicate_of`` / ``related`` / ``merge_into`` plus the record it points at."""
 
     relation: str = ""
     target: str = ""
@@ -66,7 +72,8 @@ class Answer:
 
     @classmethod
     def parse(cls, spec: str) -> Answer:
-        """``new``, ``extends X``, ``duplicate_of X`` (also ``duplicate X``), ``related X``;
+        """``new``, ``extends X``, ``duplicate_of X`` (also ``duplicate X``), ``related X``,
+        ``merge_into X``;
         a colon or equals sign may stand for the space. Empty is no answer. Anything else
         keeps its relation so ``problem`` can say what is wrong with it."""
         return cls(*split_answer(spec))
@@ -80,8 +87,8 @@ class Answer:
             return "a dry run (check) cannot also carry an answer: drop one of them"
         if not self.relation:
             return ""
-        if self.relation not in RELATIONS:
-            return f"unknown answer {self.relation!r}: one of {', '.join(RELATIONS)}"
+        if self.relation not in (*RELATIONS, MERGE_INTO):
+            return f"unknown answer {self.relation!r}: one of {', '.join((*RELATIONS, MERGE_INTO))}"
         if self.relation == "new" and self.target:
             return "'new' names no record"
         if self.relation != "new" and not self.target:
@@ -426,11 +433,24 @@ def _point(
     if chosen.relation == "related":
         out.fields |= {"related": chosen.target, "dedupe": note}
         out.back_links.append((chosen.target, rec.rid))
-    elif extendable(st, chosen.target, tkind, grace_s=grace_s):
+    elif chosen.relation == MERGE_INTO and not extendable(
+        st, chosen.target, tkind, grace_s=grace_s
+    ):
+        out.refusal = O.refused(
+            rec.event_kind,
+            f"cannot merge into {chosen.target}: it is not open and unclaimed (claimed, "
+            f"running, done or superseded). Answer extends:{chosen.target} to file this as "
+            f"a new record linked to it.",
+            id=rec.rid,
+            candidates=out.shown,
+        )
+    elif extendable(st, chosen.target, tkind, grace_s=grace_s) and (
+        chosen.relation in (MERGE_INTO, "duplicate_of") or tkind not in LINK_ONLY_KINDS
+    ):
         out.extension = {
             "target": chosen.target,
             "kind": tkind,
-            "relation": chosen.relation,
+            "relation": "extends" if chosen.relation == MERGE_INTO else chosen.relation,
             "text": rec.text,
             "score": note["score"],
             "auto": bool(note.get("auto")),

@@ -308,7 +308,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -705,7 +705,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -1651,7 +1651,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -1865,7 +1865,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -2126,7 +2126,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -2776,7 +2776,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -3576,7 +3576,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
