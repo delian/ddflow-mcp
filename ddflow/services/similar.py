@@ -265,8 +265,9 @@ class Assessment:
         return next((c for c in self.candidates if "identical" in c.flags), None)
 
 
-#: Work items: a research note and one of these are `related` (the note informs the work),
-#: so a score between them lists the pair and never asks (B-dupe-research-vs-task).
+#: Work items: a research note or a decision and one of these are `related` (it informs or
+#: governs the work), so a score between them lists the pair and never asks
+#: (B-dupe-research-vs-task, B-decision-add-duplicate-vs-own-task).
 _WORK = ("task", "phase")
 
 
