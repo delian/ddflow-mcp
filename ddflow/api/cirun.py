@@ -202,7 +202,7 @@ def ci_tool(
             timeout_s=timeout_s,
         )
     if action == "status":
-        if base or command or ref not in ("", "HEAD"):
-            return O.refused("ci", "ref, base and command are for action=run")
+        if base or command or ref not in ("", "HEAD") or timeout_s is not None:
+            return O.refused("ci", "ref, base, command and timeout are for action=run")
         return status(repo, agent=agent)
     return O.refused("ci", f"unknown action {action!r}: run | status")

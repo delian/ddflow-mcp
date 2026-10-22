@@ -84,3 +84,21 @@ def test_a_ci_command_that_already_carries_a_timeout_is_overridden():
 def test_a_gate_without_a_command_does_not_crash_the_override():
     human = GateDef(id="approve", title="a", command=None)
     assert _with_run_timeout(Config(), human, 30, "T1", "approve").timeout_s == 30
+
+
+def test_the_override_replaces_the_equals_form_and_stays_before_a_double_dash():
+    cfg = Config()
+    eq = GateDef(id="ci", title="ci", command="ddflow ci run --timeout=60", timeout_s=1)
+    assert _with_run_timeout(cfg, eq, 120, "T1", "ci").command == "ddflow ci run --timeout 120"
+    dd = GateDef(id="ci", title="ci", command="ddflow ci run -- pytest", timeout_s=1)
+    assert _with_run_timeout(cfg, dd, 120, "T1", "ci").command == (
+        "ddflow ci run --timeout 120 -- pytest"
+    )
+
+
+def test_ci_status_refuses_a_timeout(repo: Path):
+    from ddflow.api import ci_tool
+
+    run_cli(repo, "init")
+    out = ci_tool(repo, action="status", timeout_s=0)
+    assert out.exit == 3 and "timeout" in out.reason
