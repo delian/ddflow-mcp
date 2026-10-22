@@ -31,6 +31,7 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, evidence_problems, kind_pipeline, not_applicable
+from .reasons import _unavailable_reasons
 
 
 @dataclass
@@ -47,22 +48,21 @@ class GateStatus:
     #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
     #: blocks completion.
     silent: list[str] = field(default_factory=list)
-    #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review
-    #: that reported findings (`triage_counts`), with "-- PASSED ON REFUTATION" when the
-    #: triage that settled its last finding after the round cap recorded the pass
-    #: (`on_refutation`). Counting changes no outcome; only that settling triage does.
+    #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review with
+    #: findings (`triage_counts`), "-- PASSED ON REFUTATION" when the triage that settled its
+    #: last finding after the round cap recorded the pass (`on_refutation`).
     triage: dict[str, str] = field(default_factory=dict)
     #: gate -> "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed.
     rounds: dict[str, str] = field(default_factory=dict)
-    #: gate -> why it does not apply to this item (`[gate.<id>] applies_when`). Such a gate
-    #: stays in ``pipeline`` and ``rows`` and is shown, but nothing waits on it: it is not
-    #: ``current``, not ``silent`` and does not hold ``complete`` back.
+    #: gate -> why it does not apply to this item (`[gate.<id>] applies_when`): shown, but nothing
+    #: waits on it (not ``current``, not ``silent``, does not hold ``complete`` back).
     not_applicable: dict[str, str] = field(default_factory=dict)
-    #: gate -> "passed with a local-only command (not the committed one)" for a PASS whose
-    #: evidence says the command came from the git-ignored local layer (B924bdc92d7).
+    #: gate -> "passed with a local-only command" for a PASS run from the git-ignored layer (B924bdc92d7).
     local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
     #: gate -> "skipped after a failed run" for a skip that replaced a failure.
     after_failure: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> its recorded reason, for an `unavailable` or `partial` outcome (B305db5608b).
+    why: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -75,6 +75,7 @@ class GateStatus:
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             + (f"  -- {self.local_command[g]}" if g in self.local_command else "")
             + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
+            + (f"  -- {self.why[g]}" if g in self.why else "")
             for g, o in self.rows
         )
 
@@ -319,6 +320,7 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
+        why=_unavailable_reasons(it, rows),
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
