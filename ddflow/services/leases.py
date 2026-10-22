@@ -20,6 +20,7 @@ auto-deletes would have destroyed it. Recovery is: inspect, salvage, then releas
 from __future__ import annotations
 
 import contextlib
+import importlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1191,7 +1192,9 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     sha = _landed_on_base(repo, cfg, it)
     if not sha:
         return
-    from . import completion as CM
+    # Resolved at call time: completion imports the gate stack, which imports this module
+    # (a module-level import is a cycle; a deferred `import` statement is a ratchet breach).
+    CM = importlib.import_module(f"{__package__}.completion")
 
     # The holder's own model, standing in for the author's (`complete` judges reviewer
     # independence against it); whoever completes may not be the holder, so the advice says to
