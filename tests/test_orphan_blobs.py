@@ -38,7 +38,7 @@ def _blob(repo: Path, value: str) -> str:
 
 
 def _named(repo: Path, ref: str, shard: str = "mine") -> None:
-    line = json.dumps({"kind": "x", "evidence": {"k": {B.KEY: ref, "bytes": 3}}})
+    line = json.dumps({"kind": "x", "evidence": {"k": {B.KEY: ref, "bytes": 5}}})
     (repo / EC.EVENTS / f"{shard}.jsonl").write_text(line + "\n")
 
 
