@@ -30,6 +30,10 @@ def _tickets(d: Path) -> int:
     return len(list((d / "queue").glob("*.ticket")))
 
 
+def _has(d: Path, who: str) -> bool:
+    return any(who in p.name for p in (d / "queue").glob("*.ticket"))
+
+
 def _until(pred, timeout=10.0):
     end = time.monotonic() + timeout
     while not pred():
@@ -137,10 +141,11 @@ def test_a_retry_after_giving_up_keeps_its_place(tmp_path: Path):
         with pytest.raises(SL.SuiteBusy):
             with SL.hold(cfg(wait=0.3), "early", tmp_path, say=lambda _t: None):
                 pass
+        assert not _has(tmp_path, "early")  # parked, not a live ticket
         late = _waiter(tmp_path, "late", order)
-        _until(lambda: _tickets(tmp_path) == 1)
+        _until(lambda: _has(tmp_path, "late"))
         early = _waiter(tmp_path, "early", order)  # the retry
-        _until(lambda: _tickets(tmp_path) == 2)
+        _until(lambda: _has(tmp_path, "early"))
     early.join(30)
     late.join(30)
     assert order == ["early", "late"]
