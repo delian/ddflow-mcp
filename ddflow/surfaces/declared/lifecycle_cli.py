@@ -269,8 +269,19 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    extra = tuple(k for k in ("guidance", "glob_warnings") if out.data.get(k))
+    extra = tuple(k for k in ("guidance", "glob_warnings", "globs_from_bug") if out.data.get(k))
     return out.body(CLAIM_BODY + extra)
+
+
+def _bug_globs_line(note: dict, item: str) -> str:
+    """Where a fix task's files came from: its bug declared them, not the task."""
+    line = f"\n  globs from bug {', '.join(note['bugs'])} ({item} declared none of its own)"
+    if note["left_off"]:
+        line += (
+            f"; left off, held by another live lease: {', '.join(note['left_off'])}"
+            f" (`ddflow update {item} --add-globs <file>` once free)"
+        )
+    return line
 
 
 def claim_text(out, a, ctx) -> str:
@@ -320,6 +331,8 @@ def claim_text(out, a, ctx) -> str:
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
+    if d.get("globs_from_bug"):
+        msg += _bug_globs_line(d["globs_from_bug"], d["item"])
     msg += "".join(f"\n  warning:  {w}" for w in d.get("glob_warnings", []))
     if not d["globs"]:
         msg += (
