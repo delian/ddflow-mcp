@@ -1,7 +1,7 @@
 # Remote approvals: decision proposals
 
-Status: **PROPOSAL 2026-10-22**, not decided. Task `RA-research`; the operator's answers are collected by `RA-decide`
-(lead asks, records each as `D-RA-Q*`). Evidence: `docs/ddflow/research/remote-approvals.md` (section numbers refer to
+Status: **DECIDED 2026-10-22** (operator answers, recorded as `D-RA-Q1`..`D-RA-Q12`; see "Operator answers" below, which
+supersedes the proposals where they differ). Task `RA-decide`; proposals came from `RA-research`. Evidence: `docs/ddflow/research/remote-approvals.md` (section numbers refer to
 it). Phase: `P-remote-approvals`. Governing records: `D-shared-engines-r2` (1: one approvals engine),
 `D-remote`, `D-reviewer-trust-r2`, `D-failed-review-gate`, `D-review-force-with-reason`, `D-CM-7`/`D-CM-Q4Q5`
 (never hold keys), `D-mcp-tool-families` (no new tool), `D-config-layer-order`, `D-org-config`,
@@ -55,7 +55,7 @@ MCP: fold into `ddflow_session` (actions `ask` (returns a handle at once, never 
 param `approval` on the gated actions. CLI: `ddflow approvals ...`. Prompt: one line in each refusal and in the
 driver. (Research 10.)
 
-## Questions for the operator (RA-decide), with recommended defaults
+## Questions for the operator (RA-decide), with recommended defaults (proposals; answers follow)
 
 | # | Question | Recommended default | Why |
 |---|---|---|---|
@@ -71,6 +71,41 @@ driver. (Research 10.)
 | Q10 | Notification of a pending request: only brief/status/inbox, or also push (one-time code over ntfy/Slack)? | brief/status/inbox now; push when AW-sinks lands, code only with an explicit sink | Push to a channel the agent can read weakens the code |
 | Q11 | Is a `serve` host (agent cannot reach the store) in scope for strong remote approvals? | Not in this phase; documented as the upgrade path via P-remote.* | Largest build; signatures give most of the value |
 | Q12 | Auto-request on refusal (`[approvals].auto_request`)? | Yes | Zero-friction; the request is cheap and expiring |
+
+## Operator answers (2026-10-22)
+
+Each row is recorded as decision `D-RA-Q<n>` (globs on `ddflow/services/approvals/**`, `ddflow/services/ask/**`).
+
+| # | Status | Answer | Changes from the proposal |
+|---|---|---|---|
+| Q1 | accepted | Adopt the protocol for every gated command | none |
+| Q2 | accepted | Relayed consent kept for ONE more release as a time-boxed exception; doctor warns on each use; then per-verb `require_approval` on | none |
+| Q3 | **amended** | MVP channels: CLI (L1, over ssh) plus chat/PR approvals (Slack/Linear/GitHub via existing connectors) as L3. `RA-channel-chat` is in the minimal path; `RA-channel-signed` is later and optional | signed was the MVP; chat was optional |
+| Q4 | **unanswered** | SSH/FIDO2 key part not answered; recommended default applies when the signed channel is built (digest-pinned signer list outside the repo, may fall back to allowed-signers, ddflow never holds keys). Ask again before `RA-channel-signed` is claimed | n/a |
+| Q5 | **amended** | Transcript-attested `AskUserQuestion` answer accepted as L2, enabled by default, T2 only, never T3; acceptance verified by hook/transcript attestation, not the agent's word. Caveats stand: reaches ddflow only through the model/transcript, weak outside local sessions, cloud sessions need `RA-probe-harness` first | was off by default, opt-in per verb |
+| Q6 | accepted | T2 any person channel (L1/L2/L3); T3 L4 only; single-uid host: T3 rated no stronger than L1, doctor says so | L2/L3 named for T2 |
+| Q7 | accepted | Beyond today's refusals: forced `complete` and forced `claim` only | none |
+| Q8 | **ambiguous** | Operator ticked all three example rules AND "ship none". Recorded: ship the three as examples, ALL OFF, each reported when enabled and used. Lead to confirm | n/a |
+| Q9 | accepted | Request 24 h, use window 1 h, one use | none |
+| Q10 | accepted | brief/status/inbox now; push when AW-sinks lands, never to a channel the agent can read for one-time codes | none |
+| Q11 | accepted | Agent-unreachable `serve` host not in this phase (upgrade path via `P-remote.*`) | none |
+| Q12 | accepted | `auto_request` = yes | none |
+
+### Honest limits that follow from the answers
+
+* Chat/PR approvals (L3) are forgeable when the agent holds the connector or `gh` token; the research rating stands and
+  doctor says so whenever the agent can post or read with that credential.
+* The L2 harness answer is accepted only through the hook/transcript attestation; an agent-typed claim of an answer is
+  refused. It is inert in cloud sessions until `RA-probe-harness` shows what the payload carries.
+* With signing deferred, T3 acts stay terminal-only and are rated L1 on a single-uid host; doctor flags "no approval
+  signer pinned".
+
+### Plan amendments
+
+`RA-channel-chat` loses "Optional" and joins the minimal path: `RA-request` -> `RA-consume`/`RA-cli` -> `RA-channel-chat`.
+`RA-e2e` now needs `RA-channel-chat` and `RA-channel-harness` (both shipped on) instead of `RA-channel-signed`, which stays
+queued after `RA-e2e` and is optional (`RA-docs` does not wait for it). `RA-channel-harness` keeps its `RA-probe-harness`
+need. `RA-consume` also owns the dated flip of `require_approval` (Q2).
 
 ## Rejected alternatives
 
