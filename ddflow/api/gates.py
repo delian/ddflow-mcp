@@ -863,13 +863,15 @@ class _Vetted:
 
 def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) -> str:
     """A refusal when `implement` is passed for an item whose own worktree has no commit
-    ahead of its base, else "" (bug B31c0109012: a commit the lease hook refused was
+    ahead of its base, else "" (a landed item is never judged: B998bcca9ce; bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
     worktree of its own, or whose tree was removed, is not judged; a tree whose range cannot
     be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
     base = cfg.worktree.base_ref or W.default_branch(repo)
+    if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
+        return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
     if not (r.ok and r.out.strip() == "0"):
         return ""
