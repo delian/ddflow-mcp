@@ -100,5 +100,11 @@ def test_ci_status_refuses_a_timeout(repo: Path):
     from ddflow.api import ci_tool
 
     run_cli(repo, "init")
-    out = ci_tool(repo, action="status", timeout_s=0)
+    out = ci_tool(repo, action="status", timeout_s=1)
     assert out.exit == 3 and "timeout" in out.reason
+
+
+def test_the_test_runners_own_timeout_after_a_double_dash_is_kept():
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run -- pytest --timeout=30", timeout_s=1)
+    out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+    assert out.command == "ddflow ci run --timeout 60 -- pytest --timeout=30"

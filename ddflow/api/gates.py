@@ -713,9 +713,12 @@ def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
         )
     command = gdef.command or ""
     if command.strip().startswith("ddflow ci run"):
-        command = re.sub(r"\s--timeout(?:=|\s+)\d+", "", command)
+        # Only the part before a `--`: what follows belongs to the test runner.
+        head, sep, tail = command.partition(" -- ")
+        head = re.sub(r"\s--timeout(?:=|\s+)\d+", "", head)
         # Right after the verb, not at the end: after a `--` it would reach the test runner.
-        command = re.sub(r"^(\s*ddflow ci run)", rf"\1 --timeout {timeout_s}", command, count=1)
+        head = re.sub(r"^(\s*ddflow ci run)", rf"\1 --timeout {timeout_s}", head, count=1)
+        command = head + sep + tail
     return replace(gdef, timeout_s=timeout_s, command=command)
 
 
