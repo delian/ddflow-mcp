@@ -123,51 +123,49 @@ def cordis_rows(text: str) -> dict[str, dict] | None:
     return rows
 
 
+def _cordis_place(lines: list[str], name: str, new_line: str) -> tuple[list[str], bool] | None:
+    """``lines`` with ``new_line`` as ``name``'s row, and whether it replaced one; None when
+    the file holds patch entries but no `- insert:` list to put a row in (never guessed)."""
+    for i, ln in enumerate(lines):
+        if (m := _CORDIS_ROW.match(ln)) and m["name"] == name:
+            return [*lines[:i], new_line, *lines[i + 1 :]], True
+    for i, ln in enumerate(lines):
+        if _CORDIS_INSERT.match(ln):
+            return [*lines[: i + 1], new_line, *lines[i + 1 :]], False
+    body = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+    if body and body != ["[]"]:
+        return None
+    return [*(ln for ln in lines if ln.strip() != "[]"), "- insert:", new_line], False
+
+
 def _register_cordis(
     path: Path, rel: str, name: str, entry: dict, dry_run: bool, manual: str
 ) -> tuple[str, str]:
     """The Cordis patch-overlay half of `register`: one marker-tagged JSON row per server."""
     try:
         row = cordis_entry(name, entry)
-    except (ValueError, KeyError) as exc:
-        return "refused", f"SKIPPED {rel}: {exc}; add {manual} by hand"
-    try:
         text = path.read_text("utf-8") if path.exists() else ""
-    except (UnicodeDecodeError, OSError) as exc:
+    except ValueError as exc:  # a bad serverName, or undecodable bytes (UnicodeDecodeError)
+        return "refused", f"SKIPPED {rel}: {exc}; add {manual} by hand"
+    except OSError as exc:
         return "refused", f"SKIPPED {rel}: it could not be read ({exc}); add {manual} by hand"
     if (rows := cordis_rows(text)) is None:
         return "refused", f"SKIPPED {rel}: a ddflow-row line is not JSON; add {manual} by hand"
     if rows.get(name) == row:
         return "unchanged", f"{rel} already registers {name} with the same launch command"
-    new_line = f"    - {json.dumps(row)}  # ddflow-row:{name}"
-    lines = text.splitlines()
-    idx = next(
-        (i for i, ln in enumerate(lines) if (m := _CORDIS_ROW.match(ln)) and m["name"] == name),
-        None,
-    )
-    if idx is not None:
-        lines[idx] = new_line
-    elif (
-        ins := next((i for i, ln in enumerate(lines) if _CORDIS_INSERT.match(ln)), None)
-    ) is not None:
-        lines.insert(ins + 1, new_line)
-    else:
-        body = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
-        if body and body != ["[]"]:
-            return "refused", (
-                f"SKIPPED {rel}: it holds patch entries but no `- insert:` list to add to; "
-                f"add {manual} by hand"
-            )
-        lines = [ln for ln in lines if ln.strip() != "[]"]
-        if not lines:
-            lines = _CORDIS_HEADER.format(rel=rel).splitlines()
-        lines += ["- insert:", new_line]
-    out = "\n".join(lines) + "\n"
+    lines = text.splitlines() or _CORDIS_HEADER.format(rel=rel).splitlines()
+    placed = _cordis_place(lines, name, f"    - {json.dumps(row)}  # ddflow-row:{name}")
+    if placed is None:
+        return "refused", (
+            f"SKIPPED {rel}: it holds patch entries but no `- insert:` list to add to; "
+            f"add {manual} by hand"
+        )
+    out, replaced = "\n".join(placed[0]) + "\n", placed[1]
     if dry_run:
         return "written", f"WOULD write {rel}:\n{out}"
     path.parent.mkdir(parents=True, exist_ok=True)
     replace_text(path, out)
-    return "written", f"{'refreshed' if idx is not None else 'registered'} {name} in {rel}"
+    return "written", f"{'refreshed' if replaced else 'registered'} {name} in {rel}"
 
 
 def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
