@@ -36,6 +36,8 @@ QUEUE_POLL_S = 0.25
 #: Defaults of ``[ci].suite_queue_stale_s`` / ``suite_queue_grace_s``.
 STALE_S = 120.0
 GRACE_S = 120.0
+#: A ticket this young may be one whose owner has not locked it yet.
+NEW_S = 1.0
 
 
 class SuiteBusy(RuntimeError):
@@ -118,8 +120,9 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
             continue
         try:
             with fsio.file_lock(path, 0):  # got it: nobody owns this ticket any more
-                with contextlib.suppress(OSError):
-                    path.unlink()
+                if age > NEW_S:  # a ticket is created before its owner locks it
+                    with contextlib.suppress(OSError):
+                        path.unlink()
         except fsio.LockTimeout:
             if age <= stale_s:
                 live.append(path.name)
@@ -142,26 +145,29 @@ class _Ticket:
     def __init__(self, queue: Path, holder: str) -> None:
         queue.mkdir(parents=True, exist_ok=True)
         key = _key(holder)
-        old = _parked_for(queue, key)
-        if old is not None:  # a retry: back into the place it kept
-            stem = old.name[: -len(".parked")]
-            with contextlib.suppress(OSError):
-                old.rename(queue / f"{stem}.ticket")
-            self.name = f"{stem}.ticket"
+        self._parked = _parked_for(queue, key)  # a retry: back into the place it kept
+        if self._parked is not None:
+            self.path = queue / f"{self._parked.name[: -len('.parked')]}.ticket"
         else:
-            self.name = f"{time.time_ns():020d}-{key}.ticket"
-        self.path = queue / self.name
+            self.path = queue / f"{time.time_ns():020d}-{key}.ticket"
+        self.name = self.path.name
         self.park = False
         self._lock = contextlib.ExitStack()
 
     def __enter__(self) -> _Ticket:
-        self._lock.enter_context(fsio.file_lock(self.path, 0))
+        # Lock the file BEFORE it takes its ticket name: a scan that finds an unlocked
+        # ticket removes it, so the owner must never be seen unlocked.
+        self._lock.enter_context(fsio.file_lock(self._parked or self.path, 0))
+        if self._parked is not None:
+            with contextlib.suppress(OSError):
+                self._parked.rename(self.path)
         _beat(self.path)
         return self
 
     def __exit__(self, *exc: object) -> None:
         with contextlib.suppress(OSError):
             if self.park:
+                _beat(self.path)  # the grace runs from now, not from the last look
                 self.path.rename(self.path.with_suffix(".parked"))
             else:
                 self.path.unlink()
