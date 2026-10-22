@@ -124,6 +124,7 @@ def test_a_docs_only_item_is_not_owed_the_code_gates(repo):
         "dedupe",
     ):
         run_cli(repo, "gate", "record", "T1", g, "--outcome", "passed", "--evidence", f"{g} ok")
+    run_cli(repo, "gate", "skip", "T1", "unit_tests", "--reason", "docs-only change, no code")
     out = LC.complete(repo, "T1", agent="rescuer", model="claude-opus-5")
     assert out.exit == 0, out.reason
 
