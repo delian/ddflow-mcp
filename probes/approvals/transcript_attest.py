@@ -24,6 +24,12 @@ from pathlib import Path
 TOOL = "AskUserQuestion"
 
 
+def _filled(v: object) -> bool:
+    return (isinstance(v, str) and bool(v)) or (
+        isinstance(v, list) and bool(v) and all(isinstance(x, str) and x for x in v)
+    )
+
+
 def attestations(path: Path) -> list[dict]:
     uses: dict[str, dict] = {}  # tool_use id -> {"uuid": assistant row, "questions": [...]}
     out: list[dict] = []
@@ -57,15 +63,18 @@ def attestations(path: Path) -> list[dict]:
                 result = row.get("toolUseResult") or {}
                 decision = (row.get("permissionDecision") or {}).get("decision")
                 answers = result.get("answers")
+                # a question may be left unanswered, and a multi-select answer is a list of labels:
+                # the caller looks up the ONE question it rendered in `answered`
+                answered = {
+                    q: answers[q]
+                    for q in use["questions"]
+                    if isinstance(answers, dict) and _filled(answers.get(q))
+                }
                 ok = bool(
                     decision == "accept"
                     and use["uuid"]
                     and row.get("sourceToolAssistantUUID") == use["uuid"]
-                    and isinstance(answers, dict)
-                    and use["questions"]
-                    and all(
-                        isinstance(answers.get(q), str) and answers[q] for q in use["questions"]
-                    )
+                    and answered
                 )
                 out.append(
                     {
@@ -74,7 +83,7 @@ def attestations(path: Path) -> list[dict]:
                         "attested": ok,
                         "decision": decision,
                         "decision_source": (row.get("permissionDecision") or {}).get("source"),
-                        "answers": result.get("answers", {}),
+                        "answers": answered,
                         "asked": use["questions"],
                     }
                 )
