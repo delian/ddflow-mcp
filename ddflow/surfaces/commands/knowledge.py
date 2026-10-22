@@ -68,6 +68,33 @@ def cmd_lesson(a, c: Ctx) -> int:
     return FAIL
 
 
+def _job_end(a, c: Ctx, AJ) -> int:
+    """`job end`: one job, or every finished one (`--item` / `--all-finished`)."""
+    out = AJ.job_end(
+        c.repo,
+        a.job or "",
+        exit_code=a.exit_code,
+        note=a.note or "",
+        force=a.force,
+        item=a.item or "",
+        all_finished=a.all_finished,
+        agent=c.requested_agent,
+    )
+    if "ended" in out.data:
+        c.out(
+            out.reason if out.exit else f"ended {len(out.data['ended'])} finished job(s)",
+            out.body(("ended",)),
+        )
+        return out.exit
+    code = out.data.get("exit_code")
+    shown = "unknown" if code is None else code
+    c.out(
+        out.reason if out.exit else f"job {a.job} ended (exit {shown})",
+        out.body(("id", "exit_code")),
+    )
+    return out.exit
+
+
 def cmd_job(a, c: Ctx) -> int:
     from ...api import jobs as AJ
 
@@ -102,21 +129,7 @@ def cmd_job(a, c: Ctx) -> int:
         )
         return out.exit
     if a.job_cmd == "end":
-        out = AJ.job_end(
-            c.repo,
-            a.job,
-            exit_code=a.exit_code,
-            note=a.note or "",
-            force=a.force,
-            agent=c.requested_agent,
-        )
-        code = out.data.get("exit_code")
-        shown = "unknown" if code is None else code
-        c.out(
-            out.reason if out.exit else f"job {a.job} ended (exit {shown})",
-            out.body(("id", "exit_code")),
-        )
-        return out.exit
+        return _job_end(a, c, AJ)
     out = AJ.job_list(c.repo, item=a.item or "", include_ended=a.all, agent=c.requested_agent)
     if c.json:
         emit_json(out.body("jobs"))
@@ -415,15 +428,26 @@ def _misread_hint(a) -> str:
     return ""
 
 
-def _session_text(a) -> str | None:
+def _session_text(a, c: Ctx) -> str | None:
     """The words for `session prompt`/`note`: `--text`, else piped stdin.
 
     stdin because the operator's prompt is frequently multi-line and frequently contains
     the characters a shell would eat. A terminal on stdin is a person, not a pipe, and
-    reading it waits for them forever -- so that is refused before reading (None).
+    reading it waits for them forever -- so that is refused before reading (None). So is a
+    positional that names no session: it is the operator's words in the id slot, and the
+    stdin read that would follow blocks on an agent's open pipe (B-session-prompt-positional-hangs).
     """
     if a.text is not None:
         return a.text
+    if a.session and not A.session_known(c.repo, a.session, agent=c.requested_agent):
+        print(
+            f"{a.session!r} is not a session id, so it is not read as one: the positional "
+            f"argument of `session {a.session_cmd}` is the SESSION id. Pass the words with "
+            f'--text: ddflow session {a.session_cmd} --text "..." (omit the id for the '
+            f"latest open session)",
+            file=sys.stderr,
+        )
+        return None
     if sys.stdin is None or sys.stdin.isatty():
         print(
             f"refusing to read the {a.session_cmd} text from a terminal: pass it with --text "
@@ -454,7 +478,7 @@ def cmd_session(a, c: Ctx) -> int:
         c.out(out.data["session"], out.body(("session",)))
         return OK
     if a.session_cmd in ("prompt", "note"):
-        text = _session_text(a)
+        text = _session_text(a, c)
         if text is None:
             return FAIL
         if a.session_cmd == "prompt":

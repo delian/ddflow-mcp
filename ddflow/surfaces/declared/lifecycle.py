@@ -160,6 +160,7 @@ COMMANDS: tuple[Command, ...] = (
             "base",
             "rebound",
             "here",
+            "tree",
             "port",
             "port_advice",
             "broke",

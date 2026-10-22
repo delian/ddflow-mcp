@@ -30,8 +30,18 @@ ANSWER_CLI_PARAMS: tuple[Param, ...] = (
         default="",
         metavar="ID",
         exclusive=_ONE,
-        help="answer it: this adds to record ID -- appended to ID while it is open and "
-        "unclaimed, else filed as a new record linked to it",
+        help="answer it: this adds to record ID -- filed as a NEW record linked to ID "
+        "(a lesson, decision or bug is appended to instead; use --merge-into to append "
+        "to a task, phase or research note)",
+        cli_only=True,
+    ),
+    Param(
+        "merge_into",
+        default="",
+        metavar="ID",
+        exclusive=_ONE,
+        help="answer it: append this to record ID instead of filing it (ID must be open "
+        "and unclaimed); MCP: relation merge_into:ID",
         cli_only=True,
     ),
     Param(
@@ -65,7 +75,7 @@ ANSWER_TOOL_PARAMS: tuple[Param, ...] = (
     Param(
         "relation",
         help="Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | "
-        "related:ID (the refusal lists candidates and options). Omit at first.",
+        "related:ID | merge_into:ID (the refusal lists candidates and options). Omit at first.",
         mcp_only=True,
     ),
     Param(
@@ -81,7 +91,7 @@ ANSWER_PARAMS: tuple[Param, ...] = (*ANSWER_CLI_PARAMS, *ANSWER_TOOL_PARAMS)
 #: What an add tool omits of the CLI's flags, for `Command.flag_exempt` (the parity test).
 ANSWER_FLAG_EXEMPT: dict[str, str] = {
     f"--{name}": "the duplicate-check answer: MCP `relation` / `check_only`"
-    for name in ("new", "extends", "duplicate-of", "related", "check")
+    for name in ("new", "extends", "duplicate-of", "related", "merge-into", "check")
 }
 
 

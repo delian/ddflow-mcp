@@ -61,7 +61,7 @@ DEDUPE_PROPERTIES: dict[str, tuple[str, str, bool]] = {
     "relation": (
         "string",
         "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | "
-        "related:ID. Omit at first.",
+        "related:ID | merge_into:ID. Omit at first.",
         False,
     ),
     "check_only": (

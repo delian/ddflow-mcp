@@ -308,7 +308,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -705,7 +705,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -877,6 +877,10 @@
        "inputSchema": {
         "type": "object",
         "properties": {
+         "item": {
+          "type": "string",
+          "description": "Only the pairs this record is in."
+         },
          "kind": {
           "type": "string",
           "description": "Comma-separated subset of the configured kinds: bug,task,phase,lesson,decision,research,memory. Default: all of them."
@@ -1478,13 +1482,21 @@
     'ddflow_job_end': '''
       {
        "name": "ddflow_job_end",
-       "description": "Record that a job ended and how. Refused while the process is still running. The exit code defaults to the one its log recorded.",
+       "description": "Record that a job ended and how. Refused while the process is still running. The exit code defaults to the one its log recorded. With all_finished (every item) or item (one) and no job id, ends every job whose process is over.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "job": {
           "type": "string",
           "description": "Job id."
+         },
+         "all_finished": {
+          "type": "boolean",
+          "description": "End every job whose process is over (EXITED or GONE), of all items."
+         },
+         "item": {
+          "type": "string",
+          "description": "End every finished job of this item."
          },
          "exit_code": {
           "type": "integer",
@@ -1503,9 +1515,6 @@
           "description": "Subagent name, this call only."
          }
         },
-        "required": [
-         "job"
-        ],
         "additionalProperties": false
        }
       }
@@ -1647,7 +1656,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -1861,7 +1870,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -2122,7 +2131,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -2772,7 +2781,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
@@ -3007,6 +3016,10 @@
           "type": "string",
           "description": "Comma-separated globs it governs."
          },
+         "enforcement": {
+          "type": "string",
+          "description": "advisory | warn | block: how hard the rule binds (default advisory)."
+         },
          "new": {
           "type": "boolean",
           "description": "Dedup answer: a different record."
@@ -3074,6 +3087,10 @@
          "globs": {
           "type": "string",
           "description": "Comma-separated globs."
+         },
+         "enforcement": {
+          "type": "string",
+          "description": "New enforcement: advisory | warn | block."
          },
          "new": {
           "type": "boolean",
@@ -3346,7 +3363,7 @@
         "properties": {
          "agents": {
           "type": "string",
-          "description": "Comma-separated agents to write driver deltas for: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,opencode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,openhands,goose,cody. Default: all."
+          "description": "Comma-separated agents to write driver deltas for: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,opencode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,openhands,goose,cody,dsh. Default: all."
          },
          "refresh_docs": {
           "type": "boolean",
@@ -3564,7 +3581,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
