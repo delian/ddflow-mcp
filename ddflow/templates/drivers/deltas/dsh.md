@@ -15,6 +15,7 @@ Only the items below differ. Facts are from `docs/ddflow/research/dsh-probe.md`
    the project root down to the working directory, plus `AGENTS.local.md`, `CLAUDE.local.md`
    and `$DSH_HOME/AGENTS.md`. The budget is 64 KiB; broader files are dropped before the
    most specific one is truncated, so keep the root files small.
+   Skills are read from `.agents/skills` (shared with other agents) and also `.dsh/skills`.
 6. **Declare your model.** dsh runs any model. Review independence comes from the model
    declared at session start, not from the harness: say which model this session runs.
 7. **Tool names.** dsh's own tools are lowercase (`bash`, `read`, `write`, `edit`, `grep`);
@@ -42,8 +43,9 @@ The hooks come from the experimental `@deepseek-ai/dsh-hooks-claude-code` bridge
 be the version that matches dsh (`@next`, not `latest`) and is named in the overlay by the
 absolute path of its `lib/index.js`. If the bridge fails to load, dsh starts without hooks and
 prints one warning on stderr: check `ddflow verify`, not the model. The events are
-SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop; there is no pre-compaction
-or session-end event. `transcript_path` is always empty.
+SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop (the bridge also documents
+SubagentStart and SubagentStop, which ddflow does not map and the probe did not exercise);
+there is no pre-compaction or session-end event. `transcript_path` is always empty.
 
 ## What leaves the machine
 

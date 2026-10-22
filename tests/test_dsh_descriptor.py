@@ -24,7 +24,7 @@ def test_dsh_loads_with_the_launch_overlay_shape():
 def test_family_is_the_mcp_client_key_not_a_model_family():
     # firstcall.py matches `family` as a substring of the MCP clientInfo.name; dsh sends
     # `dsh-mcp-client` (tests/fixtures/dsh_probe/mcp_handshake.ndjson).
-    assert _dsh().family in "dsh-mcp-client"
+    assert _dsh().family == "dsh" and _dsh().family in "dsh-mcp-client"
 
 
 def test_hooks_are_the_claude_bridge_with_only_the_events_it_has():
