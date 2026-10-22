@@ -96,6 +96,8 @@ def test_gate_status_shows_how_long_a_run_queued_for_the_host_lock():
     st = fold(list(log.events), strict=False)
     s = O.status(st, Config(), "T1")
     assert s.queued == {"research": "queued 28m of 50m before it ran"}
+    tiny = O.status(fold(list(_log([0.04], "research").events), strict=False), Config(), "T1")
+    assert tiny.queued == {"research": "queued <0.1s of 50m before it ran"}
     half = O.status(fold(list(_log([0.5], "research").events), strict=False), Config(), "T1")
     assert half.queued == {"research": "queued 0.5s of 50m before it ran"}
     assert "queued 28m of 50m before it ran" in s.render()
