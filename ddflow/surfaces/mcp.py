@@ -1221,6 +1221,10 @@ def _upgrade_line(repo: Path, agent: str) -> str:
     the project -> what the start did and the proposal the operator is asked about. Else the
     one-line notice, said once per version on this machine, per project
     (`services.upgrade_notice`). A courtesy that can never fail a connect."""
+    from ..services import startcost as SC
+
+    if SC.is_measuring():  # `doctor` counting the handshake must not use up a notice
+        return ""
     notice = ""
     for name in ("upgrade_start", "upgrade_notice", "release_proposal"):
         try:  # each on its own: a start report that fails must not silence the notice
