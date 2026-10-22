@@ -19,8 +19,9 @@ The invariants, each pinned by `tests/test_ask_engine.py`:
   `verdict` approves only exactly that digest -- a later edit of the thing is not approved.
 * ONE-TIME CODE. ``with_code`` mints a code, shown once and kept only as its hash; an answer
   from anything but a terminal (a remote channel proving the person got the message) must
-  present it; a person at the terminal need not. The code is returned to the transport and never stored.
-* PROOF. The answer records its source and the hash of the code it presented; `verdict` re-checks
+  present it; a person at the terminal need not. The code is returned to the transport; before the answer the log holds only its hash, and
+  the answer keeps the spent code so `verdict` can re-hash it.
+* PROOF. The answer records its source and the one-time code it presented (spent by then); `verdict` re-checks
   both, so an `ask.answered` line appended by hand approves nothing. A terminal answer's source
   is the log's word (a same-uid process can write it): only the signed channel closes that.
 * EXPIRY. An ask lapses at ``expires_at`` (``[agent].ask_ttl_s`` unless given); an answer after
@@ -197,7 +198,7 @@ def answer(
                 "human": human,
                 "coded": bool(code),
                 "source": actor.source,
-                "code_proof": token_hash(code) if code else "",
+                "code_presented": code,  # spent now: kept so `verdict` can re-hash it
             },
         )
         return dict(get(_state(log), ask_id) or {})
@@ -279,7 +280,7 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
     if (
         last["code_hash"]
         and last["source"] != "terminal"
-        and not hmac.compare_digest(last["code_proof"], last["code_hash"])
+        and not hmac.compare_digest(token_hash(last["code_presented"]), last["code_hash"])
     ):
         return Verdict(False, f"{subject}: the answer did not present the one-time code", last)
     if last["digest"] != digest or last["answered_digest"] != digest:
