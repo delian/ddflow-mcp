@@ -568,7 +568,9 @@ def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[st
         # A merge's own content is what differs from EVERY parent (`--cc`): a conflict
         # resolution or an edit made inside the merge, which exists on no other commit.
         flags = ("--cc",) if merge else ()
-        files = W.git(here, "diff-tree", *flags, "--no-commit-id", "--name-only", "-r", sha)
+        files = W.git(
+            here, "diff-tree", "--root", *flags, "--no-commit-id", "--name-only", "-r", sha
+        )
         if not files.ok or not set(files.out.split()) <= set(pins):
             return False
     return True
@@ -754,9 +756,22 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
             t.done = f"kept: {t.name} is no longer only landed leftovers since the survey"
             return [f"kept {t.name}: no longer only landed leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
+    tip = (
+        W.git(root, "rev-parse", "--verify", f"refs/heads/{t.branch}").out.strip() if proof else ""
+    )
     d = dispose_tree(repo, cfg, log, wt, forced_by=proof)
-    if proof and d.removed and d.branch_left and W.git(root, "branch", "-D", t.branch).ok:
-        d = Disposal("removed", had_branch=True)
+    if proof and tip and d.removed and d.branch_left:
+        # The branch only lacks the merge-main/pin commits just proved to be leftovers. Dropped
+        # under the log's lock, still held by nobody, and only if it is still at the proved tip.
+        with log.transaction():
+            guard = _protected(
+                root, cfg, localize(fold(log.read_all(), strict=False), log, time.time())
+            )
+            if (
+                not guard.held_branches.get(t.branch)
+                and W.git(root, "update-ref", "-d", f"refs/heads/{t.branch}", tip).ok
+            ):
+                d = Disposal("removed", had_branch=True)
     if d.outcome == "refused":
         t.action, t.kind, t.done = "", d.kind, d.why
         return [f"kept {t.name}: {d.kind} since the survey"]
