@@ -105,8 +105,8 @@ def _added(out, a) -> str:
 def _edited(out, a) -> str:
     fields = sorted(
         k
-        for k in ("title", "content", "scope", "tags", "globs", "priority", "enforcement")
-        if k in a
+        for k in ("title", "content", "scope", "tags", "globs", "priority", "enforcement", "pin")
+        if (a.get(k) if k == "pin" else k in a)
     )
     related = out.data.get("related")
     return (
