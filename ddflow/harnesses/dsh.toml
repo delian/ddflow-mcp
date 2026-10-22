@@ -1,0 +1,60 @@
+id = "dsh"
+rank = 22
+family = "dsh"
+title = "dsh (DeepSeek Harness)"
+delta = "dsh.md"
+
+[mcp]
+path = ".ddflow/harness/dsh.cordis.yml"
+shape = "cordis-patch-yaml"
+note = "dsh reads MCP servers (and hook bridges) only from Cordis YAML patch layers: a --patch overlay, $DSH_HOME/cordis.patch.yml or the profile's. No project file is read, so ddflow owns an overlay and the launch line is part of the integration: dsh --profile <p> --patch .ddflow/harness/dsh.cordis.yml. A forgotten --patch removes ddflow with no error. New rows need '- insert:'; an unknown id only warns. Probed on dsh 0.2.1-rc.2: tools appear before turn 1 as mcp__ddflow__*."
+
+[instructions]
+reads = ["AGENTS.md", "CLAUDE.md", "AGENTS.local.md", "CLAUDE.local.md", "$DSH_HOME/AGENTS.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".ddflow/harness/dsh.hooks.json"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+stop = "Stop"
+
+[skills]
+dir = ".agents/skills"
+
+[env]
+session_id = ["DSH_SESSION_ID"]
+
+[verified]
+date = "2026-10-22"
+sources = [
+  "https://github.com/deepseek-ai/deepseek-harness",
+  "docs/ddflow/research/dsh.md",
+  "docs/ddflow/research/dsh-probe.md",
+]
+record = "R-dsh-probe"
+probe = "dsh 0.2.1-rc.2 --dump-default-config, --dump-config-schema and headless --json runs against a local stub endpoint, ddflow MCP stdio and the hooks-claude-code@0.2.1-rc.2 bridge; fixtures in tests/fixtures/dsh_probe"
+unverified = [
+  "plugin (dsh has a Cordis bundle mechanism, dsh plugin add, but ddflow ships none: the operator deferred DSH-bundle; a [plugin] section would make the ladder claim the plugin level for events the bridge lacks)",
+  "commands (plugin-registered only, no file directory)",
+  "subagents (native tools; definition files not found)",
+  "worktrees",
+  "pre_compact and session_end hook events (the bridge has none)",
+  "SubagentStart and SubagentStop (the bridge README lists them; the canonical events have no subagent hook, so none is mapped; not exercised)",
+  "instruction budget 65536 bytes (no descriptor field; see the delta note)",
+  ".dsh/skills (also read; the descriptor holds one directory, the shared .agents/skills)",
+  "tools/list_changed at runtime",
+  "SessionStart ordering outside headless",
+  "behaviour under a real model",
+]
