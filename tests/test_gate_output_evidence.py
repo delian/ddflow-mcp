@@ -80,6 +80,7 @@ def test_the_run_logs_are_never_committed(repo):
 def test_gate_record_keeps_the_output_file_it_digests(repo, tmp_path, monkeypatch):
     # A person's hand record: an agent's typed pass of a command gate is refused (Bed643a611b).
     monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     _setup(repo)
     out_file = tmp_path / "run.log"
     out_file.write_text("=== 2 failed ===\n" + "y" * 3000 + "\n=== 9 passed ===\n")

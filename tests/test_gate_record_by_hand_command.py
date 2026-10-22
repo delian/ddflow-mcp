@@ -22,15 +22,16 @@ from ddflow.infra.log import EventLog
 from ddflow.services import report_gates
 
 OK, REFUSED = 0, 3
-HAND = ("gate", "record", "T1", "unit_tests", "--outcome", "passed", "--command", "pytest -q",
+#: The configured command itself, typed by hand: the refusal is the missing run, not a mismatch.
+CMD = f"{sys.executable} -c \"print('1 passed')\""
+HAND = ("gate", "record", "T1", "unit_tests", "--outcome", "passed", "--command", CMD,
         "--exit-code", "0", "--evidence", "ran it")  # fmt: skip
 
 
 def _setup(repo: Path) -> None:
     run_cli(repo, "init")
-    cmd = f"{sys.executable} -c \"print('1 passed')\""
     (repo / ".ddflow" / "gates.toml").write_text(
-        f'[gate.unit_tests]\ncommand = {json.dumps(cmd)}\ncwd = "repo"\n'
+        f'[gate.unit_tests]\ncommand = {json.dumps(CMD)}\ncwd = "repo"\n'
     )
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
 
