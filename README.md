@@ -1100,7 +1100,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 373 knobs.
+cadences, and the rest of the 374 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5290,7 +5290,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 373): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 374): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5833,7 +5833,7 @@ declared once and persists — see
 
 ## Configuration
 
-373 knobs across 41 sections, every one documented in place and listed, with its default
+374 knobs across 41 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
