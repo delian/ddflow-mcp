@@ -9,7 +9,6 @@ think about.
 
 from __future__ import annotations
 
-import select
 import sys
 
 from ...api import knowledge as A
@@ -444,28 +443,7 @@ def _session_text(a, c: Ctx) -> str | None:
             file=sys.stderr,
         )
         return None
-    if not _stdin_speaks():
-        print(
-            f"refusing to wait on stdin for the {a.session_cmd} text: nothing arrived in "
-            f"{_STDIN_WAIT_S:g}s, so it is an open pipe nobody writes to (an agent's). "
-            f'Pass the words with --text: ddflow session {a.session_cmd} --text "..."',
-            file=sys.stderr,
-        )
-        return None
     return sys.stdin.read()
-
-
-#: How long a piped stdin may stay silent before it is judged to carry no text.
-_STDIN_WAIT_S = 15.0
-
-
-def _stdin_speaks() -> bool:
-    """Whether stdin has data or EOF within `_STDIN_WAIT_S` (always true where select cannot tell)."""
-    try:
-        ready, _, _ = select.select([sys.stdin], [], [], _STDIN_WAIT_S)
-    except (OSError, ValueError, TypeError):
-        return True
-    return bool(ready)
 
 
 def _where(d: dict) -> str:

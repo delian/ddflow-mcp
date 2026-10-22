@@ -205,7 +205,6 @@
 "ddflow/services/verify.py:_MIN_SUBJECT" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
 "ddflow/services/workflow.py:OLD_PARALLEL_DEFAULT" = "legacy default kept for events recorded before the knob existed; replay reads it, so it is history, not a setting"
 "ddflow/surfaces/commands/knowledge.py:_JSON_FIELD_CAP" = "fixed shape of an internal transport (worker pool, per-record trim of a machine-readable field)"
-"ddflow/surfaces/commands/knowledge.py:_STDIN_WAIT_S" = "how long an agent's piped stdin may stay silent before session prompt/note refuses it with a --text pointer (a failure bound, not a tunable)"
 "ddflow/surfaces/context.py:_MIN_SPLIT_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/surfaces/mcp.py:MAX_WORKERS" = "fixed shape of an internal transport (worker pool, per-record trim of a machine-readable field)"
 "ddflow/surfaces/registry.py:GROUP_DEPTH" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
