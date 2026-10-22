@@ -27,7 +27,9 @@ def _git(*a: str) -> None:
     subprocess.run(["git", *a], check=True, capture_output=True)
 
 
-def _merged(repo: Path, item: str, rel: str, globs: list[str] | None = None) -> None:
+def _merged(
+    repo: Path, item: str, rel: str, globs: list[str] | None = None, keep: bool = False
+) -> None:
     """``item`` claimed, one file committed on its branch, merged by ddflow."""
     run_cli(repo, "init")
     log = EventLog(repo, "seed")
@@ -41,7 +43,7 @@ def _merged(repo: Path, item: str, rel: str, globs: list[str] | None = None) -> 
     _git("-C", str(wt), "add", "-A")
     ident = ["-c", "user.email=t@e.com", "-c", "user.name=T"]
     _git("-C", str(wt), *ident, "commit", "-qm", f"{item} work")
-    assert LC.merge(repo, item, agent="worker").exit == 0
+    assert LC.merge(repo, item, agent="worker", keep=keep).exit == 0
     EventLog(repo, "worker").append(
         "session.started", "s1", {"agent": "worker", "model": "claude-opus-5"}
     )
@@ -115,3 +117,13 @@ def test_an_unmerged_item_is_still_only_advised_to_release(repo):
     _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
     (rec,) = _recs(repo, "T2")
     assert "complete" not in rec.advice and "ddflow release T2" in rec.advice, rec.advice
+
+
+def test_a_kept_clean_tree_with_no_lease_is_advised_to_complete_without_a_lease_clause(repo):
+    """The orphan path: merged with `keep`, lease released, the clean tree still there."""
+    _merged(repo, "T1", "src/T1/a.py", keep=True)
+    assert L.release(EventLog(repo, "scanner"), "T1", note="released")
+    (rec,) = _recs(repo, "T1")
+    assert rec.kind == "orphan_worktree"
+    assert "ddflow complete T1" in rec.advice and "ddflow release" not in rec.advice, rec.advice
+    assert "clears the lease" not in rec.advice
