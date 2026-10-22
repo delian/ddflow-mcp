@@ -110,3 +110,11 @@ def test_the_report_counts_a_bare_command_string_as_by_hand():
         outcome="passed", by="a", reason="", evidence={"command": "x", "ran_by": "typed"}
     )
     assert report_gates._row("ci", forged, cfg)["by_hand"] is True
+
+
+def test_a_typed_pass_over_a_real_run_is_refused_and_the_run_stands(repo):
+    _setup(repo)
+    assert run_cli(repo, "gate", "run", "T1", "unit_tests", agent="a1")[0] == OK
+    code, out, err = run_cli(repo, *HAND, agent="a1")
+    assert code == REFUSED, out + err
+    assert _gate(repo).evidence.get("command_digest"), "the run's evidence was replaced"

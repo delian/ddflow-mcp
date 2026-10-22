@@ -3,16 +3,15 @@
 `gate record --outcome passed --command 'pytest -q' --exit-code 0` on a gate that has a
 command, with no run, put a green `unit_tests` or `ci` into the log on the agent's word. The
 project rule is that a tool that could not run is recorded `unavailable`, never `passed`.
-So an AGENT's hand-recorded pass of a command gate is refused unless ddflow can verify it: the
-gate's current record is a pass of a real run (it carries the run's `command_digest`) on
-this very tree. The operator's overrides are untouched: a person's terminal, `gate skip`.
+So an AGENT's hand-recorded pass of a command gate is always refused: a real run's pass is
+recorded by `gate run` (or `ci run`), which do not come through here, and a second typed pass
+over it would only replace the run's evidence with the agent's word. The operator's overrides
+are untouched: a person's terminal, `gate skip`.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-from .evidence import tree_identity
 
 #: The tools that run a command gate's command themselves and record the result through
 #: `gate record`'s API (`Evidence.ran_by`). Any other value is not trusted.
@@ -20,20 +19,9 @@ CI_RUN = "ddflow ci run"
 RAN_BY = frozenset({CI_RUN})
 
 
-def _refusal(it, gdef, gate: str, outcome: str, agent_why: str, tree: Any) -> str:
+def _refusal(it, gdef, gate: str, outcome: str, agent_why: str) -> str:
     """Why an agent's hand-recorded ``outcome`` for ``gate`` is refused, else ""."""
     if outcome != "passed" or not agent_why or gdef is None or not gdef.is_command_gate:
-        return ""
-    rec = it.gates.get(gate)
-    ev = (rec.evidence if rec else None) or {}
-    now = tree_identity(tree) if tree is not None and tree.exists() else ""
-    if (
-        rec
-        and rec.outcome == "passed"
-        and ev.get("command_digest")
-        and now
-        and ev.get("tree_sha") == now
-    ):
         return ""
     return (
         f"{gate} runs a command, and a pass of it is `ddflow gate run {it.id} {gate}`'s to "
@@ -66,6 +54,6 @@ def hand_record(
     record: it is neither refused nor annotated."""
     if skip or evidence.ran_by in RAN_BY:
         return "", {}
-    if why := _refusal(it, gdef, gate, outcome, agent_why, tree):
+    if why := _refusal(it, gdef, gate, outcome, agent_why):
         return why, {}
     return "", _gaps(evidence.command, evidence.output_file, tree, host)
