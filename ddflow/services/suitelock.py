@@ -11,7 +11,12 @@ arrival beat one that had waited half an hour). Each waiter takes a TICKET, a fi
 ``queue/`` named by the arrival time, holds an flock on it (a dead waiter's ticket frees
 itself with the process) and touches it as a heartbeat (a waiter that stopped beating is
 passed over). Only the head of the live tickets tries the slots. A waiter that gave up on the
-wait parks its ticket for ``[ci].suite_queue_grace_s``, so a retry keeps its place."""
+wait parks its ticket for ``[ci].suite_queue_grace_s``, so a retry keeps its place.
+
+r-lock-cycle-selfheal forbids AGENTS holding file leases while they wait; this is a bounded
+host-lock poll with a heartbeat, 0.25 s apart like the sweep of `slots.Slots.hold`, it ends
+after ``[ci].suite_wait_s`` and no lease is held. `SuiteBusy` takes the queue ``position`` as
+a third argument (default 0, unknown)."""
 
 from __future__ import annotations
 
