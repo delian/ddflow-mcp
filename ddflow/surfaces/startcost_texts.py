@@ -10,7 +10,6 @@ import importlib
 import json
 from pathlib import Path
 
-from ..api.lifecycle.brief import brief
 from ..core.measuring import measuring
 
 
@@ -20,8 +19,9 @@ def start_texts(repo: Path, agent: str = "") -> dict[str, str]:
     A part that cannot be built raises: `services.startcost.report` turns that into a said
     'could not be measured', never a quiet 0."""
     # By name, not `import`: the MCP server imports the tool declarations that import this
-    # module, so a module-level import here would be a cycle.
+    # module (a cycle), and the tool table must load without the api.
     mcp = importlib.import_module("ddflow.surfaces.mcp")
+    brief = importlib.import_module("ddflow.api.lifecycle.brief").brief  # the api stays unloaded
     texts = {"instructions": "", "tools/list": "", "brief": ""}
     with measuring():
         srv = mcp.Server(repo, agent)
