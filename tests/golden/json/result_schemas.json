@@ -756,7 +756,8 @@
   "shape": "object",
   "payload": [
    "trees",
-   "stale_branches"
+   "stale_branches",
+   "orphan_blobs"
   ],
   "output_schema": {
    "type": "object",
@@ -766,6 +767,7 @@
     },
     "trees": {},
     "stale_branches": {},
+    "orphan_blobs": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
