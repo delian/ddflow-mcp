@@ -292,7 +292,7 @@ def probe_problem(roots: list[Path], probe: str) -> str:
     if missing:
         return (
             f"probe names {', '.join(missing)}, which no worktree defines "
-            f"(looked in {_where(roots)})"
+            f"(looked in tests/ of every worktree)"
         )
     prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
     bare = set(_BARE_TEST.findall(prose))
