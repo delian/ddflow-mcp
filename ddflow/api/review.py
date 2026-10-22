@@ -26,6 +26,7 @@ from typing import Any
 from ..config import family_for
 from ..core import blobref as B
 from ..core import clock
+from ..core import globs as GL
 from ..core import outcome as O
 from ..core.digest import content_digest
 from ..core.slug import safe_filename
@@ -444,6 +445,9 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
         moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
+        if moved:  # a test answering a finding is not new work (triage_ignore_globs)
+            ignore = cfg.review.triage_ignore_globs or []
+            moved = [p for p in moved if not any(GL.match(p, g) for g in ignore)]
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
