@@ -107,14 +107,13 @@ def resolve(
     placed: dict[str, Placement] = {}
     bad: list[str] = []
     for name in names if names is not None else commands:
-        if name in HOT_SINGLES:
-            placed[name] = Placement(name, "")
-            continue
         cmd = commands.get(name)
         family = getattr(cmd, "family", "")
         action = getattr(cmd, "action", "")
-        if family in HOT_SINGLES:
-            bad.append(f"{name}: family {family} is a hot single and takes no actions")
+        if name in HOT_SINGLES and not (family or action):
+            placed[name] = Placement(name, "")
+        elif name in HOT_SINGLES or family in HOT_SINGLES:
+            bad.append(f"{name}: a hot single takes no family or action ({family or name})")
         elif family and family not in FAMILY_TOOLS:
             bad.append(f"{name}: family {family} is not one of {', '.join(FAMILY_TOOLS)}")
         elif family and action:
