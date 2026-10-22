@@ -861,8 +861,13 @@ class _Vetted:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
+def _has_research_note(st, it) -> bool:
+    """Does a RESEARCH item have a recorded note (`research add --item`)? Its deliverable."""
+    return it.kind == "research" and any(n.item == it.id for n in st.research.values())
+
+
 def _implement_without_commits(
-    repo: Path, cfg, it, gate: str, result: str, wt, *, has_note: bool = False
+    repo: Path, cfg, it, gate: str, result: str, wt, has_note=False
 ) -> str:
     """A refusal when `implement` is passed for an item whose own worktree has no commit
     ahead of its base, else "" (a landed item is never judged: B998bcca9ce; bug B31c0109012: a commit the lease hook refused was
@@ -871,7 +876,7 @@ def _implement_without_commits(
     be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
-    if it.kind == "research" and has_note:
+    if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
     if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
@@ -1222,13 +1227,7 @@ def record(
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
     if not force and (
         why := _implement_without_commits(
-            repo,
-            cfg,
-            it,
-            gate,
-            result,
-            wt,
-            has_note=any(n.item == it.id for n in st.research.values()),
+            repo, cfg, it, gate, result, wt, _has_research_note(st, it)
         )
     ):
         return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
