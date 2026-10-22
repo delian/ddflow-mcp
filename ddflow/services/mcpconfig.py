@@ -190,7 +190,8 @@ def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
     things that no test tied together, and only one of them could express nesting.
     """
     if shape == SHAPE_CORDIS_PATCH:
-        return {}  # YAML overlay, not JSON: read it with `cordis_rows`
+        # A YAML overlay, not parsed JSON: answering {} here would read as "no servers".
+        raise ValueError("the cordis-patch-yaml overlay is not JSON data; read it with cordis_rows")
     if shape == SHAPE_OPENCODE:
         path: tuple[str, ...] = ("mcp",)
     elif shape == SHAPE_MCP_DOT_SERVERS:
