@@ -509,7 +509,7 @@ COMMANDS: tuple[Command, ...] = (
             base=a.get("base", "") or "",
             command=a.get("command", "") or "",
             full=bool(a.get("full")),
-            timeout_s=int(a.get("timeout") or 0),
+            timeout_s=a.get("timeout"),
             agent=agent,
         ),
         payload="",

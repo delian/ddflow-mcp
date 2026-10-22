@@ -115,7 +115,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     return swept
 
 
-def _resolve(repo: Path, item: str, gate: str, agent: str, timeout_s: int = 0):
+def _resolve(repo: Path, item: str, gate: str, agent: str, timeout_s: int | None = None):
     """(log, cfg, state, item, gatedef) or an Outcome explaining why not.
 
     One place for the two existence checks every gate operation needs. `approve` once
@@ -580,11 +580,11 @@ def run(
     rerun_failed: bool = False,
     force: bool = False,
     reason: str = "",
-    timeout_s: int = 0,
+    timeout_s: int | None = None,
 ) -> O.Outcome:
     """Execute a command gate and record what it said.
 
-    ``timeout_s`` (> 0) replaces the gate's own timeout for THIS run, and the ci budget inside
+    ``timeout_s`` (None: as declared; else 1..max) replaces the gate's own timeout for THIS run, and the ci budget inside
     it, up to ``[gates].max_run_timeout_s``: nobody edits the shared local config to get a
     longer run on a loaded host.
 
@@ -696,11 +696,11 @@ def run(
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
-def _with_run_timeout(cfg, gdef, timeout_s: int, item: str, gate: str):
+def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
     """``gdef`` for one run that may take ``timeout_s`` (0: as declared): its own timeout, and
     the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
     outside ``[gates].max_run_timeout_s`` is the refusal instead."""
-    if not timeout_s or gdef is None:
+    if timeout_s is None or gdef is None:
         return gdef
     if not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
         return O.refused(
@@ -711,9 +711,9 @@ def _with_run_timeout(cfg, gdef, timeout_s: int, item: str, gate: str):
             gate=gate,
             outcome="",
         )
-    command = gdef.command
-    if command.strip().startswith("ddflow ci run") and "--timeout" not in command:
-        command = f"{command} --timeout {timeout_s}"
+    command = gdef.command or ""
+    if command.strip().startswith("ddflow ci run"):
+        command = re.sub(r"\s--timeout[= ]\d+", "", command) + f" --timeout {timeout_s}"
     return replace(gdef, timeout_s=timeout_s, command=command)
 
 

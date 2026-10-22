@@ -54,7 +54,7 @@ def test_a_negative_timeout_is_refused(repo: Path):
 
 def test_the_ci_gate_passes_the_budget_to_ddflow_ci_run():
     gate = GateDef(id="ci", title="ci", command="ddflow ci run", timeout_s=3600)
-    cfg = Config.load(Path("."))
+    cfg = Config()
     out = _with_run_timeout(cfg, gate, 7200, "T1", "ci")
     assert out.timeout_s == 7200 and out.command == "ddflow ci run --timeout 7200"
     other = _with_run_timeout(
@@ -67,3 +67,20 @@ def test_ci_run_has_its_own_bounded_timeout_flag(repo: Path):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "ci", "run", "--timeout", "99999999")
     assert code == 3 and "[gates].max_run_timeout_s" in out + err
+
+
+def test_an_explicit_zero_timeout_is_refused_not_ignored(repo: Path):
+    _slow_gate(repo)
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", "--timeout", "0")
+    assert code == 3 and "max_run_timeout_s" in out + err
+
+
+def test_a_ci_command_that_already_carries_a_timeout_is_overridden():
+    cfg = Config()
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run --timeout 7200", timeout_s=3600)
+    assert _with_run_timeout(cfg, gate, 30, "T1", "ci").command == "ddflow ci run --timeout 30"
+
+
+def test_a_gate_without_a_command_does_not_crash_the_override():
+    human = GateDef(id="approve", title="a", command=None)
+    assert _with_run_timeout(Config(), human, 30, "T1", "approve").timeout_s == 30

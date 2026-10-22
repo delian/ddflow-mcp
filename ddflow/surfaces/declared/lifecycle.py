@@ -430,7 +430,7 @@ COMMANDS: tuple[Command, ...] = (
             rerun_failed=bool(a.get("rerun_failed")),
             force=bool(a.get("force")),
             reason=a.get("reason", "") or "",
-            timeout_s=int(a.get("timeout") or 0),
+            timeout_s=a.get("timeout"),
         ),
         payload=("gate", "outcome", "evidence"),
         render=L.run_text,
