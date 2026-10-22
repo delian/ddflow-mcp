@@ -123,7 +123,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         params=(Param("apply", type="boolean", help="Perform the safe actions.", cli_help=""),),
         call=lambda repo, a, agent: _api().cleanup(repo, apply=bool(a.get("apply")), agent=agent),
-        payload=("trees", "stale_branches"),
+        payload=("trees", "stale_branches", "orphan_blobs"),
     ),
     Command(
         path=("rebuild",),

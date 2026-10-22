@@ -13,14 +13,26 @@ from ..context import FAIL, NOTHING, OK, Ctx
 from ..render import emit_json
 
 
+def _print_orphans(orphans: list[str]) -> None:
+    if orphans:
+        print(
+            f"\n{len(orphans)} event blob(s) that no shard names (nobody's; never committed, "
+            f"delete them if they are not wanted):"
+        )
+        for rel in orphans:
+            print(f"  {rel}")
+
+
 def cmd_cleanup(a, c: Ctx) -> int:
     """Classify every ddflow worktree and branch; with --apply, land the safe ones."""
     out = A.cleanup(c.repo, apply=a.apply, agent=c.requested_agent)
     if c.json and not a.apply:
-        emit_json(out.body(("trees", "stale_branches")))
+        emit_json(out.body(("trees", "stale_branches", "orphan_blobs")))
         return out.exit
+    orphans = out.data.get("orphan_blobs") or []
     if out.exit == NOTHING:
         print(out.reason)
+        _print_orphans(orphans)
         return NOTHING
     plan = out.data["_render"]["plan"]
     for t in plan.trees + plan.stale_branches:
@@ -30,6 +42,7 @@ def cmd_cleanup(a, c: Ctx) -> int:
             f"\n{len(plan.needs_human)} tree(s) hold UNCOMMITTED work or could not be read, "
             f"and are never touched automatically. Inspect each before deciding."
         )
+    _print_orphans(orphans)
     if not a.apply:
         print(
             f"\n{out.data['actionable']} safe action(s) available. Re-run with --apply "
