@@ -486,9 +486,11 @@ def _arm_watcher(w: subprocess.Popen | None, p: subprocess.Popen | None) -> None
     if w is None or w.stdin is None:
         return
     with contextlib.suppress(OSError, ValueError):
-        if p is not None:
-            w.stdin.write(f"{p.pid}\n")
-        w.stdin.close()
+        try:
+            if p is not None and os.getpgid(p.pid) == p.pid:  # it leads a group of its own
+                w.stdin.write(f"{p.pid}\n")
+        finally:
+            w.stdin.close()
 
 
 def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
