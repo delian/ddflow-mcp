@@ -70,8 +70,9 @@ def sync(
             "whatever was applied: resolve it there, then `git stash drop` that entry."
         )
     if r.stash_note:  # merged and restored, but the stash is not as it should be: not a clean exit
-        text += f"\nSTASH NOT CLEANED UP: {r.stash_note}"
-        return O.refused("sync", text, **data)
+        # A git failure (stash list/drop/store), not a coordination refusal: exit 1, and the
+        # warning leads the prose, ahead of the merge summary.
+        return O.failed("sync", f"STASH NOT CLEANED UP: {r.stash_note}\n{text}", **data)
     if r.status in ("refused", "conflict"):
         return O.refused("sync", text, **data)
     if r.status in ("unknown", "current"):
