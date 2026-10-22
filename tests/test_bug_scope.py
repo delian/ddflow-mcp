@@ -226,7 +226,7 @@ def test_the_offer_is_produced_once_the_command_is_set(repo, monkeypatch):
     assert "`ddflow bug example B-o`" in again.data["offer"], again.data
 
 
-def test_an_explicit_project_scope_demotes_and_a_task_target_gets_no_phantom_bug(repo):
+def test_an_explicit_project_scope_demotes_and_a_merged_task_target_gets_no_phantom_bug(repo):
     run_cli(repo, "init")
     run_cli(repo, "bug", "found", "--id", "B-d", "--summary", "mis scoped one", "--scope", "ddflow")
     assert _bugs(repo)["B-d"].scope == "ddflow"
@@ -234,11 +234,18 @@ def test_an_explicit_project_scope_demotes_and_a_task_target_gets_no_phantom_bug
         repo, "bug", "found", "--id", "B-d", "--summary", "mis scoped one", "--scope", "project"
     )
     assert _bugs(repo)["B-d"].scope == "project"
-    # `--extends` pointing at a task: the text goes onto the task, no bug record appears
+    # `--merge-into` pointing at a task: the text goes onto the task, no bug record appears
     run_cli(repo, "task", "add", "T-x", "--title", "widget resize handles flicker on drag")
     code, _, err = run_cli(
         repo, "bug", "found", "--id", "B-t", "--summary", "widget resize handles flicker on drag",
-        "--extends", "T-x", "--severity", "high",
+        "--merge-into", "T-x", "--severity", "high",
     )  # fmt: skip
     assert code == 0, err
-    assert set(_bugs(repo)) == {"B-d"}, "extending a task must not create a bug record"
+    assert set(_bugs(repo)) == {"B-d"}, "merging into a task must not create a bug record"
+    # `--extends` pointing at a task files the bug, linked to it, and leaves the task alone
+    code, _, err = run_cli(
+        repo, "bug", "found", "--id", "B-u", "--summary", "widget resize handles flicker on drag",
+        "--extends", "T-x",
+    )  # fmt: skip
+    assert code == 0, err
+    assert set(_bugs(repo)) == {"B-d", "B-u"}
