@@ -631,6 +631,8 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
+        else:  # the earlier copy stays, numbered in the earlier cut (`merge_rerun`)
+            ev["delta_reraised"] = [*ev.get("delta_reraised", []), f.get("digest")]
     gone = carry(ev, prior)
     ev["chunk_findings"] = kept
     ev["findings"] = len(kept)
@@ -651,6 +653,9 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
 
 
 _SETTLED = ("refuted", "confirmed")
+_DELTA_CUT_HOW = "the delta since "  # `diff_source` of a --chunk re-run cut from a delta
+#: what a delta record says about its own cut; a `--chunk` re-run of it carries them on
+_DELTA_KEYS = ("delta_from", "delta_raised", "delta_reraised", "delta_findings", "full_coverage")
 
 
 def _hold(outcome: str, reason: str, untriaged: int, say) -> tuple[str, str]:
@@ -1233,19 +1238,64 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         return kind, done, forced, diff, how, why, None
     if item:
         say(_rounds_report(cfg, it, a, why_ok))
-    if delta:
-        diff, how, why = _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
-    elif a["commit"]:
-        diff, how = commit_diff(repo, a["commit"])
-    else:
-        diff, how = diff_for(
-            repo, cfg, st, item, a["base"], branch=a["branch"], called_from=a["called_from"]
-        )
+    diff, how, why = _pick_diff(repo, cfg, st, it, a, delta)
     rerun = None
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
+
+
+def _pick_diff(repo, cfg, st, it, a: dict[str, Any], delta: bool) -> tuple[str, str, str]:
+    """(diff, how, why not): what this call reviews -- the delta, a `--chunk` re-run of a
+    recorded delta (`_delta_cut`), a commit, or the item's whole change."""
+    item, gate = a["item"], a["gate"]
+    if delta:
+        return _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
+    if (
+        a["chunks"]
+        and not a["commit"]
+        and not a["base"]
+        and (found := _delta_cut(repo, cfg, it, a))
+    ):
+        return found
+    if a["commit"]:
+        return (*commit_diff(repo, a["commit"]), "")
+    diff, how = diff_for(
+        repo, cfg, st, item, a["base"], branch=a["branch"], called_from=a["called_from"]
+    )
+    return diff, how, ""
+
+
+def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str, str] | None:
+    """(diff, how, why not) a `--chunk` re-run of a recorded DELTA round is cut from, or None
+    when the record is not a delta's.
+
+    The chunk numbers of such a record mean something only in the delta it reviewed -- the
+    commits since `delta_from` -- not in the item's whole change, so a partial delta
+    (a chunk timed out) could never be completed (B00e6b5a540). The diff is cut afresh: if
+    the branch moved since, its digest differs and `_rerun_scope` refuses it. A delta that
+    cannot be produced is said so, not read as a different cut."""
+    if not (it and a["item"]):
+        return None
+    start = str(_prior_evidence(it.gates.get(a["gate"])).get("delta_from") or "")
+    if not start:
+        return None
+    try:
+        diff = _delta_diff(repo, it, a["branch"], start, cfg.worktree.base_ref or "")
+    except RuntimeError as exc:
+        return (
+            "",
+            "",
+            f"the delta since {start[:10]} could not be produced ({exc}); run the full review.",
+        )
+    if not diff.strip():
+        return (
+            "",
+            "",
+            f"nothing changed since {start[:10]}, the start of the recorded delta; run the full review.",
+        )
+    return diff, f"{_DELTA_CUT_HOW}{start[:10]}", ""
 
 
 def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
@@ -1909,6 +1959,13 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **_reviewed_snapshot(repo, cfg, st, it, called_from),
     }
+    if kind == "chunk" and it is not None:
+        # A re-run of part of a DELTA round stays that delta's record: the next --chunk
+        # needs its start and which findings are its own (B00e6b5a540).
+        prior = _prior_evidence(it.gates.get(gate))
+        # `delta_from` only when this re-run WAS cut from it, not from the user's own ref
+        keys = [k for k in _DELTA_KEYS if k != "delta_from" or how.startswith(_DELTA_CUT_HOW)]
+        evidence.update({k: prior[k] for k in keys if k in prior and k not in evidence})
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     _record(

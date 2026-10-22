@@ -279,8 +279,8 @@ Before you FILE something, `ddflow_similar` lists the records it reads like. An 
 looks like an existing record is refused as a possible duplicate, with `candidates` and
 `options`; answer by calling the same tool again with `relation`: `new` (a different
 record), `extends:ID` or `duplicate_of:ID` (the same thing) or `related:ID` (linked both
-ways). Prefer extending an open, unclaimed record; a claimed or closed one gets a new
-record linked to it. `check_only` shows the candidates and writes nothing.
+ways). `extends` always files a new task, phase or research note linked to the target;
+`merge_into:ID` appends to an open, unclaimed one instead. `check_only` shows the candidates and writes nothing.
 
 {% if recoverable %}
 ## Waiting for you right now

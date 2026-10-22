@@ -6,8 +6,66 @@
 
 from __future__ import annotations
 
+from ...core import outcome as O
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api, _list_or_none, _rule_answer
+
+ENFORCEMENT_HELP = "advisory | warn | block: how hard the rule binds (default advisory)."
+PIN_FLAG_EXEMPT = {
+    "--pin": "shorthand for enforcement=block on a rule with no globs: MCP `enforcement`"
+}
+PIN_HELP = (
+    "pin it: enforcement block for ALL work (no globs), so it is handed over whole "
+    "whatever the budget (the rules charter's pinned rules)"
+)
+
+
+def _enforcement(a) -> str:
+    """The enforcement the arguments ask for: --pin is `block` (for all work), else
+    --enforcement, else "" (leave it / the kind's default)."""
+    return "block" if a.get("pin") else (a.get("enforcement") or "")
+
+
+def _pin_refusal(a, kind: str):
+    """--pin means block for ALL work: a glob or another enforcement alongside it contradicts
+    it. None when fine."""
+    if not a.get("pin"):
+        return None
+    if _list_or_none(a, "globs"):
+        return O.failed(
+            kind,
+            "--pin applies a rule to all work: it cannot also carry --globs",
+            id=a.get("id", ""),
+        )
+    if a.get("enforcement") not in (None, "", "block"):
+        return O.failed(
+            kind,
+            f"--pin is enforcement block: it cannot also say --enforcement {a['enforcement']}",
+            id=a.get("id", ""),
+        )
+    return None
+
+
+def _rule_add(repo, a, agent):
+    refused = _pin_refusal(a, "rule.added")
+    if refused is not None:
+        return refused
+    return _api().rule_add(
+        repo,
+        _api().Rule(
+            id=a["id"],
+            title=a["title"],
+            content=a.get("content", "") or "",
+            tags=_list_or_none(a, "tags") or [],
+            scope=a.get("scope", "project") or "project",
+            priority=50 if a.get("priority") is None else int(a["priority"]),
+            globs=_list_or_none(a, "globs") or [],
+            enforcement=_enforcement(a),
+        ),
+        agent=agent,
+        check_dedup=True,
+        dedup_answer=_rule_answer(a, ("new", "extends", "duplicate_of", "related")),
+    )
 
 
 def _rule_line(r: dict) -> str:
@@ -54,7 +112,11 @@ def _added(out, a) -> str:
 
 
 def _edited(out, a) -> str:
-    fields = sorted(k for k in ("title", "content", "scope", "tags", "globs", "priority") if k in a)
+    fields = sorted(
+        k
+        for k in ("title", "content", "scope", "tags", "globs", "priority", "enforcement", "pin")
+        if (a.get(k) if k == "pin" else k in a)
+    )
     related = out.data.get("related")
     return (
         f"updated {a['id']}: {', '.join(fields) or 'nothing'}"
@@ -75,10 +137,35 @@ def _synced(out, a) -> str:
     return "; ".join(parts) or "rule files and the log agree"
 
 
+def _rule_edit(repo, a, agent):
+    """`rule edit`: only the fields that were given change; --pin means block for ALL work."""
+    refused = _pin_refusal(a, "rule.updated")
+    if refused is not None:
+        return refused
+    fields: dict = {}
+    for name in ("title", "content", "scope"):
+        if a.get(name):
+            fields[name] = a[name]
+    if "tags" in a:
+        fields["tags"] = _list_or_none(a, "tags") or []
+    if a.get("priority") is not None:
+        fields["priority"] = int(a["priority"])
+    if a.get("pin"):
+        fields["globs"] = []
+    elif "globs" in a:
+        fields["globs"] = _list_or_none(a, "globs") or []
+    if enforcement := _enforcement(a):
+        fields["enforcement"] = enforcement
+    return _api().rule_update(
+        repo, a["id"], dedup_answer=_rule_answer(a, ("new", "related")), agent=agent, **fields
+    )
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "add"),
         tool="ddflow_rule_add",
+        flag_exempt=PIN_FLAG_EXEMPT,
         render=_added,
         description="Add a project rule; duplicate-checked like every add (answer new | extends:ID | duplicate_of:ID | related:ID).",
         call=lambda repo, a, agent: (
@@ -90,21 +177,7 @@ COMMANDS: tuple[Command, ...] = (
                 agent=agent,
             )
             if bool(a.get("check"))
-            else _api().rule_add(
-                repo,
-                _api().Rule(
-                    id=a["id"],
-                    title=a["title"],
-                    content=a.get("content", "") or "",
-                    tags=_list_or_none(a, "tags") or [],
-                    scope=a.get("scope", "project") or "project",
-                    priority=50 if a.get("priority") is None else int(a["priority"]),
-                    globs=_list_or_none(a, "globs") or [],
-                ),
-                agent=agent,
-                check_dedup=True,
-                dedup_answer=_rule_answer(a, ("new", "extends", "duplicate_of", "related")),
-            )
+            else _rule_add(repo, a, agent)
         ),
         payload=(
             "id",
@@ -131,6 +204,8 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("priority", type="integer", help="Priority 0-100 (default 50).", cli_help=""),
             Param("globs", help="Comma-separated globs it governs.", cli_help="", default=""),
+            Param("enforcement", help=ENFORCEMENT_HELP, cli_help="", default=""),
+            Param("pin", type="boolean", help="", cli_help=PIN_HELP, cli_only=True),
             Param(
                 "new",
                 type="boolean",
@@ -174,57 +249,11 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "edit"),
         tool="ddflow_rule_edit",
+        flag_exempt=PIN_FLAG_EXEMPT,
         render=_edited,
         description="Change fields of an existing rule; omitted fields stay. Recorded in the manifest "
         "and, as a def.updated, in the log; new text is duplicate-checked.",
-        call=lambda repo, a, agent: _api().rule_update(
-            repo,
-            a["id"],
-            dedup_answer=_rule_answer(a, ("new", "related")),
-            agent=agent,
-            **(
-                {
-                    "title": a["title"],
-                }
-                if a.get("title")
-                else {}
-            ),
-            **(
-                {
-                    "content": a["content"],
-                }
-                if a.get("content")
-                else {}
-            ),
-            **(
-                {
-                    "tags": _list_or_none(a, "tags") or [],
-                }
-                if "tags" in a
-                else {}
-            ),
-            **(
-                {
-                    "scope": a["scope"],
-                }
-                if a.get("scope")
-                else {}
-            ),
-            **(
-                {
-                    "priority": int(a["priority"]),
-                }
-                if a.get("priority") is not None
-                else {}
-            ),
-            **(
-                {
-                    "globs": _list_or_none(a, "globs") or [],
-                }
-                if "globs" in a
-                else {}
-            ),
-        ),
+        call=_rule_edit,
         payload=("id", "candidates", "related", "options", "dedupe_unavailable"),
         params=(
             Param("id", help="Rule id to edit.", cli_help="", positional=True),
@@ -234,6 +263,8 @@ COMMANDS: tuple[Command, ...] = (
             Param("scope", help="New scope.", cli_help=""),
             Param("globs", help="Comma-separated globs.", cli_help=""),
             Param("priority", type="integer", help="New priority.", cli_help=""),
+            Param("enforcement", help="New enforcement: advisory | warn | block.", cli_help=""),
+            Param("pin", type="boolean", help="", cli_help=PIN_HELP, cli_only=True),
             Param(
                 "new",
                 type="boolean",
@@ -258,6 +289,7 @@ COMMANDS: tuple[Command, ...] = (
             "scope",
             "priority",
             "globs",
+            "enforcement",
             "new",
             "related",
         ),
@@ -329,6 +361,7 @@ COMMANDS: tuple[Command, ...] = (
             "scope",
             "priority",
             "globs",
+            "enforcement",
             "created",
             "updated",
         ),
