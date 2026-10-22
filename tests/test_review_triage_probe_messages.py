@@ -47,3 +47,9 @@ def test_a_test_file_stem_is_answered_with_the_file_and_the_node_form(repo, tmp_
     _project(repo, tmp_path)
     why = _refusal(repo, "covered by test_stemmed")  # the stem of tests/test_stemmed.py
     assert "tests/test_stemmed.py::<test name>" in why, why
+
+
+def test_a_missing_node_says_it_looked_in_every_worktree(repo, tmp_path):
+    _project(repo, tmp_path)
+    why = _refusal(repo, "tests/test_real.py::test_not_there")
+    assert "tests/ of every worktree" in why, why
