@@ -328,7 +328,7 @@ def dispose_tree(
     *,
     item: Item | None = None,
     forced_by: str = "",
-    allow_ahead: bool = False,
+    landed_tip: str = "",
 ) -> Disposal:
     """THE removal of a worktree (B-uni-tree-lifecycle): merge, the PR flow, cleanup and
     onboarding all end here, so every one is guarded, serialised with the claims and logged.
@@ -341,8 +341,8 @@ def dispose_tree(
       PROOF that removing whatever the tree holds is safe (the PR head merged on the forge;
       an inspection that found nothing beyond caches): it makes the removal forced, and the
       caller measured the tree itself.
-    * ``allow_ahead`` is the weaker proof (a landed item's merge/pin leftovers are the only
-      commits): not forced, so git refuses a file written after the caller's check itself.
+    * ``landed_tip`` is the weaker proof (a landed item's merge/pin leftovers are the only
+      commits up to that commit): not forced, so git refuses a file written after the caller's check itself.
     * **Logged**: a removal that worked appends `worktree.removed` -- for ``item`` when given,
       else for every item whose recorded tree is this path (B5e83fb22cb).
 
@@ -361,7 +361,7 @@ def dispose_tree(
             if kind:
                 return Disposal("refused", reason, kind)
         had_branch = bool(wt.branch) and W.branch_exists(root, wt.branch)
-        r = W.remove(repo, cfg, wt, force=bool(forced_by), allow_ahead=allow_ahead)
+        r = W.remove(repo, cfg, wt, force=bool(forced_by), landed_tip=landed_tip)
         if not r.ok:
             return Disposal("failed", (r.err or r.out).strip() or f"git exit {r.code}")
         if log is not None:
@@ -545,6 +545,11 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
+def _is_pin(path: str, pins: list[str]) -> bool:
+    """Is ``path`` a pin file, or under a pin directory (a recipe's ``files`` may name one)?"""
+    return any(path == p or path.startswith(p.rstrip("/") + "/") for p in pins)
+
+
 def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]) -> str:
     """Did ``item`` land on ``base`` (its recorded ``merged_sha`` is reachable from it), with
     only merge-main commits and pin regenerations left on the tree (Bfc4ac64c9c)?
@@ -578,7 +583,7 @@ def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]
         files = W.git(
             here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
         )
-        if not files.ok or not set(files.out.split("\0")) - {""} <= set(pins):
+        if not files.ok or not all(_is_pin(f, pins) for f in files.out.split("\0") if f):
             return ""
     return head
 
@@ -776,7 +781,7 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
             t.done = f"kept: {t.name} changed since it was proved to be only leftovers"
             return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
-    d = dispose_tree(repo, cfg, log, wt, allow_ahead=bool(proof))
+    d = dispose_tree(repo, cfg, log, wt, landed_tip=tip)
     if proof and tip and d.removed and d.branch_left:
         # The branch only lacks the merge-main/pin commits just proved to be leftovers. Dropped
         # under the log's lock, still held by nobody, and only if it is still at the proved tip.

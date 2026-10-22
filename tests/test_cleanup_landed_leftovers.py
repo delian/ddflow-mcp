@@ -122,11 +122,35 @@ def test_a_tree_that_moved_after_the_proof_is_kept(repo, tmp_path, monkeypatch):
     assert "ddflow/T1" in _g(repo, "branch", "--format=%(refname:short)").split()
 
 
-def test_allow_ahead_still_refuses_a_file_written_after_the_proof(repo, tmp_path):
+def test_landed_tip_still_refuses_a_file_written_after_the_proof(repo, tmp_path):
     from ddflow.infra import worktree as W
 
     tree = _landed_then_abandoned(repo, tmp_path)
     (tree / "scratch.txt").write_text("written after the check\n")
     wt = W.Worktree(item="T1", path=tree, branch="ddflow/T1", base="main")
-    r = W.remove(repo, Config.load(repo), wt, allow_ahead=True)
+    r = W.remove(repo, Config.load(repo), wt, landed_tip=_g(tree, "rev-parse", "HEAD"))
     assert not r.ok and tree.exists()
+
+
+def test_landed_tip_refuses_when_a_commit_arrived_after_the_proof(repo, tmp_path):
+    from ddflow.infra import worktree as W
+
+    tree = _landed_then_abandoned(repo, tmp_path)
+    proved = _g(tree, "rev-parse", "HEAD")
+    (tree / "late.txt").write_text("committed after the proof\n")
+    _g(tree, "add", "late.txt")
+    _g(tree, "commit", "-qm", "late work")
+    wt = W.Worktree(item="T1", path=tree, branch="ddflow/T1", base="main")
+    r = W.remove(repo, Config.load(repo), wt, landed_tip=proved)
+    assert not r.ok and tree.exists()
+
+
+def test_files_under_a_pin_directory_are_pins(repo, tmp_path):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    (tree / "snaps").mkdir()
+    (tree / "snaps" / "x.ambr").write_text("generated\n")
+    _g(tree, "add", "snaps")
+    _g(tree, "commit", "-qm", "regenerate pins")
+    item = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert CL.landed_leftovers_only(str(tree), item, "main", ["snaps"])
+    assert not CL.landed_leftovers_only(str(tree), item, "main", ["snaps2"])
