@@ -380,16 +380,18 @@ def _dispose(repo: Path, cfg, log, item: str, callers) -> dict[str, Any]:
     """The item's own worktree and branch, removed when it is finished with and nothing is
     in them (B79319c6ada, B4757c428f4): ``worktree_removed`` and ``kept_reason`` ("" when
     there is nothing to say), the same two fields `merge` reports; and ``jobs_ended``, the item's
-    jobs whose process is over, recorded as ended (none when there were none)."""
+    jobs whose process is over, recorded as ended (absent when there were none), and ``jobs_note``
+    when collecting them could not run."""
     it = fold(log.read_all(), strict=False).items.get(item)
     removed, why = (
         CL.dispose_finished(repo, cfg, log, it, callers=callers) if it is not None else (False, "")
     )
-    ended = JB.collect_for_item(log, item)  # its finished jobs are over with it (B5127aa5436)
+    ended, problem = JB.collect_for_item(log, item)  # its finished jobs end with it (B5127aa5436)
     return {
         "worktree_removed": removed,
         "kept_reason": why,
         **({"jobs_ended": ended} if ended else {}),
+        **({"jobs_note": problem} if problem else {}),
     }
 
 

@@ -162,3 +162,38 @@ def test_collect_finished_orders_jobs_even_without_a_start_time():
     log = Log()
     assert AJ.collect_finished(log, st) == ["J1", "J2"]
     assert [kind for kind, _s, _d in log.written] == ["job.ended", "job.ended"]
+
+
+def test_a_job_on_another_host_is_never_collected():
+    from ddflow.api import jobs as AJ
+    from ddflow.core.model import Job, State
+
+    class Log:
+        def __init__(self):
+            self.written = []
+
+        def append_many(self, items):
+            self.written.extend(items)
+
+    st = State()
+    st.jobs["F1"] = Job(id="F1", item="A", pid=0, host="some-other-host", started_at="2026-01-01")
+    log = Log()
+    assert AJ.collect_finished(log, st) == []
+    assert not log.written
+
+
+def test_item_and_all_finished_together_are_refused(repo):
+    run_cli(repo, "init")
+    code, _o, _e = run_cli(repo, "job", "end", "--item", "A", "--all-finished")
+    assert code == REFUSED
+
+
+def test_a_collection_that_cannot_run_is_reported_not_silent():
+    from ddflow.api import jobs as AJ
+
+    class Log:
+        def read_all(self):
+            raise OSError("log unreadable")
+
+    ended, why = AJ.collect_for_item(Log(), "A")
+    assert ended == [] and "not collected" in why and "log unreadable" in why
