@@ -40,3 +40,14 @@ def test_a_first_claim_with_globs_still_names_the_files(repo):
     out = LC.claim(repo, "T1", agent="me", globs="h/b.py", no_worktree=True)
     assert out.exit == 0, out.reason
     assert out.data["globs"] == ["h/b.py"]
+
+
+def test_a_held_lease_with_no_globs_falls_back_to_the_items_own(repo):
+    """The fallback reads the ITEM's globs (a list on the item), never another lease's."""
+    _seed(repo)
+    EventLog(repo, "me").append(
+        "lease.acquired", "T1", {"holder": "me", "at": time.time(), "ttl_s": 1800, "globs": []}
+    )
+    out = LC.claim(repo, "T1", agent="me", globs="h/b.py", no_worktree=True)
+    assert out.exit == 0, out.reason
+    assert sorted(out.data["globs"]) == ["h/b.py", "src/a.py"]
