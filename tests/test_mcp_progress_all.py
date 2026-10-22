@@ -105,3 +105,38 @@ def test_the_knob_refuses_a_value_the_heartbeat_cannot_use(bad):
     check = _KNOB_CHECKS["mcp.progress_s"]
     assert check(bad)
     assert not check(0) and not check(20.0)
+
+
+@pytest.mark.parametrize("token", [["a"], {"a": 1}, True, None])
+def test_a_progress_token_that_is_no_string_or_number_is_no_token(repo, token):
+    """MCP's token is a string or a number; the sender keys a dict on it, so a list from a
+    non-conformant client must not turn into `bad arguments`."""
+    srv = mcp.Server(repo, called_from=repo)
+    srv.notify = lambda frame: None
+    assert srv._progress({"_meta": {"progressToken": token}}) is None
+
+
+def test_frames_written_from_two_threads_never_interleave(tmp_path):
+    import io
+    import json
+    import threading
+
+    class Slow(io.StringIO):
+        def write(self, text):  # a write that yields half way, as a full pipe does
+            half = len(text) // 2
+            super().write(text[:half])
+            time.sleep(0.01)
+            return super().write(text[half:])
+
+    out = Slow()
+    write = mcp._frame_writer(out)
+    ts = [
+        threading.Thread(target=lambda n=n: [write({"n": n, "pad": "x" * 50}) for _ in range(5)])
+        for n in range(4)
+    ]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    rows = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert len(rows) == 20
