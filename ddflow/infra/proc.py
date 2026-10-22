@@ -420,12 +420,12 @@ def _shell_group(
         raise
 
 
-#: The watcher: started BY the owner (so its parent is the owner), it polls that parent; when the
+#: The watcher: started BY the owner and told its pid, it polls whether that is still its parent; when the
 #: parent is gone it kills the command's process group, and it ends when the group is gone. The
 #: process name carries ``ddflow-owner-watch`` so `ps` and the tests can find it.
 _WATCHER = (
     "import os, signal, sys, time\n"
-    "group, owner = int(sys.argv[1]), os.getppid()\n"
+    "group, owner = int(sys.argv[1]), int(sys.argv[2])\n"
     "while True:\n"
     "    time.sleep(1)\n"
     "    if os.getppid() != owner:\n"
@@ -450,14 +450,16 @@ def _watch_owner(p: subprocess.Popen) -> None:
     if os.name != "posix":
         return
     with contextlib.suppress(OSError, ValueError):
-        subprocess.Popen(  # nosec B603 - our own interpreter and a fixed script
-            [sys.executable, "-c", _WATCHER, str(p.pid), "ddflow-owner-watch"],
+        w = subprocess.Popen(  # nosec B603 - our own interpreter and a fixed script
+            [sys.executable, "-c", _WATCHER, str(p.pid), str(os.getpid()), "ddflow-owner-watch"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
             close_fds=True,
         )
+        # Reaped when it ends (a long-lived owner must not collect a zombie per command).
+        threading.Thread(target=w.wait, name="owner-watch-reaper", daemon=True).start()
 
 
 def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
