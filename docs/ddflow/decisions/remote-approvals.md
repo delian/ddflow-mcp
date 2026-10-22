@@ -1,8 +1,7 @@
 # Remote approvals: decision proposals
 
-Status: **DECIDED 2026-10-22 except two open items: Q4 UNANSWERED (ask again before `RA-channel-signed` is claimed) and Q8
-AMBIGUOUS (shipped off; lead to confirm)**. Operator answers are recorded as `D-RA-Q1`..`D-RA-Q12` in the event log
-(`ddflow decision show D-RA-Q4`; Q4 and Q8 carry their open state in the decision text; see "Operator answers" below, which
+Status: **DECIDED 2026-10-22; both earlier open items are closed by the operator's follow-up answers the same day: Q4 "Not now" (`D-RA-Q4-r2`) and Q8 exactly three example rules, off (`D-RA-Q8-r2`)**. Operator answers are recorded as `D-RA-Q1`..`D-RA-Q12` in the event log
+(`ddflow decision show D-RA-Q4-r2`, `D-RA-Q8-r2`; see "Operator answers" below, which
 supersedes the proposals where they differ). Task `RA-decide`; proposals came from `RA-research`. Evidence: `docs/ddflow/research/remote-approvals.md` (section numbers refer to
 it). Phase: `P-remote-approvals`. Governing records: `D-shared-engines-r2` (1: one approvals engine),
 `D-remote`, `D-reviewer-trust-r2`, `D-failed-review-gate`, `D-review-force-with-reason`, `D-CM-7`/`D-CM-Q4Q5`
@@ -83,11 +82,11 @@ Each row is recorded as decision `D-RA-Q<n>` (globs on `ddflow/services/approval
 | Q1 | accepted | Adopt the protocol for every gated command | none |
 | Q2 | accepted | Relayed consent kept for ONE more release as a time-boxed exception; doctor warns on each use; then per-verb `require_approval` on | none |
 | Q3 | **amended** | MVP channels: CLI (L1, over ssh) plus chat/PR approvals (Slack/Linear/GitHub via existing connectors) as L3. `RA-channel-chat` is in the minimal path; `RA-channel-signed` is later and optional | signed was the MVP; chat was optional |
-| Q4 | **unanswered** | SSH/FIDO2 key part not answered; recommended default applies when the signed channel is built (digest-pinned signer list outside the repo, may fall back to allowed-signers, ddflow never holds keys). Ask again before `RA-channel-signed` is claimed | n/a |
+| Q4 | **amended** (`D-RA-Q4-r2`) | Operator: "Not now" to an SSH/FIDO2 key. `RA-channel-signed` stays queued, deferred and optional, held until the operator provides a key; do not ask again before it is claimed unless the operator raises it; no key work in this phase. When built, the recommended default applies (digest-pinned signer list outside the repo, may fall back to allowed-signers, ddflow never holds keys) | n/a |
 | Q5 | **amended** | Transcript-attested `AskUserQuestion` answer accepted as L2, enabled by default, T2 only, never T3; acceptance verified by hook/transcript attestation, not the agent's word. Caveats stand: reaches ddflow only through the model/transcript, weak outside local sessions, cloud sessions need `RA-probe-harness` first | was off by default, opt-in per verb |
 | Q6 | accepted | T2 any person channel (L1/L2/L3); T3 L4 only; single-uid host: T3 rated no stronger than L1, doctor says so | L2/L3 named for T2 |
 | Q7 | accepted | Beyond today's refusals: forced `complete` and forced `claim` only | none |
-| Q8 | **ambiguous** | Operator ticked all three example rules AND "ship none". Recorded: ship the three as examples, ALL OFF, each reported when enabled and used. Lead to confirm | n/a |
+| Q8 | **resolved** (`D-RA-Q8-r2`) | Operator selected exactly three example rules: extra review round up to 5 (when the tree changed after triage); skip of a gate after its reviewer was unavailable 3 times; accept a measured baseline-red ci partial. All OFF by default, each reported when enabled and used. No lead confirmation pending | n/a |
 | Q9 | accepted | Request 24 h, use window 1 h, one use | none |
 | Q10 | accepted | brief/status/inbox now; push when AW-sinks lands, never to a channel the agent can read for one-time codes | none |
 | Q11 | accepted | Agent-unreachable `serve` host not in this phase (upgrade path via `P-remote.*`) | none |
