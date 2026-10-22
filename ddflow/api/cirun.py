@@ -100,10 +100,10 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
 def _item_ref(repo: Path, it) -> tuple[str, str]:
     """``(ref, why)``: what ``ddflow ci run <item id>`` checks. The item's branch while it
     exists; once the merge deleted it, the commit the item landed as; else why there is none."""
+    if it.merged_sha and W.rev(repo, it.merged_sha):  # what landed outranks a leftover branch
+        return it.merged_sha, ""
     if it.branch and W.rev(repo, it.branch):
         return it.branch, ""
-    if it.merged_sha and W.rev(repo, it.merged_sha):
-        return it.merged_sha, ""
     if it.merged_sha:
         return "", f"{it.id} merged as {it.merged_sha[:12]}, which this clone does not have"
     gone = f"its branch {it.branch!r} is gone" if it.branch else "it has no branch"
