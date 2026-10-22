@@ -62,6 +62,7 @@ def test_a_merged_item_with_a_lapsed_lease_is_advised_to_complete(repo):
     assert rec.kind == "expired_lease"
     assert "ddflow complete T1" in rec.advice, rec.advice
     assert "merged" in rec.advice
+    assert "ddflow release" not in rec.advice, rec.advice
 
 
 def test_the_advice_names_what_complete_still_wants(repo):
@@ -74,6 +75,7 @@ def test_the_advised_path_works(repo):
     """Another agent records the outcomes against the lapsed lease and completes."""
     _merged(repo, "T1", "src/T1/a.py")
     pass_pipeline(repo, "T1", omit=("merge",))
+    assert L.expire(EventLog(repo, "scanner"), "T1", reason="lapsed"), "the lease is lapsed"
     out = LC.complete(repo, "T1", agent="rescuer", model="claude-opus-5")
     assert out.exit == 0, out.reason
 
