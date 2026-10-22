@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.progress_s"
+new = "20.0"
+why = "An offloaded MCP tool (gate_run, ci, verify, bisect, wait, review) sends a progress notification this many seconds while it runs, so a client that aborts a silent call does not cut off a quiet gate."
+impact = "additive"
