@@ -190,3 +190,22 @@ def test_a_broken_precheck_says_so_and_the_run_goes_on(repo, monkeypatch, capsys
     assert (
         "pins precheck could not run (RuntimeError: recipes unreadable)" in capsys.readouterr().err
     )
+
+
+def test_a_run_wide_problem_beside_a_stale_pin_does_not_hide_it(repo, monkeypatch):
+    from ddflow.services import pins as PINS
+
+    rep = PINS.Report(pins=[PINS.PinState("knobs", ("count.txt",), stale=True)])
+    rep.problem = "conflict markers that do not pair up"
+    monkeypatch.setattr(CI, "regenerate_pins", lambda *a, **k: rep)
+    why = CI._stale_pins(repo, Config.load(repo), "main")
+    assert "pins stale after merging main" in why and "knobs" in why
+
+
+def test_a_reason_of_none_reads_as_no_reason():
+    from types import SimpleNamespace as NS
+
+    from ddflow.services.gates.reasons import _unavailable_reasons
+
+    it = NS(gates={"ci": NS(reason=None)})
+    assert _unavailable_reasons(it, [("ci", "unavailable")]) == {"ci": "no reason was recorded"}

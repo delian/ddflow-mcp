@@ -14,6 +14,6 @@ def _unavailable_reasons(it, rows: list[tuple[str, str]]) -> dict[str, str]:
         if o not in ("unavailable", "partial"):
             continue
         rec = it.gates.get(g)
-        text = " ".join((rec.reason if rec else "").split()) or "no reason was recorded"
+        text = " ".join(((rec.reason if rec else "") or "").split()) or "no reason was recorded"
         out[g] = text if len(text) <= WHY_CHARS else text[: WHY_CHARS - 3] + "..."
     return out

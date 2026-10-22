@@ -435,7 +435,7 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
     except Exception as exc:  # a precheck must not be what stops a run -- but it says so
         print(f"ci: the pins precheck could not run ({type(exc).__name__}: {exc})", file=sys.stderr)
         return ""
-    if rep.problem or not rep.stale:
+    if not rep.stale:  # a run-wide problem beside a stale pin does not hide it
         return ""
     names = ", ".join(p.name for p in rep.stale)
     return (
