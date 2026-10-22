@@ -37,7 +37,7 @@ MUTATION_PARAMS: tuple[Param, ...] = (
     Param(
         "mutation",
         help='Test-only fix: JSON {"file","old","new"} disabling it; the test must FAIL.',
-        cli_help='fix confined to test files: the mutation as JSON {"file","old","new"}, the three --mutation-* flags in one (as the MCP parameter); wins when both forms are given',
+        cli_help='fix confined to test files: the mutation as JSON {"file","old","new"}, the three mutation-file/-old/-new flags in one (as the MCP parameter); wins when both forms are given',
     ),
 )
 
