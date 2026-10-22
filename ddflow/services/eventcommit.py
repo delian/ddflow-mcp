@@ -39,10 +39,51 @@ def uncommitted_shards(repo: Path) -> list[str] | None:
     return sorted(e.path for e in entries if e.path.endswith(".jsonl"))
 
 
-def uncommitted_blobs(repo: Path) -> list[str]:
-    """Blob files git has not committed (they are only ever created, never changed)."""
+def split_loose_blobs(repo: Path) -> tuple[list[str], list[str]]:
+    """(named, orphans): the blob files git has not committed (they are only ever created,
+    never changed), split by whether an event shard names them. One no shard names is nobody's
+    and no door commits it. The shards are read only when there is a loose blob to place."""
     entries = G.status(repo, BLOBS, untracked="all")
-    return sorted(e.path for e in entries or [] if e.path.endswith(".json"))
+    loose = sorted(e.path for e in entries or [] if e.path.endswith(".json"))
+    if not loose:
+        return [], []
+    named = named_blobs(repo)
+    return (
+        [rel for rel in loose if Path(rel).stem in named],
+        [rel for rel in loose if Path(rel).stem not in named],
+    )
+
+
+def uncommitted_blobs(repo: Path) -> list[str]:
+    """The loose blobs an event shard names: the ones that belong in a commit."""
+    return split_loose_blobs(repo)[0]
+
+
+#: How a shard line names a blob: the stub's (and the repro link's) `sha256:<hex>`.
+_NAMED = re.compile(rb"sha256:([0-9a-f]{64})")
+
+
+def named_blobs(repo: Path) -> set[str]:
+    """The hex digests that any event shard in ``repo`` names: the blobs that belong to a log."""
+    found: set[str] = set()
+    for shard in sorted((Path(repo) / EVENTS).glob("*.jsonl")):
+        try:
+            found.update(m.decode() for m in _NAMED.findall(shard.read_bytes()))
+        except OSError:
+            continue
+    return found
+
+
+def orphan_blobs(repo: Path) -> list[str]:
+    """Blob files, committed or not, that no event shard names (B-uncommitted-blobs-owner-unknown):
+    whoever wrote one never logged the event that points at it, so it is nobody's, and nothing
+    commits it."""
+    root = Path(repo)
+    files = sorted((root / BLOBS).glob("*/*.json")) if (root / BLOBS).is_dir() else []
+    if not files:
+        return []
+    named = named_blobs(root)
+    return [str(f.relative_to(root)) for f in files if f.stem not in named]
 
 
 def _busy(repo: Path) -> str:
@@ -217,12 +258,17 @@ def _read_plan(repo: Path, reason: str, template: str):
             left.append(rel)
         else:
             taken[rel] = data
-    for rel in uncommitted_blobs(repo):
+    loose, orphans = split_loose_blobs(repo)
+    for rel in loose:
         try:
             taken[rel] = (repo / rel).read_bytes()
         except OSError:
             left.append(rel)
     skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
+    if orphans:
+        skipped = "; ".join(
+            filter(None, [skipped, f"{len(orphans)} blob(s) no event names left uncommitted"])
+        )
     if not taken:
         return stop(f"event log not committed: {skipped}" if skipped else "")
     busy = _busy(repo)
