@@ -1032,6 +1032,7 @@ def _full_rounds(it, gate: str) -> int:
         1
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "full"
+        and not r.evidence.get("round_kept")
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
@@ -1045,6 +1046,7 @@ def _delta_rounds(it, gate: str) -> int:
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "delta"
         and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+        and not r.evidence.get("round_kept")
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
