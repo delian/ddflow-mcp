@@ -44,3 +44,10 @@ def test_the_cli_namespace_carries_the_json(repo):
 
     ns = build_parser().parse_args(["complete", "x", "--mutation", JSON])
     assert mutation_of(vars(ns)) == WANT
+
+
+def test_the_json_wins_when_both_forms_are_given():
+    got = mutation_of(
+        {"mutation": JSON, "mutation_file": "other.py", "mutation_old": "a", "mutation_new": "b"}
+    )
+    assert got == WANT
