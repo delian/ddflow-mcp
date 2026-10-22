@@ -88,6 +88,12 @@ def match(path: str, glob: str, *, bare_any_depth: bool = False) -> bool:
         return False
 
 
+def under_any(path: str, entries: list[str] | tuple[str, ...]) -> bool:
+    """Is ``path`` one of ``entries`` or a file under one that names a directory (`a/b` or
+    `a/b/`)? Literal entries only: for glob claims, `inside`."""
+    return any(path == e.rstrip("/") or path.startswith(e.rstrip("/") + "/") for e in entries)
+
+
 def inside(path: str, glob: str) -> bool:
     """Is the concrete ``path`` INSIDE the claim glob ``glob``?
 

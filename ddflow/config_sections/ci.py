@@ -55,6 +55,14 @@ class CiConfig:
         1800,
         doc="Seconds a full-suite run waits for a free slot (`max_concurrent_suites`) before it reports who holds it.",
     )
+    suite_queue_stale_s: int = knob(
+        120,
+        doc="Seconds a run queued for the full-suite lock may go without a heartbeat before the queue passes over it (a stopped process). A waiter killed outright leaves the queue within about a second. Waiters are served first in, first out.",
+    )
+    suite_queue_grace_s: int = knob(
+        120,
+        doc="Seconds a run that gave up waiting for the full-suite lock keeps its place in the queue, so a retry within it is not sent to the back.",
+    )
     keep_env: list[str] = knob(
         factory=list,
         doc="Variables the CI command keeps although `[gates].scrub_env` removes them from a gate's or the CI command's environment (the caller's identity variables). Empty by default; `[gates].keep_env` applies to every gate command as well.",
@@ -82,6 +90,7 @@ class CiConfig:
             "tests/test_uc_surf_loop_transcript.py",
             "tests/test_readme_*.py",
             "tests/test_mcp_tool_budget.py",
+            "tests/test_mcp_parity.py",
         ],
-        doc="Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for EVERY item in addition to the tests its change reaches, plus any test file declaring `ALWAYS = True` at module level. They are the repo-wide guards and pins (the constants ratchet, the layering guard, golden snapshots, the setup-ops and loop transcripts, the README table pins, the tool budget: the ones that have broken main past a selection; measured about 30 s plus the loop transcript's one long test). Left out of the default for their cost, add them when they bite: `tests/test_architecture_guards.py` (18 s), `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py` (37 s): their input is the whole code base, so no import closure can know a change affects them. Recorded in the gate evidence as `always` (count, files) and `always_s` (the seconds they cost); an empty closure still runs the whole suite (which holds them). Empty list: only the selection (and any `ALWAYS = True` file) runs.",
+        doc="Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for EVERY item in addition to the tests its change reaches, plus any test file declaring `ALWAYS = True` at module level. They are the repo-wide guards and pins (the constants ratchet, the layering guard, golden snapshots, the setup-ops and loop transcripts, the README table pins, the tool budget, CLI/MCP parity: the ones that have broken main past a selection; measured about 30 s plus the loop transcript's one long test). Left out of the default for their cost, add them when they bite: `tests/test_architecture_guards.py` (18 s), `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py` (37 s): their input is the whole code base, so no import closure can know a change affects them. Recorded in the gate evidence as `always` (count, files) and `always_s` (the seconds they cost); an empty closure still runs the whole suite (which holds them). Empty list: only the selection (and any `ALWAYS = True` file) runs.",
     )
