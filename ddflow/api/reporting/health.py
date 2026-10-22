@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,7 @@ from ...services import repo_hygiene as RH
 from ...services import sessions as SS
 from ...services import shardmarks as SM
 from ...services import shared_files as SF
+from ...services import startcost as SC
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
@@ -299,6 +301,7 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
+    start_texts: Callable[[Path, str], dict[str, str]] | None = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -452,6 +455,9 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    cost = _start_cost(repo, cfg, agent, start_texts)
+    if cost is not None:
+        notes.append(cost.line())
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -463,6 +469,7 @@ def doctor(
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
         "auto_order": ordered,
+        **({"start_cost": cost.as_dict()} if cost is not None else {}),
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
@@ -471,6 +478,21 @@ def doctor(
     )
     out.data["text"] = human.render(out)
     return out
+
+
+def _start_cost(repo: Path, cfg: Config, agent: str, start_texts) -> SC.StartCost | None:
+    """What ddflow costs a session before its first turn, or None when the surface did not
+    supply the texts or building them failed (a report must not fail on its own measuring)."""
+    if start_texts is None:
+        return None
+    try:
+        return SC.measure(
+            start_texts(repo, agent),
+            chars_per_token=cfg.session.start_chars_per_token,
+            budget=cfg.session.context_budget_tokens,
+        )
+    except Exception:
+        return None
 
 
 def _rules_findings(repo: Path, highest: str, problems: list[str], notes: list[str]) -> None:

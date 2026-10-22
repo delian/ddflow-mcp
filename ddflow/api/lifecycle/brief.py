@@ -23,6 +23,7 @@ from ...services import leases as L
 from ...services import searchcore as SC
 from ...services import shardmarks as SM
 from ...services import skills as SK
+from ...services import startcost as START
 from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
@@ -198,6 +199,8 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     repeated by each brief until the project is upgraded: FIRST, so the hook, `ddflow brief`
     and `ddflow_brief` all lead with it whichever is asked first. This ddflow was upgraded
     (or the start report), then a newer release is out (proposed, never installed)."""
+    if START.is_measuring():  # said once per version: a count must not use it up
+        return ""
     notice = US.take_for_brief(repo, st)
     if not notice:
         notice = UN.line(repo, log, cfg, st, agent=agent)
@@ -209,7 +212,9 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
 def _sweep_finished(repo: Path, cfg, log, st, callers: tuple[Path | None, ...]) -> None:
     """Remove the leftover worktrees of done, abandoned and removed items finished long enough
     ago (B4757c428f4): `merge`, `abandon` and `remove` keep a tree their caller stood in. Best effort:
-    a session start must never fail on housekeeping."""
+    a session start must never fail on housekeeping. Not while `doctor` only counts the brief."""
+    if START.is_measuring():
+        return
     try:
         CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
