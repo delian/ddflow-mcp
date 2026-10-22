@@ -1,4 +1,4 @@
-"""How long a recorded gate run queued before it ran (B1d51fb9da1), for `gate status`."""
+"""How long a recorded gate run queued elapsed (B1d51fb9da1), for `gate status`."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def _queued_notes(it, rows) -> dict[str, str]:
         w, took = ev.get("waited_s"), ev.get("elapsed_s")
         if isinstance(w, int | float) and not isinstance(w, bool) and w > 0:
             of = f" of {_mins(took)}" if isinstance(took, int | float) else ""
-            out[g] = f"queued {_mins(w)}{of} before it ran"
+            out[g] = f"queued {_mins(w)}{of} elapsed"
     return out
 
 

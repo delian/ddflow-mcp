@@ -95,12 +95,12 @@ def test_gate_status_shows_how_long_a_run_queued_for_the_host_lock():
     log = _log([1700.0], "research")
     st = fold(list(log.events), strict=False)
     s = O.status(st, Config(), "T1")
-    assert s.why == {"research": "queued 28m of 50m before it ran"}
+    assert s.why == {"research": "queued 28m of 50m elapsed"}
     tiny = O.status(fold(list(_log([0.04], "research").events), strict=False), Config(), "T1")
-    assert tiny.why == {"research": "queued <0.1s of 50m before it ran"}
+    assert tiny.why == {"research": "queued <0.1s of 50m elapsed"}
     half = O.status(fold(list(_log([0.5], "research").events), strict=False), Config(), "T1")
-    assert half.why == {"research": "queued 0.5s of 50m before it ran"}
-    assert "queued 28m of 50m before it ran" in s.render()
+    assert half.why == {"research": "queued 0.5s of 50m elapsed"}
+    assert "queued 28m of 50m elapsed" in s.render()
     assert (
         O.status(fold(list(_log([None], "research").events), strict=False), Config(), "T1").why
         == {}
@@ -122,7 +122,7 @@ def test_metrics_render_shows_the_wait_beside_the_gate_time():
 
     row = _ci_row(_log([1700.0, 300.0]))
     text = RD.summary({**_blank(), "gate_time": [row]})
-    assert "queued before running: n=2" in text
+    assert "queued (lock or slot): n=2" in text
 
 
 def test_a_slot_only_wait_of_a_non_ci_gate_is_labelled_as_queueing_not_as_the_lock():
@@ -131,7 +131,7 @@ def test_a_slot_only_wait_of_a_non_ci_gate_is_labelled_as_queueing_not_as_the_lo
     row = _ci_row(_log([30.0], "unit_tests"), "unit_tests")
     text = RD.summary({**_blank(), "gate_time": [row]})
     assert row["gate"] == "unit_tests" and row["wait_n"] == 1 and row["wait_max_s"] == 30.0
-    assert "queued before running: n=1 p50 30s max 30s" in text
+    assert "queued (lock or slot): n=1 p50 30s max 30s" in text
     assert "for the lock" not in text
 
 
