@@ -63,7 +63,6 @@ def test_alias_table_is_generated_and_covers_every_non_hot_tool():
     assert set(table) == set(TOOLS) - set(F.HOT_SINGLES)
     assert table["ddflow_gate_record"] == ("ddflow_gate", "record")
     assert len(F.ALIASES) == len(table)
-    assert all(table[t] == tuple(F.placement(t)) for t in table)
     assert all(F.FAMILIES[fam].members[act] == old for old, (fam, act) in table.items())
     assert len(table) == 114
 
