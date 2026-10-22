@@ -542,29 +542,33 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
-def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[str]) -> bool:
+def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]) -> str:
     """Did ``item`` land on ``base`` (its recorded ``merged_sha`` is reachable from it), with
     only merge-main commits and pin regenerations left on the tree (Bfc4ac64c9c)?
 
     A crash after the merge gate leaves the item abandoned and its tree a few such commits
     ahead of the base: none of it is work. A merge commit counts only when every parent
     beyond the first is already on the base; any other commit only when it touches nothing
-    but pin files. Unknown (git failing, no recorded merge) is False."""
+    but pin files. Returns the commit that was proved, so a later step can be bound to exactly
+    it; "" for anything else, and for unknown (git failing, no recorded merge)."""
     if not item or not item.merged_sha:
-        return False
+        return ""
     here = Path(path)
+    head = W.git(here, "rev-parse", "--verify", "HEAD").out.strip()
+    if not head:
+        return ""
     if not W.git(here, "merge-base", "--is-ancestor", item.merged_sha, base).ok:
-        return False
-    log = W.git(here, "log", "--format=%H %P", f"{base}..HEAD")
+        return ""
+    log = W.git(here, "log", "--format=%H %P", f"{base}..{head}")
     if not log.ok:
-        return False
+        return ""
     for line in log.out.splitlines():
         sha, *parents = line.split()
         merge = len(parents) > 1
         if merge and not all(
             W.git(here, "merge-base", "--is-ancestor", p, base).ok for p in parents[1:]
         ):
-            return False
+            return ""
         # A merge's own content is what differs from EVERY parent (`--cc`): a conflict
         # resolution or an edit made inside the merge, which exists on no other commit.
         flags = ("--cc",) if merge else ()
@@ -572,8 +576,14 @@ def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[st
             here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
         )
         if not files.ok or not set(files.out.split("\0")) - {""} <= set(pins):
-            return False
-    return True
+            return ""
+    return head
+
+
+def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[str]) -> bool:
+    """`proved_leftover_tip` as a yes/no: is everything the tree has ahead of ``base`` a landed
+    item's merge-main/pin leftover?"""
+    return bool(proved_leftover_tip(path, item, base, pins))
 
 
 def _classify(
@@ -748,20 +758,19 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
     (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
     root = W.repo_root(repo)
     wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
-    proof = ""
+    proof = tip = ""
     if t.ahead:
         it = fold(log.read_all(), strict=False).items.get(t.item)
-        if not landed_leftovers_only(t.path, it, base, pin_files(repo, cfg)):
+        tip = proved_leftover_tip(t.path, it, base, pin_files(repo, cfg))
+        if not tip:
             t.action, t.kind = "", "unmerged"
             t.done = f"kept: {t.name} is no longer only landed leftovers since the survey"
             return [f"kept {t.name}: no longer only landed leftovers"]
         work = W.tree_work(Path(t.path))
-        if work.dirty or not work.readable:
-            return [f"kept {t.name}: uncommitted edits appeared since the survey"]
+        moved = W.git(Path(t.path), "rev-parse", "--verify", "HEAD").out.strip() != tip
+        if work.dirty or not work.readable or moved:
+            return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
-    tip = (
-        W.git(root, "rev-parse", "--verify", f"refs/heads/{t.branch}").out.strip() if proof else ""
-    )
     d = dispose_tree(repo, cfg, log, wt, forced_by=proof)
     if proof and tip and d.removed and d.branch_left:
         # The branch only lacks the merge-main/pin commits just proved to be leftovers. Dropped
