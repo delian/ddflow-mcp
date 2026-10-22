@@ -499,7 +499,7 @@ COMMANDS: tuple[Command, ...] = (
             repo,
             called_from=called_from,
             action=a.get("action", "status") or "status",
-            ref=a.get("ref", "HEAD") or "HEAD",
+            ref=a.get("ref", "") or "",
             base=a.get("base", "") or "",
             command=a.get("command", "") or "",
             full=bool(a.get("full")),

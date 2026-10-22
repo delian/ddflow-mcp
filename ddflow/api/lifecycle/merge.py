@@ -18,6 +18,7 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import pins_dirt as PD
 from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
     dispose_tree,
@@ -193,7 +194,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             kind="worktree.merged",
             data={"id": item, "sha": "", "dirty": []},
             exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
-            reason=r.err or r.out,
+            reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
         )
         return out
     # What the base now points at: the landing. Falls back to the branch head only if
