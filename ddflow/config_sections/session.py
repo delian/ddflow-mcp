@@ -16,6 +16,7 @@ PROGRESS_MODES = ("on", "phase", "off")
 AGENT_BRIEF_SECTIONS = (
     "identity",
     "item",
+    "rules",
     "decisions",
     "lessons",
     "start",
@@ -75,6 +76,18 @@ class SessionConfig:
         1200,
         doc="Ceiling on the session-start brief. The brief replaces reading the rulebooks and the lessons file; it must stay small or it defeats itself.",
     )
+    rules_charter_tokens: int = knob(
+        300,
+        doc="Tokens, inside brief_max_tokens, reserved FIRST for the rules charter: one line (id and title) for every live project rule, never cut by the sections after it. It also heads the subagent launch brief. 0 turns the charter off; it never takes more than half of brief_max_tokens. What does not fit is counted and points to `ddflow rule list`.",
+    )
+    rules_charter_title_chars: int = knob(
+        100,
+        doc="Characters of a rule's title the rules charter line keeps.",
+    )
+    claim_rules_reserved: int = knob(
+        2,
+        doc="How many rules governing the work every guidance block (the claim, the gate and review prompts) quotes before the decisions spend the budget: rules are advisory and would otherwise rank below every warning. 0 ranks them like any other guidance.",
+    )
     brief_lesson_count: int = knob(
         4,
         doc="How many task-relevant lessons the brief carries. Retrieved by relevance to the active task text, not by recency.",
@@ -109,7 +122,7 @@ class SessionConfig:
     )
     agent_brief_off: list[str] = knob(
         factory=list,
-        doc="Sections of the launch brief to leave out: identity, item, decisions, lessons, start, tests, reviews, gates, finish, forbidden, filing, project, report. Turning one off removes that standing rule from every launch brief: only for a project whose own instruction file already says it.",
+        doc="Sections of the launch brief to leave out: identity, item, rules, decisions, lessons, start, tests, reviews, gates, finish, forbidden, filing, project, report. Turning one off removes that standing rule from every launch brief: only for a project whose own instruction file already says it.",
         check=_check_brief_sections,
     )
     agent_brief_decisions: int = knob(

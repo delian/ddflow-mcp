@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.rules_charter_tokens"
+new = "300"
+why = "Project rules reach a fresh session: charter line per rule, reserved first."
+impact = "additive"
