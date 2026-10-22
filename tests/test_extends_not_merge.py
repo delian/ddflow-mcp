@@ -99,11 +99,14 @@ def test_the_cli_has_merge_into_and_extends_files_a_new_task(repo):
 
 def test_research_extends_keeps_the_chosen_id_and_verdict(repo):
     run_cli(repo, "init")
-    base = dict(
-        question="does the parser drop a trailing token", claim="it drops it",
-        mechanism="off by one", falsifier="the token survives",
-        probe="run it", probe_output="token lost",
-    )  # fmt: skip
+    base = {
+        "question": "does the parser drop a trailing token",
+        "claim": "it drops it",
+        "mechanism": "off by one",
+        "falsifier": "the token survives",
+        "probe": "run it",
+        "probe_output": "token lost",
+    }
     assert (
         A.research_add(repo, Finding(id="R-parent", verdict="THEORETICAL", **base), agent="a").exit
         == 0

@@ -281,7 +281,9 @@ def test_on_a_terminal_a_duplicate_asks_and_extends_on_the_reply(filed_as):
     filed = filed_as("task")
     code, shown = _on_a_terminal(filed, ADDS["task"], ["e 1"])
     assert code == 0, shown
-    assert "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort" in shown
+    assert (
+        "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [m]erge into # / [a]bort" in shown
+    )
     assert "T-old" in shown
     st = state(filed)
     assert "T-new" in st.items and st.links["T-new"].linked("extends") == {"T-old"}
@@ -456,3 +458,11 @@ def test_a_json_check_that_finds_nothing_still_says_why_on_stderr(filed_as):
     code, out, err = run_cli(filed, "--json", *ADDS["task"], "--check")
     assert code == 2 and "[dedupe].kinds" in err
     assert json.loads(out)["candidates"] == []
+
+
+def test_on_a_terminal_m_merges_into_the_open_record(filed_as):
+    filed = filed_as("task")
+    code, shown = _on_a_terminal(filed, ADDS["task"], ["m 1"])
+    assert code == 0, shown
+    st = state(filed)
+    assert "T-new" not in st.items and st.links["T-old"].extensions

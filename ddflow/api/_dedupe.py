@@ -87,7 +87,7 @@ class Answer:
         if not self.relation:
             return ""
         if self.relation not in (*RELATIONS, MERGE_INTO):
-            return f"unknown answer {self.relation!r}: one of {', '.join(RELATIONS)}"
+            return f"unknown answer {self.relation!r}: one of {', '.join((*RELATIONS, MERGE_INTO))}"
         if self.relation == "new" and self.target:
             return "'new' names no record"
         if self.relation != "new" and not self.target:
