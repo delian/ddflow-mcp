@@ -14,8 +14,10 @@ HOT = "identify brief next claim heartbeat complete merge show help".split()
 
 
 def test_every_tool_has_a_family_and_action():
-    placed = {t for fam in F.FAMILIES.values() for t in fam.members.values()}
-    assert placed == set(TOOLS)
+    listed = [t for fam in F.FAMILIES.values() for t in fam.members.values()]
+    assert len(listed) == len(set(listed)) == len(TOOLS)
+    assert set(listed) == set(TOOLS)
+    assert all(fam.members for fam in F.FAMILIES.values())
     for tool in TOOLS:
         fam, action = F.placement(tool)
         assert fam in F.FAMILIES
@@ -60,6 +62,9 @@ def test_alias_table_is_generated_and_covers_every_non_hot_tool():
     table = {a.old: (a.family, a.action) for a in F.ALIASES}
     assert set(table) == set(TOOLS) - set(F.HOT_SINGLES)
     assert table["ddflow_gate_record"] == ("ddflow_gate", "record")
+    assert len(F.ALIASES) == len(table)
+    assert all(table[t] == tuple(F.placement(t)) for t in table)
+    assert all(F.FAMILIES[fam].members[act] == old for old, (fam, act) in table.items())
     assert len(table) == 114
 
 
@@ -104,9 +109,16 @@ def test_a_declared_family_must_be_one_of_the_fifteen():
     assert len(F.FAMILY_TOOLS) == 15
 
 
-def test_a_hot_single_command_may_not_declare_a_family_or_action():
-    c = Command(
-        path=("identify",), tool="ddflow_identify", family="ddflow_identify", action="extra"
-    )
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"family": "ddflow_identify", "action": "extra"},
+        {"family": "ddflow_identify"},
+        {"action": "extra"},
+        {"family": "ddflow_gate", "action": "extra"},
+    ],
+)
+def test_a_hot_single_command_may_not_declare_a_family_or_action(extra):
+    c = Command(path=("identify",), tool="ddflow_identify", **extra)
     with pytest.raises(RuntimeError, match="hot single"):
         F.resolve({"ddflow_identify": c}, legacy={})
