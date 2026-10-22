@@ -202,3 +202,8 @@ def test_the_real_notice_the_hook_prints_fits_the_default_reserve(tmp_path):
     assert len(notice.encode()) <= (
         cfg.session.start_notice_reserve_tokens * cfg.session.start_bytes_per_token
     )
+
+
+def test_only_empty_texts_reserve_nothing():
+    cost = SC.measure({"brief": ""}, chars_per_token=4.0, budget=100, reserve=64)
+    assert cost.tokens == 0 and cost.over == 0
