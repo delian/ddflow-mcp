@@ -142,3 +142,23 @@ def test_abandoning_an_item_collects_its_finished_jobs_but_not_a_running_one(rep
     code, _o, err = run_cli(repo, "abandon", "A", "--reason", "x")
     assert code == OK, err
     assert [r["id"] for r in _rows(repo)] == [running["id"]]
+
+
+def test_collect_finished_orders_jobs_even_without_a_start_time():
+    from ddflow.api import jobs as AJ
+    from ddflow.core.model import Job, State
+    from ddflow.services import jobs as J
+
+    class Log:
+        def __init__(self):
+            self.written = []
+
+        def append_many(self, items):
+            self.written.extend(items)
+
+    st = State()
+    for jid, started in (("J1", ""), ("J2", "2026-01-01T00:00:00Z")):
+        st.jobs[jid] = Job(id=jid, item="A", pid=0, host=J.host(), started_at=started)
+    log = Log()
+    assert AJ.collect_finished(log, st) == ["J1", "J2"]
+    assert [kind for kind, _s, _d in log.written] == ["job.ended", "job.ended"]
