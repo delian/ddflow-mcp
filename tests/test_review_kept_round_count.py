@@ -51,3 +51,13 @@ def test_an_outage_after_a_delta_round_does_not_count_that_delta_twice(repo, tmp
     assert _review(repo).exit != OK
     it = _item(repo)
     assert api._full_rounds(it, "critic") == 1 and api._delta_rounds(it, "critic") == 1
+
+
+def test_a_copy_written_before_the_marker_existed_is_not_counted_either():
+    from types import SimpleNamespace as NS
+
+    def run(**ev):
+        return NS(evidence={"review_kind": "full", **ev})
+
+    it = NS(runs_of=lambda _g: [run(), run(unavailable_deltas=[{"reason": "down"}])])
+    assert api._full_rounds(it, "critic") == 1
