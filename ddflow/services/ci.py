@@ -394,14 +394,14 @@ def run(
         try:
             with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
                 if full_suite:  # the lock is held: everything before this was queueing
-                    waited = round(time.monotonic() - queued_at, 1)
+                    waited = round(time.monotonic() - queued_at, 3)
                 p, out_prefix = _execute(
                     cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used
                 )
         except SL.SuiteBusy as busy:
             return Result(
                 "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 1),
+                waited_s=round(busy.waited_s, 3),
             )  # fmt: skip
         if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
             unfinished.waited_s = waited
