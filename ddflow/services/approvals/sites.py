@@ -33,6 +33,22 @@ INFRASTRUCTURE = (
 )
 
 
+#: How many marker calls (AST `Call` nodes naming `agent_marker`, `is_agent` or the
+#: `_is_agent`/`reviewer_agent_marker` wrappers) each non-infrastructure module makes. A new
+#: call changes the count, so the test fails until the author decides which verb it gates,
+#: adds or amends its `Site` row and bumps the number here.
+MARKER_CALLS: dict[str, int] = {
+    "ddflow/api/gates.py": 2,
+    "ddflow/services/grants.py": 1,
+    "ddflow/services/approval.py": 1,  # grant(): approve.partial and chore.approve share it
+    "ddflow/services/reviewer_trust.py": 1,
+    "ddflow/services/export/select.py": 4,  # the wrapper (1) and its three uses
+    "ddflow/surfaces/commands/review.py": 1,
+}
+
+MARKER_NAMES = frozenset({"agent_marker", "is_agent", "_is_agent", "reviewer_agent_marker"})
+
+
 @dataclass(frozen=True)
 class Site:
     verb: str
@@ -46,6 +62,9 @@ class Site:
     modules: tuple[str, ...] = ()
     #: The CLI form an agent re-runs with `--approval ID`.
     command: str = ""
+    #: For a site with no marker call (relayed consent, a hook guard): (file, text) that must
+    #: still be in that file, so a rename or removal of the guard makes the row stale.
+    anchor: tuple[str, str] = ("", "")
 
 
 SITES: tuple[Site, ...] = (
@@ -120,6 +139,7 @@ SITES: tuple[Site, ...] = (
         "the target version and the upgrade plan digest",
         (),
         "ddflow upgrade --self --yes --reason ...",
+        anchor=("ddflow/surfaces/commands/setup.py", 'confirm=["self"]'),
     ),
     Site(
         "plan.confirm",
@@ -129,6 +149,7 @@ SITES: tuple[Site, ...] = (
         "the proposed plan",
         (),
         "ddflow plan confirm --yes --reason ...",
+        anchor=("ddflow/api/plan.py", "def plan_confirm"),
     ),
     Site(
         "skew.override",
@@ -138,6 +159,7 @@ SITES: tuple[Site, ...] = (
         "the installed and the repository version",
         (),
         "ddflow_* allow_older_version",
+        anchor=("ddflow/surfaces/history_verbs.py", "skew.overridden"),
     ),
     Site(
         "claim.force",
@@ -147,6 +169,7 @@ SITES: tuple[Site, ...] = (
         "the item and the other clone's live lease",
         (),
         "ddflow claim <id> --force --reason ...",
+        anchor=("ddflow/services/forbidden.py", "no force flags"),
     ),
     Site(
         "complete.force",
@@ -156,6 +179,7 @@ SITES: tuple[Site, ...] = (
         "the item and its unmet completion conditions",
         (),
         "ddflow complete <id> --force ...",
+        anchor=("ddflow/services/forbidden.py", "no force flags"),
     ),
 )
 
@@ -165,8 +189,3 @@ BY_VERB = {s.verb: s for s in SITES}
 def site(verb: str) -> Site:
     """The row for ``verb``; a KeyError for a verb nobody inventoried."""
     return BY_VERB[verb]
-
-
-def marker_modules() -> frozenset[str]:
-    """Every file the table names as calling agent_marker/is_agent."""
-    return frozenset(m for s in SITES for m in s.modules)
