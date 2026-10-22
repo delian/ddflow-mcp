@@ -47,6 +47,8 @@ class Client:
         return self.read_until(self._id)
 
     def read_until(self, want_id: int | None) -> dict:
+        if want_id is None and self.notes:
+            return self.notes.pop(0)
         while True:
             m = json.loads(self.p.stdout.readline())
             if m.get("id") == want_id and want_id is not None:
@@ -231,7 +233,21 @@ def test_matrix_lists_every_unknown_cell_and_never_passes_a_missing_one(tmp_path
     r = _run("matrix", env={"PATH": str(tmp_path)})
     assert r.returncode == 2
     rows = json.loads(r.stdout)
-    assert {"codex", "gemini", "qwen", "kimi", "opencode", "cursor", "copilot"} <= set(rows)
+    unknown = {
+        "codex",
+        "gemini",
+        "qwen",
+        "kimi",
+        "opencode",
+        "cursor",
+        "copilot",
+        "antigravity",
+        "grok",
+        "windsurf",
+        "amp",
+        "droid",
+    }
+    assert unknown <= set(rows)
     assert all(v["list_changed"] == "unavailable" for v in rows.values())
 
 
@@ -244,3 +260,68 @@ def test_recipes_use_dummy_prompts_only():
     mod = _script()
     for name, rec in mod.RECIPES.items():
         assert "bump" in rec["prompt"], name
+
+
+def test_a_notification_before_the_response_is_not_lost_by_the_test_client(tmp_path):
+    c = Client(tmp_path)
+    c.notes.append({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+    assert c.read_until(None)["method"] == "notifications/tools/list_changed"
+    c.close()
+
+
+def test_a_pipelined_tools_list_is_logged_before_the_notification(tmp_path):
+    """R: a client that sent tools/list BEFORE it could have seen the notification must not
+    classify as honouring (rubber_duck #1): IN is logged on arrival, not when handled."""
+    c = Client(tmp_path)
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    c.p.stdin.write(
+        json.dumps({"jsonrpc": "2.0", "id": 90, "method": "tools/call", "params": {"name": "bump"}})
+        + "\n"
+        + json.dumps({"jsonrpc": "2.0", "id": 91, "method": "tools/list"})
+        + "\n"
+    )
+    c.p.stdin.flush()
+    c.read_until(90)
+    c.read_until(91)
+    assert _analyze()(c.close())["list_changed"] == "ignores"
+
+
+def test_delay_without_a_value_prints_usage_and_exits_2(tmp_path):
+    r = subprocess.run(
+        [sys.executable, "-m", "ddflow.mcpshim.probe_server", str(tmp_path / "l"), "--delay"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert r.returncode == 2 and "usage" in r.stderr and "Traceback" not in r.stderr
+
+
+def test_a_timeout_still_classifies_what_the_log_recorded(tmp_path):
+    mod = _script()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    # a "claude" that drives the probe like an honouring client, then hangs
+    (fake / "claude").write_text(
+        f"#!{sys.executable}\n"
+        "import json, subprocess, sys, time\n"
+        "cfg = json.load(open(sys.argv[sys.argv.index('--mcp-config') + 1]))['mcpServers']['lc']\n"
+        "p = subprocess.Popen([cfg['command'], *cfg['args']], stdin=subprocess.PIPE,\n"
+        "                     stdout=subprocess.PIPE, text=True)\n"
+        "def req(i, m, params=None):\n"
+        "    p.stdin.write(json.dumps({'jsonrpc':'2.0','id':i,'method':m,'params':params or {}})+'\\n')\n"
+        "    p.stdin.flush()\n"
+        "    while json.loads(p.stdout.readline()).get('id') != i: pass\n"
+        "req(1, 'initialize', {'protocolVersion': 'x'}); req(2, 'tools/call', {'name': 'bump'})\n"
+        "time.sleep(0.2); req(3, 'tools/list'); time.sleep(60)\n"
+    )
+    (fake / "claude").chmod(0o755)
+    import os
+
+    old = os.environ["PATH"]
+    os.environ["PATH"] = str(fake) + os.pathsep + old
+    try:
+        row, code = mod.probe_row("claude", timeout=3)
+    finally:
+        os.environ["PATH"] = old
+    assert row["list_changed"] == "honours" and "timed out" in row["reason"]
+    assert code == 1

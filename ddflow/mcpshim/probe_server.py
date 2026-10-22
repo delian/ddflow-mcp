@@ -15,6 +15,7 @@ docs/ddflow/research/mcp-client-matrix.md is the unproductised original.
 from __future__ import annotations
 
 import json
+import queue
 import sys
 import threading
 import time
@@ -23,6 +24,7 @@ DEFAULT_DELAY_S = 6.0
 IN_LIMIT = 2000
 OUT_LIMIT = 300
 _FIELDS = 3
+SETTLE_S = 0.02
 NOTE = "notifications/tools/list_changed"
 
 _BASE = [
@@ -115,15 +117,27 @@ class _Probe:
 
 
 def serve(stdin, stdout, logfile, delay: float = DEFAULT_DELAY_S) -> None:
+    """Log each request when it ARRIVES and handle it on another thread, so a request a client
+    pipelined before it could see a notification is logged before that notification."""
     probe = _Probe(stdout, logfile, delay)
+    work: queue.Queue = queue.Queue()
+
+    def handler() -> None:
+        while (line := work.get()) is not None:
+            time.sleep(SETTLE_S)  # let already-pipelined input reach the log first
+            try:
+                probe.handle(json.loads(line))
+            except ValueError:
+                continue
+
+    t = threading.Thread(target=handler)
+    t.start()
     for line in stdin:
-        if not line.strip():
-            continue
-        probe.log_in(line.strip())
-        try:
-            probe.handle(json.loads(line))
-        except ValueError:
-            continue
+        if line.strip():
+            probe.log_in(line.strip())
+            work.put(line)
+    work.put(None)
+    t.join()
 
 
 def _parse(log: str):
@@ -176,8 +190,12 @@ def main(argv: list[str]) -> int:
     delay = DEFAULT_DELAY_S
     if "--delay" in args:
         k = args.index("--delay")
-        delay = float(args[k + 1])
-        del args[k : k + 2]
+        try:
+            delay = float(args[k + 1])
+        except (IndexError, ValueError):
+            args = []
+        else:
+            del args[k : k + 2]
     if len(args) != 1:
         sys.stderr.write("usage: probe_server LOGFILE [--delay SECONDS]\n")
         return 2
