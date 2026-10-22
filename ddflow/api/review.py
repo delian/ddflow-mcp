@@ -480,7 +480,10 @@ def _redo_hint(cfg, it, item: str, gate: str) -> str:
 
 def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     """The `reviewed_paths` evidence of a round: the content of the item's changed set, so a
-    later triage compares those files and not the whole tree. {} when it cannot be read."""
+    later triage compares those files and not the whole tree. {} when it cannot be read, or
+    for a review of no item."""
+    if it is None:
+        return {}
     wt, _held = item_tree(repo, cfg, st, it, called_from)
     paths = changed_paths(repo, it) if wt is not None and wt.exists() else None
     snap = RP.path_snapshot(wt, paths) if paths is not None and wt is not None else None
@@ -1949,7 +1952,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
 ) -> str:  # fmt: skip
     """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
     over untriaged findings of an earlier round is held, see `_hold`)."""
-    taken, kind, done, forced, how, diff_chars = scope
+    taken, kind, done, forced, how, diff_chars, snapshot = scope
     evidence = {
         **best.evidence(),
         "diff_source": how,
@@ -1957,7 +1960,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **_round_evidence(taken, kind, done, best.status, forced, _delta_rounds(it, gate)),
         **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
         **(extra_evidence or {}),
-        **_reviewed_snapshot(repo, cfg, st, it, called_from),
+        **snapshot,
     }
     if kind == "chunk" and it is not None:
         # A re-run of part of a DELTA round stays that delta's record: the next --chunk
@@ -2165,6 +2168,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
     taken = _head_of(repo, it, branch, commit)
+    # ...and the content the reviewer is sent is read now too (B44548e189d): `reviewed_paths`
+    # taken when the round is recorded would claim as reviewed what changed meanwhile.
+    snapshot = _reviewed_snapshot(repo, cfg, st, it, called_from)
     sargs: dict[str, Any] = {
         "item": item,
         "gate": gate,
@@ -2268,7 +2274,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
             called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
-            scope=(taken, kind, done, forced, how, len(diff)),
+            scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
     data: dict[str, Any] = {
