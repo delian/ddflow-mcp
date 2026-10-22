@@ -35,6 +35,21 @@ SHAPE_COPILOT = "copilot"  #: {"mcpServers": {"ddflow": {type: "local", ..., too
 SHAPE_MCP_DOT_SERVERS = "mcp.servers"  #: {"mcp": {"servers": {...}}} -- ZCode (GLM)
 SHAPE_OPENCODE = "opencode"  #: {"mcp": {"ddflow": {type: "local", command: [...]}}}
 SHAPE_TOML = "toml.mcp_servers"  #: [mcp_servers.ddflow] in TOML -- Codex
+#: A launch-time overlay, not a project config: dsh reads MCP servers (and hook bridges)
+#: only from Cordis YAML patch layers, so ddflow writes ONE file it owns and prints the
+#: `--patch` launch line (`docs/ddflow/research/dsh-probe.md`). Rows are marker-tagged
+#: lines; everything else in the file is the operator's and is kept.
+SHAPE_CORDIS_PATCH = "cordis-patch-yaml"
+CORDIS_MCP_PLUGIN = "@deepseek-ai/dsh-mcp-client"
+#: dsh's rule for `serverName`: it becomes the `mcp__<serverName>__<tool>` prefix.
+_CORDIS_SERVER_NAME = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_CORDIS_ROW = re.compile(r"^(?P<ind>\s*)- (?P<json>.*?)\s+# ddflow-row:(?P<name>\S+)\s*$")
+_CORDIS_INSERT = re.compile(r"^- insert:\s*(?:#.*)?$")
+_CORDIS_HEADER = (
+    "# ddflow-owned dsh overlay: written by `ddflow adopt`, passed to dsh with\n"
+    "#   dsh --profile <p> --patch {rel}\n"
+    "# Lines tagged `# ddflow-row:<name>` are ddflow's; other lines are kept as written.\n"
+)
 #: No project-level MCP config file EXISTS for this agent: it is configured in an IDE
 #: panel, a web UI, or a user-level file outside the repository. The delta doc and
 #: `AGENTS.md` still apply, and those are the parts that make the workflow portable — so
@@ -61,6 +76,12 @@ def server_entry_for(shape: str, entry: dict) -> dict:
         if entry.get("env"):
             out["environment"] = entry["env"]
         return out
+    if shape == SHAPE_CORDIS_PATCH:
+        if not _CORDIS_SERVER_NAME.match(str(entry.get("serverName", ""))):
+            raise ValueError("a dsh serverName is 1-32 characters of [A-Za-z0-9_-]")
+        config: dict = {k: v for k, v in entry.items() if v not in (None, {}, [])}
+        config.setdefault("transport", "stdio")
+        return {"id": config["serverName"], "name": CORDIS_MCP_PLUGIN, "config": config}
     if shape == SHAPE_SERVERS:
         # VS Code names the transport in the entry; its own documented example carries
         # `"type": "stdio"`, so that is what is written rather than relying on it being
@@ -74,6 +95,81 @@ def server_entry_for(shape: str, entry: dict) -> dict:
     return dict(entry)
 
 
+def cordis_entry(name: str, entry: dict) -> dict:
+    """The patch row for server ``name`` with stdio launch ``entry`` (``command``, ``args``,
+    ``env``, ``cwd``). ``serverName`` is the name: it prefixes every tool (``mcp__ddflow__*``).
+
+    The ambient environment of the stdio child is scrubbed by dsh (`*KEY*`, `*TOKEN*`,
+    `*SECRET*`, `*PASSWORD*`, every `DSH_*`), so anything the server needs goes in ``env``.
+    """
+    return server_entry_for(SHAPE_CORDIS_PATCH, {"serverName": name, **entry})
+
+
+def cordis_rows(text: str) -> dict[str, dict] | None:
+    """The ddflow-tagged rows of an overlay, by marker name; None when a tagged line is not
+    JSON (a hand-edit that no longer parses: unknown is not absent)."""
+    rows: dict[str, dict] = {}
+    for line in text.splitlines():
+        m = _CORDIS_ROW.match(line)
+        if not m:
+            continue
+        try:
+            row = json.loads(m["json"])
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(row, dict):
+            return None
+        rows[m["name"]] = row
+    return rows
+
+
+def _register_cordis(
+    path: Path, rel: str, name: str, entry: dict, dry_run: bool, manual: str
+) -> tuple[str, str]:
+    """The Cordis patch-overlay half of `register`: one marker-tagged JSON row per server."""
+    try:
+        row = cordis_entry(name, entry)
+    except (ValueError, KeyError) as exc:
+        return "refused", f"SKIPPED {rel}: {exc}; add {manual} by hand"
+    try:
+        text = path.read_text("utf-8") if path.exists() else ""
+    except (UnicodeDecodeError, OSError) as exc:
+        return "refused", f"SKIPPED {rel}: it could not be read ({exc}); add {manual} by hand"
+    if (rows := cordis_rows(text)) is None:
+        return "refused", f"SKIPPED {rel}: a ddflow-row line is not JSON; add {manual} by hand"
+    if rows.get(name) == row:
+        return "unchanged", f"{rel} already registers {name} with the same launch command"
+    new_line = f"    - {json.dumps(row)}  # ddflow-row:{name}"
+    lines = text.splitlines()
+    idx = next(
+        (i for i, ln in enumerate(lines) if (m := _CORDIS_ROW.match(ln)) and m["name"] == name),
+        None,
+    )
+    if idx is not None:
+        lines[idx] = new_line
+    elif (
+        ins := next((i for i, ln in enumerate(lines) if _CORDIS_INSERT.match(ln)), None)
+    ) is not None:
+        lines.insert(ins + 1, new_line)
+    else:
+        body = [ln for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+        if body and body != ["[]"]:
+            return "refused", (
+                f"SKIPPED {rel}: it holds patch entries but no `- insert:` list to add to; "
+                f"add {manual} by hand"
+            )
+        lines = [ln for ln in lines if ln.strip() != "[]"]
+        if not lines:
+            lines = _CORDIS_HEADER.format(rel=rel).splitlines()
+        lines += ["- insert:", new_line]
+    out = "\n".join(lines) + "\n"
+    if dry_run:
+        return "written", f"WOULD write {rel}:\n{out}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replace_text(path, out)
+    return "written", f"{'refreshed' if idx is not None else 'registered'} {name} in {rel}"
+
+
 def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
     """The dict inside ``data`` that maps server NAME -> entry, for this shape.
 
@@ -82,6 +178,8 @@ def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
     `SERVERS_FIELD_AGENTS` set beside it -- so adding an agent meant editing three
     things that no test tied together, and only one of them could express nesting.
     """
+    if shape == SHAPE_CORDIS_PATCH:
+        return {}  # YAML overlay, not JSON: read it with `cordis_rows`
     if shape == SHAPE_OPENCODE:
         path: tuple[str, ...] = ("mcp",)
     elif shape == SHAPE_MCP_DOT_SERVERS:
@@ -278,6 +376,8 @@ def register(
     """
     rel = rel or str(path)
     manual = manual or name
+    if shape == SHAPE_CORDIS_PATCH:
+        return _register_cordis(path, rel, name, entry, dry_run, manual)
     if shape == SHAPE_TOML:
         return _register_toml(
             path, rel, name, entry, dry_run, manual, ours, same or _equal_to(entry), elsewhere
