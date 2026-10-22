@@ -132,6 +132,7 @@ from .outcomes import (  # noqa: F401
 )
 from .regression_collect import tree_provides  # noqa: F401
 from .regression_diag import describe_run, load_snapshot  # noqa: F401
+from .regression_run import NO_TEST_RAN, not_a_failure, not_a_pass  # noqa: F401
 from .regression_testfix import (  # noqa: F401
     VERIFIED_BY_MUTATION,
     Tools,

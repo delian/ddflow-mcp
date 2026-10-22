@@ -32,6 +32,7 @@ from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import grants as GNT
 from ..services import identity as ID
 from ..services import leasekeep as LK
 from ..services import logblobs as LB
@@ -53,6 +54,7 @@ from .gates import item_tree
 from .knowledge.regression import _unresolved_tests
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
+from .review_findings import _rows as _numbered_findings
 from .review_supersede import carry, round_evidence, superseded_digests
 
 
@@ -1032,6 +1034,7 @@ def _full_rounds(it, gate: str) -> int:
         1
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "full"
+        and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
@@ -1045,9 +1048,17 @@ def _delta_rounds(it, gate: str) -> int:
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "delta"
         and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+        and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
+
+
+def _kept_copy(run) -> bool:
+    """A record `_keep_reviewed_round` re-emitted over an outage: a copy of an earlier round,
+    no round of its own (B435bbddb18). Copies written before `round_kept` existed are told
+    by `unavailable_deltas`, which only that path writes."""
+    return bool(run.evidence.get("round_kept") or run.evidence.get("unavailable_deltas"))
 
 
 def _settled_pass(run) -> bool:
@@ -1217,7 +1228,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
         used = _rounds_used(it, gate)
-        why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
+        why, forced = _budget_on_grants(repo, cfg, st, it, a, used, say)
     if why:
         return kind, done, forced, diff, how, why, None
     if item:
@@ -1235,6 +1246,42 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
+
+
+def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
+    """`_budget` for this call, with the operator grant (`services.grants.pick`) a round past
+    the budget may cite. Says the item's grants for the gate; ``a["grant"]`` is the id the
+    round ran on (set only when it did: a round the budget allows anyway spends none)."""
+    item, gate = a["item"], a["gate"]
+    for line in GNT.lines(st, item, gate):
+        say(line)
+    grant = None
+    if 0 < cfg.review.max_rounds <= used:
+        grant = GNT.pick(st, item, gate, a["force"], ctx=_grant_ctx(repo, it, gate, a))
+    why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say, grant)
+    a["grant"] = grant.id if grant and forced else ""
+    return why, forced
+
+
+def _cite_grant(extra: dict[str, Any] | None, grant_id: str) -> dict[str, Any] | None:
+    """``extra`` evidence naming the operator grant the round ran on (`services.grants`
+    counts a grant's use from it)."""
+    return {**(extra or {}), "budget_grant": grant_id} if grant_id else extra
+
+
+def _grant_ctx(repo, it, gate: str, a: dict[str, Any]) -> GNT.Ctx:
+    """The facts a standing operator grant's predicate reads (`services.grants.Ctx`)."""
+    # No numbered findings on record (a clean or hand-recorded gate: `_rows` says why in text)
+    # reads as "untriaged", so a standing grant never fires on what it cannot see: a clean
+    # round has nothing left to triage and needs no extra round.
+    rows = _numbered_findings(it, gate)
+    return GNT.Ctx(
+        untriaged=(
+            sum(1 for r in rows if r["triage"] == "untriaged") if isinstance(rows, list) else 1
+        ),
+        reviewed_head=_last_head(it, gate),
+        head=_head_of(repo, it, a["branch"], a["commit"]),
+    )
 
 
 def _wants_delta(repo, cfg, it, a, say) -> bool:
@@ -1414,9 +1461,11 @@ def _kind(repo, cfg, it, item, gate, chunks, delta, commit, base) -> str:
     return "delta" if inside else "full"
 
 
-def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
+def _budget(cfg, item, gate, done, force, reason, say, grant=None) -> tuple[str, str]:
     """(why this round is refused, "") or ("", the reason it was forced past the cap).
-    ``done`` is every round used so far, full and delta (`_rounds_used`)."""
+    ``done`` is every round used so far, full and delta (`_rounds_used`). ``grant`` is the
+    operator grant (`services.grants.pick`) this round may cite: it stands in for the
+    free-text reason, and a standing one needs no ``--force`` at all."""
     cap = cfg.review.max_rounds
     if cap <= 0 or done < cap:
         return "", ""
@@ -1426,6 +1475,12 @@ def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
             f"[review].max_rounds = {cap}: prefer `review triage`."
         )
         return "", ""
+    if grant is not None:
+        say(
+            f"round {done + 1} of {item}.{gate} runs past max_rounds = {cap} on {GNT.describe(grant)}."
+        )
+        note = f"; agent: {reason.strip()}" if reason.strip() else ""
+        return "", f"operator grant {grant.id}: {grant.reason}{note}"
     if force and reason.strip():
         say(f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap}.")
         return "", reason.strip()
@@ -1732,6 +1787,8 @@ def _any_out_of_rounds(cfg, it, gates: list[str], args: dict[str, Any]) -> bool:
     """Would a full round of any of ``gates`` be refused? Then none is combined."""
     if it is None:
         return False
+    # Operator grants are item.gate scoped; a combined round spans several gates, so none is
+    # consulted here: past the cap the gates are reviewed one by one, and each cites its own.
     quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
     return any(
         _budget(cfg, it.id, g, _rounds_used(it, g), args["force"], args["reason"], quiet)[0]
@@ -2069,6 +2126,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     )
     supers, fix = sargs.get("supers") or set(), bool(sargs.get("fix"))
     extra_evidence = round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
+    extra_evidence = _cite_grant(extra_evidence, sargs.get("grant", ""))
     if why:
         return O.Outcome(
             kind="review",
