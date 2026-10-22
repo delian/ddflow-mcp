@@ -1,7 +1,7 @@
 """RA-inventory: the gated-command table is complete (a refusal site cannot appear unlisted).
 
-The scan is on the AST, so whitespace, strings, comments and docstrings cannot hide or fake a
-call, and it COUNTS calls per module: a second call in an already-listed module changes the
+The scan is on the AST, so whitespace, comments, docstrings and an import alias cannot hide or fake
+a call (an author who deliberately obfuscates one, with `exec` or `getattr`, is out of scope), and it COUNTS calls per module: a second call in an already-listed module changes the
 count and fails until the table is amended (`MARKER_CALLS`). Sites with no marker call
 (relayed consent, hook guards) are held by an anchor: the text they hang on must still exist.
 """

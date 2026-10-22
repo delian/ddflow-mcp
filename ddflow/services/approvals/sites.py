@@ -5,7 +5,9 @@ an answer it needs (`min_level`), which state its approval digests (`digest`), a
 functions enforce the person-only rule (`functions`: those that call `agent_marker` or
 `is_agent`). `tests/test_approvals_sites.py` walks `ddflow/` and fails for a function that makes
 such a call and is named by no row (or an alias import that would hide one), so a new refusal site cannot appear without a row here
-(r-reuse-core: this is the one list; the consume check, `doctor` and the docs read it).
+This is a guard against ACCIDENTAL drift by an honest author -- it reads calls by their name in the
+syntax tree and does not stop an author who hides a call (`exec`, `getattr`, a rebinding); review
+and the verb's own tests do that (r-reuse-core: this is the one list; the consume check, `doctor` and the docs read it).
 
 Tiers (research 7): T1 standing policy (opt-in, reported), T2 a person approves each instance,
 T3 signed only. Levels (research 5): L1 terminal, L2 harness-attested, L3 secret or
@@ -66,7 +68,7 @@ class Site:
     #: Functions ("module:function") that call agent_marker/is_agent for this verb. Empty for a site with no marker call
     #: (a relayed-consent flag or a hook guard).
     functions: tuple[str, ...] = ()
-    #: The CLI form an agent re-runs with `--approval ID`.
+    #: The CLI form of the verb; an agent re-runs it with `--approval ID` appended.
     command: str = ""
     #: For a site with no marker call (relayed consent, a hook guard): (file, text) that must
     #: still be in that file, so a rename or removal of the guard makes the row stale.
