@@ -73,7 +73,7 @@ def _lines_of_mine(
     now: float,
 ) -> dict[str, set[str]]:
     """path -> the release lines the commit can be for: those of the committer's leases that
-    cover it (finished ones too: the holder's own last commits stand on them). A lease made
+    cover it. A lease made
     for the tree being committed in is the commit's own item, so when one covers the path
     only its line counts, not the lines of the committer's other items."""
     seen: dict[str, list[tuple[str, bool]]] = {p: [] for p in paths}
