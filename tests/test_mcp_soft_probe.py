@@ -573,3 +573,33 @@ def test_the_oracle_check_reads_the_tool_list_under_the_lock():
     probe.tools = Tools(probe.tools)
     probe._call(1, "secret_oracle")
     assert held and all(held), held
+
+
+def test_a_cli_that_fails_after_the_probe_concluded_says_so(tmp_path):
+    mod = _script()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "claude").write_text(
+        f"#!{sys.executable}\n"
+        "import json, subprocess, sys, time\n"
+        "cfg = json.load(open(sys.argv[sys.argv.index('--mcp-config') + 1]))['mcpServers']['lc']\n"
+        "p = subprocess.Popen([cfg['command'], *cfg['args']], stdin=subprocess.PIPE,\n"
+        "                     stdout=subprocess.PIPE, text=True)\n"
+        "def req(i, m, params=None):\n"
+        "    p.stdin.write(json.dumps({'jsonrpc':'2.0','id':i,'method':m,'params':params or {}})+'\\n')\n"
+        "    p.stdin.flush()\n"
+        "    while json.loads(p.stdout.readline()).get('id') != i: pass\n"
+        "req(1, 'initialize', {'protocolVersion': 'x'}); req(2, 'tools/call', {'name': 'bump'})\n"
+        "time.sleep(0.2); req(3, 'tools/list'); p.stdin.close(); p.wait(); sys.exit(3)\n"
+    )
+    (fake / "claude").chmod(0o755)
+    import os
+
+    old = os.environ["PATH"]
+    os.environ["PATH"] = str(fake) + os.pathsep + old
+    try:
+        row, code = mod.probe_row("claude", timeout=30)
+    finally:
+        os.environ["PATH"] = old
+    assert row["list_changed"] == "honours" and code == 1
+    assert "exit 3" in row["reason"]
