@@ -571,11 +571,9 @@ class Server:
 
         A client that sent `_meta.progressToken` resets its idle timer on each one; a
         review of 2055 s was aborted at 1800 s with none (bug B206)."""
-        meta = params.get("_meta")
-        token = meta.get("progressToken") if isinstance(meta, dict) else None
+        token = _progress_token(params)
         send = self.notify
-        # MCP: a string or a number. Anything else is no token (it is also a dict key below).
-        if send is None or isinstance(token, bool) or not isinstance(token, (str, int, float)):
+        if token is None or send is None:
             return None
         if (known := self._says.get(token)) is not None:
             return known  # one counter per call: progress must only ever increase
@@ -934,8 +932,7 @@ class Server:
             body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
             return _ok(mid, _text(body, error=failed, meta={"exit": code}))
         finally:
-            meta = call.params.get("_meta")
-            self._says.pop(meta.get("progressToken") if isinstance(meta, dict) else None, None)
+            self._says.pop(_progress_token(call.params), None)
         # `text` may be a bool or a predicate on the arguments: `render`
         # returns a document with `--show` and a file list without it, and which
         # it is cannot be known until the call.
@@ -1491,6 +1488,16 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     t = threading.Thread(target=relay, name=f"ddflow-{name}-{mid}", daemon=True)
     t.start()
     return t
+
+
+def _progress_token(params: dict[str, Any]) -> str | int | float | None:
+    """The `_meta.progressToken` of a call: MCP says a string or a number, and it is a dict
+    key here, so anything else (a list from a non-conformant client) is no token."""
+    meta = params.get("_meta")
+    token = meta.get("progressToken") if isinstance(meta, dict) else None
+    if isinstance(token, bool) or not isinstance(token, (str, int, float)):
+        return None
+    return token
 
 
 def _frame_writer(out) -> Callable[[dict[str, Any]], None]:
