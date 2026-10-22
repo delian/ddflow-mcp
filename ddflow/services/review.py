@@ -1692,7 +1692,11 @@ def _in_rerun_cut(prior: dict[str, Any], f: dict[str, Any]) -> bool:
     this one must not drop them (B00e6b5a540). Any other record numbers all in one cut."""
     if "delta_raised" not in prior:
         return True
-    return f.get("digest") in set(prior["delta_raised"])
+    digest = f.get("digest")
+    # one the delta raised again is the EARLIER copy that stayed, numbered in the earlier cut
+    return digest in set(prior["delta_raised"]) and digest not in set(
+        prior.get("delta_reraised", ())
+    )
 
 
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
