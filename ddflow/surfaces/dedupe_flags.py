@@ -38,6 +38,7 @@ def answer_of(a) -> Answer:
         ("extends", "extends"),
         ("duplicate_of", "duplicate_of"),
         ("related", "related"),
+        ("merge_into", "merge_into"),
     ):
         target = getattr(a, flag, "") or ""
         if target:
