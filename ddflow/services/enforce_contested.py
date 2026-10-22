@@ -68,8 +68,8 @@ def _commit_lines(
     WILDCARDS only. The leases covering a path are the committer's; the one made for the tree
     being committed in is the commit's own item, and when there is one only it counts, so
     the lines of the committer's other items never decide. A path the committer covers on two lines with no
-    tree to tell them apart is for either, so a rival on any of them contests it; one an exact
-    glob covers is left out: an exact holder is never overlapped."""
+    tree to tell them apart is for either, so a rival on any of them contests it; a line whose cover is an exact
+    glob is left out: an exact holder is never overlapped."""
     out: dict[str, set[str]] = {}
     for p in paths:
         if is_shared(p, shared):
@@ -86,8 +86,9 @@ def _commit_lines(
         cover = [c for c in cover if c[2]]
         if any(here for _, here, _ in cover):
             cover = [c for c in cover if c[1]]
-        lines = {line for line, _, _ in cover}
-        if lines and all(_wild(g) for _, _, gs in cover for g in gs):
+        # per candidate line: an exact glob on one line leaves the other line's wildcard contestable
+        lines = {line for line, _, gs in cover if all(_wild(g) for g in gs)}
+        if lines:
             out[p] = lines
     return out
 

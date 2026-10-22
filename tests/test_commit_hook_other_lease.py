@@ -270,3 +270,47 @@ def test_a_path_two_of_the_committers_lines_cover_is_contested_by_a_rival_on_eit
     subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_an_exact_lease_on_one_line_does_not_hide_a_wildcard_on_the_other_outside_a_tree(
+    repo, cfg, monkeypatch
+):
+    """Outside any tree the commit may be for either item: the line-"1" exact lease clears
+    nothing for the default-line wildcard item, whose rival (default line) still contests."""
+    _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/new.py"]},
+    )
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "new.py").write_text("v = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_a_line_one_rival_contests_the_path_too(repo, cfg, monkeypatch):
+    _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    mine = EventLog(repo, "owner")
+    mine.append("task.updated", "T3", {"line": "1"})
+    mine.append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/*"]},
+    )
+    _lined_other(repo, "src/new.py")
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "new.py").write_text("u = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "T2 (other)" in msg, msg
