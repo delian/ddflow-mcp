@@ -560,11 +560,15 @@ def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[st
         return False
     for line in log.out.splitlines():
         sha, *parents = line.split()
-        if len(parents) > 1:
-            if not all(W.git(here, "merge-base", "--is-ancestor", p, base).ok for p in parents[1:]):
-                return False
-            continue
-        files = W.git(here, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+        merge = len(parents) > 1
+        if merge and not all(
+            W.git(here, "merge-base", "--is-ancestor", p, base).ok for p in parents[1:]
+        ):
+            return False
+        # A merge's own content is what differs from EVERY parent (`--cc`): a conflict
+        # resolution or an edit made inside the merge, which exists on no other commit.
+        flags = ("--cc",) if merge else ()
+        files = W.git(here, "diff-tree", *flags, "--no-commit-id", "--name-only", "-r", sha)
         if not files.ok or not set(files.out.split()) <= set(pins):
             return False
     return True
@@ -746,6 +750,8 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
     if t.ahead:
         it = fold(log.read_all(), strict=False).items.get(t.item)
         if not landed_leftovers_only(t.path, it, base, pin_files(repo, cfg)):
+            t.action, t.kind = "", "unmerged"
+            t.done = f"kept: {t.name} is no longer only landed leftovers since the survey"
             return [f"kept {t.name}: no longer only landed leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
     d = dispose_tree(repo, cfg, log, wt, forced_by=proof)
