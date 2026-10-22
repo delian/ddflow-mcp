@@ -189,11 +189,12 @@ def job_end(
         return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
     if item and all_finished:
         return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
-    if (item or all_finished) and (exit_code is not None or note):
+    if (item or all_finished) and (exit_code is not None or note or force):
         return O.refused(
             "job.ended",
-            "--exit-code and --note describe ONE job: each finished job is ended with its own "
-            "recorded exit, so end that job by id to override it",
+            "--exit-code, --note and --force describe ONE job: each finished job is ended with "
+            "its own recorded exit, and one on another host is never ended in bulk; end that job "
+            "by id to override it",
             id="",
         )
     if not job:
@@ -230,7 +231,7 @@ def job_end(
 
 
 def collect_finished(log, st, item: str = "") -> list[str]:
-    """End every job whose process is over and whose exit is knowable here (EXITED or GONE),
+    """End every job whose process is over and whose end is determinable here (EXITED, or GONE: killed, with no exit recorded),
     for ``item`` or for all items; the ids ended. Never a running job, never one on another host
     (`status` says "elsewhere": it could not look). One append for the lot, not one per job."""
     ended: list[tuple[str, str, dict[str, Any]]] = []

@@ -205,3 +205,5 @@ def test_bulk_end_refuses_a_single_jobs_exit_code_and_note(repo):
     assert code == REFUSED
     code, _o, _e = run_cli(repo, "job", "end", "--item", "A", "--note", "cancelled")
     assert code == REFUSED
+    code, _o, _e = run_cli(repo, "job", "end", "--all-finished", "--force")
+    assert code == REFUSED
