@@ -181,8 +181,8 @@ def test_a_scan_holding_a_new_tickets_lock_for_an_instant_does_not_abort_its_own
 def test_two_retries_racing_for_one_parked_ticket_get_it_once(tmp_path: Path):
     queue = tmp_path / "queue"
     queue.mkdir()
-    (queue / "00000000000000000001-agent-a.parked").write_text("")
+    (queue / "00000000000000000001-agent_a.parked").write_text("")
     first = SL._Ticket(queue, "agent-a", 120)
     second = SL._Ticket(queue, "agent-a", 120)
-    assert first.name == "00000000000000000001-agent-a.ticket"
+    assert first.name == "00000000000000000001-agent_a.ticket"
     assert second.name != first.name  # the loser queues anew, it does not share or clobber
