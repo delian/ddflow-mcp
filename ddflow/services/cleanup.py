@@ -776,7 +776,11 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
             return [f"kept {t.name}: no longer only landed leftovers"]
         work = W.tree_work(Path(t.path))
         moved = W.git(Path(t.path), "rev-parse", "--verify", "HEAD").out.strip() != tip
-        if work.dirty or not work.readable or moved:
+        if not work.readable:
+            t.action, t.kind = "", "unreadable"
+            t.done = f"LEAVE ALONE — could not measure {t.name} since the survey ({work.msg[:120]})"
+            return [f"kept {t.name}: could not be measured since the survey"]
+        if work.dirty or moved:
             t.action, t.kind = "", "unmerged"
             t.done = f"kept: {t.name} changed since it was proved to be only leftovers"
             return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
@@ -850,7 +854,7 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
             )
             if not r.ok:
                 continue
-            t.action = "remove"
+            t.action, t.ahead = "remove", 0  # merged: nothing is ahead of the base any more
         if t.action == "remove":
             done.extend(_remove_planned(repo, cfg, log, t, base))
     for t in plan.stale_branches:
