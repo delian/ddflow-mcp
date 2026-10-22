@@ -12,7 +12,7 @@ Read on 2026-10-22: the GitHub page (WebFetch), a web search (third-party write-
 | REPORTED | a vendor or third-party statement not checked in the code |
 | UNKNOWN | not found; never guessed |
 
-Nothing in this document was run. `DSH-facts` ran dsh 0.2.1-rc.2 in a scratch directory with the operator's consent: results, corrections and what stays UNKNOWN are in `docs/ddflow/research/dsh-probe.md` (which supersedes any row below it contradicts).
+The rows below are from the source read and were not run. `DSH-facts` then ran dsh 0.2.1-rc.2 in a scratch directory with the operator's consent: results, corrections and what stays UNKNOWN are in `docs/ddflow/research/dsh-probe.md` (which supersedes any row below it contradicts).
 
 ## Does it exist, and is it what the operator described?
 
@@ -74,7 +74,7 @@ Yes, and the description fits, with three refinements.
 | Compaction | `compaction-basic`, `/compact` command, tool-result pruner, image offload | VERIFIED | `apps/cli/composition.md` |
 | Identity | bash-tool children get `DSH_HOME`, `DSH_SHELL=1`, `DSH_SESSION_ID`, `DSH_PROFILE`, `DSH_PROFILE_DIR` (reserved; plugins cannot override); MCP stdio children get **none** of them (scrubbed) | VERIFIED | `packages/shell/shell-env/README.md`, `mcp-client/README.md` |
 | Generic `AI_AGENT` marker | not found | UNKNOWN | grep not exhaustive |
-| First-turn token cost with ddflow | about 154k chars (about 38k tokens) against 6k native: 123 `mcp__ddflow__*` tools, 115k chars of tool JSON | MEASURED in chars with a stub (dsh-probe.md) | dsh's own system prompt and tool declarations were not counted; feeds `LS-measure` |
+| First-turn token cost with ddflow | about 154k chars (about 38k tokens) against 6k native: 123 `mcp__ddflow__*` tools, 115k chars of tool JSON | MEASURED in chars with a stub (dsh-probe.md); tokens estimated | the request carries dsh's own system prompt and tool declarations (counted); real token counts need a real model; feeds `LS-measure` |
 | Web search and fetch tools | `web-search-deepseek`, `web-fetch-http` are in the base composition | VERIFIED | `apps/cli/composition.md` |
 
 ### Client-matrix row (own section; not an edit of `mcp-client-matrix.md`)
