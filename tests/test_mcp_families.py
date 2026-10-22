@@ -173,3 +173,10 @@ def test_the_description_never_asks_for_an_argument_the_schema_lacks():
 def test_an_explicit_null_action_is_a_missing_action_even_for_a_self_named_tool():
     err = FS.route("ddflow_doctor", {"action": None})
     assert isinstance(err, str) and "action" in err and "check" in err
+
+
+def test_self_named_family_tools_do_not_advertise_action_as_required():
+    assert {f for f in FAMILY_NAMES if f in TOOLS} == {"ddflow_doctor", "ddflow_workflow"}
+    for f in ("ddflow_doctor", "ddflow_workflow"):
+        assert "required" not in FS.family_entry(f)["inputSchema"]
+        assert FS.route(f, {}) is None
