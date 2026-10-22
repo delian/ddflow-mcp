@@ -36,6 +36,7 @@ from typing import Any, get_type_hints
 from ..core.registry import Registry
 from .mcpconfig import (
     SHAPE_COPILOT,
+    SHAPE_CORDIS_PATCH,
     SHAPE_MCP_DOT_SERVERS,
     SHAPE_MCP_SERVERS,
     SHAPE_NONE,
@@ -77,6 +78,7 @@ SHAPES = frozenset(
         SHAPE_MCP_DOT_SERVERS,
         SHAPE_OPENCODE,
         SHAPE_TOML,
+        SHAPE_CORDIS_PATCH,
         SHAPE_NONE,
     }
 )
