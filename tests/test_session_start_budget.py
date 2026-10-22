@@ -120,7 +120,8 @@ def test_a_failing_surface_leaves_an_empty_cost_not_a_failed_doctor(repo):
         raise RuntimeError("no texts")
 
     cost = SC.report(repo, Config.load(repo), "x", boom)
-    assert cost.notes() == [] and cost.data() == {}
+    assert cost.notes() == ["session start cost: could not be measured (RuntimeError: no texts)"]
+    assert cost.data() == {}
 
 
 def test_a_pending_notice_is_covered_by_a_reserve_so_the_first_session_fits():
@@ -207,3 +208,27 @@ def test_the_real_notice_the_hook_prints_fits_the_default_reserve(tmp_path):
 def test_only_empty_texts_reserve_nothing():
     cost = SC.measure({"brief": ""}, chars_per_token=4.0, budget=100, reserve=64)
     assert cost.tokens == 0 and cost.over == 0
+
+
+def test_measuring_a_pending_notice_neither_shows_nor_uses_it_up(tmp_path):
+    """With a notice really pending, the measured brief omits it and the next real brief
+    still carries it: remove the guard and the first assertion or the second fails."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from ddflow.api.lifecycle.brief import brief
+
+    src = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
+    old = tmp_path / "old"
+    shutil.copytree(src, old)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(old)], check=True)
+    for k, v in (("user.email", "t@e.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        subprocess.run(["git", "-C", str(old), "config", k, v], check=True)
+    subprocess.run(["git", "-C", str(old), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(old), "commit", "-qm", "old"], check=True)
+    with SC.measuring():
+        measured = brief(old, check_recovery=False, agent="x").data["text"]
+    assert "Upgraded ddflow" not in measured
+    real = brief(old, check_recovery=False, agent="x").data["text"]
+    assert "Upgraded ddflow" in real

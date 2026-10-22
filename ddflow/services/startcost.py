@@ -47,6 +47,8 @@ class StartCost:
     parts: Mapping[str, int]  # name -> tokens
     bytes: Mapping[str, int]  # name -> UTF-8 bytes
     budget: int  # tokens; 0 = no budget
+    #: Why the cost could not be measured (empty when it could): said, never silent.
+    failed: str = ""
 
     @property
     def tokens(self) -> int:
@@ -68,6 +70,8 @@ class StartCost:
 
     def notes(self) -> list[str]:
         """The doctor note: the cost line, or nothing when no texts were measured."""
+        if self.failed:
+            return [f"session start cost: could not be measured ({self.failed})"]
         return [self.line()] if self.parts else []
 
     def data(self) -> dict[str, object]:
@@ -113,5 +117,5 @@ def report(repo, cfg, agent: str, start_texts) -> StartCost:
             budget=cfg.session.context_budget_tokens,
             reserve=cfg.session.start_notice_reserve_tokens,
         )
-    except Exception:
-        return empty
+    except Exception as exc:
+        return StartCost({}, {}, 0, failed=f"{type(exc).__name__}: {exc}")
