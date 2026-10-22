@@ -168,3 +168,37 @@ def test_the_default_reserve_covers_the_notice_lines_a_session_start_can_carry()
     reserve = Config().session.start_notice_reserve_tokens
     bytes_per_token = Config().session.start_bytes_per_token
     assert len(f"{upgraded}\n\n{release}".encode()) <= reserve * bytes_per_token
+
+
+def test_the_measured_brief_is_the_one_the_session_start_hook_prints(repo):
+    """The hook prints the plain brief (`brief`, not the subagent launch brief of
+    `--for-agent`), so that is the text counted."""
+    _adopted(repo)
+    code, hook, err = run_cli(repo, "hooks", "session-start")
+    assert code == 0, err
+    measured = start_texts(repo, "")["brief"]
+    assert measured and measured.strip().splitlines()[0] in hook
+
+
+def test_the_real_notice_the_hook_prints_fits_the_default_reserve(tmp_path):
+    """Materialised, not constructed: a project a real ddflow 0.1.3 built, so the running
+    ddflow is genuinely newer and the hook's brief leads with the real upgrade notice."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    src = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
+    old = tmp_path / "old"
+    shutil.copytree(src, old)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(old)], check=True)
+    for k, v in (("user.email", "t@e.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        subprocess.run(["git", "-C", str(old), "config", k, v], check=True)
+    subprocess.run(["git", "-C", str(old), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(old), "commit", "-qm", "old"], check=True)
+    _code, out, _err = run_cli(old, "hooks", "session-start")
+    notice = next((x for x in out.splitlines() if x.startswith("Upgraded ddflow")), "")
+    assert notice, out[:500]
+    cfg = Config()
+    assert len(notice.encode()) <= (
+        cfg.session.start_notice_reserve_tokens * cfg.session.start_bytes_per_token
+    )
