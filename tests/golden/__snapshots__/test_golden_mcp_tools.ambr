@@ -3011,6 +3011,10 @@
           "type": "string",
           "description": "Comma-separated globs it governs."
          },
+         "enforcement": {
+          "type": "string",
+          "description": "advisory | warn | block: how hard the rule binds (default advisory)."
+         },
          "new": {
           "type": "boolean",
           "description": "Dedup answer: a different record."
@@ -3078,6 +3082,10 @@
          "globs": {
           "type": "string",
           "description": "Comma-separated globs."
+         },
+         "enforcement": {
+          "type": "string",
+          "description": "New enforcement: advisory | warn | block."
          },
          "new": {
           "type": "boolean",
