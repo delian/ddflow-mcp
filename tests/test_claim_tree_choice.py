@@ -117,3 +117,28 @@ def test_the_cli_names_the_items_own_tree_on_a_second_claim(repo):
     assert "the item's own tree, from an earlier claim" in out and ".ddflow/worktrees/T1" in out, (
         out
     )
+
+
+def test_the_mcp_claim_result_carries_the_tree_choice(repo):
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    _seed(repo)
+    meta = {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+    msg = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "ddflow_claim",
+            "arguments": {"id": "T1", "as_agent": "a"},
+            "_meta": meta,
+        },
+    }
+    res = Server(repo).handle(msg)["result"]
+    body = json.loads(res["content"][0]["text"])
+    assert body["tree"]["how"] == "created" and body["tree"]["why"], body
