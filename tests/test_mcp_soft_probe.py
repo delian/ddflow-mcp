@@ -341,12 +341,14 @@ def test_a_timeout_still_classifies_what_the_log_recorded(tmp_path):
 
 
 def test_delaybump_adds_the_tool_only_when_it_notifies(tmp_path):
-    c = Client(tmp_path, "--delay", "0.5")
+    c = Client(tmp_path, "--delay", "1.5")
     c.call("initialize", {"protocolVersion": "2025-06-18"})
     r = c.call("tools/call", {"name": "delaybump"})
     assert "list your tools" not in json.dumps(r), "the result must not prompt a refetch"
+    assert "secret_oracle" not in json.dumps(r)
     assert "secret_oracle" not in _tool_names(c.call("tools/list"))
-    c.read_until(None)
+    note = c.read_until(None)
+    assert "secret_oracle" not in json.dumps(note)
     assert "secret_oracle" in _tool_names(c.call("tools/list"))
     c.close()
 
@@ -382,3 +384,69 @@ def test_a_cli_that_failed_before_the_probe_ran_is_unavailable_not_unknown(tmp_p
         os.environ["PATH"] = old
     assert row["list_changed"] == "unavailable" and code == 2
     assert "no credentials" in row["reason"]
+
+
+def test_bump_result_does_not_prompt_a_refetch(tmp_path):
+    """A result that tells the model to list its tools makes a client that ignores
+    list_changed look like one that honours it (critic #1)."""
+    c = Client(tmp_path)
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    r = c.call("tools/call", {"name": "bump"})
+    assert "list your tools" not in json.dumps(r)
+    c.close()
+
+
+def test_the_oracle_does_not_answer_before_it_exists(tmp_path):
+    c = Client(tmp_path)
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    r = c.call("tools/call", {"name": "secret_oracle"})
+    assert "MAGENTA" not in json.dumps(r)
+    c.close()
+
+
+def test_a_second_bump_sends_no_second_notification(tmp_path):
+    c = Client(tmp_path)
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    c.call("tools/call", {"name": "bump"})
+    c.call("tools/call", {"name": "bump"})
+    log = c.close()
+    assert log.count("list_changed") == 1
+
+
+def test_a_large_initialize_is_still_classified(tmp_path):
+    big = {
+        "protocolVersion": "2025-06-18",
+        "clientInfo": {"name": "big", "version": "1"},
+        "capabilities": {"experimental": {"x": "y" * 5000}},
+    }
+    c = Client(tmp_path)
+    c.call("initialize", big)
+    row = _analyze()(c.close())
+    assert row["client"] == {"name": "big", "version": "1"}
+
+
+def test_analyze_of_an_inconclusive_log_exits_2(tmp_path):
+    log = tmp_path / "empty.log"
+    log.write_text("")
+    assert _run("analyze", str(log)).returncode == 2
+
+
+def test_a_relative_path_entry_does_not_crash_the_row(tmp_path):
+    (tmp_path / "claude").write_text("#!/bin/sh\nexit 0\n")
+    (tmp_path / "claude").chmod(0o755)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "row", "claude"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={"PATH": "."},
+    )
+    assert "Traceback" not in r.stderr
+    assert json.loads(r.stdout)["list_changed"] == "unavailable"
+
+
+def test_a_cli_that_exits_0_without_calling_the_probe_is_unavailable(tmp_path):
+    (tmp_path / "claude").write_text("#!/bin/sh\nexit 0\n")
+    (tmp_path / "claude").chmod(0o755)
+    r = _run("row", "claude", env={"PATH": str(tmp_path)})
+    assert r.returncode == 2 and json.loads(r.stdout)["list_changed"] == "unavailable"
