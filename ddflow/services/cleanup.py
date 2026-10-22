@@ -42,11 +42,13 @@ from pathlib import Path
 from ..config import Config
 from ..core import clock as CK
 from ..core.flow import GITFLOW
+from ..core.globs import under_any
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import leases as L
 from .leaseclock import localize
+from .pins import pin_files
 
 
 @dataclass
@@ -327,6 +329,7 @@ def dispose_tree(
     *,
     item: Item | None = None,
     forced_by: str = "",
+    landed_tip: str = "",
 ) -> Disposal:
     """THE removal of a worktree (B-uni-tree-lifecycle): merge, the PR flow, cleanup and
     onboarding all end here, so every one is guarded, serialised with the claims and logged.
@@ -339,6 +342,8 @@ def dispose_tree(
       PROOF that removing whatever the tree holds is safe (the PR head merged on the forge;
       an inspection that found nothing beyond caches): it makes the removal forced, and the
       caller measured the tree itself.
+    * ``landed_tip`` is the weaker proof (a landed item's merge/pin leftovers are the only
+      commits up to that commit): not forced, so git refuses a file written after the caller's check itself.
     * **Logged**: a removal that worked appends `worktree.removed` -- for ``item`` when given,
       else for every item whose recorded tree is this path (B5e83fb22cb).
 
@@ -357,7 +362,7 @@ def dispose_tree(
             if kind:
                 return Disposal("refused", reason, kind)
         had_branch = bool(wt.branch) and W.branch_exists(root, wt.branch)
-        r = W.remove(repo, cfg, wt, force=bool(forced_by))
+        r = W.remove(repo, cfg, wt, force=bool(forced_by), landed_tip=landed_tip)
         if not r.ok:
             return Disposal("failed", (r.err or r.out).strip() or f"git exit {r.code}")
         if log is not None:
@@ -541,7 +546,60 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
-def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: str) -> None:
+def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]) -> str:
+    """Did ``item`` land on ``base`` (its recorded ``merged_sha`` is reachable from it), with
+    only merge-main commits and pin regenerations left on the tree (Bfc4ac64c9c)?
+
+    A crash after the merge gate leaves the item abandoned and its tree a few such commits
+    ahead of the base: none of it is work. A merge commit counts only when every parent
+    beyond the first is already on the base; any other commit only when it touches nothing
+    but pin files. Returns the commit that was proved, so a later step can be bound to exactly
+    it; "" for anything else, and for unknown (git failing, no recorded merge)."""
+    if not item or not item.merged_sha:
+        return ""
+    here = Path(path)
+    head = W.git(here, "rev-parse", "--verify", "HEAD").out.strip()
+    if not head:
+        return ""
+    if not W.git(here, "merge-base", "--is-ancestor", item.merged_sha, base).ok:
+        return ""
+    log = W.git(here, "log", "--format=%H %P", f"{base}..{head}")
+    if not log.ok:
+        return ""
+    for line in log.out.splitlines():
+        sha, *parents = line.split()
+        merge = len(parents) > 1
+        if merge and not all(
+            W.git(here, "merge-base", "--is-ancestor", p, base).ok for p in parents[1:]
+        ):
+            return ""
+        # A merge's own content is what differs from EVERY parent (`--cc`): a conflict
+        # resolution or an edit made inside the merge, which exists on no other commit.
+        flags = ("--cc",) if merge else ()
+        files = W.git(
+            here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
+        )
+        names = [f for f in files.out.split("\0") if f] if files.ok else []
+        # a non-merge commit that touches nothing (--allow-empty) is someone's note, not a pin run
+        if not files.ok or (not merge and not names) or not all(under_any(f, pins) for f in names):
+            return ""
+    return head
+
+
+def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[str]) -> bool:
+    """`proved_leftover_tip` as a yes/no: is everything the tree has ahead of ``base`` a landed
+    item's merge-main/pin leftover?"""
+    return bool(proved_leftover_tip(path, item, base, pins))
+
+
+def _classify(
+    t: TreeState,
+    item: Item | None,
+    unknown: str,
+    base: str,
+    path: str,
+    pins: list[str],
+) -> None:
     """Kind, action and advice for a tree nobody holds or adopted cleanly."""
     if unknown:
         t.kind = "unreadable"
@@ -556,6 +614,13 @@ def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: st
         t.done = (
             f"LEAVE ALONE — inspect first: `git -C {path} diff {base}`. "
             f"Uncommitted edits are the one thing that exists nowhere else."
+        )
+    elif t.ahead and landed_leftovers_only(path, item, base, pins):
+        t.kind = "merged"
+        t.action = "remove"
+        t.done = (
+            f"item {t.item} landed on {base} ({item.merged_sha[:8] if item else ''}); the "
+            f"{t.ahead} commit(s) left are merge-main/pin commits only — safe to remove"
         )
     elif t.ahead:
         t.kind = "unmerged"
@@ -651,6 +716,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
+    pins = pin_files(repo, cfg)
     for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)):
         if x.branch:
             guard.stranded[x.branch] = x.render()
@@ -674,7 +740,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
         else:
-            _classify(t, item, unknown, base, path)
+            _classify(t, item, unknown, base, path, pins)
         plan.trees.append(t)
 
     for branch in W.branches(root):
@@ -686,6 +752,54 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             continue
         plan.stale_branches.append(_stale_branch(root, branch, base, guard, own, by_branch))
     return plan
+
+
+def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
+    """Carry out one planned ``remove``; the lines for the report (and ``t`` updated when kept).
+
+    A tree with commits ahead is only here as a landed item's merge/pin leftovers
+    (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
+    root = W.repo_root(repo)
+    wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
+    proof = tip = ""
+    if t.ahead:
+        it = fold(log.read_all(), strict=False).items.get(t.item)
+        tip = proved_leftover_tip(t.path, it, base, pin_files(repo, cfg))
+        if not tip:
+            t.action, t.kind = "", "unmerged"
+            t.done = f"kept: {t.name} is no longer only landed leftovers since the survey"
+            return [f"kept {t.name}: no longer only landed leftovers"]
+        work = W.tree_work(Path(t.path))
+        moved = W.git(Path(t.path), "rev-parse", "--verify", "HEAD").out.strip() != tip
+        if not work.readable:
+            t.action, t.kind = "", "unreadable"
+            t.done = f"LEAVE ALONE — could not measure {t.name} since the survey ({work.msg[:120]})"
+            return [f"kept {t.name}: could not be measured since the survey"]
+        if work.dirty or moved:
+            t.action, t.kind = "", "unmerged"
+            t.done = f"kept: {t.name} changed since it was proved to be only leftovers"
+            return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
+        proof = f"{t.item} landed; only merge-main/pin commits left"
+    d = dispose_tree(repo, cfg, log, wt, landed_tip=tip)
+    if proof and tip and d.removed and d.branch_left:
+        # The branch only lacks the merge-main/pin commits just proved to be leftovers. Dropped
+        # under the log's lock, still held by nobody, and only if it is still at the proved tip.
+        with log.transaction():
+            guard = _protected(
+                root, cfg, localize(fold(log.read_all(), strict=False), log, time.time())
+            )
+            if (
+                not guard.held_branches.get(t.branch)
+                and W.git(root, "update-ref", "-d", f"refs/heads/{t.branch}", tip).ok
+            ):
+                d = Disposal("removed", had_branch=True)
+    if d.outcome == "refused":
+        t.action, t.kind, t.done = "", d.kind, d.why
+        return [f"kept {t.name}: {d.kind} since the survey"]
+    return [
+        f"{'removed' if d.removed else 'kept'} worktree {t.name}"
+        + ("" if d.removed else f": {d.why.splitlines()[0][:120]}")
+    ]
 
 
 def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
@@ -735,18 +849,9 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
             )
             if not r.ok:
                 continue
-            t.action = "remove"
+            t.action, t.ahead = "remove", 0  # merged: nothing is ahead of the base any more
         if t.action == "remove":
-            wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
-            d = dispose_tree(repo, cfg, log, wt)
-            if d.outcome == "refused":
-                t.action, t.kind, t.done = "", d.kind, d.why
-                done.append(f"kept {t.name}: {d.kind} since the survey")
-                continue
-            done.append(
-                f"{'removed' if d.removed else 'kept'} worktree {t.name}"
-                + ("" if d.removed else f": {d.why.splitlines()[0][:120]}")
-            )
+            done.extend(_remove_planned(repo, cfg, log, t, base))
     for t in plan.stale_branches:
         if t.action == "delete_branch":
             with unless_claimed() as guard:
