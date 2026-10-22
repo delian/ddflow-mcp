@@ -158,3 +158,34 @@ def test_an_unhashable_progress_token_does_not_fail_a_finished_call(repo, monkey
         }
     )
     assert "error" not in reply and not reply["result"].get("isError"), reply
+
+
+def test_the_heartbeat_crosses_the_worker_process_to_the_client(repo):
+    """End to end through `_offload`: the worker is a real process, so the token must survive
+    the job it is handed and the frames its relay forwards."""
+    import io
+    import json
+
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text(
+        '[mcp]\nprogress_s = 0.4\n[ci]\ncommand = "true"\n'
+    )
+    msg = {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+            "name": "ddflow_ci",
+            "arguments": {"action": "run", "command": "sleep 2.5"},
+            "_meta": {"progressToken": "e2e"},
+        },
+    }
+    out = io.StringIO()
+    mcp.serve(repo, stdin=io.StringIO(json.dumps(msg) + "\n"), stdout=out, offload=True)
+    frames = [json.loads(ln) for ln in out.getvalue().splitlines() if ln.strip()]
+    beats = [f for f in frames if f.get("method") == "notifications/progress"]
+    assert len(beats) >= 2, frames
+    assert {f["params"]["progressToken"] for f in beats} == {"e2e"}
+    got = [f["params"]["progress"] for f in beats]
+    assert got == sorted(set(got))
+    assert frames[-1].get("id") == 7  # the answer follows the beats

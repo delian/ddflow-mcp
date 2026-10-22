@@ -558,7 +558,8 @@ class Server:
         #: Writes one JSON-RPC frame to the client; `serve` sets it. Without it (a bare
         #: `handle` call) a long tool simply sends no progress.
         self.notify: Callable[[dict[str, Any]], None] | None = None
-        #: The progress sender of each call in flight, by its token (`_progress`).
+        #: The progress sender of each call in flight, by its token (`_progress`). `handle` runs
+        #: one request at a time on a Server (a worker has its own), so the dict needs no lock.
         self._says: dict[Any, Callable[[str], None]] = {}
 
     def _structured(self, modern: bool) -> bool:
