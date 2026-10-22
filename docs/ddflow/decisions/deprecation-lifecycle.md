@@ -60,7 +60,7 @@ All twelve answers accept the recommended default. Each is recorded as decision 
 | Q1 | Accepted: stable tier (documented CLI commands/flags, config keys) keeps "until 1.0"; beta tier (MCP tool names, `[enforce]` aliases, experimental knobs) two releases AND 30 days; tier added to `D-compat-r2` | D-DEP-Q1, D-compat-r2 | D-DEP-2 amended | DEP-inventory, DEP-retrofit, DEP-record |
 | Q2 | Accepted: stable 2 releases + 90 days; beta 2 releases + 30 days; experimental none | D-DEP-Q2 | D-DEP-2 accepted | DEP-lifecycle |
 | Q3 | Accepted: record required per renamed/removed public name, one per alias family, enforced by version lint | D-DEP-Q3 | D-DEP-1, D-DEP-3 accepted | DEP-lifecycle, DEP-inventory, DEP-record |
-| Q4 | Accepted: opt-in local counters, off by default; "no evidence" when nobody opted in | D-DEP-Q4 | D-DEP-5 accepted | DEP-usage, DEP-lifecycle |
+| Q4 | Accepted: opt-in local counters, off by default; removal gate asks for "no recorded use or a waiver" and says "no evidence" when nobody opted in | D-DEP-Q4 | D-DEP-5 accepted | DEP-usage, DEP-lifecycle |
 | Q5 | Accepted: erroring stage one release before removal, stable tier only | D-DEP-Q5 | D-DEP-2 amended | DEP-lifecycle, DEP-e2e |
 | Q6 | Accepted: one short MCP-instructions clause only while a breaking record is in warning or later, within the charter budget | D-DEP-Q6 | D-DEP-4 accepted | DEP-notify |
 | Q7 | Accepted: `deprecation.due` event + rendered message; delivery is an opt-in integration, no network call from core | D-DEP-Q7 | D-DEP-4 accepted | DEP-notify |
