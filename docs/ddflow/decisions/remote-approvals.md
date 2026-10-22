@@ -36,10 +36,10 @@ approval (optional). The tier names the minimum level per verb. The docs state t
 uid, a signature or a remote store, a same-uid agent can forge L1-L3 by editing files; that is visible, not
 impossible. (Research 5.)
 
-## D-RA-4 Three tiers; the approval system's own configuration is signed-or-terminal
+## D-RA-4 Three tiers; the approval system's own configuration is signed-only
 
 T1 standing policy (opt-in rules with caps, reported), T2 per-instance approval (default for all current operator
-acts), T3 signed or terminal only (approval config, roles, signers, forbidden-commands, command reviewers, key
+acts), T3 signed only (approval config, roles, signers, forbidden-commands, command reviewers, key
 rotation). Layers tighten only. (Research 7, 8.)
 
 ## D-RA-5 Audit and revocation are events
@@ -50,7 +50,7 @@ person's act. (Research 9.)
 
 ## D-RA-6 Surfaces: no new MCP tool
 
-MCP: fold into `ddflow_session` (actions `ask` (returns a handle at once; bounded optional `wait_s`), `asks`, `withdraw`; no answering action) plus one shared optional
+MCP: fold into `ddflow_session` (actions `ask` (returns a handle at once, never blocks), `asks`, `withdraw`; no answering action) plus one shared optional
 param `approval` on the gated actions. CLI: `ddflow approvals ...`. Prompt: one line in each refusal and in the
 driver. (Research 10.)
 
@@ -63,7 +63,7 @@ driver. (Research 10.)
 | Q3 | Which channels first? | CLI (L1) + signed (L4) as the MVP; elicitation (L2) after `RA-probe-harness`; chat/PR optional | The first two work today in cloud sessions and need no client support |
 | Q4 | Does the operator have or want an SSH/FIDO2 key for approvals, and is `[approvals].signers` read from the commit allowed-signers file when unset? | Yes to both; ddflow never creates or stores the key (D-CM-7) | One key list for commits and approvals |
 | Q5 | Accept the transcript-attested `AskUserQuestion` answer as L2? | Off by default; opt-in `[approvals].accept=["harness"]` per verb, T2 only | Weak outside local sessions; cannot reach T3 |
-| Q6 | Minimum level per tier | T2: L1 (any person channel); T3: L4, with L1 accepted only to enroll the first signer (then doctor flags "T3 protected only by L1" until done) | Matches today for T2; a forgeable L1 must not be able to add its own signer or rotate keys once one exists |
+| Q6 | Minimum level per tier | T2: L1 (any person channel); T3: L4 only. The first signer is enrolled outside the approval path (user or company layer, or a signed commit); doctor flags "no approval signer" until then | A forgeable L1 must never enroll or rotate its own signer; the residual risk before enrollment equals today's |
 | Q7 | Which acts are T2 beyond today's refusals: `complete --force`, `claim --force`, `cleanup --apply`, `version cut`, `promote`, `decision supersede`? | The first two (they already have a hook/flag guard); the others stay ungated | Avoid new friction |
 | Q8 | Standing auto-approval rules to ship (off by default): extra review round up to 5 per item/gate when the tree changed after triage; skip of a gate whose reviewer was unavailable 3 times; accept measured baseline-red partial? | Ship the three as examples, all off; operator enables per rule | Matches "justified grants up to 4-5"; each is reported |
 | Q9 | Windows: request lives how long; an approval is usable how long after the answer? | Request 24 h (existing `ask_ttl_s`); use window 1 h; uses 1 (counted bundles up to `[grants].max_count`) | Short use window limits stale approvals |

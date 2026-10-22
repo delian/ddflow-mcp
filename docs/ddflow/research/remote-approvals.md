@@ -191,15 +191,22 @@ transcript", never as default, and prefer elicitation and signatures.
   the skip is a recorded skip); accept a `partial` that ddflow **measured** as baseline-red (D-accept-baseline-red-partial);
   `claim` takeover of a lease expired for more than a day. Auto-approvals are `ask.answered` with `by=policy:<rule>`,
   `human=false`, `policy=true`, and the consumer counts them **only** for verbs that list policy as acceptable.
-* **T2: per-instance approval** (the default for every operator act in family A, and for family B with `require_approval = false` until switched on, section 4.3): `gate skip` over a failed
+* **T2: per-instance approval**. Family A verbs are T2 and enforced. Family B verbs are classified T2 too, but their per-verb
+  `require_approval` (section 4.3) defaults to **false**, so until the operator switches it on both the relayed flags and
+  `--approval` are accepted. The T2 verbs: `gate skip` over a failed
   review gate, `grant add`, partial accept, `reviewers approve` (HTTP entries), `chore approve`, `export ack`, `claim
   --force`, `complete --force`, `plan confirm`, `upgrade --self`, skew override, `version cut`, `promote`, `cleanup
   --apply`. Minimum level L1 (terminal) by default, L2/L3/L4 accepted; the operator can raise per verb.
-* **T3: signed or terminal only**: the approval system's own configuration (`[approvals]`, `[agent].roles/actors`,
-  `[agent].operator_role/default_role`, signer list, key rotation), `[hooks].forbidden_commands`, command-kind
-  `[[reviewer]]` entries (they execute code; D-reviewer-trust-r2), disabling hooks, company-layer floors. Minimum L4. With no signer configured a T3 act
-  can be answered at L1 **only to enroll the first signer**; until one exists `doctor` reports "T3 protected only by L1,
-  forgeable by a same-uid agent" and every later T3 act needs L4. An agent may **file** the request (so the operator sees exactly what
+* **T3: signed only** (no lower level is ever accepted): the approval system's own configuration (`[approvals]`,
+  `[agent].roles/actors`, `[agent].operator_role/default_role`, the signer list, key rotation), `[hooks].forbidden_commands`,
+  command-kind `[[reviewer]]` entries (they execute code; D-reviewer-trust-r2), disabling hooks, company-layer floors.
+  **Bootstrap, stated honestly:** ddflow cannot approve its own first signer, because any answer it could accept before a
+  signer exists is an L1 answer a same-uid agent can forge. The first signer is therefore enrolled by the operator
+  **outside ddflow's approval path**: in a layer the agent surfaces cannot write (the user layer, or a company pack pinned by
+  digest) or in a signed commit (CM-sign). Until then T3 verbs are simply not approvable by `approvals approve`, `doctor`
+  reports "no approval signer: T3 protected only by the shell-edit gap documented in `identity.agent_marker`", and the
+  residual risk equals today's (an agent with a shell can edit config). Once one exists, rotation and every other T3 act need
+  a signature by a listed key. An agent may **file** the request (so the operator sees exactly what
   to sign) but no lower-level answer is accepted.
 * **T0: ungated** stays ungated.
 
@@ -231,9 +238,9 @@ request window, a shorter `use_ttl_s` after approval; the sweep writes `ask.expi
 Families after the diet (15, from the matrix in `research/mcp-tool-diet.md`): `view task reviewers memory doctor admin gate
 workflow rule ship lease decision session job bug`. Approvals is not a noun in that list and **no 16th tool is allowed**. Recommended home:
 `ddflow_session` (it already carries `session prompt`, the operator's recorded words, and `note`): **new actions `ask`
-(file a request, return a handle at once; an optional bounded `wait_s` (the run-handle limit of RM-run-tool-mcp, 45 s) lets one
-elicitation prompt be answered inside the same call when the client supports it, otherwise the call returns `pending` and the
-agent takes the next item, never polling or holding a lease while it waits: r-lock-cycle-selfheal), `asks` (list/show the agent's own
+(file a request and return a handle **at once**, never blocking: the agent takes the next item, per r-lock-cycle-selfheal; whether
+an elicitation prompt can be issued without an open tool call is what `RA-probe-harness` decides, and only if it cannot is an opt-in
+`[approvals].elicit_wait_s` (default 0, at most the 45 s run-handle limit of RM-run-tool-mcp) considered, as an operator question), `asks` (list/show the agent's own
 pending and answered requests) and `withdraw`**. Consuming needs no action: the gated actions gain one optional,
 deduplicated union parameter `approval` (the diet already shares `as_agent` once). Answering (`approve`, `deny`,
 `revoke`) has **no MCP action**, like `approve`, `grant` and `chore` today (exemptions): the MCP surface can ask and
