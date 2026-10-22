@@ -28,6 +28,7 @@ from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from ...services import waiting as WG
 from ...services.export import select as export_select
+from ...services.guidance import charter as CH
 from ...services.guidance import inject as GI
 from ...services.guidance.kinds import unreconciled_with
 from ...views import markdown as render_md
@@ -120,10 +121,17 @@ def _contest_block(repo: Path, cfg, log, st) -> str:
     return out
 
 
-def _rules_block(governing) -> str:
-    """The project's rules that govern the item's files, one fenced line each, "" for none."""
+def _rules_block(governing, *, charter: str = "") -> str:
+    """The project's rules that govern the item's files, one fenced line each, "" for none.
+    With the charter, a rule that applies to all work and that the charter LISTS is left to
+    it (its line is there); the text is `ddflow rule show`, or the claim. One the charter had
+    to cut keeps its text here. A PINNED rule keeps its whole text here too:
+    the charter names it, this hands it over."""
 
     rules = governing.records("rule")
+    if charter:
+        named = CH.listed(charter)
+        rules = [r for r in rules if not GI.always(r) or GI.pinned(r) or r.id not in named]
     if not rules:
         return ""
     return "\n".join(
@@ -148,7 +156,7 @@ def _flag_unreconciled(d, rivals: dict[str, list[str]]):
     return replace(d, title=flag + d.title)
 
 
-def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
+def _governing(cfg, st, item: str, rules: str, *, charter: str = "") -> tuple[list, str]:
     """The decisions that govern the item, ranked by the one injection path (pinned first,
     then enforcement, scope specificity and priority), and the rules text with the project's
     own rules that govern its files LEADING it (the pointer line follows, so a trim from
@@ -160,7 +168,7 @@ def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
     if not (item and item in st.items):
         return [], rules
     found = GI.for_item(cfg, st, item)
-    block = _rules_block(found)
+    block = _rules_block(found, charter=charter)
     rivals = unreconciled_with(st)
     decisions = [_flag_unreconciled(st.decisions[r.id], rivals) for r in found.records("decision")]
     return decisions, (block + "\n\n" + rules).strip() if block else rules
@@ -268,8 +276,6 @@ def brief(
             break
 
     recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
-    decisions, rules = _governing(cfg, st, item, rules)
-
     live = sorted(
         (m for m in st.memories.values() if m.live),
         key=lambda m: (m.origin_at or m.at, m.at),
@@ -292,6 +298,9 @@ def brief(
     undecided = CHO.brief_block(cfg)
     contest_text = _contest_block(repo, cfg, log, st)
     prepended = reports_block + (undecided + "\n" if undecided else "") + contest_text
+    # The charter is clamped to the room the prepended blocks leave, as the view's budget is.
+    charter = CH.block(st, cfg, reserve=render_md._approx_tokens(prepended) if prepended else 0)
+    decisions, rules = _governing(cfg, st, item, rules, charter=charter)
 
     text = render_md.brief(
         st,
@@ -303,6 +312,7 @@ def brief(
         lessons=lessons,
         skills=project_skills,
         rules=rules,
+        charter=charter,
         # All of it: the view ranks and counts (B20e103326b). Filtering on `salvageable`
         # dropped `stale_running` (False) and unmeasurable trees (None) -- the most
         # dangerous leftovers -- and the clean ones without a word.
