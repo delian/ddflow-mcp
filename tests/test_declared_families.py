@@ -100,4 +100,13 @@ def test_a_declared_family_must_be_one_of_the_fifteen():
     c = Command(path=("zed", "go"), tool="ddflow_zed_go", family="ddflow_gte", action="go")
     with pytest.raises(RuntimeError, match="ddflow_gte"):
         F.resolve({"ddflow_zed_go": c}, legacy={})
+    assert set(F.FAMILY_TOOLS) == {f.name for f in F.FAMILIES.values() if not f.single}
     assert len(F.FAMILY_TOOLS) == 15
+
+
+def test_a_hot_single_command_may_not_declare_a_family_or_action():
+    c = Command(
+        path=("identify",), tool="ddflow_identify", family="ddflow_identify", action="extra"
+    )
+    with pytest.raises(RuntimeError, match="hot single"):
+        F.resolve({"ddflow_identify": c}, legacy={})
