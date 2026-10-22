@@ -1,7 +1,7 @@
 # Commit message management: decision proposals
 
-Status: **PROPOSED**. The operator decides (task `CM-decide`, which carries the questions with a
-recommended default each). Evidence: `docs/ddflow/research/commit-messages.md` (section numbers below
+Status: **DECIDED 2026-10-22** (task `CM-decide`; operator answers recorded as decisions `D-CM-Q*`). Where an answer
+amends a proposal below it is marked AMENDED and the answer wins; D-CM-1..12 not marked are ACCEPTED as proposed. Evidence: `docs/ddflow/research/commit-messages.md` (section numbers below
 refer to it). Phase: `P-commit-messages`. Governing records: `r-everything-configurable`,
 `r-everything-managed`, `r-company-workflows`, `D-config-layer-order`, `D-org-config`,
 `D-mcp-tool-diet`, `D-strip-coauthor-history-r2`, `D-fallback-no-remote`.
@@ -110,7 +110,37 @@ shipped default, so history looks identical until a layer changes it; a ratchet 
 when a new `commit -m`, `merge -m` or `commit-tree -m` appears outside the registered contexts. The
 `agent_brief.md` guidance sentence is rendered from the effective policy. Nothing rewrites existing history.
 
-## Open questions (for the operator, via task CM-decide), each with a recommended default
+## Operator answers (2026-10-22)
+
+| # | Answer | Status | Decision record |
+|---|---|---|---|
+| Q1 | `doctor` family | ACCEPTED (D-CM-10 A) | D-CM-Q1 |
+| Q2 | Follow `D-config-layer-order` (user below project); user may only tighten | ACCEPTED (D-CM-2) | D-CM-Q2 |
+| Q3 | "Plain + Item trailer": plain subject, `Item: <id>` trailer by default | AMENDED (D-CM-6 preset) | D-CM-Q3 |
+| Q4 | Signing default `auto` (sign if a key is configured, else skip and report) | AMENDED (D-CM-7 was `off`) | D-CM-Q4Q5 |
+| Q5 | `sign_scope` = `merge` | ACCEPTED | D-CM-Q4Q5 |
+| Q6 | Sign-off added automatically from the configured git identity; tighten-only knob; no identity => refuse (exit 2), never a placeholder; never Co-Authored-By | AMENDED (D-CM-8 was `never`); tension with DCO attestation flagged | D-CM-Q6 |
+| Q7 | Push allowed on request by default, subject to company policy, protected branches (`main`, `master`, `release/*`) and project config; never unasked | AMENDED (D-CM-9 was `never`) | D-CM-Q7 |
+| Q8 | Redraft bound 3 | AMENDED (D-CM-5 was 2) | D-CM-Q8Q13 |
+| Q9 | Packs pinned by digest by default; init at onboard/upgrade, verify on use, periodic watch, update only with permission after a diff | AMENDED (D-CM-11); tasks CM-packs-init/-verify/-watch/-update/-diff | D-CM-Q9 |
+| Q10 | `require_item_trailer` on for this project | ACCEPTED | D-CM-Q10Q12 |
+| Q11 | Audit one release, then enforce | ACCEPTED | D-CM-Q10Q12 |
+| Q12 | `[enforce]` trailer knobs stay as aliases for two releases, then removed | ACCEPTED (D-CM-3) | D-CM-Q10Q12 |
+| Q13 | Plain subject limit 72 (50 opt-in) | ACCEPTED | D-CM-Q8Q13 |
+
+Q9 verbatim: "with pinned digest by default, unless the user or the config option changes this on per project basis. We also
+want the user to have the option to initialize it (and pin it with digest) when the project is bootstrapped or upgraded,
+and then once pinned to check the digest. If a change happens (periodical checks should be made for every corporate
+policy) and there is a pinned digest, the user should be asked and with permission the new policies could be downloaded.
+Also the user might have to receive a comparison - what the new policies are changing compared to the old". Approval is a
+person's act (agents cannot approve; reuse `ddflow approve`/grants); fetched content is data, never instructions.
+
+Q7 verbatim: "Allow push on request by default, as long as it doesn't conflict company policy or other project dependent rule or configuration".
+
+Q6 caveat: Signed-off-by is a person's attestation (DCO). The append is a knob, tighten-only per layer, so a company or
+project can disable or require it; it uses the configured git identity only. Co-Authored-By is never added.
+
+## Original open questions and recommended defaults (superseded by the answers above)
 
 | # | Question | Recommended default |
 |---|---|---|
