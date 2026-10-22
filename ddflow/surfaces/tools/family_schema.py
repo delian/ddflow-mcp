@@ -149,8 +149,10 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     if ACTION not in args and name in TOOLS:
         return None
     acts = ", ".join(family.members)
-    if not isinstance(action, str) or not action:
+    if action in (None, ""):
         return f"{name}: missing required argument: action. Actions: {acts}"
+    if not isinstance(action, str):
+        return f"{name}: action must be one of: {acts}"
     tool = family.members.get(action)
     if tool is None:
         return f"{name}: unknown action {action!r}. Actions: {acts}"
