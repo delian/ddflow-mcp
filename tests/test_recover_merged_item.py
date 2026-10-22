@@ -23,12 +23,29 @@ from ddflow.infra.log import EventLog
 from ddflow.services import leases as L
 
 
+_DOC_GATES = (
+    "implement",
+    "research",
+    "rules",
+    "rubber_duck",
+    "critic",
+    "standards",
+    "bug_hunt",
+    "dedupe",
+)
+
+
 def _git(*a: str) -> None:
     subprocess.run(["git", *a], check=True, capture_output=True)
 
 
 def _merged(
-    repo: Path, item: str, rel: str, globs: list[str] | None = None, keep: bool = False
+    repo: Path,
+    item: str,
+    rel: str,
+    globs: list[str] | None = None,
+    keep: bool = False,
+    gates: bool = False,
 ) -> None:
     """``item`` claimed, one file committed on its branch, merged by ddflow."""
     run_cli(repo, "init")
@@ -43,6 +60,9 @@ def _merged(
     _git("-C", str(wt), "add", "-A")
     ident = ["-c", "user.email=t@e.com", "-c", "user.name=T"]
     _git("-C", str(wt), *ident, "commit", "-qm", f"{item} work")
+    if gates:  # outcomes recorded while the work is still in its tree, as the pipeline wants
+        for g in _DOC_GATES:
+            run_cli(repo, "gate", "record", item, g, "--outcome", "passed", "--evidence", f"{g} ok")
     assert LC.merge(repo, item, agent="worker", keep=keep).exit == 0
     EventLog(repo, "worker").append(
         "session.started", "s1", {"agent": "worker", "model": "claude-opus-5"}
@@ -120,18 +140,20 @@ def test_an_unmerged_item_is_still_only_advised_to_release(repo):
 
 
 def test_a_kept_clean_tree_with_no_lease_is_advised_to_complete_without_a_lease_clause(repo):
-    """The orphan path: merged with `keep`, lease released, the clean tree still there."""
-    _merged(repo, "T1", "src/T1/a.py", keep=True)
+    """The orphan path, a docs-only item (no author model needed, so `complete` is open to
+    it): merged with `keep`, lease released, the clean tree still there."""
+    _merged(repo, "T1", "docs/note.md", globs=["docs/*"], keep=True, gates=True)
     assert L.release(EventLog(repo, "scanner"), "T1", note="released")
     (rec,) = _recs(repo, "T1")
     assert rec.kind == "orphan_worktree"
-    assert "ddflow complete T1" in rec.advice and "ddflow release" not in rec.advice, rec.advice
-    assert "clears the lease" not in rec.advice
+    assert "Finish it: `ddflow complete T1 --model <author model>`." in rec.advice, rec.advice
+    assert "ddflow release" not in rec.advice and "lease" not in rec.advice
 
 
 def test_a_finished_item_with_a_surviving_clean_tree_is_not_advised_to_complete_again(repo):
     _merged(repo, "T1", "src/T1/a.py", keep=True)
     log = EventLog(repo, "worker")
     L.release(log, "T1", note="released")
-    log.append("item.completed", "T1", {"sha": "abc"})
+    sha = L._fold(log).items["T1"].merged_sha
+    log.append("item.completed", "T1", {"sha": sha})
     assert not [r for r in _recs(repo, "T1") if "ddflow complete" in r.advice]
