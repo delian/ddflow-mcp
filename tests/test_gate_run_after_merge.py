@@ -8,12 +8,23 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from conftest import run_cli
 from helpers import git as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
+
+
+@pytest.fixture(autouse=True)
+def _a_person_records_by_hand(monkeypatch):
+    """These tests hand-record command gates as a person: an agent's typed pass is refused
+    (Bed643a611b), and the suite itself may run under an agent harness."""
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
 
 
 def _merged(repo: Path, *, passed_before: bool = False) -> None:
