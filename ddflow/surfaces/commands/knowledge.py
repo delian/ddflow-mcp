@@ -68,10 +68,8 @@ def cmd_lesson(a, c: Ctx) -> int:
     return FAIL
 
 
-def _job_end(a, c: Ctx) -> int:
+def _job_end(a, c: Ctx, AJ) -> int:
     """`job end`: one job, or every finished one (`--item` / `--all-finished`)."""
-    from ...api import jobs as AJ
-
     out = AJ.job_end(
         c.repo,
         a.job or "",
@@ -131,7 +129,7 @@ def cmd_job(a, c: Ctx) -> int:
         )
         return out.exit
     if a.job_cmd == "end":
-        return _job_end(a, c)
+        return _job_end(a, c, AJ)
     out = AJ.job_list(c.repo, item=a.item or "", include_ended=a.all, agent=c.requested_agent)
     if c.json:
         emit_json(out.body("jobs"))
