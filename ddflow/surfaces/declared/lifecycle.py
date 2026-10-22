@@ -430,6 +430,7 @@ COMMANDS: tuple[Command, ...] = (
             rerun_failed=bool(a.get("rerun_failed")),
             force=bool(a.get("force")),
             reason=a.get("reason", "") or "",
+            timeout_s=int(a.get("timeout") or 0),
         ),
         payload=("gate", "outcome", "evidence"),
         render=L.run_text,
@@ -444,6 +445,12 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 cli_only=True,
                 cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
+            Param(
+                "timeout",
+                type="integer",
+                help="Seconds this run may take (at most [gates].max_run_timeout_s).",
+                cli_help="seconds THIS run may take instead of the gate's own timeout (and, for ci, [ci].timeout_s); at most [gates].max_run_timeout_s",
             ),
             Param(
                 "rerun_failed",

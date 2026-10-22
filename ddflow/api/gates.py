@@ -115,7 +115,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     return swept
 
 
-def _resolve(repo: Path, item: str, gate: str, agent: str):
+def _resolve(repo: Path, item: str, gate: str, agent: str, timeout_s: int = 0):
     """(log, cfg, state, item, gatedef) or an Outcome explaining why not.
 
     One place for the two existence checks every gate operation needs. `approve` once
@@ -133,7 +133,10 @@ def _resolve(repo: Path, item: str, gate: str, agent: str):
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("gate", f"no such item {item!r}{gone}", id=item, gate=gate)
-    return log, cfg, st, it, known.get(gate), known
+    gdef = _with_run_timeout(cfg, known.get(gate), timeout_s, item, gate)
+    if isinstance(gdef, O.Outcome):
+        return gdef
+    return log, cfg, st, it, gdef, known
 
 
 def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
@@ -577,8 +580,13 @@ def run(
     rerun_failed: bool = False,
     force: bool = False,
     reason: str = "",
+    timeout_s: int = 0,
 ) -> O.Outcome:
     """Execute a command gate and record what it said.
+
+    ``timeout_s`` (> 0) replaces the gate's own timeout for THIS run, and the ci budget inside
+    it, up to ``[gates].max_run_timeout_s``: nobody edits the shared local config to get a
+    longer run on a loaded host.
 
     Refuses a human gate (nothing to run) and an agent gate (ddflow cannot perform it)
     with exit 2 and the instruction, rather than pretending to have run something.
@@ -586,7 +594,7 @@ def run(
     A worktree gate runs where the item's work is (`item_tree`).
     """
 
-    resolved = _resolve(repo, item, gate, agent)
+    resolved = _resolve(repo, item, gate, agent, timeout_s)
     if isinstance(resolved, O.Outcome):
         return resolved
     log, cfg, st, it, gdef, gates = resolved
@@ -686,6 +694,27 @@ def run(
     if exit_code == O.FAIL:
         return O.failed("gate.run", reason or f"{gate} failed", **data)
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _with_run_timeout(cfg, gdef, timeout_s: int, item: str, gate: str):
+    """``gdef`` for one run that may take ``timeout_s`` (0: as declared): its own timeout, and
+    the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
+    outside ``[gates].max_run_timeout_s`` is the refusal instead."""
+    if not timeout_s or gdef is None:
+        return gdef
+    if not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
+        return O.refused(
+            "gate.run",
+            f"--timeout {timeout_s} is outside 1..{cfg.gates.max_run_timeout_s} seconds "
+            f"([gates].max_run_timeout_s bounds a per-run timeout)",
+            id=item,
+            gate=gate,
+            outcome="",
+        )
+    command = gdef.command
+    if command.strip().startswith("ddflow ci run") and "--timeout" not in command:
+        command = f"{command} --timeout {timeout_s}"
+    return replace(gdef, timeout_s=timeout_s, command=command)
 
 
 def _guarded(log, cfg, repo, agent, it, item, gate, **run):
