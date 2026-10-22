@@ -101,17 +101,22 @@ def origin_of(rec: GuidanceRecord) -> PV.Origin:
     return PV.Origin(PV.AGENT, by or (decided_by if decided_by != PV.AGENT else ""))
 
 
-def collect(state: State) -> list[GuidanceRecord]:
-    """Every record the log holds that could govern work: the live rules (definitions) and
-    every decision, in id order within a kind."""
+def live_rules(state: State) -> list[GuidanceRecord]:
+    """The live project rules (definitions in the log), in id order, each with its author."""
     rules = []
     for d in sorted(state.defs.values(), key=lambda d: d.id):
         if d.kind == RULE.kind and d.live:
             rec = DF.from_fields(d.id, d.fields, d.provenance, RULE)
             rec.provenance = {**rec.provenance, "by": d.by}
             rules.append(rec)
+    return rules
+
+
+def collect(state: State) -> list[GuidanceRecord]:
+    """Every record the log holds that could govern work: the live rules (definitions) and
+    every decision, in id order within a kind."""
     decisions = [decision_record(d) for d in sorted(state.decisions.values(), key=lambda d: d.id)]
-    return rules + decisions
+    return live_rules(state) + decisions
 
 
 @dataclass(frozen=True)
