@@ -64,6 +64,13 @@ class StartCost:
         made = ", ".join(f"{name} {n}" for name, n in self.parts.items())
         return f"{head}: {made}" if made else head
 
+    def notes(self) -> list[str]:
+        """The doctor note: the cost line, or nothing when no texts were measured."""
+        return [self.line()] if self.parts else []
+
+    def data(self) -> dict[str, object]:
+        return {"start_cost": self.as_dict()} if self.parts else {}
+
     def as_dict(self) -> dict[str, object]:
         return {
             "tokens": self.tokens,
@@ -84,3 +91,20 @@ def measure(texts: Mapping[str, str], *, chars_per_token: float, budget: int) ->
         chars={name: len(text) for name, text in texts.items()},
         budget=budget,
     )
+
+
+def report(repo, cfg, agent: str, start_texts) -> StartCost:
+    """The cost of the texts ``start_texts(repo, agent)`` returns, at the project's ratio and
+    budget; empty when the surface supplied none or building them failed (a report must not
+    fail on its own measuring)."""
+    empty = StartCost({}, {}, 0)
+    if start_texts is None:
+        return empty
+    try:
+        return measure(
+            start_texts(repo, agent),
+            chars_per_token=cfg.session.start_chars_per_token,
+            budget=cfg.session.context_budget_tokens,
+        )
+    except Exception:
+        return empty
