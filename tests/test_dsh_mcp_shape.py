@@ -142,7 +142,8 @@ def test_server_name_must_be_exactly_a_string_of_the_allowed_characters(tmp_path
 
 
 def test_the_name_argument_wins_over_a_serverName_in_the_entry():
-    assert MC.cordis_entry("ddflow", {"serverName": "evil", "command": "x"})["id"] == "ddflow"
+    row = MC.cordis_entry("ddflow", {"serverName": "evil", "command": "x"})
+    assert row["id"] == "ddflow" and row["config"]["serverName"] == "ddflow"
 
 
 def test_two_rows_for_one_name_are_unknown_not_resolved_by_position(tmp_path):
@@ -176,3 +177,11 @@ def test_non_server_rows_are_not_listed_as_mcp_servers(tmp_path):
         tmp_path, mcp_rel=".ddflow/harness/dsh.cordis.yml", shape=MC.SHAPE_CORDIS_PATCH
     )
     assert list(servers) == ["ddflow"]
+
+
+def test_a_hooks_row_in_the_one_insert_list_is_kept_beside_the_mcp_row(tmp_path):
+    """One `- insert:` list holds every inserted plugin row (mcp client, hooks bridge)."""
+    path = tmp_path / "o.yml"
+    path.write_text('- insert:\n    - {"id": "h", "name": "hooks"}  # ddflow-row:hooks\n')
+    assert MC.register(path, MC.SHAPE_CORDIS_PATCH, "ddflow", ENTRY)[0] == "written"
+    assert set(MC.cordis_rows(path.read_text())) == {"hooks", "ddflow"}
