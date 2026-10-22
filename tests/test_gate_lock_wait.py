@@ -60,6 +60,7 @@ def test_a_log_without_the_field_replays_and_reports_no_wait_not_zero():
 
 def test_the_wait_line_roundtrips_and_the_last_one_wins():
     assert CM.parse_wait(CM.wait_line(12.5)) == 12.5
+    assert CM.parse_wait(CM.wait_line(0.04)) == 0.04
     assert CM.parse_wait(f"x\n{CM.wait_line(3)}\n{CM.wait_line(7.0)}\ny") == 7.0
     assert CM.parse_wait("no marker") is None
     assert CM.parse_wait(CM.wait_line(1_000_000.0)) == 1_000_000.0  # no exponent notation
@@ -109,7 +110,9 @@ def test_a_sub_tenth_second_slot_wait_is_still_a_recorded_wait():
     from ddflow.services.gates import runner as R
 
     p = CommandRun("ran", "x", code=0, elapsed_s=5.0, waited_s=0.04)
-    assert R._waited(type("G", (), {"id": "unit_tests"})(), p, "") == 0.0
+    assert (
+        R._waited(type("G", (), {"id": "unit_tests"})(), p, "") == 0.04
+    )  # millisecond precision: a real wait is never rounded to zero
 
 
 def test_metrics_render_shows_the_wait_beside_the_gate_time():

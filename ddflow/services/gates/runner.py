@@ -88,7 +88,7 @@ def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
     admission slot the runner itself waited for."""
     slot = p.waited_s if p.waited_s and p.waited_s > 0 else 0.0
     lock = parse_wait(out) if gdef.id == "ci" else None
-    return None if lock is None and not slot else round((lock or 0.0) + slot, 1)
+    return None if lock is None and not slot else round((lock or 0.0) + slot, 3)
 
 
 #: How much of the end of a command's output the log keeps as evidence.

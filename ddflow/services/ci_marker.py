@@ -17,7 +17,7 @@ _WAIT_LINE = re.compile(rf"^{WAIT_MARKER}([0-9]+(?:\.[0-9]+)?)\s*$", re.M)
 
 
 def wait_line(waited_s: float) -> str:
-    return f"{WAIT_MARKER}{waited_s:.1f}"  # fixed notation: `parse_wait` reads no exponent
+    return f"{WAIT_MARKER}{waited_s:.3f}"  # fixed notation: `parse_wait` reads no exponent
 
 
 def parse_wait(output: str) -> float | None:
