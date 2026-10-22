@@ -15,6 +15,7 @@ from ..infra.store import Store
 from ..services import agent_brief as AB
 from ..services import prompts as P
 from ..services import searchcore as SC
+from ..services.guidance import charter as CH
 from ..services.guidance import inject as GI
 from ..views.markdown import BRIEF_DECISION_CHARS
 from ._base import _load
@@ -69,6 +70,7 @@ def agent_brief(
     try:
         tmpl = P.resolve("agent_brief", repo, P.overrides_from(cfg))
         decisions, total = _decision_lines(cfg, st, item)
+        charter = CH.block(st, cfg)
         facts = AB.Facts(
             agent=for_agent,
             item=item,
@@ -81,6 +83,7 @@ def agent_brief(
             heartbeat_s=cfg.lease.heartbeat_s,
             note=note.strip(),
             extra=cfg.session.agent_brief_extra.strip(),
+            rules=[charter] if charter else [],
             decisions=decisions,
             decisions_all=total,
             lessons=_lesson_lines(
