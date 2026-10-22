@@ -178,7 +178,10 @@ def pairs_from(
     if open_only:
         records = [r for r in records if _is_open(st, r)]
     rows = pair_records(
-        records, floor=fl, settled=lambda a, b: _settled(st, a, b), stop_after=stop_after
+        records,
+        floor=fl,
+        settled=lambda a, b: _settled(st, a, b),
+        stop_after=0 if item else stop_after,  # a bound taken before the filter hides item's pairs
     )
     if item:
         rows = [r for r in rows if item in (r["a"], r["b"])]
@@ -192,8 +195,8 @@ def dupes(
     open_only: bool = False,
     floor: float | None = None,
     limit: int = 0,
-    item: str = "",
     agent: str = "",
+    item: str = "",
 ) -> O.Outcome:
     """ "Is anything filed twice?" -- the near-duplicate PAIRS already in the log.
 
