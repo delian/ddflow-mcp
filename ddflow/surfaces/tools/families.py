@@ -55,6 +55,9 @@ _LEGACY: dict[str, str] = {
     ),
 }
 
+#: The 15 family tools; a declared `Command.family` must be one of them (a typo is not a family).
+FAMILY_TOOLS = tuple(PREFIX + noun for noun in _LEGACY)
+
 #: A tool whose name IS its family noun has no verb to strip: the action says what it does.
 _SELF_NAMED_ACTION = {"doctor": "check", "workflow": "show"}
 
@@ -112,6 +115,8 @@ def resolve(
         action = getattr(cmd, "action", "")
         if family in HOT_SINGLES:
             bad.append(f"{name}: family {family} is a hot single and takes no actions")
+        elif family and family not in FAMILY_TOOLS:
+            bad.append(f"{name}: family {family} is not one of {', '.join(FAMILY_TOOLS)}")
         elif family and action:
             placed[name] = Placement(family, action)
         elif family or action:

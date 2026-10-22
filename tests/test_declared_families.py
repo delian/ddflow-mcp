@@ -94,3 +94,10 @@ def test_a_declared_family_may_not_be_a_hot_single():
     c = Command(path=("zed", "go"), tool="ddflow_zed_go", family="ddflow_identify", action="go")
     with pytest.raises(RuntimeError, match="hot single"):
         F.resolve({"ddflow_zed_go": c}, legacy={})
+
+
+def test_a_declared_family_must_be_one_of_the_fifteen():
+    c = Command(path=("zed", "go"), tool="ddflow_zed_go", family="ddflow_gte", action="go")
+    with pytest.raises(RuntimeError, match="ddflow_gte"):
+        F.resolve({"ddflow_zed_go": c}, legacy={})
+    assert len(F.FAMILY_TOOLS) == 15
