@@ -42,7 +42,13 @@ def uncommitted_shards(repo: Path) -> list[str] | None:
 def split_loose_blobs(repo: Path) -> tuple[list[str], list[str]]:
     """(named, orphans): the blob files git has not committed (they are only ever created,
     never changed), split by whether an event shard names them. One no shard names is nobody's
-    and no door commits it. The shards are read only when there is a loose blob to place."""
+    and no door commits it. The shards are read only when there is a loose blob to place.
+
+    The owner of a blob is whoever's shard NAMES it, wherever that shard is: a door commits every
+    whole shard (a crashed agent's too), so a blob goes in the same commit as the line that
+    points at it. Limiting a door to the blobs its caller's own shard names would commit another
+    agent's shard with its blob left untracked, a dangling reference until that agent's next
+    door; and a blob no shard names has no owner to wait for."""
     entries = G.status(repo, BLOBS, untracked="all")
     loose = sorted(e.path for e in entries or [] if e.path.endswith(".json"))
     if not loose:
