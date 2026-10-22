@@ -189,3 +189,12 @@ def test_a_hooks_row_in_the_one_insert_list_is_kept_beside_the_mcp_row(tmp_path)
     assert text.count("- insert:") == 1
     first, second = (text.index(f"ddflow-row:{n}") for n in ("hooks", "ddflow"))
     assert text.index("- insert:") < min(first, second)
+
+
+def test_a_client_row_without_a_launch_config_is_not_a_server(tmp_path):
+    path = tmp_path / "o.yml"
+    path.write_text(
+        "- insert:\n"
+        '    - {"id": "ddflow", "name": "@deepseek-ai/dsh-mcp-client"}  # ddflow-row:ddflow\n'
+    )
+    assert MC.cordis_servers(MC.cordis_rows(path.read_text())) == {}

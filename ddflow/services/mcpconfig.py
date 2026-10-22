@@ -125,9 +125,14 @@ def cordis_rows(text: str) -> dict[str, dict] | None:
 
 
 def cordis_servers(rows: dict[str, dict]) -> dict[str, dict]:
-    """The MCP servers among ``rows`` (the dsh-mcp-client rows), name -> launch config; the
-    overlay also carries other ddflow rows (the hooks bridge) that are not servers."""
-    return {n: r.get("config") or {} for n, r in rows.items() if r.get("name") == CORDIS_MCP_PLUGIN}
+    """The MCP servers among ``rows`` (the dsh-mcp-client rows with a launch config), name ->
+    config; the overlay also carries other ddflow rows (the hooks bridge) that are not
+    servers, and a client row with no config launches nothing, so it is not listed."""
+    return {
+        n: r["config"]
+        for n, r in rows.items()
+        if r.get("name") == CORDIS_MCP_PLUGIN and isinstance(r.get("config"), dict) and r["config"]
+    }
 
 
 def _cordis_place(lines: list[str], name: str, new_line: str) -> tuple[list[str], bool] | None:
