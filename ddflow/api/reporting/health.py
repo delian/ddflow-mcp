@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -301,7 +300,7 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
-    start_texts: Callable[[Path, str], dict[str, str]] | None = None,
+    start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -311,10 +310,8 @@ def doctor(
     should know). The split is the whole value: a report where a stale index reads the
     same as a dependency cycle is a report nobody acts on.
 
-    The body is PROSE on both surfaces, rendered by `views/human.py`, because a list of
-    problems with advice attached is what an operator and an agent both want.
+    The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-
     log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
@@ -387,7 +384,6 @@ def doctor(
     # measures the items that are present; this one asks whether any of them can be picked
     # up, which is the question that went unasked while 37 filed follow-ups sat invisible
     # on the source project with every audit exiting 0.
-
     for u in unpickable(st, cfg):
         if u.kind == "finished_phase":
             u.detail = _finished_phase_remedy(u.detail, st, cfg, u.item, repo)
@@ -396,7 +392,6 @@ def doctor(
     # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky
     # gate and a stalled cadence are facts about the tooling, and failing `doctor` on them
     # would block work on a defect in the thing that checks the work.
-
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
@@ -427,7 +422,6 @@ def doctor(
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
     # drifted or stripped block is a note — the agent has rules, they are just not current.
-
     _rules_findings(repo, st.highest_version, problems, notes)
 
     _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
@@ -455,9 +449,8 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
-    cost = _start_cost(repo, cfg, agent, start_texts)
-    if cost is not None:
-        notes.append(cost.line())
+    cost = SC.report(repo, cfg, agent, start_texts)
+    notes += cost.notes()
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -469,7 +462,7 @@ def doctor(
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
         "auto_order": ordered,
-        **({"start_cost": cost.as_dict()} if cost is not None else {}),
+        **cost.data(),
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
@@ -478,21 +471,6 @@ def doctor(
     )
     out.data["text"] = human.render(out)
     return out
-
-
-def _start_cost(repo: Path, cfg: Config, agent: str, start_texts) -> SC.StartCost | None:
-    """What ddflow costs a session before its first turn, or None when the surface did not
-    supply the texts or building them failed (a report must not fail on its own measuring)."""
-    if start_texts is None:
-        return None
-    try:
-        return SC.measure(
-            start_texts(repo, agent),
-            chars_per_token=cfg.session.start_chars_per_token,
-            budget=cfg.session.context_budget_tokens,
-        )
-    except Exception:
-        return None
 
 
 def _rules_findings(repo: Path, highest: str, problems: list[str], notes: list[str]) -> None:
