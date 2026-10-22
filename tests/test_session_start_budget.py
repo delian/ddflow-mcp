@@ -146,3 +146,25 @@ def test_the_ratio_knob_is_in_bytes():
     from ddflow.config import KNOB_DOCS
 
     assert "Bytes (UTF-8)" in KNOB_DOCS["session.start_bytes_per_token"]
+
+
+def test_nothing_measured_reserves_nothing():
+    cost = SC.measure({}, chars_per_token=4.0, budget=50, reserve=100)
+    assert (cost.tokens, cost.over, cost.notes()) == (0, 0, [])
+
+
+def test_the_default_reserve_covers_the_notice_lines_a_session_start_can_carry():
+    """A pending notice cannot be counted without being used up, so a reserve stands for it.
+    Each notice is said once and the instructions carry at most one; the brief carries the
+    upgrade line and the release line. Together they are two short lines."""
+    from ddflow.config import Config
+    from ddflow.services import upgrade_check as UC
+
+    release = UC.line("0.2.7", "0.2.8")
+    upgraded = (
+        "Upgraded ddflow 0.2.7 -> 0.2.8: run `ddflow upgrade --plan` "
+        "(12 contested record(s) need `ddflow resolve` first)"
+    )
+    reserve = Config().session.start_notice_reserve_tokens
+    bytes_per_token = Config().session.start_bytes_per_token
+    assert len(f"{upgraded}\n\n{release}".encode()) <= reserve * bytes_per_token
