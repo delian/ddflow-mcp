@@ -187,6 +187,8 @@ def job_end(
 
     if job and (item or all_finished):
         return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
+    if item and all_finished:
+        return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
     if not job:
         if not (item or all_finished):
             return O.failed(
@@ -237,13 +239,14 @@ def collect_finished(log, st, item: str = "") -> list[str]:
     return [subject for _kind, subject, _data in ended]
 
 
-def collect_for_item(log, item: str) -> list[str]:
-    """`collect_finished` for one item as it completes or is abandoned. Never raises: a job
-    that cannot be checked must not make a finished item look unfinished."""
+def collect_for_item(log, item: str) -> tuple[list[str], str]:
+    """`collect_finished` for one item as it completes or is abandoned: (ids ended, why not).
+    Never raises, because a job that cannot be checked must not make a finished item look
+    unfinished; but a collection that could not run says so, it is not "no finished jobs"."""
     try:
-        return collect_finished(log, fold(log.read_all(), strict=False), item)
-    except Exception:
-        return []
+        return collect_finished(log, fold(log.read_all(), strict=False), item), ""
+    except Exception as e:
+        return [], f"finished jobs of {item} were not collected: {type(e).__name__}: {e}"
 
 
 def job_end_finished(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
