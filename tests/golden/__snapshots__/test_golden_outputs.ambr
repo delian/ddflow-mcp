@@ -2509,6 +2509,15 @@
           each look reads the installed version from disk and folds the log, so it is
           bounded, not per call. A skew refusal always looks at once. 0 looks on every
           call.
+      mcp.progress_s = 20.0   [default]
+          Seconds between the `notifications/progress` an offloaded MCP tool
+          (`ddflow_gate_run`, `ddflow_gate_verify`, `ddflow_ci`, `ddflow_verify`,
+          `ddflow_bisect`, `ddflow_wait`, `ddflow_review`) sends while it runs,
+          whatever it prints, when the client asked for progress
+          (`_meta.progressToken`). Claude Code resets its idle timer on each one and
+          aborts a call that stays silent for its window (30 s in a probe), so a quiet
+          gate would be cut off even though its worker finishes. 0 sends none beyond a
+          tool's own per-line progress. Read per call.
       ci.command = ''   [default]
           The command the `ci` gate and `ddflow ci run` execute in a scratch worktree
           of the branch merged with the base. Empty (default): the project's own pre-
@@ -2555,6 +2564,14 @@
       ci.suite_wait_s = 1800   [default]
           Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
           before it reports who holds it.
+      ci.suite_queue_stale_s = 120   [default]
+          Seconds a run queued for the full-suite lock may go without a heartbeat
+          before the queue passes over it (a stopped process). A waiter killed
+          outright leaves the queue within about a second. Waiters are served first
+          in, first out.
+      ci.suite_queue_grace_s = 120   [default]
+          Seconds a run that gave up waiting for the full-suite lock keeps its place
+          in the queue, so a retry within it is not sent to the back.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity

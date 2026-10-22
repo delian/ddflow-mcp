@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.suite_queue_grace_s"
+new = '120'
+why = "The full-suite lock serves waiters first in, first out (bug B1fa77a6832)."
+impact = "additive"
