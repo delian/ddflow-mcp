@@ -88,3 +88,20 @@ def test_only_orphans_left_is_not_reported_as_an_uncommitted_log(repo):
     sha, note = EC.commit_shards(repo, "again")
     assert not sha
     assert "no event names" in note and "event log not committed" not in note
+
+
+def test_an_unreadable_shard_is_not_taken_as_naming_nothing(repo, monkeypatch):
+    run_cli(repo, "init")
+    ref = _blob(repo, "named")
+    _named(repo, ref)
+    real = Path.read_bytes
+
+    def refuse(self, *a, **k):
+        if self.name == "mine.jsonl":
+            raise OSError("denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", refuse)
+    assert EC.named_blobs(repo) is None
+    assert EC.orphan_blobs(repo) == []  # unknown is not "nobody's"
+    assert EC.split_loose_blobs(repo) is None
