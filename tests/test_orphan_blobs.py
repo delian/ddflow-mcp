@@ -79,3 +79,12 @@ def test_doctor_does_not_count_an_orphan_blob_as_a_loose_shard(repo):
     _git(repo, "commit", "-qm", "init")
     _blob(repo, "orphan")
     assert _loose_shards(repo) == []
+
+
+def test_only_orphans_left_is_not_reported_as_an_uncommitted_log(repo):
+    run_cli(repo, "init")
+    EC.commit_shards(repo, "adopt")
+    _blob(repo, "orphan")
+    sha, note = EC.commit_shards(repo, "again")
+    assert not sha
+    assert "no event names" in note and "event log not committed" not in note

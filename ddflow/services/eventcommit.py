@@ -275,20 +275,21 @@ def _read_plan(repo: Path, reason: str, template: str):
         except OSError:
             left.append(rel)
     skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
-    if orphans:
-        skipped = "; ".join(
-            filter(
-                None,
-                [
-                    skipped,
-                    f"{len(orphans)} blob(s) no event names left uncommitted: "
-                    + ", ".join(orphans[:_NAMED_ORPHANS])
-                    + (", ..." if len(orphans) > _NAMED_ORPHANS else ""),
-                ],
-            )
-        )
+    orphan_note = (
+        f"{len(orphans)} blob(s) no event names left uncommitted: "
+        + ", ".join(orphans[:_NAMED_ORPHANS])
+        + (", ..." if len(orphans) > _NAMED_ORPHANS else "")
+        if orphans
+        else ""
+    )
     if not taken:
-        return stop(f"event log not committed: {skipped}" if skipped else "")
+        # Only orphans left: the log itself is committed, so it is not "not committed".
+        if skipped:
+            return stop(
+                "; ".join(filter(None, [f"event log not committed: {skipped}", orphan_note]))
+            )
+        return stop(orphan_note)
+    skipped = "; ".join(filter(None, [skipped, orphan_note]))
     busy = _busy(repo)
     if busy:
         return stop(f"event log not committed: {busy}")
