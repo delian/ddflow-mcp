@@ -88,7 +88,7 @@ def _legacy_placements() -> dict[str, Placement]:
     for noun, suffixes in _LEGACY.items():
         for suffix in suffixes.split():
             if suffix == noun:
-                action = _SELF_NAMED_ACTION[noun]
+                action = _SELF_NAMED_ACTION.get(noun, suffix)
             else:
                 action = suffix.removeprefix(noun + "_")
             placed[PREFIX + suffix] = Placement(PREFIX + noun, action)
@@ -149,7 +149,9 @@ def build(placed: Mapping[str, Placement]) -> dict[str, Family]:
 #: Family tool name -> `Family`; the 9 singles and the 15 families, in tool order.
 FAMILIES: dict[str, Family] = build(_PLACED)
 
-#: Every old name that is not a hot single, with where it went (for MTD-aliases).
+#: Every old name that is not a hot single, with where it went (for MTD-aliases). `workflow` and
+#: `doctor` are their own family tool too: those two entries are the same-name map (the old
+#: no-action call is the action named here), not a rename, and a consumer keeps them callable.
 ALIASES: tuple[FamilyAlias, ...] = tuple(
     FamilyAlias(t, p.family, p.action) for t, p in _PLACED.items() if t not in HOT_SINGLES
 )
