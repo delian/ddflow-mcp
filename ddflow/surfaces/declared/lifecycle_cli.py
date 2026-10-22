@@ -324,7 +324,7 @@ def claim_text(out, a, ctx) -> str:
             f"\n  worktree: {d['worktree']}  (adopted — you were already in it)"
             f"\n  branch:   {d['branch']}\n  Carry on where you are."
         )
-    elif d["worktree"]:
+    elif d["worktree"] and d["tree"]["how"] == "created":
         msg += (
             f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
             f"\n  a tree of its own, because {d['tree']['why']}."

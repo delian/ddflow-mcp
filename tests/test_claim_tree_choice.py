@@ -46,6 +46,7 @@ def test_from_a_free_linked_worktree_it_is_adopted(repo):
     out = LC.claim(repo, "T1", agent="a", called_from=tree)
     assert out.exit == 0, out.reason
     assert out.data["tree"]["how"] == "adopted"
+    assert "no other item holds" in out.data["tree"]["why"]
     assert str(tree.resolve()) == str(Path(out.data["worktree"]).resolve())
 
 
@@ -69,11 +70,13 @@ def test_no_worktree_and_a_second_claim_say_so(repo):
     tree = _seed(repo)
     out = LC.claim(repo, "T1", agent="a", no_worktree=True)
     assert out.data["tree"]["how"] == "none"
+    assert "--no-worktree" in out.data["tree"]["why"]
     LC.release(repo, "T1", agent="a")
     first = LC.claim(repo, "T1", agent="a", called_from=repo)
     again = LC.claim(repo, "T1", agent="a", called_from=tree)
     assert first.data["tree"]["how"] == "created"
     assert again.data["tree"]["how"] == "rebound", again.data["tree"]
+    assert "earlier claim" in again.data["tree"]["why"]
 
 
 def test_the_cli_names_the_reason_for_a_new_tree(repo):
