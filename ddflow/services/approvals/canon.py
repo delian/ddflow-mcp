@@ -12,7 +12,8 @@ and untrusted, and cannot change what is bound.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from ...core.digest import content_digest
@@ -32,11 +33,14 @@ class Canon:
     item: str = ""
     target: str = ""
     #: Normalised arguments that change what the command does (a count, a path list), as strings.
-    args: dict[str, str] = field(default_factory=dict)
+    args: Mapping[str, Any] | tuple[tuple[str, str], ...] = ()
     #: A digest of the state the command acts on, built by the site that gates it.
     state: str = ""
 
     def __post_init__(self) -> None:
+        # frozen means frozen: keep the arguments as sorted string pairs, not the caller's dict
+        pairs = self.args.items() if isinstance(self.args, Mapping) else self.args
+        object.__setattr__(self, "args", tuple(sorted((str(k), str(v)) for k, v in pairs)))
         if self.verb not in sites.BY_VERB:
             raise UnknownVerb(f"{self.verb!r} is not a gated command (services/approvals/sites)")
         if not self.agent:
@@ -53,7 +57,7 @@ class Canon:
             "agent": self.agent,
             "item": self.item,
             "target": self.target,
-            "args": {str(k): str(v) for k, v in sorted(self.args.items())},
+            "args": dict(self.args),
             "state": self.state,
         }
 
@@ -65,4 +69,7 @@ class Canon:
 
     def subject(self) -> str:
         """`cmd:<verb>:<item>:<target>`, the ask's subject (what `verdict` is asked about)."""
-        return ":".join(("cmd", self.verb, self.item, self.target))
+        esc = (
+            p.replace("%", "%25").replace(":", "%3A") for p in (self.verb, self.item, self.target)
+        )
+        return "cmd:" + ":".join(esc)

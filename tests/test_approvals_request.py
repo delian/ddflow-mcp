@@ -78,7 +78,7 @@ def test_the_request_is_an_ask_bound_to_the_command_and_its_tier(log):
         site.min_level,
         1,
     )
-    assert row["use_ttl_s"] == cfg.approvals.use_ttl_s == 3600
+    assert row["use_ttl_s"] == cfg.approvals.use_ttl_s
     assert row["subject"] == "cmd:gate.skip.failed_review:fix-X:critic"
     assert row["digest"] == c.digest() and row["canon"] == c.json()
     assert row["requested_by"] == "asker" and row["state"] == "pending"
@@ -140,3 +140,53 @@ def test_the_knobs_exist_and_default_as_decided():
     cfg = Config()
     assert cfg.approvals.auto_request is True  # D-RA-Q12
     assert cfg.approvals.use_ttl_s == 3600  # D-RA-Q9
+
+
+def test_a_zero_reason_limit_hides_the_reason_and_args_are_frozen():
+    assert R.untrusted("anything", 0) == '"(not shown)"'
+    assert R.untrusted("abcdef", 3) == '"ab…"'
+    args = {"n": "1"}
+    c = _canon(args=args)
+    before = c.digest()
+    args["n"] = "2"
+    assert c.digest() == before
+    hash(c)  # a frozen record is hashable
+
+
+def test_colons_in_an_item_cannot_collide_two_subjects():
+    a = _canon(item="x:1", target="y").subject()
+    b = _canon(item="x", target="1:y").subject()
+    assert a != b
+
+
+def test_a_plain_pending_ask_and_a_legacy_request_do_not_break_filing(log):
+    cfg = Config()
+    E.request(log, cfg, subject="help", kind="question", text="which one?", now=T0)
+    log.append(  # an ask.requested from before the command fields existed
+        "ask.requested",
+        "Qlegacy",
+        {
+            "id": "Qlegacy",
+            "type": "approval",
+            "subject": "old",
+            "digest": "d",
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+    )
+    row = asks_of(_state(log))["Qlegacy"]
+    assert row["verb"] == "" and row["uses"] == 0
+    assert R.file(log, cfg, _state(log), _canon(), now=T0).new
+    log.append("ask.answered", "Qlegacy", {"id": "Qlegacy", "outcome": "approved", "human": True})
+    log.append("ask.consumed", "Qlegacy", {"id": "Qlegacy", "by": "asker"})
+    assert asks_of(_state(log))["Qlegacy"]["used"] == 0  # no permitted use: nothing to spend
+
+
+def test_a_command_ask_with_a_negative_use_window_is_refused(log):
+    with pytest.raises(E.AskRefused, match="usable"):
+        E.request(
+            log,
+            Config(),
+            subject="s",
+            digest="d",
+            command=E.Command(verb="v", tier="T2", min_level=1, use_ttl_s=-1),
+        )

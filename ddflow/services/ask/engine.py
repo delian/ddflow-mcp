@@ -146,8 +146,8 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     if code:
         data["code_hash"] = token_hash(code)
     if command is not None:
-        if kind != APPROVAL or command.uses < 1 or command.min_level < 1:
-            raise AskRefused("a command ask is an approval spent 1+ times at level 1+")
+        if kind != APPROVAL or command.uses < 1 or command.min_level < 1 or command.use_ttl_s < 0:
+            raise AskRefused("a command ask is an approval spent 1+ times at level 1+, usable 0+ s")
         data.update(
             verb=command.verb,
             tier=command.tier,

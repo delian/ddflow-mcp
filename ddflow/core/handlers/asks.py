@@ -101,7 +101,7 @@ def h_consumed(st: State, ev: Event) -> None:
     """A use of an answered approval was spent by ``by``. Uses beyond the ask's own are not
     counted (a replayed duplicate changes nothing past the cap)."""
     row = asks_of(st).get(_id(ev))
-    if row is None or row["state"] != ANSWERED or row["used"] >= max(row["uses"], 1):
+    if row is None or row["state"] != ANSWERED or row["uses"] <= 0 or row["used"] >= row["uses"]:
         return
     row["used"] += 1
     row["consumed"].append(

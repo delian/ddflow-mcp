@@ -28,9 +28,11 @@ class Filed:
 
 def untrusted(reason: str, limit: int) -> str:
     """The agent's words as one quoted, control-free, clipped line the person reads as data."""
+    if limit <= 0:
+        return '"(not shown)"'
     flat = _CONTROL.sub(" ", reason).strip()
     if len(flat) > limit:
-        flat = flat[: max(limit - 1, 0)] + "…"
+        flat = flat[: limit - 1] + "…"
     return '"' + flat.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
@@ -46,7 +48,7 @@ def render(canon: Canon, reason: str = "", limit: int = 300) -> str:
         f"  needs   : tier {s.tier}, assurance level L{s.min_level} or stronger; one use",
     ]
     if canon.args:
-        lines.append("  args    : " + ", ".join(f"{k}={v}" for k, v in sorted(canon.args.items())))
+        lines.append("  args    : " + ", ".join(f"{k}={v}" for k, v in canon.args))
     lines.append(
         f"  agent's reason (untrusted, not part of the approval): {untrusted(reason, limit)}"
     )
