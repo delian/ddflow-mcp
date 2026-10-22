@@ -1034,6 +1034,7 @@ def _full_rounds(it, gate: str) -> int:
         1
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "full"
+        and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
@@ -1047,9 +1048,17 @@ def _delta_rounds(it, gate: str) -> int:
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "delta"
         and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+        and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
     )
+
+
+def _kept_copy(run) -> bool:
+    """A record `_keep_reviewed_round` re-emitted over an outage: a copy of an earlier round,
+    no round of its own (B435bbddb18). Copies written before `round_kept` existed are told
+    by `unavailable_deltas`, which only that path writes."""
+    return bool(run.evidence.get("round_kept") or run.evidence.get("unavailable_deltas"))
 
 
 def _settled_pass(run) -> bool:
