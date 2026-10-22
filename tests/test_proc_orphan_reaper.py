@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="process groups")
+pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="reads /proc")
 
 OWNER = "import sys\nfrom ddflow.infra import proc\nproc.run_shell(sys.argv[1], timeout_s=600)\n"
 
@@ -36,13 +36,13 @@ def _until(pred, timeout=15.0) -> bool:
 
 def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
     pids = tmp_path / "pids"
-    line = f"(echo $$ >> {pids}; exec sleep 600) & echo $$ >> {pids}; wait"
+    line = f"sleep 600 & echo $! >> {pids}; echo $$ >> {pids}; wait"
     owner = subprocess.Popen([sys.executable, "-c", OWNER, line])
     try:
         assert _until(lambda: pids.exists() and len(pids.read_text().split()) == 2)
         running = [int(p) for p in pids.read_text().split()]
         assert not any(_gone(p) for p in running)
-        time.sleep(1.0)  # the watcher has started
+        assert _until(lambda: _watching(running[1])), "no watcher started"
         os.kill(owner.pid, signal.SIGKILL)  # the owner dies without cleaning up
         owner.wait()
         assert _until(lambda: all(_gone(p) for p in running)), "the suite outlived its owner"
@@ -58,18 +58,20 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
 def test_a_finished_run_leaves_no_watcher_behind(tmp_path: Path):
     from ddflow.infra import proc
 
-    before = _watchers()
-    proc.run_shell("true", timeout_s=30)
-    assert _until(lambda: _watchers() <= before, timeout=5)
+    pid_file = tmp_path / "pid"
+    proc.run_shell(f"echo $$ > {pid_file}", timeout_s=30)
+    shell = int(pid_file.read_text())
+    assert _until(lambda: not _watching(shell), timeout=10)  # ended, and reaped (no zombie)
 
 
-def _watchers() -> int:
-    n = 0
+def _watching(group: int) -> bool:
+    """A live watcher process for the process group led by ``group``."""
     for d in Path("/proc").iterdir():
         if d.name.isdigit():
             try:
-                if b"ddflow-owner-watch" in (d / "cmdline").read_bytes():
-                    n += 1
+                argv = (d / "cmdline").read_bytes().split(b"\0")
             except OSError:
-                pass
-    return n
+                continue
+            if b"ddflow-owner-watch" in argv and str(group).encode() in argv[2:4]:
+                return True
+    return False
