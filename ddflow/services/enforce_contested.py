@@ -47,35 +47,36 @@ def contested(
     ]
     if not subject:
         return {}
-    leases = L.unfinished_leases(state, cfg, now)
-    lines = {
-        line_key(state, state.items[i], cfg)
-        for i, lz in leases.items()
-        if i in state.items and is_mine(lz)
-    }
+    mine_lines = _lines_of_mine(state, cfg, subject, is_mine, now)
     out: dict[str, str] = {}
-    for item_id, lz in leases.items():
+    for item_id, lz in L.unfinished_leases(state, cfg, now).items():
         other = state.items.get(item_id)
         if other is None or is_mine(lz):
             continue
-        if lines and line_key(state, other, cfg) not in lines:
-            continue  # another release line is another branch: no clash, as for `update`
-        changed: list[str] | None = None
-        loaded = False
+        other_line = line_key(state, other, cfg)
+        cache: dict[str, list[str] | None] = {}  # one git read per lease, not per path
         for p in subject:
-            if p in out:
-                continue
-            names = _names(lz, p, shared)
-            if not names:
-                continue
-            if any(not _wild(g) for g in names):
-                hit = True
-            else:
-                if not loaded:  # one git read per lease, not per path
-                    changed, loaded = L.holder_changed_paths(log, other), True
-                hit = changed is None or p in changed
-            if hit:
+            if p in out or other_line not in mine_lines[p]:
+                continue  # taken already, or another release line: another branch, as for `update`
+            if _holds_path(log, other, lz, p, shared, cache):
                 out[p] = f"{item_id} ({lz.holder})"
+    return out
+
+
+def _lines_of_mine(
+    state: State, cfg: Config, paths: list[str], is_mine: Callable[[Lease], bool], now: float
+) -> dict[str, set[str]]:
+    """path -> the release lines of the committer's leases that cover it (finished ones too:
+    the holder's own last commits stand on them)."""
+    out: dict[str, set[str]] = {p: set() for p in paths}
+    for item_id, lz in state.active_leases(now, cfg.lease.grace_s).items():
+        it = state.items.get(item_id)
+        if it is None or not is_mine(lz):
+            continue
+        line = line_key(state, it, cfg)
+        for p in paths:
+            if any(path_in_glob(p, g) for g in lz.globs):
+                out[p].add(line)
     return out
 
 
@@ -84,3 +85,14 @@ def _names(lz: Lease, path: str, shared: list[str]) -> list[str]:
     it; a wildcard only once its holder has changed that path (or git cannot say), as
     `update` counts it."""
     return [g for g in lz.globs if not is_shared(g, shared) and path_in_glob(path, g)]
+
+
+def _holds_path(log: EventLog, other, lz: Lease, path: str, shared: list[str], cache: dict) -> bool:
+    names = _names(lz, path, shared)
+    if not names:
+        return False
+    if any(not _wild(g) for g in names):
+        return True
+    if "changed" not in cache:
+        cache["changed"] = L.holder_changed_paths(log, other)
+    return cache["changed"] is None or path in cache["changed"]
