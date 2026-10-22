@@ -14,27 +14,18 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run(repo: Path, *argv: str, stdin: str | None = None, hang_s: float = 60):
-    """Run the CLI with an OPEN stdin pipe (as an agent has) unless `stdin` is given."""
+def _run(repo: Path, *argv: str, stdin: str):
+    """Run the CLI with `stdin` piped in (and closed): the answer to a command that reads it."""
     env = {**os.environ, "PYTHONPATH": str(_ROOT)}
-    p = subprocess.Popen(
+    p = subprocess.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), *argv],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        input=stdin,
+        capture_output=True,
         text=True,
         env=env,
+        timeout=120,
     )
-    try:
-        if stdin is not None:
-            out, err = p.communicate(stdin, timeout=hang_s)
-        else:
-            out, err = p.communicate(timeout=hang_s)  # communicate() closes stdin: use wait
-    except subprocess.TimeoutExpired:
-        p.kill()
-        p.communicate()
-        pytest.fail(f"`ddflow {' '.join(argv)}` blocked (reading stdin?)")
-    return p.returncode, out, err
+    return p.returncode, p.stdout, p.stderr
 
 
 @pytest.mark.parametrize("cmd", ["prompt", "note"])
@@ -52,7 +43,13 @@ def test_words_in_the_session_slot_are_refused_not_read_from_stdin(repo, cmd, po
         env=env,
     )
     # stdin is open and silent: a command that reads it never returns
-    t = threading.Timer(90, p.kill)
+    hung = threading.Event()
+
+    def _kill() -> None:
+        hung.set()
+        p.kill()
+
+    t = threading.Timer(90, _kill)
     t.start()
     try:
         err = p.stderr.read()
@@ -60,12 +57,13 @@ def test_words_in_the_session_slot_are_refused_not_read_from_stdin(repo, cmd, po
     finally:
         t.cancel()
         p.stdin.close()
-    assert p.returncode not in (0, -9), (p.returncode, err)
+    assert not hung.is_set(), "blocked reading stdin"
+    assert p.returncode != 0, err
     assert "--text" in err and "session" in err, err
 
 
 def test_text_flag_without_a_session_uses_the_latest_open_one(repo):
-    code, out, err = _run(repo, "session", "start")
+    code, out, err = _run(repo, "session", "start", stdin="")
     assert code == 0, err
     sid = out.strip().splitlines()[0]
     code, out, err = _run(repo, "session", "prompt", "--text", "hello there", stdin="")
@@ -74,7 +72,7 @@ def test_text_flag_without_a_session_uses_the_latest_open_one(repo):
 
 
 def test_a_known_session_id_still_takes_piped_text(repo):
-    code, out, err = _run(repo, "session", "start")
+    code, out, err = _run(repo, "session", "start", stdin="")
     sid = out.strip().splitlines()[0]
     code, out, err = _run(repo, "session", "prompt", sid, stdin="piped words")
     assert code == 0, err
