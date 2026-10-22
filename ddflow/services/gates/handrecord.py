@@ -14,6 +14,10 @@ from typing import Any
 
 from .evidence import tree_identity
 
+#: The tools that run a command gate's command themselves and record the result through
+#: `gate record`'s API (`Evidence.ran_by`). Any other value is not trusted.
+RAN_BY = frozenset({"ddflow ci run"})
+
 
 def _refusal(it, gdef, gate: str, outcome: str, agent_why: str, tree: Any) -> str:
     """Why an agent's hand-recorded ``outcome`` for ``gate`` is refused, else ""."""
@@ -59,7 +63,7 @@ def hand_record(
     """(a refusal, or the evidence to add) for ``gate record``'s ``evidence`` (an `Evidence`).
     A record a ddflow tool made after running the command (``evidence.ran_by``) is not a hand
     record: it is neither refused nor annotated."""
-    if skip or evidence.ran_by:
+    if skip or evidence.ran_by in RAN_BY:
         return "", {}
     if why := _refusal(it, gdef, gate, outcome, agent_why, tree):
         return why, {}

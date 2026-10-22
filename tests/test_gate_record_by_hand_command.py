@@ -55,6 +55,26 @@ def test_the_ran_by_provenance_cannot_be_typed_by_a_caller(repo):
     assert _gate(repo) is None
 
 
+def test_an_unknown_ran_by_does_not_spare_a_hand_record():
+    from ddflow.services.gates.handrecord import RAN_BY, hand_record
+
+    assert RAN_BY == {"ddflow ci run"}
+    gdef = SimpleNamespace(is_command_gate=True)
+    it = SimpleNamespace(id="T1", gates={})
+    ev = SimpleNamespace(ran_by="typed by an agent", command="x", output_file="")
+    why, _ = hand_record(it, gdef, "ci", "passed", "--agent a", None, ev, "h", skip=False)
+    assert "gate run" in why
+    ev.ran_by = "ddflow ci run"
+    assert hand_record(it, gdef, "ci", "passed", "--agent a", None, ev, "h", skip=False) == ("", {})
+
+
+def test_the_mcp_gate_record_tool_has_no_ran_by_argument():
+    from ddflow.surfaces.mcp import TOOLS
+
+    props = TOOLS["ddflow_gate_record"]["properties"]
+    assert "ran_by" not in props and "ran-by" not in props, sorted(props)
+
+
 def test_an_agent_may_record_it_unavailable_or_after_a_real_run(repo):
     _setup(repo)
     code, out, err = run_cli(
@@ -82,3 +102,7 @@ def test_the_report_counts_a_bare_command_string_as_by_hand():
     )
     assert report_gates._row("unit_tests", hand, cfg)["by_hand"] is True
     assert report_gates._row("unit_tests", ran, cfg)["by_hand"] is False
+    ci = SimpleNamespace(
+        outcome="passed", by="a", reason="", evidence={"command": "x", "ran_by": "ddflow ci run"}
+    )
+    assert report_gates._row("ci", ci, cfg)["by_hand"] is False
