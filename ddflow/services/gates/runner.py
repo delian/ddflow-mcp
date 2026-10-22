@@ -280,7 +280,7 @@ class Classified(NamedTuple):
     reason: str = ""
 
 
-_BLOCKED_ON = re.compile(r"blocked on [^\n]+")
+_BLOCKED_ON = re.compile(r"^(?:[\w.-]+: )?(blocked on [^\n]* since [^\n]+)$", re.M)
 
 
 def _blocked_on(output: str) -> str:
@@ -298,7 +298,7 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     rule decides nothing, and guessing either way would be a verdict nobody gave.
     """
     if code in gdef.unavailable_exits:
-        blocked = _blocked_on(output)
+        blocked = _blocked_on(output) if gdef.id == "ci" else ""
         if blocked:  # the host suite lock: say who, not only that exit 2 means unavailable
             return Classified(
                 GateOutcome.UNAVAILABLE,
