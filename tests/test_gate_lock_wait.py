@@ -140,3 +140,16 @@ def _blank() -> dict:
         "queue_wait": s, "lease_wait": s, "rework": {"reworked": 0, "completed": 0, "rate": None},
         "gate_time": [], "group_by": "gate", "outcomes": [], "providers": [], "unavailable": {},
     }  # fmt: skip
+
+
+def test_a_command_gate_run_writes_the_wait_into_its_evidence(tmp_path):
+    from ddflow.services.gates import runner as R
+    from ddflow.services.gates.defs import GateDef
+
+    gdef = GateDef(id="ci", command=f"echo ok; echo {CM.wait_line(12.5)}")
+    outcome, ev = R.run_command_gate(gdef, tmp_path)
+    assert outcome == "passed" and ev["waited_s"] == 12.5
+    quiet = GateDef(id="ci", command="echo ok")
+    assert "waited_s" not in R.run_command_gate(quiet, tmp_path)[1]
+    tiny = GateDef(id="ci", command=f"echo {CM.wait_line(0.0004)}")
+    assert R.run_command_gate(tiny, tmp_path)[1]["waited_s"] == 0.0004
