@@ -72,7 +72,7 @@ def test_second_full_run_reports_the_holder(tmp_path: Path):
             with SL.hold(cfg(wait=0), "agent-b", tmp_path):
                 raise AssertionError("two full runs at once")
     msg = str(e.value)
-    assert msg.startswith("blocked on agent-a since ") and e.value.holder["holder"] == "agent-a"
+    assert msg.startswith("blocked on pid ") and "agent-a since " in msg and e.value.holder["holder"] == "agent-a"
 
 
 def test_second_full_run_waits_for_the_first(tmp_path: Path):
