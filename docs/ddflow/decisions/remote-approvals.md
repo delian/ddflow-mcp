@@ -50,7 +50,7 @@ person's act. (Research 9.)
 
 ## D-RA-6 Surfaces: no new MCP tool
 
-MCP: fold into `ddflow_session` (actions `ask`, `asks`, `withdraw`; no answering action) plus one shared optional
+MCP: fold into `ddflow_session` (actions `ask` (returns a handle at once; bounded optional `wait_s`), `asks`, `withdraw`; no answering action) plus one shared optional
 param `approval` on the gated actions. CLI: `ddflow approvals ...`. Prompt: one line in each refusal and in the
 driver. (Research 10.)
 
@@ -63,7 +63,7 @@ driver. (Research 10.)
 | Q3 | Which channels first? | CLI (L1) + signed (L4) as the MVP; elicitation (L2) after `RA-probe-harness`; chat/PR optional | The first two work today in cloud sessions and need no client support |
 | Q4 | Does the operator have or want an SSH/FIDO2 key for approvals, and is `[approvals].signers` read from the commit allowed-signers file when unset? | Yes to both; ddflow never creates or stores the key (D-CM-7) | One key list for commits and approvals |
 | Q5 | Accept the transcript-attested `AskUserQuestion` answer as L2? | Off by default; opt-in `[approvals].accept=["harness"]` per verb, T2 only | Weak outside local sessions; cannot reach T3 |
-| Q6 | Minimum level per tier | T2: L1 (any person channel); T3: L4, or L1 when no signer is configured | Matches today's behaviour for T2; T3 is where forgery costs most |
+| Q6 | Minimum level per tier | T2: L1 (any person channel); T3: L4, with L1 accepted only to enroll the first signer (then doctor flags "T3 protected only by L1" until done) | Matches today for T2; a forgeable L1 must not be able to add its own signer or rotate keys once one exists |
 | Q7 | Which acts are T2 beyond today's refusals: `complete --force`, `claim --force`, `cleanup --apply`, `version cut`, `promote`, `decision supersede`? | The first two (they already have a hook/flag guard); the others stay ungated | Avoid new friction |
 | Q8 | Standing auto-approval rules to ship (off by default): extra review round up to 5 per item/gate when the tree changed after triage; skip of a gate whose reviewer was unavailable 3 times; accept measured baseline-red partial? | Ship the three as examples, all off; operator enables per rule | Matches "justified grants up to 4-5"; each is reported |
 | Q9 | Windows: request lives how long; an approval is usable how long after the answer? | Request 24 h (existing `ask_ttl_s`); use window 1 h; uses 1 (counted bundles up to `[grants].max_count`) | Short use window limits stale approvals |
@@ -84,5 +84,5 @@ driver. (Research 10.)
 ## Consequences
 
 Every gated command gains one refusal message that names the route. The ask engine's `verdict` must stop trusting the
-self-reported `human`/`coded` flags for levels above L1. Hot files (`config.py`, `surfaces/exemptions.py`,
+self-reported `human`/`coded` flags for levels above L1; this removes the flag gap, not the same-uid forgery of L2/L3 (only L4 does). Hot files (`config.py`, `surfaces/exemptions.py`,
 `api/gates.py`) are touched by single tasks that hold their leases; `RA-mcp` waits for `MTD-family-spec`.
