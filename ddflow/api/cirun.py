@@ -97,6 +97,19 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
     return "" if out.ok else out.reason
 
 
+def _item_ref(repo: Path, it) -> tuple[str, str]:
+    """``(ref, why)``: what ``ddflow ci run <item id>`` checks. The item's branch while it
+    exists; once the merge deleted it, the commit the item landed as; else why there is none."""
+    if it.branch and W.rev(repo, it.branch):
+        return it.branch, ""
+    if it.merged_sha and W.rev(repo, it.merged_sha):
+        return it.merged_sha, ""
+    if it.merged_sha:
+        return "", f"{it.id} merged as {it.merged_sha[:12]}, which this clone does not have"
+    gone = f"its branch {it.branch!r} is gone" if it.branch else "it has no branch"
+    return "", f"{it.id} is not merged and {gone}: name a commit with --ref"
+
+
 def run(
     repo: Path,
     *,
@@ -123,8 +136,10 @@ def run(
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
-    if ref in st.items and st.items[ref].branch:  # an item id names its branch
-        ref = st.items[ref].branch
+    if ref in st.items:  # an item id names its branch, or the commit it landed as
+        ref, why = _item_ref(repo, st.items[ref])
+        if why:
+            return O.nothing("ci.run", why, status="unavailable")
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
