@@ -653,6 +653,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
 
 
 _SETTLED = ("refuted", "confirmed")
+_DELTA_CUT_HOW = "the delta since "  # `diff_source` of a --chunk re-run cut from a delta
 #: what a delta record says about its own cut; a `--chunk` re-run of it carries them on
 _DELTA_KEYS = ("delta_from", "delta_raised", "delta_reraised", "delta_findings", "full_coverage")
 
@@ -1284,7 +1285,7 @@ def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str, str] | None:
             "",
             f"nothing changed since {start[:10]}, the start of the recorded delta; run the full review.",
         )
-    return diff, f"the delta since {start[:10]}", ""
+    return diff, f"{_DELTA_CUT_HOW}{start[:10]}", ""
 
 
 def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:
@@ -1952,7 +1953,9 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         # A re-run of part of a DELTA round stays that delta's record: the next --chunk
         # needs its start and which findings are its own (B00e6b5a540).
         prior = _prior_evidence(it.gates.get(gate))
-        evidence.update({k: prior[k] for k in _DELTA_KEYS if k in prior and k not in evidence})
+        # `delta_from` only when this re-run WAS cut from it, not from the user's own ref
+        keys = [k for k in _DELTA_KEYS if k != "delta_from" or how.startswith(_DELTA_CUT_HOW)]
+        evidence.update({k: prior[k] for k in keys if k in prior and k not in evidence})
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     _record(

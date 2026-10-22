@@ -123,6 +123,8 @@ def test_a_review_cut_from_an_explicit_base_is_completed_with_that_base(repo, tm
     flaky.unlink()
     out = _review(repo, chunks=[bad], base=base)
     assert out.exit == OK and out.data["outcome"] == "passed", out.reason
+    # the re-run was not cut from the recorded delta start, so the record must not claim so
+    assert _gate(repo).evidence.get("delta_from") in (None, ""), _gate(repo).evidence
 
 
 def test_a_chunk_re_run_drops_the_delta_s_own_finding_of_that_chunk(repo, tmp_path):
