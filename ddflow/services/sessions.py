@@ -157,6 +157,11 @@ def _recorded_recently(
     return False
 
 
+def is_started(events: Iterable, session_id: str) -> bool:
+    """Whether a session by this id was ever started (open or ended)."""
+    return any(e.kind == "session.started" and e.subject == session_id for e in events)
+
+
 def open_sessions(events: list, agent: str) -> list[str]:
     """Ids of this agent's sessions that have not ended, the most recently active first.
 
@@ -316,7 +321,7 @@ def capture_prompt(
     sid = harness_session_id(harness_id) or resolve(log, model=model, tool=tool)[0]
     clean, n = redact(text, cfg)
     events = log.read_all()
-    if not any(e.kind == "session.started" and e.subject == sid for e in events):
+    if not is_started(events, sid):
         log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
     now = time.time()
     fired = now if fired_at is None else min(now, max(fired_at, now - HOOK_START_MAX_S))
