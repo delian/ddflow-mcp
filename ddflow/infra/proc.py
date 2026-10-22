@@ -22,6 +22,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -392,6 +393,7 @@ def _shell_group(
     if input is not None:
         kwargs["stdin"] = PIPE
     p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
+    _watch_owner(p)
     deadline = None if timeout is None else time.monotonic() + timeout
     try:
         if input is not None:
@@ -416,6 +418,46 @@ def _shell_group(
         kill_group(p)
         _drain(p)
         raise
+
+
+#: The watcher: started BY the owner (so its parent is the owner), it polls that parent; when the
+#: parent is gone it kills the command's process group, and it ends when the group is gone. The
+#: process name carries ``ddflow-owner-watch`` so `ps` and the tests can find it.
+_WATCHER = (
+    "import os, signal, sys, time\n"
+    "group, owner = int(sys.argv[1]), os.getppid()\n"
+    "while True:\n"
+    "    time.sleep(1)\n"
+    "    if os.getppid() != owner:\n"
+    "        try:\n"
+    "            os.killpg(group, signal.SIGKILL)\n"
+    "        except OSError:\n"
+    "            pass\n"
+    "        break\n"
+    "    try:\n"
+    "        os.killpg(group, 0)\n"
+    "    except OSError:\n"
+    "        break\n"
+    "# ddflow-owner-watch\n"
+)
+
+
+def _watch_owner(p: subprocess.Popen) -> None:
+    """Make ``p``'s process group die with THIS process (Ba3b7509530: a suite ran 8.3 hours after
+    the gate run that started it was killed, and nothing reaped it). A SIGKILLed owner cannot
+    clean up after itself, so a small watcher process outside the group does it. Best effort: a
+    watcher that cannot start leaves the old behaviour."""
+    if os.name != "posix":
+        return
+    with contextlib.suppress(OSError, ValueError):
+        subprocess.Popen(  # nosec B603 - our own interpreter and a fixed script
+            [sys.executable, "-c", _WATCHER, str(p.pid), "ddflow-owner-watch"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
 
 
 def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
