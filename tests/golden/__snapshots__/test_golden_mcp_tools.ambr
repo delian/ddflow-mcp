@@ -3363,7 +3363,7 @@
         "properties": {
          "agents": {
           "type": "string",
-          "description": "Comma-separated agents to write driver deltas for: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,opencode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,openhands,goose,cody. Default: all."
+          "description": "Comma-separated agents to write driver deltas for: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,opencode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,openhands,goose,cody,dsh. Default: all."
          },
          "refresh_docs": {
           "type": "boolean",
