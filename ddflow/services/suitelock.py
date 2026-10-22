@@ -38,6 +38,8 @@ STALE_S = 120.0
 GRACE_S = 120.0
 #: A ticket this young may be one whose owner has not locked it yet.
 NEW_S = 1.0
+#: How long a new waiter waits for its own ticket's lock: a scan may hold it for an instant.
+LOCK_S = 5.0
 
 
 class SuiteBusy(RuntimeError):
@@ -168,7 +170,7 @@ class _Ticket:
     def __enter__(self) -> _Ticket:
         # Lock the file BEFORE it takes its ticket name: a scan that finds an unlocked
         # ticket removes it, so the owner must never be seen unlocked.
-        self._lock.enter_context(fsio.file_lock(self._parked or self.path, 0))
+        self._lock.enter_context(fsio.file_lock(self._parked or self.path, LOCK_S))
         if self._parked is not None:
             with contextlib.suppress(OSError):
                 self._parked.rename(self.path)
