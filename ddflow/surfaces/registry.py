@@ -585,6 +585,10 @@ class Command:
     kind: str = ""
     identify: bool = False
     deprecated: Mapping[str, Any] = field(default_factory=dict)
+    #: The family tool that serves this command and its ``action`` there (D-mcp-tool-families,
+    #: `tools/families.py`): the CLI's ``noun verb``. Empty: the legacy placement table decides.
+    family: str = ""
+    action: str = ""
     #: Why this command has no MCP tool of its own (the parity exemption), or "".
     reason: str = ""
     #: The tool that serves this command when it has none of its own, and the value of the
