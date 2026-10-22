@@ -19,7 +19,7 @@ from ddflow.infra.log import EventLog
 OK, REFUSED = 0, 3
 
 
-def _setup(repo: Path, tmp_path: Path, base: str = "x = 0") -> Path:
+def _setup(repo: Path, tmp_path: Path, base: dict[str, str] | None = None) -> Path:
     """A command reviewer with no verdict for a chunk carrying BADCHUNK while `flaky`
     exists; deltas on; the first commit on branch `feat` is reviewed clean."""
     flaky = tmp_path / "flaky"
@@ -43,7 +43,7 @@ def _setup(repo: Path, tmp_path: Path, base: str = "x = 0") -> Path:
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
     _git(repo, "checkout", "-q", "-b", "feat")
-    _commit(repo, {"base.py": base})
+    _commit(repo, base or {"base.py": "x = 0"})
     return flaky
 
 
@@ -65,7 +65,7 @@ def _gate(repo: Path):
 def test_a_partial_delta_can_be_completed_with_chunk_and_the_gate_passes(repo, tmp_path):
     flaky = _setup(repo, tmp_path)
     assert _review(repo).data["outcome"] == "passed"  # the full round
-    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2  # BADCHUNK", "c.py": "z = 3"})
+    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
     delta = _review(repo)
     assert delta.data["outcome"] == "partial", delta.reason
     ev = _gate(repo).evidence
@@ -80,7 +80,7 @@ def test_a_partial_delta_can_be_completed_with_chunk_and_the_gate_passes(repo, t
 def test_a_chunk_of_a_partial_delta_is_refused_once_the_diff_moved_again(repo, tmp_path):
     flaky = _setup(repo, tmp_path)
     _review(repo)
-    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2  # BADCHUNK", "c.py": "z = 3"})
+    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
     _review(repo)
     (bad,) = (g["chunk"] for g in _gate(repo).evidence["unreviewed"])
     flaky.unlink()
@@ -90,18 +90,28 @@ def test_a_chunk_of_a_partial_delta_is_refused_once_the_diff_moved_again(repo, t
 
 
 def test_a_chunk_re_run_keeps_the_findings_the_delta_carried_from_the_full_round(repo, tmp_path):
-    flaky = _setup(repo, tmp_path, base="x = 0  # FINDME")
-    assert len(_gate_findings(repo, _review(repo))) == 1  # full round: chunk 1 of ITS cut
-    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2  # BADCHUNK", "c.py": "z = 3"})
+    _setup(repo, tmp_path, base={"a0.py": "q = 0", "x0.py": "x = 0  # FINDME"})
+    assert _review(repo).data["outcome"] == "failed"  # the full round's finding
+    (carried,) = _gate(repo).evidence["chunk_findings"]
+    assert carried["chunk"] >= 2, "the finding is numbered in the FULL round's cut"
+    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
     assert _review(repo).data["outcome"] == "partial"
-    flaky.unlink()
     out = _review(
-        repo, chunks=[2]
-    )  # chunk 2 of the DELTA's cut; the full round's finding is #2 of its own
-    assert [f["title"] for f in _gate(repo).evidence["chunk_findings"]] == ["x.py:1"], out.data
+        repo, chunks=[carried["chunk"]]
+    )  # the same number in the DELTA's cut: another file
+    assert out.data["outcome"] == "partial", out.reason  # the flaky chunk is still lost
+    assert [f["digest"] for f in _gate(repo).evidence["chunk_findings"]] == [carried["digest"]]
     # and the record still says where its cut starts, so the next --chunk works too
     assert _gate(repo).evidence["delta_from"]
 
 
-def _gate_findings(repo: Path, out) -> list:
-    return _gate(repo).evidence["chunk_findings"]
+def test_a_delta_cut_from_an_explicit_base_is_completed_with_that_base(repo, tmp_path):
+    flaky = _setup(repo, tmp_path)
+    assert _review(repo).data["outcome"] == "passed"
+    reviewed = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
+    assert _review(repo, base=reviewed).data["outcome"] == "partial"
+    (bad,) = (g["chunk"] for g in _gate(repo).evidence["unreviewed"])
+    flaky.unlink()
+    out = _review(repo, chunks=[bad], base=reviewed)
+    assert out.exit == OK and out.data["outcome"] == "passed", out.reason
