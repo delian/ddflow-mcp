@@ -138,3 +138,28 @@ def test_the_holders_own_finished_lease_still_covers_its_last_commit(repo, cfg, 
     EventLog(repo, "owner").append("item.abandoned", "T1", {"reason": "done"})
     monkeypatch.chdir(tree)
     assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_a_lease_on_another_release_line_is_another_branch(repo, cfg, monkeypatch):
+    """`update` skips a lease on another line, so the hook must."""
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T2", "--globs", "src/new.py")[0] == 0
+    other = EventLog(repo, "other")
+    other.append("task.updated", "T2", {"line": "1"})
+    other.append(
+        "lease.acquired",
+        "T2",
+        {"holder": "other", "at": time.time(), "ttl_s": 1800, "globs": ["src/new.py"]},
+    )
+    other.append("item.started", "T2", {})
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_the_same_line_by_name_and_by_default_is_one_branch(repo, cfg, monkeypatch):
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner")[0] == 1
