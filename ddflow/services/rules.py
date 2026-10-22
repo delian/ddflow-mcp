@@ -51,6 +51,8 @@ class Rule:
     globs: list[str] = field(default_factory=list)
     created: datetime = field(default_factory=_now)
     updated: datetime = field(default_factory=_now)
+    #: advisory | warn | block; "" keeps what the file says (a new rule: the kind's default).
+    enforcement: str = ""
     #: What the file carried beyond the fields above (``categories``, ``owner``, ...): kept
     #: so that editing a rule writes back what a person put in it.
     record: GuidanceRecord | None = field(default=None, repr=False, compare=False)
@@ -71,6 +73,7 @@ class Rule:
             level=self.scope,
             tags=self.tags,
             priority=self.priority,
+            enforcement=self.enforcement or base.enforcement,
             provenance={"created": self.created, "updated": self.updated},
         )
 
@@ -86,6 +89,7 @@ class Rule:
             globs=list(rec.scope.globs),
             created=rec.provenance["created"],
             updated=rec.provenance["updated"],
+            enforcement=rec.enforcement,
             record=rec,
         )
 

@@ -1,0 +1,11 @@
+{"type":"session","sessionId":"session-<UUID>","cwd":"<SCRATCH>/dshwork"}
+{"type":"status","phase":"turn_start","turn":1}
+{"type":"status","phase":"step_start","turn":1,"step":1}
+{"type":"tool_call","callId":"call_1","tool":"bash","input":{"description":"probe","command":"echo hi from bash"}}
+{"type":"tool_result","callId":"call_1","status":"completed","result":"hi from bash\n[stderr]\nlandlock-run: partial enforcement (older Landlock ABI)\n"}
+{"type":"status","phase":"step_end","turn":1,"step":1,"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}
+{"type":"status","phase":"step_start","turn":1,"step":2}
+{"type":"text","text":"stub done"}
+{"type":"status","phase":"step_end","turn":1,"step":2,"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}
+{"type":"status","phase":"turn_end","turn":1,"reason":{"kind":"completed"}}
+{"type":"final","text":"stub done"}

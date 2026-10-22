@@ -1439,12 +1439,14 @@
           A two-word title shares most of its words with something; asking on it is
           noise. Shorter records still list candidates.
       dedupe.research_task_asks = False   [default]
-          Whether a research note and a task or phase (either added against the other)
-          that score at or above ask_threshold make the add ask. Default false: a note
-          about a topic and the work item that implements it are related, not
-          duplicates, so the pair is listed and the add goes ahead (bug B-dupe-
-          research-vs-task). Identical text still asks. Notes against notes, and tasks
-          against tasks, always use ask_threshold.
+          Whether a research note or a decision and a task or phase (either added
+          against the other) that score at or above ask_threshold make the add ask.
+          Default false: a note or decision about a topic and the work item that
+          implements or governs it are related, not duplicates, so the pair is listed
+          and the add goes ahead (bugs B-dupe-research-vs-task, B-decision-add-
+          duplicate-vs-own-task). Identical text still asks. Notes against notes,
+          decisions against decisions, and tasks against tasks, always use
+          ask_threshold.
       dedupe.kinds = ['bug', 'task', 'phase', 'lesson', 'decision', 'research', 'memory', 'rule']   [default]
           Record kinds checked on add, and offered as candidates -- across kinds, so a
           new bug is shown the open task that fixes it. Default: bug, task, phase,
@@ -2518,6 +2520,15 @@
           The branch merged into the task's branch before the checks run, so an
           interaction with what the base has become is tested (a parallel merge's
           effect). Empty (default): the repository's default branch.
+      ci.pins_precheck = True   [default]
+          Before the default CI command runs, check the project's pinned outputs
+          (`ddflow pins regenerate --check`, the recipes in `[pins].recipes_file`) in
+          the merge result. A pin that was current on the branch can be stale once the
+          base moved (README tables, snapshots); the run then ends at once as failed,
+          naming the stale pins and the fix (`ddflow pins regenerate`), instead of
+          running the whole suite to a failure that does not say so. A pin that cannot
+          be checked is skipped, never a failure. false: go straight to the command. A
+          custom `--command` is never prechecked.
       ci.timeout_s = 3600   [default]
           Seconds the CI command may run before the gate records UNAVAILABLE. Default
           3600: sized for the whole test suite (`ci run --full`, the merge queue's
