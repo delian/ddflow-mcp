@@ -97,7 +97,7 @@ class _Probe:
         elif name == "delaybump":
             self.send(_text(i, "ok"))
             threading.Thread(target=self._later, daemon=True).start()
-        elif name == _ADDED["name"] and _ADDED in self.tools:
+        elif name == _ADDED["name"] and _ADDED in self._snapshot():
             self.send(_text(i, "MAGENTA"))
         else:
             self.send(

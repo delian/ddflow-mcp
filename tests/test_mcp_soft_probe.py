@@ -554,3 +554,22 @@ def test_a_cli_that_exits_0_without_calling_the_probe_is_unavailable(tmp_path):
     (tmp_path / "claude").chmod(0o755)
     r = _run("row", "claude", env={"PATH": str(tmp_path)})
     assert r.returncode == 2 and json.loads(r.stdout)["list_changed"] == "unavailable"
+
+
+def test_the_oracle_check_reads_the_tool_list_under_the_lock():
+    """standards: the membership check must not race the delaybump thread's append."""
+    import io
+
+    from ddflow.mcpshim import probe_server as ps
+
+    probe = ps._Probe(io.StringIO(), io.StringIO(), 0)
+    held = []
+
+    class Tools(list):
+        def __iter__(self):
+            held.append(probe.lock._is_owned())
+            return super().__iter__()
+
+    probe.tools = Tools(probe.tools)
+    probe._call(1, "secret_oracle")
+    assert held and all(held), held
