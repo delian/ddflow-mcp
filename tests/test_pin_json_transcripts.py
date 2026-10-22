@@ -17,11 +17,13 @@ def test_the_transcripts_and_the_readme_command_list_each_have_a_recipe():
     for f in (
         "tests/test_uc_surf_loop_transcript.json",
         "tests/test_uc_surf_setup_ops_transcript.json",
+        "tests/data/uc_surf_knowledge_pin.json",
         "README.md",
     ):
         assert f in files, f"{f} is a pin file without a regeneration recipe"
     names = {r.name for r in PN.load_recipes(ROOT, Config.load(ROOT))}
     assert {"loop-transcript", "readme-commands"} <= names
+    assert "knowledge-pin" in names
 
 
 def test_the_loop_transcript_expectations_are_data_not_source():

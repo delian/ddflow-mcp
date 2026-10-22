@@ -28,6 +28,14 @@ regen = ["{python}", "-m", "pytest", "tests/test_uc_surf_setup_ops_transcript.py
 env = { DDFLOW_UPDATE_GOLDEN = "1" }
 
 [[pin]]
+name = "knowledge-pin"
+after_merge = false
+files = ["tests/data/uc_surf_knowledge_pin.json"]
+check = ["{python}", "-m", "pytest", "tests/test_uc_surf_knowledge_pin.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "pytest", "tests/test_uc_surf_knowledge_pin.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+env = { U1_PIN_RECORD = "1", DDFLOW_UPDATE_GOLDEN = "1" }
+
+[[pin]]
 name = "readme-knobs"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_knob_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
