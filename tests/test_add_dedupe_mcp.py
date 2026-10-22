@@ -102,9 +102,23 @@ def test_a_refused_add_leads_with_the_candidates_and_the_options(filed_as, tool)
 def test_relation_extends_answers_the_refusal(filed_as, tool):
     repo = filed_as(tool)
     args, old = CALLS[tool]
-    body, result = call(repo, tool, relation=f"extends:{old}", **args)
+    # A task, phase or research note is only APPENDED to when the answer says so.
+    relation = "merge_into" if tool in LINK_ONLY else "extends"
+    body, result = call(repo, tool, relation=f"{relation}:{old}", **args)
     assert result["_meta"]["exit"] == 0, body
     assert body["extended"] == old and body["relation"] == "extends"
+
+
+LINK_ONLY = ("ddflow_task_add", "ddflow_phase_add", "ddflow_research_add")
+
+
+@pytest.mark.parametrize("tool", LINK_ONLY)
+def test_relation_extends_files_a_new_linked_record(filed_as, tool):
+    repo = filed_as(tool)
+    args, old = CALLS[tool]
+    body, result = call(repo, tool, relation=f"extends:{old}", **args)
+    assert result["_meta"]["exit"] == 0, body
+    assert body["id"] == args["id"] and body.get("extended") is None
 
 
 @pytest.mark.parametrize("tool", sorted(CALLS))
