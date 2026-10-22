@@ -292,10 +292,12 @@ def _queued_notes(it, rows) -> dict[str, str]:
     return out
 
 
-_MINUTE_S, _TENS_S = 60, 10
+_MINUTE_S, _TENS_S, _TENTH_S = 60, 10, 0.1
 
 
 def _mins(seconds) -> str:
+    if seconds < _TENTH_S:
+        return f"<{_TENTH_S}s"
     if seconds >= _MINUTE_S:
         return f"{seconds / _MINUTE_S:.0f}m"
     return f"{seconds:.0f}s" if seconds >= _TENS_S else f"{seconds:.1f}s"
