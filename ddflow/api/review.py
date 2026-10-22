@@ -480,7 +480,10 @@ def _redo_hint(cfg, it, item: str, gate: str) -> str:
 
 def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     """The `reviewed_paths` evidence of a round: the content of the item's changed set, so a
-    later triage compares those files and not the whole tree. {} when it cannot be read."""
+    later triage compares those files and not the whole tree. {} when it cannot be read, or
+    for a review of no item."""
+    if it is None:
+        return {}
     wt, _held = item_tree(repo, cfg, st, it, called_from)
     paths = changed_paths(repo, it) if wt is not None and wt.exists() else None
     snap = RP.path_snapshot(wt, paths) if paths is not None and wt is not None else None
@@ -652,6 +655,38 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     )
 
 
+def _replaced_by_rerun(prior: dict[str, Any], again: set[int]) -> set[str]:
+    """Digests of the delta's own findings of the chunks ``again`` that a re-run replaces
+    (one the delta raised again is the earlier copy, numbered in another cut: it stays)."""
+    earlier = {str(d) for d in prior["delta_raised"]} - {
+        str(d) for d in prior.get("delta_reraised", ())
+    }
+    return {
+        str(f.get("digest"))
+        for f in prior.get("chunk_findings") or []
+        if int(f.get("chunk", 0)) in again and str(f.get("digest")) in earlier
+    }
+
+
+def _track_rerun_raised(evidence: dict[str, Any], prior: dict[str, Any], best) -> None:
+    """A `--chunk` re-run of a delta record: the findings it raised are the delta's own, so
+    `delta_raised` names them, and drops the delta's earlier findings of the chunks it
+    replaced (Be7aea9436a: left out, a later re-run of that chunk kept them)."""
+    if "delta_raised" not in evidence:
+        return
+    again = set(best.requested or ())
+    replaced = _replaced_by_rerun(prior, again)
+    held = {str(f.get("digest")) for f in prior.get("chunk_findings") or []}
+    # a finding the merge kept from the earlier record is not this re-run's
+    new = [
+        f.digest
+        for f in best.findings
+        if f.chunk in again and f.digest and (f.digest not in held or f.digest in replaced)
+    ]
+    raised = [d for d in evidence["delta_raised"] if d not in replaced]
+    evidence["delta_raised"] = raised + [d for d in new if d not in raised]
+
+
 _SETTLED = ("refuted", "confirmed")
 _DELTA_CUT_HOW = "the delta since "  # `diff_source` of a --chunk re-run cut from a delta
 #: what a delta record says about its own cut; a `--chunk` re-run of it carries them on
@@ -708,7 +743,8 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
     if prior["diff_sha"] != RV.diff_digest(diff):
         return (
             f"the diff changed since the recorded review of {it.id}.{gate}, so its chunk "
-            f"numbers no longer apply: run the full review"
+            f"numbers no longer apply: run the full review (the retry of a partial round "
+            f"is not counted)"
         )
     mine = [r for r in revs if r.name == prior.get("reviewer")]
     if not mine:
@@ -1042,6 +1078,7 @@ def _full_rounds(it, gate: str) -> int:
         and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
+        and not r.evidence.get("retry_of_partial")
     )
 
 
@@ -1186,10 +1223,48 @@ def _nothing_new(it, a: dict[str, Any], ok: bool, why: str) -> str:
 
 def _rounds_report(cfg, it, a: dict[str, Any], why: str) -> str:
     """The one-line report of a round that will run: rounds used counting it (a free fix
-    round counts none), against the cap, and why it is justified."""
-    used = _rounds_used(it, a["gate"]) + (0 if a.get("fix") else 1)
+    round or a free retry of a partial round counts none), against the cap, and why it is
+    justified."""
+    free = a.get("fix") or a.get("partial_retry")
+    used = _rounds_used(it, a["gate"]) + (0 if free else 1)
     cap = cfg.review.max_rounds
-    return f"rounds used {used}/{cap if cap > 0 else 'unlimited'}, justified: {why}"
+    note = (
+        " (fix round: not counted)"
+        if a.get("fix")
+        else " (free retry of a partial round: not counted)"
+        if a.get("partial_retry")
+        else ""
+    )
+    return f"rounds used {used}/{cap if cap > 0 else 'unlimited'}{note}, justified: {why}"
+
+
+def _mark_partial_retry(extra: dict | None, a: dict[str, Any]) -> dict | None:
+    """``extra`` plus `retry_of_partial` for a round `_is_partial_retry` found free."""
+    return {**(extra or {}), "retry_of_partial": True} if a.get("partial_retry") else extra
+
+
+def _is_partial_retry(it, a: dict[str, Any], kind: str) -> bool:
+    """Is this full round the one retry of a PARTIAL full round (a chunk came back off
+    contract, empty or timed out)? The partial round was charged and delivered less than
+    it was charged for; its retry is no new round -- once: a retry that is partial again
+    is paid for (Bdfc7ed1299). A `--chunk` re-run of only the missing chunks is free too,
+    but works only while the diff is unchanged (its numbers mean nothing in another diff);
+    this whole-diff retry is what is left once the branch moved."""
+    if kind != "full" or not (it and a["item"]) or a["force"]:
+        return False
+    last = next(
+        (r for r in reversed(_review_runs(it, a["gate"])) if r.evidence.get("reviewed_head")), None
+    )
+    if last is None:
+        return False
+    ev = last.evidence
+    return (
+        ev.get("review_kind") == "full"
+        and ev.get("status") == "PARTIAL"
+        and bool(ev.get("unreviewed"))
+        and not ev.get("retry_of_partial")
+        and not _kept_copy(last)
+    )
 
 
 def _is_fix_round(cfg, it, a) -> bool:
@@ -1227,9 +1302,10 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     a["fix"] = not delta and _is_fix_round(cfg, it, a)
     delta = delta or a["fix"]
     kind = _kind(repo, cfg, it, item, gate, a["chunks"], delta, a["commit"], a["base"])
+    a["partial_retry"] = _is_partial_retry(it, a, kind)
     done = _full_rounds(it, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
-    if kind in ("full", "delta") and item and not a["fix"]:
+    if kind in ("full", "delta") and item and not a["fix"] and not a["partial_retry"]:
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
         used = _rounds_used(it, gate)
@@ -1905,15 +1981,31 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
         for g in asked[1:]:
             GD.record(log, cfg, item, g, "unavailable", reason=out.reason, gates=gates)
             say(f"recorded {item}.{g} = unavailable (the combined review {rid} could not run)")
+    _l, _c, st = _load(args["repo"], args["agent"])
+    if line := _charged_line(cfg, st.items.get(item), asked, rec):
+        say(line)
     data = {**out.data, "gates": asked, "review_id": rid}
     data["text"] = "\n".join([say_out[0], data.get("text", ""), *say_out[1:]]).strip()
     return O.Outcome(kind=out.kind, data=data, exit=out.exit, reason=out.reason)
 
 
+def _charged_line(cfg, it, asked: list[str], rec) -> str:
+    """What a combined review cost EACH gate (one 'rounds used' line cannot say which): a
+    full round, unless it reached no reviewer or was the free retry of a partial one."""
+    if it is None:
+        return ""
+    cap = cfg.review.max_rounds
+    each = ", ".join(f"{g} {_rounds_used(it, g)}/{cap if cap > 0 else 'unlimited'}" for g in asked)
+    ev = (rec.evidence or {}) if rec is not None else {}
+    charged = ev.get("review_kind") == "full" and not ev.get("retry_of_partial")
+    what = "one full round to each gate" if charged else "no round to any gate"
+    return f"combined review charged {what}: rounds used now {each}"
+
+
 def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
     """The round counts of ``gate``'s own record: the combined review is one more full
     round of each gate it stands for, and leaves each gate's delta count as it was."""
-    counted = ev.get("review_kind") == "full"
+    counted = ev.get("review_kind") == "full" and not ev.get("retry_of_partial")
     done = _full_rounds(it, gate)
     out: dict[str, Any] = {
         "rounds": done + (1 if counted else 0),
@@ -1949,7 +2041,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
 ) -> str:  # fmt: skip
     """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
     over untriaged findings of an earlier round is held, see `_hold`)."""
-    taken, kind, done, forced, how, diff_chars = scope
+    taken, kind, done, forced, how, diff_chars, snapshot = scope
     evidence = {
         **best.evidence(),
         "diff_source": how,
@@ -1957,8 +2049,11 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **_round_evidence(taken, kind, done, best.status, forced, _delta_rounds(it, gate)),
         **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
         **(extra_evidence or {}),
-        **_reviewed_snapshot(repo, cfg, st, it, called_from),
+        **snapshot,
     }
+    if evidence.get("retry_of_partial"):
+        evidence["rounds"] = done  # the retry of a partial round is no round of its own
+        evidence.pop("round", None)
     if kind == "chunk" and it is not None:
         # A re-run of part of a DELTA round stays that delta's record: the next --chunk
         # needs its start and which findings are its own (B00e6b5a540).
@@ -1966,6 +2061,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         # `delta_from` only when this re-run WAS cut from it, not from the user's own ref
         keys = [k for k in _DELTA_KEYS if k != "delta_from" or how.startswith(_DELTA_CUT_HOW)]
         evidence.update({k: prior[k] for k in keys if k in prior and k not in evidence})
+        _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     _record(
@@ -2165,6 +2261,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
     taken = _head_of(repo, it, branch, commit)
+    # ...and the content the reviewer is sent is read now too (B44548e189d): `reviewed_paths`
+    # taken when the round is recorded would claim as reviewed what changed meanwhile.
+    snapshot = _reviewed_snapshot(repo, cfg, st, it, called_from)
     sargs: dict[str, Any] = {
         "item": item,
         "gate": gate,
@@ -2184,6 +2283,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     supers, fix = sargs.get("supers") or set(), bool(sargs.get("fix"))
     extra_evidence = round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
     extra_evidence = _cite_grant(extra_evidence, sargs.get("grant", ""))
+    extra_evidence = _mark_partial_retry(extra_evidence, sargs)
     if why:
         return O.Outcome(
             kind="review",
@@ -2268,7 +2368,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
             called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
-            scope=(taken, kind, done, forced, how, len(diff)),
+            scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
     data: dict[str, Any] = {
