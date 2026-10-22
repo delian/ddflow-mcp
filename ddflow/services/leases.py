@@ -1172,17 +1172,17 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     """An item whose merge gate is done and whose commit is on the base, with nothing left in
     its tree, needs COMPLETING, not releasing (Ba2eff5726b): `release` only returned it to the
     queue to be claimed and merged again. Says what `complete` still wants, if anything."""
-    if rec.salvageable is not False or rec.adopted:
-        return
+    if rec.salvageable is not False or rec.adopted or it.terminal:
+        return  # a finished item is owed nothing: `complete` would record it twice
     sha = _landed_on_base(repo, cfg, it)
     if not sha:
         return
     from . import completion as CM
 
-    # The holder's own model, as `complete` would take it from its session (it judges reviewer
-    # independence against the author): without one the verdict can only say "unknown". A
-    # session names an agent, not an item, so this is the agent's latest OPEN one -- as `complete`
-    # takes it.
+    # The holder's own model, standing in for the author's (`complete` judges reviewer
+    # independence against it): without one the verdict can only say "unknown". A session names
+    # an agent, not an item, so this is the holder's latest OPEN one. Whoever completes may not
+    # be the holder, so the advice says to pass `--model`.
     mine = [
         x for x in state.sessions.values() if x.agent == rec.holder and x.model and not x.ended_at
     ]
@@ -1192,7 +1192,7 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     if v.may_complete:
         rec.advice = (
             head
-            + f"Finish it: `ddflow complete {it.id}`"
+            + f"Finish it: `ddflow complete {it.id} --model <author model>`"
             + (" (it also clears the lease)." if rec.kind == "expired_lease" else ".")
         )
     else:
