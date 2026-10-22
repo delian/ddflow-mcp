@@ -159,7 +159,12 @@ def test_the_description_never_asks_for_an_argument_the_schema_lacks():
         entry = FS.family_entry(family)
         props = entry["inputSchema"]["properties"]
         listed = entry["description"].split("brackets: ", 1)[1]
-        named = {n for group in re.findall(r"\(([^)]*)\)", listed) for n in group.split(",") if n}
+        named = {
+            n
+            for group in re.findall(r"\(([^)]*)\)", listed)
+            for n in map(str.strip, group.split(","))
+            if n
+        }
         assert named <= set(props), (family, named - set(props))
         for tool in F.FAMILIES[family].members.values():
             assert set(FS._requires(tool)) <= named
