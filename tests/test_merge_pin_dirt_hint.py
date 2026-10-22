@@ -73,3 +73,28 @@ def test_a_staged_only_dirty_pin_file_is_cleared_by_the_printed_remedy(repo):
     assert f"git -C {repo} checkout HEAD -- README.md" in hint
     _git(repo, "checkout", "HEAD", "--", "README.md")  # the printed remedy
     assert _git(repo, "status", "--porcelain", "--untracked-files=no") == ""
+
+
+def test_an_untracked_pin_file_the_merge_would_overwrite_is_named_too(repo):
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "pins.toml").write_text(RECIPES.replace("GEN.md", "GEN.md"))
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "GEN.md", "from the branch\n", "feat: add readme")
+    _commit(repo, "g.py", "y\n", "main moves")
+    (repo / "GEN.md").write_text("stray untracked\n")
+    r = W.merge(repo, cfg, wt)
+    assert not r.ok
+    hint = PN.dirt_hint(repo, cfg, r.err or r.out, repo)
+    assert "GEN.md is an untracked pin file" in hint
+
+
+def test_the_remedy_quotes_a_path_with_a_space(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(RECIPES)
+    err = (
+        "error: Your local changes to the following files would be overwritten by merge:\n"
+        "\tREADME.md\nPlease commit your changes or stash them before you merge."
+    )
+    hint = PN.dirt_hint(tmp_path, Config(), err, Path("/a b/c"))
+    assert "git -C '/a b/c' checkout HEAD -- README.md" in hint
