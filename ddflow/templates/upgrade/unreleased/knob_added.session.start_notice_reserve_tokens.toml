@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.start_notice_reserve_tokens"
+new = "100"
+why = "The session start cost reserves this many tokens for the one-line upgrade notice, which cannot be measured without using it up."
+impact = "additive"
