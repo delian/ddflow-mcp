@@ -9,6 +9,7 @@ think about.
 
 from __future__ import annotations
 
+import select
 import sys
 
 from ...api import knowledge as A
@@ -460,8 +461,6 @@ _STDIN_WAIT_S = 15.0
 
 def _stdin_speaks() -> bool:
     """Whether stdin has data or EOF within `_STDIN_WAIT_S` (always true where select cannot tell)."""
-    import select
-
     try:
         ready, _, _ = select.select([sys.stdin], [], [], _STDIN_WAIT_S)
     except (OSError, ValueError, TypeError):
