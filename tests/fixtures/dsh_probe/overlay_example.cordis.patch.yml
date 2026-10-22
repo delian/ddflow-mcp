@@ -1,0 +1,30 @@
+- id: llm-pi-ai
+  config:
+    providers:
+      stub:
+        displayName: Stub
+        apiKeyEnv: STUB_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:18931/v1
+        models:
+          - id: stub-model
+            name: Stub Model
+            contextWindow: 131072
+- id: agent-default-model
+  config:
+    provider: stub
+    model: stub-model
+- insert:
+    - id: mcp-ddflow
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: ddflow
+        transport: stdio
+        command: python3
+        args: ['-I', '<SCRATCH>/tools/mcp_proxy.py', '<SCRATCH>/mcp.log', 'ddflow', 'mcp']
+        cwd: <SCRATCH>/dshwork
+    - id: hooks-cc
+      name: '<SCRATCH>/dshinst/node_modules/@deepseek-ai/dsh-hooks-claude-code/lib/index.js'
+      config:
+        configPath: <SCRATCH>/tools/hooks.json
+        projectDir: <SCRATCH>/dshwork
