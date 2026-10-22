@@ -15,10 +15,10 @@ Operator 2026-10-22, answers (verbatim): 1. Tier: "Tier 1 live smoke now" (NOT t
 | 5 | Credentials, telemetry | Credentials from the environment only, never argv, never committed; telemetry is recorded, not toggled | Writing keys into overlay or profile files |
 | 6 | Reviewer | No dsh reviewer; direct OpenAI-compatible reviewers stay (a review is a diff in and a verdict out) | An agent-loop reviewer |
 | 7 | npm bundle | Deferred; overlay first (`DSH-bundle` stays optional) | Publishing a dsh bundle package now |
-| 8 | Model family | Independence is judged from the model declared at session start, so dsh sessions must declare their model; the descriptor `family` is `dsh` (a clientInfo key), not a model family | A harness-level model family |
+| 8 | Model family | Independence is judged from the model declared at session start, so dsh sessions must declare their model; no harness-level model family exists. The descriptor field `family` is only a substring key matched against MCP `clientInfo.name` (`dsh` matches `dsh-mcp-client`); review independence never reads it | A harness-level model family |
 
 ## Consequences
 
-- `DSH-facts` may run dsh, in a scratch directory outside the repo, with a stub or LAN endpoint and never a real key.
+- `DSH-facts` runs dsh for real (live smoke is authorised; fixtures-only was rejected), in a scratch directory outside the repo. The coordinator's brief adds a safety limit on the endpoint: a local stub or LAN endpoint, not a real provider key. That limit is a property of this first run, not of the tier; a keyed run later is allowed by decision 5 (env only).
 - A forgotten `--patch` silently removes ddflow from a dsh run; `DSH-onboard-verify` must catch it with `--dump-config`.
 - Unattended lanes need either an ACP answerer or a disposable tree; otherwise asks fail closed.
