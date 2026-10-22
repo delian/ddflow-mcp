@@ -89,14 +89,16 @@ def attestations(path: Path) -> list[dict]:
     return out
 
 
-def answer_for(path: Path, question: str) -> str | list[str] | None:
+def answer_for(path: Path, question: str, tool_use_id: str = "") -> str | list[str] | None:
     """The person's answer to exactly ``question`` (ddflow's rendering), or None. The row must be
     a harness-shaped accepted result for an AskUserQuestion that asked this question, and the
-    question itself must have a non-empty answer (another question's answer does not count)."""
+    question itself must have a non-empty answer (another question's answer does not count). The same question text asked twice is two calls:
+    ddflow puts the ask id in the text it renders so no two requests share a question, and a caller that
+    knows the tool_use id passes it."""
     got = [
         a["answers"][question]
         for a in attestations(path)
-        if a["row_ok"] and question in a["answers"]
+        if a["row_ok"] and question in a["answers"] and tool_use_id in ("", a["tool_use_id"])
     ]
     return got[-1] if got else None
 
@@ -207,6 +209,8 @@ def _selftest() -> int:
             answer_for(p, "Q?") == "Yes"
             and answer_for(p, "Other?") is None
             and answer_for(p, "Forged?") is None
+            and answer_for(p, "Q?", "U-other") is None
+            and answer_for(p, "Q?", "U1") == "Yes"
         )
     print("selftest ok")
     return 0

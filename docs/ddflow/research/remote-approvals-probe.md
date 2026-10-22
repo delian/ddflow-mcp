@@ -46,7 +46,8 @@ Claude app while the CLI process, its tools and its files live on this host. The
   this session id, an attested answer whose question text equals the rendered text and whose answer is the approve
   label, and records the ask answered with `via=harness`, `level=2`, the transcript row uuid as proof. Accepted only
   for tier T2, never T3. An agent-typed claim of an answer is refused: only a row with the five properties in
-  finding 2 counts, and the question text must equal ddflow's rendering byte for byte.
+  finding 2 counts, and the question text must equal ddflow's rendering byte for byte. The rendering contains the ask id and digest, so
+  no two requests ever share a question text and an old answer cannot be replayed against a new request.
 * **Not verifiable:** that a person, not a script holding the session, answered; that the file was not edited. Doctor
   says so.
 * **Cloud sandbox sessions (the process runs in Anthropic's sandbox):** **UNAVAILABLE**: no such session was reachable
