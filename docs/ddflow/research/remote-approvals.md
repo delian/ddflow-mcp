@@ -200,13 +200,15 @@ transcript", never as default, and prefer elicitation and signatures.
 * **T3: signed only** (no lower level is ever accepted): the approval system's own configuration (`[approvals]`,
   `[agent].roles/actors`, `[agent].operator_role/default_role`, the signer list, key rotation), `[hooks].forbidden_commands`,
   command-kind `[[reviewer]]` entries (they execute code; D-reviewer-trust-r2), disabling hooks, company-layer floors.
-  **Bootstrap, stated honestly:** ddflow cannot approve its own first signer, because any answer it could accept before a
-  signer exists is an L1 answer a same-uid agent can forge. The first signer is therefore enrolled by the operator
-  **outside ddflow's approval path**: in a layer the agent surfaces cannot write (the user layer, or a company pack pinned by
-  digest) or in a signed commit (CM-sign). Until then T3 verbs are simply not approvable by `approvals approve`, `doctor`
-  reports "no approval signer: T3 protected only by the shell-edit gap documented in `identity.agent_marker`", and the
-  residual risk equals today's (an agent with a shell can edit config). Once one exists, rotation and every other T3 act need
-  a signature by a listed key. An agent may **file** the request (so the operator sees exactly what
+  **Root of trust, stated honestly:** ddflow cannot approve its own first signer: any answer it could accept before a signer exists is
+  an L1 answer a same-uid agent can forge, and a signer list in an agent-writable file is not a root. The root is **one out-of-band act by
+  the operator**, like pinning an ssh `known_hosts` entry: a digest of the signer list (or the keys themselves) written to a layer the agent
+  surfaces cannot write (the user layer outside the repo, or a company pack pinned by digest). `[approvals].signers` and the
+  commit allowed-signers fallback are honoured **only when they match that pin**; a signer file edited later does not match and is
+  ignored with a `doctor` finding, and rotation is a T3 act signed by a key already in the pinned list. Until the pin exists T3 verbs are
+  not approvable by `approvals approve`, `doctor` reports "no approval signer pinned: T3 protected only by the shell-edit gap documented
+  in `identity.agent_marker`", and the residual risk equals today's. A same-uid agent that can also write the user layer defeats the pin;
+  that needs a separate uid or machine, stated in the docs. An agent may **file** the request (so the operator sees exactly what
   to sign) but no lower-level answer is accepted.
 * **T0: ungated** stays ungated.
 
@@ -239,8 +241,8 @@ Families after the diet (15, from the matrix in `research/mcp-tool-diet.md`): `v
 workflow rule ship lease decision session job bug`. Approvals is not a noun in that list and **no 16th tool is allowed**. Recommended home:
 `ddflow_session` (it already carries `session prompt`, the operator's recorded words, and `note`): **new actions `ask`
 (file a request and return a handle **at once**, never blocking: the agent takes the next item, per r-lock-cycle-selfheal; whether
-an elicitation prompt can be issued without an open tool call is what `RA-probe-harness` decides, and only if it cannot is an opt-in
-`[approvals].elicit_wait_s` (default 0, at most the 45 s run-handle limit of RM-run-tool-mcp) considered, as an operator question), `asks` (list/show the agent's own
+an elicitation prompt can be issued without an open tool call is what `RA-probe-harness` decides; **if it cannot, the elicitation channel is
+not offered for that client** (the permission-prompt and signed channels remain) rather than adding any blocking wait), `asks` (list/show the agent's own
 pending and answered requests) and `withdraw`**. Consuming needs no action: the gated actions gain one optional,
 deduplicated union parameter `approval` (the diet already shares `as_agent` once). Answering (`approve`, `deny`,
 `revoke`) has **no MCP action**, like `approve`, `grant` and `chore` today (exemptions): the MCP surface can ask and
