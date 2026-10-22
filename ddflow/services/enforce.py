@@ -64,6 +64,7 @@ from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_differe
 from . import changes as CH
 from . import docsync
 from . import drift as D
+from . import enforce_contested as EC
 from . import pins_written as PW
 from . import upgrade_written as UW
 from .backups import make_backup
@@ -1358,6 +1359,8 @@ def _split_leases(
     others: dict[str, str] = {}
     holds_any = False
     for item_id, lease in state.active_leases(now, grace_s).items():
+        if item_id in state.items and state.items[item_id].terminal and lease.holder != me:
+            continue  # a finished item holds nothing, as for `update` (Bb7df2561a1)
         if _counts_as_mine(repo, lease, me, here):
             holds_any = True
             mine.extend(lease.globs)
@@ -1540,6 +1543,17 @@ def _uncovered_message(
     return "\n".join(lines)
 
 
+def _with_contested(
+    repo: Path, log, cfg, state, paths, mine, uncovered, me, here, now
+) -> tuple[list[str], dict[str, str]]:
+    """``uncovered`` plus the paths a wildcard of mine covers that another live lease holds
+    too (`enforce_contested`), and those paths with their holders."""
+    twice = EC.contested(
+        log, cfg, state, paths, mine, lambda lz: _counts_as_mine(repo, lz, me, here), now
+    )
+    return uncovered + [p for p in twice if p not in uncovered], twice
+
+
 def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     """The lease half of `check_commit`."""
     policy = getattr(cfg, "enforce", None)
@@ -1572,12 +1586,14 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
     uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
+    uncovered, twice = _with_contested(repo, log, cfg, state, paths, mine, uncovered, me, here, now)
     if not uncovered:
         return Verdict(OK, "")
 
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
+    stolen.update(twice)
     uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
