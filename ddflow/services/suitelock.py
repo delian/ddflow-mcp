@@ -158,22 +158,26 @@ class _Ticket:
     def __init__(self, queue: Path, holder: str, grace_s: float) -> None:
         queue.mkdir(parents=True, exist_ok=True)
         key = _key(holder)
-        self._parked = _parked_for(queue, key, grace_s)  # a retry: back into the place it kept
-        if self._parked is not None:
-            self.path = queue / f"{self._parked.name[: -len('.parked')]}.ticket"
-        else:
-            self.path = queue / f"{time.time_ns():020d}-{key}.ticket"
+        self.path = queue / f"{time.time_ns():020d}-{key}.ticket"
+        if (parked := _parked_for(queue, key, grace_s)) is not None:
+            # A retry takes its place back. The rename is atomic: of two retries racing for
+            # one parked ticket exactly one wins it, the other queues anew.
+            taken = queue / f"{parked.name[: -len('.parked')]}.ticket"
+            try:
+                parked.rename(taken)
+            except OSError:
+                pass
+            else:
+                self.path = taken
+                _beat(taken)  # young: counted live until its owner has locked it
         self.name = self.path.name
         self.park = False
         self._lock = contextlib.ExitStack()
 
     def __enter__(self) -> _Ticket:
-        # Lock the file BEFORE it takes its ticket name: a scan that finds an unlocked
-        # ticket removes it, so the owner must never be seen unlocked.
-        self._lock.enter_context(fsio.file_lock(self._parked or self.path, LOCK_S))
-        if self._parked is not None:
-            with contextlib.suppress(OSError):
-                self._parked.rename(self.path)
+        # A scan that finds an unlocked ticket may hold its lock for an instant (hence LOCK_S);
+        # one younger than NEW_S is not removed, so a new owner is never lost in between.
+        self._lock.enter_context(fsio.file_lock(self.path, LOCK_S))
         _beat(self.path)
         return self
 
