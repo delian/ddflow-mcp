@@ -4,7 +4,7 @@ own transcript instead of from the model?
 Usage: python transcript_attest.py TRANSCRIPT.jsonl            list attested answers
        python transcript_attest.py --selftest                  run on a fabricated transcript
 
-An answer is "attested" when the transcript holds, in this order:
+An answer is "attested" (`answer_for`) when the transcript holds, in this order:
   1. an assistant row whose content has a tool_use named AskUserQuestion (id U, row uuid A),
   2. a later user row with a tool_result for U, `sourceToolAssistantUUID` == A,
      `permissionDecision.decision == "accept"` and a `toolUseResult.answers` mapping the
@@ -74,13 +74,12 @@ def attestations(path: Path) -> list[dict]:
                     decision == "accept"
                     and use["uuid"]
                     and row.get("sourceToolAssistantUUID") == use["uuid"]
-                    and answered
                 )
                 out.append(
                     {
                         "tool_use_id": block["tool_use_id"],
                         "at": row.get("timestamp"),
-                        "attested": ok,
+                        "row_ok": ok,
                         "decision": decision,
                         "decision_source": (row.get("permissionDecision") or {}).get("source"),
                         "answers": answered,
@@ -88,6 +87,18 @@ def attestations(path: Path) -> list[dict]:
                     }
                 )
     return out
+
+
+def answer_for(path: Path, question: str) -> str | list[str] | None:
+    """The person's answer to exactly ``question`` (ddflow's rendering), or None. The row must be
+    a harness-shaped accepted result for an AskUserQuestion that asked this question, and the
+    question itself must have a non-empty answer (another question's answer does not count)."""
+    got = [
+        a["answers"][question]
+        for a in attestations(path)
+        if a["row_ok"] and question in a["answers"]
+    ]
+    return got[-1] if got else None
 
 
 def _selftest() -> int:
@@ -146,7 +157,7 @@ def _selftest() -> int:
         p = Path(d) / "t.jsonl"
         p.write_text("\n".join(json.dumps(r) for r in rows))
         got = attestations(p)
-    assert [g["attested"] for g in got] == [True, False, False, False], got
+    assert [g["row_ok"] and bool(g["answers"]) for g in got] == [True, False, False, False], got
     assert got[0]["answers"] == {"Q?": "Yes"}
     # rows without ids on both sides must not match each other (None == None)
     bare = [
@@ -173,7 +184,11 @@ def _selftest() -> int:
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "b.jsonl"
         p.write_text("\n".join(json.dumps(r) for r in bare))
-        assert [g["attested"] for g in attestations(p)] == [False]
+        assert [g["row_ok"] for g in attestations(p)] == [False]
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "t.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in rows))
+        assert answer_for(p, "Q?") == "Yes" and answer_for(p, "Other?") is None
     print("selftest ok")
     return 0
 

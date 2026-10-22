@@ -19,8 +19,8 @@ Claude app while the CLI process, its tools and its files live on this host. The
    `permissionDecision = {"decision": "accept", "source": "user_temporary"}`, and `toolUseResult.answers`, a map from the
    exact question text to the chosen label (or typed text; a list of labels for a multi-select question; a question the
    person skipped is absent). The model sees the same answer only as the tool result string.
-   `probes/approvals/transcript_attest.py` extracts and checks these: 24 of 24 attested on this transcript (a call counts when at least one of its questions has a non-empty answer and
-   the row ids line up; the caller looks up the one question it rendered).
+   `probes/approvals/transcript_attest.py` extracts and checks these: 24 of 24 `row_ok` on this transcript (`row_ok`: accepted, row ids line up). A caller never trusts the row alone: `answer_for(path, question)` returns
+   the answer to exactly the question ddflow rendered, and only when that question has a non-empty answer.
 3. **CONFIRMED: typed human prompts carry their origin.** `user` rows for what the operator typed have
    `origin.kind = "human"`, `promptSource = "sdk"`, `turnOrigin = "human"`; background notices have
    `origin.kind = "task-notification"`. A relayed message from another agent session is a `human`-origin row too in
