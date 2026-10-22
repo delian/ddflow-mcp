@@ -53,3 +53,18 @@ def test_a_prefixed_or_other_tools_line_is_not_taken():
 def test_a_blocked_on_line_without_the_queue_marker_is_not_the_lock():
     out = classify_exit(GATE, 2, "blocked on the network since an unknown time\n")
     assert "unavailable_exits" in out.reason and "suite_wait_s" not in out.reason
+
+
+def test_what_the_lock_says_is_what_the_gate_reads():
+    """The producer (`SuiteBusy`) and the consumer (`_blocked_on`) share no code: this keeps them
+    from drifting apart."""
+    from ddflow.services.suitelock import SuiteBusy
+
+    for holder in (
+        {"holder": "fx-agent", "pid": 99, "at_iso": "10:11:12"},
+        {"holder": "item of /repo (pid 7)"},
+        {},
+    ):
+        line = str(SuiteBusy(holder, 1.0, 2))
+        out = classify_exit(GATE, 2, f"ci: x\n{line}\n")
+        assert line in out.reason, line
