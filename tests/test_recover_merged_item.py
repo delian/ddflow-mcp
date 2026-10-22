@@ -158,3 +158,10 @@ def test_a_finished_item_with_a_surviving_clean_tree_is_not_advised_to_complete_
     sha = L._fold(log).items["T1"].merged_sha
     log.append("item.completed", "T1", {"sha": sha})
     assert not [r for r in _recs(repo, "T1") if "ddflow complete" in r.advice]
+
+
+def test_the_advice_counts_the_blockers_it_does_not_list(repo, monkeypatch):
+    _merged(repo, "T1", "src/T1/a.py")
+    monkeypatch.setattr(L, "_SHOWN_BLOCKERS", 1)
+    (rec,) = _recs(repo, "T1")
+    assert " (+2 more)" in rec.advice, rec.advice
