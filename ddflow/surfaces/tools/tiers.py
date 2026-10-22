@@ -133,3 +133,8 @@ def tier_note(tier: str, *, names: bool = True) -> str:
         f"them, set `[mcp].tools` to {wider} in .ddflow/config.toml (or "
         f"`DDFLOW_MCP_TOOLS`) and restart the server; the tier is read once at start."
     )
+
+
+# Loading the tiers (every MCP server does) runs the family check: a tool with no family and
+# action fails import here, not in some later release (MTD-family-spec, D-mcp-tool-families).
+from . import families  # noqa: E402,F401
