@@ -1,6 +1,8 @@
 # Remote approvals: decision proposals
 
-Status: **DECIDED 2026-10-22** (operator answers, recorded as `D-RA-Q1`..`D-RA-Q12`; see "Operator answers" below, which
+Status: **DECIDED 2026-10-22 except two open items: Q4 UNANSWERED (ask again before `RA-channel-signed` is claimed) and Q8
+AMBIGUOUS (shipped off; lead to confirm)**. Operator answers are recorded as `D-RA-Q1`..`D-RA-Q12` in the event log
+(`ddflow decision show D-RA-Q4`; Q4 and Q8 carry their open state in the decision text; see "Operator answers" below, which
 supersedes the proposals where they differ). Task `RA-decide`; proposals came from `RA-research`. Evidence: `docs/ddflow/research/remote-approvals.md` (section numbers refer to
 it). Phase: `P-remote-approvals`. Governing records: `D-shared-engines-r2` (1: one approvals engine),
 `D-remote`, `D-reviewer-trust-r2`, `D-failed-review-gate`, `D-review-force-with-reason`, `D-CM-7`/`D-CM-Q4Q5`
