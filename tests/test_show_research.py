@@ -26,7 +26,7 @@ def test_show_resolves_a_research_note_id(repo):
 def test_show_prints_the_extension_history(repo):
     run_cli(repo, "init")
     assert _note(repo, "R-one", "--new")[0] == 0
-    assert _note(repo, "R-two", "--extends", "R-one", claim="a narrower claim")[0] == 0
+    assert _note(repo, "R-two", "--merge-into", "R-one", claim="a narrower claim")[0] == 0
     out = run_cli(repo, "show", "R-one")[1]
     assert "R-two" in out and "a narrower claim" in out
 

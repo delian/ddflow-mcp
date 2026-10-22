@@ -264,6 +264,7 @@ CLAIM_BODY = (
     "port",
     "port_advice",
     "globs",
+    "tree",
 )
 
 
@@ -326,6 +327,7 @@ def claim_text(out, a, ctx) -> str:
     elif d["worktree"]:
         msg += (
             f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
+            f"\n  a tree of its own, because {d['tree']['why']}."
             f"\n  cd there and work."
         )
     # Every claim says what it now covers: an agent that passed ten paths and was
