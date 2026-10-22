@@ -9,11 +9,14 @@ running one, never one on another host), and `complete` / `abandon` collect the 
 from __future__ import annotations
 
 import json
+import os
+import signal
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
@@ -29,8 +32,31 @@ def _wait(pred, timeout=15.0):
 
 
 def _rows(repo: Path, *extra: str) -> list[dict]:
-    _c, out, _e = run_cli(repo, "--json", "job", "list", *extra)
-    return json.loads(out) if out.strip().startswith("[") else []
+    code, out, err = run_cli(repo, "--json", "job", "list", *extra)
+    if code == NOTHING:  # "no jobs": the list is empty, said in words
+        return []
+    assert code == OK, err
+    rows = json.loads(out)
+    assert isinstance(rows, list), out
+    return rows
+
+
+@pytest.fixture
+def live(repo):
+    """Start a job that stays running for the whole test, and is killed when it ends."""
+    pids: list[int] = []
+
+    def start(item: str) -> dict:
+        job = _job(repo, item, "sleep 600")
+        pids.append(job["pid"])
+        return job
+
+    yield start
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def _task(repo: Path, name: str) -> None:
@@ -50,17 +76,17 @@ def _finished(repo: Path, *ids: str) -> bool:
     return all(status.get(i) in ("exited", "gone") for i in ids)
 
 
-def test_all_finished_ends_exited_jobs_and_leaves_a_running_one(repo):
+def test_all_finished_ends_exited_jobs_and_leaves_a_running_one(repo, live):
     run_cli(repo, "init")
     _task(repo, "A")
     _task(repo, "B")
     one, two = _job(repo, "A", "exit 0"), _job(repo, "B", "exit 4")
-    live = _job(repo, "A", "sleep 60")
+    running = live("A")
     assert _wait(lambda: _finished(repo, one["id"], two["id"]))
     code, out, err = run_cli(repo, "--json", "job", "end", "--all-finished")
     assert code == OK, err
     assert sorted(json.loads(out)["ended"]) == sorted([one["id"], two["id"]])
-    assert [r["id"] for r in _rows(repo)] == [live["id"]]
+    assert [r["id"] for r in _rows(repo)] == [running["id"]]
     ended = {r["id"]: r for r in _rows(repo, "--all") if r["status"] == "ended"}
     assert ended[two["id"]]["exit_code"] == 4
 
@@ -77,20 +103,25 @@ def test_item_ends_only_that_items_finished_jobs(repo):
     assert [r["id"] for r in _rows(repo)] == [b["id"]]
 
 
-def test_bulk_end_with_nothing_finished_is_nothing_to_do(repo):
+def test_bulk_end_with_nothing_finished_is_nothing_to_do(repo, live):
     run_cli(repo, "init")
     _task(repo, "A")
-    _job(repo, "A", "sleep 60")
+    live("A")
     code, out, err = run_cli(repo, "job", "end", "--all-finished")
     assert code == NOTHING and "no finished jobs" in out + err
 
 
 def test_a_job_id_and_a_bulk_flag_are_refused_together_and_one_is_needed(repo):
     run_cli(repo, "init")
+    _task(repo, "A")
+    done = _job(repo, "A", "exit 0")
+    assert _wait(lambda: _finished(repo, done["id"]))
     code, _o, _e = run_cli(repo, "job", "end")
-    assert code != OK
-    code, _o, _e = run_cli(repo, "job", "end", "J1", "--all-finished")
-    assert code != OK
+    assert code == FAIL
+    # a REAL finished job: only the conflict itself can refuse this
+    code, _o, _e = run_cli(repo, "job", "end", done["id"], "--all-finished")
+    assert code == REFUSED
+    assert [r["id"] for r in _rows(repo)] == [done["id"]], "the refused call ended it anyway"
 
 
 def test_completing_an_item_collects_its_finished_jobs(repo):
@@ -103,11 +134,11 @@ def test_completing_an_item_collects_its_finished_jobs(repo):
     assert _rows(repo) == [], "a finished job of a completed item is still unended"
 
 
-def test_abandoning_an_item_collects_its_finished_jobs_but_not_a_running_one(repo):
+def test_abandoning_an_item_collects_its_finished_jobs_but_not_a_running_one(repo, live):
     run_cli(repo, "init")
     _task(repo, "A")
-    done, live = _job(repo, "A", "exit 0"), _job(repo, "A", "sleep 60")
+    done, running = _job(repo, "A", "exit 0"), live("A")
     assert _wait(lambda: _finished(repo, done["id"]))
     code, _o, err = run_cli(repo, "abandon", "A", "--reason", "x")
     assert code == OK, err
-    assert [r["id"] for r in _rows(repo)] == [live["id"]]
+    assert [r["id"] for r in _rows(repo)] == [running["id"]]
