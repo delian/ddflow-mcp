@@ -107,7 +107,7 @@ def test_a_missing_action_names_the_actions():
     err = FS.route("ddflow_bug", {"summary": "s"})
     assert isinstance(err, str)
     assert "action" in err
-    assert "found" in err
+    assert all(a in err for a in F.FAMILIES["ddflow_bug"].members)
 
 
 def test_self_named_family_tools_without_an_action_are_the_legacy_tool():
@@ -118,9 +118,9 @@ def test_self_named_family_tools_without_an_action_are_the_legacy_tool():
 
 
 def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
-    flat = sum(len(json.dumps(_flat(t), separators=(",", ":"))) for t in TOOLS)
-    fams = sum(len(json.dumps(e, separators=(",", ":"))) for e in FS.family_listing())
-    singles = sum(len(json.dumps(_flat(t), separators=(",", ":"))) for t in F.HOT_SINGLES)
+    flat = sum(len(json.dumps(_flat(t), separators=(",", ":")).encode()) for t in TOOLS)
+    fams = sum(len(json.dumps(e, separators=(",", ":")).encode()) for e in FS.family_listing())
+    singles = sum(len(json.dumps(_flat(t), separators=(",", ":")).encode()) for t in F.HOT_SINGLES)
     assert fams + singles < 0.6 * flat
     assert fams + singles < 55_000  # measured 49,629 (the research estimated 53,312)
 
