@@ -180,3 +180,17 @@ def test_self_named_family_tools_do_not_advertise_action_as_required():
     for f in ("ddflow_doctor", "ddflow_workflow"):
         assert "required" not in FS.family_entry(f)["inputSchema"]
         assert FS.route(f, {}) is None
+
+
+def test_a_non_string_action_is_invalid_not_missing():
+    for bad in (0, False, 3, ["record"]):
+        err = FS.route("ddflow_gate", {"action": bad})
+        assert isinstance(err, str) and "must be one of" in err and "record" in err
+        assert "missing" not in err
+
+
+def test_the_self_named_legacy_tool_is_a_member_of_its_own_family():
+    for f, act in (("ddflow_doctor", "check"), ("ddflow_workflow", "show")):
+        assert F.FAMILIES[f].members[act] == f
+        props = FS.family_entry(f)["inputSchema"]["properties"]
+        assert set(FS.member_props(f)) <= set(props)
