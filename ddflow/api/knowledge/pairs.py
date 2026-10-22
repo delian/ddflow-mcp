@@ -162,6 +162,7 @@ def pairs_from(
     floor: float | None = None,
     limit: int = 0,
     stop_after: int = 0,
+    item: str = "",
 ) -> list[dict[str, Any]]:
     """The near-duplicate pairs in the log that nobody has settled.
 
@@ -179,6 +180,8 @@ def pairs_from(
     rows = pair_records(
         records, floor=fl, settled=lambda a, b: _settled(st, a, b), stop_after=stop_after
     )
+    if item:
+        rows = [r for r in rows if item in (r["a"], r["b"])]
     return rows[:limit] if limit else rows
 
 
@@ -189,6 +192,7 @@ def dupes(
     open_only: bool = False,
     floor: float | None = None,
     limit: int = 0,
+    item: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """ "Is anything filed twice?" -- the near-duplicate PAIRS already in the log.
@@ -196,9 +200,14 @@ def dupes(
     Where ``similar`` weighs one text about to be filed, this sweeps the records already
     held against each other. Pairs already answered (a recorded link, a `distinct`
     dismissal, one lesson superseding the other) are skipped, so a `distinct` verdict
-    never returns. Read-only: settle a pair with ``ddflow link``.
+    never returns. Read-only: settle a pair with ``ddflow link``. With ``item``, only the
+    pairs that record is in: "is THIS already filed?" for a record that exists.
     """
     _log, cfg, st = _load(repo, agent)
+    if item and item not in {r["id"] for r in _sweep_records(st)}:
+        return O.failed(
+            "dupes", f"no record {item!r} to scan; `ddflow similar` weighs free text", pairs=[]
+        )
     allowed = list(cfg.dedupe.kinds)
     want = csv_list(kinds)
     unknown = [k for k in want if k not in allowed]
@@ -209,7 +218,9 @@ def dupes(
             pairs=[],
         )
     scope = want or allowed
-    shown = pairs_from(st, cfg, kinds=scope, open_only=open_only, floor=floor, limit=limit)
+    shown = pairs_from(
+        st, cfg, kinds=scope, open_only=open_only, floor=floor, limit=limit, item=item
+    )
     fl = cfg.dedupe.show_floor if floor is None else float(floor)
     data: dict[str, Any] = {
         "pairs": shown,
@@ -219,12 +230,14 @@ def dupes(
         "floor": fl,
         "limit": limit,
     }
+    if item:
+        data["item"] = item
     if not shown:
         scope_word = "open " if open_only else ""
         return O.nothing(
             "dupes",
             f"No unsettled near-duplicate {scope_word}pair in {', '.join(scope)} scores "
-            f"{fl:g} or more.",
+            f"{fl:g} or more" + (f" with {item}." if item else "."),
             **data,
         )
     return O.ok("dupes", **data)
