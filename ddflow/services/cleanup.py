@@ -42,6 +42,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import clock as CK
 from ..core.flow import GITFLOW
+from ..core.globs import under_any
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -545,11 +546,6 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
-def _is_pin(path: str, pins: list[str]) -> bool:
-    """Is ``path`` a pin file, or under a pin directory (a recipe's ``files`` may name one)?"""
-    return any(path == p or path.startswith(p.rstrip("/") + "/") for p in pins)
-
-
 def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]) -> str:
     """Did ``item`` land on ``base`` (its recorded ``merged_sha`` is reachable from it), with
     only merge-main commits and pin regenerations left on the tree (Bfc4ac64c9c)?
@@ -583,7 +579,7 @@ def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]
         files = W.git(
             here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
         )
-        if not files.ok or not all(_is_pin(f, pins) for f in files.out.split("\0") if f):
+        if not files.ok or not all(under_any(f, pins) for f in files.out.split("\0") if f):
             return ""
     return head
 
