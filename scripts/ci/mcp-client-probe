@@ -9,8 +9,8 @@ client table).
     scripts/ci/mcp-client-probe analyze LOGFILE          # classify a probe log by hand
 
 A row is JSON: {"harness", "list_changed": honours|ignores|unknown|unavailable, "client",
-"revision", "probed_discover", "listen", "reason"?}. Exit 0 = concluded, 1 = the CLI ran and
-failed, 2 = could not run (CLI or recipe missing, or the model never called the probe):
+"revision", "probed_discover", "listen", "reason"?}. Exit 0 = concluded, 1 = the CLI timed out or failed AFTER
+the probe concluded, 2 = nothing concluded (could not run (CLI or recipe missing, or the model never called the probe):
 `unavailable` is a coverage gap, never a pass. Only dummy prompts are sent, with a cheap model.
 """
 
@@ -83,7 +83,14 @@ PENDING = (
 
 def _unavailable(harness: str, reason: str, seen: dict | None = None) -> dict:
     """An unavailable row; `seen` is whatever the probe log already showed."""
-    row = {"harness": harness, **(seen or {})}
+    row = {
+        "harness": harness,
+        "client": None,
+        "revision": None,
+        "probed_discover": False,
+        "listen": False,
+        **(seen or {}),
+    }
     return {**row, "list_changed": "unavailable", "reason": reason}
 
 
