@@ -167,11 +167,13 @@ def test_extending_a_claimed_task_files_a_new_linked_task(repo):
     assert state(repo).links["T2"].linked("extends") == {"T1"}
 
 
-def test_extending_an_open_task_appends_to_it(repo):
+def test_merging_into_an_open_task_appends_to_it(repo):
     run_cli(repo, "init")
     title = "update must widen the held lease globs as well as the item globs on a claimed item"
     A.task_add(repo, "T1", title=title, agent="a")
-    out = A.task_add(repo, "T2", title=title + " too", answer=DD.Answer("extends", "T1"), agent="b")
+    out = A.task_add(
+        repo, "T2", title=title + " too", answer=DD.Answer("merge_into", "T1"), agent="b"
+    )
     assert out.exit == 0 and out.data["extended"] == "T1"
     st = state(repo)
     assert "T2" not in st.items and st.items["T1"].title == title
