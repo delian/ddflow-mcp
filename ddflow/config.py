@@ -73,6 +73,7 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
     FlowConfig,
 )
 from .config_sections.gates import GatesConfig
+from .config_sections.grants import GrantsConfig
 from .config_sections.health import HealthConfig
 from .config_sections.hooks import HooksConfig
 from .config_sections.ids import (  # noqa: F401
@@ -219,6 +220,7 @@ class Config:
     plan: PlanConfig = field(default_factory=PlanConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
+    grants: GrantsConfig = field(default_factory=GrantsConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)

@@ -688,7 +688,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version]\n              [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...\nddflow: error: unrecognized arguments: nosuchpreset\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version]\n              [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...\nddflow: error: unrecognized arguments: nosuchpreset\n"
  ],
  [
   [
@@ -1511,7 +1511,7 @@
   ],
   1,
   "",
-  "that edit would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, sensitivity, session, triggers, upgrade, worktree\n"
+  "that edit would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, grants, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, sensitivity, session, triggers, upgrade, worktree\n"
  ],
  [
   [
@@ -1531,7 +1531,7 @@
   ],
   1,
   "",
-  "appending this would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, sensitivity, session, triggers, upgrade, worktree\n"
+  "appending this would break the config: unknown config section [nosuch]. Known sections: agent, bugs, cadence, chore, ci, companions, dedupe, docs, enforce, evaluation, export, flow, gates, grants, health, hooks, ids, importer, lanes, lease, lessons, log, loops, mcp, memory, merge_queue, metrics, pins, plan, prompts, rag, reinstruct, release, review, rules, schedule, sensitivity, session, triggers, upgrade, worktree\n"
  ],
  [
   [
