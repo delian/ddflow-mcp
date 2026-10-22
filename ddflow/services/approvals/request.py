@@ -36,7 +36,7 @@ def untrusted(reason: str, limit: int) -> str:
     return '"' + flat.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def render(canon: Canon, reason: str = "", limit: int = 300) -> str:
+def render(canon: Canon, reason: str = "", limit: int = 300, uses: int = 1) -> str:
     """The text the person answers, built from the canonical record only."""
     s = canon.site
     lines = [
@@ -45,7 +45,7 @@ def render(canon: Canon, reason: str = "", limit: int = 300) -> str:
         f"  item    : {canon.item or '-'}    target: {canon.target or '-'}",
         f"  acts on : {s.digest}",
         f"  digest  : {canon.digest()[:16]}  (the state is read again when the agent runs it)",
-        f"  needs   : tier {s.tier}, assurance level L{s.min_level} or stronger; one use",
+        f"  needs   : tier {s.tier}, assurance level L{s.min_level} or stronger; {uses} use(s)",
     ]
     if canon.args:
         lines.append("  args    : " + ", ".join(f"{k}={v}" for k, v in canon.args))
@@ -82,7 +82,7 @@ def file(
         log,
         cfg,
         subject=canon.subject(),
-        text=render(canon, reason, cfg.approvals.reason_chars),
+        text=render(canon, reason, cfg.approvals.reason_chars, uses=1),
         digest=digest,
         now=now,
         command=E.Command(
