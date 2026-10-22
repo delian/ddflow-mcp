@@ -47,9 +47,9 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
         owner.wait()
         assert _until(lambda: all(_gone(p) for p in running)), "the suite outlived its owner"
     finally:
-        for p in locals().get("running", []):
+        for word in pids.read_text().split() if pids.exists() else []:
             try:
-                os.kill(p, signal.SIGKILL)
+                os.kill(int(word), signal.SIGKILL)
             except OSError:
                 pass
         owner.kill()
@@ -61,7 +61,8 @@ def test_a_finished_run_leaves_no_watcher_behind(tmp_path: Path):
     pid_file = tmp_path / "pid"
     proc.run_shell(f"echo $$ > {pid_file}", timeout_s=30)
     shell = int(pid_file.read_text())
-    assert _until(lambda: not _watching(shell), timeout=10)  # ended, and reaped (no zombie)
+    assert _until(lambda: not _watching(shell), timeout=10)  # ended
+    assert _until(lambda: not _zombie_children(), timeout=10)  # and reaped
 
 
 def _watching(group: int) -> bool:
@@ -75,3 +76,18 @@ def _watching(group: int) -> bool:
             if b"ddflow-owner-watch" in argv and str(group).encode() in argv[2:4]:
                 return True
     return False
+
+
+def _zombie_children() -> list[int]:
+    """Children of this process that ended and were never waited for."""
+    me = str(os.getpid())
+    out = []
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit():
+            try:
+                fields = (d / "stat").read_text().rsplit(")", 1)[1].split()
+            except OSError:
+                continue
+            if fields[0] == "Z" and fields[1] == me:
+                out.append(int(d.name))
+    return out
