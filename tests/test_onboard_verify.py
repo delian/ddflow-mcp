@@ -143,12 +143,14 @@ def test_brief_and_next_run_this_trees_code_whatever_interpreter_started_us(repo
     seen = []
 
     def fake_capture(argv, **kwargs):
+        assert argv[argv.index("--repo") + 1] == str(repo.resolve())
         seen.append((kwargs.get("env") or {}, kwargs.get("cwd")))
         return V.P.Captured(0, "line\n", "")
 
     monkeypatch.setattr(V.P, "capture", fake_capture)
     monkeypatch.setenv("PYTHONPATH", "/elsewhere")
-    assert V._answers(repo).outcome == "passed"
+    monkeypatch.chdir(repo)
+    assert V._answers(Path(".")).outcome == "passed"
     root = str(Path(V.__file__).resolve().parents[2])
     assert len(seen) == 2
     for env, cwd in seen:
