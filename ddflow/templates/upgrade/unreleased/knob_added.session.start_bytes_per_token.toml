@@ -2,7 +2,7 @@
 
 [[change]]
 kind = "knob_added"
-key = "session.start_chars_per_token"
+key = "session.start_bytes_per_token"
 new = "4.0"
-why = "The characters-per-token ratio of the session start cost estimate."
+why = "The bytes-per-token ratio of the session start cost estimate."
 impact = "additive"

@@ -94,10 +94,15 @@ class SessionConfig:
     )
     context_budget_tokens: int = knob(
         40000,
-        doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints; a pending one-line upgrade notice is not counted, since counting would use it up). `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
+        doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints) plus `start_notice_reserve_tokens` for the one-line upgrade notice, which cannot be counted without using it up. `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
         check=int_at_least(0),
     )
-    start_chars_per_token: float = knob(
+    start_notice_reserve_tokens: int = knob(
+        100,
+        doc="Tokens `ddflow doctor` adds to the session start cost for the one-line upgrade or release notice that leads the first session after an upgrade. Measuring cannot count a pending notice without using it up (it is said once per version), so this reserve stands for it: the budget then holds even in that session. 0 reserves nothing.",
+        check=int_at_least(0),
+    )
+    start_bytes_per_token: float = knob(
         4.0,
         doc="Bytes (UTF-8) to a token in the session start cost estimate (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs nearer three, so lower it to be stricter. No tokenizer is imported.",
         check=lambda v: (

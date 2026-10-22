@@ -71,8 +71,8 @@ def test_the_ratio_is_the_knobs_not_a_constant():
 def test_the_ratio_knob_refuses_what_cannot_divide(bad):
     from ddflow.config import _KNOB_CHECKS
 
-    assert _KNOB_CHECKS["session.start_chars_per_token"](bad)
-    assert not _KNOB_CHECKS["session.start_chars_per_token"](4)
+    assert _KNOB_CHECKS["session.start_bytes_per_token"](bad)
+    assert not _KNOB_CHECKS["session.start_bytes_per_token"](4)
 
 
 def test_the_start_cost_stays_under_its_ceiling(repo):
@@ -80,7 +80,7 @@ def test_the_start_cost_stays_under_its_ceiling(repo):
     cfg = Config.load(repo)
     cost = SC.measure(
         start_texts(repo, "x"),
-        chars_per_token=cfg.session.start_chars_per_token,
+        chars_per_token=cfg.session.start_bytes_per_token,
         budget=cfg.session.context_budget_tokens,
     )
     assert all(cost.parts.values()), cost.parts  # a part that measured 0 is a part that broke
@@ -112,7 +112,7 @@ def test_report_builds_the_texts_while_measuring(repo):
         return {"a": "x" * 40}
 
     cost = SC.report(repo, Config.load(repo), "x", texts)
-    assert seen == [True] and cost.tokens == 10
+    assert seen == [True] and cost.parts["a"] == 10
 
 
 def test_a_failing_surface_leaves_an_empty_cost_not_a_failed_doctor(repo):
@@ -123,8 +123,26 @@ def test_a_failing_surface_leaves_an_empty_cost_not_a_failed_doctor(repo):
     assert cost.notes() == [] and cost.data() == {}
 
 
-def test_the_knob_says_what_is_and_is_not_counted():
+def test_a_pending_notice_is_covered_by_a_reserve_so_the_first_session_fits():
+    """The notice cannot be counted without being used up, so the cost holds a reserve for it."""
+    plain = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0)
+    held = SC.measure({"a": "x" * 400}, chars_per_token=4.0, budget=0, reserve=100)
+    assert (plain.tokens, held.tokens) == (100, 200)
+    assert "upgrade notice (reserve) 100" in held.line()
+
+
+def test_doctor_counts_the_notice_reserve(repo):
+    _adopted(repo)
+    _, out, _ = run_cli(repo, "--json", "doctor")
+    note = next(n for n in json.loads(out)["notes"] if "session start cost:" in n)
+    assert "upgrade notice (reserve) 100" in note, note
+    run_cli(repo, "config", "session.start_notice_reserve_tokens", "0")
+    _, out, _ = run_cli(repo, "--json", "doctor")
+    note = next(n for n in json.loads(out)["notes"] if "session start cost:" in n)
+    assert "reserve" not in note, note
+
+
+def test_the_ratio_knob_is_in_bytes():
     from ddflow.config import KNOB_DOCS
 
-    doc = KNOB_DOCS["session.context_budget_tokens"]
-    assert "SessionStart hook" in doc and "upgrade notice is not counted" in doc
+    assert "Bytes (UTF-8)" in KNOB_DOCS["session.start_bytes_per_token"]
