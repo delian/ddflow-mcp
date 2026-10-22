@@ -91,6 +91,11 @@ def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
     return None if lock is None and not slot else round((lock or 0.0) + slot, 6)
 
 
+def _wait_evidence(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> dict[str, Any]:
+    w = _waited(gdef, p, out)
+    return {} if w is None else {"waited_s": w}
+
+
 #: How much of the end of a command's output the log keeps as evidence.
 OUTPUT_TAIL_CHARS = 2000
 
@@ -233,7 +238,7 @@ def run_command_gate(
         **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
         # How much of elapsed_s was queueing for the host suite lock or an admission slot,
         # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
-        **({"waited_s": w} if (w := _waited(gdef, p, out)) is not None else {}),
+        **_wait_evidence(gdef, p, out),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe

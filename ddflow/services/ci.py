@@ -30,6 +30,7 @@ from ..core.slug import ascii_slug
 from ..infra import fsio
 from ..infra import worktree as W
 from . import ci_conflict as CC
+from . import ci_marker as CM
 from . import ci_scope as CS
 from . import suitelock as SL
 from . import workers as WK
@@ -99,6 +100,11 @@ class Result:
     def exit(self) -> int:
         return {"passed": 0, "failed": 1}.get(self.status, 2)
 
+    def _wait_data(self) -> dict:
+        if self.waited_s is None:
+            return {}
+        return {"waited_s": self.waited_s, "wait_line": CM.wait_line(self.waited_s)}
+
     def as_data(self) -> dict:
         return {
             "status": self.status,
@@ -108,7 +114,7 @@ class Result:
             "why": self.reason,
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "output_tail": self.output_tail,
-            **({"waited_s": self.waited_s} if self.waited_s is not None else {}),
+            **self._wait_data(),
             **({"scope": self.scope} if self.scope else {}),
             **self.failures,
             **({"failure_text": failure_text(self.failures)} if self.failures else {}),
@@ -389,15 +395,10 @@ def run(
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
         full_suite = not command.strip() and _runs_whole_suite(cmd, scope)
-        waited: float | None = None
-        queued_at = time.monotonic()
         try:
-            with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
-                if full_suite:  # the lock is held: everything before this was queueing
-                    waited = round(time.monotonic() - queued_at, 6)
-                p, out_prefix = _execute(
-                    cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used
-                )
+            p, out_prefix, waited = _run_locked(
+                cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite
+            )
         except SL.SuiteBusy as busy:
             return Result(
                 "unavailable", command=cmd, sha=sha, reason=str(busy),
@@ -411,6 +412,18 @@ def run(
     if scope is None and used:
         res.scope = {"workers": used}
     return res
+
+
+def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite):
+    """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
+    its output prefix and the seconds spent queued for the slot (None without one)."""
+    waited: float | None = None
+    queued_at = time.monotonic()
+    with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+        if full_suite:  # the slot is held: everything before this was queueing
+            waited = round(time.monotonic() - queued_at, 6)
+        p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used)
+    return p, out_prefix, waited
 
 
 def _unfinished(p, cmd: str, sha: str, scope) -> Result | None:
