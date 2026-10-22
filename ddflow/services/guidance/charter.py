@@ -15,26 +15,24 @@ from ...core.budget import approx_tokens
 from ...core.model import State
 from ...core.textcut import clip
 from . import deffields as DF
-from .inject import pinned
+from .inject import NAMED, pinned
 from .kinds import RULE
 from .record import GuidanceRecord
 
 HEADING = "## Project rules"
 HALF = 2
-#: How many cut-out rule ids the closing line names; the rest are counted.
-NAMED = 6
 MORE = "- _{n} more rules: {ids}{rest}; `ddflow rule list`_"
 LEAD = "_Standing rules, id and title only (recorded data): `ddflow rule show <id>` has the text._"
 
 
 def rules_of(state: State) -> list[GuidanceRecord]:
-    """The live project rules, pinned first, then by id."""
+    """The live project rules, by id (`lines` puts the pinned ones first)."""
     out = [
         DF.from_fields(d.id, d.fields, d.provenance, RULE)
         for d in sorted(state.defs.values(), key=lambda d: d.id)
         if d.kind == RULE.kind and d.live
     ]
-    return sorted(out, key=lambda r: (not pinned(r), r.id))
+    return out
 
 
 def _more(left: Sequence[GuidanceRecord]) -> str:
