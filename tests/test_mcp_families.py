@@ -62,9 +62,11 @@ def test_a_property_two_members_type_differently_is_a_union_type():
 
 
 def test_route_resolves_the_member_and_drops_the_action():
-    r = FS.route("ddflow_gate", {"action": "record", "id": "T1", "gate": "critic"})
+    r = FS.route(
+        "ddflow_gate", {"action": "record", "id": "T1", "gate": "critic", "outcome": "passed"}
+    )
     assert r.tool == "ddflow_gate_record"
-    assert r.args == {"id": "T1", "gate": "critic"}
+    assert r.args == {"id": "T1", "gate": "critic", "outcome": "passed"}
     assert r.display == "ddflow_gate action=record"
 
 
@@ -82,8 +84,9 @@ def test_a_members_own_action_argument_is_op_in_its_family():
 
 
 def test_op_is_unknown_for_an_action_that_has_no_action_argument_of_its_own():
-    r = FS.route("ddflow_gate", {"action": "list", "op": "x"})
-    assert r.args == {"op": "x"}  # left as given: the member's check calls it unknown
+    err = FS.route("ddflow_gate", {"action": "list", "op": "x"})
+    assert isinstance(err, str)
+    assert "ddflow_gate action=list" in err and "unknown argument(s): op" in err
 
 
 def test_route_of_a_name_that_is_no_family_or_a_hot_single_is_none():
@@ -128,10 +131,18 @@ def _flat(tool):
 
 
 def test_missing_required_arguments_are_found_per_action():
-    r = FS.route("ddflow_gate", {"action": "record"})
+    r = FS.Routed("ddflow_gate_record", {}, "ddflow_gate action=record")
     assert FS.missing_required(r) == ["id", "gate", "outcome"]
+    err = FS.route("ddflow_gate", {"action": "record"})
+    assert err == "ddflow_gate action=record: missing required argument(s): id, gate, outcome"
     r = FS.route("ddflow_gate", {"action": "record", "id": "T", "gate": "ci", "outcome": "passed"})
     assert FS.missing_required(r) == []
+
+
+def test_an_argument_the_action_does_not_take_is_said_with_the_action_and_its_known_ones():
+    err = FS.route("ddflow_gate", {"action": "list", "bogus": "x"})
+    assert err.startswith("ddflow_gate action=list: unknown argument(s): bogus. Known: ")
+    assert "as_agent" in err and "bogus" not in err.split("Known: ")[1]
 
 
 def test_a_required_own_action_argument_is_listed_as_op_in_the_description(monkeypatch):
@@ -159,7 +170,7 @@ def test_a_falsy_but_present_required_value_is_not_missing(monkeypatch):
     monkeypatch.setitem(TOOLS["ddflow_gate_list"], "properties", props)
     r = FS.route("ddflow_gate", {"action": "list", "n": 0, "flag": False})
     assert FS.missing_required(r) == []
-    r = FS.route("ddflow_gate", {"action": "list", "n": None, "flag": ""})
+    r = FS.Routed("ddflow_gate_list", {"n": None, "flag": ""}, "d")
     assert FS.missing_required(r) == ["n", "flag"]
 
 
@@ -167,7 +178,6 @@ def test_a_required_own_action_argument_is_reported_missing_as_op(monkeypatch):
     props = dict(TOOLS["ddflow_queue"]["properties"])
     props["action"] = ("string", "add|run", True)
     monkeypatch.setitem(TOOLS["ddflow_queue"], "properties", props)
-    r = FS.route("ddflow_view", {"action": "queue"})
-    assert FS.missing_required(r) == ["op"]
+    assert FS.route("ddflow_view", {"action": "queue"}).endswith("missing required argument(s): op")
     r = FS.route("ddflow_view", {"action": "queue", "op": "add"})
     assert FS.missing_required(r) == []

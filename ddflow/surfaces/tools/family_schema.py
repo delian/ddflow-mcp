@@ -17,6 +17,8 @@ from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
 from . import TOOLS
 from .families import FAMILIES, Family
 
+__all__ = ("family_entry", "family_listing", "member_props", "missing_required", "route")
+
 ACTION = "action"
 #: A member that has an argument of its own called ``action`` (queue, ci, prompts, hooks,
 #: export) is given it as ``op`` in its family, where ``action`` picks the member.
@@ -133,7 +135,9 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
 
     ``None``: ``name`` is no family (a member's own legacy name, a hot single, or an unknown
     tool), or a self-named family tool (``ddflow_doctor``, ``ddflow_workflow``) called with no
-    ``action``, which is the legacy tool and stays so. A string: why the call cannot be routed.
+    ``action``, which is the legacy tool and stays so. A string: why the call cannot be routed --
+    no or an unknown action, a required argument missing, or one the action does not take, each
+    said with the action it was asked of.
     """
     family = FAMILIES.get(name)
     if family is None or family.single:
@@ -150,4 +154,20 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     rest = {k: v for k, v in args.items() if k != ACTION}
     if OP in rest and ACTION in TOOLS[tool]["properties"]:
         rest[ACTION] = rest.pop(OP)
-    return Routed(tool, rest, f"{name} action={action}")
+    routed = Routed(tool, rest, f"{name} action={action}")
+    return _problem(routed) or routed
+
+
+def _problem(routed: Routed) -> str:
+    """Why the routed call lacks what its member needs ("" when it has it): a required argument
+    missing, or one the member does not take, each said with the action it was asked of."""
+    if missing := missing_required(routed):
+        return f"{routed.display}: missing required argument(s): {', '.join(missing)}"
+    known = set(member_props(routed.tool))
+    known |= set(TOOLS[routed.tool].get("deprecated") or {})
+    if unknown := sorted(set(routed.args) - known):
+        return (
+            f"{routed.display}: unknown argument(s): {', '.join(unknown)}. "
+            f"Known: {', '.join(sorted(OP if k == ACTION else k for k in known))}"
+        )
+    return ""
