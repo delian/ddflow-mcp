@@ -14,7 +14,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from .. import workers as WK
-from ..ci_marker import parse_marker
+from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failure_evidence
 from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance
@@ -81,6 +81,20 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
     if p.kind == cmdrunner.NOT_FOUND:
         return {"reason": p.reason, "command": gdef.command, "exit": p.code}
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
+
+
+def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
+    """Seconds the run queued: the suite lock a `ci run` reported on its output, plus the
+    admission slot the runner itself waited for. The slot leg is forward-looking: no production
+    caller passes `slots` to the CommandRunner yet, so today only the lock wait arrives."""
+    slot = p.waited_s if p.waited_s and p.waited_s > 0 else 0.0
+    lock = parse_wait(out) if gdef.id == "ci" else None
+    return None if lock is None and not slot else round((lock or 0.0) + slot, 6)
+
+
+def _wait_evidence(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> dict[str, Any]:
+    w = _waited(gdef, p, out)
+    return {} if w is None else {"waited_s": w}
 
 
 #: How much of the end of a command's output the log keeps as evidence.
@@ -223,6 +237,9 @@ def run_command_gate(
         **output_evidence(out),
         # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
         **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
+        # How much of elapsed_s was queueing for the host suite lock or an admission slot,
+        # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
+        **_wait_evidence(gdef, p, out),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe
