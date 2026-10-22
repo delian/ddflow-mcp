@@ -280,7 +280,11 @@ class Classified(NamedTuple):
     reason: str = ""
 
 
-_BLOCKED_ON = re.compile(r"^(?:[\w.-]+: )?(blocked on [^\n]* since [^\n]+)$", re.M)
+_BLOCKED_ON = re.compile(
+    r"^(blocked on [^\n]+? since (?:\d{2}:\d{2}:\d{2}|an unknown time)"
+    r"(?:, you are #\d+ in the queue)?)$",
+    re.M,
+)
 
 
 def _blocked_on(output: str) -> str:

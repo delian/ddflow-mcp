@@ -41,3 +41,10 @@ def test_only_the_ci_gate_reads_the_suite_lock_line():
     lint = GateDef(id="lint", title="lint", command="x", unavailable_exits=[2])
     out = classify_exit(lint, 2, f"{LINE}\n")
     assert "unavailable_exits" in out.reason and "suite_wait_s" not in out.reason
+
+
+def test_a_prefixed_or_other_tools_line_is_not_taken():
+    out = classify_exit(GATE, 2, "pre-commit: blocked on python3.11 since 10:00:00\n")
+    assert "unavailable_exits" in out.reason and "suite_wait_s" not in out.reason
+    out = classify_exit(GATE, 2, "blocked on the network since yesterday\n")
+    assert "suite_wait_s" not in out.reason
