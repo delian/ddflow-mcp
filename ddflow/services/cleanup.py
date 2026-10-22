@@ -772,6 +772,8 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
         work = W.tree_work(Path(t.path))
         moved = W.git(Path(t.path), "rev-parse", "--verify", "HEAD").out.strip() != tip
         if work.dirty or not work.readable or moved:
+            t.action, t.kind = "", "unmerged"
+            t.done = f"kept: {t.name} changed since it was proved to be only leftovers"
             return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
     d = dispose_tree(repo, cfg, log, wt, allow_ahead=bool(proof))
