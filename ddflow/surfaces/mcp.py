@@ -579,23 +579,25 @@ class Server:
         if (known := self._says.get(token)) is not None:
             return known  # one counter per call: progress must only ever increase
         count = [0]
+        lock = threading.Lock()  # a heartbeat thread and the tool's own lines share this counter
 
         def say(line: str) -> None:
-            count[0] += 1
-            try:
-                send(
-                    {
-                        "jsonrpc": "2.0",
-                        "method": "notifications/progress",
-                        "params": {
-                            "progressToken": token,
-                            "progress": count[0],
-                            "message": line.strip()[:500],
-                        },
-                    }
-                )
-            except Exception:  # a closed pipe must not fail the review
-                pass
+            with lock:  # count and send together: progress must reach the client in order
+                count[0] += 1
+                try:
+                    send(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/progress",
+                            "params": {
+                                "progressToken": token,
+                                "progress": count[0],
+                                "message": line.strip()[:500],
+                            },
+                        }
+                    )
+                except Exception:  # a closed pipe must not fail the review
+                    pass
 
         self._says[token] = say
         return say
