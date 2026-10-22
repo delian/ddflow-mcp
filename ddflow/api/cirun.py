@@ -157,17 +157,18 @@ def ci_tool(
     repo: Path,
     *,
     action: str = "status",
-    ref: str = "HEAD",
+    ref: str = "",
     base: str = "",
     command: str = "",
     agent: str = "",
     called_from: Path | None = None,
     full: bool = False,
 ) -> O.Outcome:
-    """The `ddflow_ci` tool: action run | status."""
+    """The `ddflow_ci` tool: action run | status. ``ref`` empty is no ref (the held item's
+    branch, Be81c39acb8); a ref named, `HEAD` included, is taken at its word (B8f41346d9f)."""
     if action == "run":
-        if ref in ("", "HEAD"):  # no ref given: the held item's branch (Be81c39acb8)
-            ref = held_item(repo, agent, called_from) or ref
+        if not ref:
+            ref = held_item(repo, agent, called_from)
         return run(
             repo,
             ref=ref or "HEAD",
@@ -178,7 +179,7 @@ def ci_tool(
             full=full,
         )
     if action == "status":
-        if base or command or (ref and ref != "HEAD"):
+        if base or command or ref not in ("", "HEAD"):
             return O.refused("ci", "ref, base and command are for action=run")
         return status(repo, agent=agent)
     return O.refused("ci", f"unknown action {action!r}: run | status")
