@@ -18,6 +18,9 @@ from . import TOOLS
 from .families import FAMILIES, Family
 
 ACTION = "action"
+#: A member that has an argument of its own called ``action`` (queue, ci, prompts, hooks,
+#: export) is given it as ``op`` in its family, where ``action`` picks the member.
+OP = "op"
 
 #: One clause per family, after the action list.
 _BLURB = {
@@ -55,12 +58,19 @@ def _member_props(tool: str) -> dict[str, tuple[str, str, bool]]:
 
 
 def _union(family: Family) -> dict[str, tuple[set[str], str]]:
-    """``{argument: (types, description)}`` over the members, the longest description kept."""
+    """``{argument: (types, description)}`` over the members, the longest description kept.
+
+    A member's own ``action`` argument is ``op`` here, its description naming the action it
+    belongs to (the members' meanings differ, so they are joined, not picked between)."""
     union: dict[str, tuple[set[str], str]] = {}
-    for tool in family.members.values():
-        for name, (kind, text, _req) in _member_props(tool).items():
-            types, best = union.get(name, (set(), ""))
-            union[name] = (types | {kind}, text if len(text) > len(best) else best)
+    for act, tool in family.members.items():
+        for arg, (kind, text, _req) in _member_props(tool).items():
+            if arg == ACTION:
+                types, said = union.get(OP, (set(), ""))
+                union[OP] = (types | {kind}, f"{said} {act}: {text}".strip())
+                continue
+            types, best = union.get(arg, (set(), ""))
+            union[arg] = (types | {kind}, text if len(text) > len(best) else best)
     return union
 
 
@@ -121,4 +131,7 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     tool = family.members.get(action)
     if tool is None:
         return f"{name}: unknown action {action!r}. Actions: {acts}"
-    return Routed(tool, {k: v for k, v in args.items() if k != ACTION}, f"{name} action={action}")
+    rest = {k: v for k, v in args.items() if k != ACTION}
+    if OP in rest and ACTION in TOOLS[tool]["properties"]:
+        rest[ACTION] = rest.pop(OP)
+    return Routed(tool, rest, f"{name} action={action}")
