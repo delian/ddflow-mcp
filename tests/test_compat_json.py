@@ -33,7 +33,10 @@ def test_the_result_schemas_are_pinned():
         GOLDEN.write_text(table, "utf-8")
     assert GOLDEN.read_text("utf-8") == table, (
         "a tool's result schema changed. A field added is fine; one removed or retyped bumps "
-        "registry.SCHEMA_VERSIONS. Re-record with DDFLOW_UPDATE_GOLDEN=1."
+        "registry.SCHEMA_VERSIONS. Re-record with DDFLOW_UPDATE_GOLDEN=1 uv run pytest "
+        "tests/test_compat_json.py. Two branches that each changed a result schema both pass "
+        "alone and fail together: after merging main into your branch, re-run this test and "
+        "re-record the pin before you merge, never leave it for main."
     )
 
 
