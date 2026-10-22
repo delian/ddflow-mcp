@@ -47,9 +47,10 @@ def dirt_hint(repo: Path, cfg: Config, git_error: str, tree: Path) -> str:
             "then merge again; if it is a real edit, commit it first."
         )
     if loose:
-        names = " ".join(shlex.quote(f) for f in loose)
+        moves = "; ".join(f"mv {shlex.quote(f)} {shlex.quote(f + '.stray')}" for f in loose)
         out += (
             f"\n\n{', '.join(loose)} is an untracked pin file in {tree} (a stray `ddflow pins "
-            f"regenerate` wrote it there): move it aside (`mv` in {where}: {names}) and merge again."
+            f"regenerate` wrote it there): move it aside "
+            f"(`cd {where} && {moves}`) and merge again."
         )
     return out

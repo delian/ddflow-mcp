@@ -87,6 +87,7 @@ def test_an_untracked_pin_file_the_merge_would_overwrite_is_named_too(repo):
     assert not r.ok
     hint = PN.dirt_hint(repo, cfg, r.err or r.out, repo)
     assert "GEN.md is an untracked pin file" in hint
+    assert "&& mv GEN.md GEN.md.stray`" in hint
 
 
 def test_the_remedy_quotes_a_path_with_a_space(tmp_path):
