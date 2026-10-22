@@ -29,9 +29,9 @@ def _item(repo: Path, kind: str) -> None:
     assert LC.claim(repo, "T1", agent="worker").exit == 0
 
 
-def _note(repo: Path) -> None:
+def _note(repo: Path, item: str = "T1") -> None:
     code, out, err = run_cli(
-        repo, "research", "add", "--new", "--id", "R-T1", "--item", "T1", "--question", "why",
+        repo, "research", "add", "--new", "--id", f"R-{item}", "--item", item, "--question", "why",
         "--claim", "because", "--mechanism", "m", "--falsifier", "f", "--probe", "p",
         "--probe-output", "o", "--verdict", "CONFIRMED",
     )  # fmt: skip
@@ -60,5 +60,13 @@ def test_a_research_item_without_a_note_is_still_refused(repo):
 def test_a_code_task_is_not_excused_by_a_note(repo):
     _item(repo, "task")
     _note(repo)
+    code, out, err = _implement(repo)
+    assert code != 0 and "no commit ahead" in out + err
+
+
+def test_a_note_for_another_item_does_not_excuse_this_one(repo):
+    _item(repo, "research")
+    run_cli(repo, "task", "add", "T2", "--parent", "P1", "--title", "T2", "--kind", "research")
+    _note(repo, "T2")
     code, out, err = _implement(repo)
     assert code != 0 and "no commit ahead" in out + err
