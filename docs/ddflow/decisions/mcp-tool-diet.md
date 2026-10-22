@@ -22,7 +22,7 @@ Chosen option: "Families with an action + search/call facade for tiny windows".
    MTD-sunset removes them.
 3. Per-client profiles chosen from the descriptor cap and `initialize.clientInfo.name`, never by
    a runtime call (`listChanged` stays false): `lean` 15 tools, `families` 24 (the default),
-   `hot+families` 36. Flat tiers stay opt-in.
+   `hot+families` 36 (21 hot singles + 15 families; `families` is 9 hot + 15 families = 24). Flat tiers stay opt-in.
 4. For the smallest caps (below 24) the 2-tool `ddflow_search` / `ddflow_call` facade
    (PM-search-call) is the escape hatch; no second dispatcher.
 
