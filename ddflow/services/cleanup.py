@@ -579,7 +579,9 @@ def proved_leftover_tip(path: str, item: Item | None, base: str, pins: list[str]
         files = W.git(
             here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
         )
-        if not files.ok or not all(under_any(f, pins) for f in files.out.split("\0") if f):
+        names = [f for f in files.out.split("\0") if f] if files.ok else []
+        # a non-merge commit that touches nothing (--allow-empty) is someone's note, not a pin run
+        if not files.ok or (not merge and not names) or not all(under_any(f, pins) for f in names):
             return ""
     return head
 
