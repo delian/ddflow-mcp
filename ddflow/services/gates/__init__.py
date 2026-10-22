@@ -140,6 +140,7 @@ from .regression_testfix import (  # noqa: F401
 )
 from .reviewed_paths import (  # noqa: F401
     REVIEWED_PATHS_FIELD,
+    ignorable,
     path_snapshot,
     snapshot_differing,
 )
