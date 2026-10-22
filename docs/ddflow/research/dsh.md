@@ -12,7 +12,7 @@ Read on 2026-10-22: the GitHub page (WebFetch), a web search (third-party write-
 | REPORTED | a vendor or third-party statement not checked in the code |
 | UNKNOWN | not found; never guessed |
 
-The rows below are from the source read and were not run. `DSH-facts` then ran dsh 0.2.1-rc.2 in a scratch directory with the operator's consent: results, corrections and what stays UNKNOWN are in `docs/ddflow/research/dsh-probe.md` (which supersedes any row below it contradicts).
+The rows below are from the source read and were not run, except where a row says MEASURED. `DSH-facts` then ran dsh 0.2.1-rc.2 in a scratch directory with the operator's consent: results, corrections and what stays UNKNOWN are in `docs/ddflow/research/dsh-probe.md` (which supersedes any row below it contradicts).
 
 ## Does it exist, and is it what the operator described?
 
