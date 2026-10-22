@@ -8,7 +8,6 @@ in the merge result first; and a gate that could not run says why in `gate statu
 from __future__ import annotations
 
 import json
-import sys
 
 import pytest
 from conftest import run_cli
