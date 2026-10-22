@@ -21,11 +21,10 @@ import threading
 import time
 
 DEFAULT_DELAY_S = 6.0
-IN_LIMIT = 2000
+IN_LIMIT = 65536
 OUT_LIMIT = 300
 _FIELDS = 3
 SETTLE_S = 0.02
-REFETCH_HINT = "server tool list changed (new tool name not disclosed; list your tools to find it)"
 NOTE = "notifications/tools/list_changed"
 
 _BASE = [
@@ -77,24 +76,33 @@ class _Probe:
 
     def _later(self) -> None:
         time.sleep(self.delay)
+        if self._add():
+            self.send({"jsonrpc": "2.0", "method": NOTE})
+
+    def _add(self) -> bool:
+        """Add the new tool; True only if the list actually changed."""
         with self.lock:
-            if _ADDED not in self.tools:
-                self.tools.append(_ADDED)
-        self.send({"jsonrpc": "2.0", "method": NOTE})
+            if _ADDED in self.tools:
+                return False
+            self.tools.append(_ADDED)
+            return True
 
     def _call(self, i, name) -> None:
+        # No result text prompts a refetch: a client that merely obeys it would look like one
+        # that honours list_changed.
         if name == "bump":
-            with self.lock:
-                if _ADDED not in self.tools:
-                    self.tools.append(_ADDED)
-            self.send(_text(i, REFETCH_HINT))
-            self.send({"jsonrpc": "2.0", "method": NOTE})
+            self.send(_text(i, "ok"))
+            if self._add():
+                self.send({"jsonrpc": "2.0", "method": NOTE})
         elif name == "delaybump":
-            # the result must not prompt a refetch: the notification comes later, unsolicited
             self.send(_text(i, "ok"))
             threading.Thread(target=self._later, daemon=True).start()
-        else:
+        elif name == _ADDED["name"] and _ADDED in self.tools:
             self.send(_text(i, "MAGENTA"))
+        else:
+            self.send(
+                {"jsonrpc": "2.0", "id": i, "error": {"code": -32602, "message": "unknown tool"}}
+            )
 
     def handle(self, m: dict) -> None:
         if not isinstance(m, dict):

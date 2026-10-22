@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Per-client list_changed probe (SU-client-probe-ci): runs the stdlib probe server under an
-installed agent CLI and writes that client's row of the table in
-docs/ddflow/research/mcp-client-matrix.md.
+installed agent CLI and prints that client's row of the table in
+docs/ddflow/research/mcp-client-matrix.md as JSON (SU-probe-client-cli will write it into the
+client table).
 
     scripts/ci/mcp-client-probe row HARNESS [--model M] [--timeout S]
     scripts/ci/mcp-client-probe matrix [--timeout S]     # every harness we have a cell for
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -28,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 from ddflow.mcpshim.probe_server import analyze_log  # noqa: E402
 
 PROBE = ROOT / "ddflow" / "mcpshim" / "probe_server.py"
-PROMPT = "call lc bump, then call the new tool and report its output"
+PROMPT = "call lc bump, then call the new lc tool that appears and report its output, or say NONE"
 
 #: Harnesses whose recipe was run by hand (VERIFIED) -- the others have a cell to settle.
 RECIPES: dict[str, dict] = {
@@ -94,9 +96,10 @@ def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) ->
     rec = RECIPES.get(harness)
     if rec is None:
         return _unavailable(harness, "no recipe verified for this harness yet"), 2
-    binary = shutil.which(rec["bin"])
-    if binary is None:
+    found = shutil.which(rec["bin"])
+    if found is None:
         return _unavailable(harness, f"{rec['bin']} not on PATH"), 2
+    binary = os.path.abspath(found)  # the CLI runs in another directory
     for w in rec["warn"]:
         print(f"warning: {w}", file=sys.stderr)
     with tempfile.TemporaryDirectory(prefix="mcp-probe-") as d:
@@ -126,11 +129,11 @@ def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) ->
             harness, f"exit {done.returncode} before the probe ran: {tail[0] if tail else ''}"
         ), 2
     if row["list_changed"] == "unknown":
-        row["reason"] = (
+        reason = (
             f"exit {done.returncode}: the probe never sent list_changed "
             "(missing key, or the model did not call bump)"
         )
-        return row, 2
+        return _unavailable(harness, reason), 2
     return row, 0 if done.returncode == 0 else 1
 
 
@@ -153,8 +156,9 @@ def main(argv: list[str]) -> int:
     a.add_argument("logfile")
     args = ap.parse_args(argv)
     if args.cmd == "analyze":
-        print(json.dumps(analyze_log(Path(args.logfile).read_text())))
-        return 0
+        row = analyze_log(Path(args.logfile).read_text())
+        print(json.dumps(row))
+        return 2 if row["list_changed"] == "unknown" else 0
     if args.cmd == "row":
         row, code = probe_row(args.harness, args.model, args.timeout)
         print(json.dumps(row))
