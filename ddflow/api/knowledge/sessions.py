@@ -50,6 +50,13 @@ def session_prompt(
     )
 
 
+def session_known(repo: Path, session: str, *, agent: str = "") -> bool:
+    """Whether `session` names a session this project has started (open or ended)."""
+
+    log, _cfg, _st = _load(repo, agent)
+    return any(e.kind == "session.started" and e.subject == session for e in log.read_all())
+
+
 def session_note(
     repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
 ) -> O.Outcome:
