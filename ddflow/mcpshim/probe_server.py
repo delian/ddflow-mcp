@@ -25,6 +25,7 @@ IN_LIMIT = 2000
 OUT_LIMIT = 300
 _FIELDS = 3
 SETTLE_S = 0.02
+REFETCH_HINT = "server tool list changed (new tool name not disclosed; list your tools to find it)"
 NOTE = "notifications/tools/list_changed"
 
 _BASE = [
@@ -76,28 +77,31 @@ class _Probe:
 
     def _later(self) -> None:
         time.sleep(self.delay)
+        with self.lock:
+            if _ADDED not in self.tools:
+                self.tools.append(_ADDED)
         self.send({"jsonrpc": "2.0", "method": NOTE})
 
     def _call(self, i, name) -> None:
-        if name not in ("bump", "delaybump"):
-            self.send(_text(i, "MAGENTA"))
-            return
-        if _ADDED not in self.tools:
-            self.tools.append(_ADDED)
-        self.send(
-            _text(
-                i,
-                "server tool list changed (new tool name not disclosed; "
-                "list your tools to find it)",
-            )
-        )
         if name == "bump":
+            with self.lock:
+                if _ADDED not in self.tools:
+                    self.tools.append(_ADDED)
+            self.send(_text(i, REFETCH_HINT))
             self.send({"jsonrpc": "2.0", "method": NOTE})
-        else:
+        elif name == "delaybump":
+            # the result must not prompt a refetch: the notification comes later, unsolicited
+            self.send(_text(i, "ok"))
             threading.Thread(target=self._later, daemon=True).start()
+        else:
+            self.send(_text(i, "MAGENTA"))
 
     def handle(self, m: dict) -> None:
-        meth, i, params = m.get("method"), m.get("id"), m.get("params") or {}
+        if not isinstance(m, dict):
+            return
+        meth, i, params = m.get("method"), m.get("id"), m.get("params")
+        if not isinstance(params, dict):
+            params = {}
         results = {
             "initialize": lambda: {
                 "protocolVersion": params.get("protocolVersion"),
@@ -127,8 +131,8 @@ def serve(stdin, stdout, logfile, delay: float = DEFAULT_DELAY_S) -> None:
             time.sleep(SETTLE_S)  # let already-pipelined input reach the log first
             try:
                 probe.handle(json.loads(line))
-            except ValueError:
-                continue
+            except Exception as e:
+                probe.log_in(f"ERR {type(e).__name__}: {e}")
 
     t = threading.Thread(target=handler)
     t.start()
@@ -147,9 +151,11 @@ def _parse(log: str):
         if len(parts) < _FIELDS or parts[1] not in ("IN", "OUT"):
             continue
         try:
-            yield parts[1], json.loads(parts[2])
+            m = json.loads(parts[2])
         except ValueError:
             continue
+        if isinstance(m, dict):
+            yield parts[1], m
 
 
 def analyze_log(log: str) -> dict:
@@ -168,8 +174,8 @@ def analyze_log(log: str) -> dict:
                 notified_at = n
             continue
         if meth == "initialize":
-            p = m.get("params") or {}
-            info = p.get("clientInfo") or {}
+            p = m.get("params") if isinstance(m.get("params"), dict) else {}
+            info = p.get("clientInfo") if isinstance(p.get("clientInfo"), dict) else {}
             row["revision"] = p.get("protocolVersion")
             if info:
                 row["client"] = {"name": info.get("name"), "version": info.get("version")}

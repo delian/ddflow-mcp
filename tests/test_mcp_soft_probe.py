@@ -11,10 +11,14 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import json
+import queue
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ci" / "mcp-client-probe"
@@ -34,6 +38,10 @@ class Client:
             text=True,
             cwd=ROOT,
         )
+        self.lines: queue.Queue = queue.Queue()
+        threading.Thread(
+            target=lambda: [self.lines.put(x) for x in self.p.stdout], daemon=True
+        ).start()
         self.notes: list[dict] = []
         self._id = 0
 
@@ -50,7 +58,11 @@ class Client:
         if want_id is None and self.notes:
             return self.notes.pop(0)
         while True:
-            m = json.loads(self.p.stdout.readline())
+            try:
+                m = json.loads(self.lines.get(timeout=8))
+            except queue.Empty:
+                self.p.kill()
+                raise AssertionError("probe server stopped answering") from None
             if m.get("id") == want_id and want_id is not None:
                 return m
             if "id" not in m:
@@ -82,6 +94,7 @@ def test_bump_adds_a_tool_and_notifies_at_once(tmp_path):
     assert "secret_oracle" not in json.dumps(r), "the new tool's name must not be disclosed"
     note = c.read_until(None)
     assert note["method"] == "notifications/tools/list_changed"
+    assert "secret_oracle" not in json.dumps(note)
     assert "secret_oracle" in _tool_names(c.call("tools/list"))
     c.close()
 
@@ -242,7 +255,7 @@ def test_matrix_lists_every_unknown_cell_and_never_passes_a_missing_one(tmp_path
         "cursor",
         "copilot",
         "antigravity",
-        "grok",
+        "grok-build",
         "windsurf",
         "amp",
         "droid",
@@ -325,3 +338,47 @@ def test_a_timeout_still_classifies_what_the_log_recorded(tmp_path):
         os.environ["PATH"] = old
     assert row["list_changed"] == "honours" and "timed out" in row["reason"]
     assert code == 1
+
+
+def test_delaybump_adds_the_tool_only_when_it_notifies(tmp_path):
+    c = Client(tmp_path, "--delay", "0.5")
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    r = c.call("tools/call", {"name": "delaybump"})
+    assert "list your tools" not in json.dumps(r), "the result must not prompt a refetch"
+    assert "secret_oracle" not in _tool_names(c.call("tools/list"))
+    c.read_until(None)
+    assert "secret_oracle" in _tool_names(c.call("tools/list"))
+    c.close()
+
+
+@pytest.mark.parametrize(
+    "junk", ["null", "7", '"x"', "[1]", '{"id": 5, "method": "tools/call", "params": "x"}']
+)
+def test_valid_json_that_is_not_a_request_does_not_kill_the_responder(tmp_path, junk):
+    c = Client(tmp_path)
+    c.p.stdin.write(junk + "\n")
+    c.p.stdin.flush()
+    assert _tool_names(c.call("tools/list")) == ["bump", "delaybump"]
+    c.close()
+
+
+def test_analyze_skips_valid_json_that_is_not_an_object():
+    assert _analyze()("1.0 IN  null\n2.0 OUT [1]\n")["list_changed"] == "unknown"
+
+
+def test_a_cli_that_failed_before_the_probe_ran_is_unavailable_not_unknown(tmp_path):
+    mod = _script()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "claude").write_text("#!/bin/sh\necho 'no credentials' >&2\nexit 1\n")
+    (fake / "claude").chmod(0o755)
+    import os
+
+    old = os.environ["PATH"]
+    os.environ["PATH"] = str(fake) + os.pathsep + old
+    try:
+        row, code = mod.probe_row("claude", timeout=10)
+    finally:
+        os.environ["PATH"] = old
+    assert row["list_changed"] == "unavailable" and code == 2
+    assert "no credentials" in row["reason"]
