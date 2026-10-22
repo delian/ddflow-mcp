@@ -77,7 +77,7 @@ def test_a_staged_only_dirty_pin_file_is_cleared_by_the_printed_remedy(repo):
 
 def test_an_untracked_pin_file_the_merge_would_overwrite_is_named_too(repo):
     (repo / ".ddflow").mkdir(exist_ok=True)
-    (repo / ".ddflow" / "pins.toml").write_text(RECIPES.replace("GEN.md", "GEN.md"))
+    (repo / ".ddflow" / "pins.toml").write_text(RECIPES.replace("README.md", "GEN.md"))
     cfg = Config()
     wt = W.create(repo, cfg, "T1")
     _commit(wt.path, "GEN.md", "from the branch\n", "feat: add readme")
