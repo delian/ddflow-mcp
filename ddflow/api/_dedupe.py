@@ -62,7 +62,7 @@ def split_answer(spec: str) -> tuple[str, str]:
 @dataclass(frozen=True)
 class Answer:
     """What the adder says about a possible duplicate: ``new``, or ``extends`` /
-    ``duplicate_of`` / ``related`` plus the record it points at."""
+    ``duplicate_of`` / ``related`` / ``merge_into`` plus the record it points at."""
 
     relation: str = ""
     target: str = ""
@@ -72,7 +72,8 @@ class Answer:
 
     @classmethod
     def parse(cls, spec: str) -> Answer:
-        """``new``, ``extends X``, ``duplicate_of X`` (also ``duplicate X``), ``related X``;
+        """``new``, ``extends X``, ``duplicate_of X`` (also ``duplicate X``), ``related X``,
+        ``merge_into X``;
         a colon or equals sign may stand for the space. Empty is no answer. Anything else
         keeps its relation so ``problem`` can say what is wrong with it."""
         return cls(*split_answer(spec))
