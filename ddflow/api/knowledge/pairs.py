@@ -235,8 +235,7 @@ def dupes(
         "floor": fl,
         "limit": limit,
     }
-    if item:
-        data["item"] = item
+    data["item"] = item  # always present: the wire payload names it, MCP pads a missing key
     if not shown:
         scope_word = "open " if open_only else ""
         return O.nothing(

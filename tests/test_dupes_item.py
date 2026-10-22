@@ -52,7 +52,9 @@ def test_dupes_unknown_item_is_refused_with_the_id(repo):
 def test_dupes_without_an_id_is_still_the_whole_sweep(repo):
     _repo(repo)
     _code, out, _err = run_cli(repo, "--json", "dupes")
-    pairs = json.loads(out)["pairs"]
+    body = json.loads(out)
+    assert body["item"] == ""
+    pairs = body["pairs"]
     assert {(p["a"], p["b"]) for p in pairs} >= {("B1", "B2"), ("B3", "B4")}
 
 
