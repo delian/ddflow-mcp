@@ -1200,7 +1200,8 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
             head
             + f"`ddflow complete {it.id}` is refused for now: "
             + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:3])
-            + f". Record those outcomes (`ddflow gate status {it.id}`), then complete it."
+            + (f" (+{len(v.blockers) - 3} more)" if len(v.blockers) > 3 else "")
+            + f". Settle what `ddflow gate status {it.id}` shows, then complete it."
         )
 
 
