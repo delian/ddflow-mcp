@@ -23,7 +23,7 @@
     -h, --help            show this help message and exit
     --agents AGENTS       comma-separated: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,openc
                           ode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,op
-                          enhands,goose,cody (default: all)
+                          enhands,goose,cody,dsh (default: all)
     --docs DOCS           where to write the drivers
     --launch {auto,uvx,docker,python}
                           how agents spawn the MCP server: 'auto' prefers uvx for an install from a
@@ -1193,13 +1193,15 @@
 # ---
 # name: test_help[ddflow job end]
   '''
-  usage: ddflow job end [-h] [--exit-code EXIT_CODE] [--note NOTE] [--force] job
+  usage: ddflow job end [-h] [--all-finished] [--item ITEM] [--exit-code EXIT_CODE] [--note NOTE] [--force] [job]
   
   positional arguments:
     job
   
   options:
     -h, --help            show this help message and exit
+    --all-finished        end every finished job
+    --item ITEM
     --exit-code EXIT_CODE
                           default: the one its log recorded
     --note NOTE
