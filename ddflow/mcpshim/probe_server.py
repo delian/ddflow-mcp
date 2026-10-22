@@ -129,7 +129,11 @@ class _Probe:
 
 
 def serve(stdin, stdout, logfile, delay: float = DEFAULT_DELAY_S) -> None:
-    """Log each request when it ARRIVES and handle it on another thread, so a request a client
+    """Residual race, accepted: SETTLE_S is a delay, not a fence, so under heavy load a client
+    that pipelined tools/list right behind a call can still be logged after the notification.
+    Real runs are serial (the model waits for each result).
+
+    Log each request when it ARRIVES and handle it on another thread, so a request a client
     pipelined before it could see a notification is logged before that notification."""
     probe = _Probe(stdout, logfile, delay)
     work: queue.Queue = queue.Queue()

@@ -362,22 +362,31 @@ def test_delaybump_adds_the_tool_with_its_notification(tmp_path):
 
 def test_add_and_notify_are_one_step_under_the_lock():
     """critic: a tools/list handled between the add and the notification would show the tool
-    before the notification. The lock is held across both."""
+    before the notification. While the notification is being sent, a concurrent snapshot of
+    the tool list must be blocked -- and must not see the tool before the send."""
     import io
+    import threading
 
     from ddflow.mcpshim import probe_server as ps
 
     probe = ps._Probe(io.StringIO(), io.StringIO(), 0)
-    held = []
+    snaps, state = [], []
     real_send = probe.send
+    threads = []
 
     def spy(m):
-        held.append(probe.lock._is_owned())  # the re-entrant lock is held by this thread
+        t = threading.Thread(target=lambda: snaps.append(probe._snapshot()))
+        threads.append(t)
+        t.start()
+        t.join(timeout=0.3)
+        state.append("blocked" if t.is_alive() else "NOT-BLOCKED")
         real_send(m)
 
     probe.send = spy
     probe._add_and_notify()
-    assert held == [True]
+    threads[0].join(timeout=5)
+    assert state == ["blocked"], state
+    assert ps._ADDED in snaps[0]
 
 
 def test_logging_is_not_truncated(tmp_path):
