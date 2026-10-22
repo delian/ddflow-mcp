@@ -55,7 +55,8 @@ def not_a_failure(ev: dict[str, Any], *, where: str) -> str:
             f"no test ran on {where} (pytest exited {code}: the named test was not "
             f"collected), so it did not fail before the fix"
         )
-    if isinstance(code, int) and code != 1:  # 2 interrupted / collection error, 3 internal
+    if isinstance(code, int) and code != 1 and not _counts(ev).get("failed"):
+        # 2 interrupted / collection error, 3 internal: a test that DID fail first still counts
         return (
             f"the run on {where} ended without a test failure (pytest exited {code}: "
             f"interrupted or an internal error), so the test is not shown to fail before the fix"
