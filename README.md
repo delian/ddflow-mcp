@@ -5471,7 +5471,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=dce53e105504 -->
+<!-- ddflow:begin README/agents sha=a7756cc6cc85 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -5496,6 +5496,7 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | OpenHands | `openhands` | none | claude | native hook |
 | Goose | `goose` | none | claude | native hook |
 | Sourcegraph Cody | `cody` | none | not verified | nv |
+| dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
