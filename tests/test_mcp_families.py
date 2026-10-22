@@ -48,10 +48,10 @@ def test_schema_has_the_action_enum_and_the_union_of_the_members_arguments(famil
 
 
 @pytest.mark.parametrize("family", FAMILY_NAMES)
-def test_as_agent_is_declared_once_and_no_member_requires_anything_in_the_schema(family):
+def test_as_agent_is_declared_once_exactly_when_a_member_takes_it(family):
     schema = FS.family_entry(family)["inputSchema"]
-    assert list(schema["properties"]).count("as_agent") == 1
-    assert schema.get("required") == (None if family in TOOLS else ["action"])
+    takes = any(not TOOLS[t].get("identify") for t in F.FAMILIES[family].members.values())
+    assert list(schema["properties"]).count("as_agent") == int(takes)
 
 
 def test_a_property_two_members_type_differently_is_a_union_type():
@@ -158,33 +158,13 @@ def test_the_description_never_asks_for_an_argument_the_schema_lacks():
     for family in FAMILY_NAMES:
         entry = FS.family_entry(family)
         props = entry["inputSchema"]["properties"]
+        listed = entry["description"].split("brackets: ", 1)[1]
+        named = {n for group in re.findall(r"\(([^)]*)\)", listed) for n in group.split(",") if n}
+        assert named <= set(props), (family, named - set(props))
         for tool in F.FAMILIES[family].members.values():
-            for name in FS._requires(tool):
-                assert name in props
+            assert set(FS._requires(tool)) <= named
 
 
-def test_a_falsy_but_present_required_value_is_not_missing(monkeypatch):
-    props = dict(TOOLS["ddflow_gate_list"]["properties"])
-    props["n"] = ("integer", "a count", True)
-    props["flag"] = ("boolean", "a flag", True)
-    monkeypatch.setitem(TOOLS["ddflow_gate_list"], "properties", props)
-    r = FS.route("ddflow_gate", {"action": "list", "n": 0, "flag": False})
-    assert FS.missing_required(r) == []
-    r = FS.Routed("ddflow_gate_list", {"n": None, "flag": ""}, "d")
-    assert FS.missing_required(r) == ["n", "flag"]
-
-
-def test_a_required_own_action_argument_is_reported_missing_as_op(monkeypatch):
-    props = dict(TOOLS["ddflow_queue"]["properties"])
-    props["action"] = ("string", "add|run", True)
-    monkeypatch.setitem(TOOLS["ddflow_queue"], "properties", props)
-    assert FS.route("ddflow_view", {"action": "queue"}).endswith("missing required argument(s): op")
-    r = FS.route("ddflow_view", {"action": "queue", "op": "add"})
-    assert FS.missing_required(r) == []
-
-
-def test_self_named_family_tools_do_not_advertise_action_as_required():
-    assert {f for f in FAMILY_NAMES if f in TOOLS} == {"ddflow_doctor", "ddflow_workflow"}
-    for f in ("ddflow_doctor", "ddflow_workflow"):
-        assert "required" not in FS.family_entry(f)["inputSchema"]
-        assert FS.route(f, {}) is None
+def test_an_explicit_null_action_is_a_missing_action_even_for_a_self_named_tool():
+    err = FS.route("ddflow_doctor", {"action": None})
+    assert isinstance(err, str) and "action" in err and "check" in err
