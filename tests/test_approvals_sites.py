@@ -31,9 +31,9 @@ def _scan(tree: ast.AST, rel: str, found: dict[str, int], aliased: list[str]) ->
             if isinstance(child, ast.Call) and _called_name(child) in S.MARKER_NAMES:
                 key = f"{rel}:{fn}"
                 found[key] = found.get(key, 0) + 1
-            if isinstance(child, ast.Name | ast.Attribute) and id(child) not in callee:
-                name = child.id if isinstance(child, ast.Name) else child.attr
-                if name in S.MARKER_NAMES and not isinstance(child.ctx, ast.Store):
+            if isinstance(child, ast.Name) and id(child) not in callee:
+                name = child.id
+                if name in S.MARKER_NAMES and isinstance(child.ctx, ast.Load):
                     aliased.append(f"{rel}: {name} used as a value")
             if isinstance(child, ast.ImportFrom):
                 aliased.extend(
@@ -127,3 +127,10 @@ def test_rows_are_well_formed_and_the_amended_acts_are_listed():
         assert (s.tier == S.T3) == (s.min_level == S.L4), s.verb
     for required in ("gate.skip.failed_review", "grant.add", "claim.force", "complete.force"):
         assert S.site(required).tier == S.T2
+
+
+def test_an_unrelated_attribute_named_like_a_marker_is_not_an_alias(tmp_path):
+    pkg = tmp_path / "ddflow" / "services"
+    pkg.mkdir(parents=True)
+    (pkg / "queries.py").write_text("def summarize(row):\n    return row.is_agent\n")
+    assert _calls(tmp_path) == ({}, [])
