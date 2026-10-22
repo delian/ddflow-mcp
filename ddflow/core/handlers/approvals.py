@@ -30,6 +30,8 @@ def grant_row(ev: Event, subject: str) -> dict[str, Any]:
         "human": bool(d.get("human")),
         "note": d.get("note", ""),
         "token_hash": d.get("token_hash", ""),
+        # The terms of a recorded grant (`services.grants`); {} for any other approval.
+        "terms": d.get("terms") or {},
         "used_at": "",
         "agent": ev.agent,
         "at": ev.ts,

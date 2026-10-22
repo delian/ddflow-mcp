@@ -2382,6 +2382,16 @@
           matched globs and the approval). A gate of the item's pipeline that is
           neither listed here nor `merge` (which the merge itself records) is left for
           you to run, and the chore does not complete until it carries an outcome.
+      grants.max_count = 3   [default]
+          The most extra rounds ONE operator grant may carry (default 3): `ddflow
+          grant add --count N` above it is refused. A grant is the operator's recorded
+          permission for rounds past [review].max_rounds (`ddflow grant list`); a
+          standing allowance of many rounds is a raised max_rounds, which is a
+          decision, not a grant.
+      grants.ttl_h = 48   [default]
+          How many hours an operator grant stays usable after it is added (default 48;
+          0 = never expires). An expired grant is still listed, marked expired, and a
+          review no longer cites it.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
