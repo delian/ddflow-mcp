@@ -134,3 +134,22 @@ def test_the_report_says_what_did_not_pass(repo):
     assert not report.passed
     rendered = report.render()
     assert "did not pass" in rendered and "hooks armed" in rendered
+
+
+def test_brief_and_next_run_this_trees_code_whatever_interpreter_started_us(repo, monkeypatch):
+    """B5e962c5161: the child `python -m ddflow` found no ddflow under an interpreter that
+    did not have it installed, so the pinned transcript changed with the regenerating python."""
+    seen = []
+
+    def fake_capture(argv, **kwargs):
+        seen.append(kwargs.get("env") or {})
+        return V.P.Captured(0, "line\n", "")
+
+    monkeypatch.setattr(V.P, "capture", fake_capture)
+    monkeypatch.setenv("PYTHONPATH", "/elsewhere")
+    assert V._answers(repo).outcome == "passed"
+    root = str(Path(V.__file__).resolve().parents[2])
+    assert len(seen) == 2
+    for env in seen:
+        assert env.get("PYTHONPATH", "").split(":")[0] == root
+        assert "/elsewhere" in env["PYTHONPATH"]
