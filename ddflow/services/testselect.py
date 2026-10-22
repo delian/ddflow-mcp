@@ -376,6 +376,15 @@ def _dirs_below_tests(path: str, homes: set[str]) -> list[str] | None:
     return None
 
 
+def fail_fast(command: str) -> bool:
+    """Whether a test command stops at its first failure (`-x`, `--exitfirst`, `--maxfail`)."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return True  # cannot tell: do not read a missing failure line as a pass
+    return any(t in ("-x", "--exitfirst") or t.startswith("--maxfail") for t in tokens)
+
+
 def run_command(configured: str, tests: list[str], root: Path) -> str:
     """A command that runs ``tests`` the way the project runs its suite, in parallel.
 
