@@ -22,6 +22,7 @@ TASK_BODY = "implement observation of client capability at connect time with a p
 @pytest.fixture(autouse=True)
 def _ask(monkeypatch):
     monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "ask")
+    monkeypatch.delenv("DDFLOW_DEDUPE_RESEARCH_TASK_ASKS", raising=False)
 
 
 def _seed(repo):
