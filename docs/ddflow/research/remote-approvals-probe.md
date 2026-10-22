@@ -30,8 +30,8 @@ Claude app while the CLI process, its tools and its files live on this host. The
    session) produces it.
 5. **CONFIRMED limit: the file is writable by the agent.** It is owned by the agent's uid and not append-only. A shell
    command can append rows of exactly this shape, so transcript attestation is **visible forgery, not impossible**
-   (the same class as L1; research section 5). It stops accident, prompt injection and a model that merely *claims* an
-   answer; it does not stop an agent that edits its own transcript.
+   (the same class as L1; research section 5). It stops accident and a model that merely *claims* an answer in text; it does
+   not stop an agent that edits its own transcript, which includes an agent following an injected instruction to do so.
 6. **CONFIRMED: this session runs with `permissionMode: bypassPermissions`.** Tool permission prompts are skipped, so a
    PreToolUse hook that returns `ask` cannot be relied on to prompt in such sessions; `AskUserQuestion` is a question
    tool, not a permission prompt, and is still put to the person.
@@ -47,9 +47,9 @@ Claude app while the CLI process, its tools and its files live on this host. The
   finding 2 counts, and the question text must equal ddflow's rendering byte for byte.
 * **Not verifiable:** that a person, not a script holding the session, answered; that the file was not edited. Doctor
   says so.
-* **Cloud sandbox sessions (the process runs in Anthropic's sandbox):** the transcript is in the sandbox filesystem,
-  so the same mechanism applies when ddflow runs there and can read it; **UNAVAILABLE** here: no such session was
-  reachable from this host, so its row shape and path are unconfirmed.
+* **Cloud sandbox sessions (the process runs in Anthropic's sandbox):** **UNAVAILABLE**: no such session was reachable
+  from this host, so whether the transcript exists there, where, and in which shape is unconfirmed. Until someone runs
+  the script in one, the harness channel is inert there (D-RA-Q5 already says so).
 
 ## Unavailable (not run; reasons)
 
