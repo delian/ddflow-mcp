@@ -55,6 +55,17 @@ def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
     return out
 
 
+def gate_waits(ctx: Context) -> dict[str, list[float]]:
+    """gate -> seconds each of its runs spent queued for the host lock (its ``waited_s``
+    evidence). A run with no figure (an older log, a gate that took no lock) has no sample:
+    never a zero."""
+    out: dict[str, list[float]] = defaultdict(list)
+    for o in scoped_outcomes(ctx):
+        if o.kind in RAN and o.waited_s is not None:
+            out[o.gate].append(o.waited_s)
+    return out
+
+
 def review_rounds(ctx: Context) -> list[int]:
     """Review verdicts per item completed inside the view, over its whole life (0 for an item whose reviews were all skipped)."""
     counts: Counter[str] = Counter(
@@ -172,7 +183,15 @@ def build(ctx: Context, group_by: str = "gate") -> dict:
     per_gate: dict[str, list[float]] = defaultdict(list)
     for o, secs in gate_durations(ctx):
         per_gate[o.gate].append(secs)
-    gate_time = [{"gate": g, **stat(v, minimum)} for g, v in sorted(per_gate.items())]
+    waits = gate_waits(ctx)
+    gate_time = [
+        {
+            "gate": g,
+            **stat(v, minimum),
+            **{f"wait_{k}": x for k, x in stat(waits.get(g, []), minimum).items()},
+        }
+        for g, v in sorted(per_gate.items())
+    ]
     if not any(r["p50_s"] is not None for r in gate_time):
         unavailable["gate_time"] = f"no gate with {minimum} timed runs"
     rounds = [float(n) for n in review_rounds(ctx)]
