@@ -1364,7 +1364,7 @@ def _split_leases(
     others: dict[str, str] = {}
     holds_any = False
     for item_id, lease in state.active_leases(now, grace_s).items():
-        if item_id in state.items and state.items[item_id].terminal and lease.holder != me:
+        if item_id in state.items and state.items[item_id].terminal:
             continue  # a finished item holds nothing, as for `update` (Bb7df2561a1)
         if _counts_as_mine(repo, lease, me, here):
             holds_any = True

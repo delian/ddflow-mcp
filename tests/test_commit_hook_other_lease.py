@@ -131,13 +131,15 @@ def test_a_wildcard_holder_who_never_touched_the_file_does_not(repo, cfg, monkey
     assert E.check_commit(repo, cfg, agent="owner") == (0, "")
 
 
-def test_the_holders_own_finished_lease_still_covers_its_last_commit(repo, cfg, monkeypatch):
-    """Deliberate: only ANOTHER agent's finished lease is ignored; the holder's own stays."""
+def test_the_holders_own_finished_lease_covers_nothing_either(repo, cfg, monkeypatch):
+    """A finished item holds nothing -- its holder's new work needs a lease of its own, as
+    for `update`."""
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
     EventLog(repo, "owner").append("item.abandoned", "T1", {"reason": "done"})
     monkeypatch.chdir(tree)
-    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1 and "not covered" in msg, msg
 
 
 def test_a_lease_on_another_release_line_is_another_branch(repo, cfg, monkeypatch):
