@@ -963,7 +963,7 @@
    "cleanup"
   ],
   2,
-  "{\n  \"schema\": \"cleanup@1\",\n  \"trees\": [],\n  \"stale_branches\": []\n}\n",
+  "{\n  \"schema\": \"cleanup@1\",\n  \"trees\": [],\n  \"stale_branches\": [],\n  \"orphan_blobs\": []\n}\n",
   ""
  ],
  [

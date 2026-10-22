@@ -63,6 +63,10 @@ def uncommitted_blobs(repo: Path) -> list[str]:
 _NAMED = re.compile(rb"sha256:([0-9a-f]{64})")
 
 
+#: How many orphan blobs a commit note names before it says "...".
+_NAMED_ORPHANS = 3
+
+
 def named_blobs(repo: Path) -> set[str]:
     """The hex digests that any event shard in ``repo`` names: the blobs that belong to a log."""
     found: set[str] = set()
@@ -267,7 +271,15 @@ def _read_plan(repo: Path, reason: str, template: str):
     skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
     if orphans:
         skipped = "; ".join(
-            filter(None, [skipped, f"{len(orphans)} blob(s) no event names left uncommitted"])
+            filter(
+                None,
+                [
+                    skipped,
+                    f"{len(orphans)} blob(s) no event names left uncommitted: "
+                    + ", ".join(orphans[:_NAMED_ORPHANS])
+                    + (", ..." if len(orphans) > _NAMED_ORPHANS else ""),
+                ],
+            )
         )
     if not taken:
         return stop(f"event log not committed: {skipped}" if skipped else "")
