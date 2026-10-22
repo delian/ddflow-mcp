@@ -87,7 +87,7 @@ def test_an_untracked_pin_file_the_merge_would_overwrite_is_named_too(repo):
     assert not r.ok
     hint = PN.dirt_hint(repo, cfg, r.err or r.out, repo)
     assert "GEN.md is an untracked pin file" in hint
-    assert "&& mv GEN.md GEN.md.stray`" in hint
+    assert "&& mv -n GEN.md GEN.md.stray`" in hint
 
 
 def test_the_remedy_quotes_a_path_with_a_space(tmp_path):
@@ -99,3 +99,14 @@ def test_the_remedy_quotes_a_path_with_a_space(tmp_path):
     )
     hint = PN.dirt_hint(tmp_path, Config(), err, Path("/a b/c"))
     assert "git -C '/a b/c' checkout HEAD -- README.md" in hint
+
+
+def test_a_pinned_directory_covers_the_files_git_names_under_it(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(RECIPES.replace('"README.md"', '"snaps/"'))
+    err = (
+        "error: Your local changes to the following files would be overwritten by merge:\n"
+        "\tsnaps/a.snap\n\tother/b.txt\nMerge with strategy ort failed."
+    )
+    hint = PN.dirt_hint(tmp_path, Config(), err, tmp_path)
+    assert "snaps/a.snap" in hint and "other/b.txt" not in hint

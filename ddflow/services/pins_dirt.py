@@ -30,8 +30,12 @@ def dirt_hint(repo: Path, cfg: Config, git_error: str, tree: Path) -> str:
                 break
             into.append(nxt.lstrip(" \t"))
     pins = set(pin_files(repo, cfg))
-    mine = [f for f in tracked if f in pins]
-    loose = [f for f in untracked if f in pins]
+
+    def pinned(path: str) -> bool:  # a recipe may pin a directory: every file under it
+        return any(path == p or path.startswith(p.rstrip("/") + "/") for p in pins)
+
+    mine = [f for f in tracked if pinned(f)]
+    loose = [f for f in untracked if pinned(f)]
     if not mine and not loose:
         return ""
     where = shlex.quote(str(tree))
@@ -47,7 +51,7 @@ def dirt_hint(repo: Path, cfg: Config, git_error: str, tree: Path) -> str:
             "then merge again; if it is a real edit, commit it first."
         )
     if loose:
-        moves = "; ".join(f"mv {shlex.quote(f)} {shlex.quote(f + '.stray')}" for f in loose)
+        moves = "; ".join(f"mv -n {shlex.quote(f)} {shlex.quote(f + '.stray')}" for f in loose)
         out += (
             f"\n\n{', '.join(loose)} is an untracked pin file in {tree} (a stray `ddflow pins "
             f"regenerate` wrote it there): move it aside "
