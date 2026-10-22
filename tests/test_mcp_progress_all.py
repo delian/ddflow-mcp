@@ -140,3 +140,20 @@ def test_frames_written_from_two_threads_never_interleave(tmp_path):
         t.join()
     rows = [json.loads(line) for line in out.getvalue().splitlines()]
     assert len(rows) == 20
+
+
+def test_an_unhashable_progress_token_does_not_fail_a_finished_call(repo, monkeypatch):
+    spec = dict(TOOLS["ddflow_wait"])
+    spec["api"] = lambda *a, **k: Outcome(kind="status", data={"text": "ok"})
+    monkeypatch.setitem(TOOLS, "ddflow_wait", spec)
+    srv = mcp.Server(repo, called_from=repo)
+    srv.notify = lambda frame: None
+    reply = srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_wait", "arguments": {}, "_meta": {"progressToken": ["a"]}},
+        }
+    )
+    assert "error" not in reply and not reply["result"].get("isError"), reply
