@@ -86,7 +86,7 @@ def test_a_fully_recorded_item_is_told_to_complete_outright(repo):
     _merged(repo, "T1", "src/T1/a.py")
     pass_pipeline(repo, "T1", omit=("merge",))
     (rec,) = _recs(repo, "T1")
-    assert "Finish it: `ddflow complete T1`" in rec.advice, rec.advice
+    assert "Finish it: `ddflow complete T1 --model <author model>`" in rec.advice, rec.advice
 
 
 def test_a_docs_only_item_is_not_owed_the_code_gates(repo):
@@ -127,3 +127,11 @@ def test_a_kept_clean_tree_with_no_lease_is_advised_to_complete_without_a_lease_
     assert rec.kind == "orphan_worktree"
     assert "ddflow complete T1" in rec.advice and "ddflow release" not in rec.advice, rec.advice
     assert "clears the lease" not in rec.advice
+
+
+def test_a_finished_item_with_a_surviving_clean_tree_is_not_advised_to_complete_again(repo):
+    _merged(repo, "T1", "src/T1/a.py", keep=True)
+    log = EventLog(repo, "worker")
+    L.release(log, "T1", note="released")
+    log.append("item.completed", "T1", {"sha": "abc"})
+    assert not [r for r in _recs(repo, "T1") if "ddflow complete" in r.advice]
