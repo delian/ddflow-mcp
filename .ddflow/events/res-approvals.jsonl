@@ -1,0 +1,3 @@
+{"agent":"res-approvals","data":{"format_level":1,"install":"source-tree","version":"0.2.7"},"id":"e5447287458c2022b3ab0ddec","kind":"ddflow.seen","lamport":93336,"schema":1,"subject":"ddflow","ts":"2026-10-22T16:38:39.610501Z"}
+{"agent":"res-approvals","data":{"path":".ddflow/worktrees/fix-B-decision-add-duplicate-vs-own-task"},"id":"ed908102124508df76b0cb626","kind":"worktree.removed","lamport":93337,"schema":1,"subject":"fix-B-decision-add-duplicate-vs-own-task","ts":"2026-10-22T16:38:39.647509Z"}
+{"agent":"res-approvals","data":{"cwd":"[REDACTED:path]","implicit":true,"model":"","tool":"claude"},"id":"e9c1248aa0a0c8628e30dccad","kind":"session.started","lamport":93344,"schema":1,"subject":"s20261022T163925-1624674","ts":"2026-10-22T16:39:25.328613Z"}
