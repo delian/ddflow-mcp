@@ -90,3 +90,14 @@ def test_a_merge_commit_carrying_its_own_edit_is_not_a_leftover(repo, tmp_path):
     _g(tree, "commit", "-qm", "merge main, with an edit")
     t = next(x for x in _plan(repo).trees if x.path == str(tree))
     assert t.action == "", t.done
+
+
+def test_a_root_commit_with_real_files_is_not_a_leftover(repo, tmp_path):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    _g(tree, "checkout", "-q", "--orphan", "fresh")
+    (tree / "only.txt").write_text("the only copy\n")
+    _g(tree, "add", "only.txt")
+    _g(tree, "commit", "-qm", "root")
+    _g(tree, "branch", "-M", "ddflow/T1")
+    t = next(x for x in _plan(repo).trees if x.path == str(tree))
+    assert t.action == "", t.done
