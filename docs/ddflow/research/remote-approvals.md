@@ -103,7 +103,9 @@ One protocol for every gated command, built on the ask engine (no second engine,
 **4.2 Approve or deny.** A person answers by one of the channels in section 5 with the digest they saw. The engine
 already enforces human-only answering, digest match, expiry, one-time code. New: the answer carries `level` and `proof`
 (signature, code, harness attestation) and `verdict` re-verifies the proof instead of trusting the self-reported
-`human` flag (this closes Finding 1 for levels L2 and above).
+`human` flag. This closes the **self-reported-flag** gap (threat classes 1 and 2): a forgery now needs a proof-shaped
+artifact. It does **not** make L2/L3 unforgeable by a same-uid shell (class 3), which can fake a hook payload or edit a
+transcript; only L4 (a signature the agent cannot make) closes that, and the docs say so.
 
 **4.3 Consume.** The gated site stops asking "is the caller an agent?" and asks one function:
 `operator_gate(verb, params, caller, approval_id)`:
@@ -122,7 +124,9 @@ Properties by construction: single use (spent under lock, a replay is refused), 
 item, gate and state), expiring, requester-bound, widening-proof (any change is a new digest and needs a new ask),
 self-approval-proof (the agent identity cannot answer), revocable (`approvals revoke` writes `ask.withdrawn`; consume
 re-checks). Class B (relayed `--yes --reason`) gains an optional upgrade path: `--approval A` in place of the
-trust-me flags; the old flags keep working until a tier says otherwise (section 7).
+trust-me flags. Class B verbs are T2 by classification, but their per-verb `require_approval` defaults to **false**:
+both forms are accepted for one release (decision Q2), `doctor` warns on each relayed use, and the operator flips
+`require_approval` per verb when ready.
 
 **4.4 Class S vs class A.** State approvals (partial accept, reviewer trust, chore globs, export ack) are today read
 later by a `check`. Under the protocol the person's answer to the ask **is** the approval and the agent need not run
@@ -187,14 +191,15 @@ transcript", never as default, and prefer elicitation and signatures.
   the skip is a recorded skip); accept a `partial` that ddflow **measured** as baseline-red (D-accept-baseline-red-partial);
   `claim` takeover of a lease expired for more than a day. Auto-approvals are `ask.answered` with `by=policy:<rule>`,
   `human=false`, `policy=true`, and the consumer counts them **only** for verbs that list policy as acceptable.
-* **T2: per-instance approval** (the default for every operator act in family A and B): `gate skip` over a failed
+* **T2: per-instance approval** (the default for every operator act in family A, and for family B with `require_approval = false` until switched on, section 4.3): `gate skip` over a failed
   review gate, `grant add`, partial accept, `reviewers approve` (HTTP entries), `chore approve`, `export ack`, `claim
   --force`, `complete --force`, `plan confirm`, `upgrade --self`, skew override, `version cut`, `promote`, `cleanup
   --apply`. Minimum level L1 (terminal) by default, L2/L3/L4 accepted; the operator can raise per verb.
 * **T3: signed or terminal only**: the approval system's own configuration (`[approvals]`, `[agent].roles/actors`,
   `[agent].operator_role/default_role`, signer list, key rotation), `[hooks].forbidden_commands`, command-kind
-  `[[reviewer]]` entries (they execute code; D-reviewer-trust-r2), disabling hooks, company-layer floors. Minimum L4, or L1
-  at a real terminal when no signer is configured. An agent may **file** the request (so the operator sees exactly what
+  `[[reviewer]]` entries (they execute code; D-reviewer-trust-r2), disabling hooks, company-layer floors. Minimum L4. With no signer configured a T3 act
+  can be answered at L1 **only to enroll the first signer**; until one exists `doctor` reports "T3 protected only by L1,
+  forgeable by a same-uid agent" and every later T3 act needs L4. An agent may **file** the request (so the operator sees exactly what
   to sign) but no lower-level answer is accepted.
 * **T0: ungated** stays ungated.
 
@@ -226,7 +231,9 @@ request window, a shorter `use_ttl_s` after approval; the sweep writes `ask.expi
 Families after the diet (15, from the matrix in `research/mcp-tool-diet.md`): `view task reviewers memory doctor admin gate
 workflow rule ship lease decision session job bug`. Approvals is not a noun in that list and **no 16th tool is allowed**. Recommended home:
 `ddflow_session` (it already carries `session prompt`, the operator's recorded words, and `note`): **new actions `ask`
-(file a request; with `wait_s` it blocks on elicitation when the client supports it), `asks` (list/show the agent's own
+(file a request, return a handle at once; an optional bounded `wait_s` (the run-handle limit of RM-run-tool-mcp, 45 s) lets one
+elicitation prompt be answered inside the same call when the client supports it, otherwise the call returns `pending` and the
+agent takes the next item, never polling or holding a lease while it waits: r-lock-cycle-selfheal), `asks` (list/show the agent's own
 pending and answered requests) and `withdraw`**. Consuming needs no action: the gated actions gain one optional,
 deduplicated union parameter `approval` (the diet already shares `as_agent` once). Answering (`approve`, `deny`,
 `revoke`) has **no MCP action**, like `approve`, `grant` and `chore` today (exemptions): the MCP surface can ask and
