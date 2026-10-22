@@ -97,6 +97,19 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
     return "" if out.ok else out.reason
 
 
+def _item_ref(repo: Path, it) -> tuple[str, str]:
+    """``(ref, why)``: what ``ddflow ci run <item id>`` checks. The item's branch while it
+    exists; once the merge deleted it, the commit the item landed as; else why there is none."""
+    if it.merged_sha and W.rev(repo, it.merged_sha):  # what landed outranks a leftover branch
+        return it.merged_sha, ""
+    if it.branch and W.rev(repo, it.branch):
+        return it.branch, ""
+    if it.merged_sha:
+        return "", f"{it.id} merged as {it.merged_sha[:12]}, which this clone does not have"
+    gone = f"its branch {it.branch!r} is gone" if it.branch else "it has no branch"
+    return "", f"{it.id} is not merged and {gone}: name a commit with --ref"
+
+
 def run(
     repo: Path,
     *,
@@ -123,8 +136,10 @@ def run(
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
-    if ref in st.items and st.items[ref].branch:  # an item id names its branch
-        ref = st.items[ref].branch
+    if ref in st.items:  # an item id names its branch, or the commit it landed as
+        ref, why = _item_ref(repo, st.items[ref])
+        if why:
+            return O.nothing("ci.run", why, status="unavailable")
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s,
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
@@ -157,17 +172,18 @@ def ci_tool(
     repo: Path,
     *,
     action: str = "status",
-    ref: str = "HEAD",
+    ref: str = "",
     base: str = "",
     command: str = "",
     agent: str = "",
     called_from: Path | None = None,
     full: bool = False,
 ) -> O.Outcome:
-    """The `ddflow_ci` tool: action run | status."""
+    """The `ddflow_ci` tool: action run | status. ``ref`` empty is no ref (the held item's
+    branch, Be81c39acb8); a ref named, `HEAD` included, is taken at its word (B8f41346d9f)."""
     if action == "run":
-        if ref in ("", "HEAD"):  # no ref given: the held item's branch (Be81c39acb8)
-            ref = held_item(repo, agent, called_from) or ref
+        if not ref:
+            ref = held_item(repo, agent, called_from)
         return run(
             repo,
             ref=ref or "HEAD",
@@ -178,7 +194,7 @@ def ci_tool(
             full=full,
         )
     if action == "status":
-        if base or command or (ref and ref != "HEAD"):
+        if base or command or ref not in ("", "HEAD"):
             return O.refused("ci", "ref, base and command are for action=run")
         return status(repo, agent=agent)
     return O.refused("ci", f"unknown action {action!r}: run | status")
