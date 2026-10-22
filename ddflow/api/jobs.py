@@ -189,6 +189,13 @@ def job_end(
         return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
     if item and all_finished:
         return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
+    if (item or all_finished) and (exit_code is not None or note):
+        return O.refused(
+            "job.ended",
+            "--exit-code and --note describe ONE job: each finished job is ended with its own "
+            "recorded exit, so end that job by id to override it",
+            id="",
+        )
     if not job:
         if not (item or all_finished):
             return O.failed(

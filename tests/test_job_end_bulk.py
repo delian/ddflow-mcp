@@ -157,7 +157,7 @@ def test_collect_finished_orders_jobs_even_without_a_start_time():
             self.written.extend(items)
 
     st = State()
-    for jid, started in (("J1", ""), ("J2", "2026-01-01T00:00:00Z")):
+    for jid, started in (("J2", "2026-01-01T00:00:00Z"), ("J1", "")):  # inserted out of order
         st.jobs[jid] = Job(id=jid, item="A", pid=0, host=J.host(), started_at=started)
     log = Log()
     assert AJ.collect_finished(log, st) == ["J1", "J2"]
@@ -197,3 +197,11 @@ def test_a_collection_that_cannot_run_is_reported_not_silent():
 
     ended, why = AJ.collect_for_item(Log(), "A")
     assert ended == [] and "not collected" in why and "log unreadable" in why
+
+
+def test_bulk_end_refuses_a_single_jobs_exit_code_and_note(repo):
+    run_cli(repo, "init")
+    code, _o, _e = run_cli(repo, "job", "end", "--all-finished", "--exit-code", "42")
+    assert code == REFUSED
+    code, _o, _e = run_cli(repo, "job", "end", "--item", "A", "--note", "cancelled")
+    assert code == REFUSED
