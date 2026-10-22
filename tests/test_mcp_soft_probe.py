@@ -340,17 +340,86 @@ def test_a_timeout_still_classifies_what_the_log_recorded(tmp_path):
     assert code == 1
 
 
-def test_delaybump_adds_the_tool_only_when_it_notifies(tmp_path):
-    c = Client(tmp_path, "--delay", "1.5")
+def test_delaybump_does_not_add_the_tool_before_it_notifies(tmp_path):
+    c = Client(tmp_path, "--delay", "60")  # never fires inside the test: no timing involved
     c.call("initialize", {"protocolVersion": "2025-06-18"})
     r = c.call("tools/call", {"name": "delaybump"})
     assert "list your tools" not in json.dumps(r), "the result must not prompt a refetch"
     assert "secret_oracle" not in json.dumps(r)
     assert "secret_oracle" not in _tool_names(c.call("tools/list"))
+    c.p.kill()
+
+
+def test_delaybump_adds_the_tool_with_its_notification(tmp_path):
+    c = Client(tmp_path, "--delay", "0.2")
+    c.call("initialize", {"protocolVersion": "2025-06-18"})
+    c.call("tools/call", {"name": "delaybump"})
     note = c.read_until(None)
     assert "secret_oracle" not in json.dumps(note)
     assert "secret_oracle" in _tool_names(c.call("tools/list"))
     c.close()
+
+
+def test_add_and_notify_are_one_step_under_the_lock():
+    """critic: a tools/list handled between the add and the notification would show the tool
+    before the notification. The lock is held across both."""
+    import io
+
+    from ddflow.mcpshim import probe_server as ps
+
+    probe = ps._Probe(io.StringIO(), io.StringIO(), 0)
+    held = []
+    real_send = probe.send
+
+    def spy(m):
+        held.append(probe.lock._is_owned())  # the re-entrant lock is held by this thread
+        real_send(m)
+
+    probe.send = spy
+    probe._add_and_notify()
+    assert held == [True]
+
+
+def test_logging_is_not_truncated(tmp_path):
+    big = {
+        "protocolVersion": "x",
+        "clientInfo": {"name": "huge", "version": "1"},
+        "capabilities": {"experimental": {"x": "y" * 200_000}},
+    }
+    c = Client(tmp_path)
+    c.call("initialize", big)
+    c.call("tools/list")
+    log = c.close()
+    assert _analyze()(log)["client"] == {"name": "huge", "version": "1"}
+    out_tools = [ln for ln in log.splitlines() if " OUT " in ln and '"result": {"tools"' in ln]
+    assert out_tools and json.loads(out_tools[0].split(None, 2)[2])["result"]["tools"]
+
+
+def test_an_unavailable_row_keeps_what_the_log_already_showed(tmp_path):
+    mod = _script()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "claude").write_text(
+        f"#!{sys.executable}\n"
+        "import json, subprocess, sys\n"
+        "cfg = json.load(open(sys.argv[sys.argv.index('--mcp-config') + 1]))['mcpServers']['lc']\n"
+        "p = subprocess.Popen([cfg['command'], *cfg['args']], stdin=subprocess.PIPE,\n"
+        "                     stdout=subprocess.PIPE, text=True)\n"
+        "p.stdin.write(json.dumps({'jsonrpc':'2.0','id':1,'method':'initialize','params':\n"
+        "    {'protocolVersion':'r9','clientInfo':{'name':'c','version':'2'}}})+'\\n')\n"
+        "p.stdin.flush(); p.stdout.readline(); p.stdin.close(); p.wait(); sys.exit(1)\n"
+    )
+    (fake / "claude").chmod(0o755)
+    import os
+
+    old = os.environ["PATH"]
+    os.environ["PATH"] = str(fake) + os.pathsep + old
+    try:
+        row, code = mod.probe_row("claude", timeout=20)
+    finally:
+        os.environ["PATH"] = old
+    assert row["list_changed"] == "unavailable" and code == 2
+    assert row["revision"] == "r9" and row["client"] == {"name": "c", "version": "2"}
 
 
 @pytest.mark.parametrize(
