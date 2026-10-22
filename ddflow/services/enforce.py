@@ -1549,7 +1549,7 @@ def _uncovered_message(
 
 
 def _with_contested(
-    repo: Path, log, cfg, state, paths, mine, uncovered, me, here, now
+    repo: Path, log, cfg, state, paths, uncovered, me, here, now
 ) -> tuple[list[str], dict[str, str]]:
     """``uncovered`` plus the paths a wildcard of mine covers that another live lease holds
     too (`enforce_contested`), and those paths with their holders."""
@@ -1558,9 +1558,8 @@ def _with_contested(
         cfg,
         state,
         paths,
-        mine,
         lambda lz: _counts_as_mine(repo, lz, me, here),
-        lambda lz: _made_tree(repo, lz) == here,
+        lambda lz: here is not None and _made_tree(repo, lz) == here,
         now,
     )
     return uncovered + [p for p in twice if p not in uncovered], twice
@@ -1598,7 +1597,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
     uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
-    uncovered, twice = _with_contested(repo, log, cfg, state, paths, mine, uncovered, me, here, now)
+    uncovered, twice = _with_contested(repo, log, cfg, state, paths, uncovered, me, here, now)
     if not uncovered:
         return Verdict(OK, "")
 

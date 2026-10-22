@@ -31,7 +31,6 @@ def contested(
     cfg: Config,
     state: State,
     paths: list[str],
-    mine: list[str],
     is_mine: Callable[[Lease], bool],
     in_tree: Callable[[Lease], bool],
     now: float,
@@ -39,56 +38,57 @@ def contested(
     """path -> "item (holder)" for each of ``paths`` the committer covers by wildcard only
     and another live, unfinished lease on the same line covers too, as `update` judges it."""
     shared = shared_globs(cfg)
-    subject = [
-        p
-        for p in paths
-        if not is_shared(p, shared)
-        and any(path_in_glob(p, g) for g in mine)
-        and all(_wild(g) for g in mine if path_in_glob(p, g))
-    ]
-    if not subject:
-        return {}
-    mine_lines = _lines_of_mine(state, cfg, subject, is_mine, in_tree, now)
+    unfinished = L.unfinished_leases(state, cfg, now)
+    lines = _commit_lines(state, cfg, paths, unfinished, is_mine, in_tree, shared)
     out: dict[str, str] = {}
-    for item_id, lz in L.unfinished_leases(state, cfg, now).items():
+    for item_id, lz in unfinished.items():
         other = state.items.get(item_id)
         if other is None or is_mine(lz):
             continue
         other_line = line_key(state, other, cfg)
         cache: dict[str, list[str] | None] = {}  # one git read per lease, not per path
-        for p in subject:
-            if p in out or other_line not in mine_lines[p]:
+        for p, mine_line in lines.items():
+            if p in out or other_line != mine_line:
                 continue  # taken already, or another release line: another branch, as for `update`
             if _holds_path(log, other, lz, p, shared, cache):
                 out[p] = f"{item_id} ({lz.holder})"
     return out
 
 
-def _lines_of_mine(
+def _commit_lines(
     state: State,
     cfg: Config,
     paths: list[str],
+    unfinished: dict[str, Lease],
     is_mine: Callable[[Lease], bool],
     in_tree: Callable[[Lease], bool],
-    now: float,
-) -> dict[str, set[str]]:
-    """path -> the release lines the commit can be for: those of the committer's leases that
-    cover it. A lease made
-    for the tree being committed in is the commit's own item, so when one covers the path
-    only its line counts, not the lines of the committer's other items."""
-    seen: dict[str, list[tuple[str, bool]]] = {p: [] for p in paths}
-    for item_id, lz in state.active_leases(now, cfg.lease.grace_s).items():
-        it = state.items.get(item_id)
-        if it is None or not is_mine(lz):
+    shared: list[str],
+) -> dict[str, str]:
+    """path -> the release line its commit is for, for each path the committer covers by
+    WILDCARDS only. The leases covering a path are the committer's; the one made for the tree
+    being committed in is the commit's own item, and when there is one only it counts, so
+    the lines of the committer's other items never decide. A path two lines claim, or one an
+    exact glob covers, is left out: an exact holder is never overlapped."""
+    out: dict[str, str] = {}
+    for p in paths:
+        if is_shared(p, shared):
             continue
-        line, here = line_key(state, it, cfg), in_tree(lz)
-        for p in paths:
-            if any(path_in_glob(p, g) for g in lz.globs):
-                seen[p].append((line, here))
-    return {
-        p: {ln for ln, here in hits if here or not any(h for _, h in hits)}
-        for p, hits in seen.items()
-    }
+        cover = [
+            (
+                line_key(state, state.items[i], cfg),
+                in_tree(lz),
+                [g for g in lz.globs if path_in_glob(p, g)],
+            )
+            for i, lz in unfinished.items()
+            if i in state.items and is_mine(lz)
+        ]
+        cover = [c for c in cover if c[2]]
+        if any(here for _, here, _ in cover):
+            cover = [c for c in cover if c[1]]
+        lines = {line for line, _, _ in cover}
+        if len(lines) == 1 and all(_wild(g) for _, _, gs in cover for g in gs):
+            out[p] = lines.pop()
+    return out
 
 
 def _names(lz: Lease, path: str, shared: list[str]) -> list[str]:
