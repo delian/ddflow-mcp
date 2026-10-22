@@ -50,7 +50,7 @@ class Routed(NamedTuple):
     display: str
 
 
-def _member_props(tool: str) -> dict[str, tuple[str, str, bool]]:
+def member_props(tool: str) -> dict[str, tuple[str, str, bool]]:
     props = dict(TOOLS[tool]["properties"])
     if not TOOLS[tool].get("identify"):
         props[AS_AGENT] = AS_AGENT_SPEC
@@ -64,7 +64,7 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
     belongs to (the members' meanings differ, so they are joined, not picked between)."""
     union: dict[str, tuple[set[str], str]] = {}
     for act, tool in family.members.items():
-        for arg, (kind, text, _req) in _member_props(tool).items():
+        for arg, (kind, text, _req) in member_props(tool).items():
             if arg == ACTION:
                 types, said = union.get(OP, (set(), ""))
                 union[OP] = (types | {kind}, f"{said} {act}: {text}".strip())
@@ -75,7 +75,16 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
 
 
 def _requires(tool: str) -> list[str]:
-    return [n for n, (_t, _d, req) in TOOLS[tool]["properties"].items() if req]
+    """What the member requires, by the name its family gives each argument (``op``)."""
+    return [
+        OP if n == ACTION else n for n, (_t, _d, req) in TOOLS[tool]["properties"].items() if req
+    ]
+
+
+def missing_required(routed: Routed) -> list[str]:
+    """The arguments the routed member requires and the call lacks, in the member's own names."""
+    props = TOOLS[routed.tool]["properties"]
+    return [n for n, (_t, _d, req) in props.items() if req and not routed.args.get(n)]
 
 
 def _description(family: Family) -> str:

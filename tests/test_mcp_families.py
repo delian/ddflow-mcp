@@ -5,6 +5,7 @@ member with errors that name the action (D-mcp-tool-families)."""
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ddflow.surfaces.registry import properties_schema
 from ddflow.surfaces.tools import TOOLS
 from ddflow.surfaces.tools import families as F
 from ddflow.surfaces.tools import family_schema as FS
@@ -121,7 +123,30 @@ def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
 
 
 def _flat(tool):
-    from ddflow.surfaces.mcp import _schema
+    schema = properties_schema(FS.member_props(tool))
+    return {"name": tool, "description": TOOLS[tool]["description"], "inputSchema": schema}
 
-    s = TOOLS[tool]
-    return {"name": tool, "description": s["description"], "inputSchema": _schema(s)}
+
+def test_missing_required_arguments_are_found_per_action():
+    r = FS.route("ddflow_gate", {"action": "record"})
+    assert FS.missing_required(r) == ["id", "gate", "outcome"]
+    r = FS.route("ddflow_gate", {"action": "record", "id": "T", "gate": "ci", "outcome": "passed"})
+    assert FS.missing_required(r) == []
+
+
+def test_a_required_own_action_argument_is_listed_as_op_in_the_description(monkeypatch):
+    props = dict(TOOLS["ddflow_queue"]["properties"])
+    props["action"] = ("string", "add|run", True)
+    monkeypatch.setitem(TOOLS["ddflow_queue"], "properties", props)
+    desc = FS.family_entry("ddflow_view")["description"]
+    assert re.search(r"\bqueue\([^)]*\bop\b", desc), desc
+    assert not re.search(r"\bqueue\([^)]*\baction\b", desc), desc
+
+
+def test_the_description_never_asks_for_an_argument_the_schema_lacks():
+    for family in FAMILY_NAMES:
+        entry = FS.family_entry(family)
+        props = entry["inputSchema"]["properties"]
+        for tool in F.FAMILIES[family].members.values():
+            for name in FS._requires(tool):
+                assert name in props
