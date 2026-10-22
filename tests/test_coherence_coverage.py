@@ -220,6 +220,8 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     ("split",): WRITERS_EXEMPT["api/items.py:split"],
     ("import",): WRITERS_EXEMPT["services/importer.py:apply_import"],
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
+    ("grant", "add"): "a person's recorded permission on one item.gate (refused under an agent "
+    "identity), not authored prose that could repeat: the same words are a second grant",
     ("job", "add"): "a long-running process an item waits on, not authored text",
     ("session", "prompt"): EXEMPT["session.prompt"],
     ("session", "note"): EXEMPT["session.note"],
