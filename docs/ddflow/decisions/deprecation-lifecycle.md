@@ -1,6 +1,6 @@
 # Deprecation lifecycle: decision proposals
 
-Status: **PROPOSED**. The operator decides (task `DEP-decide`, which carries the questions with a recommended default each). Evidence: `docs/ddflow/research/deprecation-lifecycle.md` (section numbers below refer to it). Phase: `P-deprecation` (prefix `DEP-`). Governing records: `D-compat-r2`, `D-mcp-tool-diet`, `D-mcp-tool-families`, `D-config-layer-order`, `D-universal-principles`, `r-everything-configurable`, `r-everything-managed`, `r-company-workflows`, `D-old-work-behind-core-docs-accepted`. Related phases: P-soft-upgrade, P-tool-diet, P-commit-messages, P-requirements, P-specs, P-lean-start.
+Status: **ACCEPTED 2026-10-22** (operator answered Q1-Q12; every answer equals the recommended default; see the answers table at the end). D-DEP-1..8 are accepted as proposed, with the answers refining them. Decided in task `DEP-decide`. Evidence: `docs/ddflow/research/deprecation-lifecycle.md` (section numbers below refer to it). Phase: `P-deprecation` (prefix `DEP-`). Governing records: `D-compat-r2`, `D-mcp-tool-diet`, `D-mcp-tool-families`, `D-config-layer-order`, `D-universal-principles`, `r-everything-configurable`, `r-everything-managed`, `r-company-workflows`, `D-old-work-behind-core-docs-accepted`. Related phases: P-soft-upgrade, P-tool-diet, P-commit-messages, P-requirements, P-specs, P-lean-start.
 
 ## D-DEP-1 One managed record kind, not a new subsystem
 
@@ -50,3 +50,24 @@ Event kinds stay readable forever (replay); a removed knob is read-ignored-prese
 | Q10 | Requirement/spec `obsolete` state | Computed from the record reaching `removed`; stories close `obsolete`; needs a shared state name agreed with RQM-model and SPEC-gate (declared dependency) |
 | Q11 | Event kinds: tombstone only, deletion never | Agreed default; stubs removed at a major only |
 | Q12 | Retrofit ddflow's own deprecations as records, with `Alias.removed_in` read from them | Yes, after Q1 is answered; one record per alias family |
+
+## Answers (operator, 2026-10-22)
+
+All twelve answers accept the recommended default. Each is recorded as decision `D-DEP-Q<n>`; Q1 is also added to `D-compat-r2` as the tier amendment (neither text superseded).
+
+| Q | Answer | Decision | Proposals | Effect on tasks |
+|---|---|---|---|---|
+| Q1 | Accepted: stable tier (documented CLI commands/flags, config keys) keeps "until 1.0"; beta tier (MCP tool names, `[enforce]` aliases, experimental knobs) two releases AND 30 days; tier added to `D-compat-r2` | D-DEP-Q1, D-compat-r2 | D-DEP-2 amended | DEP-inventory, DEP-retrofit, DEP-record |
+| Q2 | Accepted: stable 2 releases + 90 days; beta 2 releases + 30 days; experimental none | D-DEP-Q2 | D-DEP-2 accepted | DEP-lifecycle |
+| Q3 | Accepted: record required per renamed/removed public name, one per alias family, enforced by version lint | D-DEP-Q3 | D-DEP-1, D-DEP-3 accepted | DEP-lifecycle, DEP-inventory, DEP-record |
+| Q4 | Accepted: opt-in local counters, off by default; "no evidence" when nobody opted in | D-DEP-Q4 | D-DEP-5 accepted | DEP-usage, DEP-lifecycle |
+| Q5 | Accepted: erroring stage one release before removal, stable tier only | D-DEP-Q5 | D-DEP-2 amended | DEP-lifecycle, DEP-e2e |
+| Q6 | Accepted: one short MCP-instructions clause only while a breaking record is in warning or later, within the charter budget | D-DEP-Q6 | D-DEP-4 accepted | DEP-notify |
+| Q7 | Accepted: `deprecation.due` event + rendered message; delivery is an opt-in integration, no network call from core | D-DEP-Q7 | D-DEP-4 accepted | DEP-notify |
+| Q8 | Accepted: shortening needs an expiring recorded waiver with a reason; projects cannot shorten company floors; security exceptions need `severity = security` and a lesson | D-DEP-Q8 | D-DEP-2 amended | DEP-record, DEP-lifecycle |
+| Q9 | Accepted: `scope = project`, generated DEPRECATIONS.md, notice template, Deprecation/Sunset header text; ddflow sends nothing | D-DEP-Q9 | D-DEP-8 accepted | DEP-project |
+| Q10 | Accepted: `obsolete` computed from the record reaching `removed`; stories close `obsolete`; state name shared with RQM-model and SPEC-gate | D-DEP-Q10 | D-DEP-8 accepted | DEP-project |
+| Q11 | Accepted: event kinds tombstone only; stubs removed at a major only | D-DEP-Q11 | D-DEP-7 accepted | DEP-retrofit, DEP-e2e |
+| Q12 | Accepted: retrofit as records after Q1, one per alias family, `Alias.removed_in` read from them | D-DEP-Q12 | D-DEP-1 accepted | DEP-retrofit |
+
+Decisions D-DEP-1 to D-DEP-8 above are the design these answers ratify; they are accepted, with D-DEP-2 amended by Q1, Q5 and Q8 as shown.
