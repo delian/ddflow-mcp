@@ -101,7 +101,7 @@ def test_measuring_leaves_the_once_per_version_notice_alone(repo):
 
 def test_the_cost_is_counted_in_bytes_not_code_points():
     cost = SC.measure({"a": "é" * 400}, chars_per_token=4.0, budget=0)
-    assert (cost.chars["a"], cost.tokens) == (800, 200)
+    assert (cost.bytes["a"], cost.tokens) == (800, 200)
 
 
 def test_report_builds_the_texts_while_measuring(repo):

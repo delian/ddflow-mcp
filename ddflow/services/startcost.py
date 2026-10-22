@@ -45,7 +45,7 @@ class StartCost:
     """The first-turn cost of ddflow: tokens per part, and the budget they are held to."""
 
     parts: Mapping[str, int]  # name -> tokens
-    chars: Mapping[str, int]  # name -> characters
+    bytes: Mapping[str, int]  # name -> UTF-8 bytes
     budget: int  # tokens; 0 = no budget
 
     @property
@@ -79,7 +79,7 @@ class StartCost:
             "budget": self.budget,
             "over": self.over,
             "parts": dict(self.parts),
-            "chars": dict(self.chars),
+            "bytes": dict(self.bytes),
         }
 
 
@@ -92,7 +92,7 @@ def measure(
     parts = {name: max(1, round(n / ratio)) if n else 0 for name, n in sizes.items()}
     if reserve > 0 and parts:  # a pending notice cannot be counted without being used up
         parts["upgrade notice (reserve)"] = reserve
-    return StartCost(parts=parts, chars=sizes, budget=budget)
+    return StartCost(parts=parts, bytes=sizes, budget=budget)
 
 
 def report(repo, cfg, agent: str, start_texts) -> StartCost:
