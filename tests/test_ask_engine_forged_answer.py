@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from ddflow.config import Config
+from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import actors as A
@@ -64,10 +65,18 @@ def test_a_hand_appended_answer_does_not_approve_a_coded_ask(log):
     assert not _verdict(log).ok
 
 
-def test_a_hand_appended_answer_with_a_wrong_code_proof_does_not_approve(log):
+def test_a_hand_appended_answer_with_a_wrong_code_presented_does_not_approve(log):
     cfg = Config()
     ask = _ask(log, cfg, with_code=True)
-    _forge(log, ask.id, source="credential", code_proof="0" * 64)
+    _forge(log, ask.id, source="credential", code_presented="WRONGCODE")
+    assert not _verdict(log).ok
+
+
+def test_copying_the_public_code_hash_as_the_proof_does_not_approve(log):
+    cfg = Config()
+    ask = _ask(log, cfg, with_code=True)
+    code_hash = asks_of(_state(log))[ask.id]["code_hash"]
+    _forge(log, ask.id, source="credential", code_presented=code_hash)
     assert not _verdict(log).ok
 
 

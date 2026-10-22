@@ -25,7 +25,7 @@
    "fields": {
     "answer": ["str"],
     "by": ["str"],
-    "code_proof": ["str"],
+    "code_presented": ["str"],
     "coded": ["bool"],
     "digest": ["str"],
     "human": ["bool"],
