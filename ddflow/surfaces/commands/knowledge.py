@@ -68,6 +68,33 @@ def cmd_lesson(a, c: Ctx) -> int:
     return FAIL
 
 
+def _job_end(a, c: Ctx, AJ) -> int:
+    """`job end`: one job, or every finished one (`--item` / `--all-finished`)."""
+    out = AJ.job_end(
+        c.repo,
+        a.job or "",
+        exit_code=a.exit_code,
+        note=a.note or "",
+        force=a.force,
+        item=a.item or "",
+        all_finished=a.all_finished,
+        agent=c.requested_agent,
+    )
+    if "ended" in out.data:
+        c.out(
+            out.reason if out.exit else f"ended {len(out.data['ended'])} finished job(s)",
+            out.body(("ended",)),
+        )
+        return out.exit
+    code = out.data.get("exit_code")
+    shown = "unknown" if code is None else code
+    c.out(
+        out.reason if out.exit else f"job {a.job} ended (exit {shown})",
+        out.body(("id", "exit_code")),
+    )
+    return out.exit
+
+
 def cmd_job(a, c: Ctx) -> int:
     from ...api import jobs as AJ
 
@@ -102,21 +129,7 @@ def cmd_job(a, c: Ctx) -> int:
         )
         return out.exit
     if a.job_cmd == "end":
-        out = AJ.job_end(
-            c.repo,
-            a.job,
-            exit_code=a.exit_code,
-            note=a.note or "",
-            force=a.force,
-            agent=c.requested_agent,
-        )
-        code = out.data.get("exit_code")
-        shown = "unknown" if code is None else code
-        c.out(
-            out.reason if out.exit else f"job {a.job} ended (exit {shown})",
-            out.body(("id", "exit_code")),
-        )
-        return out.exit
+        return _job_end(a, c, AJ)
     out = AJ.job_list(c.repo, item=a.item or "", include_ended=a.all, agent=c.requested_agent)
     if c.json:
         emit_json(out.body("jobs"))
