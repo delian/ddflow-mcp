@@ -655,6 +655,19 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     )
 
 
+def _replaced_by_rerun(prior: dict[str, Any], again: set[int]) -> set[str]:
+    """Digests of the delta's own findings of the chunks ``again`` that a re-run replaces
+    (one the delta raised again is the earlier copy, numbered in another cut: it stays)."""
+    earlier = {str(d) for d in prior["delta_raised"]} - {
+        str(d) for d in prior.get("delta_reraised", ())
+    }
+    return {
+        str(f.get("digest"))
+        for f in prior.get("chunk_findings") or []
+        if int(f.get("chunk", 0)) in again and str(f.get("digest")) in earlier
+    }
+
+
 def _track_rerun_raised(evidence: dict[str, Any], prior: dict[str, Any], best) -> None:
     """A `--chunk` re-run of a delta record: the findings it raised are the delta's own, so
     `delta_raised` names them, and drops the delta's earlier findings of the chunks it
@@ -662,15 +675,8 @@ def _track_rerun_raised(evidence: dict[str, Any], prior: dict[str, Any], best) -
     if "delta_raised" not in evidence:
         return
     again = set(best.requested or ())
-    earlier = {str(d) for d in prior["delta_raised"]} - {
-        str(d) for d in prior.get("delta_reraised", ())
-    }
-    held = {str(f.get("digest")) for f in prior.get("chunk_findings") or [] if isinstance(f, dict)}
-    replaced = {
-        str(f.get("digest"))
-        for f in prior.get("chunk_findings") or []
-        if int(f.get("chunk", 0)) in again and str(f.get("digest")) in earlier
-    }
+    replaced = _replaced_by_rerun(prior, again)
+    held = {str(f.get("digest")) for f in prior.get("chunk_findings") or []}
     # a finding the merge kept from the earlier record is not this re-run's
     new = [
         f.digest
