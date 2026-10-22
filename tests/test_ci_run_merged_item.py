@@ -52,3 +52,13 @@ def test_an_unmerged_item_without_a_branch_says_so(repo, monkeypatch):
     res = A.run(repo, ref="T1")
     assert res.exit != 0 and "branch" in res.reason and "T1" in res.reason, res.reason
     assert "is not a commit" not in res.reason
+
+
+def test_what_landed_outranks_a_branch_left_behind_and_a_missing_commit_is_said(repo):
+    from types import SimpleNamespace as NS
+
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "branch", "left-behind")
+    assert A._item_ref(repo, NS(id="T", branch="left-behind", merged_sha=head)) == (head, "")
+    ref, why = A._item_ref(repo, NS(id="T", branch="", merged_sha="f" * 40))
+    assert ref == "" and "which this clone does not have" in why
