@@ -23,6 +23,7 @@ from ...services import ports as PT
 from ...services import tree_bin as TB
 from ...services import waiting as WG
 from ...services.bug_globs import bug_globs_of
+from ...services.completion import fixes_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
@@ -193,6 +194,26 @@ class _Bound(NamedTuple):
     was_adopted: bool = False
 
 
+def _bug_default(st, cfg, it, me: str) -> tuple[list[str] | None, dict | None]:
+    """(the files to claim, what to say about them) for a fix task that declared none.
+
+    Its bug's files are a DEFAULT, so the commit hook does not refuse the fix the bug
+    names -- never a reason to wait: those another agent's live lease holds are left off,
+    and the answer says which files came from the bug and which were left off
+    (B-claim-fix-task-takes-bug-globs). None when the bug declared no files."""
+    named = bug_globs_of(st, it.id, cfg)
+    if not named:
+        return None, None
+    now = time.time()
+    left_off = [g for g in named if L.glob_clash(st, cfg, it, me, [g], now)]
+    kept = [g for g in named if g not in left_off]
+    return kept or None, {
+        "bugs": sorted(fixes_of(st, it.id, cfg)),
+        "kept": kept,
+        "left_off": left_off,
+    }
+
+
 def _widened(want, prior, parked):
     """``want`` added to what the caller's own live lease already covers (Bf22edc42d5).
 
@@ -246,8 +267,9 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
+    bug_globs = None
     if want is None and parked is not None and not parked.globs:
-        want = bug_globs_of(st, item, cfg) or None  # a fix task declared no files: its bug did
+        want, bug_globs = _bug_default(st, cfg, parked, log.agent_id)  # its bug declared files
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
@@ -293,6 +315,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
+    if bug_globs:
+        out.data["globs_from_bug"] = bug_globs
     return _with_notes(out, notes)
 
 
