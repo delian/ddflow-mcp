@@ -168,6 +168,15 @@ def test_a_done_item_with_unlanded_commits_is_merged_then_removed_in_one_pass(re
     _g(tree, "commit", "-qm", "work")
     LC.release(repo, "T1", agent="worker")
     EventLog(repo, "worker").append("item.completed", "T1", {"sha": "abc"})
+    work = _g(tree, "rev-parse", "HEAD")
     done = CL.apply(repo, Config.load(repo), _plan(repo), EventLog(repo, "sweeper"))
     assert not tree.exists(), done
     assert "ddflow/T1" not in _g(repo, "branch", "--format=%(refname:short)").split()
+    _g(repo, "merge-base", "--is-ancestor", work, "main")  # the work landed before the tree went
+
+
+def test_an_empty_commit_is_not_a_pin_run(repo, tmp_path):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    _g(tree, "commit", "-q", "--allow-empty", "-m", "unmerged notes")
+    t = next(x for x in _plan(repo).trees if x.path == str(tree))
+    assert t.action == "", t.done
