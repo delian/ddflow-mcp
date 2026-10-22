@@ -314,3 +314,30 @@ def test_a_line_one_rival_contests_the_path_too(repo, cfg, monkeypatch):
     subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1 and "T2 (other)" in msg, msg
+
+
+def test_an_exact_and_a_wildcard_lease_on_one_line_are_judged_together(repo, cfg, monkeypatch):
+    """Two of the committer's leases on the SAME line: the exact one makes the line exact."""
+    _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    EventLog(repo, "owner").append(
+        "lease.acquired",
+        "T3",
+        {"holder": "owner", "at": time.time(), "ttl_s": 1800, "globs": ["src/new.py"]},
+    )
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "new.py").write_text("k = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/new.py"], check=True)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")
+
+
+def test_a_shared_file_is_never_contested(repo, cfg, monkeypatch):
+    tree = _setup(repo, cfg)
+    cfg.enforce.commit_without_lease = "block"
+    cfg.lease.shared_globs = ["src/new.py"]
+    _other_holds(repo, "src/new.py")
+    monkeypatch.chdir(tree)
+    assert E.check_commit(repo, cfg, agent="owner") == (0, "")

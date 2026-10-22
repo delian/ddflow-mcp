@@ -87,7 +87,10 @@ def _commit_lines(
         if any(here for _, here, _ in cover):
             cover = [c for c in cover if c[1]]
         # per candidate line: an exact glob on one line leaves the other line's wildcard contestable
-        lines = {line for line, _, gs in cover if all(_wild(g) for g in gs)}
+        by_line: dict[str, list[str]] = {}
+        for line, _, gs in cover:
+            by_line.setdefault(line, []).extend(gs)
+        lines = {line for line, gs in by_line.items() if all(_wild(g) for g in gs)}
         if lines:
             out[p] = lines
     return out
