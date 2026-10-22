@@ -154,3 +154,20 @@ def test_files_under_a_pin_directory_are_pins(repo, tmp_path):
     item = fold(EventLog(repo).read_all(), strict=False).items["T1"]
     assert CL.landed_leftovers_only(str(tree), item, "main", ["snaps"])
     assert not CL.landed_leftovers_only(str(tree), item, "main", ["snaps2"])
+
+
+def test_a_done_item_with_unlanded_commits_is_merged_then_removed_in_one_pass(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T1", {"parent": "P1", "title": "T1", "globs": ["f.txt"]})
+    out = LC.claim(repo, "T1", agent="worker")
+    tree = Path(out.data["worktree"])
+    (tree / "f.txt").write_text("work\n")
+    _g(tree, "add", "f.txt")
+    _g(tree, "commit", "-qm", "work")
+    LC.release(repo, "T1", agent="worker")
+    EventLog(repo, "worker").append("item.completed", "T1", {"sha": "abc"})
+    done = CL.apply(repo, Config.load(repo), _plan(repo), EventLog(repo, "sweeper"))
+    assert not tree.exists(), done
+    assert "ddflow/T1" not in _g(repo, "branch", "--format=%(refname:short)").split()
