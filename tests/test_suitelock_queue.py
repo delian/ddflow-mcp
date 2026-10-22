@@ -92,6 +92,7 @@ def test_the_place_in_the_queue_is_said_when_it_changes(tmp_path: Path):
     t1.join(30)
     t2.join(30)
     assert any("#2 in the queue" in s for s in said)
+    assert all("you are #" in s for s in said)
     assert order == ["first", "second"]
 
 

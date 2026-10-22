@@ -43,7 +43,10 @@ LOCK_S = 5.0
 
 
 class SuiteBusy(RuntimeError):
-    """Every suite slot stayed held for the whole wait. Exit 2: could not run."""
+    """Every suite slot stayed held for the whole wait. Exit 2: could not run.
+
+    ``position`` (new argument, default 0 = unknown) is the caller's place in the queue; the
+    message names the holder's pid and says "you are #k in the queue"."""
 
     def __init__(self, holder: dict[str, Any], waited_s: float, position: int = 0) -> None:
         who = holder.get("holder") or "another run"
