@@ -27,11 +27,20 @@ def _enforcement(a) -> str:
 
 
 def _pin_refusal(a, kind: str):
-    """--pin means ALL work, so a glob alongside it contradicts it. None when fine."""
-    if a.get("pin") and _list_or_none(a, "globs"):
+    """--pin means block for ALL work: a glob or another enforcement alongside it contradicts
+    it. None when fine."""
+    if not a.get("pin"):
+        return None
+    if _list_or_none(a, "globs"):
         return O.failed(
             kind,
             "--pin applies a rule to all work: it cannot also carry --globs",
+            id=a.get("id", ""),
+        )
+    if a.get("enforcement") not in (None, "", "block"):
+        return O.failed(
+            kind,
+            f"--pin is enforcement block: it cannot also say --enforcement {a['enforcement']}",
             id=a.get("id", ""),
         )
     return None
