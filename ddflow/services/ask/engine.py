@@ -60,6 +60,20 @@ class AskRefused(ValueError):
 
 
 @dataclass(frozen=True)
+class Command:
+    """What makes an approval ask a GATED COMMAND's (services/approvals): the verb, its tier and
+    minimum assurance level, how many times it may be spent, how long after the answer, and the
+    canonical record the digest is of."""
+
+    verb: str
+    tier: str
+    min_level: int
+    uses: int = 1
+    use_ttl_s: int = 0
+    canon: str = ""
+
+
+@dataclass(frozen=True)
 class Requested:
     id: str
     #: The one-time code, "" unless asked for. Shown to the person by the transport; the log
@@ -95,6 +109,7 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     with_code: bool = False,
     actor: Actor | None = None,
     now: float | None = None,
+    command: Command | None = None,
 ) -> Requested:
     """Put an ask. Anyone may ask; ``bot_answerable`` needs ``actor`` to hold ``approve``."""
     if kind not in (APPROVAL, QUESTION):
@@ -130,6 +145,17 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     }
     if code:
         data["code_hash"] = token_hash(code)
+    if command is not None:
+        if kind != APPROVAL or command.uses < 1 or command.min_level < 1:
+            raise AskRefused("a command ask is an approval spent 1+ times at level 1+")
+        data.update(
+            verb=command.verb,
+            tier=command.tier,
+            min_level=command.min_level,
+            uses=command.uses,
+            use_ttl_s=command.use_ttl_s,
+            canon=command.canon,
+        )
     log.append("ask.requested", ask_id, data)
     return Requested(ask_id, code)
 
