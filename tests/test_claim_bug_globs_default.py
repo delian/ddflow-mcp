@@ -77,3 +77,10 @@ def test_a_claim_naming_its_own_globs_has_no_bug_note(repo):
     out = LC.claim(repo, "fix-Bh", agent="w", globs="src/mine.py", no_worktree=True)
     assert out.exit == 0, out.reason
     assert "globs_from_bug" not in out.data
+
+
+def test_a_bug_that_declared_no_files_adds_no_note(repo):
+    _seed(repo, [])
+    out = LC.claim(repo, "fix-Bh", agent="w", no_worktree=True)
+    assert out.exit == 0, out.reason
+    assert out.data["globs"] == [] and "globs_from_bug" not in out.data
