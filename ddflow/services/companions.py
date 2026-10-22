@@ -51,11 +51,14 @@ from . import mcpconfig as MC
 from .adopt import AGENT_TARGETS, SHAPE_TOML, get_servers
 from .gates import pipelines
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
+    SHAPE_CORDIS_PATCH,
     _declared,
     _launch_of,
     _load_toml,
     _serves,
     _toml_without,
+    cordis_rows,
+    cordis_servers,
 )
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
@@ -699,6 +702,11 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
             return None
         servers = data.get("mcp_servers") or {}
         return (servers if isinstance(servers, dict) else {}), text
+    if shape == SHAPE_CORDIS_PATCH:
+        rows = cordis_rows(text)
+        if rows is None:
+            return None  # a tagged line that is not JSON: unreadable, not empty
+        return cordis_servers(rows), text
     try:
         data = json.loads(text or "{}")
     except json.JSONDecodeError:
