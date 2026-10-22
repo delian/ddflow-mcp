@@ -225,7 +225,7 @@ def collect_finished(log, st, item: str = "") -> list[str]:
     for ``item`` or for all items; the ids ended. Never a running job, never one on another host
     (`status` says "elsewhere": it could not look). One append for the lot, not one per job."""
     ended: list[tuple[str, str, dict[str, Any]]] = []
-    for j in sorted(st.jobs.values(), key=lambda x: x.started_at):
+    for j in sorted(st.jobs.values(), key=lambda x: x.started_at or ""):
         if j.ended_at or (item and j.item != item):
             continue
         s = J.status(j)
