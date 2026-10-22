@@ -68,6 +68,8 @@ def test_an_unknown_enforcement_is_refused(repo):
     run_cli(repo, "init")
     code, _out, err = run_cli(repo, *ADD, "--enforcement", "strict")
     assert code != 0 and "advisory" in err and "block" in err
+    with pytest.raises(FileNotFoundError):
+        RulesStorage(repo).get("r-one")
 
 
 def test_edit_changes_enforcement_and_keeps_the_rest(repo):
@@ -101,9 +103,12 @@ def test_show_reports_the_enforcement(repo):
 def test_edit_with_an_unknown_enforcement_is_refused_and_changes_nothing(repo):
     run_cli(repo, "init")
     assert run_cli(repo, *ADD)[0] == 0
-    code, _out, err = run_cli(repo, "rule", "edit", "r-one", "--enforcement", "strict")
+    code, _out, err = run_cli(
+        repo, "rule", "edit", "r-one", "--enforcement", "strict", "--priority", "90"
+    )
     assert code != 0 and "block" in err, err
-    assert _rec(repo).enforcement == "advisory"
+    rec = _rec(repo)
+    assert (rec.enforcement, rec.priority, rec.title) == ("advisory", 50, "Keep names plain")
 
 
 def test_edit_pin_says_what_it_changed(repo):
@@ -112,3 +117,15 @@ def test_edit_pin_says_what_it_changed(repo):
     code, out, err = run_cli(repo, "rule", "edit", "r-one", "--pin")
     assert code == 0, err
     assert "pin" in out and "nothing" not in out
+
+
+def test_pin_with_another_enforcement_is_refused(repo):
+    run_cli(repo, "init")
+    code, _out, err = run_cli(repo, *ADD, "--pin", "--enforcement", "warn")
+    assert code != 0 and "pin" in err and "block" in err, err
+    with pytest.raises(FileNotFoundError):
+        RulesStorage(repo).get("r-one")
+    assert run_cli(repo, *ADD)[0] == 0
+    code, _out, err = run_cli(repo, "rule", "edit", "r-one", "--pin", "--enforcement", "bogus")
+    assert code != 0, err
+    assert _rec(repo).enforcement == "advisory"
