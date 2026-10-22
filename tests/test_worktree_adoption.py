@@ -166,8 +166,12 @@ def test_adopt_existing_false_restores_the_old_behaviour(repo):
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     code, out, err = run_cli(agent_tree, "claim", "T1")
     assert code == OK, err
-    assert "adopted" not in out, out
+    # Assert the behaviour, not a word: the message may say "no tree is adopted".
+    assert "Carry on where you are" not in out, out
     assert "cd there and work" in out
+    kinds = [e.kind for e in EventLog(repo).read_all() if e.kind.startswith("worktree.")]
+    assert "worktree.adopted" not in kinds, kinds
+    assert "worktree.created" in kinds, kinds
 
 
 def test_a_detached_head_is_not_adopted(repo):

@@ -415,15 +415,26 @@ def _misread_hint(a) -> str:
     return ""
 
 
-def _session_text(a) -> str | None:
+def _session_text(a, c: Ctx) -> str | None:
     """The words for `session prompt`/`note`: `--text`, else piped stdin.
 
     stdin because the operator's prompt is frequently multi-line and frequently contains
     the characters a shell would eat. A terminal on stdin is a person, not a pipe, and
-    reading it waits for them forever -- so that is refused before reading (None).
+    reading it waits for them forever -- so that is refused before reading (None). So is a
+    positional that names no session: it is the operator's words in the id slot, and the
+    stdin read that would follow blocks on an agent's open pipe (B-session-prompt-positional-hangs).
     """
     if a.text is not None:
         return a.text
+    if a.session and not A.session_known(c.repo, a.session, agent=c.requested_agent):
+        print(
+            f"{a.session!r} is not a session id, so it is not read as one: the positional "
+            f"argument of `session {a.session_cmd}` is the SESSION id. Pass the words with "
+            f'--text: ddflow session {a.session_cmd} --text "..." (omit the id for the '
+            f"latest open session)",
+            file=sys.stderr,
+        )
+        return None
     if sys.stdin is None or sys.stdin.isatty():
         print(
             f"refusing to read the {a.session_cmd} text from a terminal: pass it with --text "
@@ -454,7 +465,7 @@ def cmd_session(a, c: Ctx) -> int:
         c.out(out.data["session"], out.body(("session",)))
         return OK
     if a.session_cmd in ("prompt", "note"):
-        text = _session_text(a)
+        text = _session_text(a, c)
         if text is None:
             return FAIL
         if a.session_cmd == "prompt":

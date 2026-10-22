@@ -1,0 +1,7 @@
+{"hooks": {
+ "SessionStart": [{"hooks": [{"type":"command","command":"python3 -I <SCRATCH>/tools/hook_rec.py SessionStart"}]}],
+ "UserPromptSubmit": [{"hooks": [{"type":"command","command":"python3 -I <SCRATCH>/tools/hook_rec.py UserPromptSubmit"}]}],
+ "PreToolUse": [{"matcher":"*","hooks": [{"type":"command","command":"python3 -I <SCRATCH>/tools/hook_rec.py PreToolUse"}]}],
+ "PostToolUse": [{"matcher":"*","hooks": [{"type":"command","command":"python3 -I <SCRATCH>/tools/hook_rec.py PostToolUse"}]}],
+ "Stop": [{"hooks": [{"type":"command","command":"python3 -I <SCRATCH>/tools/hook_rec.py Stop"}]}]
+}}
