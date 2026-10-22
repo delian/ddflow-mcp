@@ -161,3 +161,13 @@ def test_a_falsy_but_present_required_value_is_not_missing(monkeypatch):
     assert FS.missing_required(r) == []
     r = FS.route("ddflow_gate", {"action": "list", "n": None, "flag": ""})
     assert FS.missing_required(r) == ["n", "flag"]
+
+
+def test_a_required_own_action_argument_is_reported_missing_as_op(monkeypatch):
+    props = dict(TOOLS["ddflow_queue"]["properties"])
+    props["action"] = ("string", "add|run", True)
+    monkeypatch.setitem(TOOLS["ddflow_queue"], "properties", props)
+    r = FS.route("ddflow_view", {"action": "queue"})
+    assert FS.missing_required(r) == ["op"]
+    r = FS.route("ddflow_view", {"action": "queue", "op": "add"})
+    assert FS.missing_required(r) == []
