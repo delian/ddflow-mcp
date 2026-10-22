@@ -31,6 +31,7 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, evidence_problems, kind_pipeline, not_applicable
+from .reasons import _unavailable_reasons
 
 
 @dataclass
@@ -247,23 +248,6 @@ def _with_outcome(rows: list[tuple[str, str]], *outcomes: str) -> list[str]:
     return [g for g, o in rows if o in outcomes]
 
 
-WHY_CHARS = 200
-
-
-def unavailable_reasons(it, rows: list[tuple[str, str]]) -> dict[str, str]:
-    """gate -> why it did not run, for each `unavailable` or `partial` outcome. The recorded
-    reason is mandatory; a record from before that rule shows as having none, which is itself
-    worth saying."""
-    out: dict[str, str] = {}
-    for g, o in rows:
-        if o not in ("unavailable", "partial"):
-            continue
-        rec = it.gates.get(g)
-        text = " ".join((rec.reason if rec else "").split()) or "no reason was recorded"
-        out[g] = text if len(text) <= WHY_CHARS else text[: WHY_CHARS - 3] + "..."
-    return out
-
-
 def _round_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     """gate -> its "1 full round, 2 delta rounds" line, for the gates `ddflow review` ran."""
     return {g: line for g, _o in rows if (line := rounds_line(it, g))}
@@ -340,7 +324,7 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
-        why=unavailable_reasons(it, rows),
+        why=_unavailable_reasons(it, rows),
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
