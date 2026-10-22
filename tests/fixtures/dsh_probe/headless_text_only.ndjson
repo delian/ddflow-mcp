@@ -1,0 +1,7 @@
+{"type":"session","sessionId":"session-<UUID>","cwd":"<SCRATCH>/dshwork"}
+{"type":"status","phase":"turn_start","turn":1}
+{"type":"status","phase":"step_start","turn":1,"step":1}
+{"type":"text","text":"stub done"}
+{"type":"status","phase":"step_end","turn":1,"step":1,"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}
+{"type":"status","phase":"turn_end","turn":1,"reason":{"kind":"completed"}}
+{"type":"final","text":"stub done"}
