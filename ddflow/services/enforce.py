@@ -62,8 +62,9 @@ from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirec
 from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
-from . import docsync
+from . import docsync, leases
 from . import drift as D
+from . import enforce_contested as EC
 from . import pins_written as PW
 from . import upgrade_written as UW
 from .backups import make_backup
@@ -1114,6 +1115,11 @@ _UNKNOWN_STAGED = (
 )
 
 
+def _made_tree(repo: Path, lease: Lease) -> Path | None:
+    """The tree ``lease`` made, resolved; None for a lease with no tree."""
+    return W.load_path(repo, lease.worktree).resolve() if lease.worktree else None
+
+
 def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> bool:
     """A lease is "mine" if I hold it, OR if it created the very tree this commit is
     happening in. The second test is the robust one: the hook runs inside a worktree,
@@ -1351,13 +1357,13 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
 
 
 def _split_leases(
-    repo: Path, state, me: str, here: Path, now: float, grace_s: float
+    repo: Path, state, cfg: Config, me: str, here: Path, now: float
 ) -> tuple[list[str], dict[str, str], bool]:
     """(globs I hold, glob -> "item (holder)" of every other live lease, whether I hold any)."""
     mine: list[str] = []
     others: dict[str, str] = {}
     holds_any = False
-    for item_id, lease in state.active_leases(now, grace_s).items():
+    for item_id, lease in leases.unfinished_leases(state, cfg, now).items():  # as for `update`
         if _counts_as_mine(repo, lease, me, here):
             holds_any = True
             mine.extend(lease.globs)
@@ -1540,6 +1546,23 @@ def _uncovered_message(
     return "\n".join(lines)
 
 
+def _with_contested(
+    repo: Path, log, cfg, state, paths, uncovered, me, here, now
+) -> tuple[list[str], dict[str, str]]:
+    """``uncovered`` plus the paths a wildcard of mine covers that another live lease holds
+    too (`enforce_contested`), and those paths with their holders."""
+    twice = EC.contested(
+        log,
+        cfg,
+        state,
+        paths,
+        lambda lz: _counts_as_mine(repo, lz, me, here),
+        lambda lz: here is not None and _made_tree(repo, lz) == here,
+        now,
+    )
+    return uncovered + [p for p in twice if p not in uncovered], twice
+
+
 def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     """The lease half of `check_commit`."""
     policy = getattr(cfg, "enforce", None)
@@ -1565,19 +1588,21 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)
-    mine, others, holds_any = _split_leases(repo, state, me, here, now, cfg.lease.grace_s)
+    mine, others, holds_any = _split_leases(repo, state, cfg, me, here, now)
 
     # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
     uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
+    uncovered, twice = _with_contested(repo, log, cfg, state, paths, uncovered, me, here, now)
     if not uncovered:
         return Verdict(OK, "")
 
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
+    stolen.update(twice)
     uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
