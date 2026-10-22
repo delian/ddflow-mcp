@@ -52,13 +52,17 @@ def test_a_recorded_wait_is_readable_in_the_facts_and_in_metrics():
 
 def test_a_log_without_the_field_replays_and_reports_no_wait_not_zero():
     row = _ci_row(_log([None]))
-    assert row["n"] == 1 and row["wait_n"] == 0 and row["wait_p50_s"] is None
+    assert row["n"] == 1 and row["wait_n"] == 0
+    assert all(row[k] is None for k in row if k.startswith("wait_") and k != "wait_n")
+    st, _c, _now = frozen(_log([None]))
+    assert [o.waited_s for o in F.collect(_log([None]).events, st).outcomes] == [None]
 
 
 def test_the_wait_line_roundtrips_and_the_last_one_wins():
     assert CM.parse_wait(CM.wait_line(12.5)) == 12.5
     assert CM.parse_wait(f"x\n{CM.wait_line(3)}\n{CM.wait_line(7.0)}\ny") == 7.0
     assert CM.parse_wait("no marker") is None
+    assert CM.parse_wait(CM.wait_line(1_000_000.0)) == 1_000_000.0  # no exponent notation
 
 
 def test_a_ci_result_carries_the_wait_only_when_it_queued():
@@ -90,8 +94,10 @@ def test_gate_status_shows_how_long_a_run_queued_for_the_host_lock():
     log = _log([1700.0], "research")
     st = fold(list(log.events), strict=False)
     s = O.status(st, Config(), "T1")
-    assert s.queued == {"research": "queued 28m of 50m for the host lock"}
-    assert "queued 28m of 50m for the host lock" in s.render()
+    assert s.queued == {"research": "queued 28m of 50m before it ran"}
+    half = O.status(fold(list(_log([0.5], "research").events), strict=False), Config(), "T1")
+    assert half.queued == {"research": "queued 0.5s of 50m before it ran"}
+    assert "queued 28m of 50m before it ran" in s.render()
     assert (
         O.status(fold(list(_log([None], "research").events), strict=False), Config(), "T1").queued
         == {}
