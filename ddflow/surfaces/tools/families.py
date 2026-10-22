@@ -110,10 +110,12 @@ def resolve(
         cmd = commands.get(name)
         family = getattr(cmd, "family", "")
         action = getattr(cmd, "action", "")
-        if family and action:
+        if family in HOT_SINGLES:
+            bad.append(f"{name}: family {family} is a hot single and takes no actions")
+        elif family and action:
             placed[name] = Placement(family, action)
-        elif family:
-            bad.append(f"{name}: a family but no action")
+        elif family or action:
+            bad.append(f"{name}: a family and an action are declared together or not at all")
         elif name in legacy:
             placed[name] = legacy[name]
         else:
@@ -131,16 +133,17 @@ def placement(tool: str) -> Placement:
     return _PLACED[tool]
 
 
-def _families() -> dict[str, Family]:
+def build(placed: Mapping[str, Placement]) -> dict[str, Family]:
+    """The families of a placement; two tools sharing one action of a family is an error."""
     members: dict[str, dict[str, str]] = {}
-    for tool, (family, action) in _PLACED.items():
+    for tool, (family, action) in placed.items():
         if members.setdefault(family, {}).setdefault(action, tool) != tool:
             raise RuntimeError(f"{family}: action {action!r} is served by two tools")
     return {f: Family(f, m, single=f in HOT_SINGLES) for f, m in members.items()}
 
 
 #: Family tool name -> `Family`; the 9 singles and the 15 families, in tool order.
-FAMILIES: dict[str, Family] = _families()
+FAMILIES: dict[str, Family] = build(_PLACED)
 
 #: Every old name that is not a hot single, with where it went (for MTD-aliases).
 ALIASES: tuple[FamilyAlias, ...] = tuple(
