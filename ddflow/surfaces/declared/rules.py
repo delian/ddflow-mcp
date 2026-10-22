@@ -11,6 +11,9 @@ from ..registry import Command, Param, by_tool
 from ..tools._common import _api, _list_or_none, _rule_answer
 
 ENFORCEMENT_HELP = "advisory | warn | block: how hard the rule binds (default advisory)."
+PIN_FLAG_EXEMPT = {
+    "--pin": "shorthand for enforcement=block on a rule with no globs: MCP `enforcement`"
+}
 PIN_HELP = (
     "pin it: enforcement block for ALL work (no globs), so it is handed over whole "
     "whatever the budget (the rules charter's pinned rules)"
@@ -153,6 +156,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "add"),
         tool="ddflow_rule_add",
+        flag_exempt=PIN_FLAG_EXEMPT,
         render=_added,
         description="Add a project rule; duplicate-checked like every add (answer new | extends:ID | duplicate_of:ID | related:ID).",
         call=lambda repo, a, agent: (
@@ -236,6 +240,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "edit"),
         tool="ddflow_rule_edit",
+        flag_exempt=PIN_FLAG_EXEMPT,
         render=_edited,
         description="Change fields of an existing rule; omitted fields stay. Recorded in the manifest "
         "and, as a def.updated, in the log; new text is duplicate-checked.",

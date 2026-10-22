@@ -163,8 +163,8 @@
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
     --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
-                          three --mutation-* flags in one (as the MCP parameter); wins when both
-                          forms are given
+                          three mutation-file/-old/-new flags in one (as the MCP parameter); wins
+                          when both forms are given
     --landed LANDED       a commit already on the base that holds the fix: the test must fail on its
                           first parent and pass on it; the bug's fix task is ended naming it
     --lesson LESSON
@@ -454,8 +454,8 @@
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
     --mutation MUTATION   fix confined to test files: the mutation as JSON {"file","old","new"}, the
-                          three --mutation-* flags in one (as the MCP parameter); wins when both
-                          forms are given
+                          three mutation-file/-old/-new flags in one (as the MCP parameter); wins
+                          when both forms are given
   
   '''
 # ---
