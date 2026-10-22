@@ -1180,7 +1180,8 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     from . import completion as CM
 
     # The holder's own model, as `complete` would take it from its session (it judges reviewer
-    # independence against the author): without one the verdict can only say "unknown".
+    # independence against the author): without one the verdict can only say "unknown". A
+    # session names an agent, not an item, so this is the agent's latest -- as `complete` takes it.
     mine = [x for x in state.sessions.values() if x.agent == rec.holder and x.model]
     model = max(mine, key=lambda x: x.started_at).model if mine else ""
     v = CM.verdict(state, cfg, it.id, repo=repo, model=model)

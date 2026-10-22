@@ -27,12 +27,12 @@ def _git(*a: str) -> None:
     subprocess.run(["git", *a], check=True, capture_output=True)
 
 
-def _merged(repo: Path, item: str, rel: str) -> None:
+def _merged(repo: Path, item: str, rel: str, globs: list[str] | None = None) -> None:
     """``item`` claimed, one file committed on its branch, merged by ddflow."""
     run_cli(repo, "init")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "Phase one"})
-    log.append("task.added", item, {"parent": "P1", "title": item, "globs": [rel]})
+    log.append("task.added", item, {"parent": "P1", "title": item, "globs": globs or [rel]})
     out = LC.claim(repo, item, agent="worker")
     assert out.exit == 0, out.reason
     wt = Path(out.data["worktree"])
@@ -88,9 +88,9 @@ def test_a_fully_recorded_item_is_told_to_complete_outright(repo):
 
 
 def test_a_docs_only_item_is_not_owed_the_code_gates(repo):
-    """The diff, not the declared globs, decides: a landed docs change runs the doc pipeline,
-    so skipping its code gates on the record is honoured and complete goes through."""
-    _merged(repo, "T1", "docs/note.md")
+    """The diff, not the declared globs, decides: the item declares code AND docs, but what
+    landed is a document, so it runs the doc pipeline and is not owed unit_tests."""
+    _merged(repo, "T1", "docs/note.md", globs=["src/T1/*", "docs/*"])
     for g in (
         "implement",
         "research",
