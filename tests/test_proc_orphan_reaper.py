@@ -43,6 +43,7 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
         running = [int(p) for p in pids.read_text().split()]
         assert not any(_gone(p) for p in running)
         assert _until(lambda: _watching(owner.pid)), "no watcher started"
+        time.sleep(0.5)  # armed: the owner writes the group to it right after the shell starts
         os.kill(owner.pid, signal.SIGKILL)  # the owner dies without cleaning up
         owner.wait()
         assert _until(lambda: all(_gone(p) for p in running)), "the suite outlived its owner"
@@ -52,8 +53,9 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
                 os.kill(int(word), signal.SIGKILL)
             except OSError:
                 pass
-        owner.kill()
-        owner.wait()
+        if owner.poll() is None:
+            owner.kill()
+            owner.wait()
 
 
 def test_a_finished_run_leaves_no_watcher_behind(tmp_path: Path):
