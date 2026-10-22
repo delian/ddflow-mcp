@@ -105,7 +105,7 @@ Lifecycle (transitions enforced by the engine): `proposed` > `announced` > `warn
 
 ### 5.2 Window policy
 
-`[deprecation]` knobs (all layered by D-config-layer-order; company ENFORCED floors, projects may only raise): `min_releases`, `min_days` per tier (defaults proposed: stable 2 releases and 90 days, beta 1 release and 30 days, experimental 0), `error_tier_enabled`, `usage_required` (see 5.4), `notice_each` (`session`, `day`, `version`). Effective window is the LONGER of releases and days. Tighten-only for company minimums; a waiver is an expiring, scoped record with a reason (as requirements waivers, `RQM-strength`).
+`[deprecation]` knobs (all layered by D-config-layer-order; company ENFORCED floors, projects may only raise): `min_releases`, `min_days` per tier (defaults proposed: stable 2 releases and 90 days, beta 2 releases and 30 days, experimental 0), `error_tier_enabled`, `usage_required` (see 5.4), `notice_each` (`session`, `day`, `version`). Effective window is the LONGER of releases and days. Tighten-only for company minimums; a waiver is an expiring, scoped record with a reason (as requirements waivers, `RQM-strength`).
 
 ### 5.3 Gates (enforced, not requested)
 
