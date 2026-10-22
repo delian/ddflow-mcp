@@ -7,6 +7,7 @@ handshake against the REGISTERED entry is the only proof the MCP server really s
 from __future__ import annotations
 
 import json
+import os
 import stat
 import sys
 from pathlib import Path
@@ -142,7 +143,7 @@ def test_brief_and_next_run_this_trees_code_whatever_interpreter_started_us(repo
     seen = []
 
     def fake_capture(argv, **kwargs):
-        seen.append(kwargs.get("env") or {})
+        seen.append((kwargs.get("env") or {}, kwargs.get("cwd")))
         return V.P.Captured(0, "line\n", "")
 
     monkeypatch.setattr(V.P, "capture", fake_capture)
@@ -150,6 +151,7 @@ def test_brief_and_next_run_this_trees_code_whatever_interpreter_started_us(repo
     assert V._answers(repo).outcome == "passed"
     root = str(Path(V.__file__).resolve().parents[2])
     assert len(seen) == 2
-    for env in seen:
-        assert env.get("PYTHONPATH", "").split(":")[0] == root
+    for env, cwd in seen:
+        assert cwd == root
+        assert env.get("PYTHONPATH", "").split(os.pathsep)[0] == root
         assert "/elsewhere" in env["PYTHONPATH"]
