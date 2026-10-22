@@ -149,3 +149,11 @@ def test_a_retry_after_giving_up_keeps_its_place(tmp_path: Path):
     early.join(30)
     late.join(30)
     assert order == ["early", "late"]
+
+
+def test_a_ticket_not_yet_locked_by_its_owner_still_holds_its_place(tmp_path: Path):
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    (queue / "00000000000000000001-early.ticket").write_text("")  # created, not locked yet
+    live = SL._live(queue, 120, 120)
+    assert live == ["00000000000000000001-early.ticket"]
