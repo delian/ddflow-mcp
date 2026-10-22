@@ -52,5 +52,9 @@ class McpConfig:
     progress_s: float = knob(
         20.0,
         doc="Seconds between the `notifications/progress` an offloaded MCP tool (`ddflow_gate_run`, `ddflow_gate_verify`, `ddflow_ci`, `ddflow_verify`, `ddflow_bisect`, `ddflow_wait`, `ddflow_review`) sends while it runs, whatever it prints, when the client asked for progress (`_meta.progressToken`). Claude Code resets its idle timer on each one and aborts a call that stays silent for its window (30 s in a probe), so a quiet gate would be cut off even though its worker finishes. 0 sends none beyond a tool's own per-line progress. Read per call.",
-        check=lambda v: "" if isinstance(v, (int, float)) and v >= 0 else "must be 0 or more",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v < float("inf")
+            else "must be a number, 0 or more, and finite"
+        ),
     )
