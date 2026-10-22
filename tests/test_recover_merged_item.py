@@ -22,7 +22,6 @@ from ddflow.config import Config
 from ddflow.infra.log import EventLog
 from ddflow.services import leases as L
 
-
 _DOC_GATES = (
     "implement",
     "research",
