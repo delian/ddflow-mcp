@@ -87,3 +87,33 @@ def test_a_known_session_id_still_takes_piped_text(repo):
     code, out, err = _run(repo, "session", "prompt", sid, stdin="piped words")
     assert code == 0, err
     assert _prompts(repo) == [(sid, "piped words")]
+
+
+def test_no_text_and_a_silent_open_stdin_is_refused_not_waited_on(repo):
+    import threading
+
+    env = {**os.environ, "PYTHONPATH": str(_ROOT)}
+    p = subprocess.Popen(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "session", "prompt"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    hung = threading.Event()
+
+    def _kill() -> None:
+        hung.set()
+        p.kill()
+
+    t = threading.Timer(90, _kill)
+    t.start()
+    try:
+        err = p.stderr.read()
+        p.wait()
+    finally:
+        t.cancel()
+        p.stdin.close()
+    assert not hung.is_set(), "blocked reading stdin"
+    assert p.returncode != 0 and "--text" in err, err
