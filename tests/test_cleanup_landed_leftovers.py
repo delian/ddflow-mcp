@@ -101,3 +101,12 @@ def test_a_root_commit_with_real_files_is_not_a_leftover(repo, tmp_path):
     _g(tree, "branch", "-M", "ddflow/T1")
     t = next(x for x in _plan(repo).trees if x.path == str(tree))
     assert t.action == "", t.done
+
+
+def test_a_file_named_like_two_pins_is_not_a_pin(repo, tmp_path):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    (tree / "a.pin b.pin").write_text("x\n")
+    _g(tree, "add", "a.pin b.pin")
+    _g(tree, "commit", "-qm", "odd name")
+    item = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert not CL.landed_leftovers_only(str(tree), item, "main", ["a.pin", "b.pin"])

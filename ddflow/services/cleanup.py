@@ -569,9 +569,9 @@ def landed_leftovers_only(path: str, item: Item | None, base: str, pins: list[st
         # resolution or an edit made inside the merge, which exists on no other commit.
         flags = ("--cc",) if merge else ()
         files = W.git(
-            here, "diff-tree", "--root", *flags, "--no-commit-id", "--name-only", "-r", sha
+            here, "diff-tree", "--root", *flags, "-z", "--no-commit-id", "--name-only", "-r", sha
         )
-        if not files.ok or not set(files.out.split()) <= set(pins):
+        if not files.ok or not set(files.out.split("\0")) - {""} <= set(pins):
             return False
     return True
 
@@ -755,6 +755,9 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
             t.action, t.kind = "", "unmerged"
             t.done = f"kept: {t.name} is no longer only landed leftovers since the survey"
             return [f"kept {t.name}: no longer only landed leftovers"]
+        work = W.tree_work(Path(t.path))
+        if work.dirty or not work.readable:
+            return [f"kept {t.name}: uncommitted edits appeared since the survey"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
     tip = (
         W.git(root, "rev-parse", "--verify", f"refs/heads/{t.branch}").out.strip() if proof else ""
