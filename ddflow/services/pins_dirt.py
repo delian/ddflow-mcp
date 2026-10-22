@@ -28,7 +28,7 @@ def dirt_hint(repo: Path, cfg: Config, git_error: str, tree: Path) -> str:
         for nxt in lines[i + 1 :]:
             if not nxt[:1].isspace():
                 break
-            into.append(nxt.strip())
+            into.append(nxt[1:])
     pins = set(pin_files(repo, cfg))
     mine = [f for f in tracked if f in pins]
     loose = [f for f in untracked if f in pins]
