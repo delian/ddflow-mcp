@@ -96,3 +96,12 @@ def test_a_bad_interval_starts_no_heartbeat(repo, every):
     with heartbeat(repo, "t", said.append, every=every):
         time.sleep(0.2)
     assert said == []
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("nan"), -1, True, "20"])
+def test_the_knob_refuses_a_value_the_heartbeat_cannot_use(bad):
+    from ddflow.config import _KNOB_CHECKS
+
+    check = _KNOB_CHECKS["mcp.progress_s"]
+    assert check(bad)
+    assert not check(0) and not check(20.0)
