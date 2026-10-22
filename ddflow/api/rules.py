@@ -20,6 +20,7 @@ from ..services.guidance import deffields as DF
 from ..services.guidance import ruleview as RV
 from ..services.guidance.kinds import RULE
 from ..services.guidance.limits import lint, over_limit
+from ..services.guidance.record import ENFORCEMENTS
 from ..services.guidance.similarity import similar
 from ..services.guidance.store import GuidanceFiles
 from ..services.rules import Rule, RulesStorage
@@ -715,6 +716,15 @@ def rule_update(
     Returns:
         Outcome indicating success or failure
     """
+    enforcement = fields.get("enforcement")
+    if enforcement is not None and enforcement not in ENFORCEMENTS:
+        # Refused BEFORE the write: the file would otherwise be saved with a value no
+        # later read accepts.
+        return O.failed(
+            "rule.updated",
+            f"unknown enforcement {enforcement!r}: one of {', '.join(ENFORCEMENTS)}",
+            id=rule_id,
+        )
     storage = RulesStorage(repo)
     stop, extra = _check_edit(repo, rule_id, fields, dedup_answer, agent)
     if stop is not None:
@@ -806,6 +816,7 @@ def rule_get(repo: Path, rule_id: str) -> O.Outcome:
             scope=rule.scope,
             priority=rule.priority,
             globs=rule.globs,
+            enforcement=rule.enforcement,
             created=created_str,
             updated=updated_str,
         )
