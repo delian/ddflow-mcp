@@ -18,7 +18,7 @@ def _run(repo: Path, *argv: str, stdin: str):
     """Run the CLI with `stdin` piped in (and closed): the answer to a command that reads it."""
     env = {**os.environ, "PYTHONPATH": str(_ROOT)}
     p = subprocess.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), *argv],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", "tester", *argv],
         input=stdin,
         capture_output=True,
         text=True,
@@ -62,13 +62,23 @@ def test_words_in_the_session_slot_are_refused_not_read_from_stdin(repo, cmd, po
     assert "--text" in err and "session" in err, err
 
 
+def _prompts(repo: Path) -> list[tuple[str, str]]:
+    from ddflow.infra.log import EventLog
+
+    return [
+        (e.subject, e.data["text"])
+        for e in EventLog(repo, "r").read_all()
+        if e.kind == "session.prompt"
+    ]
+
+
 def test_text_flag_without_a_session_uses_the_latest_open_one(repo):
     code, out, err = _run(repo, "session", "start", stdin="")
     assert code == 0, err
     sid = out.strip().splitlines()[0]
     code, out, err = _run(repo, "session", "prompt", "--text", "hello there", stdin="")
     assert code == 0, err
-    assert sid in out or "latest" in out or "recorded" in out
+    assert _prompts(repo) == [(sid, "hello there")]
 
 
 def test_a_known_session_id_still_takes_piped_text(repo):
@@ -76,3 +86,4 @@ def test_a_known_session_id_still_takes_piped_text(repo):
     sid = out.strip().splitlines()[0]
     code, out, err = _run(repo, "session", "prompt", sid, stdin="piped words")
     assert code == 0, err
+    assert _prompts(repo) == [(sid, "piped words")]
