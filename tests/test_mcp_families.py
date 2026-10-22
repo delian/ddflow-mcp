@@ -34,7 +34,7 @@ def test_schema_has_the_action_enum_and_the_union_of_the_members_arguments(famil
     members = F.FAMILIES[family].members
     assert schema["type"] == "object"
     assert schema["additionalProperties"] is False
-    assert schema["required"] == ["action"]
+    assert schema.get("required") == (None if family in TOOLS else ["action"])
     action = schema["properties"]["action"]
     assert action["type"] == "string"
     assert action["enum"] == list(members)
@@ -51,7 +51,7 @@ def test_schema_has_the_action_enum_and_the_union_of_the_members_arguments(famil
 def test_as_agent_is_declared_once_and_no_member_requires_anything_in_the_schema(family):
     schema = FS.family_entry(family)["inputSchema"]
     assert list(schema["properties"]).count("as_agent") == 1
-    assert schema["required"] == ["action"]
+    assert schema.get("required") == (None if family in TOOLS else ["action"])
 
 
 def test_a_property_two_members_type_differently_is_a_union_type():
@@ -181,3 +181,10 @@ def test_a_required_own_action_argument_is_reported_missing_as_op(monkeypatch):
     assert FS.route("ddflow_view", {"action": "queue"}).endswith("missing required argument(s): op")
     r = FS.route("ddflow_view", {"action": "queue", "op": "add"})
     assert FS.missing_required(r) == []
+
+
+def test_self_named_family_tools_do_not_advertise_action_as_required():
+    assert {f for f in FAMILY_NAMES if f in TOOLS} == {"ddflow_doctor", "ddflow_workflow"}
+    for f in ("ddflow_doctor", "ddflow_workflow"):
+        assert "required" not in FS.family_entry(f)["inputSchema"]
+        assert FS.route(f, {}) is None

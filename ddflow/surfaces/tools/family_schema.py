@@ -121,7 +121,10 @@ def family_entry(name: str) -> dict[str, Any]:
         "enum": list(family.members),
         "description": "What to do; see the tool description for each action's arguments.",
     }
-    schema["required"] = [ACTION]
+    if name in TOOLS:
+        schema.pop("required", None)  # a self-named tool called with no action is the legacy one
+    else:
+        schema["required"] = [ACTION]
     return {"name": name, "description": _description(family), "inputSchema": schema}
 
 
