@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.pins_precheck"
+new = "true"
+why = "`ddflow ci run` checks the pinned outputs in the merge result before the suite and fails at once naming the stale pins."
+impact = "additive"
