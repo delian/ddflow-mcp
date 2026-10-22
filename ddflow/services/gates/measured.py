@@ -184,6 +184,9 @@ def _keep_reviewed_round(
         "diff_chars": ev.get("diff_chars", 0),
     }
     prior["unavailable_deltas"] = [*(prior.get("unavailable_deltas") or []), note]
+    # This record is a COPY of an earlier round, not a new one: the budget must not count it
+    # again (`_full_rounds`/`_delta_rounds`, B435bbddb18).
+    prior["round_kept"] = True
     return rec.outcome, rec.reason, prior
 
 
