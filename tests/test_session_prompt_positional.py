@@ -59,7 +59,7 @@ def test_words_in_the_session_slot_are_refused_not_read_from_stdin(repo, cmd, po
         p.stdin.close()
     assert not hung.is_set(), "blocked reading stdin"
     assert p.returncode != 0, err
-    assert "--text" in err and "session" in err, err
+    assert "is not a session id" in err and "--text" in err, err
 
 
 def _prompts(repo: Path) -> list[tuple[str, str]]:
