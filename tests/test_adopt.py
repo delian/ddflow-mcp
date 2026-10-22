@@ -19,6 +19,7 @@ from ddflow.services.adopt import (
     SHAPE_TOML,
     get_server,
 )
+from ddflow.services.mcpconfig import SHAPE_CORDIS_PATCH, cordis_rows, cordis_servers
 
 
 def test_every_agent_has_a_delta_document():
@@ -48,6 +49,8 @@ def test_adopt_writes_a_usable_mcp_config(repo, agent):
     assert cfg.is_file(), f"{agent}: {target.config} was not written"
     if target.shape == SHAPE_TOML:
         entry = tomllib.loads(cfg.read_text())["mcp_servers"]["ddflow"]
+    elif target.shape == SHAPE_CORDIS_PATCH:
+        entry = cordis_servers(cordis_rows(cfg.read_text()))["ddflow"]
     else:
         # Looked up through the SAME helper the writer uses. Sniffing the field name
         # ("servers" if present else "mcpServers") passed for a writer that wrote either
@@ -241,7 +244,12 @@ def test_every_shape_in_use_has_a_documented_fixture():
     Without this, a sixth shape ships with no external check at all and the parametrised
     test above simply does not run for it — the coverage-gap-visible-to-humans-only class.
     """
-    in_use = {t.shape for t in AGENT_TARGETS.values()} - {SHAPE_NONE, SHAPE_TOML}
+    # The YAML overlay is not JSON: tests/test_dsh_mcp_shape.py is its fixture.
+    in_use = {t.shape for t in AGENT_TARGETS.values()} - {
+        SHAPE_NONE,
+        SHAPE_TOML,
+        SHAPE_CORDIS_PATCH,
+    }
     missing = sorted(in_use - set(DOCUMENTED_SHAPES))
     assert not missing, f"these shapes ship with no documented-JSON fixture: {missing}"
 
@@ -255,6 +263,8 @@ def test_writing_a_server_preserves_what_is_already_there(agent):
     target = AGENT_TARGETS[agent]
     if target.shape == SHAPE_TOML:
         pytest.skip("TOML shape is covered by test_adopt_writes_a_usable_mcp_config")
+    if target.shape == SHAPE_CORDIS_PATCH:
+        pytest.skip("the YAML overlay is covered by tests/test_dsh_mcp_shape.py")
     data = {"somebody_elses_key": {"keep": "me"}, "mcp": {"theirs": {"command": "x"}}}
     place_server(data, target.shape, "ddflow", {"command": "uvx", "args": ["ddflow-mcp"]})
     assert data["somebody_elses_key"] == {"keep": "me"}, f"{agent}: stomped a sibling key"

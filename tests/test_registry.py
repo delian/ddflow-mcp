@@ -180,7 +180,7 @@ ITEM_KINDS = ["task", "phase", "bug", "doc", "research", "job"]
 HARNESSES = [
     "claude", "gemini", "codex", "copilot", "vscode", "kilo", "cursor", "kimi", "opencode",
     "glm", "qwen", "antigravity", "devin", "qodo", "tabnine", "aider", "cline", "windsurf",
-    "replit", "openhands", "goose", "cody",
+    "replit", "openhands", "goose", "cody", "dsh",
 ]  # fmt: skip
 
 

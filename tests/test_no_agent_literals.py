@@ -75,7 +75,9 @@ def _roots() -> set[str]:
             paths.append(getattr(sec, "dir", "") if sec else "")
         for raw in paths:
             p = raw.removeprefix("~/")
-            if p.startswith(".") and "/" in p:
+            # `.ddflow/` is ddflow's own directory (dsh's launch overlay lives in it), not an
+            # agent's: every string naming ddflow's files would otherwise be a site.
+            if p.startswith(".") and "/" in p and not p.startswith(".ddflow/"):
                 roots.add(p.split("/")[0] + "/")
     return roots
 
