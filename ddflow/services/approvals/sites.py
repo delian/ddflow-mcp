@@ -2,9 +2,9 @@
 
 One row per VERB an agent may be refused. The row says what the verb is (`tier`), how strong
 an answer it needs (`min_level`), which state its approval digests (`digest`), and which
-modules enforce the person-only rule (`modules`: the files that call `agent_marker` or
-`is_agent`). `tests/test_approvals_sites.py` walks `ddflow/` and fails for a module that makes
-such a call and is named by no row, so a new refusal site cannot appear without a row here
+functions enforce the person-only rule (`functions`: those that call `agent_marker` or
+`is_agent`). `tests/test_approvals_sites.py` walks `ddflow/` and fails for a function that makes
+such a call and is named by no row (or an alias import that would hide one), so a new refusal site cannot appear without a row here
 (r-reuse-core: this is the one list; the consume check, `doctor` and the docs read it).
 
 Tiers (research 7): T1 standing policy (opt-in, reported), T2 a person approves each instance,
@@ -33,17 +33,22 @@ INFRASTRUCTURE = (
 )
 
 
-#: How many marker calls (AST `Call` nodes naming `agent_marker`, `is_agent` or the
-#: `_is_agent`/`reviewer_agent_marker` wrappers) each non-infrastructure module makes. A new
-#: call changes the count, so the test fails until the author decides which verb it gates,
-#: adds or amends its `Site` row and bumps the number here.
+#: Marker calls per enclosing function ("module:function" -> number of AST `Call` nodes naming
+#: `agent_marker`, `is_agent` or the `_is_agent`/`reviewer_agent_marker` wrappers), for every
+#: module that is not infrastructure. A new call, or one moved to another function, changes
+#: this map, so the test fails until the author decides which verb it gates and amends the row
+#: that names the function in `Site.functions`.
 MARKER_CALLS: dict[str, int] = {
-    "ddflow/api/gates.py": 2,
-    "ddflow/services/grants.py": 1,
-    "ddflow/services/approval.py": 1,  # grant(): approve.partial and chore.approve share it
-    "ddflow/services/reviewer_trust.py": 1,
-    "ddflow/services/export/select.py": 4,  # the wrapper (1) and its three uses
-    "ddflow/surfaces/commands/review.py": 1,
+    "ddflow/api/gates.py:_agent_skip_refusal": 1,
+    "ddflow/api/gates.py:record": 1,
+    "ddflow/services/grants.py:add": 1,
+    "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
+    "ddflow/services/reviewer_trust.py:approve": 1,
+    "ddflow/services/export/select.py:_is_agent": 1,  # the wrapper
+    "ddflow/services/export/select.py:enable": 1,
+    "ddflow/services/export/select.py:disable": 1,
+    "ddflow/services/export/select.py:acknowledge": 1,
+    "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
 }
 
 MARKER_NAMES = frozenset({"agent_marker", "is_agent", "_is_agent", "reviewer_agent_marker"})
@@ -57,9 +62,9 @@ class Site:
     min_level: int
     #: What the approval's digest binds, in words (the canonical record is built in RA-request).
     digest: str
-    #: Files that call agent_marker/is_agent for this verb. Empty for a site with no marker call
+    #: Functions ("module:function") that call agent_marker/is_agent for this verb. Empty for a site with no marker call
     #: (a relayed-consent flag or a hook guard).
-    modules: tuple[str, ...] = ()
+    functions: tuple[str, ...] = ()
     #: The CLI form an agent re-runs with `--approval ID`.
     command: str = ""
     #: For a site with no marker call (relayed consent, a hook guard): (file, text) that must
@@ -74,7 +79,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the failed review outcome and its unresolved findings",
-        ("ddflow/api/gates.py",),
+        ("ddflow/api/gates.py:_agent_skip_refusal", "ddflow/api/gates.py:record"),
         "ddflow gate skip <id> <gate> --reason ...",
     ),
     Site(
@@ -83,7 +88,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the item, the grant kind and count, and the grants already recorded",
-        ("ddflow/services/grants.py",),
+        ("ddflow/services/grants.py:add",),
         "ddflow grant add ...",
     ),
     Site(
@@ -92,7 +97,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the recorded partial outcome (gate_accept digest)",
-        ("ddflow/services/approval.py",),
+        ("ddflow/services/approval.py:grant",),
         "ddflow approve <id> <gate>",
     ),
     Site(
@@ -101,7 +106,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the current [chore].globs",
-        ("ddflow/services/approval.py",),
+        ("ddflow/services/approval.py:grant",),
         "ddflow chore approve",
     ),
     Site(
@@ -110,7 +115,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the pending reviewer entry (endpoint and model)",
-        ("ddflow/services/reviewer_trust.py",),
+        ("ddflow/services/reviewer_trust.py:approve",),
         "ddflow reviewers approve <name>",
     ),
     Site(
@@ -119,7 +124,12 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the export document selection and its content digest",
-        ("ddflow/services/export/select.py",),
+        (
+            "ddflow/services/export/select.py:_is_agent",
+            "ddflow/services/export/select.py:enable",
+            "ddflow/services/export/select.py:disable",
+            "ddflow/services/export/select.py:acknowledge",
+        ),
         "ddflow export ack ...",
     ),
     Site(
@@ -128,7 +138,7 @@ SITES: tuple[Site, ...] = (
         T3,
         L4,
         "the [[reviewer]] command line (it executes code)",
-        ("ddflow/surfaces/commands/review.py",),
+        ("ddflow/surfaces/commands/review.py:_reviewers_add",),
         "ddflow reviewers add --preset ...",
     ),
     Site(
