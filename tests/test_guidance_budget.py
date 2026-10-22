@@ -107,10 +107,23 @@ def test_a_pinned_rule_is_listed_even_when_the_charter_has_no_room():
 def test_the_cut_line_is_reserved_only_for_the_rules_after_the_one_listed():
     rules = [GuidanceRecord(id=f"r-{c}", kind="rule", title="t") for c in "ab"]
     exact = (
-        CH.approx_tokens(CH.LEAD)
+        CH.approx_tokens(CH.HEADING)
+        + CH.approx_tokens(CH.LEAD)
         + CH.approx_tokens("- [r-a] t")
         + CH.approx_tokens(CH._more(rules[1:]))
     )
     got = CH.lines(rules, tokens=exact, title_chars=100)
     # reserving the cut line for BOTH rules would have dropped the first one
     assert got == ["- [r-a] t", "- [r-b] t"]
+
+
+def test_a_rule_the_charter_cut_keeps_its_text_in_the_rules_block():
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.brief import _rules_block
+
+    listed = GuidanceRecord(id="r-listed", kind="rule", title="L", body="listed body")
+    cut = GuidanceRecord(id="r-cut", kind="rule", title="C", body="cut body")
+    gov = SimpleNamespace(records=lambda kind: [listed, cut])
+    got = _rules_block(gov, charter="- [r-listed] L\n- _1 more rules: r-cut; `ddflow rule list`_")
+    assert "r-cut" in got and "r-listed" not in got
