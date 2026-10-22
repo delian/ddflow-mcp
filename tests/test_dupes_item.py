@@ -54,3 +54,16 @@ def test_dupes_without_an_id_is_still_the_whole_sweep(repo):
     _code, out, _err = run_cli(repo, "--json", "dupes")
     pairs = json.loads(out)["pairs"]
     assert {(p["a"], p["b"]) for p in pairs} >= {("B1", "B2"), ("B3", "B4")}
+
+
+def test_pairs_from_item_is_not_cut_by_stop_after(repo):
+    from ddflow.api.knowledge import pairs as P
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    _repo(repo)
+    st = fold(EventLog(repo, "t").read_all())
+    # B3~B4 sorts after B1~B2 only by id; asking for B4's pairs under stop_after=1 must find it
+    rows = P.pairs_from(st, Config.load(repo), item="B4", stop_after=1)
+    assert [(r["a"], r["b"]) for r in rows] == [("B3", "B4")]
