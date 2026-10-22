@@ -16,7 +16,8 @@ from .evidence import tree_identity
 
 #: The tools that run a command gate's command themselves and record the result through
 #: `gate record`'s API (`Evidence.ran_by`). Any other value is not trusted.
-RAN_BY = frozenset({"ddflow ci run"})
+CI_RUN = "ddflow ci run"
+RAN_BY = frozenset({CI_RUN})
 
 
 def _refusal(it, gdef, gate: str, outcome: str, agent_why: str, tree: Any) -> str:
