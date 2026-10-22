@@ -25,13 +25,14 @@ TIERS = (T1, T2, T3)
 L1, L2, L3, L4 = 1, 2, 3, 4
 FAMILIES = ("A", "B", "C")
 
-#: Modules that implement the rule itself or only map an identity to a role; they are not sites.
-INFRASTRUCTURE = (
-    "ddflow/services/identity.py",  # defines agent_marker / is_agent
-    "ddflow/services/actors.py",  # resolves an identity to a role for the ask engine
-    "ddflow/api/surf_setup.py",  # a one-line shim over reviewer_trust.agent_marker
-)
-
+#: Modules that implement the rule itself or only map an identity to a role; they are not
+#: sites. Their marker calls are pinned too ("module:function" -> count), so a new refusal
+#: cannot hide in them either.
+INFRASTRUCTURE: dict[str, int] = {
+    "ddflow/services/identity.py:is_agent": 1,  # defines is_agent over agent_marker
+    "ddflow/services/actors.py:_role": 1,  # resolves an identity to a role for the ask engine
+    "ddflow/api/surf_setup.py:reviewer_agent_marker": 1,  # a shim over reviewer_trust
+}
 
 #: Marker calls per enclosing function ("module:function" -> number of AST `Call` nodes naming
 #: `agent_marker`, `is_agent` or the `_is_agent`/`reviewer_agent_marker` wrappers), for every
