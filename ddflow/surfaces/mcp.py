@@ -59,6 +59,7 @@ from . import mcp_upgrade as _upgrade
 from . import projectkinds as PK
 from . import registry as _REGISTRY
 from .mcp_bound import BOUNDS
+from .mcp_heartbeat import heartbeat
 from .mcp_protocol import (  # noqa: F401
     CACHE_SCOPE,
     CACHE_TTL_MS,
@@ -557,6 +558,9 @@ class Server:
         #: Writes one JSON-RPC frame to the client; `serve` sets it. Without it (a bare
         #: `handle` call) a long tool simply sends no progress.
         self.notify: Callable[[dict[str, Any]], None] | None = None
+        #: The progress sender of each call in flight, by its token (`_progress`). `handle` runs
+        #: one request at a time on a Server (a worker has its own), so the dict needs no lock.
+        self._says: dict[Any, Callable[[str], None]] = {}
 
     def _structured(self, modern: bool) -> bool:
         """Whether this request is served with `outputSchema` / `structuredContent`: the knob
@@ -568,30 +572,34 @@ class Server:
 
         A client that sent `_meta.progressToken` resets its idle timer on each one; a
         review of 2055 s was aborted at 1800 s with none (bug B206)."""
-        meta = params.get("_meta")
-        token = meta.get("progressToken") if isinstance(meta, dict) else None
+        token = _progress_token(params)
         send = self.notify
         if token is None or send is None:
             return None
+        if (known := self._says.get(token)) is not None:
+            return known  # one counter per call: progress must only ever increase
         count = [0]
+        lock = threading.Lock()  # a heartbeat thread and the tool's own lines share this counter
 
         def say(line: str) -> None:
-            count[0] += 1
-            try:
-                send(
-                    {
-                        "jsonrpc": "2.0",
-                        "method": "notifications/progress",
-                        "params": {
-                            "progressToken": token,
-                            "progress": count[0],
-                            "message": line.strip()[:500],
-                        },
-                    }
-                )
-            except Exception:  # a closed pipe must not fail the review
-                pass
+            with lock:  # count and send together: progress must reach the client in order
+                count[0] += 1
+                try:
+                    send(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/progress",
+                            "params": {
+                                "progressToken": token,
+                                "progress": count[0],
+                                "message": line.strip()[:500],
+                            },
+                        }
+                    )
+                except Exception:  # a closed pipe must not fail the review
+                    pass
 
+        self._says[token] = say
         return say
 
     def _someone_else(self, per_call: str) -> bool:
@@ -903,7 +911,10 @@ class Server:
         try:
             if call.allow_older is not None:
                 self._override_skew(call.allow_older, agent)
-            result = self._invoke(spec, args, agent, call.per_call, call.params)
+            with heartbeat(
+                self.repo, name, self._progress(call.params) if name in OFFLOADED else None
+            ):
+                result = self._invoke(spec, args, agent, call.per_call, call.params)
         except Exception as exc:
             # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
             # class declaring exit 3 -- is a result to act on, not a failed call;
@@ -921,6 +932,8 @@ class Server:
             failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
             body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
             return _ok(mid, _text(body, error=failed, meta={"exit": code}))
+        finally:
+            self._says.pop(_progress_token(call.params), None)
         # `text` may be a bool or a predicate on the arguments: `render`
         # returns a document with `--show` and a file list without it, and which
         # it is cannot be known until the call.
@@ -1478,6 +1491,32 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     return t
 
 
+def _progress_token(params: dict[str, Any]) -> str | int | float | None:
+    """The `_meta.progressToken` of a call: MCP says a string or a number, and it is a dict
+    key here, so anything else (a list from a non-conformant client) is no token."""
+    meta = params.get("_meta")
+    token = meta.get("progressToken") if isinstance(meta, dict) else None
+    if isinstance(token, bool) or not isinstance(token, (str, int, float)):
+        return None
+    return token
+
+
+def _frame_writer(out) -> Callable[[dict[str, Any]], None]:
+    """Write one JSON-RPC frame per call to ``out``; calls from several threads (the
+    answer, a heartbeat that outlived its call) never interleave their bytes."""
+    lock = threading.Lock()
+
+    def write(frame: dict[str, Any]) -> None:
+        with lock:
+            try:
+                out.write(json.dumps(frame) + "\n")
+                out.flush()
+            except (OSError, ValueError):
+                pass
+
+    return write
+
+
 def _worker_main() -> None:
     """A worker process: one offloaded call, read as a job from stdin (see `_offload`).
 
@@ -1490,12 +1529,7 @@ def _worker_main() -> None:
     os.dup2(2, 1)
     sys.stdout = sys.stderr
 
-    def write(frame: dict[str, Any]) -> None:
-        try:
-            out.write(json.dumps(frame) + "\n")
-            out.flush()
-        except (OSError, ValueError):
-            pass
+    write = _frame_writer(out)
 
     msg = job["msg"]
     if job.get("state_key"):
