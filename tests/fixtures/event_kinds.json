@@ -25,12 +25,14 @@
    "fields": {
     "answer": ["str"],
     "by": ["str"],
+    "code_presented": ["str"],
     "coded": ["bool"],
     "digest": ["str"],
     "human": ["bool"],
     "id": ["str"],
     "outcome": ["str"],
     "role": ["str"],
+    "source": ["str"],
     "via": ["str"]
    },
    "v": 1
