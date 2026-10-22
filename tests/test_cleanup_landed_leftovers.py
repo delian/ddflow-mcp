@@ -79,3 +79,14 @@ def test_apply_removes_tree_and_branch_of_a_landed_item(repo, tmp_path):
     done = CL.apply(repo, cfg, _plan(repo), EventLog(repo, "sweeper"))
     assert not tree.exists(), done
     assert "ddflow/T1" not in _g(repo, "branch", "--format=%(refname:short)").split()
+
+
+def test_a_merge_commit_carrying_its_own_edit_is_not_a_leftover(repo, tmp_path):
+    tree = _landed_then_abandoned(repo, tmp_path)
+    _g(repo, "commit", "-q", "--allow-empty", "-m", "main again")
+    _g(tree, "merge", "-q", "--no-ff", "--no-commit", "main")
+    (tree / "evil.txt").write_text("only in the merge\n")
+    _g(tree, "add", "evil.txt")
+    _g(tree, "commit", "-qm", "merge main, with an edit")
+    t = next(x for x in _plan(repo).trees if x.path == str(tree))
+    assert t.action == "", t.done
