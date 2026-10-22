@@ -1157,6 +1157,20 @@ def _tree_is_gone(repo: Path, recorded: str) -> bool:
     return not wt or not wt.exists()
 
 
+def open_session_model(st: State, agent: str) -> str:
+    """The model ``agent`` declared on its most recent OPEN session, or "".
+
+    Only this agent's: another agent's session names another author, and borrowing its
+    model would judge reviewer independence against the wrong family. A session names an
+    agent, not an item, so this is the agent's latest open one."""
+    open_ = [s for s in st.sessions.values() if s.agent == agent and s.model and not s.ended_at]
+    return max(open_, key=lambda s: s.started_at).model if open_ else ""
+
+
+#: How many of `complete`'s refusals the recovery advice names before it counts the rest.
+_SHOWN_BLOCKERS = 3
+
+
 def _landed_on_base(repo: Path, cfg: Config, it: Item) -> str:
     """The commit `merge` recorded when it is reachable from the base branch, else "".
     Checked against git, not the log: a recorded merge on a branch since rewound is not
@@ -1180,13 +1194,9 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
     from . import completion as CM
 
     # The holder's own model, standing in for the author's (`complete` judges reviewer
-    # independence against it): without one the verdict can only say "unknown". A session names
-    # an agent, not an item, so this is the holder's latest OPEN one. Whoever completes may not
-    # be the holder, so the advice says to pass `--model`.
-    mine = [
-        x for x in state.sessions.values() if x.agent == rec.holder and x.model and not x.ended_at
-    ]
-    model = max(mine, key=lambda x: x.started_at).model if mine else ""
+    # independence against it); whoever completes may not be the holder, so the advice says to
+    # pass `--model`.
+    model = open_session_model(state, rec.holder)
     v = CM.verdict(state, cfg, it.id, repo=repo, model=model)
     head = f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
     if v.may_complete:
@@ -1199,8 +1209,12 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
         rec.advice = (
             head
             + f"`ddflow complete {it.id}` is refused for now: "
-            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:3])
-            + (f" (+{len(v.blockers) - 3} more)" if len(v.blockers) > 3 else "")
+            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:_SHOWN_BLOCKERS])
+            + (
+                f" (+{len(v.blockers) - _SHOWN_BLOCKERS} more)"
+                if len(v.blockers) > _SHOWN_BLOCKERS
+                else ""
+            )
             + f". Settle what `ddflow gate status {it.id}` shows, then "
             + f"`ddflow complete {it.id} --model <author model>`."
         )

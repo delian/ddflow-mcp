@@ -32,13 +32,9 @@ from .planning import plan_for
 
 
 def _session_model(st: State, agent: str) -> str:
-    """The model `agent` declared on its most recent OPEN session, or "".
-
-    Only this agent's: another agent's session names another author, and borrowing its
-    model would judge reviewer independence against the wrong family.
-    """
-    open_ = [s for s in st.sessions.values() if s.agent == agent and s.model and not s.ended_at]
-    return max(open_, key=lambda s: s.started_at).model if open_ else ""
+    """The model `agent` declared on its most recent OPEN session, or "" (one definition,
+    `leases.open_session_model`, shared with what `recover` advises)."""
+    return L.open_session_model(st, agent)
 
 
 def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-only
