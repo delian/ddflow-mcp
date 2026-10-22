@@ -2014,7 +2014,8 @@
   "shape": "object",
   "payload": [
    "id",
-   "exit_code"
+   "exit_code",
+   "ended"
   ],
   "output_schema": {
    "type": "object",
@@ -2024,6 +2025,7 @@
     },
     "id": {},
     "exit_code": {},
+    "ended": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
