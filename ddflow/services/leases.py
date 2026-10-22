@@ -1115,6 +1115,7 @@ def scan(
                 )
             else:
                 _measure(rec, repo, cfg)
+                _note_landed(rec, it, state, cfg, repo)
             out.append(rec)
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
@@ -1135,6 +1136,7 @@ def scan(
                 branch=it.branch,
             )
             _measure(rec, repo, cfg)
+            _note_landed(rec, it, state, cfg, repo)
             out.append(rec)
         elif schedule.interrupted(state, it, live):
             # Same predicate the scheduler uses, so `recover` and `next` cannot
@@ -1153,6 +1155,45 @@ def _tree_is_gone(repo: Path, recorded: str) -> bool:
     """Does the recorded worktree path no longer exist?"""
     wt = W.load_path(repo, recorded) if recorded else None
     return not wt or not wt.exists()
+
+
+def _landed_on_base(repo: Path, cfg: Config, it: Item) -> str:
+    """The commit `merge` recorded when it is reachable from the base branch, else "".
+    Checked against git, not the log: a recorded merge on a branch since rewound is not
+    "on main"."""
+    sha = it.merged_sha
+    if it.gate_outcome("merge") != "passed" or not sha:
+        return ""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    return sha if W.git(repo, "merge-base", "--is-ancestor", sha, base).ok else ""
+
+
+def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path) -> None:
+    """An item whose merge gate is done and whose commit is on the base, with nothing left in
+    its tree, needs COMPLETING, not releasing (Ba2eff5726b): `release` only returned it to the
+    queue to be claimed and merged again. Says what `complete` still wants, if anything."""
+    if rec.salvageable is not False or rec.adopted:
+        return
+    sha = _landed_on_base(repo, cfg, it)
+    if not sha:
+        return
+    from . import completion as CM
+
+    # The holder's own model, as `complete` would take it from its session (it judges reviewer
+    # independence against the author): without one the verdict can only say "unknown".
+    mine = [x for x in state.sessions.values() if x.agent == rec.holder and x.model]
+    model = max(mine, key=lambda x: x.started_at).model if mine else ""
+    v = CM.verdict(state, cfg, it.id, repo=repo, model=model)
+    head = f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
+    if v.may_complete:
+        rec.advice = head + f"Finish it: `ddflow complete {it.id}` (it also clears the lease)."
+    else:
+        rec.advice = (
+            head
+            + f"`ddflow complete {it.id}` is refused for now: "
+            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:3])
+            + f". Record those outcomes (`ddflow gate status {it.id}`), then complete it."
+        )
 
 
 def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
