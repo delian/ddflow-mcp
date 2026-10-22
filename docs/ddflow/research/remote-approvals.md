@@ -205,10 +205,15 @@ transcript", never as default, and prefer elicitation and signatures.
   the operator**, like pinning an ssh `known_hosts` entry: a digest of the signer list (or the keys themselves) written to a layer the agent
   surfaces cannot write (the user layer outside the repo, or a company pack pinned by digest). `[approvals].signers` and the
   commit allowed-signers fallback are honoured **only when they match that pin**; a signer file edited later does not match and is
-  ignored with a `doctor` finding, and rotation is a T3 act signed by a key already in the pinned list. Until the pin exists T3 verbs are
+  ignored with a `doctor` finding, and rotation is a T3 act signed by a key already accepted: the pin names the **root list**, and a later list is honoured when it
+  is reached by a chain of rotations, each signed by a key of the list before it (the chain is in the log and verified offline; a
+  compromised key is removed by a rotation signed by another key of the previous list, with no change to the pin). Until the pin exists T3 verbs are
   not approvable by `approvals approve`, `doctor` reports "no approval signer pinned: T3 protected only by the shell-edit gap documented
-  in `identity.agent_marker`", and the residual risk equals today's. A same-uid agent that can also write the user layer defeats the pin;
-  that needs a separate uid or machine, stated in the docs. An agent may **file** the request (so the operator sees exactly what
+  in `identity.agent_marker`", and the residual risk equals today's. **Limit, plainly:** a same-uid agent that can write the user layer on a fresh install can write both a key list and its pin, so
+  on a single-uid host the pin only raises the cost from "append one event" to "also write the user layer and hold a key", and
+  does not stop a determined agent; real protection needs the pin in a place the agent cannot write (a root-owned file, a
+  company pack verified against a remote, a signed commit with a hardware key) or a separate uid or machine. The honest claim
+  is "visible and costlier", never "unforgeable", for a single-uid host. An agent may **file** the request (so the operator sees exactly what
   to sign) but no lower-level answer is accepted.
 * **T0: ungated** stays ungated.
 
