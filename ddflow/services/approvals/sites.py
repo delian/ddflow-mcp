@@ -162,7 +162,7 @@ SITES: tuple[Site, ...] = (
         "the proposed plan",
         (),
         "ddflow plan confirm --yes --reason ...",
-        anchor=("ddflow/api/plan.py", "def plan_confirm"),
+        anchor=("ddflow/api/plan.py", "Confirm with --yes --reason"),
     ),
     Site(
         "skew.override",
@@ -171,7 +171,7 @@ SITES: tuple[Site, ...] = (
         L1,
         "the installed and the repository version",
         (),
-        "ddflow_* allow_older_version",
+        "ddflow <write command> --allow-older-version --reason ...",
         anchor=("ddflow/surfaces/history_verbs.py", "skew.overridden"),
     ),
     Site(
