@@ -91,6 +91,7 @@ def test_the_advice_names_what_complete_still_wants(repo):
     _merged(repo, "T1", "src/T1/a.py")
     (rec,) = _recs(repo, "T1")
     assert "required gate(s) not passed" in rec.advice and "unit_tests" in rec.advice, rec.advice
+    assert "then `ddflow complete T1 --model <author model>`" in rec.advice, rec.advice
 
 
 def test_the_advised_path_works(repo):
