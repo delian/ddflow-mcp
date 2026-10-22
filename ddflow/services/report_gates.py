@@ -11,8 +11,17 @@ from . import gates as G
 from .gates.reviewers import family_of
 
 #: Evidence keys that show a tool or a reviewer produced the outcome. A gate with none of them
-#: was recorded by hand (`gate record ... --evidence`) and its note is all there is.
-TOOL_KEYS = ("command", "reviewer", "covered_by", "roborev", "branch_head", "ci_scope", "scope")
+#: was recorded by hand (`gate record ... --evidence`) and its note is all there is. A bare
+#: `command` string is the caller's word, not a run: only `command_digest` (`gate run`) counts.
+TOOL_KEYS = (
+    "command_digest",
+    "reviewer",
+    "covered_by",
+    "roborev",
+    "branch_head",
+    "ci_scope",
+    "scope",
+)
 
 
 def _family(ev: dict[str, Any], cfg) -> str:

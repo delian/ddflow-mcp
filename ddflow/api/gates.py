@@ -44,6 +44,7 @@ from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import failed_gate as OC
 from ..services.gates import failed_review as GO
+from ..services.gates import handrecord as HR
 from ..services.gates import measured as R
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
@@ -1191,6 +1192,13 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
+
+    # A command gate's pass is `gate run`'s to give (Bed643a611b); and what a hand record
+    # could not measure is said in it (Bb305b43f56).
+    if why := HR.refusal(it, gdef, gate, result, agent_marker(agent), wt, skip=skip):
+        return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
+    if not skip:
+        ev.update(HR.gaps(evidence.command, evidence.output_file, wt, log.agent_id))
 
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:
