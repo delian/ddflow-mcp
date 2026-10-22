@@ -282,7 +282,7 @@ class Classified(NamedTuple):
 
 _BLOCKED_ON = re.compile(
     r"^(blocked on [^\n]+? since (?:\d{2}:\d{2}:\d{2}|an unknown time)"
-    r"(?:, you are #\d+ in the queue)?)$",
+    r", you are #\d+ in the queue)$",
     re.M,
 )
 
