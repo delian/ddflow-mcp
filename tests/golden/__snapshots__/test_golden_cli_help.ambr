@@ -2225,10 +2225,10 @@
 # ---
 # name: test_help[ddflow rule add]
   '''
-  usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--priority PRIORITY] [--globs GLOBS] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--priority PRIORITY] [--globs GLOBS] [--enforcement ENFORCEMENT] [--pin] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --id ID
     --title TITLE
     --content CONTENT
@@ -2236,31 +2236,37 @@
     --scope SCOPE
     --priority PRIORITY
     --globs GLOBS
-    --new                a different rule, file it
+    --enforcement ENFORCEMENT
+    --pin                 pin it: enforcement block for ALL work (no globs), so it is handed over
+                          whole whatever the budget (the rules charter's pinned rules)
+    --new                 a different rule, file it
     --extends ID
     --duplicate-of ID
     --related ID
-    --check              dry run: list duplicates only
+    --check               dry run: list duplicates only
   
   '''
 # ---
 # name: test_help[ddflow rule edit]
   '''
-  usage: ddflow rule edit [-h] [--title TITLE] [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--globs GLOBS] [--priority PRIORITY] [--new | --related ID] id
+  usage: ddflow rule edit [-h] [--title TITLE] [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--globs GLOBS] [--priority PRIORITY] [--enforcement ENFORCEMENT] [--pin] [--new | --related ID] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --content CONTENT
     --tags TAGS
     --scope SCOPE
     --globs GLOBS
     --priority PRIORITY
-    --new                answer the duplicate check: different
-    --related ID         answer it: related to ID
+    --enforcement ENFORCEMENT
+    --pin                 pin it: enforcement block for ALL work (no globs), so it is handed over
+                          whole whatever the budget (the rules charter's pinned rules)
+    --new                 answer the duplicate check: different
+    --related ID          answer it: related to ID
   
   '''
 # ---
