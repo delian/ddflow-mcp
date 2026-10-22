@@ -534,6 +534,8 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.answered", "outcome"): "the word or choice an answer is compared with",
     ("ask.answered", "role"): "a role name",
     ("ask.answered", "via"): "a channel word",
+    ("ask.answered", "source"): "an actor source word",
+    ("ask.answered", "code_proof"): "a hash that is compared",
     ("ask.answered", "by"): "an actor id, the audit trail's who",
     ("ask.withdrawn", "by"): "an actor id, the audit trail's who",
     ("ask.expired", "by"): "an actor id, the audit trail's who",
