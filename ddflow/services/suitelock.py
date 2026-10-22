@@ -114,13 +114,19 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
         if path.suffix == ".parked":
             if age <= grace_s:
                 live.append(path.name)
-            else:
-                with contextlib.suppress(OSError):
-                    path.unlink()
+                continue
+            try:  # expired: gone, unless a retry is taking it back right now
+                with fsio.file_lock(path, 0):
+                    with contextlib.suppress(OSError):
+                        path.unlink()
+            except fsio.LockTimeout:
+                live.append(path.name)
             continue
         try:
-            with fsio.file_lock(path, 0):  # got it: nobody owns this ticket any more
-                if age > NEW_S:  # a ticket is created before its owner locks it
+            with fsio.file_lock(path, 0):  # got it: nobody owns this ticket (yet)
+                if age <= NEW_S:  # created, its owner has not locked it yet: it still has its place
+                    live.append(path.name)
+                else:
                     with contextlib.suppress(OSError):
                         path.unlink()
         except fsio.LockTimeout:
@@ -134,18 +140,23 @@ def _key(holder: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in holder)[:80]
 
 
-def _parked_for(queue: Path, key: str) -> Path | None:
-    """A ticket this holder parked on an earlier try: its place, to be taken back."""
-    return next(iter(sorted(queue.glob(f"*-{key}.parked"))), None)
+def _parked_for(queue: Path, key: str, grace_s: float) -> Path | None:
+    """A ticket this holder parked on an earlier try, still within its grace: its place, to be
+    taken back."""
+    for path in sorted(queue.glob(f"*-{key}.parked")):
+        with contextlib.suppress(OSError):
+            if time.time() - path.stat().st_mtime <= grace_s:
+                return path
+    return None
 
 
 class _Ticket:
     """A waiter's place in the queue: a file it holds the flock on."""
 
-    def __init__(self, queue: Path, holder: str) -> None:
+    def __init__(self, queue: Path, holder: str, grace_s: float) -> None:
         queue.mkdir(parents=True, exist_ok=True)
         key = _key(holder)
-        self._parked = _parked_for(queue, key)  # a retry: back into the place it kept
+        self._parked = _parked_for(queue, key, grace_s)  # a retry: back into the place it kept
         if self._parked is not None:
             self.path = queue / f"{self._parked.name[: -len('.parked')]}.ticket"
         else:
@@ -200,7 +211,7 @@ def hold(
     slots = SLOTS.Slots(directory, NAME)
     said = 0
     with contextlib.ExitStack() as stack:
-        ticket = stack.enter_context(_Ticket(queue, holder))
+        ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
         name = ticket.name
         while True:
             line = _live(queue, stale_s, grace_s, name)
