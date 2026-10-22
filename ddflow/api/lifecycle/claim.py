@@ -320,6 +320,35 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     return _with_notes(out, notes)
 
 
+def _tree_choice(cfg, bound: _Bound, stands: Path) -> dict[str, str]:
+    """Which tree this claim bound and why: `how` is none | rebound | adopted | created.
+
+    The rule is one and the same for every caller: the item's own tree from an earlier claim
+    first; else the linked worktree the caller stands in, when no other item holds it; else a
+    tree of its own under .ddflow/worktrees. It differed by caller with nothing said
+    (B-claim-points-to-ddflow-worktrees-not-session), so every answer now names the case."""
+    wt = bound.wt
+    if wt is None:
+        return {
+            "how": "none",
+            "why": "no tree was asked for or needed (--no-worktree, a tree-less item, or [worktree].enabled is off)",
+        }
+    if bound.rebound:
+        return {"how": "rebound", "why": "the item already has its own tree from an earlier claim"}
+    if not wt.created and not bound.ours:
+        return {
+            "how": "adopted",
+            "why": "you are standing in a linked worktree no other item holds",
+        }
+    if not cfg.worktree.adopt_existing:
+        why = "[worktree].adopt_existing is off, so no tree is adopted"
+    elif W.current(stands) is None:
+        why = "you are not standing in a linked worktree of this repository (the primary checkout, or a detached HEAD)"
+    else:
+        why = "the tree you are in could not be adopted"
+    return {"how": "created", "why": why}
+
+
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
     """The success answer of a claim: the lease, the tree and what governs the item."""
     wt = bound.wt
@@ -355,6 +384,7 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
         # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
         globs=list(lz.globs),
         broke=broke,
+        tree=_tree_choice(cfg, bound, stands),
     )
 
 
