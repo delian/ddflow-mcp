@@ -618,6 +618,10 @@ class Command:
     #: argparse's ``formatter_class`` and ``epilog`` for this command's help.
     formatter_class: Any = None
     epilog: str = ""
+    #: The family tool that serves this command and its ``action`` there (D-mcp-tool-families,
+    #: `tools/families.py`): the CLI's ``noun verb``. Empty: the legacy placement table decides.
+    family: str = ""
+    action: str = ""
 
     def __post_init__(self) -> None:
         self._check_names()
