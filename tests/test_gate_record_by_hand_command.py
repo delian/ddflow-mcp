@@ -106,3 +106,7 @@ def test_the_report_counts_a_bare_command_string_as_by_hand():
         outcome="passed", by="a", reason="", evidence={"command": "x", "ran_by": "ddflow ci run"}
     )
     assert report_gates._row("ci", ci, cfg)["by_hand"] is False
+    forged = SimpleNamespace(
+        outcome="passed", by="a", reason="", evidence={"command": "x", "ran_by": "typed"}
+    )
+    assert report_gates._row("ci", forged, cfg)["by_hand"] is True
