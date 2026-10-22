@@ -398,8 +398,9 @@ EXPECTED = [
         "",
         "usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT]\n"
         "                       [--tags TAGS] [--scope SCOPE] [--priority PRIORITY]\n"
-        "                       [--globs GLOBS] [--new | --extends ID |\n"
-        "                       --duplicate-of ID | --related ID | --check]\n"
+        "                       [--globs GLOBS] [--enforcement ENFORCEMENT] [--pin]\n"
+        "                       [--new | --extends ID | --duplicate-of ID |\n"
+        "                       --related ID | --check]\n"
         "ddflow rule add: error: the following arguments are required: --id\n",
     ),
     (
@@ -524,6 +525,7 @@ EXPECTED = [
         '    "a/*.py",\n'
         '    "b/*.py"\n'
         "  ],\n"
+        '  "enforcement": "advisory",\n'
         '  "created": "<time>",\n'
         '  "updated": "<time>"\n'
         "}\n",
