@@ -1,3 +1,4 @@
+# EXAMPLE (recorded probe overlay): replace every <SCRATCH> with a real absolute path before use.
 - id: llm-pi-ai
   config:
     providers:
