@@ -41,6 +41,11 @@ EXEMPTIONS: tuple[Command, ...] = (
         "shell, `approve` a person's act; neither is worth tools/list bytes",
     ),
     Command(
+        path=("grant",),
+        reason="a person's act (DX-operator-grants-recorded): `grant add` is refused under any "
+        "agent identity like `approve`, so no tool carries it; `list` goes with it",
+    ),
+    Command(
         path=("plan",),
         reason="its only command, `plan check`, is CLI-only: a pre-filing convenience on a document",
     ),
