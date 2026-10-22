@@ -6,10 +6,12 @@ and the brief's business, and the api layer imports no surface."""
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
-from ..services import startcost as SC
+from ..api.lifecycle.brief import brief
+from ..core.measuring import measuring
 
 
 def start_texts(repo: Path, agent: str = "") -> dict[str, str]:
@@ -17,11 +19,11 @@ def start_texts(repo: Path, agent: str = "") -> dict[str, str]:
     profile (compact JSON, as it is sent) and the session brief the SessionStart hook prints.
     A part that cannot be built raises: `services.startcost.report` turns that into a said
     'could not be measured', never a quiet 0."""
-    from ..api.lifecycle.brief import brief
-    from . import mcp
-
+    # By name, not `import`: the MCP server imports the tool declarations that import this
+    # module, so a module-level import here would be a cycle.
+    mcp = importlib.import_module("ddflow.surfaces.mcp")
     texts = {"instructions": "", "tools/list": "", "brief": ""}
-    with SC.measuring():
+    with measuring():
         srv = mcp.Server(repo, agent)
         texts["instructions"] = mcp._instructions(repo, agent, srv.tier)
         listed = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
