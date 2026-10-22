@@ -198,3 +198,8 @@ def test_a_client_row_without_a_launch_config_is_not_a_server(tmp_path):
         '    - {"id": "ddflow", "name": "@deepseek-ai/dsh-mcp-client"}  # ddflow-row:ddflow\n'
     )
     assert MC.cordis_servers(MC.cordis_rows(path.read_text())) == {}
+
+
+def test_a_client_row_whose_config_launches_nothing_is_not_a_server():
+    rows = {"ddflow": {"name": MC.CORDIS_MCP_PLUGIN, "config": {"serverName": "ddflow"}}}
+    assert MC.cordis_servers(rows) == {}

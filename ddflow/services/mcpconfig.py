@@ -131,7 +131,7 @@ def cordis_servers(rows: dict[str, dict]) -> dict[str, dict]:
     return {
         n: r["config"]
         for n, r in rows.items()
-        if r.get("name") == CORDIS_MCP_PLUGIN and isinstance(r.get("config"), dict) and r["config"]
+        if r.get("name") == CORDIS_MCP_PLUGIN and _serves(r.get("config"))
     }
 
 
