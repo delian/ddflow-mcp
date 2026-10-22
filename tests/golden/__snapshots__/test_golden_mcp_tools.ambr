@@ -1478,13 +1478,21 @@
     'ddflow_job_end': '''
       {
        "name": "ddflow_job_end",
-       "description": "Record that a job ended and how. Refused while the process is still running. The exit code defaults to the one its log recorded.",
+       "description": "Record that a job ended and how. Refused while the process is still running. The exit code defaults to the one its log recorded. With all_finished (every item) or item (one) and no job id, ends every job whose process is over.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "job": {
           "type": "string",
           "description": "Job id."
+         },
+         "all_finished": {
+          "type": "boolean",
+          "description": "End every job whose process is over (EXITED or GONE), of all items."
+         },
+         "item": {
+          "type": "string",
+          "description": "End every finished job of this item."
          },
          "exit_code": {
           "type": "integer",
@@ -1503,9 +1511,6 @@
           "description": "Subagent name, this call only."
          }
         },
-        "required": [
-         "job"
-        ],
         "additionalProperties": false
        }
       }

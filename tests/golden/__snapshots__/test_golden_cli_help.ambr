@@ -1178,13 +1178,15 @@
 # ---
 # name: test_help[ddflow job end]
   '''
-  usage: ddflow job end [-h] [--exit-code EXIT_CODE] [--note NOTE] [--force] job
+  usage: ddflow job end [-h] [--all-finished] [--item ITEM] [--exit-code EXIT_CODE] [--note NOTE] [--force] [job]
   
   positional arguments:
     job
   
   options:
     -h, --help            show this help message and exit
+    --all-finished        end every finished job
+    --item ITEM
     --exit-code EXIT_CODE
                           default: the one its log recorded
     --note NOTE
