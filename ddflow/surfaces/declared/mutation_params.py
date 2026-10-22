@@ -1,6 +1,6 @@
 """The mutation that shows a regression test guards a fix confined to test files.
 
-Shared by `bug fixed` and `complete` (B Bc262739f62): three flags on the command line, one
+Shared by `bug fixed` and `complete` (B Bc262739f62): three flags on the command line (or the one JSON `--mutation`), one
 JSON parameter over MCP (the tool list is size-budgeted), both read back as the one
 `{file, old, new}` dict the api takes.
 """
@@ -37,7 +37,7 @@ MUTATION_PARAMS: tuple[Param, ...] = (
     Param(
         "mutation",
         help='Test-only fix: JSON {"file","old","new"} disabling it; the test must FAIL.',
-        mcp_only=True,
+        cli_help='fix confined to test files: the mutation as JSON {"file","old","new"}, the three --mutation-* flags in one (as the MCP parameter)',
     ),
 )
 
