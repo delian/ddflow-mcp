@@ -1240,7 +1240,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     elif (a["chunks"] and not a["commit"] and not a["base"]) and (
         found := _delta_cut(repo, cfg, it, a)
     ):
-        diff, how = found
+        diff, how, why = found
     elif a["commit"]:
         diff, how = commit_diff(repo, a["commit"])
     else:
@@ -1254,13 +1254,15 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     return kind, done, forced, diff, how, why, rerun
 
 
-def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str] | None:
-    """(diff, how) a `--chunk` re-run of a recorded DELTA round is cut from, or None.
+def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str, str] | None:
+    """(diff, how, why not) a `--chunk` re-run of a recorded DELTA round is cut from, or None
+    when the record is not a delta's.
 
     The chunk numbers of such a record mean something only in the delta it reviewed -- the
     commits since `delta_from` -- not in the item's whole change, so a partial delta
     (a chunk timed out) could never be completed (B00e6b5a540). The diff is cut afresh: if
-    the branch moved since, its digest differs and `_rerun_scope` refuses it."""
+    the branch moved since, its digest differs and `_rerun_scope` refuses it. A delta that
+    cannot be produced is said so, not read as a different cut."""
     if not (it and a["item"]):
         return None
     start = str(_prior_evidence(it.gates.get(a["gate"])).get("delta_from") or "")
@@ -1268,9 +1270,19 @@ def _delta_cut(repo, cfg, it, a: dict[str, Any]) -> tuple[str, str] | None:
         return None
     try:
         diff = _delta_diff(repo, it, a["branch"], start, cfg.worktree.base_ref or "")
-    except RuntimeError:
-        return None
-    return (diff, f"the delta since {start[:10]}") if diff.strip() else None
+    except RuntimeError as exc:
+        return (
+            "",
+            "",
+            f"the delta since {start[:10]} could not be produced ({exc}); run the full review.",
+        )
+    if not diff.strip():
+        return (
+            "",
+            "",
+            f"nothing changed since {start[:10]}, the start of the recorded delta; run the full review.",
+        )
+    return diff, f"the delta since {start[:10]}", ""
 
 
 def _budget_on_grants(repo, cfg, st, it, a: dict[str, Any], used: int, say) -> tuple[str, str]:

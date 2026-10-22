@@ -115,3 +115,18 @@ def test_a_delta_cut_from_an_explicit_base_is_completed_with_that_base(repo, tmp
     flaky.unlink()
     out = _review(repo, chunks=[bad], base=reviewed)
     assert out.exit == OK and out.data["outcome"] == "passed", out.reason
+
+
+def test_a_delta_that_cannot_be_cut_says_so(repo, tmp_path, monkeypatch):
+    flaky = _setup(repo, tmp_path)
+    _review(repo)
+    _commit(repo, {"a.py": "x = 1", "b.py": "y = 2", "c.py": "z = 3  # BADCHUNK"})
+    assert _review(repo).data["outcome"] == "partial"
+    flaky.unlink()
+
+    def broken(*_a, **_k):
+        raise RuntimeError("git is unwell")
+
+    monkeypatch.setattr(api, "_delta_diff", broken)
+    out = _review(repo, chunks=[1])
+    assert out.exit == REFUSED and "could not be produced (git is unwell)" in out.reason, out.reason
