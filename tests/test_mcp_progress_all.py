@@ -61,3 +61,38 @@ def test_no_token_no_heartbeat(repo, monkeypatch):
         }
     )
     assert sent == []
+
+
+def test_progress_from_two_threads_reaches_the_client_in_order(repo):
+    """A heartbeat thread and a tool's own lines share one counter: count and send are
+    one step, or a slow first send lets a later number overtake it."""
+    import threading
+
+    srv = mcp.Server(repo, called_from=repo)
+    sent: list[int] = []
+
+    def notify(frame: dict) -> None:
+        n = frame["params"]["progress"]
+        if n == 1:
+            time.sleep(0.2)  # the first sender is held up while the second one counts
+        sent.append(n)
+
+    srv.notify = notify
+    say = srv._progress({"_meta": {"progressToken": "t"}})
+    ts = [threading.Thread(target=say, args=("x",)) for _ in range(2)]
+    ts[0].start()
+    time.sleep(0.05)
+    ts[1].start()
+    for t in ts:
+        t.join()
+    assert sent == [1, 2]
+
+
+@pytest.mark.parametrize("every", [float("nan"), float("inf"), 0, -1])
+def test_a_bad_interval_starts_no_heartbeat(repo, every):
+    from ddflow.surfaces.mcp_heartbeat import heartbeat
+
+    said: list[str] = []
+    with heartbeat(repo, "t", said.append, every=every):
+        time.sleep(0.2)
+    assert said == []

@@ -8,6 +8,7 @@ sender (and so the same counter) as a tool's own per-line progress."""
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -30,7 +31,7 @@ def heartbeat(
             every = float(Config.load(repo).mcp.progress_s)
         except Exception:  # a broken config must not fail the call it would keep alive
             every = 20.0
-    if every <= 0:
+    if not math.isfinite(every) or every <= 0:  # nan would make wait() return at once: a spin
         yield
         return
     done = threading.Event()
