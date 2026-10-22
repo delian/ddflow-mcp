@@ -10,11 +10,23 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from conftest import run_cli
 from helpers import git_quiet as _git
 
 from ddflow.config import KNOB_CHOICES, KNOB_DOCS, KNOB_STRICTEST, Config
+
+
+@pytest.fixture(autouse=True)
+def _a_person_records_by_hand(monkeypatch):
+    """These tests hand-record command gates as a person: an agent's typed pass is refused
+    (Bed643a611b), and the suite itself may run under an agent harness."""
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+
 
 # The unrelated red test is red on the base as well, so the gate that runs it is recorded
 # `partial` as baseline-red (exit 2) -- still the proof that it ran (DX-gate-baseline-red).

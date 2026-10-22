@@ -9,6 +9,7 @@ from typing import Any
 from ..core import clock
 from ..core import ids as IDS
 from ..core import outcome as O
+from ..core.model import fold
 from ..infra import worktree as W
 from ..services import jobs as J
 from ._base import _load
@@ -164,21 +165,56 @@ def job_list(
     return O.ok("job.list", **data)
 
 
+def _bulk_refusal(job: str, item: str, all_finished: bool, *, single: bool) -> O.Outcome | None:
+    """The refusal for a `job end` that mixes one job with the bulk flags (or names neither);
+    ``single`` is any of --exit-code / --note / --force, which describe ONE job."""
+    bulk = bool(item or all_finished)
+    if job and bulk:
+        return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
+    if item and all_finished:
+        return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
+    if bulk and single:
+        return O.refused(
+            "job.ended",
+            "--exit-code, --note and --force describe ONE job: each finished job is ended with "
+            "its own recorded exit, and one on another host is never ended in bulk; end that job "
+            "by id to override it",
+            id="",
+        )
+    if not job and not bulk:
+        return O.failed(
+            "job.ended", "name a job to end, or pass --item <id> or --all-finished", id=""
+        )
+    return None
+
+
 def job_end(
     repo: Path,
-    job: str,
+    job: str = "",
     *,
     exit_code: int | None = None,
     note: str = "",
     force: bool = False,
+    item: str = "",
+    all_finished: bool = False,
     agent: str = "",
 ) -> O.Outcome:
     """Record how a job ended. The exit code defaults to the one its log recorded.
 
     Refused while the process is still running: "ended" is a fact about the process,
     and recording it early is how a queue says a run finished that is still writing.
+
+    With no ``job`` but ``item`` or ``all_finished``: every job whose process is over, of that
+    item or of all (`job_end_finished`).
     """
 
+    bad = _bulk_refusal(
+        job, item, all_finished, single=exit_code is not None or bool(note) or force
+    )
+    if bad is not None:
+        return bad
+    if not job:
+        return job_end_finished(repo, item=item, agent=agent)
     log, _cfg, st = _load(repo, agent)
     j = st.jobs.get(job)
     if j is None:
@@ -204,3 +240,44 @@ def job_end(
     code = exit_code if exit_code is not None else s.exit_code
     log.append("job.ended", job, {"exit_code": code, "note": note or s.detail})
     return O.ok("job.ended", id=job, exit_code=code)
+
+
+def collect_finished(log, st, item: str = "") -> list[str]:
+    """End every job whose process is over and whose end is determinable here (EXITED, or GONE: killed, with no exit recorded),
+    for ``item`` or for all items; the ids ended. Never a running job, never one on another host
+    (`status` says "elsewhere": it could not look). One append for the lot, not one per job."""
+    ended: list[tuple[str, str, dict[str, Any]]] = []
+    # `Job.started_at` is the `job.started` event's ISO-8601 string (records.Job: `str = ""`), never
+    # a datetime or None, so the order is a plain string order.
+    for j in sorted(st.jobs.values(), key=lambda x: x.started_at or ""):
+        if j.ended_at or (item and j.item != item):
+            continue
+        s = J.status(j)
+        if s.state in ("exited", "gone"):
+            note = f"{s.detail} (collected)"
+            ended.append(("job.ended", j.id, {"exit_code": s.exit_code, "note": note}))
+    if ended:
+        log.append_many(ended)
+    return [subject for _kind, subject, _data in ended]
+
+
+def collect_for_item(log, item: str) -> tuple[list[str], str]:
+    """`collect_finished` for one item as it completes or is abandoned: (ids ended, why not).
+    Never raises, because a job that cannot be checked must not make a finished item look
+    unfinished; but a collection that could not run says so, it is not "no finished jobs"."""
+    try:
+        return collect_finished(log, fold(log.read_all(), strict=False), item), ""
+    except Exception as e:
+        return [], f"finished jobs of {item} were not collected: {type(e).__name__}: {e}"
+
+
+def job_end_finished(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
+    """`job end --all-finished` / `--item X`: record the end of every job that is over."""
+    log, _cfg, st = _load(repo, agent)
+    if item and item not in st.items:
+        return O.failed("job.ended", f"no such item {item!r}", ended=[])
+    ended = collect_finished(log, st, item)
+    where = f" of {item}" if item else ""
+    if not ended:
+        return O.nothing("job.ended", f"no finished jobs{where} to end", ended=[])
+    return O.ok("job.ended", ended=ended, count=len(ended))

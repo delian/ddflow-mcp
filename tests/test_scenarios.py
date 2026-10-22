@@ -56,8 +56,12 @@ def test_every_scenario_still_imports():
 # hook); a scenario gets CI's scenario budget whatever the command line says.
 @pytest.mark.timeout(1800)
 @pytest.mark.parametrize("name", [n for n, _ in _scenarios()], ids=lambda n: n)
-def test_scenario(name, tmp_path):
+def test_scenario(name, tmp_path, monkeypatch):
     """One scenario, against a freshly invented project in a temp directory."""
+    # Scenarios hand-record command gates as a person would; an agent's typed pass of one is
+    # refused (Bed643a611b), and this suite itself may run under an agent harness.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     from harness import Fail, Scenario
 
     fn = dict(_scenarios())[name]
