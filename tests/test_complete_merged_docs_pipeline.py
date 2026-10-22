@@ -3,7 +3,7 @@ branch kept) `gate status` and `complete` must resolve the SAME pipeline: the do
 
 from __future__ import annotations
 
-from conftest import run_cli
+from conftest import pass_pipeline, run_cli
 from test_na_required_gate import _state, _worktree_with_change
 
 from ddflow.config import Config
@@ -15,12 +15,7 @@ def test_a_merged_docs_only_task_has_one_pipeline_for_status_and_complete(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "note", "--globs", "docs/**")
     _worktree_with_change(repo, "docs/note.md")
-    for gate in ("rules", "implement", "standards", "dedupe"):
-        code, out, err = run_cli(
-            repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran",
-            agent="a1",
-        )  # fmt: skip
-        assert code == 0, (gate, out, err)
+    pass_pipeline(repo, "T1", omit=("merge",))
     code, out, err = run_cli(repo, "merge", "T1", agent="a1")
     assert code == 0, out + err
     cfg = Config.load(repo)
