@@ -97,3 +97,34 @@ def test_measuring_leaves_the_once_per_version_notice_alone(repo):
         assert _upgrade_notices(repo, None, None, None, "x") == ""
         assert mcp._upgrade_line(repo, "x") == ""
     assert not SC.is_measuring()
+
+
+def test_the_cost_is_counted_in_bytes_not_code_points():
+    cost = SC.measure({"a": "é" * 400}, chars_per_token=4.0, budget=0)
+    assert (cost.chars["a"], cost.tokens) == (800, 200)
+
+
+def test_report_builds_the_texts_while_measuring(repo):
+    seen = []
+
+    def texts(_repo, _agent):
+        seen.append(SC.is_measuring())
+        return {"a": "x" * 40}
+
+    cost = SC.report(repo, Config.load(repo), "x", texts)
+    assert seen == [True] and cost.tokens == 10
+
+
+def test_a_failing_surface_leaves_an_empty_cost_not_a_failed_doctor(repo):
+    def boom(_repo, _agent):
+        raise RuntimeError("no texts")
+
+    cost = SC.report(repo, Config.load(repo), "x", boom)
+    assert cost.notes() == [] and cost.data() == {}
+
+
+def test_the_knob_says_what_is_and_is_not_counted():
+    from ddflow.config import KNOB_DOCS
+
+    doc = KNOB_DOCS["session.context_budget_tokens"]
+    assert "SessionStart hook" in doc and "upgrade notice is not counted" in doc

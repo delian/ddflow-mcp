@@ -8,7 +8,8 @@ passes it in (the service layer imports no surface), and the estimate is charact
 ratio (`[session].start_chars_per_token`), so no tokenizer is imported.
 
 Measuring must not CHANGE anything: the upgrade notice is said once per version and the brief
-sweeps finished worktrees. `measuring()` tells those to stand aside while a text is built.
+sweeps finished worktrees. `measuring()` tells those to stand aside while a text is built; so a
+pending upgrade notice (one line, said once per version) is the one thing NOT counted.
 """
 
 from __future__ import annotations
@@ -84,11 +85,10 @@ class StartCost:
 def measure(texts: Mapping[str, str], *, chars_per_token: float, budget: int) -> StartCost:
     """The cost of ``texts`` (name -> what the session is handed), at ``chars_per_token``."""
     ratio = chars_per_token if chars_per_token > 0 else 4.0
+    sizes = {name: len(text.encode("utf-8")) for name, text in texts.items()}  # bytes
     return StartCost(
-        parts={
-            name: max(1, round(len(text) / ratio)) if text else 0 for name, text in texts.items()
-        },
-        chars={name: len(text) for name, text in texts.items()},
+        parts={name: max(1, round(n / ratio)) if n else 0 for name, n in sizes.items()},
+        chars=sizes,
         budget=budget,
     )
 
@@ -101,8 +101,10 @@ def report(repo, cfg, agent: str, start_texts) -> StartCost:
     if start_texts is None:
         return empty
     try:
+        with measuring():  # the surface's own guard is not the only one
+            texts = start_texts(repo, agent)
         return measure(
-            start_texts(repo, agent),
+            texts,
             chars_per_token=cfg.session.start_chars_per_token,
             budget=cfg.session.context_budget_tokens,
         )
