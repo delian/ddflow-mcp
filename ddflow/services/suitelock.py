@@ -38,9 +38,6 @@ NAME = "suites"
 QUEUE = "queue"
 #: Seconds between two looks of a queued waiter (it also beats its ticket then).
 QUEUE_POLL_S = 0.25
-#: Defaults of ``[ci].suite_queue_stale_s`` / ``suite_queue_grace_s``.
-STALE_S = 120.0
-GRACE_S = 120.0
 #: A ticket this young may be one whose owner has not locked it yet.
 NEW_S = 1.0
 #: How long a new waiter waits for its own ticket's lock: a scan may hold it for an instant.
@@ -217,8 +214,8 @@ def hold(
     directory = Path(directory) if directory else state_dir()
     limit = max(1, int(cfg.ci.max_concurrent_suites))
     wait = max(0.0, float(cfg.ci.suite_wait_s))
-    stale_s = float(getattr(cfg.ci, "suite_queue_stale_s", STALE_S))
-    grace_s = float(getattr(cfg.ci, "suite_queue_grace_s", GRACE_S))
+    stale_s = float(getattr(cfg.ci, "suite_queue_stale_s", 120))
+    grace_s = float(getattr(cfg.ci, "suite_queue_grace_s", 120))
     say = say or _say_default
     queue = directory / QUEUE
     start = time.monotonic()
