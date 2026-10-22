@@ -62,7 +62,8 @@ def not_a_failure(ev: dict[str, Any], *, where: str) -> str:
             f"interrupted or an internal error), so the test is not shown to fail before the fix"
         )
     counts = _counts(ev)
-    if counts and not counts.get("failed"):
+    if counts and (not counts.get("failed") or counts.get("xpassed")):
+        # a strict xfail that XPASSed reads "1 failed, 1 xpassed": its assertion held
         what = _said(counts) or "no test failed"
         return (
             f"the named test did not FAIL on {where}: {what} (an error is not a failure "
