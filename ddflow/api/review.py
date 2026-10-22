@@ -333,8 +333,9 @@ def _probe_refusal(repo: Path, it, probe: str) -> str:
     roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
     problem = probe_problem(roots, probe)
     return (
-        f"{problem}: a probe must name an existing test as a path::node id "
-        f"(tests/test_x.py::test_y) or a command that was run (pytest -k expr, ./script)"
+        f"{problem}: a probe must name an existing test -- a path::node id "
+        f"(tests/test_x.py::test_y) or a test name defined under tests/ -- or a command that was "
+        f"run (pytest -k expr, ./script)"
         if problem
         else ""
     )
