@@ -6,7 +6,10 @@ retries a bounded number of times and, when it gives up, says what happened."""
 from __future__ import annotations
 
 import sys
+import threading
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -14,6 +17,12 @@ from test_flow import _commit, _git
 
 from ddflow.config import Config
 from ddflow.infra import worktree as W
+
+
+def _patch_sleep(monkeypatch, fn):
+    """Replace the sleep of the WORKTREE MODULE only: patching `time.sleep` itself would hand
+    this test every other thread's sleep too (B-merge-stash-retry-tests-patch-global-sleep)."""
+    monkeypatch.setattr(W, "time", SimpleNamespace(sleep=fn))
 
 
 def _setup(repo):
@@ -40,7 +49,7 @@ def test_a_stash_failure_from_a_briefly_held_index_lock_is_retried(repo, monkeyp
         pauses.append(seconds)
         lock.unlink(missing_ok=True)
 
-    monkeypatch.setattr(W.time, "sleep", release_on_first_pause)
+    _patch_sleep(monkeypatch, release_on_first_pause)
     r = W.merge(repo, cfg, wt)
     assert pauses, "the first attempt must have failed on the lock, or this proves nothing"
     assert r.ok, r.err or r.out
@@ -53,7 +62,7 @@ def test_a_stash_failure_that_never_clears_is_reported_with_its_cause(repo, monk
     head = _git(repo, "rev-parse", "HEAD")
     _lock(repo)
     pauses = []
-    monkeypatch.setattr(W.time, "sleep", pauses.append)
+    _patch_sleep(monkeypatch, pauses.append)
     r = W.merge(repo, cfg, wt)
     assert len(pauses) == W.STASH_RETRIES - 1  # bounded
     assert not r.ok
@@ -69,7 +78,7 @@ def test_a_conflict_in_a_file_named_stash_failed_is_not_retried(repo, monkeypatc
     _commit(wt.path, "stash failed", "branch\n", "feat: f")
     _commit(repo, "stash failed", "main\n", "main: same file")
     pauses = []
-    monkeypatch.setattr(W.time, "sleep", pauses.append)
+    _patch_sleep(monkeypatch, pauses.append)
     r = W.merge(repo, cfg, wt)
     assert not r.ok and not pauses
     assert "CONFLICT" in (r.err + r.out)
@@ -85,7 +94,7 @@ def test_a_blocking_file_named_like_the_error_is_not_retried(repo, monkeypatch):
     _commit(wt.path, name, "branch\n", "feat: edit")
     (repo / name).write_text("dirty local\n")  # the merge would overwrite it: git refuses
     pauses = []
-    monkeypatch.setattr(W.time, "sleep", pauses.append)
+    _patch_sleep(monkeypatch, pauses.append)
     r = W.merge(repo, cfg, wt)
     assert not r.ok and not pauses, (r.err, r.out)
     assert "index.lock" not in (r.err + r.out)
@@ -109,7 +118,7 @@ def test_a_merge_already_begun_is_never_rerun_whatever_its_output_says(repo, mon
         return r
 
     monkeypatch.setattr(W, "git", git)
-    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    _patch_sleep(monkeypatch, lambda s: None)
     r = W.merge(repo, cfg, wt)
     assert len(seen) == 1 and not r.ok  # attempted once; MERGE_HEAD existed: not retried
 
@@ -134,7 +143,7 @@ def test_a_refusal_listing_a_file_named_with_the_error_line_is_not_retried(repo,
         return real(tree, *a, **kw)
 
     monkeypatch.setattr(W, "git", git)
-    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    _patch_sleep(monkeypatch, lambda s: None)
     r = W.merge(repo, cfg, wt)
     assert len(seen) == 1 and not r.ok
 
@@ -160,6 +169,30 @@ def test_the_multi_line_lock_explanation_before_the_sentence_is_still_retried(re
         return real(tree, *a, **kw)
 
     monkeypatch.setattr(W, "git", git)
-    monkeypatch.setattr(W.time, "sleep", lambda s: None)
+    _patch_sleep(monkeypatch, lambda s: None)
     r = W.merge(repo, cfg, wt)
     assert r.ok, r.err or r.out  # the second attempt ran and merged
+
+
+def test_other_threads_sleeping_do_not_count_as_the_merge_pauses(repo, monkeypatch):
+    """A busy neighbour thread sleeps all the while; only the merge's own pauses are counted."""
+    cfg, wt = _setup(repo)
+    _lock(repo)
+    pauses = []
+    _patch_sleep(monkeypatch, pauses.append)
+    stop, sleeping = threading.Event(), threading.Event()
+
+    def neighbour():
+        while not stop.is_set():
+            time.sleep(0.0005)
+            sleeping.set()
+
+    t = threading.Thread(target=neighbour, daemon=True)
+    t.start()
+    try:
+        assert sleeping.wait(10), "the neighbour must be sleeping before the merge starts"
+        r = W.merge(repo, cfg, wt)
+    finally:
+        stop.set()
+        t.join()
+    assert not r.ok and len(pauses) == W.STASH_RETRIES - 1
