@@ -33,3 +33,29 @@ def test_a_test_plus_a_source_edit_still_blocks_and_names_only_the_source(repo, 
     last = _settle(repo)
     assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
     assert "c.py" in last.data["text"] and "test_regress.py" not in last.data["text"]
+
+
+def _ignore_all_py(repo) -> None:
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[review]\n", '[review]\ntriage_ignore_globs = ["*.py"]\n', 1)
+    )
+
+
+def test_a_reviewed_file_matching_the_globs_that_changed_still_blocks(repo, tmp_path):
+    """Only a file ADDED since the round is ignored: a reviewed file whose content the
+    round did not see is new work, whatever it is called."""
+    wt = _round(repo, tmp_path)
+    _ignore_all_py(repo)
+    (wt / "c.py").write_text("x = 2  # edited after the review\n")
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "c.py" in last.data["text"]
+
+
+def test_a_file_added_after_the_round_matching_the_globs_is_ignored(repo, tmp_path):
+    wt = _round(repo, tmp_path)
+    _ignore_all_py(repo)
+    (wt / "d.py").write_text("x = 3\n")
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "passed", last.data["text"]

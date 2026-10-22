@@ -445,9 +445,10 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
         moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
-        if moved:  # a test answering a finding is not new work (triage_ignore_globs)
+        if moved:  # a test ADDED since the round is not new work (triage_ignore_globs)
+            seen = ev.get(RP.REVIEWED_PATHS_FIELD) or {}
             ignore = cfg.review.triage_ignore_globs or []
-            moved = [p for p in moved if not any(GL.match(p, g) for g in ignore)]
+            moved = [p for p in moved if p in seen or not any(GL.match(p, g) for g in ignore)]
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
