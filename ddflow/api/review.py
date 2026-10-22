@@ -1241,8 +1241,9 @@ def _is_partial_retry(it, a: dict[str, Any], kind: str) -> bool:
     """Is this full round the one retry of a PARTIAL full round (a chunk came back off
     contract, empty or timed out)? The partial round was charged and delivered less than
     it was charged for; its retry is no new round -- once: a retry that is partial again
-    is paid for (B-chunk-retry-charged, Bdfc7ed1299). `--chunk` cannot do it once the
-    branch moved: its numbers mean nothing in another diff."""
+    is paid for (Bdfc7ed1299). A `--chunk` re-run of only the missing chunks is free too,
+    but works only while the diff is unchanged (its numbers mean nothing in another diff);
+    this whole-diff retry is what is left once the branch moved."""
     if kind != "full" or not (it and a["item"]) or a["force"]:
         return False
     last = next(
