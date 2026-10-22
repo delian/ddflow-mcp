@@ -27,7 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from ddflow.mcpshim.probe_server import analyze_log  # noqa: E402
+from ddflow.mcpshim.probe_server import analyze_log, empty_row  # noqa: E402
 
 PROBE = ROOT / "ddflow" / "mcpshim" / "probe_server.py"
 PROMPT = "call lc bump, then call the new lc tool that appears and report its output, or say NONE"
@@ -83,14 +83,7 @@ PENDING = (
 
 def _unavailable(harness: str, reason: str, seen: dict | None = None) -> dict:
     """An unavailable row; `seen` is whatever the probe log already showed."""
-    row = {
-        "harness": harness,
-        "client": None,
-        "revision": None,
-        "probed_discover": False,
-        "listen": False,
-        **(seen or {}),
-    }
+    row = {"harness": harness, **empty_row(), **(seen or {})}
     return {**row, "list_changed": "unavailable", "reason": reason}
 
 
@@ -130,7 +123,7 @@ def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) ->
         # the log may already hold the answer: keep it, and say the CLI did not finish
         row["reason"] = f"timed out after {timeout:g}s"
         if row["list_changed"] == "unknown":
-            return {**_unavailable(harness, row["reason"], row)}, 1
+            return _unavailable(harness, row["reason"], row), 2
         return row, 1
     if row["list_changed"] == "unknown" and done.returncode != 0:
         tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:]

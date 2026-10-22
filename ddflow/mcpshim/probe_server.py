@@ -170,6 +170,11 @@ def _parse(log: str):
             yield parts[1], m
 
 
+def empty_row() -> dict:
+    """The client-table row before anything is known: the one place its keys are declared."""
+    return {"client": None, "revision": None, "probed_discover": False, "listen": False}
+
+
 def analyze_log(log: str) -> dict:
     """The client-table row a probe log supports.
 
@@ -178,7 +183,7 @@ def analyze_log(log: str) -> dict:
     """
     notified_at = None
     refetched = False
-    row = {"client": None, "revision": None, "probed_discover": False, "listen": False}
+    row = empty_row()
     for n, (direction, m) in enumerate(_parse(log)):
         meth = m.get("method")
         if direction == "OUT":
