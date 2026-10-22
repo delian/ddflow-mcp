@@ -20,6 +20,7 @@ auto-deletes would have destroyed it. Recovery is: inspect, salvage, then releas
 from __future__ import annotations
 
 import contextlib
+import importlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1115,6 +1116,7 @@ def scan(
                 )
             else:
                 _measure(rec, repo, cfg)
+                _note_landed(rec, it, state, cfg, repo)
             out.append(rec)
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
@@ -1135,6 +1137,7 @@ def scan(
                 branch=it.branch,
             )
             _measure(rec, repo, cfg)
+            _note_landed(rec, it, state, cfg, repo)
             out.append(rec)
         elif schedule.interrupted(state, it, live):
             # Same predicate the scheduler uses, so `recover` and `next` cannot
@@ -1153,6 +1156,72 @@ def _tree_is_gone(repo: Path, recorded: str) -> bool:
     """Does the recorded worktree path no longer exist?"""
     wt = W.load_path(repo, recorded) if recorded else None
     return not wt or not wt.exists()
+
+
+def open_session_model(st: State, agent: str) -> str:
+    """The model ``agent`` declared on its most recent OPEN session, or "".
+
+    Only this agent's: another agent's session names another author, and borrowing its
+    model would judge reviewer independence against the wrong family. A session names an
+    agent, not an item, so this is the agent's latest open one."""
+    open_ = [s for s in st.sessions.values() if s.agent == agent and s.model and not s.ended_at]
+    return max(open_, key=lambda s: s.started_at).model if open_ else ""
+
+
+#: How many of `complete`'s refusals the recovery advice names before it counts the rest.
+_SHOWN_BLOCKERS = 3
+
+
+def _landed_on_base(repo: Path, cfg: Config, it: Item) -> str:
+    """The commit `merge` recorded when it is reachable from the base branch, else "".
+    Checked against git, not the log: a recorded merge on a branch since rewound is not
+    "on main"."""
+    sha = it.merged_sha
+    if it.gate_outcome("merge") != "passed" or not sha:
+        return ""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    return sha if W.git(repo, "merge-base", "--is-ancestor", sha, base).ok else ""
+
+
+def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path) -> None:
+    """An item whose merge gate is done and whose commit is on the base, with nothing left in
+    its tree, needs COMPLETING, not releasing (Ba2eff5726b): `release` only returned it to the
+    queue to be claimed and merged again. Says what `complete` still wants, if anything."""
+    if rec.salvageable is not False or rec.adopted or it.terminal:
+        return  # a finished item is owed nothing: `complete` would record it twice
+    sha = _landed_on_base(repo, cfg, it)
+    if not sha:
+        return
+    # Resolved at call time: completion imports the gate stack, which imports this module
+    # (a module-level import is a cycle; a deferred `import` statement is a ratchet breach).
+    CM = importlib.import_module(f"{__package__}.completion")
+
+    # The holder's own model, standing in for the author's (`complete` judges reviewer
+    # independence against it); whoever completes may not be the holder, so the advice says to
+    # pass `--model`.
+    model = open_session_model(state, rec.holder)
+    v = CM.verdict(state, cfg, it.id, repo=repo, model=model)
+    head = f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
+    if v.may_complete:
+        rec.advice = (
+            head
+            + f"Finish it: `ddflow complete {it.id} --model <author model>`"
+            + (" (it also clears the lease)." if rec.kind == "expired_lease" else ".")
+            + " (An advisory read: `complete` also runs the phase-suite and review checks.)"
+        )
+    else:
+        rec.advice = (
+            head
+            + f"`ddflow complete {it.id}` is refused for now: "
+            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:_SHOWN_BLOCKERS])
+            + (
+                f" (+{len(v.blockers) - _SHOWN_BLOCKERS} more)"
+                if len(v.blockers) > _SHOWN_BLOCKERS
+                else ""
+            )
+            + f". Settle what `ddflow gate status {it.id}` shows, then "
+            + f"`ddflow complete {it.id} --model <author model>`."
+        )
 
 
 def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
