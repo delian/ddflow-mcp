@@ -88,6 +88,7 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
             command=res.command,
             exit_code={"passed": 0, "failed": 1}.get(res.status, 2),
             ci_scope=res.scope or None,
+            ran_by="ddflow ci run",
         ),
         agent=agent,
         called_from=called_from,

@@ -15,11 +15,9 @@ from typing import Any
 from .evidence import tree_identity
 
 
-def refusal(
-    it, gdef, gate: str, outcome: str, agent_why: str, tree: Any, *, skip: bool = False
-) -> str:
+def _refusal(it, gdef, gate: str, outcome: str, agent_why: str, tree: Any) -> str:
     """Why an agent's hand-recorded ``outcome`` for ``gate`` is refused, else ""."""
-    if skip or outcome != "passed" or not agent_why or gdef is None or not gdef.is_command_gate:
+    if outcome != "passed" or not agent_why or gdef is None or not gdef.is_command_gate:
         return ""
     rec = it.gates.get(gate)
     ev = (rec.evidence if rec else None) or {}
@@ -41,7 +39,7 @@ def refusal(
     )
 
 
-def gaps(command: str, output_file: str, tree: Any, host: str) -> dict[str, Any]:
+def _gaps(command: str, output_file: str, tree: Any, host: str) -> dict[str, Any]:
     """What a hand-recorded gate lacks that `gate run` measures (bug Bb305b43f56): the fields
     ddflow could not take, named, and the host that holds a recorded ``--output-file`` (a path
     on the recording agent's machine, as a run's `output_log_host`). ``tree`` is None when the
@@ -53,3 +51,16 @@ def gaps(command: str, output_file: str, tree: Any, host: str) -> dict[str, Any]
     if output_file and host:
         out["output_file_host"] = host
     return out
+
+
+def hand_record(
+    it, gdef, gate: str, outcome: str, agent_why: str, tree: Any, evidence, host: str, *, skip: bool
+) -> tuple[str, dict[str, Any]]:
+    """(a refusal, or the evidence to add) for ``gate record``'s ``evidence`` (an `Evidence`).
+    A record a ddflow tool made after running the command (``evidence.ran_by``) is not a hand
+    record: it is neither refused nor annotated."""
+    if skip or evidence.ran_by:
+        return "", {}
+    if why := _refusal(it, gdef, gate, outcome, agent_why, tree):
+        return why, {}
+    return "", _gaps(evidence.command, evidence.output_file, tree, host)
