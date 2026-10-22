@@ -28,3 +28,16 @@ def test_an_exit_2_without_a_lock_line_keeps_the_generic_reason():
     out = classify_exit(GATE, 2, "pre-commit is not installed\n")
     assert out.outcome == GateOutcome.UNAVAILABLE
     assert "unavailable_exits" in out.reason and "blocked on" not in out.reason
+
+
+def test_a_line_that_merely_contains_the_words_is_not_taken():
+    out = classify_exit(
+        GATE, 2, "not blocked on pid 1 / x since 10:00:00, you are #3 in the queue\n"
+    )
+    assert "unavailable_exits" in out.reason and "suite_wait_s" not in out.reason
+
+
+def test_only_the_ci_gate_reads_the_suite_lock_line():
+    lint = GateDef(id="lint", title="lint", command="x", unavailable_exits=[2])
+    out = classify_exit(lint, 2, f"{LINE}\n")
+    assert "unavailable_exits" in out.reason and "suite_wait_s" not in out.reason
