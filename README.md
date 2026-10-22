@@ -5900,8 +5900,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=24129c4ed17c -->
-<details><summary>All 373 knobs across 41 sections</summary>
+<!-- ddflow:begin README/knobs sha=91fbfca5e53b -->
+<details><summary>All 374 knobs across 41 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6213,6 +6213,7 @@ long default is left to `ddflow config --explain`.
 | `mcp.stale_check_every_s` | `60.0` |  |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |
+| `ci.pins_precheck` | `true` |  |
 | `ci.timeout_s` | `3600` |  |
 | `ci.workers` | `"auto"` |  |
 | `ci.min_workers` | `1` |  |
