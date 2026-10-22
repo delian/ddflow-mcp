@@ -10,6 +10,7 @@ from pathlib import Path
 from ...core import outcome as O
 from ...infra import worktree as W
 from ...services import branchsync as BS
+from ...services.completion import changed_paths, refine_stale_notes
 from ...services.gates import outcomes as GO
 from .._base import _load
 
@@ -54,6 +55,8 @@ def sync(
     }
     if r.status == "merged":
         notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
+        # a judged gate is stale only when the item's OWN files moved, not for main's work
+        notes = refine_stale_notes(notes, it, tree, "HEAD", changed_paths(repo, it))
         stale = {n.gate for n in notes if not n.unverified}
         unverified = {n.gate for n in notes if n.unverified}
         recorded = {g for g, rec in it.gates.items() if rec.outcome == "passed"}

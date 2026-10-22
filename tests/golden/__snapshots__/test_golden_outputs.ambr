@@ -1989,6 +1989,17 @@
           Change it for the project (`ddflow config review.combined_under_lines 100`),
           for this machine (add --local), per run
           (DDFLOW_REVIEW_COMBINED_UNDER_LINES), or over MCP with `ddflow_configure`.
+      review.triage_ignore_globs = ['tests/**', '**/test_*.py', '**/*_test.py', '**/conftest.py']   [default]
+          Globs of files whose change after a review round does not void a triage pass
+          (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit,
+          B4ab42dbedb): answering a refuted finding with a regression test used to
+          change the item's reviewed paths, so the settled round 'held other content
+          now' and cost another round. A path that moved since the round and matches
+          one of these is not new work; any other moved path still blocks the pass and
+          is named. Default: tests and conftest files. An empty list makes every moved
+          path block. Change it for the project (`ddflow config
+          review.triage_ignore_globs ...`), for this machine (add --local), or over
+          MCP with `ddflow_configure`.
       review.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]
           Globs of generated and pinned files (golden snapshots, transcripts,
           lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a
