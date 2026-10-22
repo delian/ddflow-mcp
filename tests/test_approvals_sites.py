@@ -22,12 +22,19 @@ def _called_name(node: ast.Call) -> str:
 
 
 def _scan(tree: ast.AST, rel: str, found: dict[str, int], aliased: list[str]) -> None:
+    callee = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+
     def walk(node: ast.AST, fn: str) -> None:
         for child in ast.iter_child_nodes(node):
-            where = child.name if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) else fn
+            scope = isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+            where = (fn + "." if fn != "<module>" else "") + child.name if scope else fn
             if isinstance(child, ast.Call) and _called_name(child) in S.MARKER_NAMES:
                 key = f"{rel}:{fn}"
                 found[key] = found.get(key, 0) + 1
+            if isinstance(child, ast.Name | ast.Attribute) and id(child) not in callee:
+                name = child.id if isinstance(child, ast.Name) else child.attr
+                if name in S.MARKER_NAMES and not isinstance(child.ctx, ast.Store):
+                    aliased.append(f"{rel}: {name} used as a value")
             if isinstance(child, ast.ImportFrom):
                 aliased.extend(
                     f"{rel}: {a.name} as {a.asname}"
@@ -48,14 +55,10 @@ def _calls(base: Path = ROOT) -> tuple[dict[str, int], list[str]]:
     return found, aliased
 
 
-def _outside_infrastructure(found: dict[str, int]) -> dict[str, int]:
-    return {k: n for k, n in found.items() if k.split(":")[0] not in S.INFRASTRUCTURE}
-
-
 def test_the_marker_call_sites_are_exactly_the_ones_the_table_declares():
     found, aliased = _calls()
     assert not aliased, f"a marker imported under another name hides its calls: {aliased}"
-    assert _outside_infrastructure(found) == S.MARKER_CALLS, (
+    assert found == {**S.INFRASTRUCTURE, **S.MARKER_CALLS}, (
         "a call to agent_marker/is_agent was added, moved or removed: give the verb it gates a "
         "Site row in ddflow/services/approvals/sites.py (tier, minimum level, what is "
         "digested), name the function in the row's `functions`, and update MARKER_CALLS"
@@ -65,8 +68,7 @@ def test_the_marker_call_sites_are_exactly_the_ones_the_table_declares():
 def test_every_row_function_is_counted_and_every_counted_function_has_a_row():
     named = {f for s in S.SITES for f in s.functions}
     assert named == set(S.MARKER_CALLS)
-    for m in S.INFRASTRUCTURE:
-        assert (ROOT / m).is_file(), m
+    assert not set(S.INFRASTRUCTURE) & set(S.MARKER_CALLS)
 
 
 def test_a_new_refusal_site_would_be_caught(tmp_path):
@@ -87,6 +89,8 @@ def test_a_new_refusal_site_would_be_caught(tmp_path):
     found, aliased = _calls(tmp_path)
     assert found == {"ddflow/services/newgate.py:f": 2}
     assert aliased == ["ddflow/services/alias.py: agent_marker as _am"]
+    (pkg / "assigned.py").write_text("_am = agent_marker\ndef f(a):\n    return _am(a)\n")
+    assert "ddflow/services/assigned.py: agent_marker used as a value" in _calls(tmp_path)[1]
 
 
 def test_a_call_moved_to_another_function_is_caught(tmp_path):
@@ -96,6 +100,10 @@ def test_a_call_moved_to_another_function_is_caught(tmp_path):
     (pkg / "approval.py").write_text("def other(a):\n    return agent_marker(a)\n")
     found, _ = _calls(tmp_path)
     assert found != {"ddflow/services/approval.py:grant": 1}
+    (pkg / "approval.py").write_text(
+        "class A:\n    def grant(a):\n        return agent_marker(a)\n"
+    )
+    assert _calls(tmp_path)[0] == {"ddflow/services/approval.py:A.grant": 1}
 
 
 def test_sites_without_a_marker_call_are_anchored():
