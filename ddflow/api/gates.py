@@ -45,6 +45,7 @@ from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import failed_gate as OC
 from ..services.gates import failed_review as GO
+from ..services.gates import handrecord as HR
 from ..services.gates import measured as R
 from ..services.gates import running as RUN
 from ..services.gates.reviewers import run_watching_git
@@ -848,6 +849,9 @@ class Evidence:
     model_is_reviewer: bool = False
     #: Which tests a `ci run` took (`ci_scope.Plan.evidence`): recorded as `ci_scope`.
     ci_scope: dict[str, Any] | None = None
+    #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
+    #: an MCP argument: it is what tells that record from an agent's typed `--command`.
+    ran_by: str = ""
 
 
 @dataclass
@@ -1053,6 +1057,8 @@ def _evidence_fields(
         ev["model"] = evidence.model
     if evidence.ci_scope:
         ev["ci_scope"] = evidence.ci_scope
+    if evidence.ran_by:
+        ev["ran_by"] = evidence.ran_by
     if evidence.output_file:
         try:
             txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
@@ -1195,6 +1201,15 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
+
+    # A command gate's pass is `gate run`'s to give (Bed643a611b); and what a hand record
+    # could not measure is said in it (Bb305b43f56).
+    why, extra = HR.hand_record(
+        it, gdef, gate, result, agent_marker(agent), wt, evidence, log.agent_id, skip=skip
+    )
+    if why:
+        return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
+    ev.update(extra)
 
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:

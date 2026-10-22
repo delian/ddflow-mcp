@@ -12,10 +12,11 @@ Operator 2026-10-22, answers (verbatim): 1. Tier: "Tier 1 live smoke now" (NOT t
 | 2 | Config location | A ddflow-owned overlay `.ddflow/harness/dsh.cordis.yml` plus a printed launch line `dsh --profile <p> --patch .ddflow/harness/dsh.cordis.yml`; `$DSH_HOME` is never edited without per-agent consent | Merging into the user's profile patch by default |
 | 3 | Hooks | Mount the experimental `hooks-claude-code` bridge from the overlay, fail open; lease enforcement via `PreToolUse` only when the bridge is verified loaded, otherwise reported `unavailable`, never claimed | Native Cordis plugin; assuming the bridge is loaded |
 | 4 | Lane permission | Lane-private `DSH_HOME`, `workspace-write`, approvals resolved by the ddflow permission broker over ACP; headless `danger-full-access` only as an explicit operator opt-in in a disposable worktree or container | Headless `danger-full-access` as the default |
-| 5 | Credentials, telemetry | Credentials from the environment only, never argv, never committed; telemetry is recorded, not toggled | Writing keys into overlay or profile files |
+| 5 | Credentials, telemetry | Credentials from the environment only, never argv, never committed; telemetry is recorded, not toggled, EXCEPT for ddflow-launched lanes (row 9, `D-dsh-telemetry`) | Writing keys into overlay or profile files |
 | 6 | Reviewer | No dsh reviewer; direct OpenAI-compatible reviewers stay (a review is a diff in and a verdict out) | An agent-loop reviewer |
 | 7 | npm bundle | Deferred; overlay first (`DSH-bundle` stays optional) | Publishing a dsh bundle package now |
 | 8 | Model family | Independence is judged from the model declared at session start, so dsh sessions must declare their model; no harness-level model family exists. The descriptor field `family` is only a substring key matched against MCP `clientInfo.name` (`dsh` matches `dsh-mcp-client`); review independence never reads it | A harness-level model family |
+| 9 | Telemetry for lanes (operator 2026-10-22, `D-dsh-telemetry`, amends row 5 for lane launches only) | The ddflow-written dsh overlay sets `DSH_TELEMETRY_MODE=DISABLED` for ddflow-launched lane workers; the user's own dsh usage is untouched; doctor reports the exporter (`dsh-otel-collector.deepseeksvc.com`, feedback-gated) and the overlay choice. `DSH-overlay` and `DSH-lane` carry it | Record only, never toggle; disabling for all dsh use |
 
 ## Consequences
 
