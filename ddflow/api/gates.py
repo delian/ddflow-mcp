@@ -861,7 +861,14 @@ class _Vetted:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
-def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) -> str:
+def _has_research_note(st, it) -> bool:
+    """Does a RESEARCH item have a recorded note (`research add --item`)? Its deliverable."""
+    return it.kind == "research" and any(n.item == it.id for n in st.research.values())
+
+
+def _implement_without_commits(
+    repo: Path, cfg, it, gate: str, result: str, wt, has_note=False
+) -> str:
     """A refusal when `implement` is passed for an item whose own worktree has no commit
     ahead of its base, else "" (a landed item is never judged: B998bcca9ce; bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
@@ -869,6 +876,8 @@ def _implement_without_commits(repo: Path, cfg, it, gate: str, result: str, wt) 
     be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
+    if has_note:
+        return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
     if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
         return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
@@ -1216,7 +1225,11 @@ def record(
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
-    if not force and (why := _implement_without_commits(repo, cfg, it, gate, result, wt)):
+    if not force and (
+        why := _implement_without_commits(
+            repo, cfg, it, gate, result, wt, _has_research_note(st, it)
+        )
+    ):
         return O.refused("gate.record", why, id=item, gate=gate, outcome=result)
     ev.update(vetted.evidence)
     warning = " ".join(filter(None, [warning, vetted.note]))
