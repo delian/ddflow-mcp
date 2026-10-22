@@ -2556,6 +2556,14 @@
       ci.suite_wait_s = 1800   [default]
           Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
           before it reports who holds it.
+      ci.suite_queue_stale_s = 120   [default]
+          Seconds a run queued for the full-suite lock may go without a heartbeat
+          before the queue passes over it (a stopped process). A waiter killed
+          outright leaves the queue within about a second. Waiters are served first
+          in, first out.
+      ci.suite_queue_grace_s = 120   [default]
+          Seconds a run that gave up waiting for the full-suite lock keeps its place
+          in the queue, so a retry within it is not sent to the back.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity
