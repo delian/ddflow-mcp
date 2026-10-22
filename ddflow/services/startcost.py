@@ -90,7 +90,7 @@ def measure(
     ratio = chars_per_token if chars_per_token > 0 else 4.0
     sizes = {name: len(text.encode("utf-8")) for name, text in texts.items()}  # bytes
     parts = {name: max(1, round(n / ratio)) if n else 0 for name, n in sizes.items()}
-    if reserve > 0:  # a pending notice cannot be counted without being used up
+    if reserve > 0 and parts:  # a pending notice cannot be counted without being used up
         parts["upgrade notice (reserve)"] = reserve
     return StartCost(parts=parts, chars=sizes, budget=budget)
 
