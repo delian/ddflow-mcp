@@ -17,7 +17,7 @@ from ddflow.services import pins_dirt as PN
 RECIPES = '[[pin]]\nname = "x"\nfiles = ["README.md"]\ncheck = ["true"]\nregen = ["true"]\n'
 
 
-def _refused(repo, name: str):
+def _refused(repo, name: str, staged: bool = False):
     (repo / ".ddflow").mkdir(exist_ok=True)
     (repo / ".ddflow" / "pins.toml").write_text(RECIPES)
     cfg = Config()
@@ -26,6 +26,8 @@ def _refused(repo, name: str):
     _commit(wt.path, name, "from the branch\n", "feat: touch")
     _commit(repo, "g.py", "y\n", "main moves")
     (repo / name).write_text("stray local change\n")
+    if staged:
+        _git(repo, "add", name)
     r = W.merge(repo, cfg, wt)
     assert not r.ok
     return cfg, r
@@ -63,3 +65,11 @@ def test_ddflow_merge_refusal_carries_the_hint(repo):
     code, out, err = run_cli(repo, "merge", "T1")
     assert code != 0
     assert "README.md is a pin file" in out + err
+
+
+def test_a_staged_only_dirty_pin_file_is_cleared_by_the_printed_remedy(repo):
+    cfg, r = _refused(repo, "README.md", staged=True)
+    hint = PN.dirt_hint(repo, cfg, r.err or r.out, repo)
+    assert f"git -C {repo} checkout HEAD -- README.md" in hint
+    _git(repo, "checkout", "HEAD", "--", "README.md")  # the printed remedy
+    assert _git(repo, "status", "--porcelain", "--untracked-files=no") == ""
