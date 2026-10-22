@@ -10,7 +10,7 @@ refer to it). Phase: `P-commit-messages`. Governing records: `r-everything-confi
 
 Commit message management has contexts (which situation), templates (how text is produced) and a policy
 (what any message must satisfy). The policy is the contract and a deterministic lint enforces it; a
-template is one producer and must pass it. Alternatives rejected: one big template per project (cannot
+template is one producer and must pass it. Ratified as proposed (no question raised; operator gave the Q1-Q13 answers 2026-10-22). Alternatives rejected: one big template per project (cannot
 express a company floor); policy as prose only (not checkable, and a model would judge it).
 
 ## D-CM-2 Layering reuses the config layer order; policy is tighten-only
@@ -38,13 +38,13 @@ Templates render in a `SandboxedEnvironment` with `StrictUndefined`, a time cap 
 curated context of plain values (section 5.4); no environment, paths, secrets or callables. One shared
 environment factory replaces the three sandbox setups that exist or are planned (task CM-sandbox).
 Templates are data (instruction text), not executable extensions, and honour `[config].template_trust`.
-The lint never imports jinja (hook path cost). Rejected: `str.format` (the one place that uses it,
+The lint never imports jinja (hook path cost). Ratified as proposed (no question raised). Rejected: `str.format` (the one place that uses it,
 `commit_events_message`, cannot express a loop or a conditional); unsandboxed Jinja.
 
 ## D-CM-5 The model supplies fields; templates render; lint decides
 
 For ddflow-owned commits the agent passes structured fields, never the final string. A lint refusal
-returns machine-readable violations and allows at most `[commit].draft_retries` (default 2) redrafts. No
+returns machine-readable violations and allows at most `[commit].draft_retries` (default 3; AMENDED by D-CM-Q8Q13, was 2) redrafts. No
 model runs in a hook and no model judges conformance; a style review is an advisory reviewer lens.
 Rejected: letting a model rewrite the message after lint (the contract would be unverifiable).
 
@@ -59,7 +59,7 @@ project (configured, as now), `Item:` trailer required only where `require_item_
 
 ## D-CM-7 Signing: ddflow orchestrates and verifies, never holds keys
 
-`[commit].sign = off | auto | required` (default `off`), `sign_scope = merge | tips | all` (default
+`[commit].sign = off | auto | required` (default `auto`; AMENDED by D-CM-Q4Q5, was `off`), `sign_scope = merge | tips | all` (default
 `merge`), `sign_verify = git | gitsign`. ddflow adds `-S` to its own plumbing commits (they ignore
 `commit.gpgsign`), verifies with `git verify-commit` against the configured allowed-signers, and treats an
 inability to sign or verify as `unavailable` (exit 2), never a pass or a silent unsigned commit under
@@ -69,14 +69,14 @@ pending proposals). Rejected: ddflow-managed keys (custody and blast radius); si
 
 ## D-CM-8 Sign-off is a person's act
 
-`Signed-off-by` (DCO) certifies origin, so `[commit].signoff = never | person | policy`, default `never`.
+`Signed-off-by` (DCO) certifies origin, so `[commit].signoff = never | person | policy`, default `never` (AMENDED by D-CM-Q6: values `auto | policy | never`, default `auto`, tighten-only, configured git identity only, no identity => refuse exit 2; the rest of this paragraph is the original proposal).
 `person` adds it only to commits made under a person identity through the CLI (like `chore approve`);
 `policy` (a company with a DCO) requires the trailer to be present and lets the human add it; an agent
 identity never fabricates one. Rejected: auto sign-off by every agent for the operator's name.
 
 ## D-CM-9 Push: never by default, one guard, server-side stays the real wall
 
-`[commit].push = never | branch | allowed` (default `never`), `push_protected`, `push_require_signed`,
+`[commit].push = never | branch | allowed` (default `never`; AMENDED by D-CM-Q7: default `request`, push only when explicitly requested and not forbidden by policy), `push_protected`, `push_require_signed`,
 `push_require_lint`; the knob is `outward` and `policy`-tier, so a typo is the safe value. One guard
 function is called by every ddflow push site; an optional generated `pre-push` hook applies it to pushes
 ddflow does not make (advisory). Existing operator-set pushes (`flow.integration=pr`, `flow.claims=remote`)
@@ -98,7 +98,7 @@ MTD-family-schema and MTD-profiles.
 ## D-CM-11 Packs, extension and presets
 
 Presets (`plain`, `conventional`, `angular`, `kernel`, `jira`) ship as copies. Users add contexts
-(`[[commit.context]]`) and static variables (`[commit.vars]`). Company packs travel in the org bundle
+(`[[commit.context]]`) and static variables (`[commit.vars]`). (AMENDED by D-CM-Q9: pinned by default; init/verify/watch/update/diff lifecycle.) Company packs travel in the org bundle
 (`commit/`), are pinned by digest in the org lock, are data only, and appear in brief/doctor with the
 source named; a local file or git source is allowed, a bare URL without a digest is not. Executable
 content in a pack (none is defined) would stay inert until approved, as for every org kind.
@@ -108,7 +108,7 @@ content in a pack (none is defined) would stay inert until approved, as for ever
 The 14 generation sites (research section 6) move to templates one group at a time with the old text as the
 shipped default, so history looks identical until a layer changes it; a ratchet test (CM-inventory) fails
 when a new `commit -m`, `merge -m` or `commit-tree -m` appears outside the registered contexts. The
-`agent_brief.md` guidance sentence is rendered from the effective policy. Nothing rewrites existing history.
+`agent_brief.md` guidance sentence is rendered from the effective policy. Nothing rewrites existing history. Ratified as proposed (no question raised).
 
 ## Operator answers (2026-10-22)
 
