@@ -42,7 +42,7 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
         assert _until(lambda: pids.exists() and len(pids.read_text().split()) == 2)
         running = [int(p) for p in pids.read_text().split()]
         assert not any(_gone(p) for p in running)
-        assert _until(lambda: _watching(running[1])), "no watcher started"
+        assert _until(lambda: _watching(owner.pid)), "no watcher started"
         os.kill(owner.pid, signal.SIGKILL)  # the owner dies without cleaning up
         owner.wait()
         assert _until(lambda: all(_gone(p) for p in running)), "the suite outlived its owner"
@@ -53,27 +53,26 @@ def test_a_killed_owner_takes_its_whole_process_group_with_it(tmp_path: Path):
             except OSError:
                 pass
         owner.kill()
+        owner.wait()
 
 
 def test_a_finished_run_leaves_no_watcher_behind(tmp_path: Path):
     from ddflow.infra import proc
 
-    pid_file = tmp_path / "pid"
-    proc.run_shell(f"echo $$ > {pid_file}", timeout_s=30)
-    shell = int(pid_file.read_text())
-    assert _until(lambda: not _watching(shell), timeout=10)  # ended
+    proc.run_shell("true", timeout_s=30)
+    assert _until(lambda: not _watching(os.getpid()), timeout=10)  # ended
     assert _until(lambda: not _zombie_children(), timeout=10)  # and reaped
 
 
-def _watching(group: int) -> bool:
-    """A live watcher process for the process group led by ``group``."""
+def _watching(owner_pid: int) -> bool:
+    """A live watcher process guarding commands of the process ``owner_pid``."""
     for d in Path("/proc").iterdir():
         if d.name.isdigit():
             try:
                 argv = (d / "cmdline").read_bytes().split(b"\0")
             except OSError:
                 continue
-            if b"ddflow-owner-watch" in argv and str(group).encode() in argv[2:4]:
+            if b"ddflow-owner-watch" in argv and str(owner_pid).encode() in argv[3:4]:
                 return True
     return False
 
