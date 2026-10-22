@@ -36,7 +36,7 @@ def test_a_dirty_pin_file_in_the_primary_is_named_with_its_owner_and_remedy(repo
     hint = PN.dirt_hint(repo, cfg, r.err or r.out, repo)
     assert "README.md is a pin file" in hint
     assert "ddflow pins regenerate" in hint
-    assert f"git -C {repo} checkout -- README.md" in hint
+    assert f"git -C {repo} checkout HEAD -- README.md" in hint
 
 
 def test_a_dirty_file_that_is_no_pin_gets_no_pin_advice(repo):
