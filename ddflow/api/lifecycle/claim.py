@@ -320,7 +320,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     return _with_notes(out, notes)
 
 
-def _tree_choice(cfg, bound: _Bound, stands: Path) -> dict[str, str]:
+def _tree_choice(cfg, bound: _Bound) -> dict[str, str]:
     """Which tree this claim bound and why: `how` is none | rebound | adopted | created.
 
     The rule is one and the same for every caller: the item's own tree from an earlier claim
@@ -342,10 +342,8 @@ def _tree_choice(cfg, bound: _Bound, stands: Path) -> dict[str, str]:
         }
     if not cfg.worktree.adopt_existing:
         why = "[worktree].adopt_existing is off, so no tree is adopted"
-    elif W.current(stands) is None:
+    else:  # `_bind_tree` creates a tree only when adoption is off or `W.current` finds none
         why = "you are not standing in a linked worktree of this repository (the primary checkout, or a detached HEAD)"
-    else:
-        why = "the tree you are in could not be adopted"
     return {"how": "created", "why": why}
 
 
@@ -384,7 +382,7 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
         # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
         globs=list(lz.globs),
         broke=broke,
-        tree=_tree_choice(cfg, bound, stands),
+        tree=_tree_choice(cfg, bound),
     )
 
 
