@@ -112,19 +112,29 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_job_end",
         description=(
             "Record that a job ended and how. Refused while the process is still running. "
-            "The exit code defaults to the one its log recorded."
+            "The exit code defaults to the one its log recorded. With all_finished (every item) "
+            "or item (one) and no job id, ends every job whose process is over."
         ),
         call=lambda repo, a, agent: _api().job_end(
             repo,
-            a["job"],
+            a.get("job", "") or "",
             exit_code=a.get("exit_code"),
             note=a.get("note", "") or "",
             force=bool(a.get("force")),
+            item=a.get("item", "") or "",
+            all_finished=bool(a.get("all_finished")),
             agent=agent,
         ),
-        payload=("id", "exit_code"),
+        payload=("id", "exit_code", "ended"),
         params=(
-            Param("job", help="Job id.", cli_help="", positional=True),
+            Param("job", help="Job id.", cli_help="", positional=True, nargs="?", default=""),
+            Param(
+                "all_finished",
+                type="boolean",
+                help="End every job whose process is over (EXITED or GONE), of all items.",
+                cli_help="end every finished job",
+            ),
+            Param("item", help="End every finished job of this item.", cli_help="", default=""),
             Param(
                 "exit_code",
                 type="integer",
