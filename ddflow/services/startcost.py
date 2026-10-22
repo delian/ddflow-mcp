@@ -15,29 +15,10 @@ pending upgrade notice (one line, said once per version) is covered by a reserve
 
 from __future__ import annotations
 
-import contextvars
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-_MEASURING: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "ddflow_measuring_start_cost", default=False
-)
-
-
-@contextmanager
-def measuring() -> Iterator[None]:
-    """Inside this block a text is being MEASURED, not delivered: once-per-version notices are
-    not consumed and the brief does no housekeeping."""
-    token = _MEASURING.set(True)
-    try:
-        yield
-    finally:
-        _MEASURING.reset(token)
-
-
-def is_measuring() -> bool:
-    return _MEASURING.get()
+from ..core.measuring import is_measuring, measuring  # noqa: F401 -- re-exported
 
 
 @dataclass(frozen=True)
