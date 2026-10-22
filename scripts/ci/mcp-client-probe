@@ -81,8 +81,10 @@ PENDING = (
 )
 
 
-def _unavailable(harness: str, reason: str) -> dict:
-    return {"harness": harness, "list_changed": "unavailable", "reason": reason}
+def _unavailable(harness: str, reason: str, seen: dict | None = None) -> dict:
+    """An unavailable row; `seen` is whatever the probe log already showed."""
+    row = {"harness": harness, **(seen or {})}
+    return {**row, "list_changed": "unavailable", "reason": reason}
 
 
 def _config(rec: dict, log: Path) -> dict:
@@ -121,19 +123,21 @@ def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) ->
         # the log may already hold the answer: keep it, and say the CLI did not finish
         row["reason"] = f"timed out after {timeout:g}s"
         if row["list_changed"] == "unknown":
-            return {**_unavailable(harness, row["reason"])}, 1
+            return {**_unavailable(harness, row["reason"], row)}, 1
         return row, 1
     if row["list_changed"] == "unknown" and done.returncode != 0:
         tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:]
         return _unavailable(
-            harness, f"exit {done.returncode} before the probe ran: {tail[0] if tail else ''}"
+            harness,
+            f"exit {done.returncode} before the probe ran: {tail[0] if tail else ''}",
+            row,
         ), 2
     if row["list_changed"] == "unknown":
         reason = (
             f"exit {done.returncode}: the probe never sent list_changed "
             "(missing key, or the model did not call bump)"
         )
-        return _unavailable(harness, reason), 2
+        return _unavailable(harness, reason, row), 2
     return row, 0 if done.returncode == 0 else 1
 
 

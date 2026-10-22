@@ -21,8 +21,6 @@ import threading
 import time
 
 DEFAULT_DELAY_S = 6.0
-IN_LIMIT = 65536
-OUT_LIMIT = 300
 _FIELDS = 3
 SETTLE_S = 0.02
 NOTE = "notifications/tools/list_changed"
@@ -56,7 +54,7 @@ class _Probe:
     """The probe's state: the tool list, the log, and the replies."""
 
     def __init__(self, stdout, logfile, delay: float):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.tools = list(_BASE)
         self.stdout, self.logfile, self.delay = stdout, logfile, delay
 
@@ -66,34 +64,36 @@ class _Probe:
 
     def log_in(self, text: str) -> None:
         with self.lock:
-            self._stamp("IN ", text[:IN_LIMIT])
+            self._stamp("IN ", text)
 
     def send(self, m: dict) -> None:
         with self.lock:
             self.stdout.write(json.dumps(m) + "\n")
             self.stdout.flush()
-            self._stamp("OUT", json.dumps(m)[:OUT_LIMIT])
+            self._stamp("OUT", json.dumps(m))
+
+    def _snapshot(self) -> list:
+        with self.lock:
+            return list(self.tools)
+
+    def _add_and_notify(self) -> None:
+        """Add the new tool and send the notification as one step: a tools/list handled
+        between the two would show the tool before the notification."""
+        with self.lock:
+            if _ADDED not in self.tools:
+                self.tools.append(_ADDED)
+                self.send({"jsonrpc": "2.0", "method": NOTE})
 
     def _later(self) -> None:
         time.sleep(self.delay)
-        if self._add():
-            self.send({"jsonrpc": "2.0", "method": NOTE})
-
-    def _add(self) -> bool:
-        """Add the new tool; True only if the list actually changed."""
-        with self.lock:
-            if _ADDED in self.tools:
-                return False
-            self.tools.append(_ADDED)
-            return True
+        self._add_and_notify()
 
     def _call(self, i, name) -> None:
         # No result text prompts a refetch: a client that merely obeys it would look like one
         # that honours list_changed.
         if name == "bump":
             self.send(_text(i, "ok"))
-            if self._add():
-                self.send({"jsonrpc": "2.0", "method": NOTE})
+            self._add_and_notify()
         elif name == "delaybump":
             self.send(_text(i, "ok"))
             threading.Thread(target=self._later, daemon=True).start()
@@ -116,7 +116,7 @@ class _Probe:
                 "capabilities": {"tools": {"listChanged": True}, "prompts": {"listChanged": True}},
                 "serverInfo": {"name": "lc", "version": "1"},
             },
-            "tools/list": lambda: {"tools": self.tools},
+            "tools/list": lambda: {"tools": self._snapshot()},
             "prompts/list": lambda: {"prompts": []},
             "resources/list": lambda: {"resources": []},
         }
