@@ -190,3 +190,8 @@ def test_a_command_ask_with_a_negative_use_window_is_refused(log):
             digest="d",
             command=E.Command(verb="v", tier="T2", min_level=1, use_ttl_s=-1),
         )
+
+
+def test_an_argument_named_twice_is_refused_not_collapsed():
+    with pytest.raises(ValueError, match="named twice"):
+        _canon(args=(("n", "1"), ("n", "2")))

@@ -40,7 +40,10 @@ class Canon:
     def __post_init__(self) -> None:
         # frozen means frozen: keep the arguments as sorted string pairs, not the caller's dict
         pairs = self.args.items() if isinstance(self.args, Mapping) else self.args
-        object.__setattr__(self, "args", tuple(sorted((str(k), str(v)) for k, v in pairs)))
+        norm = tuple(sorted((str(k), str(v)) for k, v in pairs))
+        if len({k for k, _ in norm}) != len(norm):
+            raise ValueError("an argument is named twice: the digest could not show both")
+        object.__setattr__(self, "args", norm)
         if self.verb not in sites.BY_VERB:
             raise UnknownVerb(f"{self.verb!r} is not a gated command (services/approvals/sites)")
         if not self.agent:
