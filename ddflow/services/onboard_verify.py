@@ -189,11 +189,15 @@ def _run_hook(hook: Path, repo: Path, text: str) -> P.Captured:
         return P.capture([str(hook), str(message)], cwd=repo, timeout=60).unwrap()
 
 
+def _own_code_root() -> str:
+    return str(Path(__file__).resolve().parents[2])
+
+
 def _own_code_env() -> dict[str, str]:
     """The environment a `python -m ddflow` child needs to run THIS tree's code under
     whatever interpreter is running us: that interpreter may not have ddflow installed
     (B5e962c5161), so the answer to brief/next would depend on which python started us."""
-    root = str(Path(__file__).resolve().parents[2])
+    root = _own_code_root()
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in (root, env.get("PYTHONPATH", "")) if p)
     return env
@@ -205,6 +209,7 @@ def _answers(repo: Path) -> Check:
     brief = P.capture(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "brief"],
         timeout=120,
+        cwd=_own_code_root(),  # python -m puts cwd first on sys.path: never another tree
         env=_own_code_env(),
     ).unwrap()
     if brief.returncode != 0:
@@ -218,6 +223,7 @@ def _answers(repo: Path) -> Check:
     nxt = P.capture(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "next"],
         timeout=120,
+        cwd=_own_code_root(),  # python -m puts cwd first on sys.path: never another tree
         env=_own_code_env(),
     ).unwrap()
     if nxt.returncode not in (0, 2) or not (nxt.stdout or "").strip():
