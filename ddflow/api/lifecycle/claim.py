@@ -193,6 +193,17 @@ class _Bound(NamedTuple):
     was_adopted: bool = False
 
 
+def _widened(want, prior, parked):
+    """``want`` added to what the caller's own live lease already covers (Bf22edc42d5).
+
+    Files named on a claim the caller already holds ADD to the lease; replacing them left
+    the next commit uncovered. No files named leaves the claim alone."""
+    if want is None or prior is None:
+        return want
+    have = list(prior.globs or (parked.globs if parked is not None else []))
+    return have + [g for g in want if g not in have]
+
+
 def claim(  # noqa: PLR0913 -- the door's own flags
     repo: Path,
     item: str,
@@ -240,6 +251,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
+    if held_before:
+        want = _widened(want, prior, parked)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
