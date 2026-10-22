@@ -122,3 +122,11 @@ def test_research_extends_keeps_the_chosen_id_and_verdict(repo):
     assert st.research["R-x"].verdict == "CONFIRMED"
     assert st.research["R-parent"].verdict == "THEORETICAL"
     assert st.links["R-x"].linked("extends") == {"R-parent"}
+
+
+def test_the_refusal_names_merge_into_and_what_extends_does(repo):
+    run_cli(repo, "init")
+    assert A.task_add(repo, "T1", title=FIRST, agent="a").exit == 0
+    out = A.task_add(repo, "T2", title=SECOND, agent="b")
+    assert out.exit == 3
+    assert "merge_into T1" in out.reason and "a new record linked to T1" in out.reason

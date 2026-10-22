@@ -17,10 +17,12 @@ def reason(rows_: list[dict[str, Any]], floor: float = 0.0) -> str:
         lines += [_line(r) for r in named]
     top = asking[0]["id"]
     lines.append(
-        f"Answer it: new (it is a different record), extends {top} / duplicate_of {top} "
-        f"(the same thing -- added to {top} while it is open and unclaimed, else filed as "
-        f"a new record linked to it), or related {top} (linked both ways). A bug that a "
-        f"task will fix is filed against that task (--item)."
+        f"Answer it: new (it is a different record), extends {top} (a new record linked "
+        f"to {top}; a lesson, decision, bug or memory is appended to instead), duplicate_of "
+        f"{top} (the same thing -- added to {top} while it is open and unclaimed, else "
+        f"filed as a new record linked to it), merge_into {top} (append to a task, phase or "
+        f"research note that is open and unclaimed), or related {top} (linked both ways). "
+        f"A bug that a task will fix is filed against that task (--item)."
     )
     return "\n".join(lines)
 
