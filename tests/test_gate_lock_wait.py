@@ -33,10 +33,10 @@ def _log(waited: list[float | None], gate: str = "ci") -> Log:
     return log
 
 
-def _ci_row(log: Log, **cfg):
+def _ci_row(log: Log, gate: str = "ci"):
     st, c, now = frozen(log)
     c.metrics.min_samples = 1
-    return {r["gate"]: r for r in M.run(log.events, st, c, now).metrics["gate_time"]}["ci"]
+    return {r["gate"]: r for r in M.run(log.events, st, c, now).metrics["gate_time"]}[gate]
 
 
 def test_a_recorded_wait_is_readable_in_the_facts_and_in_metrics():
@@ -121,6 +121,16 @@ def test_metrics_render_shows_the_wait_beside_the_gate_time():
     row = _ci_row(_log([1700.0, 300.0]))
     text = RD.summary({**_blank(), "gate_time": [row]})
     assert "queued before running: n=2" in text
+
+
+def test_a_slot_only_wait_of_a_non_ci_gate_is_labelled_as_queueing_not_as_the_lock():
+    from ddflow.services.metrics import render as RD
+
+    row = _ci_row(_log([30.0], "unit_tests"), "unit_tests")
+    text = RD.summary({**_blank(), "gate_time": [row]})
+    assert row["gate"] == "unit_tests" and row["wait_n"] == 1 and row["wait_max_s"] == 30.0
+    assert "queued before running: n=1 p50 30s max 30s" in text
+    assert "for the lock" not in text
 
 
 def _blank() -> dict:
