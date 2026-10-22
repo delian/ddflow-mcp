@@ -20,8 +20,8 @@ def reason(rows_: list[dict[str, Any]], floor: float = 0.0) -> str:
         f"Answer it: new (it is a different record), extends {top} (a new record linked "
         f"to {top}; a lesson, decision, bug or memory is appended to instead), duplicate_of "
         f"{top} (the same thing -- added to {top} while it is open and unclaimed, else "
-        f"filed as a new record linked to it), merge_into {top} (append to it instead -- the only "
-        f"way to append to a task, phase or research note; it must be open and unclaimed), or related {top} (linked both ways). "
+        f"filed as a new record linked to it), merge_into {top} (append to it instead of "
+        f"filing a record; it must be open and unclaimed), or related {top} (linked both ways). "
         f"A bug that a task will fix is filed against that task (--item)."
     )
     return "\n".join(lines)
