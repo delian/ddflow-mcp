@@ -53,7 +53,10 @@ def test_a_hand_record_names_the_host_of_its_output_file_and_what_it_did_not_mea
     code, out, err = _hand(repo, tmp_path)
     assert code == OK, out + err
     ev = _ev(repo)
-    assert ev["output_file_host"], ev
+    by = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["unit_tests"].by
+    # The recording agent (the file is on its machine); the store redacts a hostname prefix.
+    assert ev["output_file_host"].endswith("-proj-" + by.rsplit("-", 1)[1]), (ev, by)
+    assert "elapsed_s" not in ev and "command_digest" not in ev, ev
     assert ev["tree_sha"] and "tree_sha" not in ev.get("unmeasured", []), ev
     assert set(ev["unmeasured"]) >= {"elapsed_s", "command_digest"}, ev
 
