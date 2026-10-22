@@ -67,3 +67,25 @@ def test_pairs_from_item_is_not_cut_by_stop_after(repo):
     # B3~B4 sorts after B1~B2 only by id; asking for B4's pairs under stop_after=1 must find it
     rows = P.pairs_from(st, Config.load(repo), item="B4", stop_after=1)
     assert [(r["a"], r["b"]) for r in rows] == [("B3", "B4")]
+
+
+def test_pairs_from_item_still_honours_stop_after(repo):
+    from ddflow.api.knowledge import pairs as P
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    _repo(repo)
+    run_cli(
+        repo,
+        "bug",
+        "found",
+        "--id",
+        "B5",
+        "--summary",
+        "parser drops trailing token on empty line",
+        "--no-task",
+    )
+    st = fold(EventLog(repo, "t").read_all())
+    assert len(P.pairs_from(st, Config.load(repo), item="B1")) >= 2
+    assert len(P.pairs_from(st, Config.load(repo), item="B1", stop_after=1)) == 1

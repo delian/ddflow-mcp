@@ -185,6 +185,8 @@ def pairs_from(
     )
     if item:
         rows = [r for r in rows if item in (r["a"], r["b"])]
+        if stop_after:
+            rows = rows[:stop_after]
     return rows[:limit] if limit else rows
 
 
