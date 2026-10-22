@@ -240,6 +240,11 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
+    if held_before and want is not None and prior is not None:
+        # Files named on a claim the caller already holds ADD to what the lease covers
+        # (Bf22edc42d5): replacing them left the next commit uncovered.
+        have = list(prior.globs or (parked.globs if parked is not None else []))
+        want = have + [g for g in want if g not in have]
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
