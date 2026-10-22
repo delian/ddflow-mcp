@@ -173,7 +173,7 @@ def test_a_scan_holding_a_new_tickets_lock_for_an_instant_does_not_abort_its_own
             time.sleep(0.4)
 
     threading.Thread(target=scanner, daemon=True).start()
-    gate.wait(5)
+    assert gate.wait(5)
     with ticket:  # waits out the scan instead of raising LockTimeout
         assert ticket.path.exists()
 
