@@ -51,7 +51,7 @@ def lines(rules: Sequence[GuidanceRecord], *, tokens: int, title_chars: int) -> 
         return []
     rows = sorted(rules, key=lambda r: (not pinned(r), r.id))
     out: list[str] = []
-    used = approx_tokens(LEAD)
+    used = approx_tokens(HEADING) + approx_tokens(LEAD)
     for i, r in enumerate(rows):
         title = clip(" ".join(r.title.split()), title_chars, marker=" …", boundary="word")
         line = f"- [{r.id}] {title}" + (" (pinned)" if pinned(r) else "")

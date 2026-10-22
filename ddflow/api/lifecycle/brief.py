@@ -121,15 +121,18 @@ def _contest_block(repo: Path, cfg, log, st) -> str:
     return out
 
 
-def _rules_block(governing, *, charter: bool = False) -> str:
+def _rules_block(governing, *, charter: str = "") -> str:
     """The project's rules that govern the item's files, one fenced line each, "" for none.
-    With the charter, a rule that applies to all work is left to it (its line is there); the
-    text is `ddflow rule show`, or the claim. A PINNED rule keeps its whole text here too:
+    With the charter, a rule that applies to all work and that the charter LISTS is left to
+    it (its line is there); the text is `ddflow rule show`, or the claim. One the charter had
+    to cut keeps its text here. A PINNED rule keeps its whole text here too:
     the charter names it, this hands it over."""
 
     rules = governing.records("rule")
     if charter:
-        rules = [r for r in rules if not GI.always(r) or GI.pinned(r)]
+        rules = [
+            r for r in rules if not GI.always(r) or GI.pinned(r) or f"[{r.id}] " not in charter
+        ]
     if not rules:
         return ""
     return "\n".join(
@@ -154,7 +157,7 @@ def _flag_unreconciled(d, rivals: dict[str, list[str]]):
     return replace(d, title=flag + d.title)
 
 
-def _governing(cfg, st, item: str, rules: str, *, charter: bool = False) -> tuple[list, str]:
+def _governing(cfg, st, item: str, rules: str, *, charter: str = "") -> tuple[list, str]:
     """The decisions that govern the item, ranked by the one injection path (pinned first,
     then enforcement, scope specificity and priority), and the rules text with the project's
     own rules that govern its files LEADING it (the pointer line follows, so a trim from
@@ -275,7 +278,7 @@ def brief(
 
     recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
     charter = CH.block(st, cfg)
-    decisions, rules = _governing(cfg, st, item, rules, charter=bool(charter))
+    decisions, rules = _governing(cfg, st, item, rules, charter=charter)
 
     live = sorted(
         (m for m in st.memories.values() if m.live),
