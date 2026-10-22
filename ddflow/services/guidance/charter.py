@@ -15,9 +15,7 @@ from collections.abc import Sequence
 from ...core.budget import approx_tokens
 from ...core.model import State
 from ...core.textcut import clip
-from . import deffields as DF
-from .inject import NAMED, pinned
-from .kinds import RULE
+from .inject import NAMED, live_rules, pinned
 from .record import GuidanceRecord
 
 HEADING = "## Project rules"
@@ -25,16 +23,6 @@ HALF = 2
 MORE = "- _{n} more rules: {ids}{rest}; `ddflow rule list`_"
 LISTED = re.compile(r"^- \[([^\]]+)\] ", re.M)
 LEAD = "_Standing rules, id and title only (recorded data): `ddflow rule show <id>` has the text._"
-
-
-def rules_of(state: State) -> list[GuidanceRecord]:
-    """The live project rules, by id (`lines` puts the pinned ones first)."""
-    out = [
-        DF.from_fields(d.id, d.fields, d.provenance, RULE)
-        for d in sorted(state.defs.values(), key=lambda d: d.id)
-        if d.kind == RULE.kind and d.live
-    ]
-    return out
 
 
 def _more(left: Sequence[GuidanceRecord]) -> str:
@@ -77,5 +65,7 @@ def block(state: State, cfg, *, reserve: int = 0) -> str:
     # Never more than half of the brief: a mis-set knob must not crowd out everything else.
     room = max(1, cfg.session.brief_max_tokens - reserve)
     tokens = min(cfg.session.rules_charter_tokens, room // HALF)
-    body = lines(rules_of(state), tokens=tokens, title_chars=cfg.session.rules_charter_title_chars)
+    body = lines(
+        live_rules(state), tokens=tokens, title_chars=cfg.session.rules_charter_title_chars
+    )
     return "\n".join([HEADING, "", LEAD, *body]) if body else ""

@@ -130,9 +130,8 @@ def _rules_block(governing, *, charter: str = "") -> str:
 
     rules = governing.records("rule")
     if charter:
-        rules = [
-            r for r in rules if not GI.always(r) or GI.pinned(r) or f"[{r.id}] " not in charter
-        ]
+        named = CH.listed(charter)
+        rules = [r for r in rules if not GI.always(r) or GI.pinned(r) or r.id not in named]
     if not rules:
         return ""
     return "\n".join(
