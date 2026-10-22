@@ -137,8 +137,11 @@
 "ddflow/services/flowstate.py:KEEP_S" = "flowstate.keep_s"
 "ddflow/services/testidents.py:_PHRASE_MIN" = "testidents.phrase_min"
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
+"ddflow/infra/worktree.py:STASH_RETRIES" = "worktree.stash_retries"
+"ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = "worktree.stash_retry_pause_s"
 
 [exempt]
+"ddflow/services/gates/reasons.py:WHY_CHARS" = "how much of a recorded reason one `gate status` row shows; a display cut of a line, the whole reason stays in the record and in `show`"
 "ddflow/infra/log.py:_HOLDER_SCANS_MAX" = "a bound on a diagnostic-only rescan of /proc/locks while a lock-timeout message is built; it shapes an error note, never behaviour, so no operator needs the knob"
 "ddflow/infra/log.py:_HOLDER_SCAN_S" = "the time cap of the same diagnostic rescan (companion of _HOLDER_SCANS_MAX)"
 "ddflow/infra/docindex.py:MIN_SUBSTRING" = "a format fact: a trigram index matches no fewer than 3 characters, so shorter substrings fall back to LIKE"

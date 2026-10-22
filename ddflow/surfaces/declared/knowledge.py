@@ -336,10 +336,19 @@ COMMANDS: tuple[Command, ...] = (
             open_only=bool(a.get("open_only")),
             floor=a.get("floor"),
             limit=int(a.get("limit") or 0),
+            item=a.get("item", "") or "",
             agent=agent,
         ),
-        payload=("pairs", "count", "kinds", "open_only", "floor", "limit"),
+        payload=("pairs", "count", "kinds", "open_only", "floor", "limit", "item"),
         params=(
+            Param(
+                "item",
+                help="Only the pairs this record is in.",
+                cli_help="only the pairs this record id is in (default: the whole sweep)",
+                positional=True,
+                nargs="?",
+                default="",
+            ),
             Param(
                 "kind",
                 help="Comma-separated subset of the configured kinds: bug,task,phase,lesson,decision,research,memory. Default: all of them.",
