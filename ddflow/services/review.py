@@ -1685,6 +1685,20 @@ def diff_digest(diff: str) -> str:
     return content_digest(strip_hunk_context(diff), errors="replace")
 
 
+def _in_rerun_cut(prior: dict[str, Any], f: dict[str, Any]) -> bool:
+    """Is finding ``f`` of the record ``prior`` numbered in the cut a re-run chunk refers to?
+    In a record of a DELTA round only the delta's own findings (`delta_raised`) are; the ones
+    it carried from an earlier round are numbered in that round's cut, and a chunk number of
+    this one must not drop them (B00e6b5a540). Any other record numbers all in one cut."""
+    if "delta_raised" not in prior:
+        return True
+    digest = f.get("digest")
+    # one the delta raised again is the EARLIER copy that stayed, numbered in the earlier cut
+    return digest in set(prior["delta_raised"]) and digest not in set(
+        prior.get("delta_reraised", ())
+    )
+
+
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     """Fold a `--chunk` re-review into the evidence of the review it re-runs part of.
 
@@ -1723,7 +1737,7 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
                 digest=f.get("digest", ""),
             )
             for f in prior.get("chunk_findings", [])
-            if int(f.get("chunk", 0)) not in again
+            if int(f.get("chunk", 0)) not in again or not _in_rerun_cut(prior, f)
         ]
         + res.findings,
         key=lambda f: f.chunk,
