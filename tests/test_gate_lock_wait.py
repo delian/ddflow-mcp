@@ -102,3 +102,28 @@ def test_gate_status_shows_how_long_a_run_queued_for_the_host_lock():
         O.status(fold(list(_log([None], "research").events), strict=False), Config(), "T1").queued
         == {}
     )
+
+
+def test_a_sub_tenth_second_slot_wait_is_still_a_recorded_wait():
+    from ddflow.services.cmdrunner import CommandRun
+    from ddflow.services.gates import runner as R
+
+    p = CommandRun("ran", "x", code=0, elapsed_s=5.0, waited_s=0.04)
+    assert R._waited(type("G", (), {"id": "unit_tests"})(), p, "") == 0.0
+
+
+def test_metrics_render_shows_the_wait_beside_the_gate_time():
+    from ddflow.services.metrics import render as RD
+
+    row = _ci_row(_log([1700.0, 300.0]))
+    text = RD.summary({**_blank(), "gate_time": [row]})
+    assert "queued before running: n=2" in text
+
+
+def _blank() -> dict:
+    s = {"n": 0, "p50_s": None, "p90_s": None, "max_s": None}
+    return {
+        "cycle_time": s, "review_rounds": {"n": 0, "p50_rounds": None, "p90_rounds": None, "max_rounds": None},
+        "queue_wait": s, "lease_wait": s, "rework": {"reworked": 0, "completed": 0, "rate": None},
+        "gate_time": [], "group_by": "gate", "outcomes": [], "providers": [], "unavailable": {},
+    }  # fmt: skip
