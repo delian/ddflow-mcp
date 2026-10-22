@@ -1,6 +1,6 @@
 # Batched gates: decision proposals
 
-Status: **PROPOSAL** (nothing here is decided; the operator answers in task `BG-decide`).
+Status: **DECIDED** 2026-10-22 (operator answered all ten questions with the recommended defaults; records `D-BG-Q1`..`D-BG-Q10`; see the answers table at the end). Proposals D-BG-1..10 below are accepted as written, amended only by the answers.
 Evidence: `docs/ddflow/research/batch-gates.md` (section numbers refer to it). Phase
 `P-batch-gates` (prefix BG-). Governing records: `D-gate-economy-r3` (full CI per batch;
 review depth = larger of size and risk; delta re-review), `D-review-rounds-4`,
@@ -136,6 +136,21 @@ Proposal: fold it into BG-ci (`ddflow task fold`) when BG-ci starts; do not run 
 8. Company floor: forbid `full` for security-regulated projects? Default: allowed, floor knob exists.
 9. Bisect: drop culprit and land the rest, or all-or-nothing? Default drop and land.
 10. Retention of the batch record in the log: forever (it is the audit)? Default yes.
+
+## Answers (operator, 2026-10-22)
+
+| Q | Answer | Decision record |
+|---|--------|-----------------|
+| 1 | Mode default `off` now; `ci` for ddflow after BG-ci; `full` later | D-BG-Q1 |
+| 2 | Triggers 4 items / 800 changed lines / 45 min | D-BG-Q2 |
+| 3 | Review unit 400 lines | D-BG-Q3 |
+| 4 | No skipping the second reviewer on tiny batches (`skip_below_lines` = 0) | D-BG-Q4 |
+| 5 | Risk-glob items review alone | D-BG-Q5 |
+| 6 | Fold B-batch-integration into BG-ci | D-BG-Q6 |
+| 7 | bug_hunt and dedupe stay per item | D-BG-Q7 |
+| 8 | Company floor knob exists (company may forbid `full`) | D-BG-Q8 |
+| 9 | Red batch: bisect, drop the culprit, land the rest | D-BG-Q9 |
+| 10 | Batch record kept in the log forever | D-BG-Q10 |
 
 ## What would change this proposal
 
