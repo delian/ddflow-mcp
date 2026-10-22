@@ -165,6 +165,29 @@ def job_list(
     return O.ok("job.list", **data)
 
 
+def _bulk_refusal(job: str, item: str, all_finished: bool, *, single: bool) -> O.Outcome | None:
+    """The refusal for a `job end` that mixes one job with the bulk flags (or names neither);
+    ``single`` is any of --exit-code / --note / --force, which describe ONE job."""
+    bulk = bool(item or all_finished)
+    if job and bulk:
+        return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
+    if item and all_finished:
+        return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
+    if bulk and single:
+        return O.refused(
+            "job.ended",
+            "--exit-code, --note and --force describe ONE job: each finished job is ended with "
+            "its own recorded exit, and one on another host is never ended in bulk; end that job "
+            "by id to override it",
+            id="",
+        )
+    if not job and not bulk:
+        return O.failed(
+            "job.ended", "name a job to end, or pass --item <id> or --all-finished", id=""
+        )
+    return None
+
+
 def job_end(
     repo: Path,
     job: str = "",
@@ -185,23 +208,12 @@ def job_end(
     item or of all (`job_end_finished`).
     """
 
-    if job and (item or all_finished):
-        return O.refused("job.ended", "give a job id, or --item / --all-finished, not both", id=job)
-    if item and all_finished:
-        return O.refused("job.ended", "--item and --all-finished contradict: pick one", id="")
-    if (item or all_finished) and (exit_code is not None or note or force):
-        return O.refused(
-            "job.ended",
-            "--exit-code, --note and --force describe ONE job: each finished job is ended with "
-            "its own recorded exit, and one on another host is never ended in bulk; end that job "
-            "by id to override it",
-            id="",
-        )
+    bad = _bulk_refusal(
+        job, item, all_finished, single=exit_code is not None or bool(note) or force
+    )
+    if bad is not None:
+        return bad
     if not job:
-        if not (item or all_finished):
-            return O.failed(
-                "job.ended", "name a job to end, or pass --item <id> or --all-finished", id=""
-            )
         return job_end_finished(repo, item=item, agent=agent)
     log, _cfg, st = _load(repo, agent)
     j = st.jobs.get(job)
