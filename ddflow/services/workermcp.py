@@ -21,7 +21,9 @@ from ..infra.fsio import replace_text
 REL = ".ddflow/local/worker-mcp.json"
 #: The variable the server reads its tier from (`DDFLOW_<SECTION>_<KNOB>` of `[mcp].tools`).
 TIER_ENV = "DDFLOW_MCP_TOOLS"
-#: `ENABLE_TOOL_SEARCH=auto:N` with N at or above this defers nothing for ddflow (auto:90 measured).
+#: `ENABLE_TOOL_SEARCH=auto:N`: N is a PERCENT of the context window (not a tool count) above which the host
+#: defers MCP schemas. ddflow's schemas take a large share of a small window, so a high N (auto:90 measured:
+#: nothing deferred, 87.3K against 29.3K) sends them all; 50 is the line this note draws, a judgement.
 AUTO_NO_DEFER_PCT = 50
 
 
