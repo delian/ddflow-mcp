@@ -77,3 +77,9 @@ def test_a_shared_glob_is_not_held_against_a_waiter(proj):
     assert A.claim(proj, "T5", no_worktree=True, agent=HOLDER).ok
     out = A.wait(proj, lease="docs/CHANGELOG.md", timeout_s=0, agent=WAITER)
     assert out.data["woke"], out.data  # claim would grant it too
+
+
+def test_waiting_on_your_own_leases_is_refused_not_ready(proj):
+    out = A.wait(proj, lease=HOLDER, timeout_s=0, agent=HOLDER)
+    assert not out.data["woke"] and not out.data["waitable"], out.data
+    assert "never ends" in out.reason, out.reason
