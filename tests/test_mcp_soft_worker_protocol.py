@@ -13,6 +13,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -274,25 +275,33 @@ def test_requests_after_drain_are_refused_not_served():
 
 
 def test_concurrent_requests_are_answered_independently():
-    fast_done = threading.Event()
+    from ddflow.surfaces import worker
+
+    out = io.StringIO()
 
     def handler(conn, msg, notify):
-        if msg["id"] == 1:  # the slow call finishes only after the fast one has answered
-            assert fast_done.wait(10)
-        else:
-            threading.Timer(0.2, fast_done.set).start()  # after its answer is written
+        if msg["id"] == 1:  # the slow call finishes only once the fast answer is on the wire
+            deadline = time.time() + 10
+            while '"t":"res","id":2' not in out.getvalue() and time.time() < deadline:
+                time.sleep(0.01)
         return {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
 
-    out = run_worker(
-        [
+    lines = [
+        WP.encode(f)
+        for f in (
             WP.hello(shim_proto=WP.PROTO_MAJOR),
             WP.request(1, {"id": 1}, CONN),
             WP.request(2, {"id": 2}, CONN),
-        ],
-        handler,
-    )
-    order = [f["id"] for f in out if f["t"] == "res"]
+        )
+    ]
+    worker.run(Path("."), iter(lines), out, handler=handler)
+    order = [json.loads(x)["id"] for x in out.getvalue().splitlines() if '"t":"res"' in x]
     assert order == [2, 1], "a slow call must not block a fast one"
+
+
+def test_another_major_with_an_odd_state_key_is_still_refused_as_incompatible():
+    err = WP.negotiate({"t": "hello", "shim_proto": WP.PROTO_MAJOR + 1, "state_key": "not-hex"})
+    assert err["code"] == "incompatible_shim_proto"
 
 
 def test_a_bare_hello_and_a_note_without_an_id_are_not_frames():
@@ -418,6 +427,7 @@ def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
         assert _read(p)["t"] == "hello" and _read(p)["t"] == "res"
         p.stdin.close()
         assert _read(p)["t"] == "bye"  # and then nothing but EOF
+        assert p.wait(timeout=30) == 0  # it exits instead of hanging after its bye
         assert p.stdout.read() == ""
     finally:
         p.stdin.close()
