@@ -32,9 +32,10 @@ def _branch_with_noise(tmp_path: Path) -> tuple[Path, str, str]:
     (r / "a.py").write_text("a = 2\n")
     (r / ".ddflow" / "events").mkdir(parents=True)
     (r / ".ddflow" / "events" / "other-agent.jsonl").write_text('{"kind": "ci.recorded"}\n')
+    git(r, "add", "a.py", ".ddflow")
     git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},tmp.cDDAI7SLqb")
-    git(r, "add", "-A")
     git(r, "commit", "-qm", "work")
+    assert "160000" in git(r, "ls-tree", "work", "tmp.cDDAI7SLqb"), "the gitlink is committed"
     return r, head, "work"
 
 
@@ -50,3 +51,13 @@ def test_the_diff_of_an_items_tree_leaves_them_out_too(tmp_path):
     diff, _how = RV._tree_diff(r, "main")
     assert "a = 2" in diff
     assert ".ddflow/events" not in diff and "Subproject commit" not in diff, diff
+
+
+def test_a_registered_submodules_pointer_change_is_still_reviewed(tmp_path):
+    r, head, tip = _branch_with_noise(tmp_path)
+    (r / ".gitmodules").write_text('[submodule "lib"]\n\tpath = lib\n\turl = ../lib\n')
+    git(r, "add", ".gitmodules")
+    git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},lib")
+    git(r, "commit", "-qm", "register lib")
+    diff = RV._delta_of_branch(r, tip, head, "main")
+    assert "lib" in diff and "tmp.cDDAI7SLqb" not in diff, diff
