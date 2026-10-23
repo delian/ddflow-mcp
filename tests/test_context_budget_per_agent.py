@@ -115,7 +115,18 @@ def test_every_agent_type_has_an_effective_budget_by_default(hid):
 
 @pytest.mark.parametrize(
     "bad",
-    [{"claude": -1}, {"claude": "big"}, {"claude": True}, {"Claude Code": 1}, {"": 1}, [1], "x"],
+    [
+        {"global": -1},
+        {"global": "big"},
+        {"global": True},
+        {"claude": -1},
+        {"claude": "big"},
+        {"claude": True},
+        {"Claude Code": 1},
+        {"": 1},
+        [1],
+        "x",
+    ],
 )
 def test_the_table_refuses_what_is_not_a_budget(bad):
     assert _KNOB_CHECKS["session.context_budget"](bad)
@@ -184,3 +195,13 @@ def test_measure_carries_the_per_target_budgets():
     )
     assert any(ln.strip().startswith("codex: 100 tokens (budget 500)") for ln in lines)
     assert cost.as_dict()["targets"] == {"claude": 30, "codex": 500}
+
+
+def test_an_invalid_global_in_the_table_is_refused_when_the_config_loads(repo):
+    from ddflow.config import InvalidValue
+
+    run_cli(repo, "init")
+    cfgp = repo / ".ddflow" / "config.toml"
+    cfgp.write_text(cfgp.read_text() + "\n[session.context_budget]\nglobal = -5\n")
+    with pytest.raises(InvalidValue):
+        Config.load(repo)
