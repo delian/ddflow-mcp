@@ -62,6 +62,11 @@ class DigestConfig:
         doc="How many queue entries `ddflow digest` prints in full before it counts the rest (`--json` always carries every entry). 0 prints none.",
         check=int_at_least(0),
     )
+    text_chars: int = knob(
+        400,
+        doc="How many characters of a recorded text (an agent's question, a DECIDE task's default line, a failed check) a queue entry quotes before it cuts it. Quoted text has secrets masked first. 0 quotes none.",
+        check=int_at_least(0),
+    )
     spotcheck_min: int = knob(
         1,
         doc="How many gates passed on refutation, not yet completed, make one spot-check entry in the operator queue. 0 turns that entry off.",

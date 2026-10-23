@@ -18,7 +18,7 @@ _KIND_OF_VERB = {v: s.kind for s in SOURCES for v in s.sites}
 
 
 def kind_of(row: dict[str, Any]) -> str:
-    if not row["verb"]:
+    if not row["verb"] or row.get("type") == "question":
         return "question"
     return _KIND_OF_VERB.get(row["verb"], "approval")
 
@@ -31,13 +31,9 @@ def _item_of(subject: str) -> str:
     return parts[2].replace("%3A", ":").replace("%25", "%")
 
 
-QUOTE_CHARS = 400
-
-
-def _quote(row: dict[str, Any]) -> str:
-    """An agent's own words, shown only for a question (there is nothing else to show), cut and
-    on one line; a reader is told they are quoted."""
-    return " ".join(str(row.get("text", "")).split())[:QUOTE_CHARS]
+def _question_default(row: dict[str, Any]) -> str:
+    opts = [str(o) for o in row.get("options") or []]
+    return f"one of: {', '.join(opts)}" if opts else "answer in your own words"
 
 
 def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
@@ -58,7 +54,7 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 what=(
                     f"{who} asks for `{verb}`" + (f" on {item}" if item else "")
                     if verb
-                    else f"{who} asks (quoted, unchecked): {_quote(row)}"
+                    else f"{who} asks (quoted, unchecked): {N.clip(row.get('text', ''), cfg)}"
                 ),
                 why=(
                     f"`{verb}` is a person-only act (tier {row['tier'] or '?'}); an agent cannot do it"
@@ -66,16 +62,18 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                     else "an agent asked and no one has answered"
                 ),
                 since=row["requested_at"],
-                default=SAFE_DEFAULT,
-                command=f"ddflow approvals approve {row['id']}",
-                answer=f"approve or deny request {row['id']}",
+                default=SAFE_DEFAULT if verb else _question_default(row),
+                command=f"ddflow approvals approve {row['id']}"
+                if verb
+                else f"ddflow approvals show {row['id']}",
+                answer=f"approve or deny request {row['id']}" if verb else "",
                 blocks=[item] if item in st.items else [],
                 agents=[who],
-                chat_ref=row["id"],
+                chat_ref=row["id"] if verb else "",
                 detail={
                     "ask": row["id"],
                     "verb": verb,
-                    **({} if verb else {"question": _quote(row)}),
+                    **({} if verb else {"question": N.clip(row.get("text", ""), cfg)}),
                 },
             )
         )

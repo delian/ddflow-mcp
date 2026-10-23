@@ -114,6 +114,14 @@ def dependants(st: State, roots: Iterable[str]) -> set[str]:
     return found
 
 
+def clip(text: str, cfg) -> str:
+    """A recorded text for display: secrets masked, on one line, cut at `[digest].text_chars`."""
+    from ..redact_report import redact_secrets
+
+    clean, _ = redact_secrets(str(text or ""), cfg)
+    return " ".join(clean.split())[: cfg.digest.text_chars]
+
+
 def seconds(ts: str, default: float = 0.0) -> float:
     return clock.epoch(ts, default=default)
 

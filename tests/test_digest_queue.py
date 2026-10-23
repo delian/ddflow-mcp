@@ -249,22 +249,11 @@ def test_entries_serialize_without_loss():
     st = State()
     ask(st, "Q1", 1, verb="grant.add", subject="cmd:grant.add:X:")
     d = build(st).entries[0].as_dict()
-    assert {
-        "id",
-        "kind",
-        "owner",
-        "what",
-        "why",
-        "since",
-        "default",
-        "answer",
-        "command",
-        "chat",
-        "blocks",
-        "impact",
-        "severity",
-        "age_s",
-    } <= set(d)
+    assert d["id"] == "approval:Q1" and d["kind"] == "approval" and d["owner"] == "operator"
+    assert d["what"] == "agent-a asks for `grant.add` on X" and "person-only" in d["why"]
+    assert d["since"] == at(1) and d["age_s"] == H and d["severity"] == "needs"
+    assert d["default"].startswith("deny") and d["command"] == "ddflow approvals approve Q1"
+    assert d["answer"] and d["chat"] and d["blocks"] == [] and d["impact"] == 0
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -328,7 +317,12 @@ def test_a_question_shows_its_quoted_text_and_how_to_answer():
     assert (
         e.kind == "question" and "ship it now?" in e.what and e.detail["question"] == "ship it now?"
     )
-    assert e.command == "ddflow approvals approve Q9" and "approvals ask Q9" in e.chat
+    assert e.command == "ddflow approvals show Q9" and e.chat.startswith(
+        "ddflow digest --ask question:Q9"
+    )
+    assert e.default == "answer in your own words" and "answer the question" in e.answer
+    asks_of(st)["Q9"]["options"] = ["yes", "no"]
+    assert Q.build(st, Config(), NOW).entries[0].default == "one of: yes, no"
 
 
 def test_an_abandoned_item_is_not_awaiting_a_spot_check():
@@ -345,3 +339,30 @@ def test_an_abandoned_item_is_not_awaiting_a_spot_check():
     assert build(st).entries == ()
     it.state = OPEN
     assert [e.kind for e in build(st).entries] == ["gate_spotcheck"]  # the same gate, on live work
+
+
+def test_quoted_text_is_masked_and_cut_by_the_knob():
+    st = State()
+    ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["text"] = (
+        "deploy with token ghp_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8 " + "x" * 600
+    )
+    cfg = Config()
+    (e,) = Q.build(st, cfg, NOW).entries
+    assert "ghp_a1b2" not in repr(e.as_dict()) and len(e.detail["question"]) == 400
+    cfg.digest.text_chars = 20
+    assert len(Q.build(st, cfg, NOW).entries[0].detail["question"]) == 20
+
+
+def test_a_decide_default_line_is_masked_too():
+    st = State()
+    item(
+        st,
+        "D1",
+        kind="doc",
+        title="DECIDE: k",
+        created_at=at(1),
+        body="default: use ghp_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8",
+    )
+    (e,) = build(st).entries
+    assert "ghp_a1b2" not in e.default

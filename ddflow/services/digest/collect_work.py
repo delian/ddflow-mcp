@@ -22,7 +22,6 @@ _KEY_REASON = re.compile(
     re.I,
 )
 _DEFAULT_LINE = re.compile(r"^.*\bdefault\b.*$", re.I | re.M)
-DEFAULT_TEXT_CHARS = 240
 
 
 def _live(st: State):
@@ -41,9 +40,7 @@ def collect_decide(st, cfg, now, facts):
         if any(st.items.get(n) is not None and st.items[n].state != DONE for n in it.needs):
             continue  # not askable yet: what it waits for is not done
         m = _DEFAULT_LINE.search(it.body or "")
-        default = (
-            m.group(0).strip()[:DEFAULT_TEXT_CHARS] if m else "the defaults listed in the task"
-        )
+        default = N.clip(m.group(0), cfg) if m else "the defaults listed in the task"
         out.append(
             N.make(
                 st,
@@ -170,7 +167,7 @@ def collect_red_main(st, cfg, now, facts):
     if not streak:
         return []
     first = streak[-1]
-    failed = ", ".join(str(c) for c in first.get("checks") or [])[:DEFAULT_TEXT_CHARS]
+    failed = N.clip(", ".join(str(c) for c in first.get("checks") or []), cfg)
     return [
         N.make(
             st,
