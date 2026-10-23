@@ -74,6 +74,9 @@ def test_naming_globs_again_takes_the_opt_out_back(repo):
     _seed(repo)
     assert run_cli(repo, "update", "fix-Bh", "--globs", "")[0] == 0
     assert run_cli(repo, "update", "fix-Bh", "--globs", "src/x.py")[0] == 0
+    assert state(repo).items["fix-Bh"].globs == ["src/x.py"]
+    assert LC.claim(repo, "fix-Bh", agent="w", no_worktree=True).data["globs"] == ["src/x.py"]
+    assert LC.release(repo, "fix-Bh", agent="w").exit == 0
     assert run_cli(repo, "update", "fix-Bh", "--globs", "")[0] == 0
     assert LC.claim(repo, "fix-Bh", agent="w", no_worktree=True).data["globs"] == []
 
@@ -134,6 +137,7 @@ def test_a_finished_task_is_not_moved(repo):
     log.append("item.completed", "T1", {"sha": "abc"})
     code, _, err = run_cli(repo, "update", "T1", "--phase", "P2")
     assert code != 0 and "done" in err
+    assert state(repo).items["T1"].parent == "P1"
 
 
 def test_the_tool_moves_a_task_too(repo):
@@ -195,3 +199,16 @@ def test_making_a_forked_task_top_level_cannot_change_its_line_either(repo):
     code, _, err = run_cli(repo, "update", "T1", "--phase", "")
     assert code != 0 and "release line" in err
     assert state(repo).items["T1"].parent == "P1"
+
+
+def test_a_move_and_a_needs_edit_together_are_checked_as_one(repo):
+    log = _seed(repo)
+    log.append("task.added", "X", {"parent": "P1", "title": "x", "needs": ["T1"]})
+    log.append("task.added", "T2", {"parent": "P1", "title": "t2"})
+    code, _, err = run_cli(repo, "update", "T2", "--parent", "P2", "--needs", "X")
+    assert code == 0, err  # no cycle: P2 waits on nothing
+    log.append("phase.updated", "P2", {"needs": ["X"]})
+    log.append("task.added", "T3", {"parent": "P1", "title": "t3"})
+    log.append("task.updated", "X", {"needs": ["T3"]})
+    code, _, err = run_cli(repo, "update", "T3", "--parent", "P2", "--needs", "T1")
+    assert code != 0 and "cycle" in err
