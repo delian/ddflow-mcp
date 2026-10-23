@@ -14,11 +14,14 @@ from typing import Any
 from ..core import outcome as O
 from ..core.handlers.asks import asks_of
 from ..services import actors as A
+from ..services.approvals import gate_skip as GS
 from ..services.approvals import request as R
 from ..services.approvals import state as PS
 from ..services.approvals import view as V
 from ..services.approvals.canon import Canon, UnknownVerb
 from ._base import _load
+
+PS.register(GS.VERB, GS.provider)
 
 
 def _commands(st, now: float) -> list[dict[str, Any]]:

@@ -109,7 +109,13 @@ def h_consumed(st: State, ev: Event) -> None:
         return
     row["used"] += 1
     row["consumed"].append(
-        {"by": str(ev.data.get("by", "")), "effect": str(ev.data.get("effect", "")), "at": ev.ts}
+        {
+            "by": str(ev.data.get("by", "")),
+            "effect": str(ev.data.get("effect", "")),
+            "verb": str(ev.data.get("verb", "")),
+            "digest": str(ev.data.get("digest", "")),
+            "at": ev.ts,
+        }
     )
 
 
