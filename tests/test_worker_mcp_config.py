@@ -39,6 +39,14 @@ def test_the_worker_entry_adds_the_tier_and_keeps_the_rest():
     assert WM.worker_entry({"command": "c"}, "standard")["env"] == {"DDFLOW_MCP_TOOLS": "standard"}
 
 
+def test_a_docker_launch_forwards_the_tier_into_the_container():
+    entry = {"command": "docker", "args": ["run", "-i", "--rm", "img"]}
+    got = WM.worker_entry(entry, "core")
+    assert got["args"] == ["run", "-e", "DDFLOW_MCP_TOOLS=core", "-i", "--rm", "img"], got
+    assert entry["args"] == ["run", "-i", "--rm", "img"], "the input must not be changed"
+    assert WM.worker_entry({"command": "uvx", "args": ["x"]}, "core")["args"] == ["x"]
+
+
 def test_adopt_for_claude_writes_the_worker_config_and_says_how_to_use_it(repo):
     code, out, err = run_cli(repo, "adopt", "--agents", "claude")
     assert code == 0, err
@@ -98,15 +106,22 @@ def test_the_doctor_note_says_when_a_host_would_send_every_schema():
     assert auto, "auto:90 sets the threshold above ddflow's size: nothing deferred (measured)"
 
 
-def test_doctor_carries_the_note(repo, monkeypatch):
+def test_doctor_judges_the_workers_tier_not_the_lanes_own(repo, monkeypatch):
     run_cli(repo, "init")
-    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)  # the tier under test is the default, all
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
+    monkeypatch.delenv("DDFLOW_MCP_WORKER_TOOLS", raising=False)
     monkeypatch.setenv("ENABLE_TOOL_SEARCH", "false")
-    _code, out, _ = run_cli(repo, "doctor", "--json")
-    assert any("every ddflow schema" in n for n in json.loads(out)["notes"])
+
+    def notes() -> list[str]:
+        return json.loads(run_cli(repo, "doctor", "--json")[1])["notes"]
+
+    assert not any("every ddflow schema" in n for n in notes()), "workers default to core"
+    run_cli(repo, "config", "--set", "mcp.worker_tools", "all")
+    assert any("every ddflow schema" in n for n in notes())
+    run_cli(repo, "config", "--set", "mcp.tools", "core")  # the lane's own tier does not matter
+    assert any("every ddflow schema" in n for n in notes())
     monkeypatch.delenv("ENABLE_TOOL_SEARCH")
-    _code, out, _ = run_cli(repo, "doctor", "--json")
-    assert not any("every ddflow schema" in n for n in json.loads(out)["notes"])
+    assert not any("every ddflow schema" in n for n in notes())
 
 
 def test_the_recipe_names_the_tier_the_file_carries(repo, monkeypatch):
