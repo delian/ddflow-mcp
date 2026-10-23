@@ -19,7 +19,6 @@ _HEADER = re.compile(r"^diff --git a/(?P<p>[\w./@+-]+) b/(?P=p)$")
 _GITLINK_MODE = re.compile(
     r"^(?:(?:new file|deleted file|old|new) mode 160000|index \S+ 160000)$", re.M
 )
-_HEADER_LINES = 8
 
 
 def _paths_of(repo: Path, *source: str) -> set[str]:
@@ -44,6 +43,14 @@ def registered_submodules(repo: Path, *refs: str) -> set[str]:
     return found
 
 
+def _before_first_hunk(section: list[str]) -> list[str]:
+    """The extended header lines of a file section: everything up to its first hunk."""
+    for i, line in enumerate(section):
+        if line.startswith("@@"):
+            return section[:i]
+    return section
+
+
 def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
     """``diff`` without the file sections that change a gitlink at a path not in ``registered``.
     A section whose header is not a plain `a/P b/P` is kept."""
@@ -57,7 +64,7 @@ def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
             sections[-1].append(line)
 
     def stray(sec: list[str]) -> bool:
-        head = "".join(sec[:_HEADER_LINES])
+        head = "".join(ln for ln in _before_first_hunk(sec))
         m = _HEADER.match(sec[0].rstrip("\n"))
         if not m or not _GITLINK_MODE.search(head):
             return False
