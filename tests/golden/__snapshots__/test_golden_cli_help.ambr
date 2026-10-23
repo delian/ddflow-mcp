@@ -268,10 +268,15 @@
 # ---
 # name: test_help[ddflow bug file-tasks]
   '''
-  usage: ddflow bug file-tasks [-h] [--dry-run]
+  usage: ddflow bug file-tasks [-h] [--all] [--dry-run] [id]
+  
+  positional arguments:
+    id          the open bug to file the fix task of (omit to preview; --all files every bug's)
   
   options:
     -h, --help  show this help message and exit
+    --all       file a task for every open bug that has none (other agents' too); without it and
+                without an id, only a preview
     --dry-run   list what would be filed
   
   '''
@@ -408,8 +413,7 @@
   
   positional arguments:
     {found,file-tasks,fixed,invalid,reopen,list,show}
-      file-tasks          file a fix task for every open bug that has none (one-shot, after an
-                          upgrade)
+      file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
@@ -900,7 +904,7 @@
 # ---
 # name: test_help[ddflow gate record]
   '''
-  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] [--force] id gate
+  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] [--approval APPROVAL] [--force] id gate
   
   positional arguments:
     id
@@ -924,6 +928,9 @@
                           the commit the review tool ran on (roborev review <sha>); refused when it
                           is not the item's branch head or a commit of its branch
     --output-file OUTPUT_FILE
+    --approval APPROVAL   the id of the operator's approval of this exact override: a refused call
+                          files the request and names the id; a person answers it with `ddflow
+                          approvals approve`
     --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
                           on the event)
   
@@ -952,7 +959,7 @@
 # ---
 # name: test_help[ddflow gate skip]
   '''
-  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] [--force] id gate
+  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] [--approval APPROVAL] [--force] id gate
   
   positional arguments:
     id
@@ -970,6 +977,9 @@
     --model MODEL         the REVIEWER's model, for family independence (the author's is `complete
                           --model`); an author-family name on a reviewer gate is refused
     --output-file OUTPUT_FILE
+    --approval APPROVAL   the id of the operator's approval of this exact override: a refused call
+                          files the request and names the id; a person answers it with `ddflow
+                          approvals approve`
     --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
                           on the event)
   
