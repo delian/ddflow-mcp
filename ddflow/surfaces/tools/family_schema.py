@@ -188,6 +188,7 @@ def _problem(routed: Routed) -> str:
         return f"{routed.display}: missing required argument(s): {', '.join(missing)}"
     known = set(member_props(routed.tool))
     known |= set(TOOLS[routed.tool].get("deprecated") or {})
+    known |= set(TOOLS[routed.tool].get("arg_aliases") or {})
     if unknown := sorted(set(routed.args) - known):
         return (
             f"{routed.display}: unknown argument(s): {', '.join(unknown)}. "

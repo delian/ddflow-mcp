@@ -102,3 +102,31 @@ def test_a_family_call_to_a_long_member_runs_in_a_worker(name, args, offloaded):
 
     msg = {"method": "tools/call", "id": 1, "params": {"name": name, "arguments": args}}
     assert _offloaded(msg) is offloaded
+
+
+@pytest.fixture
+def old_spelling(monkeypatch):
+    from ddflow.surfaces.registry import Alias
+    from ddflow.surfaces.tools import TOOLS
+
+    alias = Alias("argument", "since_date", "since", "0.2.3")
+    monkeypatch.setitem(TOOLS["ddflow_gate_list"], "arg_aliases", {"since_date": alias})
+
+
+def test_an_old_argument_spelling_works_through_a_family_call(inited, old_spelling):
+    text, err = _call(inited, "ddflow_gate", action="list", refuted=True, since_date="2020-01-01")
+    flat, flat_err = _call(inited, "ddflow_gate_list", refuted=True, since="2020-01-01")
+    assert (text, err) == (flat, flat_err)
+
+
+def test_a_clash_between_spellings_names_the_action(inited, old_spelling):
+    text, err = _call(inited, "ddflow_gate", action="list", since="a", since_date="b")
+    assert err
+    assert text.startswith("ddflow_gate action=list: bad arguments: ")
+    assert "since_date" in text
+
+
+def test_ddflow_workflow_without_an_action_is_the_legacy_tool(inited):
+    text, err = _call(inited, "ddflow_workflow")
+    assert not err
+    assert (text, err) == _call(inited, "ddflow_workflow", action="show")
