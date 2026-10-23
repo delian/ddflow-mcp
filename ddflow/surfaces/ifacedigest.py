@@ -150,7 +150,7 @@ def live_snapshot(
     return snapshot(
         tools=tools,
         prompts=prompts,
-        instructions_id=hashlib.sha256(text.encode()).hexdigest()[:16],
+        instructions_id=hashlib.sha256(text.encode()).hexdigest(),
         capabilities=proto.capabilities(),
         protocols=[*proto.SUPPORTED_PROTOCOLS, *proto.MODERN_PROTOCOLS],
         shim_proto=shim_proto,
