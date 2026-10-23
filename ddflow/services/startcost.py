@@ -85,8 +85,12 @@ class StartCost:
         for name, budget in self.targets.items():
             over = max(0, self.tokens - budget) if budget > 0 else 0
             cap = f"budget {budget}" if budget > 0 else "no budget"
+            odd = (
+                "" if name in {h.id for h in HR.load()} else " [no such agent type: never matches]"
+            )
             out.append(
-                f"  {name}: {self.tokens} tokens ({cap})" + (f" -- OVER by {over}" if over else "")
+                f"  {name}{odd}: {self.tokens} tokens ({cap})"
+                + (f" -- OVER by {over}" if over else "")
             )
         return out
 

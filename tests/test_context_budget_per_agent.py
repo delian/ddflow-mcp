@@ -205,3 +205,16 @@ def test_an_invalid_global_in_the_table_is_refused_when_the_config_loads(repo):
     cfgp.write_text(cfgp.read_text() + "\n[session.context_budget]\nglobal = -5\n")
     with pytest.raises(InvalidValue):
         Config.load(repo)
+
+
+def test_a_misspelled_agent_type_is_called_out_in_the_doctor_line():
+    cost = SC.measure({"a": "x" * 40}, bytes_per_token=4.0, budget=0, targets={"calude": 100})
+    assert "calude [no such agent type: never matches]: 10 tokens (budget 100)" in cost.line()
+
+
+def test_the_globals_provenance_follows_the_table_spelling(repo):
+    run_cli(repo, "init")
+    cfgp = repo / ".ddflow" / "config.toml"
+    cfgp.write_text(cfgp.read_text() + "\n[session.context_budget]\nglobal = 31000\n")
+    cfg = Config.load(repo)
+    assert cfg.sources["session.context_budget_tokens"] != "default", cfg.sources
