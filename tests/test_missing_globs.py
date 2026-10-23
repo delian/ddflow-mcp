@@ -121,3 +121,55 @@ def test_a_tracked_file_with_a_space_is_a_nearest_path(proj):
     run_cli(proj, "task", "add", "T1", "--globs", "sorc/my file.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "src/my file.py" in out
+
+
+def test_plan_check_does_not_warn_about_a_path_an_item_declares_it_creates(proj, tmp_path):
+    """B-plan-check-new-file-warnings-noise: every new file of a plan was a 'does not exist'
+    warning; `creates = [...]` says it is expected, for the item and for the others listing it."""
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["newpkg/new_a.py", "sorc/real.py"]\ncreates = ["newpkg/new_a.py"]\n'
+        'acceptance = "done"\n[B]\nglobs = ["newpkg/new_a.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "new_a.py" not in out, out
+    assert "warning  A:" in out and "src/real.py" in out  # a typo is still warned about
+
+
+def test_a_path_inside_a_directory_an_item_creates_is_not_warned(proj, tmp_path):
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["newpkg/"]\ncreates = ["newpkg/"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/inner/mod.py", "newpkg"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg" not in out, out
+
+
+def test_a_wildcard_glob_is_never_warned_and_nothing_hides_under_a_created_file(proj, tmp_path):
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = []\ncreates = ["newpkg/new_a.py", "docs/index.html", "LICENSE"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/*.py", "docs/index.html/extra.js", "LICENSE/h.txt", "LICENSE/"]\nneeds = ["A"]\n'
+        'acceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg" not in out, out  # a wildcard is not a literal path: nothing to warn about
+    assert "docs/index.html/extra.js" in out and "LICENSE/h.txt" in out and "LICENSE/" in out, (
+        out
+    )  # not under a file
+
+
+def test_a_bare_creates_name_covers_only_itself(proj, tmp_path):
+    """A name without a trailing slash may be a file, so it hides nothing beneath it."""
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["newpkg"]\ncreates = ["newpkg"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/inner/mod.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg/inner/mod.py" in out and "warning  A:" not in out, out
