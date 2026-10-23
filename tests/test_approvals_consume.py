@@ -207,7 +207,7 @@ def test_a_forged_level_is_not_believed_without_a_channel_that_can_verify_it(log
     )
     got = C.operator_gate(log, cfg, t3, approval_id=filed.id, now=T0 + 1)
     assert not got.ok and "needs L4" in got.message and "signed" in got.message
-    monkeypatch.setitem(E.LEVEL_VERIFIERS, "signed", lambda row: True)
+    monkeypatch.setitem(E.LEVEL_VERIFIERS, "signed", lambda row, cfg: True)
     assert C.operator_gate(log, cfg, t3, approval_id=filed.id, now=T0 + 2).ok
     # a verifier that says no means the claim is not believed
     filed2 = _request(log, cfg, _canon(verb="config.reviewer_command", item="x", target=""))
@@ -217,7 +217,7 @@ def test_a_forged_level_is_not_believed_without_a_channel_that_can_verify_it(log
         {"id": filed2.id, "outcome": "approved", "digest": filed2.digest, "by": "me",
          "human": True, "source": "terminal", "level": 4, "via": "signed"},
     )  # fmt: skip
-    monkeypatch.setitem(E.LEVEL_VERIFIERS, "signed", lambda row: False)
+    monkeypatch.setitem(E.LEVEL_VERIFIERS, "signed", lambda row, cfg: False)
     got = C.operator_gate(
         log, cfg, _canon(verb="config.reviewer_command", item="x", target=""),
         approval_id=filed2.id, now=T0 + 3,

@@ -133,7 +133,8 @@ def run(
     branch whose item is gone) takes the selected tests too: the selection needs only the diff
     against the base (B-ci-selected-runs-full-suite); it just records no gate."""
     log, cfg, st = _load(repo, agent)
-    if timeout_s is not None and not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
+    # 0 is "no per-run limit" (the integrator passes its own, possibly 0); only a real one is bounded
+    if timeout_s and not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
         return O.refused(
             "ci",
             f"--timeout {timeout_s} is outside 1..{cfg.gates.max_run_timeout_s} seconds "

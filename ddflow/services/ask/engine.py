@@ -145,13 +145,14 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     actor: Actor | None = None,
     now: float | None = None,
     command: Command | None = None,
+    ask_id: str = "",
 ) -> Requested:
     """Put an ask. Anyone may ask; ``bot_answerable`` needs ``actor`` to hold ``approve``."""
     digest = _check_request(kind, subject, text, digest, content, bot_answerable, actor)
     ttl = cfg.agent.ask_ttl_s if ttl_s is None else ttl_s
     if ttl <= 0:
         raise AskRefused("an ask must expire: ttl_s is above 0 (`agent.ask_ttl_s`)")
-    ask_id = "Q" + secrets.token_hex(5)
+    ask_id = ask_id or new_ask_id()
     code = _mint_code(cfg.agent.ask_code_length) if with_code else ""
     data: dict[str, Any] = {
         "id": ask_id,
@@ -169,6 +170,12 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
         data.update(_command_fields(command, kind))
     log.append("ask.requested", ask_id, data)
     return Requested(ask_id, code)
+
+
+def new_ask_id() -> str:
+    """A fresh ask id, for a caller that must put it in the text the person reads (a channel that
+    finds the answer by that text)."""
+    return "Q" + secrets.token_hex(5)
 
 
 def _mint_code(length: int) -> str:
@@ -205,6 +212,7 @@ def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-
     text: str = "",
     via: str = "cli",
     level: int = 0,
+    proof: str = "",
     now: float | None = None,
 ) -> dict[str, Any]:
     """Record a person's answer. Raises `AskRefused` unless every invariant holds. Returns the
@@ -238,6 +246,7 @@ def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-
                 "source": actor.source,
                 "level": level if level >= 1 else 1,
                 "code_presented": code,  # spent now: kept so `verdict` can re-hash it
+                "proof": proof,  # a channel's own evidence (a harness tool_use id), see its verifier
             },
         )
         return dict(get(_state(log), ask_id) or {})
@@ -330,15 +339,15 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
 #: channel's proof holds (a transcript row, a signature, a code). A level above 1 is believed only
 #: when its channel registered one and it says yes: an answer line written by hand claims any
 #: level it likes.
-LEVEL_VERIFIERS: dict[str, Callable[[dict[str, Any]], bool]] = {}
+LEVEL_VERIFIERS: dict[str, Callable[[dict[str, Any], Config], bool]] = {}
 
 
-def verified_level(row: dict[str, Any]) -> int:
+def verified_level(row: dict[str, Any], cfg: Config | None = None) -> int:
     """The assurance level of an answered row that can be shown to hold: 1 (a terminal's word)
     unless the row's channel registered a verifier that confirms the higher level it claims."""
     claimed = row.get("level", 0)
     check = LEVEL_VERIFIERS.get(row.get("via", ""))
-    believed = claimed > 1 and check is not None and check(row)
+    believed = claimed > 1 and check is not None and check(row, cfg or Config())
     return claimed if believed else 1  # an answered row is at least a terminal's word
 
 
