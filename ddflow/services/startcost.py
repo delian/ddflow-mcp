@@ -15,10 +15,35 @@ pending upgrade notice (one line, said once per version) is covered by a reserve
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..core.measuring import is_measuring, measuring  # noqa: F401 -- re-exported
+from . import harnessreg as HR
+
+
+def effective_budget(session, target: str = "") -> int:
+    """The start budget, in tokens, of a session of agent type ``target`` ("" = unknown): the
+    smaller of the global ceiling (`context_budget_tokens`, and the table's own `global`) and the
+    type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
+    out; a type above the global does not raise it (D-session-start-budget). 0 when nothing is set."""
+    table = session.context_budget or {}
+    levels = [
+        session.context_budget_tokens,
+        table.get("global", 0),
+        table.get(target, 0) if target else 0,
+    ]
+    return min((v for v in levels if v > 0), default=0)
+
+
+def configured_targets(session) -> dict[str, int]:
+    """`{agent type: effective budget}` for each type the table names, in name order."""
+    return {
+        t: effective_budget(session, t)
+        for t in sorted(session.context_budget or {})
+        if t != "global"
+    }
 
 
 @dataclass(frozen=True)
@@ -30,6 +55,8 @@ class StartCost:
     budget: int  # tokens; 0 = no budget
     #: Why the cost could not be measured (empty when it could): said, never silent.
     failed: str = ""
+    #: Agent type -> its effective budget, for each type `[session.context_budget]` names.
+    targets: Mapping[str, int] = field(default_factory=dict)
 
     @property
     def tokens(self) -> int:
@@ -47,7 +74,19 @@ class StartCost:
         if self.over:
             head += f" -- OVER by {self.over}"
         made = ", ".join(f"{name} {n}" for name, n in self.parts.items())
-        return f"{head}: {made}" if made else head
+        head = f"{head}: {made}" if made else head
+        return "\n".join([head, *self._target_lines()])
+
+    def _target_lines(self) -> list[str]:
+        """One line per configured agent type: the same cost against that type's budget."""
+        out = []
+        for name, budget in self.targets.items():
+            over = max(0, self.tokens - budget) if budget > 0 else 0
+            cap = f"budget {budget}" if budget > 0 else "no budget"
+            out.append(
+                f"  {name}: {self.tokens} tokens ({cap})" + (f" -- OVER by {over}" if over else "")
+            )
+        return out
 
     def notes(self) -> list[str]:
         """The doctor note: the cost line, or nothing when no texts were measured."""
@@ -65,11 +104,17 @@ class StartCost:
             "over": self.over,
             "parts": dict(self.parts),
             "bytes": dict(self.bytes),
+            "targets": dict(self.targets),
         }
 
 
 def measure(
-    texts: Mapping[str, str], *, bytes_per_token: float, budget: int, reserve: int = 0
+    texts: Mapping[str, str],
+    *,
+    bytes_per_token: float,
+    budget: int,
+    reserve: int = 0,
+    targets: Mapping[str, int] | None = None,
 ) -> StartCost:
     """The cost of ``texts`` (name -> what the session is handed), at ``bytes_per_token``."""
     ratio = bytes_per_token if bytes_per_token > 0 else 4.0
@@ -80,12 +125,12 @@ def measure(
     ):  # a pending notice cannot be counted without being used up
         parts["upgrade notice (reserve)"] = reserve
         sizes["upgrade notice (reserve)"] = round(reserve * ratio)
-    return StartCost(parts=parts, bytes=sizes, budget=budget)
+    return StartCost(parts=parts, bytes=sizes, budget=budget, targets=dict(targets or {}))
 
 
 def report(repo, cfg, agent: str, start_texts) -> StartCost:
     """The cost of the texts ``start_texts(repo, agent)`` returns, at the project's ratio and
-    budget; empty when the surface supplied none or building them failed (a report must not
+    budget (the global one, or that of the agent type running this command); empty when the surface supplied none or building them failed (a report must not
     fail on its own measuring)."""
     empty = StartCost({}, {}, 0)
     if start_texts is None:
@@ -96,8 +141,11 @@ def report(repo, cfg, agent: str, start_texts) -> StartCost:
         return measure(
             texts,
             bytes_per_token=cfg.session.start_bytes_per_token,
-            budget=cfg.session.context_budget_tokens,
+            # The headline is judged against the agent type running this very command, when its
+            # harness can be told from the environment; the table's types follow it.
+            budget=effective_budget(cfg.session, HR.detect(os.environ)),
             reserve=cfg.session.start_notice_reserve_tokens,
+            targets=configured_targets(cfg.session),
         )
     except Exception as exc:
         return StartCost({}, {}, 0, failed=f"{type(exc).__name__}: {exc}")
