@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.lint_checks"
+new = '["ruff", "(CI: Lint)", "format"]'
+why = "Which CI-filed bugs are lint bugs that `bug fixed --lint-exempt REASON` may close without a regression test."
+impact = "additive"

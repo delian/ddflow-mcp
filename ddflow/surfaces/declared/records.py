@@ -269,6 +269,7 @@ COMMANDS: tuple[Command, ...] = (
             verify_reason=a.get("verify_reason", "") or "",
             mutation=mutation_of(a),
             landed=a.get("landed", "") or "",
+            lint_exempt=a.get("lint_exempt", "") or "",
             agent=agent,
         ),
         payload=(
@@ -305,6 +306,12 @@ COMMANDS: tuple[Command, ...] = (
                 "landed",
                 help="A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on its first parent and pass on it; the fix task is ended naming it.",
                 cli_help="a commit already on the base that holds the fix: the test must fail on its first parent and pass on it; the bug's fix task is ended naming it",
+                default="",
+            ),
+            Param(
+                "lint_exempt",
+                help="For a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test (what made the check green). Recorded as regression_verified=exempt-lint; instead of regression_test.",
+                cli_help="close a CI-filed lint bug (no test to write) with this reason, recorded, instead of --regression-test",
                 default="",
             ),
             Param(
@@ -346,6 +353,7 @@ COMMANDS: tuple[Command, ...] = (
             "skip_regression_verify",
             "verify_reason",
             "landed",
+            "lint_exempt",
             *MUTATION_ORDER,
         ),
     ),

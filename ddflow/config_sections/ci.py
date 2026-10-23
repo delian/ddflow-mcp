@@ -53,7 +53,7 @@ class CiConfig:
     )
     max_concurrent_suites: int = knob(
         1,
-        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue and the after-merge check) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are not limited.",
+        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue, the after-merge check and the `unit_tests` gate when its command names no test file) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are not limited.",
     )
     suite_wait_s: int = knob(
         1800,
