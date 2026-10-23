@@ -136,24 +136,29 @@ def scan(path: Path, question: str, marker: str) -> list[Attested]:
     return found
 
 
-def find(cfg: Config, row: dict[str, Any]) -> Attested | None:
-    """The newest accepted answer to this request's question, from a transcript touched since the
-    request was filed."""
+def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
+    """Every accepted answer to this request's question, from transcripts touched since the
+    request was filed (oldest first)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
     for path in _files(cfg, since):
         hits += scan(path, row["text"], row["id"])
+    return hits
+
+
+def find(cfg: Config, row: dict[str, Any]) -> Attested | None:
+    """The newest accepted answer to this request's question."""
+    hits = find_all(cfg, row)
     return hits[-1] if hits else None
 
 
 def verify(row: dict[str, Any], cfg: Config) -> bool:
     """Re-check a recorded harness answer from the transcript (the level verifier): the proof
-    tool_use id must still be there with the same answer the row records."""
-    hit = find(cfg, row)
-    if hit is None or hit.tool_use_id != row.get("proof"):
-        return False
+    tool_use id must still be there, answered the way the row records. A later duplicate answer
+    to the same question does not undo it."""
     yes, no = labels(row["id"])
-    return hit.answer == (yes if row.get("outcome") == E.APPROVED else no)
+    want = yes if row.get("outcome") == E.APPROVED else no
+    return any(h.tool_use_id == row.get("proof") and h.answer == want for h in find_all(cfg, row))
 
 
 def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[bool, str]:
