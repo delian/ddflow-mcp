@@ -85,6 +85,8 @@ def test_a_hand_written_approval_is_flagged_and_cannot_be_spent(log):
     )
     found = AU.findings(_state(log), cfg)
     assert any(filed.id in f and "without proof" in f for f in found), found
+    spent = C.operator_gate(log, cfg, _canon(), approval_id=filed.id)
+    assert not spent.ok and "source" in spent.message  # flagged AND unspendable
 
 
 def test_an_approval_left_unspent_is_reported_when_its_window_runs_out(log):
