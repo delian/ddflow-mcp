@@ -50,7 +50,7 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     return began, slow
 
 
-def _review_and_term(repo: Path, began: Path, tmp_path: Path) -> str:
+def _review_and_term(repo: Path, began: Path, tmp_path: Path, *, group: bool) -> str:
     """Start `ddflow review`, SIGTERM it once its reviewer is running; its output. The output
     goes to a file, not a pipe: nothing to drain, and no EOF held open by a lingering reviewer."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
@@ -67,8 +67,9 @@ def _review_and_term(repo: Path, began: Path, tmp_path: Path) -> str:
             while not began.exists() and time.monotonic() < deadline and p.poll() is None:
                 time.sleep(0.1)
             assert began.exists(), "the reviewer never started: " + log.read_text()
-            p.send_signal(signal.SIGTERM)
-            p.wait(timeout=60)  # it must end by itself...
+            # `timeout` signals the whole group; a direct kill only the review itself
+            (os.killpg if group else os.kill)(p.pid, signal.SIGTERM)
+            assert p.wait(timeout=60) != 0, "a killed review must not exit 0"  # ...by itself
             _assert_gone(began.parent / "reviewer.pid")  # ...with its reviewer cancelled
         except BaseException:
             with contextlib.suppress(ProcessLookupError):
@@ -98,7 +99,7 @@ def _gate(repo: Path) -> dict:
 def test_a_sigtermed_review_says_so_and_records_the_gate_unavailable(repo, tmp_path):
     began, slow = _setup(repo, tmp_path)
     slow.touch()
-    text = _review_and_term(repo, began, tmp_path)
+    text = _review_and_term(repo, began, tmp_path, group=True)
     assert "terminated by SIGTERM" in text and "not a pass" in text, text
     gate = _gate(repo)
     assert gate["outcome"] == "unavailable" and "SIGTERM" in gate["reason"], gate
@@ -109,7 +110,7 @@ def test_a_sigtermed_review_leaves_an_earlier_finished_round_the_record(repo, tm
     assert run_cli(repo, "review", "T1", "--gate", "critic", "--branch", "feat")[0] == 0
     assert _gate(repo)["outcome"] == "passed"
     slow.touch()
-    text = _review_and_term(repo, began, tmp_path)
+    text = _review_and_term(repo, began, tmp_path, group=False)
     assert "terminated by SIGTERM" in text, text
     gate = _gate(repo)
     assert gate["outcome"] == "passed", gate
