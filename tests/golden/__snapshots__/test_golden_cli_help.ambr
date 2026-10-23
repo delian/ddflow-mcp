@@ -525,7 +525,8 @@
   usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] [--break] id
   
   positional arguments:
-    id
+    id                    item id, or an open bug id: its fix task is claimed (filed first if it has
+                          none)
   
   options:
     -h, --help            show this help message and exit
