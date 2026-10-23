@@ -49,7 +49,7 @@ def test_show_says_not_verified_for_an_agent_with_no_row(repo):
 
 def test_by_harness_returns_the_main_row_of_an_agent():
     assert C.by_harness("claude").key == "claude-code"
-    assert C.by_harness("cursor").key == "cursor-cli"  # the first of its rows
+    assert C.by_harness("cursor").key == "cursor-ide"  # the descriptor describes the IDE
     assert C.by_harness("no-such-harness") is None
 
 
@@ -58,9 +58,11 @@ def test_every_row_that_names_a_harness_names_a_real_descriptor():
     assert {e.harness for e in C.ENTRIES if e.harness} <= have
 
 
-def test_the_agents_without_a_row_are_listed_so_a_new_agent_is_noticed():
-    """A new descriptor with no client row is not an error (unknown = hard), but it is a visible
-    gap: this list shrinks when someone probes the agent."""
-    without = sorted(set(HR.ids()) - {e.harness for e in C.ENTRIES if e.harness})
-    assert without == sorted(without)
-    assert "claude" not in without and "kilo" not in without
+#: Descriptors with no client row yet. A new descriptor missing from both this list and the table
+#: fails below, so a new agent is noticed; when someone probes one of these, delete it here.
+NO_ROW = {"cody", "devin", "dsh", "glm", "qodo", "replit", "tabnine"}
+
+
+def test_the_agents_without_a_row_are_exactly_the_listed_ones():
+    without = set(HR.ids()) - {e.harness for e in C.ENTRIES if e.harness}
+    assert without == NO_ROW, (sorted(without - NO_ROW), sorted(NO_ROW - without))
