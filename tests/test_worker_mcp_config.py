@@ -92,6 +92,7 @@ def test_the_doctor_note_says_when_a_host_would_send_every_schema():
     off = WM.deferral_note({"ENABLE_TOOL_SEARCH": "false"}, tier="all")
     assert off and "every ddflow schema" in off and "core" in off
     assert WM.deferral_note({"ENABLE_TOOL_SEARCH": "false"}, tier="core") == ""
+    assert WM.deferral_note({"ENABLE_TOOL_SEARCH": "false"}, tier="standard") == ""
     assert WM.deferral_note({}, tier="all") == "", "default hosts defer; nothing to say"
     auto = WM.deferral_note({"ENABLE_TOOL_SEARCH": "auto:90"}, tier="all")
     assert auto, "auto:90 sets the threshold above ddflow's size: nothing deferred (measured)"
@@ -99,9 +100,18 @@ def test_the_doctor_note_says_when_a_host_would_send_every_schema():
 
 def test_doctor_carries_the_note(repo, monkeypatch):
     run_cli(repo, "init")
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)  # the tier under test is the default, all
     monkeypatch.setenv("ENABLE_TOOL_SEARCH", "false")
     _code, out, _ = run_cli(repo, "doctor", "--json")
     assert any("every ddflow schema" in n for n in json.loads(out)["notes"])
     monkeypatch.delenv("ENABLE_TOOL_SEARCH")
     _code, out, _ = run_cli(repo, "doctor", "--json")
     assert not any("every ddflow schema" in n for n in json.loads(out)["notes"])
+
+
+def test_the_recipe_names_the_tier_the_file_carries(repo):
+    assert "`standard` tier" in WM.recipe(tier="standard")
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "mcp.worker_tools", "standard")
+    _code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert "`standard` tier" in out and "`core` tier" not in out
