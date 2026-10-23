@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from ...core import globs
 from .evidence import worktree_entries
 
 #: The evidence field a review round carries.
@@ -39,3 +40,12 @@ def snapshot_differing(
     if now is None:
         return None
     return sorted(p for p in recorded.keys() | now.keys() if recorded.get(p) != now.get(p))
+
+
+def ignorable(path: str, recorded: dict[str, str] | None, ignore: Iterable[str]) -> bool:
+    """Is ``path``'s change since the round not new work? One the round did not review
+    (it is not in its ``recorded`` snapshot) that matches ``ignore``
+    (`[review].triage_ignore_globs`: tests answering a finding). A path the round reviewed
+    is never ignored: its content was judged, whatever it is called. The one predicate for
+    triage, `sync` and `complete`, so the three cannot drift."""
+    return path not in (recorded or {}) and any(globs.match(path, g) for g in ignore)

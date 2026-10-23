@@ -753,6 +753,13 @@
           so in pr mode it travels in the release request. A trunk or maintenance cut
           with `integration = "pr"` is refused: the bump would have no request to
           travel in. Empty (default): nothing is bumped.
+      gates.max_run_timeout_s = 21600   [default]
+          The longest a single `gate run <id> <gate> --timeout N` (or the MCP
+          `timeout` parameter, or `ddflow ci run --timeout N`) may ask a command gate
+          to run, in seconds. A run needs the override on a loaded host without anyone
+          editing the shared `[ci].timeout_s` / gate timeout; a larger request is
+          refused (exit 3) naming this knob, so one agent cannot hold the host suite
+          lock for days.
       gates.task_pipeline = ['research', 'rules', 'implement', 'rubber_duck', 'critic', 'standards', 'unit_tests', 'bug_hunt', 'dedupe', 'merge']   [default]
           Ordered gate ids every TASK passes through. Reorder or trim per project; ids
           must exist in [gate.*] definitions.
@@ -997,6 +1004,25 @@
       session.brief_lesson_count = 4   [default]
           How many task-relevant lessons the brief carries. Retrieved by relevance to
           the active task text, not by recency.
+      session.context_budget_tokens = 40000   [default]
+          Ceiling, in tokens, on what ddflow itself costs a session before its first
+          turn: the MCP instructions, `tools/list` for the active `[mcp].tools`
+          profile and the session brief (what the SessionStart hook prints) plus
+          `start_notice_reserve_tokens` for the one-line upgrade notice, which cannot
+          be counted without using it up. `ddflow doctor` prints `session start cost:
+          N tokens (budget M)` and says OVER when it is past;
+          tests/test_session_start_budget.py ratchets the same measurement. 0 sets no
+          budget (the cost is still shown).
+      session.start_notice_reserve_tokens = 100   [default]
+          Tokens `ddflow doctor` adds to the session start cost for the one-line
+          upgrade or release notice that leads the first session after an upgrade.
+          Measuring cannot count a pending notice without using it up (it is said once
+          per version), so this reserve stands for it: the budget then holds even in
+          that session. 0 reserves nothing.
+      session.start_bytes_per_token = 4.0   [default]
+          Bytes (UTF-8) to a token in the session start cost estimate
+          (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs
+          nearer three, so lower it to be stricter. No tokenizer is imported.
       session.first_call = True   [default]
           Append a compact session start to the first MCP tool call of a connection,
           for agents whose hooks and instructions do not deliver one. Off when a
@@ -1264,10 +1290,11 @@
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
-          --no-task` files no task (a bug fixed in the same commit); `bug file-tasks`
-          files one for every open bug that has none. When the item named is itself an
-          OPEN bug-fix task, that task is the fix and nothing new is filed. `false`:
-          bugs are flat records, as before.
+          --no-task` files no task (a bug fixed in the same commit); `bug file-tasks
+          <id>` files the task of one open bug that has none (`--all`: every such bug;
+          with neither it only previews). When the item named is itself an OPEN bug-
+          fix task, that task is the fix and nothing new is filed. `false`: bugs are
+          flat records, as before.
       bugs.phase = 'bugs'   [default]
           The standing phase (default `bugs`) every fix task is filed under, whatever
           item the bug names. Made on first use, with the title `Bugs`.
@@ -1989,6 +2016,17 @@
           Change it for the project (`ddflow config review.combined_under_lines 100`),
           for this machine (add --local), per run
           (DDFLOW_REVIEW_COMBINED_UNDER_LINES), or over MCP with `ddflow_configure`.
+      review.triage_ignore_globs = ['tests/**', '**/test_*.py', '**/*_test.py', '**/conftest.py']   [default]
+          Globs of files whose change after a review round does not void a triage pass
+          (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit,
+          B4ab42dbedb): answering a refuted finding with a regression test used to
+          change the item's reviewed paths, so the settled round 'held other content
+          now' and cost another round. A path that moved since the round and matches
+          one of these is not new work; any other moved path still blocks the pass and
+          is named. Default: tests and conftest files. An empty list makes every moved
+          path block. Change it for the project (`ddflow config
+          review.triage_ignore_globs ...`), for this machine (add --local), or over
+          MCP with `ddflow_configure`.
       review.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]
           Globs of generated and pinned files (golden snapshots, transcripts,
           lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a
@@ -2394,6 +2432,24 @@
           How many hours an operator grant stays usable after it is added (default 48;
           0 = never expires). An expired grant is still listed, marked expired, and a
           review no longer cites it.
+      approvals.use_ttl_s = 3600   [default]
+          How many seconds after a person answered an approval it can still be spent
+          (default 3600, one hour; D-RA-Q9). A later use is refused and the agent
+          files a new request. The window to ANSWER is `[agent].ask_ttl_s`.
+      approvals.auto_request = True   [default]
+          When true (default; D-RA-Q12), a gated command refused to an agent files the
+          approval request itself and names its id in the refusal, so the operator
+          sees exactly what to approve. When false the refusal only names the route
+          and the agent files the request.
+      approvals.reason_chars = 300   [default]
+          How many characters of an agent's own reason are shown to the person in an
+          approval request (default 300; the rest is cut with an ellipsis). The reason
+          is quoted as untrusted text and is never part of what is approved.
+      approvals.min_digest_chars = 8   [default]
+          How many leading characters of a request's digest the person types back to
+          approve or deny it (default 8): `ddflow approvals approve ID --digest
+          XXXXXXXX`. It proves they read which request, so it cannot be answered
+          blind.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
@@ -2533,6 +2589,12 @@
           gate evidence (D-agent-test-etiquette).
       ci.min_workers = 1   [default]
           The fewest workers `[ci].workers = auto` may compute, at least 1.
+      ci.suite_min_workers = 8   [default]
+          The fewest workers a run that holds the host-wide full-suite lock gets,
+          however loaded the host (capped by max_workers; critical memory pressure
+          still wins). The lock serialises every agent's full suite, so a holder cut
+          to `-n 1` by the load clamp kept the rest waiting for hours. 1 turns the
+          floor off.
       ci.max_workers = 48   [default]
           The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.max_concurrent_suites = 1   [default]
@@ -2585,21 +2647,21 @@
           `config --set`, `ddflow_configure` and the environment refuse it, and so
           does loading ddflow's own source tree, where the file and the code are one
           commit.
-      ci.always_tests = ['tests/test_constants_ratchet.py', 'tests/test_layering*.py', 'tests/golden/**', 'tests/test_uc_surf_setup_ops_transcript.py', 'tests/test_uc_surf_loop_transcript.py', 'tests/test_readme_*.py', 'tests/test_mcp_tool_budget.py']   [default]
+      ci.always_tests = ['tests/test_constants_ratchet.py', 'tests/test_layering*.py', 'tests/golden/**', 'tests/test_uc_surf_setup_ops_transcript.py', 'tests/test_uc_surf_loop_transcript.py', 'tests/test_readme_*.py', 'tests/test_mcp_tool_budget.py', 'tests/test_mcp_parity.py']   [default]
           Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for
           EVERY item in addition to the tests its change reaches, plus any test file
           declaring `ALWAYS = True` at module level. They are the repo-wide guards and
           pins (the constants ratchet, the layering guard, golden snapshots, the
-          setup-ops and loop transcripts, the README table pins, the tool budget: the
-          ones that have broken main past a selection; measured about 30 s plus the
-          loop transcript's one long test). Left out of the default for their cost,
-          add them when they bite: `tests/test_architecture_guards.py` (18 s),
-          `tests/test_compat*.py`, `tests/test_uc_surf_registry_rule_transcript.py`
-          (37 s): their input is the whole code base, so no import closure can know a
-          change affects them. Recorded in the gate evidence as `always` (count,
-          files) and `always_s` (the seconds they cost); an empty closure still runs
-          the whole suite (which holds them). Empty list: only the selection (and any
-          `ALWAYS = True` file) runs.
+          setup-ops and loop transcripts, the README table pins, the tool budget,
+          CLI/MCP parity: the ones that have broken main past a selection; measured
+          about 30 s plus the loop transcript's one long test). Left out of the
+          default for their cost, add them when they bite:
+          `tests/test_architecture_guards.py` (18 s), `tests/test_compat*.py`,
+          `tests/test_uc_surf_registry_rule_transcript.py` (37 s): their input is the
+          whole code base, so no import closure can know a change affects them.
+          Recorded in the gate evidence as `always` (count, files) and `always_s` (the
+          seconds they cost); an empty closure still runs the whole suite (which holds
+          them). Empty list: only the selection (and any `ALWAYS = True` file) runs.
       prompts.review_system = ''   [default]
           Path to the reviewer's system prompt template, replacing the shipped one.
           `ddflow prompts eject` writes an editable copy into .ddflow/prompts/ to

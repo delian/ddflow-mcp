@@ -41,6 +41,8 @@ from ..services import prompts as P
 from ..services import roborev as RR
 from ..services import testscope as TSC
 from ..services import testselect as TS
+from ..services.approvals import gate_skip as GS
+from ..services.approvals.consume import operator_gate
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import failed_gate as OC
@@ -115,7 +117,7 @@ def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     return swept
 
 
-def _resolve(repo: Path, item: str, gate: str, agent: str):
+def _resolve(repo: Path, item: str, gate: str, agent: str, timeout_s: int | None = None):
     """(log, cfg, state, item, gatedef) or an Outcome explaining why not.
 
     One place for the two existence checks every gate operation needs. `approve` once
@@ -133,7 +135,10 @@ def _resolve(repo: Path, item: str, gate: str, agent: str):
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("gate", f"no such item {item!r}{gone}", id=item, gate=gate)
-    return log, cfg, st, it, known.get(gate), known
+    gdef = _with_run_timeout(cfg, known.get(gate), timeout_s, item, gate)
+    if isinstance(gdef, O.Outcome):
+        return gdef
+    return log, cfg, st, it, gdef, known
 
 
 def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
@@ -577,8 +582,13 @@ def run(
     rerun_failed: bool = False,
     force: bool = False,
     reason: str = "",
+    timeout_s: int | None = None,
 ) -> O.Outcome:
     """Execute a command gate and record what it said.
+
+    ``timeout_s`` (None: as declared; else 1..max) replaces the gate's own timeout for THIS run, and the ci budget inside
+    it, up to ``[gates].max_run_timeout_s``: nobody edits the shared local config to get a
+    longer run on a loaded host.
 
     Refuses a human gate (nothing to run) and an agent gate (ddflow cannot perform it)
     with exit 2 and the instruction, rather than pretending to have run something.
@@ -586,7 +596,7 @@ def run(
     A worktree gate runs where the item's work is (`item_tree`).
     """
 
-    resolved = _resolve(repo, item, gate, agent)
+    resolved = _resolve(repo, item, gate, agent, timeout_s)
     if isinstance(resolved, O.Outcome):
         return resolved
     log, cfg, st, it, gdef, gates = resolved
@@ -686,6 +696,35 @@ def run(
     if exit_code == O.FAIL:
         return O.failed("gate.run", reason or f"{gate} failed", **data)
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
+    """``gdef`` for one run that may take ``timeout_s`` (None: as declared; else 1..max): its own timeout, and
+    the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
+    outside ``[gates].max_run_timeout_s`` is the refusal instead."""
+    if timeout_s is None or gdef is None:
+        return gdef
+    if not 0 < timeout_s <= cfg.gates.max_run_timeout_s:
+        return O.refused(
+            "gate.run",
+            f"--timeout {timeout_s} is outside 1..{cfg.gates.max_run_timeout_s} seconds "
+            f"([gates].max_run_timeout_s bounds a per-run timeout)",
+            id=item,
+            gate=gate,
+            outcome="",
+        )
+    command = gdef.command or ""
+    if re.match(r"\s*ddflow\s+ci\s+run(\s|$)", command):
+        # Only the part before a `--`: what follows belongs to the test runner.
+        parts = re.split(r"(\s--(?:\s|$))", command, maxsplit=1)
+        head, sep, tail = parts[0], "".join(parts[1:2]), "".join(parts[2:])
+        head = re.sub(r"\s--timeout(?:=|\s+)\d+", "", head)
+        # Right after the verb, not at the end: after a `--` it would reach the test runner.
+        head = re.sub(
+            r"^(\s*ddflow\s+ci\s+run)(?=\s|$)", rf"\1 --timeout {timeout_s}", head, count=1
+        )
+        command = head + sep + tail
+    return replace(gdef, timeout_s=timeout_s, command=command)
 
 
 def _guarded(log, cfg, repo, agent, it, item, gate, **run):
@@ -849,6 +888,8 @@ class Evidence:
     model_is_reviewer: bool = False
     #: Which tests a `ci run` took (`ci_scope.Plan.evidence`): recorded as `ci_scope`.
     ci_scope: dict[str, Any] | None = None
+    #: Seconds the run queued for the host suite lock (B1d51fb9da1): recorded as `waited_s`.
+    waited_s: float | None = None
     #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
     #: an MCP argument: it is what tells that record from an agent's typed `--command`.
     ran_by: str = ""
@@ -1053,11 +1094,12 @@ def _docs_gate_export(
 
 
 def _evidence_fields(
-    evidence: Evidence, item: str, gate: str
+    evidence: Evidence, item: str, gate: str, approval: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], O.Outcome | None]:
     """The event's evidence from what the caller supplied, or the failure (an unreadable
-    ``--output-file``)."""
-    ev: dict[str, Any] = {}
+    ``--output-file``). ``approval`` is the stamp of an operator approval spent on this
+    override (who approved, by which channel and level, which digest)."""
+    ev: dict[str, Any] = {"approval": approval} if approval else {}
     if evidence.note:
         ev["note"] = evidence.note
     if evidence.command:
@@ -1068,6 +1110,8 @@ def _evidence_fields(
         ev["model"] = evidence.model
     if evidence.ci_scope:
         ev["ci_scope"] = evidence.ci_scope
+    if evidence.waited_s is not None:
+        ev["waited_s"] = evidence.waited_s
     if evidence.ran_by:
         ev["ran_by"] = evidence.ran_by
     if evidence.output_file:
@@ -1083,39 +1127,64 @@ def _evidence_fields(
     return ev, None
 
 
+def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
+    """The question `_agent_skip_refusal` asks the approvals engine when an agent sets aside a
+    failed review: ``how`` is (skip?, the outcome word being hand-recorded)."""
+    skip, outcome = how
+    word = "skipped" if skip else outcome
+
+    def ask(why: str):
+        canon = GS.canon_for(it, gate, item, why, log.agent_id, word)
+        return operator_gate(log, cfg, canon, approval_id=approval, reason=reason)
+
+    return ask
+
+
 def _agent_skip_refusal(
-    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool, required=()
-) -> O.Outcome | None:
+    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool, required=(), gated=None
+) -> tuple[O.Outcome | None, dict]:
     """D-failed-review-gate (B85841c0846): replacing the FAILED outcome of a review gate whose
     confirmed findings were never re-reviewed -- by a skip, or a hand-recorded pass,
     unavailable or partial -- is the operator's override. An agent (`--agent`, DDFLOW_AGENT,
     a harness's shell) is refused; the person records the reason. A review that really runs
     (`ddflow review`, a triage) does not come through here.
 
+    ``gated`` (RA-consume): a callable taking the reason the gate is unresolved and returning
+    the approval decision (`approvals.consume.Decision`). An agent with a person's approval of
+    exactly this override is let through and the approval's stamp is returned for the record.
+
     DX-skip-failed-gate: a skip of any other REQUIRED gate that is FAILED is refused for
     everyone (`skip_over_failure_refusal`); a failure is recorded as one, or as unavailable."""
     if hard_skip and not (gdef and gdef.reviewer):
         if why := OC.skip_over_failure_refusal(it, gate, item, required):
-            return O.refused("gate.record", why, id=item, gate=gate, outcome="")
+            return O.refused("gate.record", why, id=item, gate=gate, outcome=""), {}
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
-        return None
+        return None, {}
     why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
-        return None
-    return O.refused(
-        "gate.record",
-        f"{gate} failed ({why}); setting it aside past those findings is the operator's "
-        f"override, and this call is an agent's ({marker}). Fix and re-run "
-        f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
-        f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
-        id=item,
-        gate=gate,
-        outcome="",
+        return None, {}
+    route = ""
+    if gated is not None:
+        decision = gated(why)
+        if decision.ok:
+            return None, decision.stamp
+        route = " " + decision.message
+    return (
+        O.refused(
+            "gate.record",
+            f"{gate} failed ({why}); setting it aside past those findings is the operator's "
+            f"override, and this call is an agent's ({marker}). Fix and re-run "
+            f"`ddflow review {item} --gate {gate}`, or get the operator's approval.{route}",
+            id=item,
+            gate=gate,
+            outcome="",
+        ),
+        {},
     )
 
 
-def record(
+def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
     repo: Path,
     item: str,
     gate: str,
@@ -1127,6 +1196,7 @@ def record(
     agent: str = "",
     called_from: Path | None = None,
     force: bool = False,
+    approval: str = "",
 ) -> O.Outcome:
     """Record an outcome an agent produced, or skip the gate on the record.
 
@@ -1143,7 +1213,7 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    refused = _agent_skip_refusal(
+    refused, approval_stamp = _agent_skip_refusal(
         it,
         gdef,
         gate,
@@ -1152,6 +1222,7 @@ def record(
         skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
+        gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
     if refused is not None:
         return refused
@@ -1174,7 +1245,7 @@ def record(
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
 
     result = "skipped" if skip else outcome
-    ev, bad = _evidence_fields(evidence, item, gate)
+    ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)
     if bad is not None:
         return bad
 

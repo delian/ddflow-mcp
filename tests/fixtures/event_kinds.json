@@ -30,10 +30,21 @@
     "digest": ["str"],
     "human": ["bool"],
     "id": ["str"],
+    "level": ["int"],
     "outcome": ["str"],
     "role": ["str"],
     "source": ["str"],
     "via": ["str"]
+   },
+   "v": 1
+  },
+  "ask.consumed": {
+   "fields": {
+    "by": ["str"],
+    "digest": ["str"],
+    "effect": ["str"],
+    "id": ["str"],
+    "verb": ["str"]
    },
    "v": 1
   },
@@ -47,21 +58,28 @@
   "ask.requested": {
    "fields": {
     "bot_answerable": ["bool"],
+    "canon": ["str"],
     "code_hash": ["str"],
     "digest": ["str"],
     "expires_at": ["str"],
     "id": ["str"],
+    "min_level": ["int"],
     "options": ["list"],
     "subject": ["str"],
     "text": ["str"],
-    "type": ["str"]
+    "tier": ["str"],
+    "type": ["str"],
+    "use_ttl_s": ["int"],
+    "uses": ["int"],
+    "verb": ["str"]
    },
    "v": 1
   },
   "ask.withdrawn": {
    "fields": {
     "by": ["str"],
-    "id": ["str"]
+    "id": ["str"],
+    "revoked": ["bool"]
    },
    "v": 1
   },

@@ -11,6 +11,13 @@ from ..context import Ctx
 from ..render import emit_json
 
 
+def _print_markers(d: dict) -> None:
+    """The wait and the scope lines, for the ci gate that records them from the output."""
+    for line in (d.get("wait_line"), d.get("scope_line")):
+        if line:
+            print(line)
+
+
 def cmd_ci(a, c: Ctx) -> int:
     if a.verb == "record":
         if not a.result:
@@ -49,7 +56,8 @@ def cmd_ci(a, c: Ctx) -> int:
         a.ref or AR.held_item(c.repo, c.log.agent_id, where) or SS.head_here_or_repo(c.repo, where)
     )
     out = AR.run(c.repo, ref=ref, agent=c.log.agent_id, base=a.base, command=a.command, called_from=where,
-                 full=bool(getattr(a, "full", False)))  # fmt: skip
+                 full=bool(getattr(a, "full", False)),
+                timeout_s=getattr(a, "timeout", None))  # fmt: skip
     if c.json:
         emit_json(out.body(""))
         return out.exit
@@ -62,8 +70,7 @@ def cmd_ci(a, c: Ctx) -> int:
             f"  [{'ok  ' if ch['ok'] else 'FAIL'}] {ch['id']}"
             + (f"  {ch['detail']}" if ch["detail"] else "")
         )
-    if d.get("scope_line"):
-        print(d["scope_line"])  # the scope, for the ci gate that records it from the output
+    _print_markers(d)
     if out.exit == 0:
         print("ci: passed")
         return 0

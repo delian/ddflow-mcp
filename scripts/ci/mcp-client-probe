@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Per-client list_changed probe (SU-client-probe-ci): runs the stdlib probe server under an
+installed agent CLI and prints that client's row of the table in
+docs/ddflow/research/mcp-client-matrix.md as JSON (SU-probe-client-cli will write it into the
+client table).
+
+    scripts/ci/mcp-client-probe row HARNESS [--model M] [--timeout S]
+    scripts/ci/mcp-client-probe matrix [--timeout S]     # every harness we have a cell for
+    scripts/ci/mcp-client-probe analyze LOGFILE          # classify a probe log by hand
+
+A row is JSON: {"harness", "list_changed": honours|ignores|unknown|unavailable, "client",
+"revision", "probed_discover", "listen", "reason"?}. Exit 0 = concluded, 1 = the CLI timed out or failed AFTER
+the probe concluded, 2 = nothing concluded (could not run (CLI or recipe missing, or the model never called the probe):
+`unavailable` is a coverage gap, never a pass. Only dummy prompts are sent, with a cheap model.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from ddflow.mcpshim.probe_server import analyze_log, empty_row  # noqa: E402
+
+PROBE = ROOT / "ddflow" / "mcpshim" / "probe_server.py"
+PROMPT = "call lc bump, then call the new lc tool that appears and report its output, or say NONE"
+
+#: Harnesses whose recipe was run by hand (VERIFIED) -- the others have a cell to settle.
+RECIPES: dict[str, dict] = {
+    "claude": {
+        "bin": "claude",
+        "config": "mcp.json",
+        "shape": "mcpServers",
+        "argv": [
+            "{bin}",
+            "-p",
+            "--strict-mcp-config",
+            "--mcp-config",
+            "{config}",
+            "--allowedTools",
+            "mcp__lc",
+            "--model",
+            "{model}",
+            "{prompt}",
+        ],
+        "model": "haiku",
+        "prompt": PROMPT,
+        "warn": [],
+    },
+    "kilo": {
+        "bin": "kilo",
+        "config": "kilo.json",
+        "shape": "opencode",
+        "argv": ["{bin}", "run", "-m", "{model}", "{prompt}"],
+        "model": "google/gemini-2.5-flash",
+        "prompt": PROMPT,
+        "warn": ["kilo run uploads a session share URL (app.kilo.ai/s/...) by default"],
+    },
+}
+#: Cells still UNKNOWN in the matrix: no recipe has been verified for them yet.
+PENDING = (
+    "codex",
+    "gemini",
+    "qwen",
+    "kimi",
+    "opencode",
+    "cursor",
+    "copilot",
+    "antigravity",
+    "grok-build",
+    "windsurf",
+    "amp",
+    "droid",
+)
+
+
+def _unavailable(harness: str, reason: str, seen: dict | None = None) -> dict:
+    """An unavailable row; `seen` is whatever the probe log already showed."""
+    row = {"harness": harness, **empty_row(), **(seen or {})}
+    return {**row, "list_changed": "unavailable", "reason": reason}
+
+
+def _config(rec: dict, log: Path) -> dict:
+    cmd = [sys.executable, str(PROBE), str(log)]
+    if rec["shape"] == "opencode":
+        return {"mcp": {"lc": {"type": "local", "command": cmd}}}
+    return {"mcpServers": {"lc": {"command": cmd[0], "args": cmd[1:]}}}
+
+
+def probe_row(harness: str, model: str | None = None, timeout: float = 180.0) -> tuple[dict, int]:
+    rec = RECIPES.get(harness)
+    if rec is None:
+        return _unavailable(harness, "no recipe verified for this harness yet"), 2
+    found = shutil.which(rec["bin"])
+    if found is None:
+        return _unavailable(harness, f"{rec['bin']} not on PATH"), 2
+    binary = os.path.abspath(found)  # the CLI runs in another directory
+    for w in rec["warn"]:
+        print(f"warning: {w}", file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix="mcp-probe-") as d:
+        work, log = Path(d), Path(d) / "probe.log"
+        cfg = work / rec["config"]
+        cfg.write_text(json.dumps(_config(rec, log)))
+        argv = [
+            a.format(bin=binary, config=cfg, model=model or rec["model"], prompt=rec["prompt"])
+            for a in rec["argv"]
+        ]
+        timed_out = False
+        try:
+            done = subprocess.run(argv, cwd=work, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+        text = log.read_text() if log.exists() else ""
+    row = {"harness": harness, **analyze_log(text)}
+    if timed_out:
+        # the log may already hold the answer: keep it, and say the CLI did not finish
+        row["reason"] = f"timed out after {timeout:g}s"
+        if row["list_changed"] == "unknown":
+            return _unavailable(harness, row["reason"], row), 2
+        return row, 1
+    if row["list_changed"] == "unknown" and done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:]
+        return _unavailable(
+            harness,
+            f"exit {done.returncode} before the probe ran: {tail[0] if tail else ''}",
+            row,
+        ), 2
+    if row["list_changed"] == "unknown":
+        reason = (
+            f"exit {done.returncode}: the probe never sent list_changed "
+            "(missing key, or the model did not call bump)"
+        )
+        return _unavailable(harness, reason, row), 2
+    if done.returncode != 0:
+        row["reason"] = f"exit {done.returncode} after the probe concluded"
+        return row, 1
+    return row, 0
+
+
+def _worse(a: int, b: int) -> int:
+    """The exit code that says more: a failure (1) outranks could-not-run (2) outranks 0."""
+    rank = {0: 0, 2: 1, 1: 2}
+    return a if rank[a] >= rank[b] else b
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("row")
+    r.add_argument("harness")
+    r.add_argument("--model")
+    r.add_argument("--timeout", type=float, default=180.0)
+    m = sub.add_parser("matrix")
+    m.add_argument("--timeout", type=float, default=180.0)
+    a = sub.add_parser("analyze")
+    a.add_argument("logfile")
+    args = ap.parse_args(argv)
+    if args.cmd == "analyze":
+        row = analyze_log(Path(args.logfile).read_text())
+        print(json.dumps(row))
+        return 2 if row["list_changed"] == "unknown" else 0
+    if args.cmd == "row":
+        row, code = probe_row(args.harness, args.model, args.timeout)
+        print(json.dumps(row))
+        return code
+    rows, worst = {}, 0
+    for h in (*RECIPES, *PENDING):
+        rows[h], code = probe_row(h, timeout=args.timeout)
+        worst = _worse(worst, code)
+    print(json.dumps(rows, indent=1))
+    return worst
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

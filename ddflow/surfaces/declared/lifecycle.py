@@ -430,6 +430,7 @@ COMMANDS: tuple[Command, ...] = (
             rerun_failed=bool(a.get("rerun_failed")),
             force=bool(a.get("force")),
             reason=a.get("reason", "") or "",
+            timeout_s=a.get("timeout"),
         ),
         payload=("gate", "outcome", "evidence"),
         render=L.run_text,
@@ -444,6 +445,12 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 cli_only=True,
                 cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
+            Param(
+                "timeout",
+                type="integer",
+                help="Seconds this run may take (at most [gates].max_run_timeout_s).",
+                cli_help="seconds THIS run may take instead of the gate's own timeout (and, for ci, [ci].timeout_s); at most [gates].max_run_timeout_s",
             ),
             Param(
                 "rerun_failed",
@@ -503,6 +510,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
             called_from=called_from,
             force=bool(a.get("force")),
+            approval=a.get("approval", "") or "",
         ),
         payload=("gate", "outcome", "warning"),
         render=L.record_text,
@@ -567,6 +575,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "approval",
+                help="An operator approval id (Q...) for this exact override; a refusal names it.",
+                cli_help="the id of the operator's approval of this exact override: a refused call files the request and names the id; a person answers it with `ddflow approvals approve`",
+                default="",
+            ),
+            Param(
                 "force",
                 type="boolean",
                 cli_only=True,
@@ -585,6 +599,7 @@ COMMANDS: tuple[Command, ...] = (
             "command",
             "exit_code",
             "output_file",
+            "approval",
         ),
     ),
     Command(
@@ -615,6 +630,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             agent=agent,
             force=bool(a.get("force")),
+            approval=a.get("approval", "") or "",
         ),
         payload=("gate", "outcome"),
         render=L.record_text,
@@ -648,6 +664,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_only=True,
             ),
             Param("output_file", default="", cli_only=True),
+            Param(
+                "approval",
+                help="An operator approval id (Q...) for this exact override; a refusal names it.",
+                cli_help="the id of the operator's approval of this exact override: a refused call files the request and names the id; a person answers it with `ddflow approvals approve`",
+                default="",
+            ),
             Param(
                 "force",
                 type="boolean",

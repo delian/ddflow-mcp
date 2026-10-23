@@ -33,6 +33,7 @@ from .config_sections.agent import (  # noqa: F401
     family_for,
     router_set,
 )
+from .config_sections.approvals import ApprovalsConfig
 from .config_sections.bugs import BugsConfig
 from .config_sections.cadence import CadenceConfig
 from .config_sections.chore import ChoreConfig
@@ -221,6 +222,7 @@ class Config:
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
+    approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
