@@ -29,6 +29,7 @@ from ..config import family_for
 from ..core import blobref as B
 from ..core import clock
 from ..core import outcome as O
+from ..core.bookkeeping import EVENTS_EXCLUDE
 from ..core.digest import content_digest
 from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
@@ -59,6 +60,13 @@ from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
 from .review_findings import _rows as _numbered_findings
 from .review_supersede import carry, round_evidence, superseded_digests
+
+#: What no review diff carries: other agents' event shards (they reach a branch through the
+#: base's own commits) and gitlinks (a nested repository added by accident), neither of which
+#: is the item's work (B-delta-review-output-mixed-with-other-agents).
+_NOISE_FLAGS = ("--ignore-submodules=all",)
+_NOISE_PATHSPEC = ("--", ".", *EVENTS_EXCLUDE)
+_NOISE_PREFIXES = (".ddflow/events/",)
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -141,7 +149,7 @@ def diff_for(
             f"on a branch, pass --branch <branch> or run review from its worktree",
             exclude=SELF_MANAGED,
         )
-    d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
+    d = W.git(repo, "diff", "--no-color", *_NOISE_FLAGS, f"{base}...{branch}", *_NOISE_PATHSPEC)
     how = f"{base}...{branch} ({chosen})"
     if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
         return "", f"{how} could not be read: {d.err or d.out}"
@@ -152,7 +160,7 @@ def _tree_diff(wt_path: Path, base: str) -> tuple[str, str]:
     """(diff, how) of an item's worktree: the branch's commits plus TRACKED edits. An
     untracked file is a draft nobody committed (B2bf4d38cc1): it is named, not reviewed."""
     try:
-        diff = W.capture_diff(wt_path, base, include_untracked=False)
+        diff = W.capture_diff(wt_path, base, include_untracked=False, exclude=_NOISE_PREFIXES)
     except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
         return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
     how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
@@ -1767,7 +1775,7 @@ def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     Raises RuntimeError when a diff cannot be produced: never "nothing changed"."""
     start = _delta_start(wt, "HEAD", head, base)
     # `start..HEAD` plus the tracked edits: what a review sent, with a git failure kept.
-    return W.capture_diff(wt, include_untracked=False, since=start)
+    return W.capture_diff(wt, include_untracked=False, since=start, exclude=_NOISE_PREFIXES)
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
@@ -1775,7 +1783,7 @@ def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
     delta that could not run is never "nothing changed"."""
     start = _delta_start(repo, tip, head, base)
     rng = (f"{head}...{tip}",) if start == head else (start, tip)
-    d = W.git(repo, "diff", "--no-color", *rng)
+    d = W.git(repo, "diff", "--no-color", *_NOISE_FLAGS, *rng, *_NOISE_PATHSPEC)
     if not d.ok:  # never a wider range than asked: that would send the base's work
         raise RuntimeError(f"git diff {' '.join(rng)} failed: {d.err or d.out}")
     return (d.out + "\n") if d.out else ""
