@@ -678,3 +678,15 @@ def test_output_bounds_patterns_and_unknown_keywords_are_checked_like_input_ones
 def test_a_missing_schema_means_no_restriction_not_accepts_nothing():
     assert D.schema_problems(None, {}) == []
     assert D.schema_problems({}, None) == []
+
+
+def test_the_facade_surface_does_not_depend_on_the_servers_own_tier(tmp_path, monkeypatch):
+    from ddflow.surfaces import mcp
+    from ddflow.surfaces.mcp import Server
+
+    spec = next(iter(mcp.TOOLS.values()))
+    for name in D.FACADE_TOOLS:
+        monkeypatch.setitem(mcp.TOOLS, name, spec)
+    srv = Server(_init_repo(tmp_path / "r"))
+    srv.tier = "core"
+    assert {t["name"] for t in D.live_surfaces(srv)["facade"]["tools"]} == set(D.FACADE_TOOLS)
