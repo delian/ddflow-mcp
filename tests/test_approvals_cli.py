@@ -174,3 +174,17 @@ def test_no_mcp_tool_carries_the_approvals_verbs():
 
     assert all(c.tool == "" for c in D.COMMANDS)
     assert registry is not None
+
+
+def test_the_answer_api_refuses_an_agent_without_touching_the_repo(tmp_path):
+    from ddflow.api import approvals_answer as AA
+
+    nowhere = tmp_path / "no" / "such" / "repo"
+    for out in (
+        AA.approvals_approve(nowhere, "Q1", digest="abcdefgh", agent="bot"),
+        AA.approvals_deny(nowhere, "Q1", digest="abcdefgh", agent="bot"),
+        AA.approvals_revoke(nowhere, "Q1", agent="bot"),
+    ):
+        assert out.exit == 3 and "person's act" in out.reason
+    assert AA.digest_chars(nowhere, "bot") == 0
+    assert not nowhere.exists()
