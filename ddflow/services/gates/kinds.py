@@ -181,6 +181,13 @@ def _filled(value: Any) -> bool:
     return isinstance(value, str | int | float) and str(value).strip().lower() not in BOILERPLATE
 
 
+def bare(evidence: Mapping[str, Any] | None) -> bool:
+    """Is a pass carrying ``evidence`` bare? Nothing the caller observed: no entry, or only
+    `reviewed_paths`, which ddflow measures itself for a hand-recorded agent gate
+    (`handrecord`) and which says nothing about what was done."""
+    return not any(k != "reviewed_paths" for k in evidence or {})
+
+
 def evidence_problems(
     gdef: Any,
     evidence: Mapping[str, Any],
