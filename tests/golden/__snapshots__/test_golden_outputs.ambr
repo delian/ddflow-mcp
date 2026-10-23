@@ -1013,6 +1013,18 @@
           N tokens (budget M)` and says OVER when it is past;
           tests/test_session_start_budget.py ratchets the same measurement. 0 sets no
           budget (the cost is still shown).
+      session.context_budget = {}   [default]
+          Start budgets per agent type, beside the global `context_budget_tokens`: a
+          table from `global` or an agent type (the harness ids of `ddflow harness
+          list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens,
+          e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target
+          is managed separately. A session's effective budget is the smaller of the
+          global and its type's; `global` here is another spelling of
+          `context_budget_tokens` (set both and the smaller applies, whatever the
+          layer order); a type left out inherits the global; 0 sets no ceiling AT THAT
+          LEVEL (a type at 0 leaves the global in force). `ddflow doctor` reports the
+          cost against each configured type. Layers merge key by key (the local layer
+          wins).
       session.start_notice_reserve_tokens = 100   [default]
           Tokens `ddflow doctor` adds to the session start cost for the one-line
           upgrade or release notice that leads the first session after an upgrade.
