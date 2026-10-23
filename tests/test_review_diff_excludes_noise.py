@@ -62,3 +62,49 @@ def test_a_registered_submodules_pointer_change_is_still_reviewed(tmp_path):
     diff = RV._delta_of_branch(r, tip, head, "main")
     assert "diff --git a/lib b/lib" in diff and f"+Subproject commit {head}" in diff, diff
     assert "tmp.cDDAI7SLqb" not in diff, diff
+
+
+def test_a_submodule_whose_name_differs_from_its_path_is_registered_by_its_path(tmp_path):
+    r, head, tip = _branch_with_noise(tmp_path)
+    (r / ".gitmodules").write_text(
+        '[submodule "vendor-lib"]\n\tpath = vendor/lib\n\turl = ../lib\n'
+    )
+    git(r, "add", ".gitmodules")
+    git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},vendor/lib")
+    git(r, "commit", "-qm", "register vendor/lib")
+    diff = RV._delta_of_branch(r, tip, head, "main")
+    assert "diff --git a/vendor/lib b/vendor/lib" in diff and "tmp.cDDAI7SLqb" not in diff, diff
+
+
+def test_a_submodule_the_branch_deletes_is_still_reviewed(tmp_path):
+    r, head, _tip = _branch_with_noise(tmp_path)
+    (r / ".gitmodules").write_text('[submodule "lib"]\n\tpath = lib\n\turl = ../lib\n')
+    git(r, "add", ".gitmodules")
+    git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},lib")
+    git(r, "commit", "-qm", "register lib")
+    git(r, "checkout", "-q", "-b", "work2")
+    git(r, "rm", "-q", "--cached", "lib")
+    (r / ".gitmodules").write_text("")
+    git(r, "add", ".gitmodules")
+    git(r, "commit", "-qm", "drop lib")
+    diff, _how = RV._tree_diff(r, "work")
+    assert "deleted file mode 160000" in diff and "a/lib" in diff, diff
+
+
+def test_a_file_replaced_by_an_unregistered_gitlink_is_dropped(tmp_path):
+    from ddflow.services.review_noise import without_stray_gitlinks
+
+    diff = (
+        "diff --git a/x b/x\nold mode 100644\nnew mode 160000\nindex 1..2\n"
+        "-Subproject commit a\n+Subproject commit b\n"
+        "diff --git a/ok.py b/ok.py\nindex 1..2 100644\n+x = 1\n"
+    )
+    out = without_stray_gitlinks(diff, set())
+    assert "a/x" not in out and "ok.py" in out, out
+
+
+def test_a_section_with_an_unreadable_quoted_path_is_kept():
+    from ddflow.services.review_noise import without_stray_gitlinks
+
+    diff = 'diff --git "a/caf\\303\\251" "b/caf\\303\\251"\nnew file mode 160000\n+Subproject commit b\n'
+    assert without_stray_gitlinks(diff, set()) == diff
