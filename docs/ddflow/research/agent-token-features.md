@@ -268,11 +268,14 @@ Placement (no parallel structure):
 `[tokens]` keys (each is a value, `none = true`, or absent = not verified; a value may carry the HX-facts-core fact record):
 
 ```
-[tokens.cache]       control = "ttl-env" | "ttl-setting" | "automatic" | "keepalive" | "none"
+[tokens.cache]       control = "ttl-env" | "ttl-setting" | "automatic" | "keepalive" | "harness" | "none"
                      ttl_values = ["5m","1h"]; default_ttl = "5m"
-                     set = {main = <setter>, subagent = <setter>}     # a setter is the launch mechanism below
+                     set = <setter> | {main = <setter>, subagent = <setter>}   # a setter is the launch mechanism below; the table form splits main and subagent
                      headless_ttl_fixed = "5m"                        # Goose: headless forces 5m
+                     ttl_stated = "1h"                                # pass 2: a TTL the vendor states but the user cannot set (control = "harness", Copilot)
+                     observe = "cache_read"                           # pass 2: the [meters].usage_fields name that shows cache reads
 [tokens.window]      set = <setter>  unit = "tokens" | "ratio" | "percent"  min = .. max = ..
+                     tier = <setter>  tier_values = [..]               # pass 2: window tier with a price effect (Copilot --context)
                      threshold = <setter>  unit = ..                  # trigger point when separate from the window
                      default_trigger = "967k" | 0.85 | ...            # documented default
 [tokens.compact]     command = "/compact"  takes_instructions = true | false | (absent)
@@ -284,7 +287,7 @@ Placement (no parallel structure):
 
 A **setter** is one inline table naming how a launcher applies a value, reusing the launch vocabulary of `[headless]`/the launcher (`P-agent-parity.launcher`: env, argv, lane-private file):
 `{env = "NAME", value = "{tokens}"}`, `{argv = ["-c", "model_auto_compact_token_limit={tokens}"]}`, `{file = "kimi.config.toml", key = "loop_control.compaction_trigger_ratio", value = "{ratio}"}`
-(`file` is relative to the lane's private config dir named by `[tokens.lane_dir]`, e.g. `env = "CODEX_HOME"`; absent = no lane-private file is possible and file setters are reported unavailable). Placeholders are `{tokens}`, `{ratio}`, `{percent}`, `{ttl}`, and (pass 2) `{credits}`, `{seconds}`, `{n}`, `{bytes}`, `{tier}`, `{slug}`.
+(`file` is relative to the lane's private config dir named by `[tokens.lane_dir]`, e.g. `env = "CODEX_HOME"`; absent = no lane-private file is possible and file setters are reported unavailable). Placeholders are `{tokens}`, `{ratio}`, `{percent}`, `{ttl}`, and (pass 2) `{credits}`, `{seconds}`, `{n}`, `{bytes}`, `{tier}`, `{slug}`, `{list}` (comma-separated names).
 Validation: unknown key = loader error naming key and file (existing rule); a setter without `[verified]` source is shown as `not verified` by `ddflow harness show` and the launcher refuses to apply it
 (prints `unavailable`, never silently skips). Every value is overridable in config (D-everything-configurable); an operator override records the source `operator`.
 
