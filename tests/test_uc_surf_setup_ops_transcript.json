@@ -224,7 +224,7 @@
   ],
   3,
   "",
-  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval Qbb252e900f requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve Qbb252e900f` from their own terminal (or answers it over a channel they use); then re-run this command with --approval Qbb252e900f. It is single-use, bound to this exact command and its current state, and expires.\n"
+  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval Q505a37517b requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve Q505a37517b` from their own terminal (or answers it over a channel they use); then re-run this command with --approval Q505a37517b. It is single-use, bound to this exact command and its current state, and expires.\n"
  ],
  [
   [
@@ -717,7 +717,7 @@
   ],
   3,
   "",
-  "no reviewer named 'nosuch' (reviewer)\n"
+  "refusing: approving is a person's act, and this command runs under an agent identity (--agent tx). Run it from your own terminal, or ask the operator over chat: where the command takes `--approval`, re-run it with `--approval request` (or the refusal names the request id) and the operator answers in chat.\n"
  ],
  [
   [

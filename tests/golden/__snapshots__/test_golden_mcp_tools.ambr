@@ -559,11 +559,7 @@
           "type": "boolean",
           "description": "Include forgotten memories, with why they were forgotten."
          },
-         "approval": {
-          "type": "string",
-          "description": "An agent: the id of the operator's approval of enabling a locked document (a refusal files the request and names it)."
-         },
-         "as_agent": {
+         "action": {
           "type": "string",
           "enum": [
            "lesson_verify",
