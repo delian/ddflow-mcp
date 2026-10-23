@@ -1882,6 +1882,7 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
         f"the review was terminated by {signame} before a reviewer finished: "
         "nothing was reviewed, which is not a pass"
     )
+    kept: list[str] = []
     if item and gate_names:
         log, cfg, st = _load(repo, args["agent"])
         gates = GD.load_gates(repo, cfg)
@@ -1889,11 +1890,14 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
         for g in gate_names:
             rec = it.gates.get(g) if it else None
             if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
-                continue  # this run already recorded it
+                kept.append(f"{g} = {rec.outcome}")  # this run already recorded it
+                continue
             _record(
                 repo, log, cfg, st, item, g, "unavailable", args["called_from"], gates,
                 reason=reason, evidence={"review_kind": "delta"},
             )  # fmt: skip
+    if kept:
+        reason += f" (already recorded by this run: {', '.join(kept)})"
     return O.nothing(
         "review",
         reason,
