@@ -153,3 +153,14 @@ def test_a_real_timeout_next_to_a_quoted_one_is_the_one_replaced():
     assert out.command == (
         "ddflow ci run --timeout 30 --reason 'x --timeout 5' -- pytest --timeout=9"
     )
+
+
+def test_the_shell_idiom_for_a_single_quote_inside_single_quotes_is_one_word():
+    gate = GateDef(
+        id="ci",
+        title="ci",
+        command="ddflow ci run --reason 'it'\\''s --timeout 5' --timeout 9",
+        timeout_s=1,
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == "ddflow ci run --timeout 30 --reason 'it'\\''s --timeout 5'"
