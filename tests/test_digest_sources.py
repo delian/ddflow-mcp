@@ -45,26 +45,27 @@ def test_operator_rows_have_a_chat_route_and_lead_rows_do_not_pretend():
             assert s.chat == S.LEAD_ONLY
 
 
-def _prefix(command: str) -> str:
-    """The command up to its first placeholder, option or ellipsis: `ddflow gate skip`."""
-    words = []
-    for w in command.split():
-        if w.startswith(("<", "-", ".")):
-            break
-        words.append(w)
-    return " ".join(words)
+def _fixed(command: str) -> list[str]:
+    """The tokens of a command that are not placeholders: verb words and options."""
+    return [w for w in command.split() if not w.startswith("<") and w != "..."]
+
+
+def _subsequence(needle: list[str], hay: list[str]) -> bool:
+    it = iter(hay)
+    return all(w in it for w in needle)
 
 
 def test_commands_are_runnable_ddflow_commands():
     for s in S.SOURCES:
         assert s.command.startswith("ddflow "), s.kind
+        assert "..." not in s.command, s.kind
 
 
 def test_site_commands_appear_in_the_answer_of_their_source():
     cmd = {s.verb: s.command for s in sites.SITES}
     for s in S.SOURCES:
         for v in s.sites:
-            assert s.command.startswith(_prefix(cmd[v])), (s.kind, v)
+            assert _subsequence(_fixed(cmd[v]), _fixed(s.command)), (s.kind, v)
 
 
 def test_red_main_is_urgent_and_by_kind_indexes_all():
