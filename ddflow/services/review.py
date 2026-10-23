@@ -27,6 +27,7 @@ review did not happen, whatever the token count says.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import http.client
 import json
@@ -505,6 +506,19 @@ class ReviewerDispatch:
 
 
 # -- probing ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _cancel_on_error(tokens):
+    """On SIGTERM / Ctrl-C (or any error) end every request in flight before the pool's exit
+    waits for its threads: a killed review hung for as long as the slowest reviewer
+    (Bed9d75dd1c)."""
+    try:
+        yield
+    except BaseException:
+        for token in tokens.values():
+            token.cancel()
+        raise
 
 
 class _Cancel:
@@ -1249,7 +1263,7 @@ def _race(
         return _bounded(rev, system, users[i], min(rev.timeout_s, remaining), tokens[(i, c)], tree)
 
     order = [(i, c) for c in range(hedge) for i in range(n)]
-    with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool:
+    with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool, _cancel_on_error(tokens):
         futures = {pool.submit(attempt, i, c): (i, c) for i, c in order}
         pending = set(futures)
         next_tick = time.time() + tick_s

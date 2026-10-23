@@ -30,6 +30,7 @@
     "digest": ["str"],
     "human": ["bool"],
     "id": ["str"],
+    "level": ["int"],
     "outcome": ["str"],
     "role": ["str"],
     "source": ["str"],
