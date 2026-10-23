@@ -173,12 +173,12 @@ class SessionConfig:
     )
     agent_brief_min_chars: int = knob(
         4000,
-        doc="The floor, in characters, of the launch brief's derived cap: the identity, item, lease, merge and report text is not worth cutting below it.",
+        doc="The floor, in UTF-8 bytes (characters, for ASCII text), of the launch brief's derived cap: the identity, item, lease, merge and report text is not worth cutting below it.",
         check=int_at_least(0),
     )
     agent_brief_lean_chars: int = knob(
         6000,
-        doc="Under this derived cap the launch brief is LEAN: the testing, review, gate and filing sections, the project's own text and the lessons are left out (the gates enforce the rules; one line says where the rest is). 0 never goes lean.",
+        doc="Under this derived cap (UTF-8 bytes) the launch brief is LEAN: the testing, review, gate and filing sections, the project's own text and the lessons are left out (the gates enforce the rules; one line says where the rest is). 0 never goes lean.",
         check=int_at_least(0),
     )
     agent_brief_off: list[str] = knob(
