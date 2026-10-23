@@ -21,7 +21,7 @@ from typing import Any, NamedTuple
 
 from ...config import Config
 from ...core import globs as GL
-from ...core.bookkeeping import is_state
+from ...core.bookkeeping import SELF_MANAGED
 from ...infra import fsio
 from .. import changes as CH
 from .defs import GateDef
@@ -80,8 +80,10 @@ def verify_test_only_fix(
         REGRESSION_PASSES_ON_PREFIX,
         REGRESSION_VERIFIED,
     )
-    # ddflow's own bookkeeping rides in a landing commit (event log, blobs): not part of the fix
-    changed = [p for p in CH.changed_since(tree, base_sha) or [] if not is_state(p)]
+    # ddflow's own bookkeeping rides in a landing commit (event log, blobs, regenerated views):
+    # not part of the fix. None (git could not say) stays "nothing to conclude".
+    listed = CH.changed_since(tree, base_sha)
+    changed = None if listed is None else [p for p in listed if not p.startswith(SELF_MANAGED)]
     globs = list(cfg.lessons.test_file_globs)
     if not changed or not all(_is_test_file(p, globs) for p in changed):
         return None
