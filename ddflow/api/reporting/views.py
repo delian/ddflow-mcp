@@ -155,8 +155,12 @@ def replay(repo: Path, *, out_dir: str = "", verify: bool = False, agent: str = 
     log, cfg, st = _load(repo, agent)
     steps = session.replay(log.read_all())
     problems = session.verify(st, repo, cfg) if verify else []
+    # The live state is the index's, a pure fold of the log: `_load`'s `st` has been adjusted
+    # for other clones' lease clocks (`localize`), so it is not the fold a replay yields.
     broken = (
-        roundtrip.check(log.read_all(), st, from_bytes=log.read_all(snapshot=False))
+        roundtrip.check(
+            log.read_all(), Store(repo, cfg).ensure(log), from_bytes=log.read_all(snapshot=False)
+        )
         if verify
         else []
     )
