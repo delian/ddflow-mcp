@@ -31,7 +31,14 @@ def test_each_tool_offers_what_it_always_did_in_the_order_it_served_it():
         "limit", "tag", "session", "max_bytes", "diff", "check", "write", "path",
     ]  # fmt: skip
     assert list(TOOLS["ddflow_bisect"]["properties"]) == ["victim", "cmd", "candidates", "timeout"]
-    assert list(TOOLS["ddflow_ci"]["properties"]) == ["action", "ref", "base", "command", "full"]
+    assert list(TOOLS["ddflow_ci"]["properties"]) == [
+        "action",
+        "ref",
+        "base",
+        "command",
+        "full",
+        "timeout",
+    ]
     assert list(TOOLS["ddflow_tests"]["properties"]) == ["item", "base"]
     assert list(TOOLS["ddflow_precommit"]["properties"]) == ["ddflow_cmd", "write"]
 
@@ -83,3 +90,8 @@ def test_the_command_line_halves_keep_their_defaults_and_types():
     assert parse("precommit").ddflow_cmd == "ddflow" and parse("precommit", "--write").write
     with pytest.raises(SystemExit):
         parse("bisect", "V")  # --cmd is required
+
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True
