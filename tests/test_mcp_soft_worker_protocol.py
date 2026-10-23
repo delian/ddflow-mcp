@@ -620,3 +620,8 @@ def test_main_returns_1_when_run_dies_before_any_drain(monkeypatch):
     t0 = time.time()
     assert worker.main(["--repo", "."]) == 1
     assert time.time() - t0 < 5, "main must not wait for a drain that will never come"
+
+
+def test_a_hello_with_a_bad_shim_proto_is_refused_by_negotiate_whatever_else_it_carries():
+    frame = WP.decode('{"t":"hello","shim_proto":"bad","worker_proto":1}\n')
+    assert WP.negotiate(frame)["code"] == "bad_frame"
