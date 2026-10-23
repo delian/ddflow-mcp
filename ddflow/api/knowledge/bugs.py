@@ -355,15 +355,32 @@ def _needs_fix_task(st, b, cfg=None) -> bool:
     return state == DONE and b.id not in fixes_of(st, b.fix_task, cfg)
 
 
-def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
+def bug_file_tasks(
+    repo: Path, *, bug_id: str = "", every: bool = True, dry_run: bool = False, agent: str = ""
+) -> O.Outcome:
     """Give every OPEN bug that has no fix task one -- the one-shot upgrade for a log
     written before `bug found` filed them, and the repair for a bug whose `fix_task` names
     an item that is not in the queue (a crash between the two appends of `bug found`) or a
     finished task it was only reported against (`_needs_fix_task`, B8dcbf2f8da). A
     bug whose item is an open bug-fix task is linked to it (``linked``); any other gets
     `fix-<bug>` filed (``filed``), as `bug found` would have. Nothing to do is exit 2.
-    ``dry_run`` reports and writes nothing."""
+    ``dry_run`` reports and writes nothing. ``bug_id`` narrows it to that one bug (an
+    unknown or closed one is a failure; one with a fix task already is nothing to do).
+    Both surfaces pass ``every=False`` unless asked for the bulk form: with neither a bug
+    nor ``every`` this is a preview (``dry_run``, ``preview`` true), because filing tasks for
+    every open bug -- other agents' too -- was what a bare `bug file-tasks` did, and it
+    listed them as if it had not (B-bug-file-tasks-no-id-files-all)."""
     log, cfg, st = _load(repo, agent)
+    preview = not bug_id and not every
+    dry_run = dry_run or preview
+    if bug_id:
+        b = st.bugs.get(bug_id)
+        if b is None:
+            return O.failed("bug.file_tasks", f"no such bug {bug_id!r}", id=bug_id)
+        if not b.open:
+            return O.failed(
+                "bug.file_tasks", f"bug {bug_id} is not open: nothing to file a task for", id=bug_id
+            )
     filed: list[str] = []
     linked: list[str] = []
     tasks: dict[str, str] = {}
@@ -372,7 +389,11 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
-            (b for b in st.bugs.values() if b.open and _needs_fix_task(st, b, cfg)),
+            (
+                b
+                for b in st.bugs.values()
+                if b.open and (not bug_id or b.id == bug_id) and _needs_fix_task(st, b, cfg)
+            ),
             key=lambda b: (b.found_at, b.id),
         )
         for b in todo:
@@ -408,15 +429,24 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     if not filed and not linked:
         return O.nothing(
             "bug.file_tasks",
-            "every open bug already has a fix task",
+            f"{bug_id} already has a fix task"
+            if bug_id
+            else "every open bug already has a fix task",
             filed=[],
             linked=[],
             tasks={},
             links={},
             dry_run=dry_run,
+            preview=preview,
         )
     return O.ok(
-        "bug.file_tasks", filed=filed, linked=linked, tasks=tasks, links=links, dry_run=dry_run
+        "bug.file_tasks",
+        filed=filed,
+        linked=linked,
+        tasks=tasks,
+        links=links,
+        dry_run=dry_run,
+        preview=preview,
     )
 
 

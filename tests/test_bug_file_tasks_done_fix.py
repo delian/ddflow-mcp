@@ -140,7 +140,7 @@ def test_the_cli_names_the_task_a_bug_is_linked_to_and_its_state(repo):
     log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
     log.append("item.completed", "fix-Brep", {"sha": "abc"})
     log.append("item.completed", "fix-Bx", {"sha": "abc"})
-    for dry in (["--dry-run"], []):
+    for dry in (["--dry-run"], ["--all"]):
         code, out, err = run_cli(repo, "bug", "file-tasks", *dry, agent="a")
         assert code == 0, out + err
         assert "Brep -> fix-Brep (done)" in out, out
@@ -173,6 +173,6 @@ def test_json_carries_the_links(repo):
     log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
     log.append("item.completed", "fix-Brep", {"sha": "abc"})
     log.append("item.completed", "fix-Bx", {"sha": "abc"})
-    code, out, err = run_cli(repo, "--json", "bug", "file-tasks", agent="a")
+    code, out, err = run_cli(repo, "--json", "bug", "file-tasks", "--all", agent="a")
     assert code == 0, out + err
     assert json.loads(out)["links"] == {"Brep": {"task": "fix-Brep", "state": "done"}}, out

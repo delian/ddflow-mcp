@@ -7,6 +7,7 @@ own: `ddflow_bug_invalid` with `reopen` serves it.
 
 from __future__ import annotations
 
+from ...core import outcome as O
 from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
@@ -26,6 +27,16 @@ BUG_INVALID_FIELDS = (
     "fix_task_holder",
     "fix_task_tree",
 )
+
+def file_tasks_call(repo, a: dict, agent: str):
+    """`bug file-tasks`: one bug's task (`id`), every bug's (`all`), else a preview."""
+    bug = a.get("id") or ""
+    if bug and a.get("all"):
+        return O.failed("bug.file_tasks", "pass a bug id or --all/all, not both")
+    return _api().bug_file_tasks(
+        repo, bug_id=bug, every=bool(a.get("all")), dry_run=bool(a.get("dry_run")), agent=agent
+    )
+
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -208,15 +219,29 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("bug", "file-tasks"),
-        summary="file a fix task for every open bug that has none (one-shot, after an upgrade)",
+        summary="file the fix task of one open bug that has none (--all: every such bug)",
         tool="ddflow_bug_file_tasks",
-        description="File a fix task for every open bug that has none (one-shot after an upgrade; "
-        "`ddflow_bug_found` files one per bug by default).",
-        call=lambda repo, a, agent: _api().bug_file_tasks(
-            repo, dry_run=bool(a.get("dry_run")), agent=agent
-        ),
-        payload=("filed", "linked", "tasks", "links", "dry_run"),
+        description="File the fix task of ONE open bug that has none (`id`), or of every such "
+        "bug (`all`: one-shot after an upgrade -- other agents' bugs too). With neither it "
+        "only PREVIEWS (`dry_run` true in the answer) and files nothing. "
+        "`ddflow_bug_found` files one per bug by default.",
+        call=lambda repo, a, agent: file_tasks_call(repo, a, agent),
+        payload=("filed", "linked", "tasks", "links", "dry_run", "preview"),
         params=(
+            Param(
+                "id",
+                help="The open bug to file the fix task of.",
+                cli_help="the open bug to file the fix task of (omit to preview; --all files every bug's)",
+                positional=True,
+                nargs="?",
+                default="",
+            ),
+            Param(
+                "all",
+                type="boolean",
+                help="File a fix task for EVERY open bug that has none, other agents' too. Without it and without `id`, only a preview.",
+                cli_help="file a task for every open bug that has none (other agents' too); without it and without an id, only a preview",
+            ),
             Param(
                 "dry_run",
                 type="boolean",
