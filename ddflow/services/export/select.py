@@ -75,6 +75,23 @@ def _approval_route(log, cfg: Config, verb: str, doc: str, state: str, approval:
     return "" if decision.ok else decision.message
 
 
+def _unlock_by_approval(log, cfg: Config, doc: str, lock, why_agent: str, approval: str) -> str:
+    """An agent's enable of a locked document: refused unless it spends the operator's approval
+    (then it counts as the operator's own enable, so ""); anything else passes through."""
+    if not (lock and why_agent):
+        return why_agent
+    state = json.dumps(lock, sort_keys=True)
+    route = _approval_route(log, cfg, "export.unlock", doc, state, approval)
+    if route:
+        raise ExportError(
+            f"{doc} is locked by the operator ({lock.get('by') or '?'}, "
+            f"{str(lock.get('at', ''))[:19]}): an agent cannot enable it without the "
+            f"operator's approval. {route}",
+            EXIT_REFUSED,
+        )
+    return ""
+
+
 def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-only
     repo: Path,
     log: Any,
@@ -98,18 +115,7 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
     R.get(doc)  # unknown kind: refused, listing the kinds
     why_agent = _is_agent(requested_agent, via_mcp)
     lock = _locked(st, doc)
-    if lock and why_agent:
-        route = _approval_route(
-            log, cfg, "export.unlock", doc, json.dumps(lock, sort_keys=True), approval
-        )
-        if route:
-            raise ExportError(
-                f"{doc} is locked by the operator ({lock.get('by') or '?'}, "
-                f"{str(lock.get('at', ''))[:19]}): an agent cannot enable it without the "
-                f"operator's approval. {route}",
-                EXIT_REFUSED,
-            )
-        why_agent = ""  # the operator's approval stands for the operator's own enable
+    why_agent = _unlock_by_approval(log, cfg, doc, lock, why_agent, approval)
     spec = ops.spec_for(cfg, doc, path=path, mode=mode, writing=True)  # mode/kind checks
     try:
         W.safe_target(repo, spec.path)
