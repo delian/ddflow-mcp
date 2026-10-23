@@ -12,6 +12,7 @@ from ...core import progress as PR
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ...core.schedule import critical_path
 from ...infra.store import Store
+from ...services import replay_roundtrip as roundtrip
 from ...services import sessions as session
 from ...services.gates import pipeline_for
 from ...views import markdown as render_md
@@ -147,22 +148,38 @@ def replay(repo: Path, *, out_dir: str = "", verify: bool = False, agent: str = 
 
     `verify` re-resolves every recorded commit: a sha that no longer resolves means the
     reconstruction describes work that is not in the tree, which is the one way this
-    document can be confidently wrong.
+    document can be confidently wrong. It also replays the log from scratch and reports a
+    state that differs from the live one or a record that disappears (D-no-deletion).
     """
 
     log, cfg, st = _load(repo, agent)
     steps = session.replay(log.read_all())
     problems = session.verify(st, repo, cfg) if verify else []
+    # The live state is the index's, a pure fold of the log: `_load`'s `st` has been adjusted
+    # for other clones' lease clocks (`localize`), so it is not the fold a replay yields.
+    broken = (
+        roundtrip.check(
+            log.read_all(), Store(repo, cfg).ensure(log), from_bytes=log.read_all(snapshot=False)
+        )
+        if verify
+        else []
+    )
     if out_dir:
         files = session.bundle(st, steps, Path(out_dir), cfg, project=repo.name)
         text = "wrote:\n" + "\n".join(f"  {f}" for f in files)
         return O.ok(
-            "replay", text=text, files=[str(f) for f in files], problems=problems, verified=verify
+            "replay",
+            text=text,
+            files=[str(f) for f in files],
+            problems=problems,
+            roundtrip=broken,
+            verified=verify,
         )
     return O.ok(
         "replay",
         text=session.render_reconstruction(st, steps, project=repo.name),
         files=[],
         problems=problems,
+        roundtrip=broken,
         verified=verify,
     )
