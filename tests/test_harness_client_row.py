@@ -40,7 +40,9 @@ def test_show_says_ignores_for_an_agent_known_to_ignore_it(repo):
 
 
 def test_show_says_unknown_for_an_agent_with_an_unknown_row(repo):
-    assert "unknown" in line(repo, "antigravity")
+    got = line(repo, "antigravity")
+    assert "list_changed   unknown (reported, antigravity; by name)" in got
+    assert "no client row" not in got
 
 
 def test_show_says_no_client_row_for_an_agent_without_one(repo):
