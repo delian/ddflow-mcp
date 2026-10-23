@@ -354,3 +354,9 @@ def test_write_refuses_a_snapshot_its_own_reader_would_reject(tmp_path, monkeypa
     with pytest.raises(ValueError, match="version"):
         ifacesnap.write(srv, instructions="x")
     assert S.read(srv.repo) is None
+
+
+@pytest.mark.parametrize("key", ["protocols", "modern_protocols"])
+def test_a_version_list_with_a_non_string_is_not_a_snapshot(key):
+    assert any(key in p for p in S.problems(sample(**{key: ["2025-11-25", None]})))
+    assert any(key in p for p in S.problems(sample(**{key: [123]})))
