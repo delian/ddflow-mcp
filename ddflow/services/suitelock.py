@@ -102,6 +102,9 @@ def _beat(path: Path) -> None:
         os.utime(path)
 
 
+# Every check here is check-then-use on a shared directory, so none is atomic; the contract is
+# that a scan never CREATES a ticket and that any misreading (a ghost, a late unlink of a retry's
+# new file) lasts one poll at most, because every poll rescans.
 def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[str]:
     """The names of the tickets still waiting, oldest first.
 
@@ -127,7 +130,8 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
                     with contextlib.suppress(OSError):
                         path.unlink()
             except fsio.LockTimeout:
-                live.append(path.name)
+                if path.exists():  # a retry holds it, and it is still named
+                    live.append(path.name)
             except FileNotFoundError:
                 pass  # its owner took it or removed it: nothing to count, nothing to recreate
             continue
