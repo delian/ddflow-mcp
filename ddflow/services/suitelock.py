@@ -102,6 +102,9 @@ def _beat(path: Path) -> None:
         os.utime(path)
 
 
+# Every check here is check-then-use on a shared directory, so none is atomic; the contract is
+# that a scan never CREATES a ticket and that any misreading (a ghost, a late unlink of a retry's
+# new file) lasts one poll at most, because every poll rescans.
 def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[str]:
     """The names of the tickets still waiting, oldest first.
 
@@ -123,22 +126,29 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
                 live.append(path.name)
                 continue
             try:  # expired: gone, unless a retry is taking it back right now
-                with fsio.file_lock(path, 0):
+                with fsio.file_lock(path, 0, create=False):
                     with contextlib.suppress(OSError):
                         path.unlink()
             except fsio.LockTimeout:
-                live.append(path.name)
+                if path.exists():  # a retry holds it, and it is still named
+                    live.append(path.name)
+            except FileNotFoundError:
+                pass  # its owner took it or removed it: nothing to count, nothing to recreate
             continue
         try:
-            with fsio.file_lock(path, 0):  # got it: nobody owns this ticket (yet)
+            with fsio.file_lock(path, 0, create=False):  # got it: nobody owns this ticket (yet)
+                if not path.exists():  # unlinked after the open: the lock is on a dead inode
+                    continue
                 if age <= NEW_S:  # created, its owner has not locked it yet: it still has its place
                     live.append(path.name)
                 else:
                     with contextlib.suppress(OSError):
                         path.unlink()
         except fsio.LockTimeout:
-            if age <= stale_s:
+            if age <= stale_s and path.exists():  # held, and still named (not unlinked meanwhile)
                 live.append(path.name)
+        except FileNotFoundError:
+            continue  # the owner left between the stat and the lock: no ghost is made
     return sorted(live, key=lambda n: n.split(".")[0])
 
 
