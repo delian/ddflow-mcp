@@ -89,13 +89,15 @@ def earlier_tree(st, cfg, item_id: str, repo: Path, landed: str) -> dict[str, st
 def _approval_tail(it, gate: str) -> str:
     """` (approved by X via chat at L2, approval Q...)` when an operator's approval was spent on
     the gate's skip (RA-audit-wire), else ""."""
-    for run in reversed(it.runs_of(gate)):
-        ap = (run.evidence or {}).get("approval")
-        if isinstance(ap, dict) and ap.get("ask"):
-            return (
-                f" (approved by {ap.get('approved_by', '?')} via {ap.get('via', '?')} "
-                f"at L{ap.get('level', '?')}, approval {ap['ask']})"
-            )
+    runs = it.runs_of(gate)
+    ap = (
+        (runs[-1].evidence or {}).get("approval") if runs else None
+    )  # the skip on record, not an older one
+    if isinstance(ap, dict) and ap.get("ask"):
+        return (
+            f" (approved by {ap.get('approved_by', '?')} via {ap.get('via', '?')} "
+            f"at L{ap.get('level', '?')}, approval {ap['ask']})"
+        )
     return ""
 
 
