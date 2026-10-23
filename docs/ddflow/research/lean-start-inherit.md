@@ -17,16 +17,18 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
 | V10 | `--strict-mcp-config`, no MCP at all | 24.2K |
 | V12 | strict plus the project `.mcp.json` (ddflow all tier) | 25.6K |
 | V1 | strict plus `worker-mcp.json` (ddflow core tier) | 25.9K |
+| V17 | `--strict-mcp-config`, no MCP, `ENABLE_TOOL_SEARCH=false` | 39.6K |
 | V7 | V0 with `ENABLE_TOOL_SEARCH=false` | 205.4K |
 | V13 | V12 with `ENABLE_TOOL_SEARCH=false` | 52.7K |
 | V8 | V1 with `ENABLE_TOOL_SEARCH=false` | 55.7K |
 
 - ddflow's names cost 1.4K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
   V12) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool search on.
-- ddflow undeferred is 28.5K (V13 against V10) on this tree, half of the 58.4K of lean-start.md probe L (the
-  charter replaced a 3.1K instruction block and the tool-diet work has landed since; the split is UNKNOWN). The core
-  tier does NOT undercut the all tier here: V8 55.7K against V13 52.7K, where lean-start.md measured core 54.7K
-  against all 84.2K (probes K and L). UNKNOWN why a core-tier server weighs as much as the all tier in this run (one
+- Turning tool search off also inlines Claude Code's own built-in tool schemas (V17 39.6K against V10 24.2K), so
+  ddflow's own undeferred cost is read against V17: all tier 13.1K (V13 against V17), a fifth of the 58.4K of
+  lean-start.md probe L (the charter replaced a 3.1K instruction block and the tool-diet work has landed since;
+  the split is UNKNOWN). The core tier does NOT undercut the all tier here: 16.1K (V8 against V17) against 13.1K,
+  where lean-start.md measured core 54.7K against all 84.2K (probes K and L). UNKNOWN why a core-tier server weighs as much as the all tier in this run (one
   run each; the schema bytes/4 ESTIMATE says 8.8K against 26.6K tokens, which the run does not show).
 - The hypothesis of lean-start.md (1M-window models do not defer) is REFUTED for haiku: its `modelUsage` reports a
   1,000,000-token window and V0 still deferred ddflow. Opus is not measured (no Opus spend).
