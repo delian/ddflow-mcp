@@ -107,7 +107,13 @@ def h_consumed(st: State, ev: Event) -> None:
         return
     row["used"] += 1
     row["consumed"].append(
-        {"by": str(ev.data.get("by", "")), "effect": str(ev.data.get("effect", "")), "at": ev.ts}
+        {
+            "by": str(ev.data.get("by", "")),
+            "effect": str(ev.data.get("effect", "")),
+            "verb": str(ev.data.get("verb", "")),
+            "digest": str(ev.data.get("digest", "")),
+            "at": ev.ts,
+        }
     )
 
 
@@ -120,10 +126,20 @@ def _closer(state: str):
     return handler
 
 
+def h_withdrawn(st: State, ev: Event) -> None:
+    """The asker took a pending ask back -- or a person REVOKED an answered approval
+    (``revoked``): its outcome stays on the row, its state no longer lets anyone spend it."""
+    row = asks_of(st).get(_id(ev))
+    if row is not None and row["state"] == ANSWERED and ev.data.get("revoked") is True:
+        row.update(state=WITHDRAWN, revoked_by=str(ev.data.get("by", "")), revoked_at=ev.ts)
+        return
+    _closer(WITHDRAWN)(st, ev)
+
+
 ASK_HANDLERS = {
     "ask.requested": h_requested,
     "ask.answered": h_answered,
     "ask.consumed": h_consumed,
-    "ask.withdrawn": _closer(WITHDRAWN),
+    "ask.withdrawn": h_withdrawn,
     "ask.expired": _closer(EXPIRED),
 }

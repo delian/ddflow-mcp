@@ -339,8 +339,8 @@ def test_the_handshake_calls_an_unprobed_companion_UNCHECKED_not_missing(repo):
     text = _instructions(repo)
     assert "[not checked]" in text, text[-900:]
     assert "[not installed]" not in text, "an unprobed companion was rendered as known-absent"
-    # ...and the command is still there to act on.
-    assert "Install: `" in text
+    # ...and the install command is one call away (the charter names `ddflow_companions`).
+    assert "ddflow_companions" in text
 
 
 def test_a_gate_is_not_a_gap_when_its_companion_was_never_probed(repo):

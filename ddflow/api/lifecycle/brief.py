@@ -28,6 +28,7 @@ from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from ...services import waiting as WG
+from ...services.approvals import view as V
 from ...services.export import select as export_select
 from ...services.guidance import charter as CH
 from ...services.guidance import inject as GI
@@ -193,6 +194,13 @@ def _refuted_line(st) -> str:
     )
 
 
+def _operator_lines(st) -> str:
+    """What waits on or is flagged for the OPERATOR: gates passed on refutation, approval
+    requests (RA-cli)."""
+    pending = V.pending_line(st)
+    return _refuted_line(st) + ("\n" + pending if pending else "")
+
+
 def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     """The upgrade lines that lead a brief, "" when none is due. The notice is first said
     once per version on this machine (D-upgrade-auto-check, D-self-upgrade 2) and then
@@ -342,7 +350,7 @@ def brief(
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
-    text += _refuted_line(st)
+    text += _operator_lines(st)
     if notice := _upgrade_notices(repo, log, cfg, st, agent):
         text = notice + "\n\n" + text
     if item and item in st.items:

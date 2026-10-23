@@ -19,7 +19,7 @@ from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..declared.mutation_params import mutation_of
-from ..declared.records import BUG_INVALID_FIELDS
+from ..declared.records import BUG_INVALID_FIELDS, file_tasks_call
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
@@ -286,19 +286,25 @@ def cmd_research(a, c: Ctx) -> int:
 
 
 def _bug_file_tasks(a, c: Ctx) -> int:
-    out = A.bug_file_tasks(c.repo, dry_run=a.dry_run, agent=c.requested_agent)
+    out = file_tasks_call(
+        c.repo,
+        {"id": a.id, "all": a.all, "dry_run": a.dry_run},
+        c.requested_agent,
+    )
     if out.exit not in (OK, NOTHING):
         print(out.reason, file=sys.stderr)
         return out.exit
     if out.exit == NOTHING:
-        c.out(out.reason, out.body(("filed", "linked", "tasks", "links", "dry_run")))
+        c.out(out.reason, out.body(("filed", "linked", "tasks", "links", "dry_run", "preview")))
         return NOTHING
-    would = "would file" if a.dry_run else "filed"
+    would = "would file" if out.data["dry_run"] else "filed"
     lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
+    if out.data["preview"]:
+        lines.insert(0, "dry run: nothing was written")
     lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
     links = out.data["links"]
     lines += [f"  {b} -> {links[b]['task']} ({links[b]['state']})" for b in out.data["linked"]]
-    c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "links", "dry_run")))
+    c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "links", "dry_run", "preview")))
     return OK
 
 

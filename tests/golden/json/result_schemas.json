@@ -1496,7 +1496,8 @@
    "linked",
    "tasks",
    "links",
-   "dry_run"
+   "dry_run",
+   "preview"
   ],
   "output_schema": {
    "type": "object",
@@ -1509,6 +1510,7 @@
     "tasks": {},
     "links": {},
     "dry_run": {},
+    "preview": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
