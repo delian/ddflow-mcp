@@ -66,9 +66,8 @@ _FLAG_INSTEAD = (
 #: A `--force` on ddflow's own command is an override only the operator takes. The route that
 #: needs no config edit: the operator runs the exact line, which the hook does not guard.
 _OPERATOR_FORCE = (
-    "report the exact command line to "
-    "them; they run it from their own terminal (the hook guards agents' Bash only), or lift "
-    "it for ONE session with DDFLOW_HOOKS_ALLOW=--force"
+    "report the exact command line to them; they run it from their own terminal (the hook "
+    "guards agents' Bash only)"
 )
 
 
