@@ -6,6 +6,7 @@ import sys
 
 from ...api import approvals as A
 from ...api import approvals_answer as AA
+from ...api import approvals_harness as AH
 from ..context import OK, Ctx
 from .chore import _finish as finish_payload
 
@@ -13,6 +14,8 @@ PAYLOADS = {
     "list": ("approvals",),
     "show": ("approval",),
     "request": ("id", "new", "digest"),
+    "ask": ("id", "input"),
+    "attest": ("id",),
     "approve": ("id", "outcome"),
     "deny": ("id", "outcome"),
     "revoke": ("id",),
@@ -73,3 +76,11 @@ def cmd_approvals_revoke(a, c: Ctx) -> int:
 
 def cmd_approvals_withdraw(a, c: Ctx) -> int:
     return _finish(c, A.approvals_withdraw(c.repo, a.id, agent=c.requested_agent), "withdraw")
+
+
+def cmd_approvals_ask(a, c: Ctx) -> int:
+    return _finish(c, AH.approvals_ask(c.repo, a.id, agent=c.requested_agent), "ask")
+
+
+def cmd_approvals_attest(a, c: Ctx) -> int:
+    return _finish(c, AH.approvals_attest(c.repo, a.id, agent=c.requested_agent), "attest")
