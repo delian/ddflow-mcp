@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 
 from ddflow.services.approvals import sites
 from ddflow.services.digest import sources as S
+from ddflow.surfaces.cli import build_parser
 
 
 def test_every_operator_only_verb_is_covered_or_exempt():
@@ -71,3 +73,30 @@ def test_site_commands_appear_in_the_answer_of_their_source():
 def test_red_main_is_urgent_and_by_kind_indexes_all():
     assert S.by_kind()["red_main"].severity == "urgent"
     assert len(S.by_kind()) == len(S.SOURCES)
+
+
+def _resolve(command: str) -> tuple[argparse.ArgumentParser, list[str]]:
+    """Walk the real parser along the command's verb words; return the final parser and the rest."""
+    parser = build_parser()
+    words = command.split()[1:]
+    while words:
+        subs = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
+        if not subs or words[0] not in subs[0].choices:
+            break
+        parser = subs[0].choices[words[0]]
+        words = words[1:]
+    return parser, words
+
+
+def test_every_command_resolves_against_the_real_parser():
+    for s in S.SOURCES:
+        parser, rest = _resolve(s.command)
+        assert parser.prog != build_parser().prog, (s.kind, "no verb resolved")
+        known = {o for a in parser._actions for o in a.option_strings}
+        for w in rest:
+            if w.startswith("--"):
+                assert w in known, (s.kind, w)
+        # a verb word left over that is not a placeholder, flag or value means a renamed verb
+        stray = [w for w in rest if re.fullmatch(r"[a-z][a-z-]*", w)]
+        subs = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
+        assert not (subs and stray and rest[0] == stray[0]), (s.kind, stray)
