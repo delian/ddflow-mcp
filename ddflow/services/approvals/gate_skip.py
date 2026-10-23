@@ -35,7 +35,9 @@ def canon_for(it, gate: str, item: str, why: str, agent: str, outcome: str) -> C
         agent=agent,
         item=item,
         target=gate,
-        args={"outcome": outcome or "skipped"},
+        # a plain skip carries no argument, so a request filed by hand (`approvals request`) is
+        # the same command; any other outcome being hand-recorded is part of what is approved
+        args={} if outcome in ("", "skipped") else {"outcome": outcome},
         state=state_digest(it, gate, why),
     )
 
