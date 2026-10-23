@@ -27,6 +27,20 @@ def _named_tests(regression_test: str | list[str]) -> tuple[list[str], str]:
     return tests, shown
 
 
+def _half_node_ids(tests: list[str]) -> list[str]:
+    """Entries that are a node id with a part missing: ``::test_x`` (the file part empty,
+    e.g. from an unset shell variable) or a bare ``tests/test_x.py`` (no test named). A
+    shell command or a spec is not one (B-bugfixed-accepts-bare-node-id)."""
+    out = []
+    for t in tests:
+        e = t.strip()
+        if e.startswith("::") or (
+            e.endswith(".py") and "::" not in e and not any(c.isspace() for c in e)
+        ):
+            out.append(t)
+    return out
+
+
 def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome:
     """The refusal for named tests that exist in no worktree of this repository."""
     joined = [m for m in missing if _looks_like_several(m)]
@@ -139,6 +153,15 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     landing, why = _landing_for(repo, cfg, landed, tests, verify_regression)
     if why:
         return O.refused("bug.fixed", why, id=item)
+    half = _half_node_ids(tests)
+    if half and verify_regression:
+        return O.refused(
+            "bug.fixed",
+            f"--regression-test: {'; '.join(repr(h) for h in half)} is not a pytest node id "
+            f"(`path/to/test_x.py::test_name`): the file or the test name is missing, so "
+            f"nothing could be checked to fail without the fix. Check for an unset variable.",
+            id=item,
+        )
     verified, verify_ev = _verify_regression(
         repo,
         cfg,
