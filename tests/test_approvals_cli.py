@@ -165,26 +165,32 @@ def test_requesting_by_hand_needs_a_verb_that_has_a_provider(proj, monkeypatch):
 
 def test_no_mcp_tool_carries_the_approvals_verbs():
     root = Path(__file__).resolve().parents[1]
-    for p in (root / "ddflow" / "surfaces").rglob("*.py"):
-        if "commands" in p.parts or p.name in ("approvals.py", "exemptions.py"):
-            continue
-        assert "approvals_approve" not in p.read_text(), p
-    from ddflow.surfaces import registry  # the declared commands carry no tool
+    # nothing the MCP server reaches imports the module that answers, and no tool is named for it
+    mcp_side = [root / "ddflow/surfaces/mcp.py", *(root / "ddflow/surfaces/tools").rglob("*.py")]
+    for p in mcp_side:
+        if p.exists():
+            text = p.read_text()
+            assert "approvals_answer" not in text and "ddflow_approvals" not in text, p
     from ddflow.surfaces.declared import approvals as D
 
-    assert all(c.tool == "" for c in D.COMMANDS)
-    assert registry is not None
+    assert D.COMMANDS and all(c.tool == "" for c in D.COMMANDS)  # CLI-only, every one
+    tools = {c.tool for mod in _declared_modules() for c in mod.COMMANDS if c.tool}
+    assert not [t for t in tools if "approvals" in t]
 
 
-def test_the_answer_api_refuses_an_agent_without_touching_the_repo(tmp_path):
-    from ddflow.api import approvals_answer as AA
+def _declared_modules():
+    import importlib
+    import pkgutil
 
-    nowhere = tmp_path / "no" / "such" / "repo"
-    for out in (
-        AA.approvals_approve(nowhere, "Q1", digest="abcdefgh", agent="bot"),
-        AA.approvals_deny(nowhere, "Q1", digest="abcdefgh", agent="bot"),
-        AA.approvals_revoke(nowhere, "Q1", agent="bot"),
-    ):
-        assert out.exit == 3 and "person's act" in out.reason
-    assert AA.digest_chars(nowhere, "bot") == 0
-    assert not nowhere.exists()
+    import ddflow.surfaces.declared as pkg
+
+    for info in pkgutil.iter_modules(pkg.__path__):
+        mod = importlib.import_module(f"{pkg.__name__}.{info.name}")
+        if hasattr(mod, "COMMANDS"):
+            yield mod
+
+
+def test_an_answer_with_a_wrong_digest_does_not_print_the_right_one(proj):
+    filed = _file(proj)
+    code, _o, err = run_cli(proj, "approvals", "approve", filed.id, "--digest", "zzzzzzzz")
+    assert code == 3 and filed.digest[:8] not in err

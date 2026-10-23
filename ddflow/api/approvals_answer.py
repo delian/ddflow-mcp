@@ -39,7 +39,7 @@ def _answer(
         return O.refused(
             kind,
             f"say which one you read: pass --digest with the first {cfg.approvals.min_digest_chars}+ characters of "
-            f"the digest shown by `ddflow approvals show {ask_id}` ({shown[:16]}...)",
+            f"the digest shown by `ddflow approvals show {ask_id}`",
         )
     try:
         AN.answer(log, cfg, ask_id, outcome, actor=actor, digest=shown)

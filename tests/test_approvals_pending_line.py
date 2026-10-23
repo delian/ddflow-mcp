@@ -30,7 +30,9 @@ def test_the_brief_and_status_say_nothing_until_a_request_waits(repo):
     code, out, _e = run_cli(repo, "brief")
     assert code == 0 and "approval request" not in out
     _c, out, _e = run_cli(repo, "--json", "status")
-    assert "approvals_pending" not in json.loads(out)
+    assert "approvals_pending" not in json.loads(out) and "approvals" not in json.loads(out)
+    _c, out, _e = run_cli(repo, "status")
+    assert "approval request" not in out
 
     log = EventLog(repo, "bot")
     st = fold(log.read_all(), strict=False)
