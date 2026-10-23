@@ -109,12 +109,21 @@ def harness_list(repo: Path) -> O.Outcome:
 
 def _list_changed_line(harness_id: str) -> str:
     """Does this agent re-fetch its tool list on `notifications/tools/list_changed`? From the
-    client table (`mcpshim/clients.py`), joined by descriptor id; what decides a soft upgrade."""
+    client table (`mcpshim/clients.py`), joined by descriptor id: what the table SAYS. What the
+    shim acts on also depends on the version actually connected (a ranged row is trusted only from
+    its `min_version`) and the row's age, so both are shown."""
     row = clients.by_harness(harness_id)
     if row is None:
         return f"{'list_changed':<13} no client row (unknown: treated as hard)"
+    trust = (
+        f"trusted from {row.min_version}"
+        if row.min_version
+        else f"checked {row.checked}, expires unless verified"
+        if row.list_changed == clients.HONOURS and row.source != "verified"
+        else "by name"
+    )
     version = f" {row.verified_version}" if row.verified_version else ""
-    return f"{'list_changed':<13} {row.list_changed} ({row.source}{version}, {row.key})"
+    return f"{'list_changed':<13} {row.list_changed} ({row.source}{version}, {row.key}; {trust})"
 
 
 def harness_show(repo: Path, which: str) -> O.Outcome:
