@@ -151,7 +151,7 @@ def test_the_frontmatter_is_valid_yaml_scalars():
 def test_every_role_is_told_to_file_ddflow_defects_it_meets():
     for role in ROLES:
         body = LA.template_text(role).split("\n---\n", 1)[1]
-        assert "ddflow_bug_found" in body and "before your context is compacted" in body, role
+        assert "ddflow_bug_found" in body and "already corrected" in body, role
         assert "ddflow_bug_found" in LA.ddflow_tools(role), role
 
 
