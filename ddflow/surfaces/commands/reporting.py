@@ -462,8 +462,14 @@ def cmd_replay(a, c: Ctx) -> int:
         print(f"  ! {p}", file=sys.stderr)
     if out.data["problems"]:
         print(f"{len(out.data['problems'])} recorded commit(s) no longer resolve.", file=sys.stderr)
+    for p in out.data["roundtrip"]:
+        print(f"  ! {p}", file=sys.stderr)
+    code = FAIL if out.data["roundtrip"] else OK
     if out.data["files"]:
-        c.out(out.data["text"], out.body(("files",)))
-        return OK
-    c.out(out.data["text"], {"text": out.data["text"], "files": []})
-    return OK
+        c.out(out.data["text"], out.body(("files", "roundtrip")))
+        return code
+    c.out(
+        out.data["text"],
+        {"text": out.data["text"], "files": [], "roundtrip": out.data["roundtrip"]},
+    )
+    return code
