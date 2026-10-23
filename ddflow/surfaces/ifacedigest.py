@@ -22,6 +22,10 @@ out on purpose: it changes on every upgrade).
 Facade mode (`ddflow_search` / `ddflow_call`) keeps the visible list stable: with it on, only
 the facade tools are compared, and a change behind them is soft.
 
+The facade tools do not exist yet (MTD-search-call), so `live_snapshot(facade=True)` is empty
+today; the filter is written against their names so it holds the day they are registered.
+Prompts stay in a facade snapshot: a client sees them whatever the tool list holds.
+
 Pure functions over plain data; only `live_snapshot` touches a running `Server`.
 """
 
@@ -131,14 +135,19 @@ def _types(schema: dict[str, Any]) -> set[str] | None:
     return set(t) if isinstance(t, list) else {t}
 
 
+def _widens(old: set[str], new: set[str]) -> bool:
+    """Every type `old` accepts is accepted by `new` (an integer is a number)."""
+    return all(t in new or (t == "integer" and "number" in new) for t in old)
+
+
 def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") -> list[str]:
     """Why a call valid under `old` could fail under `new`; empty when `new` accepts all of
     `old`'s calls. Looks at types, required arguments, removed arguments, enums, items."""
     where = path or "arguments"
     problems: list[str] = []
     ot, nt = _types(old), _types(new)
-    if ot and nt and not ot <= nt:
-        problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt)}")
+    if nt and (ot is None or not _widens(ot, nt)):
+        problems.append(f"{where}: type changed from {sorted(ot or [])} to {sorted(nt)}")
     if "enum" in new and (
         "enum" not in old or not set(map(str, old["enum"])) <= set(map(str, new["enum"]))
     ):
@@ -154,6 +163,29 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
             problems += schema_problems(old_props[name], new_props[name], sub)
     if isinstance(old.get("items"), dict) and isinstance(new.get("items"), dict):
         problems += schema_problems(old["items"], new["items"], f"{where}[]")
+    return problems
+
+
+def output_problems(
+    old: dict[str, Any] | None, new: dict[str, Any] | None, path: str = ""
+) -> list[str]:
+    """Why a client reading a result under the OLD output schema could break on the new one:
+    a field it read is gone, or its type is no longer one the old schema allowed. A field the
+    new schema adds is harmless."""
+    if not old or not new:
+        return []
+    where = path or "result"
+    problems: list[str] = []
+    ot, nt = _types(old), _types(new)
+    if ot and nt and not _widens(nt, ot):
+        problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt)}")
+    new_props = new.get("properties") or {}
+    for name, sub in sorted((old.get("properties") or {}).items()):
+        here = f"{path}.{name}" if path else name
+        if name not in new_props:
+            problems.append(f"{here}: field removed")
+        else:
+            problems += output_problems(sub, new_props[name], here)
     return problems
 
 
@@ -215,6 +247,10 @@ def _diff_tools(old: dict[str, Any], new: dict[str, Any], d: dict[str, list[str]
         if ot[name] == nt[name]:
             continue
         problems = schema_problems(ot[name]["inputSchema"], nt[name]["inputSchema"])
+        problems += [
+            f"output {p}"
+            for p in output_problems(ot[name].get("outputSchema"), nt[name].get("outputSchema"))
+        ]
         if problems:
             d["schema"] += [f"tool {name}: {p}" for p in problems]
         else:
@@ -298,7 +334,8 @@ def classify_surfaces(
         if name not in new:
             out.append(Verdict("hard", 5, (f"surface {name}: removed",)))
         elif name not in old:
-            out.append(Verdict("soft", 3, (f"surface {name}: added",)))
+            honours = client == HONOURS  # rung 2: tell it to list again
+            out.append(Verdict("soft", 2 if honours else 3, (f"surface {name}: added",), honours))
         else:
             v = classify(old[name], new[name], client, **kw)
             out.append(
