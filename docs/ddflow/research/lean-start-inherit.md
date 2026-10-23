@@ -21,9 +21,8 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
 | V13 | V12 with `ENABLE_TOOL_SEARCH=false` | 52.7K |
 | V8 | V1 with `ENABLE_TOOL_SEARCH=false` | 55.7K |
 
-- The claude.ai connectors cost 1.4K deferred (V12 against V10 is ddflow's names: 1.4K; V0 against V12 is the
-  connectors: 8.0K) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool
-  search on.
+- ddflow's names cost 1.4K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
+  V12) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool search on.
 - ddflow undeferred is 28.5K (V13 against V10), the core tier does NOT undercut the all tier here: V8 55.7K against
   V13 52.7K. The earlier "core 54.7K against all 84.2K" (lean-start.md, probes K and L) was on a different
   baseline; UNKNOWN why a core-tier server weighs as much as the all tier in this run (one run each; schema bytes by
@@ -42,9 +41,11 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
 | V6 | implementer plus strict plus the CORE-tier `worker-mcp.json` | 17.2K |
 | V15 | implementer with `DDFLOW_MCP_TOOLS=core` in the environment | 19.9K |
 | V5 / V16 | researcher / reviewer plus strict plus worker config | 10.1K / 11.4K |
+| V9 | V6 with `ENABLE_TOOL_SEARCH=false` | 17.2K |
+| V11 | V5 with `ENABLE_TOOL_SEARCH=false` | 10.1K |
 
 - Against 33.6K as is, a lean definition is 9.5K to 12.6K (the 25.4K to 10.4K of lean-start.md reproduced on
-  this tree's real definitions). With tool search off the definitions cost the same (V9 = V6 = 17.2K; V11 = V5): the
+  this tree's real definitions). With tool search off the definitions cost the same (V9 = V6 = 17.2K; V11 = V5 = 10.1K): the
   allow-list, not deferral, bounds them.
 - FINDING: the core-tier worker config makes a role definition WORSE (V6 17.2K, V15 19.9K against V14 9.8K and
   V2 12.6K). The role's `tools:` names ddflow tools outside the core tier (review, triage, research, memory); a
