@@ -16,6 +16,7 @@ from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from ...core.schedule import Blocked, plan
 from ...infra.log import EventLog
+from ...services import leasekeep as LK
 from ...services import leases as L
 from ...services import waits as WT
 from .._base import _load
@@ -399,12 +400,16 @@ def wait(
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
     seen = None  # an EventLog.mark() once taken
     checked = started
+    # The waiter's OWN leases stay alive while it waits (Bf81c097a89): hours of waiting once
+    # lapsed the very claim the wait was for.
+    keep_alive = _keep_alive(log, cfg, st)
     try:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
                 return result(v, time.monotonic() - started, [])
             time.sleep(min(poll, left))
+            keep_alive()
             # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
             ext = log.mark(clock=False)
             if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
@@ -424,6 +429,24 @@ def wait(
                 WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
     finally:
         _end_wait(WT, w, keep, cfg)
+
+
+def _keep_alive(log, cfg, st):
+    """A tick renewing every live lease the waiter holds once per `[lease].heartbeat_s`; a
+    no-op when it holds none or `[lease].renew_long_commands` is off. The interval is
+    enforced here: `for_holder` hands the pacing to its caller, and renewing on every poll
+    folds the whole log every couple of seconds."""
+    tick, every = LK.for_holder(log, cfg, st)
+    if tick is None:
+        return lambda: None
+    last = [time.monotonic()]
+
+    def paced() -> None:
+        if time.monotonic() - last[0] >= every:
+            last[0] = time.monotonic()
+            tick()
+
+    return paced
 
 
 def _end_wait(WT, w, keep: bool, cfg) -> None:
