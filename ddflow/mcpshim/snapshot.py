@@ -11,6 +11,10 @@ interface digest, the ddflow version that wrote it and the tier. A snapshot is `
 the version that wrote it; any problem (missing, unparseable, wrong form, a field of the wrong
 type) reads as no snapshot, and the caller falls back to the worker.
 
+The reply builders mirror `surfaces.mcp_protocol.initialize_result` / `discover` (this module
+cannot import them: the shim stays stdlib-only); `tests/test_mcp_soft_snapshot.py` pins that they
+agree for every served version, and `ifacesnap.drift` checks it against the live server.
+
 Stdlib only: the shim imports this module. The modern (2026-07-28) wrapping of a result
 (`resultType`, `_meta`, cache hints) is the shim's job, as it is `Server`'s for the live ones.
 """
@@ -33,10 +37,7 @@ def path(repo: Path | str) -> Path:
     return Path(repo) / RELATIVE
 
 
-def problems(data: Any) -> list[str]:
-    """Why `data` is not a usable snapshot; empty when it is."""
-    if not isinstance(data, dict):
-        return ["snapshot is not an object"]
+def _field_problems(data: dict[str, Any]) -> list[str]:
     out: list[str] = []
     if data.get("form") != FORM:
         out.append(f"form {data.get('form')!r}, expected {FORM}")
@@ -48,6 +49,19 @@ def problems(data: Any) -> list[str]:
     for key in _LISTS:
         if not isinstance(data.get(key), list):
             out.append(f"{key} must be a list")
+    if not isinstance(data.get("capabilities"), dict):
+        out.append("capabilities must be an object")
+    info = data.get("server_info")
+    if not isinstance(info, dict) or not isinstance(info.get("name"), str):
+        out.append("server_info must be an object with a name")
+    return out
+
+
+def problems(data: Any) -> list[str]:
+    """Why `data` is not a usable snapshot; empty when it is."""
+    if not isinstance(data, dict):
+        return ["snapshot is not an object"]
+    out = _field_problems(data)
     if isinstance(data.get("protocols"), list) and not data["protocols"]:
         out.append("protocols must name at least one version")
     for key in ("tools", "prompts"):
@@ -56,11 +70,6 @@ def problems(data: Any) -> list[str]:
             isinstance(i, dict) and isinstance(i.get("name"), str) for i in items
         ):
             out.append(f"every entry of {key} needs a string name")
-    if not isinstance(data.get("capabilities"), dict):
-        out.append("capabilities must be an object")
-    info = data.get("server_info")
-    if not isinstance(info, dict) or not isinstance(info.get("name"), str):
-        out.append("server_info must be an object with a name")
     return out
 
 

@@ -329,3 +329,28 @@ def test_write_refuses_a_snapshot_that_would_not_reproduce(tmp_path, monkeypatch
     with pytest.raises(ValueError, match="tools/list"):
         ifacesnap.write(srv, instructions="x")
     assert S.read(srv.repo) is None
+
+
+def test_the_reply_builders_agree_with_mcp_protocol_for_every_served_version():
+    from ddflow.surfaces import mcp_protocol as proto
+
+    snap = sample(
+        protocols=list(proto.SUPPORTED_PROTOCOLS),
+        modern_protocols=list(proto.MODERN_PROTOCOLS),
+        capabilities=proto.capabilities(),
+        server_info=dict(proto.SERVER_INFO),
+    )
+    for want in (*proto.SUPPORTED_PROTOCOLS, "1999-01-01", "", None):
+        version = proto.legacy_version(want)
+        assert S.initialize_result(snap, want) == proto.initialize_result(version, "hello")
+    assert S.discover_result(snap) == proto.discover("hello")
+
+
+def test_write_refuses_a_snapshot_its_own_reader_would_reject(tmp_path, monkeypatch):
+    from ddflow.surfaces import ifacesnap
+
+    srv = _server(_git(tmp_path / "r"))
+    monkeypatch.setattr(ifacesnap, "running_version", lambda: "")
+    with pytest.raises(ValueError, match="version"):
+        ifacesnap.write(srv, instructions="x")
+    assert S.read(srv.repo) is None
