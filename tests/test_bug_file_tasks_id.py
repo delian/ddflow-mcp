@@ -77,7 +77,8 @@ def test_an_unknown_or_closed_bug_is_refused(repo):
 
 def test_id_with_all_is_refused(repo):
     seed(repo)
-    assert run_cli(repo, "bug", "file-tasks", "B-one", "--all")[0] != 0
+    code, _, err = run_cli(repo, "bug", "file-tasks", "B-one", "--all")
+    assert code != 0 and "not both" in err
     assert "fix-B-one" not in state(repo).items
 
 
