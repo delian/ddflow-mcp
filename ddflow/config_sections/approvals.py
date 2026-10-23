@@ -41,3 +41,7 @@ class ApprovalsConfig:
         factory=lambda: ["~/.claude/projects"],
         doc="Where the harness channel looks for session transcripts (`*.jsonl`) that hold the answer to an approval question (default ~/.claude/projects). Only files modified since the request was filed are read.",
     )
+    expiry_warn_s: int = knob(
+        600,
+        doc="How many seconds before the end of its use window `ddflow approvals log` starts to say an approved-but-unspent request will expire unused (default 600).",
+    )

@@ -2469,6 +2469,10 @@
           Where the harness channel looks for session transcripts (`*.jsonl`) that
           hold the answer to an approval question (default ~/.claude/projects). Only
           files modified since the request was filed are read.
+      approvals.expiry_warn_s = 600   [default]
+          How many seconds before the end of its use window `ddflow approvals log`
+          starts to say an approved-but-unspent request will expire unused (default
+          600).
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
