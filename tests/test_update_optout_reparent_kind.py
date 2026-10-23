@@ -173,6 +173,7 @@ def test_the_tool_sets_kind(repo):
 
 def test_batch_does_not_take_parent_or_kind(repo):
     _seed(repo)
-    code, _, err = run_cli(repo, "batch", "--edits", json.dumps([{"id": "T1", "parent": "P2"}]))
-    assert code != 0, err
-    assert state(repo).items["T1"].parent == "P1"
+    for entry in ({"id": "T1", "parent": "P2"}, {"id": "T1", "kind": "doc"}):
+        code, _, err = run_cli(repo, "batch", "--edits", json.dumps([entry]))
+        assert code != 0, err
+    assert state(repo).items["T1"].parent == "P1" and state(repo).items["T1"].kind == "task"
