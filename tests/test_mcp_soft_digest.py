@@ -643,3 +643,14 @@ def test_live_surfaces_names_every_tier_and_the_facade_and_restores_the_tier(tmp
     surfaces = D.live_surfaces(srv)
     assert set(surfaces) == {*TIERS, "facade"} and srv.tier == own
     assert D.classify_surfaces(surfaces, surfaces, "ignores").rung == 1
+
+
+def test_a_tool_with_an_output_break_is_not_also_listed_as_extended():
+    def out(field):
+        t = tool()
+        t["outputSchema"] = _obj({field: {"type": "string"}}, [field])
+        return snap(tools=[t])
+
+    v = D.classify(out("a"), out("b"), "honours")
+    assert any("output" in r for r in v.reasons)
+    assert not any("extended" in r for r in v.reasons)

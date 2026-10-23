@@ -229,13 +229,10 @@ def _diff_tools(old: dict[str, Any], new: dict[str, Any], d: dict[str, list[str]
         if ot[name] == nt[name]:
             continue
         problems = schema_problems(ot[name]["inputSchema"], nt[name]["inputSchema"])
-        d["incompatible"] += [
-            f"tool {name}: output {p}"
-            for p in output_problems(ot[name].get("outputSchema"), nt[name].get("outputSchema"))
-        ]
-        if problems:
-            d["schema"] += [f"tool {name}: {p}" for p in problems]
-        else:
+        outputs = output_problems(ot[name].get("outputSchema"), nt[name].get("outputSchema"))
+        d["incompatible"] += [f"tool {name}: output {p}" for p in outputs]
+        d["schema"] += [f"tool {name}: {p}" for p in problems]
+        if not problems and not outputs:
             d["additive"].append(f"tool {name}: description or schema extended")
 
 
