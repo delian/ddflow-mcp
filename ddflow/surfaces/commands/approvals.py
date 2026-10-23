@@ -12,6 +12,7 @@ from .chore import _finish as finish_payload
 
 PAYLOADS = {
     "list": ("approvals",),
+    "log": ("approvals", "warnings"),
     "show": ("approval",),
     "request": ("id", "new", "digest"),
     "ask": ("id", "input"),
@@ -84,3 +85,11 @@ def cmd_approvals_ask(a, c: Ctx) -> int:
 
 def cmd_approvals_attest(a, c: Ctx) -> int:
     return _finish(c, AH.approvals_attest(c.repo, a.id, agent=c.requested_agent), "attest")
+
+
+def cmd_approvals_log(a, c: Ctx) -> int:
+    out = A.approvals_log(
+        c.repo, verb=a.verb or "", agent_filter=a.agent_filter or "", since=a.since or "",
+        agent=c.requested_agent,
+    )  # fmt: skip
+    return _finish(c, out, "log")

@@ -197,8 +197,10 @@ def _review_branch(
             (
                 "",
                 f"{item} was claimed without a worktree, and the primary's working tree is not "
-                f"its: pass --branch <branch>, run review from the worktree it is worked in, or "
-                f"set [worktree].enabled = false if the primary is where you work",
+                f"its: pass --branch <branch>, run review from the worktree it is worked in, "
+                f"review what already landed with --commit <sha> (a research item's committed "
+                f"doc) or --base <ref>, or set [worktree].enabled = false if the primary is "
+                f"where you work",
             ),
         )
     return branch, chosen, None

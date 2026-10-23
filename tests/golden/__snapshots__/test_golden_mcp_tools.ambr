@@ -3723,7 +3723,7 @@
          },
          "globs": {
           "type": "string",
-          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped."
+          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped. Empty: none, and a fix task then takes none from its bug."
          },
          "needs": {
           "type": "string",
@@ -3764,6 +3764,14 @@
          "landed": {
           "type": "string",
           "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
+         },
+         "parent": {
+          "type": "string",
+          "description": "Move the task under this phase (or task); empty makes it top level. Refused for a finished item, a missing parent, or a dependency cycle."
+         },
+         "kind": {
+          "type": "string",
+          "description": "Work kind: task, doc, research or job (its gate pipeline)."
          },
          "worktree": {
           "type": "string",
@@ -3975,7 +3983,7 @@
     'ddflow_wait': '''
       {
        "name": "ddflow_wait",
-       "description": "Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling or asking the operator when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait.",
+       "description": "Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling or asking the operator when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait. With no item and no lease it returns the first ready item AT ONCE, whatever it is: to wait for a held file or an agent's leases give `lease`.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -3994,6 +4002,10 @@
          "globs": {
           "type": "string",
           "description": "With item: the globs you will claim with (comma-separated or a JSON array), so ready means that claim will not be refused for them."
+         },
+         "lease": {
+          "type": "string",
+          "description": "Wait for a LEASE instead of an item: an agent id (until it holds nothing) or a path/glob (until no other agent's live lease covers it). A bare wait returns the first ready item at once."
          },
          "timeout": {
           "type": "number",

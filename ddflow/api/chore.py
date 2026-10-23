@@ -19,6 +19,8 @@ from ..infra import worktree as W
 from ..services import approval as AP
 from ..services import chore as CO
 from ..services import gates as G
+from ..services.approvals import consume as CN
+from ..services.approvals import grant_site as GS
 from ._base import _load
 from ._dedupe import Answer
 from .gates import record as gate_record
@@ -29,14 +31,25 @@ from .lifecycle import merge as merge_item
 KIND = "chore.committed"
 
 
-def chore_approve(repo: Path, *, agent: str = "", note: str = "") -> O.Outcome:
-    """A PERSON approves the CURRENT `[chore].globs`. Refused under an agent identity."""
+def chore_approve(repo: Path, *, agent: str = "", note: str = "", approval: str = "") -> O.Outcome:
+    """A PERSON approves the CURRENT `[chore].globs`. Refused under an agent identity unless it
+    spends a person's approval of exactly this list (``approval``, RA-consume-sites-2)."""
     log, cfg, _st = _load(repo, agent)
     digest = CO.approval_digest(cfg)
+    proxy = None
+    if why := AP.agent_marker(agent):
+        decision = CN.operator_gate(
+            log, cfg, GS.chore_canon(log.agent_id, list_digest=digest), approval_id=approval,
+            reason=note,
+        )  # fmt: skip
+        if not decision.ok:
+            return O.refused("chore.approve", AP.refusal(why) + " " + decision.message)
+        proxy = decision.stamp
     try:
         got = AP.grant(
-            log, CO.SUBJECT, digest, note=note or ", ".join(cfg.chore.globs), requested_agent=agent
-        )
+            log, CO.SUBJECT, digest, note=note or ", ".join(cfg.chore.globs),
+            requested_agent=agent, proxy=proxy,
+        )  # fmt: skip
     except AP.ApprovalRefused as exc:
         return O.refused("chore.approve", str(exc))
     return O.ok(
