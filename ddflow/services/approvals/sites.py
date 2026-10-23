@@ -219,6 +219,31 @@ SITES: tuple[Site, ...] = (
     ),
 )
 
+#: Refusals that name only a terminal because the act is T3 (D-RA-4, D-RA-Q6): no chat route
+#: exists, by decision, and the reason says why. `tests/test_approvals_conformance.py` fails for a
+#: refusal that names a terminal, offers no approval route and is not listed here.
+#: Also T3 and not listed as a refusal text: the approval system's own configuration
+#: (`[approvals]`, `[agent].roles/actors`), signer pins and key rotation (no signer exists yet),
+#: `[hooks].forbidden_commands`, disabling hooks, company-layer floors.
+TERMINAL_ONLY: dict[str, str] = {
+    "ddflow/surfaces/declared/export.py:<module>": (
+        "NOT YET ROUTED (follow-up RA-consume-sites-4): `export --force` (override of hand-edit "
+        "protection) and the per-machine `--local` selection are still the operator's terminal acts; "
+        "the lock, the lock lift and the acknowledgement are routed (export.lock/unlock/ack)"
+    ),
+    "ddflow/services/reviewer_trust.py:write": (
+        "T3: a command reviewer runs any program and can print any verdict, so only a person "
+        "adds one; over chat it would let whoever types into the session run code"
+    ),
+}
+
+#: Strings that mention a terminal without refusing anyone (input prompts, docs).
+NOT_A_REFUSAL: dict[str, str] = {
+    "ddflow/services/export/select.py:brief_line": "an operator-facing brief line: the operator is its reader",
+    "ddflow/surfaces/commands/knowledge.py:_session_text": "refuses to read prose from a tty, not an act",
+    "ddflow/services/help.py:<module>": "help text about the CLI as a surface",
+}
+
 BY_VERB = {s.verb: s for s in SITES}
 
 
