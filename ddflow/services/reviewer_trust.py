@@ -202,6 +202,8 @@ def approve(
     revs = {r.name: r for r in load_reviewers(Path(repo))}
     rev = revs.get(name)
     if rev is None:
+        if why:  # an agent is not told which reviewers exist
+            raise ReviewerRefused(AP.refusal(why))
         known = ", ".join(sorted(revs)) or "none configured"
         raise ReviewerRefused(f"no reviewer named {name!r} ({known})")
     dig = digest(rev)
