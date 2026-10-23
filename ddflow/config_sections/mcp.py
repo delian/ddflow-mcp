@@ -30,6 +30,16 @@ class McpConfig:
         strictest=("all", "no safety dimension; every tool advertised, as without the knob"),
     )
 
+    worker_tools: str = knob(
+        "core",
+        doc="The tool tier of the MCP config `ddflow adopt` writes for lane workers (`.ddflow/local/worker-mcp.json`, started with `claude --mcp-config <file> --strict-mcp-config`): it sets `DDFLOW_MCP_TOOLS` in the server's environment. `core` (default) saves ~27K first-turn tokens on a host that sends every schema (84.2K against 54.7K measured); `standard` or `all` for workers that need the rest. It hides schemas, never tools: every tool stays callable by name.",
+        choices=MCP_TOOL_TIERS,
+        strictest=(
+            "core",
+            "no safety dimension; fewer schemas advertised, every tool still callable",
+        ),
+    )
+
     output_schemas: str = knob(
         "off",
         doc='Whether `tools/list` declares an `outputSchema` for every tool whose result is a JSON object of declared fields (not `show`, `decision_show` or `recall`, which answer one record or null, nor text), and a call returns that object also as `structuredContent` (not when it failed; MCP 2025-06-18 and later; an older client is served as with `off`). `off` (default): the result is the JSON text in the first content block only, and `tools/list` is as small as before. `on`: each object tool lists `{"type": "object", "properties": {"schema": {"const": "<tool>@<n>"}, <its declared fields>: {}}}` -- additive, nothing required -- and a bare-array tool lists its schema under `_meta["ddflow/outputSchema"]`, since an `outputSchema` must be an object. Costs about 16 KB more `tools/list` and every object result is sent twice (the text block and `structuredContent`). Every object result carries its `schema` tag either way. Read once at server start, so change it and restart the server.',
