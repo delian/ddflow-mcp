@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "ask.consumed"
+why = "An agent spent one use of a person's approval on the exact command it was for."
+impact = "additive"
