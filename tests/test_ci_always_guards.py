@@ -15,6 +15,7 @@ GUARDS = (
     "tests/test_declared_export.py",
     "tests/test_ratchet_no_dead_knobs.py",
     "tests/compat/test_surface.py",
+    "tests/test_ci_always_guards.py",  # this file: deleting a flag must be caught too
 )
 
 
@@ -22,3 +23,6 @@ def test_the_selection_always_runs_these_guards():
     ran = ci_scope.always_tests(Config(), ROOT)
     for guard in GUARDS:
         assert guard in ran, guard
+
+
+ALWAYS = True
