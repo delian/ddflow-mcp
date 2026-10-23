@@ -232,7 +232,7 @@ Placement (no parallel structure):
 |---|---|---|
 | resume argv, model flag, output format, MCP injection form | `[headless]` (descriptor-v2) | already reserved: `resume = ["--resume", "{session}"]` |
 | quota/limit signal and query command | `[meters]` (descriptor-v2): new keys `limit_signal`, `limit_exit_code`, `limit_match`, `reset_source`, `query` | descriptor-v2 reserves `[meters]` for quota sources; these are its sub-keys, one definition |
-| output caps (tool output, MCP, shell) | `[caps]` (descriptor-v2): new keys `tool_output`, `mcp_output`, `shell_output`, `brief` | `[caps]` already holds caps |
+| output caps (tool output, MCP, shell) | `[caps]` (descriptor-v2): new keys `tool_output`, `mcp_output`, `shell_output`, `max_completion` | `[caps]` already holds caps |
 | `post_compact`, `session_start_compact` canonical events | `[hooks.events]` + CANONICAL_EVENTS, in DX-descriptor-vocab-dsh | the same vocabulary task already adds subagent events |
 | per-subagent model / window | `[spawn]` (descriptor-v2): keys `model_setting`, `window_setting` | subagent facts live with `[spawn]` |
 | **cache TTL, compaction window, compaction commands/instructions** | **new section `[tokens]`** (one definition, registered in descriptor-v2 by amendment) | nothing reserved covers these |
@@ -250,12 +250,13 @@ Placement (no parallel structure):
 [tokens.compact]     command = "/compact"  takes_instructions = true | false | (absent)
                      instructions_region = "# Compact instructions" | none = true
                      prompt_setting = <setter>                        # codex compact_prompt, roo CONDENSE
-[tokens.output]      brief = <setter>                                 # --silent, --output-style Concise, model_verbosity=low
+[tokens.output]      brief = <setter>                                 # --silent, --output-style Concise, model_verbosity=low (the only home of `brief`)
+[tokens.lane_dir]    env = "CODEX_HOME" | argv = ["--config-dir", "{dir}"]   # how the launcher relocates the agent's config dir for one lane; a `file` setter is relative to it
 ```
 
 A **setter** is one inline table naming how a launcher applies a value, reusing the launch vocabulary of `[headless]`/the launcher (`P-agent-parity.launcher`: env, argv, lane-private file):
 `{env = "NAME", value = "{tokens}"}`, `{argv = ["-c", "model_auto_compact_token_limit={tokens}"]}`, `{file = "kimi.config.toml", key = "loop_control.compaction_trigger_ratio", value = "{ratio}"}`
-(`file` is relative to the lane's private config dir named in `[tokens.lane_dir]`, e.g. `env = "CODEX_HOME"`). Placeholders are `{tokens}`, `{ratio}`, `{percent}`, `{ttl}`.
+(`file` is relative to the lane's private config dir named by `[tokens.lane_dir]`, e.g. `env = "CODEX_HOME"`; absent = no lane-private file is possible and file setters are reported unavailable). Placeholders are `{tokens}`, `{ratio}`, `{percent}`, `{ttl}`.
 Validation: unknown key = loader error naming key and file (existing rule); a setter without `[verified]` source is shown as `not verified` by `ddflow harness show` and the launcher refuses to apply it
 (prints `unavailable`, never silently skips). Every value is overridable in config (D-everything-configurable); an operator override records the source `operator`.
 
