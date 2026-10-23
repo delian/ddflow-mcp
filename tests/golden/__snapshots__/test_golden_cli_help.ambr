@@ -240,10 +240,15 @@
 # ---
 # name: test_help[ddflow bug file-tasks]
   '''
-  usage: ddflow bug file-tasks [-h] [--dry-run]
+  usage: ddflow bug file-tasks [-h] [--all] [--dry-run] [id]
+  
+  positional arguments:
+    id          the open bug to file the fix task of (omit to preview; --all files every bug's)
   
   options:
     -h, --help  show this help message and exit
+    --all       file a task for every open bug that has none (other agents' too); without it and
+                without an id, only a preview
     --dry-run   list what would be filed
   
   '''
@@ -380,8 +385,7 @@
   
   positional arguments:
     {found,file-tasks,fixed,invalid,reopen,list,show}
-      file-tasks          file a fix task for every open bug that has none (one-shot, after an
-                          upgrade)
+      file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
