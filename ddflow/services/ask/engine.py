@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -60,6 +61,20 @@ class AskRefused(ValueError):
 
 
 @dataclass(frozen=True)
+class Command:
+    """What makes an approval ask a GATED COMMAND's (services/approvals): the verb, its tier and
+    minimum assurance level, how many times it may be spent, how long after the answer, and the
+    canonical record the digest is of."""
+
+    verb: str
+    tier: str
+    min_level: int
+    uses: int = 1
+    use_ttl_s: int = 0
+    canon: str = ""
+
+
+@dataclass(frozen=True)
 class Requested:
     id: str
     #: The one-time code, "" unless asked for. Shown to the person by the transport; the log
@@ -80,23 +95,8 @@ def _state(log):
     return fold(log.read_all(), strict=False)
 
 
-def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-only
-    log,
-    cfg: Config,
-    *,
-    subject: str,
-    kind: str = APPROVAL,
-    text: str = "",
-    digest: str = "",
-    content: str | bytes = "",
-    options: tuple[str, ...] | list[str] = (),
-    ttl_s: float | None = None,
-    bot_answerable: bool = False,
-    with_code: bool = False,
-    actor: Actor | None = None,
-    now: float | None = None,
-) -> Requested:
-    """Put an ask. Anyone may ask; ``bot_answerable`` needs ``actor`` to hold ``approve``."""
+def _check_request(kind, subject, text, digest, content, bot_answerable, actor) -> str:
+    """Refuse an ask that could never be answered or is malformed; return the digest to use."""
     if kind not in (APPROVAL, QUESTION):
         raise AskRefused(f"an ask is an '{APPROVAL}' or a '{QUESTION}', not '{kind}'")
     if not subject:
@@ -113,6 +113,41 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
         why = require(actor, CAP_APPROVE) if actor is not None else "no actor named"
         if why:
             raise AskRefused(f"only an approver may mark an ask bot-answerable: {why}")
+    return digest
+
+
+def _command_fields(command: Command, kind: str) -> dict[str, Any]:
+    if kind != APPROVAL or command.uses < 1 or command.min_level < 1 or command.use_ttl_s < 0:
+        raise AskRefused("a command ask is an approval spent 1+ times at level 1+, usable 0+ s")
+    return {
+        "verb": command.verb,
+        "tier": command.tier,
+        "min_level": command.min_level,
+        "uses": command.uses,
+        "use_ttl_s": command.use_ttl_s,
+        "canon": command.canon,
+    }
+
+
+def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-only
+    log,
+    cfg: Config,
+    *,
+    subject: str,
+    kind: str = APPROVAL,
+    text: str = "",
+    digest: str = "",
+    content: str | bytes = "",
+    options: tuple[str, ...] | list[str] = (),
+    ttl_s: float | None = None,
+    bot_answerable: bool = False,
+    with_code: bool = False,
+    actor: Actor | None = None,
+    now: float | None = None,
+    command: Command | None = None,
+) -> Requested:
+    """Put an ask. Anyone may ask; ``bot_answerable`` needs ``actor`` to hold ``approve``."""
+    digest = _check_request(kind, subject, text, digest, content, bot_answerable, actor)
     ttl = cfg.agent.ask_ttl_s if ttl_s is None else ttl_s
     if ttl <= 0:
         raise AskRefused("an ask must expire: ttl_s is above 0 (`agent.ask_ttl_s`)")
@@ -130,6 +165,8 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     }
     if code:
         data["code_hash"] = token_hash(code)
+    if command is not None:
+        data.update(_command_fields(command, kind))
     log.append("ask.requested", ask_id, data)
     return Requested(ask_id, code)
 
@@ -156,7 +193,7 @@ def pending(state, now: float | None = None) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: r["requested_at"])
 
 
-def answer(
+def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-only
     log,
     cfg: Config,
     ask_id: str,
@@ -167,6 +204,7 @@ def answer(
     code: str = "",
     text: str = "",
     via: str = "cli",
+    level: int = 0,
     now: float | None = None,
 ) -> dict[str, Any]:
     """Record a person's answer. Raises `AskRefused` unless every invariant holds. Returns the
@@ -198,6 +236,7 @@ def answer(
                 "human": human,
                 "coded": bool(code),
                 "source": actor.source,
+                "level": level if level >= 1 else 1,
                 "code_presented": code,  # spent now: kept so `verdict` can re-hash it
             },
         )
@@ -268,7 +307,32 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
         return Verdict(
             False, f"{subject} is " + ("waiting for an answer" if waiting else "not approved")
         )
-    last = answered[-1]
+    return judge(answered[-1], digest)
+
+
+#: Channel word (`via`) -> a function that re-verifies, from the answered row alone, that the
+#: channel's proof holds (a transcript row, a signature, a code). A level above 1 is believed only
+#: when its channel registered one and it says yes: an answer line written by hand claims any
+#: level it likes.
+LEVEL_VERIFIERS: dict[str, Callable[[dict[str, Any]], bool]] = {}
+
+
+def verified_level(row: dict[str, Any]) -> int:
+    """The assurance level of an answered row that can be shown to hold: 1 (a terminal's word)
+    unless the row's channel registered a verifier that confirms the higher level it claims."""
+    claimed = row.get("level", 0)
+    check = LEVEL_VERIFIERS.get(row.get("via", ""))
+    believed = claimed > 1 and check is not None and check(row)
+    return claimed if believed else 1  # an answered row is at least a terminal's word
+
+
+def judge(last: dict[str, Any], digest: str) -> Verdict:
+    """Is this ANSWERED approval row an approval of ``digest`` by a person? The proof is
+    re-checked here, not trusted from the row's own flags (B-ask-verdict-trusts-hand-appended-answer):
+    a recorded source, the one-time code when the ask had one."""
+    subject = last["subject"]
+    if last["state"] != ANSWERED:
+        return Verdict(False, f"{subject} is not answered", last)
     if last["outcome"] != APPROVED:
         return Verdict(False, f"{subject} was denied by {last['answered_by']}", last)
     if not (last["human"] or last["bot_answerable"]):

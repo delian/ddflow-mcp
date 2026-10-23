@@ -160,7 +160,7 @@ EXEMPT: dict[str, str] = {
     "lease.waiting": "a refused claim or widening's own record of who waits for which files "
     "(services.waiting): globs and ids, no authored text",
     **dict.fromkeys(
-        ("ask.requested", "ask.answered", "ask.withdrawn", "ask.expired"),
+        ("ask.requested", "ask.answered", "ask.withdrawn", "ask.expired", "ask.consumed"),
         "a question or approval put to a person and its outcome: the asker's text is "
         "compared by the asker, not here (services.ask)",
     ),
