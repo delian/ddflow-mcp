@@ -141,3 +141,9 @@ def test_a_name_defined_twice_keeps_the_worse_definition():
 def test_a_declared_non_utf8_source_is_still_measured():
     src = "# -*- coding: latin-1 -*-\ndef caf\xe9(x):\n    return x\n".encode("latin-1")
     assert list(CB.complexities(src)) == ["caf\xe9"]
+
+
+def test_the_tree_the_hook_reads_head_in_is_a_directory_not_an_id(repo):
+    """`_complexity_note` runs `git show HEAD:<path>` in `_index_tree(repo)`."""
+    _setup(repo, 3)
+    assert E._index_tree(repo).is_dir()
