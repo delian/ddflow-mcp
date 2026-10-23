@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -11,9 +12,11 @@ from typing import Any, NamedTuple
 from ...config import csv_list
 from ...core import globspec as GS
 from ...core import outcome as O
+from ...core.digest import content_digest
 from ...core.model import ABANDONED, DONE, REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
+from ...services import approval as AP
 from ...services import choices as CHO
 from ...services import claimguards as GD
 from ...services import flow as FS
@@ -22,6 +25,8 @@ from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import tree_bin as TB
 from ...services import waiting as WG
+from ...services.approvals import consume as CN
+from ...services.approvals.canon import Canon
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
@@ -194,6 +199,55 @@ class _Bound(NamedTuple):
 
 
 def claim(  # noqa: PLR0913 -- the door's own flags
+    repo: Path,
+    item: str,
+    *,
+    globs: str = "",
+    note: str = "",
+    force: bool = False,
+    no_worktree: bool = False,
+    called_from: Path | None = None,
+    resources: str = "",
+    agent: str = "",
+    queue: bool = False,
+    break_lease: bool = False,
+    approval: str = "",
+) -> O.Outcome:
+    """`_claim_once`, and for an AGENT refused where `--force` would take it: the operator's
+    approval of exactly that (verb claim.force) in place of the flag. `--approval request`
+    files the request, the operator answers it in chat, `--approval ID` re-runs forced with the
+    approval named in the lease note (RA-consume-sites-3)."""
+    kw = {
+        "globs": globs, "no_worktree": no_worktree, "called_from": called_from,
+        "resources": resources, "agent": agent, "queue": queue, "break_lease": break_lease,
+    }  # fmt: skip
+    out = _claim_once(repo, item, note=note, force=force, **kw)
+    if force or out.exit != O.REFUSED or "--force" not in (out.reason or ""):
+        return out
+    return _claim_by_approval(repo, item, out, approval, note, kw)
+
+
+def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str, note: str, kw):
+    if not AP.agent_marker(kw["agent"]):
+        return refused  # a person has --force
+    log, cfg, st = _load(repo, kw["agent"])
+    it = st.items.get(item)
+    lease = it.lease if it is not None else None
+    state = content_digest(
+        json.dumps({"state": it.state if it else "", "holder": lease.holder if lease else ""})
+    )
+    canon = Canon(verb="claim.force", agent=log.agent_id, item=item, state=state)
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
+    if not decision.ok:
+        return O.refused(
+            "item.claimed", f"{refused.reason}\n{decision.message}", id=item, alternatives=[]
+        )
+    stamp = decision.stamp
+    why = f"{note} [operator approval {stamp['ask']} by {stamp['approved_by']} via {stamp['via']}]"
+    return _claim_once(repo, item, note=why.strip(), force=True, **kw)
+
+
+def _claim_once(  # noqa: PLR0913 -- the door's own flags
     repo: Path,
     item: str,
     *,

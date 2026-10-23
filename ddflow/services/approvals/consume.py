@@ -114,6 +114,11 @@ def spend(
     )
 
 
+#: `--approval request`: the agent asks for the approval now (sites that must not file one on
+#: every refusal, because the refusal is routine: a premature `complete`).
+REQUEST = "request"
+
+
 def operator_gate(
     log,
     cfg: Config,
@@ -122,14 +127,23 @@ def operator_gate(
     approval_id: str = "",
     reason: str = "",
     now: float | None = None,
+    auto: bool = True,
 ) -> Decision:
-    """The one question an agent-refusing site asks. Never answers for a person."""
-    if approval_id:
+    """The one question an agent-refusing site asks. Never answers for a person. ``auto`` False:
+    file no request unless the agent says `--approval request`."""
+    if approval_id and approval_id != REQUEST:
         return spend(log, canon, approval_id, now=now, cfg=cfg)
+    if not approval_id and not auto:
+        return Decision(
+            False,
+            f"to ask the operator to approve '{canon.verb}' for {canon.item or 'this'}, "
+            f"re-run with `--approval {REQUEST}`: a request id comes back and the operator "
+            "answers it in chat.",
+        )
     state = fold(log.read_all(), strict=False)
     if stamp := PO.apply(log, cfg, state, canon, reason=reason):  # a standing rule (off by default)
         return Decision(True, stamp=stamp, ask_id=stamp["ask"])
-    filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=True)
+    filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=approval_id != REQUEST)
     if filed is None:
         return Decision(
             False,
