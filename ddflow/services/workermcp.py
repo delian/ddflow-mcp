@@ -33,7 +33,9 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
     out = dict(entry)
     out["env"] = {**dict(entry.get("env") or {}), TIER_ENV: tier}
     args = list(entry.get("args") or [])
-    if entry.get("command") == "docker" and args[:1] == ["run"]:
+    # The image-last invariant (`_launch_entry`'s shape) is checked, not assumed: an entry whose
+    # last argument is an option is not one we generated, and is left alone.
+    if entry.get("command") == "docker" and args[:1] == ["run"] and not args[-1].startswith("-"):
         # `env` reaches the `docker` client, not the container: forward the tier with `-e`,
         # replacing any value already forwarded (the last `-e` of a name would win).
         # The entry is `_launch_entry`'s own: `run`, its options, then the image LAST. What follows

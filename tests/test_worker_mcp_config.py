@@ -119,6 +119,27 @@ def test_a_server_started_with_that_env_lists_only_the_core_tier(repo, monkeypat
     assert names == set(tier_tools("core")) and len(names) < len(TOOLS)
 
 
+def test_a_tool_outside_the_core_tier_is_still_callable_by_name(repo, monkeypatch):
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "core")
+    hidden = "ddflow_lanes"
+    assert hidden in TOOLS and hidden not in tier_tools("core")
+    srv = Server(repo)
+    got = srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": hidden, "arguments": {}},
+        }
+    )
+    assert "error" not in got and not got["result"].get("isError"), got
+
+
+def test_a_docker_entry_ending_in_an_option_is_left_alone():
+    odd = {"command": "docker", "args": ["run", "img", "--flag"]}
+    assert WM.worker_entry(odd, "core")["args"] == ["run", "img", "--flag"]
+
+
 def test_the_recipe_names_the_flags_and_the_deferral_switch():
     text = WM.recipe(REL)
     for must in ("--mcp-config", "--strict-mcp-config", "ENABLE_TOOL_SEARCH"):
