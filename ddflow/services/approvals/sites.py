@@ -33,7 +33,8 @@ FAMILIES = ("A", "B", "C")
 INFRASTRUCTURE: dict[str, int] = {
     "ddflow/services/identity.py:is_agent": 1,  # defines is_agent over agent_marker
     "ddflow/services/actors.py:_role": 1,  # resolves an identity to a role for the ask engine
-    "ddflow/api/surf_setup.py:reviewer_agent_marker": 1,  # a shim over reviewer_trust
+    "ddflow/api/surf_setup.py:reviewer_agent_marker": 1,
+    "ddflow/services/approvals/answer.py:why_not_a_person": 1,  # the answer verbs' early refusal  # a shim over reviewer_trust
 }
 
 #: Marker calls per enclosing function ("module:function" -> number of AST `Call` nodes naming
