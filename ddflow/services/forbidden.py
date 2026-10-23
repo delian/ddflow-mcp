@@ -63,6 +63,13 @@ _FLAG_INSTEAD = (
     "(--gate and the other options may sit anywhere, --reason is required, and a "
     "timeout or python -m launcher is fine)"
 )
+#: A `--force` on ddflow's own command is an override only the operator takes. The route that
+#: needs no config edit: the operator runs the exact line, which the hook does not guard.
+_OPERATOR_FORCE = (
+    "report the exact command line to "
+    "them; they run it from their own terminal (the hook guards agents' Bash only), or lift "
+    "it for ONE session with DDFLOW_HOOKS_ALLOW=--force"
+)
 
 
 @dataclass(frozen=True)
@@ -299,9 +306,19 @@ def _lifted(env: dict[str, str]) -> tuple[bool, set[str]]:
     return "all" in items, {" ".join(i.removesuffix(PRIMARY).split()) for i in items}
 
 
-def _instead(entry: str) -> str:
+def _runs_ddflow(words: list[str]) -> bool:
+    """Whether the command is ddflow itself, launched directly or as `python -m ddflow`."""
+    head = _head(words)
+    return any(h and h[0].rsplit("/", 1)[-1] == "ddflow" for h in (head, _python_module(head)))
+
+
+def _instead(entry: str, words: list[str] | None = None) -> str:
     if entry.startswith("-"):
-        return _FLAG_INSTEAD
+        return (
+            f"{_FLAG_INSTEAD}. If the operator authorised this override: {_OPERATOR_FORCE}"
+            if words and _runs_ddflow(words)
+            else _FLAG_INSTEAD
+        )
     words = entry.split()
     return (
         _INSTEAD.get(" ".join(words[:2]))
@@ -339,7 +356,7 @@ def check(
                     primary = _elsewhere(cmds) or is_primary(cwd or Path.cwd())
                 if not primary:
                     continue
-            return Refusal(entry, " ".join(words)[:200], _instead(entry))
+            return Refusal(entry, " ".join(words)[:200], _instead(entry, words))
     return None
 
 
