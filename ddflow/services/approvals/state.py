@@ -11,9 +11,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ...core.registry import Registry
+
 #: verb -> (state, item, target, args) -> the state digest string the site would compute.
-PROVIDERS: dict[str, Callable[[Any, str, str, dict[str, str]], str]] = {}
+PROVIDERS: Registry[Callable[[Any, str, str, dict[str, str]], str]] = Registry(
+    "approval state provider", replace=True
+)
 
 
 def register(verb: str, provider: Callable[[Any, str, str, dict[str, str]], str]) -> None:
-    PROVIDERS[verb] = provider
+    PROVIDERS.register(provider, verb)
