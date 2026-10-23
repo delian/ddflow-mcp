@@ -197,7 +197,7 @@ def test_a_backslash_newline_inside_a_quoted_value_keeps_the_value_whole():
 
 def test_a_timeout_on_a_continuation_line_and_a_negative_one_are_replaced():
     cases = {
-        "ddflow ci run \\\n--timeout 30 -- pytest": "ddflow ci run --timeout 60  -- pytest",
+        "ddflow ci run \\\n--timeout 30 -- pytest": "ddflow ci run --timeout 60 \\\n -- pytest",
         "ddflow ci run --timeout=-5 -- pytest": "ddflow ci run --timeout 60 -- pytest",
         "ddflow ci run --timeout +5": "ddflow ci run --timeout 60",
         "ddflow ci run --timeout='+5'": "ddflow ci run --timeout 60",

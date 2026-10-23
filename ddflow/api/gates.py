@@ -702,12 +702,12 @@ def run(
 #: one to replace. A CONSERVATIVE scanner for a one-line gate command, not a shell parser: an
 #: unclosed quote leaves the command unchanged. Accepted limits: no here-docs, no `$(...)`/backtick
 #: nesting, no option-level parsing (`ddflow ci run` itself refuses an option value that is
-#: `--timeout=N`).
+#: `--timeout=N`), no `#` comments, no words built by quote concatenation (`+"3"0`).
 #: The one predicate for "a `ddflow ci run` line", used to decide and to insert.
 _CI_VERB = re.compile(r"^(\s*ddflow\s+ci\s+run)(?=\s|$)")
 _CI_WORDS = re.compile(
     r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*"|'[^']*'|\\[^\n])+)"""
-    r"""|(?P<sep>(?:\s|\\\n)--(?=\s|$))|(?P<timeout>(?:\s|\\\n)--timeout(?:=|\s+)["']?[+-]?\d+["']?)""",
+    r"""|(?P<sep>(?:\s|\\\n)--(?=\s|$))|(?P<timeout>(?P<lead>\s|\\\n)--timeout(?:=|\s+)["']?[+-]?\d+["']?)""",
     re.S,
 )
 
@@ -740,7 +740,9 @@ def _ci_command_with_timeout(command: str, timeout_s: int) -> str:
         if m.lastgroup == "sep":
             break
         if m.lastgroup == "timeout":
-            out.append(command[pos : m.start()])
+            # Drop only the option; a continuation (backslash-newline) before it stays as written.
+            keep = m.group("lead") if m.group("lead").startswith("\\") else ""
+            out.append(command[pos : m.start()] + keep)
             pos = m.end()
     else:
         m = None
