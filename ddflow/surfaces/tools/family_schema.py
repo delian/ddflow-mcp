@@ -17,7 +17,14 @@ from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
 from . import TOOLS
 from .families import FAMILIES, Family
 
-__all__ = ("family_entry", "family_listing", "member_props", "missing_required", "route")
+__all__ = (
+    "family_entry",
+    "family_listing",
+    "member_of",
+    "member_props",
+    "missing_required",
+    "route",
+)
 
 ACTION = "action"
 #: A member that has an argument of its own called ``action`` (queue, ci, prompts, hooks,
@@ -87,12 +94,16 @@ def missing_required(routed: Routed) -> list[str]:
     """The arguments the routed member requires and the call lacks, by their family names.
 
     Missing is absent, ``None`` or ``""`` -- what the engine's own check calls missing -- while
-    ``0`` and ``False`` are values."""
-    props = TOOLS[routed.tool]["properties"]
+    ``0`` and ``False`` are values. An argument given under an old spelling the member still
+    accepts (``arg_aliases``) is given."""
+    spec = TOOLS[routed.tool]
+    olds = {a.new: old for old, a in (spec.get("arg_aliases") or {}).items()}
     return [
         OP if n == ACTION else n
-        for n, (_t, _d, req) in props.items()
-        if req and routed.args.get(n) in (None, "")
+        for n, (_t, _d, req) in spec["properties"].items()
+        if req
+        and routed.args.get(n) in (None, "")
+        and routed.args.get(olds.get(n, n)) in (None, "")
     ]
 
 
@@ -133,6 +144,17 @@ def family_listing() -> list[dict[str, Any]]:
     return [family_entry(n) for n, f in FAMILIES.items() if not f.single]
 
 
+def member_of(name: str, args: Any) -> str:
+    """The tool a ``tools/call`` of ``name`` runs: the member a family call selects, else ``name``.
+    No validation -- `route` refuses a bad call; this only says which tool it WOULD run, for the
+    server's choice of worker (a family call to a long gate is a long call)."""
+    family = FAMILIES.get(name)
+    action = args.get(ACTION) if isinstance(args, dict) else None
+    if family is None or family.single or not isinstance(action, str):
+        return name
+    return family.members.get(action, name)
+
+
 def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     """Resolve a family call ``name`` + ``args`` to its member.
 
@@ -170,6 +192,7 @@ def _problem(routed: Routed) -> str:
         return f"{routed.display}: missing required argument(s): {', '.join(missing)}"
     known = set(member_props(routed.tool))
     known |= set(TOOLS[routed.tool].get("deprecated") or {})
+    known |= set(TOOLS[routed.tool].get("arg_aliases") or {})
     if unknown := sorted(set(routed.args) - known):
         return (
             f"{routed.display}: unknown argument(s): {', '.join(unknown)}. "
