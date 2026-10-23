@@ -27,11 +27,6 @@ RECORD_COLLECTIONS = (
 )
 
 
-def record_ids(st: State) -> dict[str, frozenset[str]]:
-    """Collection -> the ids of the records in it."""
-    return {name: frozenset(getattr(st, name)) for name in RECORD_COLLECTIONS}
-
-
 def differing_fields(a: State, b: State) -> list[str]:
     """The State fields on which two folds disagree."""
     return [f.name for f in fields(State) if getattr(a, f.name) != getattr(b, f.name)]
