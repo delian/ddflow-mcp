@@ -25,15 +25,11 @@ from . import harnessreg as HR
 
 def effective_budget(session, target: str = "") -> int:
     """The start budget, in tokens, of a session of agent type ``target`` ("" = unknown): the
-    smaller of the global ceiling (`context_budget_tokens`, and the table's own `global`) and the
-    type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
+    smaller of the global ceiling (`context_budget_tokens`; the table's `global` key is the same
+    value, folded in when the config is read) and the type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
     out; a type above the global does not raise it (D-session-start-budget). 0 when nothing is set."""
     table = session.context_budget or {}
-    levels = [
-        session.context_budget_tokens,
-        table.get("global", 0),
-        table.get(target, 0) if target else 0,
-    ]
+    levels = [session.context_budget_tokens, table.get(target, 0) if target else 0]
     return min((v for v in levels if v > 0), default=0)
 
 

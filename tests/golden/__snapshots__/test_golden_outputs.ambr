@@ -1019,11 +1019,11 @@
           list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens,
           e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target
           is managed separately. A session's effective budget is the smaller of the
-          global and its type's; `global` here is a second spelling of
-          `context_budget_tokens` (if both are set the smaller applies); a type left
-          out inherits the global; 0 sets no ceiling AT THAT LEVEL (a type at 0 leaves
-          the global in force). `ddflow doctor` reports the cost against each
-          configured type. Layers merge key by key (the local layer wins).
+          global and its type's; `global` here is another spelling of
+          `context_budget_tokens`: the same value, the later layer's spelling winning;
+          a type left out inherits the global; 0 sets no ceiling AT THAT LEVEL (a type
+          at 0 leaves the global in force). `ddflow doctor` reports the cost against
+          each configured type. Layers merge key by key (the local layer wins).
       session.start_notice_reserve_tokens = 100   [default]
           Tokens `ddflow doctor` adds to the session start cost for the one-line
           upgrade or release notice that leads the first session after an upgrade.
