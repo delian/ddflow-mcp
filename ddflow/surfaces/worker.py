@@ -61,7 +61,7 @@ def live_digest(repo: Path) -> str:
 
 
 def _internal_error(msg: dict[str, Any], exc: BaseException) -> dict[str, Any] | None:
-    if msg.get("id") is None:
+    if "id" not in msg:  # a request with `"id": null` is still a request
         return None  # a notification: nothing is owed
     return {
         "jsonrpc": "2.0",
@@ -142,17 +142,8 @@ class _Run:
             with self.cv:
                 self.inflight -= 1
                 self.cv.notify_all()
-            self.write(
-                WP.response(
-                    frame["id"],
-                    _internal_error(frame["msg"], exc)
-                    or {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32603, "message": str(exc)},
-                    },
-                )
-            )
+            # a notification (no `id`) is owed nothing: acknowledge it, as `serve` does
+            self.write(WP.response(frame["id"], _internal_error(frame["msg"], exc)))
 
     def wait_idle(self) -> None:
         with self.cv:
@@ -268,9 +259,9 @@ def main(argv: list[str] | None = None) -> int:
     def target() -> None:
         try:
             code.append(run(Path(args.repo), sys.stdin, out, done=done))
-        except BaseException:  # run() died: record it, a crash is not a clean exit
-            print(traceback.format_exc(), file=sys.stderr)
+        except BaseException:  # run() died: record it first, a crash is not a clean exit
             code.append(1)
+            print(traceback.format_exc(), file=sys.stderr)
 
     t = threading.Thread(target=target, daemon=True)
     t.start()

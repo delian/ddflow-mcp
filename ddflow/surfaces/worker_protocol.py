@@ -7,7 +7,7 @@ can be replaced under a live connection.
 
 Frames (every one has `t`, the kind):
 
-    hello    shim -> worker  {shim_proto, state_key?}       first frame
+    hello    shim -> worker  {shim_proto, state_key?}       first frame (`state_key`: hex text)
     hello    worker -> shim  {worker_proto, digest, version} the reply, or `error`
     req      shim -> worker  {id, msg, conn}                  one MCP message
     res      worker -> shim  {id, msg}                        its answer (`msg` null: none owed)
@@ -21,7 +21,7 @@ Frames (every one has `t`, the kind):
                                                               sends it to the next worker)
     error    either          {code, message, id?}             a typed refusal
 
-Versioning: `PROTO_MAJOR` changes when a frame stops meaning what it did; an unknown extra field
+Versioning: `minor` is informational (nothing compares it yet). `PROTO_MAJOR` changes when a frame stops meaning what it did; an unknown extra field
 (a newer minor) is ignored. A worker refuses a shim of another major with
 `incompatible_shim_proto`; the shim (SU-shim) refuses a worker of another major with
 `incompatible_worker_proto` by comparing the `worker_proto` of the worker's hello with its
@@ -102,6 +102,8 @@ def decode(line: str) -> dict[str, Any] | None:
 
 def hello(*, shim_proto: int = PROTO_MAJOR, state_key: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {"t": "hello", "shim_proto": shim_proto, "minor": PROTO_MINOR}
+    if state_key and _bad_hex(state_key):
+        raise ValueError("state_key is hex text (the worker refuses anything else)")
     if state_key:
         out["state_key"] = state_key
     return out
