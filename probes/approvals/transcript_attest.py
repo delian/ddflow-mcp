@@ -93,11 +93,13 @@ def attestations(path: Path) -> list[dict]:
 
 
 def answer_for(path: Path, question: str, tool_use_id: str = "") -> str | list[str] | None:
-    """The person's answer to exactly ``question`` (ddflow's rendering), or None. The row must be
-    a harness-shaped accepted result for an AskUserQuestion that asked this question, and the
-    question itself must have a non-empty answer (another question's answer does not count). The same question text asked twice is two calls:
-    ddflow puts the ask id in the text it renders so no two requests share a question, and a caller that
-    knows the tool_use id passes it."""
+    """The newest accepted answer to a question with exactly this text, or None. The row must be a
+    harness-shaped accepted result for an AskUserQuestion that asked this question, and the
+    question itself must have a non-empty answer (another question's answer does not count).
+    Question TEXT is the only identity here unless ``tool_use_id`` pins one call: the same text
+    asked twice is two calls and this returns the newest answer to either. ddflow therefore puts the
+    ask id in the text it renders so no two requests share a question; a caller that cannot
+    guarantee unique text must pass the tool_use id."""
     got = [
         a["answers"][question]
         for a in attestations(path)
