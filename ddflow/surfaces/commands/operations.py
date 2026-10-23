@@ -255,10 +255,11 @@ def _pins_regenerate(a, c: Ctx) -> int:
     if c.json:
         emit_json(out.body())
         return out.exit
+    # .gitattributes is tracked: whatever the run's verdict, say what was written to it
+    for line in out.data.get("attributes", []):
+        print(f"{line} (a pin recipe lacked its merge line; commit .gitattributes with the pins)")
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
-        for line in out.data.get("attributes", []):
-            print(line, file=sys.stderr)
         for p in out.data.get("pins", []):
             if p["stale"] or p["error"]:
                 print(f"  {p['name']}: {p['error'] or 'stale'} ({', '.join(p['files'])})")
@@ -272,8 +273,6 @@ def _pins_regenerate(a, c: Ctx) -> int:
         print(out.data["note"])
     for line in out.data.get("resolved", []):
         print(f"resolved {line}; `git add` marks it resolved")
-    for line in out.data.get("attributes", []):
-        print(f"{line} (a pin recipe lacked its merge line; commit .gitattributes with the pins)")
     for p in out.data.get("pins", []):
         state = "re-recorded" if p["regenerated"] else "current"
         print(f"{p['name']}: {state}")
