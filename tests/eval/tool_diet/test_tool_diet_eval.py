@@ -149,3 +149,36 @@ def test_the_tagged_surface_tells_a_members_own_action_argument_as_op(monkeypatc
         "function"
     ]["parameters"]["properties"]["action"]["description"]
     assert "queue: op" in view and "queue: action" not in view
+
+
+def test_a_run_reports_the_first_call_and_the_retried_one_apart(monkeypatch):
+    import argparse
+
+    import td_run
+
+    answers = iter(
+        [
+            ("ddflow_gate_record", '{"id": "T-1"}', 100),  # refused: required arguments missing
+            ("ddflow_claim", '{"id": "T-2"}', 120),  # the retry is right
+        ]
+    )
+    monkeypatch.setattr(td_run, "ask", lambda *a, **k: next(answers))
+    monkeypatch.setattr(td_run, "SCENARIOS", (SCENARIOS[2],))
+    args = argparse.Namespace(repeat=1, timeout=1, retry=True)
+    out = td_run.run_surface(None, "flat", args)
+    assert out["first_call"]["invalid"] == 1 and out["first_call"]["correct"] == 0
+    assert out["correct"] == 1 and out["accuracy"] == 1.0
+    assert out["prompt_tokens_mean"] == 110  # both asks are counted
+    assert [m.get("retry", False) for m in out["misses"]] == [False]
+    assert out["misses"][0]["got"] == "ddflow_gate_record"
+
+
+def test_a_non_object_argument_text_is_a_refusal_not_a_crash(monkeypatch):
+    import td_run
+
+    monkeypatch.setattr(td_run, "ask", lambda *a, **k: ("ddflow_claim", '{"id": "T-2"}', 5))
+    sc = SCENARIOS[2]
+    first = G.grade(sc, "flat", "ddflow_claim", "null")
+    assert first.called and not first.valid
+    graded, name, _raw, used = td_run.retry(None, [], sc, "flat", "ddflow_claim", "null", 1, first)
+    assert graded.valid and name == "ddflow_claim" and used == 5
