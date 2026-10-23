@@ -139,7 +139,7 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
     _adjust_list(it, edit, fields, "needs")
     _adjust_list(it, edit, fields, "tags")
     _adjust_globs(it, edit, fields)
-    moved = IM.plan(cfg, st, it, edit.parent, edit.kind, _line_frozen)
+    moved = IM.plan(cfg, st, it, edit.parent, edit.kind, _line_frozen, fields.get("needs"))
     if isinstance(moved, str):
         return O.failed("item.updated", f"{it.id}: {moved}", id=it.id)
     fields.update(moved)

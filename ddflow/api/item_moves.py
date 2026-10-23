@@ -24,6 +24,7 @@ def plan(
     parent: str | None,
     kind: str | None,
     line_frozen: Callable[[State, Item], str],
+    needs: list[str] | None = None,
 ) -> dict[str, Any] | str:
     """``{"parent": ..}`` / ``{"kind": ..}`` for the parts that change ``it``, else why not.
 
@@ -43,7 +44,7 @@ def plan(
     if kind is not None and kind != it.kind:
         out["kind"] = kind
     if parent is not None and parent != it.parent:
-        bad = _parent_problem(cfg, st, it, parent, line_frozen)
+        bad = _parent_problem(cfg, st, it, parent, line_frozen, needs)
         if bad:
             return bad
         out["parent"] = parent
@@ -51,7 +52,12 @@ def plan(
 
 
 def _parent_problem(
-    cfg, st: State, it: Item, parent: str, line_frozen: Callable[[State, Item], str]
+    cfg,
+    st: State,
+    it: Item,
+    parent: str,
+    line_frozen: Callable[[State, Item], str],
+    needs: list[str] | None,
 ) -> str:
     to = st.items.get(parent) if parent else None
     if parent:
@@ -69,7 +75,7 @@ def _parent_problem(
                 f"{parent} is claimed ({to.lease.holder}): a task moved under it makes it an "
                 f"umbrella, which holds no lease. Release it first."
             )
-    trial = _moved(st, it, parent)
+    trial = _moved(st, it, parent, needs)
     if effective_line(trial, trial.items[it.id]) != effective_line(st, it):
         # An item inherits its phase's release line: moving it re-aims it like `--line` does.
         frozen = line_frozen(st, it)
@@ -85,11 +91,15 @@ def _parent_problem(
     return ""
 
 
-def _moved(st: State, it: Item, parent: str) -> State:
-    """A copy of ``st`` with ``it`` under ``parent``."""
+def _moved(st: State, it: Item, parent: str, needs: list[str] | None) -> State:
+    """A copy of ``st`` with ``it`` under ``parent`` (and with ``needs``, when the same edit
+    sets them)."""
     trial = copy.copy(st)
     trial.__dict__.pop("_children_cache", None)  # the parent -> children index is per fold
-    trial.items = {**st.items, it.id: replace(it, parent=parent)}
+    trial.items = {
+        **st.items,
+        it.id: replace(it, parent=parent, needs=it.needs if needs is None else list(needs)),
+    }
     return trial
 
 
