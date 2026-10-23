@@ -208,3 +208,42 @@ def test_a_failed_abort_is_not_reported_as_an_untouched_branch(repo, monkeypatch
     monkeypatch.setattr(branchsync.W, "git", git)
     out = sync(repo, item="T1", agent=ME)
     assert out.data["status"] == "conflict" and "ABORT FAILED" in out.reason
+
+
+def test_a_sync_of_unrelated_main_work_leaves_the_judged_gates_valid(repo):
+    """B-sync-main-makes-gates-stale-without-touching-globs: gates an agent judged about the
+    item's own change (standards, critic) are compared by the item's changed paths, not the
+    whole tree, so main work in files the item never touched does not make them stale."""
+    wt = _claimed(repo)
+    (wt / "src").mkdir(exist_ok=True)
+    (wt / "src" / "mine.py").write_text("x = 1\n")
+    _git(wt, "add", "src/mine.py")
+    _git(wt, "commit", "-qm", "mine")
+    for gate in ("standards", "critic"):
+        r = run_cli(wt, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran")
+        assert r[0] == 0, r
+    _land(repo, "docs/elsewhere.md")
+    out = sync(repo, item="T1", agent=ME)
+    assert out.data["status"] == "merged", out.reason
+    assert {"standards", "critic"} <= set(out.data["gates_valid"]), out.data
+    assert not {"standards", "critic"} & set(out.data["gates_stale"]), out.data
+
+
+def test_a_test_added_after_the_gate_does_not_make_it_stale_at_sync(repo):
+    """The same `[review].triage_ignore_globs` as triage: a regression test added after a
+    judged gate passed is not a difference."""
+    wt = _claimed(repo)
+    (wt / "src").mkdir(exist_ok=True)
+    (wt / "src" / "mine.py").write_text("x = 1\n")
+    _git(wt, "add", "src/mine.py")
+    _git(wt, "commit", "-qm", "mine")
+    r = run_cli(wt, "gate", "record", "T1", "standards", "--outcome", "passed", "--evidence", "ran")
+    assert r[0] == 0, r
+    (wt / "tests").mkdir(exist_ok=True)
+    (wt / "tests" / "test_mine.py").write_text("def test_x():\n    pass\n")
+    _git(wt, "add", "tests/test_mine.py")
+    _git(wt, "commit", "-qm", "a test")
+    _land(repo, "docs/elsewhere.md")
+    out = sync(repo, item="T1", agent=ME)
+    assert out.data["status"] == "merged", out.reason
+    assert "standards" in out.data["gates_valid"], out.data
