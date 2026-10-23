@@ -137,13 +137,19 @@ def test_a_tool_outside_the_core_tier_is_still_callable_by_name(repo, monkeypatc
 
 def test_a_docker_entry_ending_in_an_option_is_left_alone():
     odd = {"command": "docker", "args": ["run", "img", "--flag"]}
-    assert WM.worker_entry(odd, "core")["args"] == ["run", "img", "--flag"]
+    got = WM.worker_entry(odd, "core")
+    assert got["args"] == ["run", "img", "--flag"] and "env" not in got, got
 
 
 def test_the_recipe_names_the_flags_and_the_deferral_switch():
     text = WM.recipe(REL)
     for must in ("--mcp-config", "--strict-mcp-config", "ENABLE_TOOL_SEARCH"):
         assert must in text, must
+
+
+def test_only_the_documented_values_count_as_no_deferral():
+    for odd in ("0", "off", "no", "true"):
+        assert WM.deferral_note({"ENABLE_TOOL_SEARCH": odd}, tier="all") == "", odd
 
 
 def test_the_doctor_note_says_when_a_host_would_send_every_schema():
