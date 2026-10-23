@@ -43,11 +43,42 @@ def test_the_effective_budget_is_the_min_of_global_and_type():
     assert SC.effective_budget(s, "cursor") == 40000
 
 
-def test_the_table_has_its_own_global_key_that_is_the_same_ceiling():
+def test_the_table_global_key_is_a_second_spelling_of_the_global_and_the_smaller_wins():
     s = _session(context_budget_tokens=40000, context_budget={"global": 30000})
     assert SC.effective_budget(s, "claude") == 30000
     s = _session(context_budget_tokens=0, context_budget={"global": 30000, "claude": 25000})
     assert SC.effective_budget(s, "claude") == 25000 and SC.effective_budget(s, "x") == 30000
+
+
+def test_a_type_at_zero_lifts_nothing_and_leaves_the_global_in_force():
+    s = _session(context_budget_tokens=30000, context_budget={"claude": 0})
+    assert SC.effective_budget(s, "claude") == 30000, "0 at one level is no ceiling THERE, not 0"
+
+
+def test_the_manifest_default_is_an_empty_table_not_a_string():
+    from ddflow.services import upgrade_manifest as UM
+
+    change = next(
+        c
+        for _v, _d, changes in UM.load().releases
+        for c in changes
+        if c.key == "session.context_budget"
+    )
+    assert change.new == {} and isinstance(change.new, dict)
+
+
+def test_the_headline_follows_the_harness_running_doctor_not_the_ddflow_agent_name(
+    repo, monkeypatch
+):
+    """`agent` is a ddflow identity (a role or worker name), never a harness id: the type comes
+    from the session variables of the harness running the command."""
+    run_cli(repo, "init")
+    cfgp = repo / ".ddflow" / "config.toml"
+    cfgp.write_text(cfgp.read_text() + "\n[session.context_budget]\nclaude = 7\n")
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    _code, out, _ = run_cli(repo, "--json", "doctor", agent="claude")
+    head = next(n for n in json.loads(out)["notes"] if n.startswith("session start cost:"))
+    assert "(budget 40000)" in head, head
 
 
 def test_zero_means_no_ceiling_at_that_level_and_none_at_all_is_zero():

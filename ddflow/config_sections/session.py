@@ -117,7 +117,7 @@ class SessionConfig:
     )
     context_budget: dict[str, int] = knob(
         factory=dict,
-        doc="Start budgets per agent type, beside the global `context_budget_tokens`: a table from `global` or an agent type (the harness ids of `ddflow harness list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens, e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target is managed separately. A session's effective budget is the smaller of the global and its type's; a type left out inherits the global; 0 sets no ceiling at that level. `ddflow doctor` reports the cost against each configured type. Layers merge key by key (the local layer wins).",
+        doc="Start budgets per agent type, beside the global `context_budget_tokens`: a table from `global` or an agent type (the harness ids of `ddflow harness list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens, e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target is managed separately. A session's effective budget is the smaller of the global and its type's; `global` here is a second spelling of `context_budget_tokens` (if both are set the smaller applies); a type left out inherits the global; 0 sets no ceiling AT THAT LEVEL (a type at 0 leaves the global in force). `ddflow doctor` reports the cost against each configured type. Layers merge key by key (the local layer wins).",
         check=context_budget_problem,
     )
     start_notice_reserve_tokens: int = knob(
