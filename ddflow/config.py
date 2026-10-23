@@ -457,8 +457,6 @@ class Config:
             value = merge_signals(getattr(target, knob), value)
         if key == "session.context_budget" and isinstance(value, dict):
             value = {**getattr(target, knob), **value}  # per agent type, over the layers below
-            if "global" in value:  # the table's `global` IS context_budget_tokens: one value
-                target.context_budget_tokens = value.pop("global")
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
@@ -502,6 +500,9 @@ class Config:
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
         self._forget_fallback(key, f"the {source} value {value!r}")
+        if key == "session.context_budget" and "global" in value:
+            # the table's `global` IS context_budget_tokens: one value, validated above with the rest
+            target.context_budget_tokens = value.pop("global")
         setattr(target, knob, value)
         self.sources[key] = source
 
