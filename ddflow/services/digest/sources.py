@@ -37,8 +37,10 @@ class Source:
     detected_from: str
     #: "ddflow.services.digest.queue:collect_<kind>"; OD-queue's test resolves every one.
     collector: str
-    #: The exact command that answers it.
+    #: How it is answered, in words (may be an act outside ddflow, e.g. raising a limit).
     answer: str
+    #: The runnable `ddflow ...` command that answers or inspects it, with <placeholders>.
+    command: str
     #: How the lead puts it to the operator in chat.
     chat: str
     #: Who is blocked and how the impact count is taken.
@@ -47,7 +49,7 @@ class Source:
     sites: tuple[str, ...] = ()
 
 
-def _s(kind, what, owner, severity, detected, answer, chat, blocks, sites=()):
+def _s(kind, what, owner, severity, detected, answer, command, chat, blocks, sites=()):
     return Source(
         kind,
         what,
@@ -56,6 +58,7 @@ def _s(kind, what, owner, severity, detected, answer, chat, blocks, sites=()):
         detected,
         f"ddflow.services.digest.queue:collect_{kind}",
         answer,
+        command,
         chat,
         blocks,
         tuple(sites),
@@ -69,7 +72,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "approval ask records without an answer",
-        "ddflow approvals approve <id> | deny <id>",
+        "approve or deny the request",
+        "ddflow approvals approve <id>",
         APPROVAL_ASK,
         "the requesting agent and its item; dependants via needs",
     ),
@@ -79,7 +83,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "kind doc, title starts DECIDE, open, needs done",
-        "answer the task's questions, then decision add D-<id>-Qn",
+        "answer the task's questions; the lead records each as a decision",
+        "ddflow decision add --id D-<task>-Q<n> ...",
         ASK,
         "every item whose needs reach the task",
     ),
@@ -89,7 +94,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "gate at its round cap, or unavailable with no alternative",
-        "ddflow gate skip <id> <gate> --reason ... --approval <id>",
+        "approve the skip, then re-run it with the approval id",
+        "ddflow gate skip <id> <gate> --reason ...",
         APPROVAL_ASK,
         "the item and its dependants",
         ("gate.skip.failed_review",),
@@ -100,6 +106,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "gate recorded partial, not accepted",
+        "accept the partial outcome",
         "ddflow approve <id> <gate>",
         APPROVAL_ASK,
         "the item",
@@ -111,7 +118,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "pipeline complete except a refused gate; the hook refuses an agent's --force",
-        "ddflow complete <id> --force ... --approval <id>",
+        "approve the forced completion",
+        "ddflow complete <id> --force ...",
         APPROVAL_ASK,
         "the item and dependants",
         ("complete.force",),
@@ -122,6 +130,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "pending [chore] globs or skip_gates change",
+        "approve the chore policy",
         "ddflow chore approve",
         APPROVAL_ASK,
         "none usually",
@@ -133,6 +142,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "pending [[reviewer]] entry",
+        "approve the reviewer",
         "ddflow reviewers approve <name>",
         APPROVAL_ASK,
         "the gate that wanted it",
@@ -144,6 +154,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "export document selection changed, not acknowledged",
+        "acknowledge the selection",
         "ddflow export ack ...",
         APPROVAL_ASK,
         "none",
@@ -155,6 +166,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "plan proposed, not confirmed",
+        "confirm or reject the plan",
         "ddflow plan confirm --yes --reason ...",
         ASK,
         "the work the plan creates",
@@ -166,7 +178,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "decision in status proposed, or accepted by default and unconfirmed",
-        "ddflow decision show <id>, then accept or supersede",
+        "read it, then accept or supersede it",
+        "ddflow decision show <id>",
         ASK,
         "items under its globs",
     ),
@@ -176,7 +189,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "gate list --refuted / --overrides",
-        "ddflow gate list --refuted, then accept or reopen",
+        "inspect each, then accept or reopen",
+        "ddflow gate list --refuted",
         ASK,
         "trust, not flow",
     ),
@@ -186,6 +200,7 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "urgent",
         "latest ci.recorded on main failed, or the red-main bug is open",
+        "see the fix task; nothing merges until main is green",
         "ddflow show <fix task>",
         ASK,
         "every merge; impact is the ready queue",
@@ -196,7 +211,8 @@ SOURCES: tuple[Source, ...] = (
         LEAD,
         "needs",
         "health finding older than the cap, or lease expired without a heartbeat",
-        "ddflow health (its correcting command)",
+        "run the correcting command health prints",
+        "ddflow health",
         LEAD_ONLY,
         "the waiters on its files",
     ),
@@ -206,7 +222,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "needs",
         "run record failure text, or lease expired with no heartbeat",
-        "restart the agent; raise the limit",
+        "restart the agent; raise the limit if that was the cause",
+        "ddflow show <item>",
         ASK,
         "its item",
     ),
@@ -217,6 +234,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "unavailable reviewer whose cause is a missing key",
         "put the key where the reviewer's doc says (never in chat)",
+        "ddflow reviewers list",
         ASK,
         "the gate",
     ),
@@ -227,6 +245,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "session note or ask of kind question without an answer",
         "answer in chat; the lead records it",
+        "ddflow session note <item> ...",
         ASK,
         "the asker",
     ),
@@ -236,11 +255,13 @@ SOURCES: tuple[Source, ...] = (
         LEAD,
         "info",
         "every task done, phase open",
+        "complete the phase",
         "ddflow complete <phase>",
         LEAD_ONLY,
         "none",
     ),
 )
+
 
 #: Operator-only verbs that never WAIT: the act happens at the call and leaves nothing pending.
 EXEMPT_SITES: dict[str, str] = {

@@ -32,7 +32,7 @@ def test_kinds_unique_and_rows_complete():
     for s in S.SOURCES:
         assert re.fullmatch(r"[a-z_]+", s.kind)
         assert s.owner in S.OWNERS and s.severity in S.SEVERITIES
-        for f in (s.what, s.detected_from, s.answer, s.chat, s.blocks):
+        for f in (s.what, s.detected_from, s.answer, s.command, s.chat, s.blocks):
             assert f.strip(), (s.kind, f)
         assert s.collector == f"ddflow.services.digest.queue:collect_{s.kind}"
 
@@ -45,11 +45,26 @@ def test_operator_rows_have_a_chat_route_and_lead_rows_do_not_pretend():
             assert s.chat == S.LEAD_ONLY
 
 
+def _prefix(command: str) -> str:
+    """The command up to its first placeholder, option or ellipsis: `ddflow gate skip`."""
+    words = []
+    for w in command.split():
+        if w.startswith(("<", "-", ".")):
+            break
+        words.append(w)
+    return " ".join(words)
+
+
+def test_commands_are_runnable_ddflow_commands():
+    for s in S.SOURCES:
+        assert s.command.startswith("ddflow "), s.kind
+
+
 def test_site_commands_appear_in_the_answer_of_their_source():
     cmd = {s.verb: s.command for s in sites.SITES}
     for s in S.SOURCES:
         for v in s.sites:
-            assert cmd[v].split(" ")[1] in s.answer, (s.kind, v)
+            assert s.command.startswith(_prefix(cmd[v])), (s.kind, v)
 
 
 def test_red_main_is_urgent_and_by_kind_indexes_all():
