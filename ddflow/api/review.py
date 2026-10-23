@@ -14,6 +14,8 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import functools
+import inspect
 import json
 import re
 import secrets
@@ -46,6 +48,7 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
+from ..services.gates import running as RUN
 from ..services.guidance import inject as GI
 from ..views import human
 from ._base import _load
@@ -1832,6 +1835,26 @@ def _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reas
     return O.refused("review", why, id=item, gate=gate) if why else None
 
 
+def _ends_on_signal(fn):
+    """`fn` (a `review`) with SIGTERM/SIGHUP -- the usual `timeout` -- turned into a said and
+    recorded `unavailable` (`_terminated`) instead of a silent death (Bed9d75dd1c)."""
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def wrapper(*a, **kw):
+        bound = sig.bind(*a, **kw)
+        bound.apply_defaults()
+        started_at = clock.now_iso()
+        try:
+            with RUN.terminating():
+                return fn(*a, **kw)
+        except RUN.RunTerminated as stop:
+            return _terminated(dict(bound.arguments), stop.signame, started_at)
+
+    return wrapper
+
+
+@_ends_on_signal
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -1870,6 +1893,45 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     if len(asked) > 1:
         return _review_gates(asked, args)
     return _review_gate(**{**args, "gate": asked[0] if asked else gate})
+
+
+def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcome:
+    """A review ended by SIGTERM/SIGHUP (the usual `timeout`) before its reviewers answered:
+    said, and recorded `unavailable` for each gate asked that gained no outcome in this run
+    -- never a pass, never silence, never over a round this run already recorded. Marked a
+    delta so an earlier finished round stays the gate's record (`_keep_reviewed_round`)
+    (Bed9d75dd1c)."""
+    repo, item = args["repo"], args["item"]
+    gate_names = [g.strip() for g in args["gate"].split(",") if g.strip()]
+    reason = (
+        f"the review was terminated by {signame} before a reviewer finished: "
+        "nothing was reviewed, which is not a pass"
+    )
+    kept: list[str] = []
+    log, cfg, st = _load(repo, args["agent"])
+    it = st.items.get(item) if item else None
+    if it is not None and gate_names:  # an id no item has is never recorded (B8d9e8108f8)
+        gates = GD.load_gates(repo, cfg)
+        for g in gate_names:
+            rec = it.gates.get(g) if it else None
+            if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
+                kept.append(f"{g} = {rec.outcome}")  # this run already recorded it
+                continue
+            _record(
+                repo, log, cfg, st, item, g, "unavailable", args["called_from"], gates,
+                reason=reason, evidence={"review_kind": "delta"},
+            )  # fmt: skip
+    if kept:
+        reason += f" (already recorded by this run: {', '.join(kept)})"
+    return O.nothing(
+        "review",
+        reason,
+        id=item,
+        gate=args["gate"],
+        outcome="unavailable",
+        findings=[],
+        text=reason,
+    )
 
 
 #: What each review gate asks of a reviewer, for a combined review's intent. A gate with
