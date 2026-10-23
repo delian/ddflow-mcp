@@ -1,6 +1,6 @@
 {#
   What the MCP client injects into the model's context the moment it connects: a CHARTER of the contract
-  (<= 1.5K chars, tests/test_charter_contract.py), not a manual. The manual is the help topic `manual`.
+  (contract text <= 1.5K chars; state notices add to it only while their state holds, tests/test_charter_contract.py), not a manual. The manual is the help topic `manual`.
 
   This is the ONLY place the server speaks unprompted, and it is plain text on purpose:
   it is the file to edit when you want a different workflow, a different tone, or a
@@ -64,7 +64,7 @@ This project's rules file needs the operator:{% for r in rules_drift %} {{ r.det
 {% endif %}{% if actionable_companions %}
 Companions not wired up ("not checked" is not "missing"; `ddflow_companions` probes, has install commands):{% for c in actionable_companions %} {{ c.id }} [{{ c.state_word }}]{% endfor %}. Propose to the operator; install nothing unasked.
 {% endif %}{% if gate_gaps %}
-Gates with no tool behind them:{% for g in gate_gaps %} `{{ g }}`{% endfor %}; record `unavailable`, never imply a tool ran.
+Gates with no tool behind them:{% for g in gate_gaps %} `{{ g }}`{% endfor %}; judgement you do yourself is fine and expected, but record `unavailable` for a tool or reviewer that could not run, never imply one ran.
 {% endif %}{% if queue_is_empty %}{% if importable %}
 The queue is empty but {{ importable }} history file(s) were found: `ddflow_import` (writes nothing), then put it to the operator; the `onboard` prompt also cuts the workflow over.
 {% endif %}{% endif %}{% if imported_no_globs or imported_shipped_drift %}
