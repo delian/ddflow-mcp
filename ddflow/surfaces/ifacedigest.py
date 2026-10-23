@@ -57,13 +57,13 @@ from ..core import digest as DG
 from . import mcp_protocol as proto
 from .ifaceschema import output_problems, schema_problems
 from .tools.tiers import TIERS
+from .worker_protocol import PROTO_MAJOR
 
 #: Bumped when the canonical form changes, so a digest of one form is never compared to another.
 FORM = 1
-#: The shim<->worker protocol majors (SU-worker-proto owns them once it lands): a change of
-#: either is a HARD upgrade whatever the rest of the interface did.
-SHIM_PROTO = 1
-WORKER_PROTO = 1
+#: The shim<->worker protocol major (`worker_protocol` owns it): a change of it is a HARD upgrade
+#: whatever the rest of the interface did. The shim and the worker speak one number today.
+SHIM_PROTO = WORKER_PROTO = PROTO_MAJOR
 #: The two tools a facade-mode server lists (MTD-search-call).
 FACADE_TOOLS = ("ddflow_search", "ddflow_call")
 HONOURS, IGNORES, UNKNOWN = "honours", "ignores", "unknown"
