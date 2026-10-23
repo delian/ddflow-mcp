@@ -97,12 +97,25 @@ def _from_bug_found(args: dict, data: dict) -> list[dict]:
 
 def _from_next(args: dict, data: dict) -> list[dict]:
     ready = data.get("ready") or []
-    first = ready[0] if ready else None
-    item = str(first.get("id", "")) if isinstance(first, dict) else str(first or "")
+    item = _id_of(ready[0]) if ready else ""
     return [_hint("ddflow_claim", "claim the first ready item", id=item)] if item else []
 
 
+def _id_of(entry: Any) -> str:
+    return str(entry.get("id", "")) if isinstance(entry, dict) else str(entry or "")
+
+
+def _from_brief(args: dict, data: dict) -> list[dict]:
+    """Work this agent holds first (its gate status), else the first ready item."""
+    held = next((i for i in (_id_of(e) for e in data.get("held") or []) if i), "")
+    if held:
+        return [_gate_status(held)]
+    ready = next((i for i in (_id_of(e) for e in data.get("ready") or []) if i), "")
+    return [_hint("ddflow_claim", "claim the first ready item", id=ready)] if ready else []
+
+
 _EMITTERS = {
+    "ddflow_brief": _from_brief,
     "ddflow_claim": _from_claim,
     "ddflow_gate_record": _from_gate_result,
     "ddflow_gate_skip": _from_gate_result,

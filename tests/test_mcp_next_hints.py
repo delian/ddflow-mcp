@@ -108,9 +108,16 @@ def test_next_points_at_claiming_the_first_ready_item():
     assert N.hints("ddflow_next", {}, {"ready": []}, "all") == []
 
 
+def test_brief_points_at_held_work_first_else_the_first_ready_item():
+    held = N.hints("ddflow_brief", {}, {"held": [{"id": "T5"}], "ready": [{"id": "T6"}]}, "all")
+    assert held[0]["tool"] == "ddflow_gate_status" and held[0]["args_hint"] == {"id": "T5"}
+    ready = N.hints("ddflow_brief", {}, {"held": [], "ready": [{"id": "T6"}]}, "all")
+    assert ready[0]["tool"] == "ddflow_claim" and ready[0]["args_hint"] == {"id": "T6"}
+    assert N.hints("ddflow_brief", {}, {"held": [], "ready": []}, "all") == []
+
+
 def test_tools_outside_the_list_get_no_hint():
     assert N.hints("ddflow_rule_list", {}, {}, "all") == []
-    assert N.hints("ddflow_brief", {}, {}, "all") == []
     assert N.hints("ddflow_gate_status", {"id": "T1"}, {"item": "T1"}, "all") == []  # no state
 
 
@@ -197,12 +204,14 @@ def queued(repo):
     return repo
 
 
-def test_hints_are_off_by_default(queued):
+def test_hints_are_off_by_default(queued, monkeypatch):
+    monkeypatch.delenv("DDFLOW_MCP_NEXT_HINTS", raising=False)
     body, err = _call(queued, "ddflow_claim", id="T1")
     assert not err and "next" not in body
 
 
 def test_the_knob_adds_the_next_field_to_a_state_changing_result(queued, monkeypatch):
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "all")
     monkeypatch.setenv("DDFLOW_MCP_NEXT_HINTS", "on")
     body, err = _call(queued, "ddflow_claim", id="T1")
     assert not err
@@ -232,6 +241,7 @@ def _texts(repo, tool, **args):
 
 
 def test_a_text_result_carries_the_hints_as_a_last_block(queued, monkeypatch):
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "all")
     monkeypatch.setenv("DDFLOW_MCP_NEXT_HINTS", "1")
     texts = _texts(queued, "ddflow_gate_status", id="T1")
     assert not texts[0].startswith("next: ")  # the document stays first
