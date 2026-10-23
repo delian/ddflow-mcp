@@ -93,14 +93,23 @@ def _is_ddflow(argv: list[str]) -> bool:
 
 
 def _has_ddflow_ancestor(proc: Path, pid: int) -> bool:
+    """True when a ddflow process is above ``pid`` -- or when that cannot be told: an ancestor
+    that is there but unreadable (another user's under hidepid) might be one, and naming a live
+    run's suite as orphaned with a kill command is worse than missing an orphan."""
     seen = set()
     while pid >= 1 and pid not in seen:
         seen.add(pid)
         stat = _stat(proc, pid)
         if stat is None:
-            return False
+            return (proc / str(pid)).exists()  # gone: the chain ends; unreadable: unknown
         pid = stat[0]
-        if pid >= 1 and _is_ddflow(_argv(proc, pid)):
+        if pid < 1:
+            break
+        try:
+            raw = (proc / str(pid) / "cmdline").read_bytes()
+        except OSError:
+            return (proc / str(pid)).exists()  # unreadable: unknown; gone: the chain ends
+        if _is_ddflow([w.decode("utf-8", "replace") for w in raw.split(b"\0") if w]):
             return True
     return False
 
