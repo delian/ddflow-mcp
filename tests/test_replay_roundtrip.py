@@ -108,6 +108,21 @@ def test_a_record_deleted_and_recreated_is_still_caught(history, monkeypatch):
     assert "M1" in fold(events, strict=False).memories  # the final state has it
     _forget_deletes(monkeypatch)
     assert any("M1 disappeared" in p for p in rt.vanished(events))
+    # and through the public check, which is what `replay --verify` runs
+    assert any("M1 disappeared" in p for p in rt.check(events, fold(events, strict=False)))
+
+
+def test_a_swap_that_keeps_the_count_is_caught(history, monkeypatch):
+    repo, _ = history
+    events = _log(repo).read_all()
+    real = model.HANDLERS["memory.forgotten"]
+
+    def swapping(st, ev):
+        real(st, ev)
+        st.memories["other"] = st.memories.pop(ev.subject)  # one out, one in: same length
+
+    monkeypatch.setitem(model.HANDLERS, "memory.forgotten", swapping)
+    assert any("M1 disappeared" in p for p in rt.vanished(events))
 
 
 def test_a_record_that_lives_between_two_events_is_caught(history, monkeypatch):
