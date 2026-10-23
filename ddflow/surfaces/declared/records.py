@@ -28,6 +28,7 @@ BUG_INVALID_FIELDS = (
     "fix_task_tree",
 )
 
+
 def file_tasks_call(repo, a: dict, agent: str):
     """`bug file-tasks`: one bug's task (`id`), every bug's (`all`), else a preview."""
     bug = a.get("id") or ""
