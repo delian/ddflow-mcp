@@ -64,6 +64,7 @@ def test_the_pipeline_shown_is_the_project_s_own(repo):
     text = _instructions(repo)
     line = next((ln for ln in text.splitlines() if ln.startswith("Gates:")), "")
     assert line, text[:600]
+    assert line.split() == ["Gates:", "implement", "unit_tests", "merge."], line
     assert "rubber_duck" not in line, f"a trimmed pipeline must not show the default: {line}"
 
 

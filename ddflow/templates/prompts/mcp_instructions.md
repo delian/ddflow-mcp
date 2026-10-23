@@ -43,8 +43,8 @@
 {% endif %}
 {% if adopted %}
 ddflow manages this repository's work queue. Hooks, leases and gate refusals enforce it; this is the contract.
-1. Call `ddflow_brief` first.
-2. Claim before you edit: `ddflow_next`, `ddflow_claim` (an isolated worktree), `ddflow_gate_status`, `ddflow_merge`, `ddflow_complete`. One of several agents: `ddflow_identify` first, or `as_agent` on every call.
+1. Call `ddflow_brief` first. Sharing a worktree with other agents: pass `as_agent` (your role name) on every call.
+2. Claim before you edit: `ddflow_next`, `ddflow_claim` (an isolated worktree), `ddflow_gate_status`, `ddflow_merge`, `ddflow_complete` (PR flow: merge parks the item; take the next, do not complete).
 3. Missing, ambiguous or needs approval: ask the operator, never guess; install nothing unasked.
 4. A tool or reviewer that could not run is `unavailable`, never `passed`. A bug needs a regression test.
 5. Record as you go: the operator's words verbatim (`ddflow_session_prompt`), decisions, bugs before fixing, lessons.

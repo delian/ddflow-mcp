@@ -39,22 +39,25 @@ def _instructions(repo: Path) -> str:
 def test_the_adopted_charter_keeps_every_contract_line_under_the_cap(repo):
     run_cli(repo, "init")
     text = _instructions(repo)
+    assert "as_agent" in text and "PR flow" in text  # identity per call; merge parks in PR flow
     for must in CONTRACT:
         assert must in text, f"the charter dropped {must!r}"
-    assert len(text) <= CHARTER_MAX_CHARS, f"{len(text)} chars > {CHARTER_MAX_CHARS}:\n{text}"
+    assert len(text.encode()) <= CHARTER_MAX_CHARS, (
+        f"{len(text.encode())} bytes > {CHARTER_MAX_CHARS}:\n{text}"
+    )
 
 
 def test_the_unadopted_charter_is_under_the_cap_too(repo):
     text = _instructions(repo)
     assert "does not use ddflow yet" in text and "ddflow_setup" in text
-    assert len(text) <= CHARTER_MAX_CHARS, f"{len(text)} chars"
+    assert len(text.encode()) <= CHARTER_MAX_CHARS, f"{len(text.encode())} bytes"
 
 
 def test_the_charter_points_at_a_manual_that_exists_and_holds_the_rest(repo):
     from ddflow.services import help as H
 
     run_cli(repo, "init")
-    assert "topic=manual" in _instructions(repo) or "manual" in _instructions(repo)
+    assert "`ddflow_help` topic `manual`" in _instructions(repo)
     manual = H.render_topic("manual", repo)
     # What the charter no longer carries is still reachable.
     for kept in (
@@ -79,6 +82,6 @@ def test_the_session_start_framing_carries_the_contract_in_a_kilobyte(repo):
     from ddflow.api.setup import SESSION_START_FOOTER, SESSION_START_HEADER
 
     framing = SESSION_START_HEADER + SESSION_START_FOOTER
-    assert len(framing) <= 1000, len(framing)
+    assert len(framing.encode()) <= 1000, len(framing.encode())
     for must in ("claim", "operator", "unavailable", "ddflow_brief"):
         assert must in framing, must
