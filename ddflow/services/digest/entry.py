@@ -14,12 +14,13 @@ from typing import Any
 
 from ...config_sections.digest import parse_ladder
 from ...core import clock
+from ...core.health import KINDS as HK
 from ...core.model import ABANDONED, DONE, State
 from .sources import SEVERITIES, by_kind
 
 #: Facts that need I/O (a worktree's newest change) are read by the caller and passed in; a
 #: queue built without them says so (`Queue.gaps`) instead of reporting a clean lane.
-HEALTH_KINDS = ("crashed", "locked", "unresponsive", "stalled")
+HEALTH_KINDS = HK  # every finding kind the watchdog can raise
 
 
 @dataclass(frozen=True)
