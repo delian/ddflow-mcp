@@ -18,6 +18,7 @@ from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ...core.model import fold
 from ..ask import engine as E
+from . import harness as H  # noqa: F401 -- registers the level verifier of the harness channel
 from . import request as R
 from . import sites
 from .canon import Canon
@@ -43,7 +44,7 @@ def route(ask_id: str, canon: Canon, *, new: bool) -> str:
     )
 
 
-def _problem(row: dict[str, Any] | None, canon: Canon, now: float) -> str:
+def _problem(row: dict[str, Any] | None, canon: Canon, now: float, cfg: Config | None) -> str:
     if row is None or not row["verb"]:
         return "no such approval request"
     ask_id = row["id"]
@@ -66,7 +67,7 @@ def _problem(row: dict[str, Any] | None, canon: Canon, now: float) -> str:
     verdict = E.judge(row, canon.digest())
     if not verdict.ok:
         return verdict.reason
-    level = E.verified_level(row)
+    level = E.verified_level(row, cfg)
     if level < row["min_level"]:
         return (
             f"{ask_id} was answered at a level that holds up as L{level} but '{canon.verb}' "
@@ -81,13 +82,15 @@ def _problem(row: dict[str, Any] | None, canon: Canon, now: float) -> str:
     return ""
 
 
-def spend(log, canon: Canon, ask_id: str, *, now: float | None = None) -> Decision:
+def spend(
+    log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None
+) -> Decision:
     """Check ``ask_id`` against ``canon`` and, if it holds, record one use. All under the lock."""
     with log.transaction():
         # read the clock INSIDE the lock: waiting for it must not make an expiry look earlier
         now = clock.now_utc().timestamp() if now is None else now
         row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
-        if why := _problem(row, canon, now):
+        if why := _problem(row, canon, now, cfg):
             return Decision(False, f"refusing: {why}.", ask_id=ask_id)
         assert row is not None
         log.append(
@@ -101,7 +104,7 @@ def spend(log, canon: Canon, ask_id: str, *, now: float | None = None) -> Decisi
             "ask": ask_id,
             "approved_by": row["answered_by"],
             "via": row["via"],
-            "level": E.verified_level(row),
+            "level": E.verified_level(row, cfg),
             "digest": row["digest"],
             "proxy": canon.agent,
         },
@@ -120,7 +123,7 @@ def operator_gate(
 ) -> Decision:
     """The one question an agent-refusing site asks. Never answers for a person."""
     if approval_id:
-        return spend(log, canon, approval_id, now=now)
+        return spend(log, canon, approval_id, now=now, cfg=cfg)
     state = fold(log.read_all(), strict=False)
     filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=True)
     if filed is None:

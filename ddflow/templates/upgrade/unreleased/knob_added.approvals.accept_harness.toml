@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.accept_harness"
+new = 'true'
+why = "Accept an approval answered in the agent's own chat, read from the harness transcript."
