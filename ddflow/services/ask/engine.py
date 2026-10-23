@@ -284,7 +284,7 @@ def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> Non
         log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id})
 
 
-def revoke(log, ask_id: str, *, actor: Actor, now: float | None = None) -> None:
+def revoke(log, ask_id: str, *, actor: Actor) -> None:
     """An approver takes back an ANSWERED approval that still has uses left (RA-cli). A person's
     act, refused to any other identity before the ask is even looked up: the spend check
     (`consume`) refuses a revoked ask, and a use already spent stays spent."""
