@@ -262,7 +262,12 @@ def _text_with_next(
 ) -> dict[str, Any]:
     """A text result (a document, not an object) carries the hints as a block ``next: [...]``
     after the document, so its first block stays the document."""
-    if hint is not None and out.exit == OK and (hints := hint(out.data)):
+    if (
+        hint is not None
+        and out.exit == OK
+        and isinstance(out.data, dict)
+        and (hints := hint(out.data))
+    ):
         text = "next: " + json.dumps(hints, separators=(",", ":"))
         result["content"].append({"type": "text", "text": text})
     return result

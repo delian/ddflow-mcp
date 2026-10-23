@@ -15,10 +15,9 @@ MCP_TOOL_TIERS = ("core", "standard", "all")
 
 #: What `[mcp].tools` accepts: the profiles of `surfaces/tools/profiles.py` (`auto` is the lean
 #: core unless the client table names another) and the flat tiers above.
+MCP_TOOL_CHOICES = ("auto", "lean", "families", "hot+families", *MCP_TOOL_TIERS)
 #: `[mcp].next_hints`: how many next-step hints a state-changing result may carry.
 MCP_NEXT_HINTS = ("off", "on", "1", "2", "3")
-
-MCP_TOOL_CHOICES = ("auto", "lean", "families", "hot+families", *MCP_TOOL_TIERS)
 #: `[mcp].output_schemas`.
 MCP_OUTPUT_SCHEMAS = ("off", "on")
 #: `[mcp].on_upgrade`.

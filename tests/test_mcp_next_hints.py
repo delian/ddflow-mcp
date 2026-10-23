@@ -277,3 +277,25 @@ def test_a_body_that_already_has_a_next_keeps_it(queued, monkeypatch):
     assert M._with_next({"a": 1}, Out, hint)["next"] == hint({})
     assert M._with_next({"a": 1}, Out, None) == {"a": 1}
     assert M._with_next(["list"], Out, hint) == ["list"]
+
+
+def test_a_nested_status_that_carries_the_item_inside_is_read(monkeypatch):
+    nested = {"status": {"item": "T7", "current": "critic", "complete": False}}
+    got = N.hints("ddflow_gate_status", {}, nested, "all")
+    assert got[0]["tool"] == "ddflow_review" and got[0]["args_hint"] == {
+        "id": "T7",
+        "gate": "critic",
+    }
+
+
+def test_a_text_result_whose_data_is_not_an_object_gets_no_block():
+    from ddflow.surfaces import mcp as M
+
+    class Out:
+        exit = 0
+        data = "a document"
+
+    result = {"content": [{"type": "text", "text": "doc"}]}
+    assert M._text_with_next(result, Out, lambda d: [{"x": 1}]) == {
+        "content": [{"type": "text", "text": "doc"}]
+    }
