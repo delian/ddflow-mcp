@@ -27,9 +27,10 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     """A reviewer that answers at once, or sleeps while `slow` exists; branch `feat` with a
     change. Returns (the file the slow reviewer touches when it starts, the `slow` switch)."""
     began, slow = tmp_path / "began", tmp_path / "slow"
+    pidfile = tmp_path / "reviewer.pid"
     cli = tmp_path / "reviewer"
     cli.write_text(
-        f"#!/bin/sh\ncat >/dev/null\nif [ -e '{slow}' ]; then touch '{began}'; sleep 120; fi\n"
+        f"#!/bin/sh\ncat >/dev/null\nif [ -e '{slow}' ]; then echo $$ > '{pidfile}'; touch '{began}'; exec sleep 120; fi\n"
         "echo 'STATUS: NO FINDINGS'\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
@@ -67,12 +68,26 @@ def _review_and_term(repo: Path, began: Path, tmp_path: Path) -> str:
                 time.sleep(0.1)
             assert began.exists(), "the reviewer never started: " + log.read_text()
             p.send_signal(signal.SIGTERM)
-            p.wait(timeout=60)  # it must end by itself, with its reviewer cancelled
+            p.wait(timeout=60)  # it must end by itself...
+            _assert_gone(began.parent / "reviewer.pid")  # ...with its reviewer cancelled
         except BaseException:
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(p.pid, signal.SIGKILL)  # the group still exists: p is not reaped
             raise
     return log.read_text()
+
+
+def _assert_gone(pidfile: Path) -> None:
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
+    os.kill(pid, signal.SIGKILL)
+    raise AssertionError(f"the reviewer (pid {pid}) outlived the terminated review")
 
 
 def _gate(repo: Path) -> dict:
