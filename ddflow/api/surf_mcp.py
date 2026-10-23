@@ -66,6 +66,12 @@ def render_instructions(repo: Path, overrides: dict[str, str], variables: dict[s
     return P.render(P.resolve("mcp_instructions", repo, overrides), **variables).strip()
 
 
+def instructions_template(repo: Path) -> str:
+    """The UNRENDERED `mcp_instructions` template (override or shipped): what the interface
+    digest fingerprints, so the per-session variables of the rendered text do not move it."""
+    return P.resolve("mcp_instructions", repo).text
+
+
 def instructions_override(repo: Path) -> str:
     """The `[prompts].mcp_instructions` path, read by NAME: the dead-knob ratchet greps for
     the knob being read, and a bulk dict pass is how a knob gets renamed in config and
