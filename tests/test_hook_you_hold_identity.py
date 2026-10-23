@@ -55,6 +55,7 @@ def test_another_items_lease_of_the_same_holder_does_not_cover_this_tree(repo, c
     code, msg = E.check_commit(repo, cfg, agent="owner")
     assert code == 1, msg
     assert "docs/x.md" in msg and "You hold: src/*" in msg, msg
+    assert "ANOTHER agent" not in msg and "another item YOU hold" in msg, msg
 
 
 def test_a_holders_item_without_a_tree_still_covers_its_commit_here(repo, cfg, monkeypatch):
