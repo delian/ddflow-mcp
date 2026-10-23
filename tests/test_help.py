@@ -20,6 +20,7 @@ from conftest import run_cli
 from ddflow.services import help as H
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.mcp import TOOLS
+from ddflow.surfaces.tools.families import FAMILIES
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -122,7 +123,8 @@ def unknown_mentions(mentions: list[tuple[str, str]], leaves: set[str] | None = 
     `ddflow_cleanup with apply=true` names `ddflow_cleanup`. ` ` is a CLI path, looked
     up in argparse.
     """
-    tools = {t.removeprefix("ddflow_") for t in TOOLS}
+    # a family tool (`ddflow_gate action=record`) is a tool a client sees, though not a `TOOLS` key
+    tools = {t.removeprefix("ddflow_") for t in (*TOOLS, *FAMILIES)}
     names = [m.split()[0] for sep, m in mentions if sep == "_"]
     bad = [f"ddflow_{name}" for name in names if name not in tools]
     return bad + unknown_cli_mentions([m for sep, m in mentions if sep == " "], leaves)
