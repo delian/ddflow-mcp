@@ -38,6 +38,7 @@ from ...services import repo_hygiene as RH
 from ...services import sessions as SS
 from ...services import shardmarks as SM
 from ...services import shared_files as SF
+from ...services import startcost as SC
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
@@ -299,6 +300,7 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
+    start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -308,10 +310,8 @@ def doctor(
     should know). The split is the whole value: a report where a stale index reads the
     same as a dependency cycle is a report nobody acts on.
 
-    The body is PROSE on both surfaces, rendered by `views/human.py`, because a list of
-    problems with advice attached is what an operator and an agent both want.
+    The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-
     log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
@@ -322,6 +322,7 @@ def doctor(
     repair_ctx = RP.context(repo, log, cfg)
     events = repair_ctx.events
     store = Store(repo, cfg)
+    cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
     problems, notes = RP.integrity(repair_ctx)
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
@@ -384,7 +385,6 @@ def doctor(
     # measures the items that are present; this one asks whether any of them can be picked
     # up, which is the question that went unasked while 37 filed follow-ups sat invisible
     # on the source project with every audit exiting 0.
-
     for u in unpickable(st, cfg):
         if u.kind == "finished_phase":
             u.detail = _finished_phase_remedy(u.detail, st, cfg, u.item, repo)
@@ -393,7 +393,6 @@ def doctor(
     # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky
     # gate and a stalled cadence are facts about the tooling, and failing `doctor` on them
     # would block work on a defect in the thing that checks the work.
-
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
@@ -424,7 +423,6 @@ def doctor(
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
     # drifted or stripped block is a note — the agent has rules, they are just not current.
-
     _rules_findings(repo, st.highest_version, problems, notes)
 
     _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
@@ -452,6 +450,7 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    notes += cost.notes()
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -463,6 +462,7 @@ def doctor(
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
         "auto_order": ordered,
+        **cost.data(),
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)

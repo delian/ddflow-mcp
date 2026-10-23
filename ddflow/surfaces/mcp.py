@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from ddflow.core import agentname as AN
+from ddflow.core import measuring
 from ddflow.core.outcome import EXIT_NAMES, NOTHING, OK, REFUSED, declared_exit, exit_for
 
 from ..config import Config
@@ -1234,6 +1235,8 @@ def _upgrade_line(repo: Path, agent: str) -> str:
     the project -> what the start did and the proposal the operator is asked about. Else the
     one-line notice, said once per version on this machine, per project
     (`services.upgrade_notice`). A courtesy that can never fail a connect."""
+    if measuring.is_measuring():  # `doctor` counting the handshake must not use up a notice
+        return ""
     notice = ""
     for name in ("upgrade_start", "upgrade_notice", "release_proposal"):
         try:  # each on its own: a start report that fails must not silence the notice
