@@ -215,7 +215,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             out.append("")
         if sec.rows:
             table(sec.rows)
-    cp = critical_path(state, phase)
+    cp = critical_path(state, phase, cfg)
     if len(cp) > 1:
         out.append(
             f"**Critical path** ({len(cp)} deep — this, not the task count, "
