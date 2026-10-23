@@ -114,7 +114,9 @@ def test_the_default_brief_is_the_full_one(proj):
 def test_a_small_budget_renders_the_lean_brief_with_a_pointer(proj):
     run_cli(proj, "config", "--set", "session.context_budget_tokens", "8000")
     out = _brief(proj)
-    assert "Lean brief" in out and "`ddflow_help`" in out
+    assert (
+        "Lean brief" in out and "`ddflow_help`" in out and "lessons" in out.split("Lean brief")[1]
+    )
     for gone in ("## Tests", "## Reviews", "## Gates", "## Filing", "## This project"):
         assert gone not in out, gone
     for kept in ("## Start", "## Finish", "## Never", "## Report"):

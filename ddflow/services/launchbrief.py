@@ -19,8 +19,8 @@ LEAN_OFF = ("tests", "reviews", "gates", "filing", "project", "lessons")
 
 #: The line a lean brief ends with, so the omission is said, never silent.
 LEAN_NOTE = (
-    "_Lean brief (small context budget): the testing, review, gate and filing rules and the "
-    "project's own text are left out. `ddflow gate status <id>` names each gate's step; "
+    "_Lean brief (small context budget): the testing, review, gate and filing rules, the "
+    "project's own text and the lessons are left out (`ddflow recall \"<topic>\"` finds lessons). `ddflow gate status <id>` names each gate's step; "
     "`ddflow_help` topic `manual` carries the rest._"
 )
 
@@ -34,6 +34,8 @@ class Sizing:
 
 def sizing(session, target: str = "") -> Sizing:
     """The brief's cap and mode for a session of agent type ``target`` ("" = unknown)."""
+    # Tokens to characters is an estimate (`start_bytes_per_token`, about four to a token), the same
+    # one the start cost meter uses; a ceiling of 0 means none, and the floor applies to a DERIVED cap.
     budget = SC.effective_budget(session, target)
     ceiling = session.agent_brief_max_chars
     cap = ceiling
