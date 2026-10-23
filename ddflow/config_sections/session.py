@@ -4,6 +4,7 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ._docs import declare, int_at_least, knob
@@ -29,6 +30,23 @@ AGENT_BRIEF_SECTIONS = (
     "project",
     "report",
 )
+
+
+#: A key of `[session.context_budget]`: `global`, or an agent type named as `ddflow harness list` does.
+_BUDGET_KEY = re.compile(r"[a-z][a-z0-9_-]*")
+
+
+def context_budget_problem(value: object) -> str:
+    """Why a ``[session.context_budget]`` table is unusable, or ``""``: keys are `global` or an
+    agent type id (lower case), values whole numbers of tokens, 0 or more."""
+    if not isinstance(value, dict):
+        return "must be a table of token budgets, e.g. { global = 30000, claude = 20000 }"
+    for key, tokens in value.items():
+        if not isinstance(key, str) or not _BUDGET_KEY.fullmatch(key):
+            return f"key {key!r} must be `global` or an agent type id such as claude or codex"
+        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens < 0:
+            return f"{key}: must be a whole number of tokens, 0 or more (0 = no ceiling)"
+    return ""
 
 
 def _check_brief_sections(value) -> str:
@@ -96,6 +114,11 @@ class SessionConfig:
         40000,
         doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints) plus `start_notice_reserve_tokens` for the one-line upgrade notice, which cannot be counted without using it up. `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
         check=int_at_least(0),
+    )
+    context_budget: dict[str, int] = knob(
+        factory=dict,
+        doc="Start budgets per agent type, beside the global `context_budget_tokens`: a table from `global` or an agent type (the harness ids of `ddflow harness list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens, e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target is managed separately. A session's effective budget is the smaller of the global and its type's; `global` here is another spelling of `context_budget_tokens` (set both and the smaller applies, whatever the layer order); a type left out inherits the global; 0 sets no ceiling AT THAT LEVEL (a type at 0 leaves the global in force). `ddflow doctor` reports the cost against each configured type. Layers merge key by key (the local layer wins).",
+        check=context_budget_problem,
     )
     start_notice_reserve_tokens: int = knob(
         100,

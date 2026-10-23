@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.context_budget"
+new = '{}'
+why = "Start budgets per agent type (claude, codex, copilot, ...) beside the global `context_budget_tokens`; a session's effective budget is the smaller of the two."
+impact = "additive"
