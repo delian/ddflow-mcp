@@ -10,7 +10,7 @@ from ddflow.services import workers as WK
 
 def cfg(workers="auto", lo=1, hi=48, marks=None):
     return NS(
-        ci=NS(workers=workers, min_workers=lo, max_workers=hi),
+        ci=NS(workers=workers, min_workers=lo, max_workers=hi, suite_min_workers=1),
         schedule=NS(signals=marks or {"load_per_core": {"high": 0.75}}),
     )
 
@@ -91,3 +91,47 @@ def test_the_gate_runner_substitutes_the_workers(tmp_path):
     assert outcome == "passed" and "n=3" in ev["tail"]
     assert ev["command"] == "echo n={workers}" and ev["command_run"] == "echo n=3"
     assert ev["workers"]["n"] == 3 and ev["workers"]["setting"] == "3"
+
+
+def holder_cfg(floor, **kw):
+    c = cfg(**kw)
+    c.ci.suite_min_workers = floor
+    return c
+
+
+def test_suite_lock_holder_is_not_clamped_to_one_worker():
+    """B-suite-lock-held-by-n1-run: a busy host gave the lock holder `-n 1` for hours."""
+    c = holder_cfg(8)
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})  # loadavg >> cores * high
+    assert WK.compute(c, None, source=src, cores=192, holding_suite=True).n == 8
+    assert WK.compute(c, None, source=src, cores=192).n == 1  # a selected run still yields
+
+
+def test_suite_floor_never_exceeds_the_ceiling_or_the_files():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})
+    assert WK.compute(holder_cfg(8, hi=4), None, source=src, cores=192, holding_suite=True).n == 4
+    assert WK.compute(holder_cfg(8), 3, source=src, cores=192, holding_suite=True).n == 3
+
+
+def test_critical_memory_still_wins_over_the_holder_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.02})
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192, holding_suite=True).n == 1
+
+
+def test_localize_auto_gives_the_holder_its_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})
+    text, w = WK.localize_auto("x: -n auto\ny: -n auto\n", holder_cfg(8), source=src,
+                               cores=192, holding_suite=True)  # fmt: skip
+    assert text == "x: -n 8\ny: -n 8\n" and w.n == 8
+
+
+def test_high_memory_halving_does_not_cut_the_holder_below_its_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})  # high, not critical
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192, holding_suite=True).n == 8
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192).n == 1
+
+
+def test_an_explicit_worker_count_is_never_raised_by_the_holder_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})
+    c = holder_cfg(8, workers="4")
+    assert WK.compute(c, None, source=src, cores=192, holding_suite=True).n == 4
