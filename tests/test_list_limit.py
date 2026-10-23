@@ -164,6 +164,8 @@ def test_the_note_and_the_tool_follow_the_constants(monkeypatch):
     monkeypatch.setattr(api, "view_read", lambda repo, kind, **kw: seen.update(kw))
     TOOLS["ddflow_list"]["api"](None, {"kind": "task", "limit": 0}, "a")
     assert seen["limit"] == 5000
+    TOOLS["ddflow_list"]["api"](None, {"kind": "search", "limit": 0}, "a")
+    assert seen["limit"] == 77
 
 
 def test_a_refused_list_echoes_the_clamped_limit_not_the_requested_one():

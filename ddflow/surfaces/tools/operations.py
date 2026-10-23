@@ -49,7 +49,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             owner=a.get("owner", "") or "",
             since=a.get("since", "") or "",
             item=a.get("item", "") or "",
-            limit=R.LIST_MAX_LIMIT if a.get("limit") == 0 else int(a.get("limit") or 25),
+            limit=(R.SEARCH_MAX_LIMIT if a.get("kind") == "search" else R.LIST_MAX_LIMIT)
+            if a.get("limit") == 0
+            else int(a.get("limit") or 25),
             offset=int(a.get("offset") or 0),
             all=bool(a.get("all")),
             mode=a.get("mode", "") or "ranked",
