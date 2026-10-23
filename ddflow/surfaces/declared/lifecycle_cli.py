@@ -270,7 +270,7 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    extra = tuple(k for k in ("guidance", "glob_warnings", "globs_from_bug") if out.data.get(k))
+    extra = tuple(k for k in ("guidance", "glob_warnings", "globs_from_bug", "bug") if out.data.get(k))
     return out.body(CLAIM_BODY + extra)
 
 
