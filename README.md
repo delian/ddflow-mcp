@@ -5572,7 +5572,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=4a6eab86dc7a -->
+<!-- ddflow:begin README/tools sha=f222d7b55ec6 -->
 <details><summary>All 123 MCP tools: 32 in the `core` tier, 49 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5652,7 +5652,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Landing it | `ddflow_queue` | standard | Merge queue. |
 | Landing it | `ddflow_version_cut` | all | Tag the next version. |
 | Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
-| What the project remembers | `ddflow_bug_file_tasks` | all | File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one… |
+| What the project remembers | `ddflow_bug_file_tasks` | all | File the fix task of ONE open bug that has none (`id`), or of every such bug (`all`: one-shot after an… |
 | What the project remembers | `ddflow_bug_fixed` | core | Close a bug. |
 | What the project remembers | `ddflow_bug_found` | core | Report a bug the moment you find it, BEFORE fixing it. |
 | What the project remembers | `ddflow_bug_invalid` | core | Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. |
