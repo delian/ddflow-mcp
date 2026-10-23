@@ -33,7 +33,7 @@ def test_the_bugs_globs_are_recorded_and_refile_carries_them(repo):
     K.bug_found(repo, summary="parser drops a line", id="Bx", globs="src/p.py", agent="a")
     assert state(repo).bugs["Bx"].globs == ["src/p.py"]
     log.append("item.abandoned", "fix-Bx", {"reason": "superseded"})
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     task = out.data["tasks"]["Bx"]
     assert state(repo).items[task].globs == ["src/p.py"], out.data
 
