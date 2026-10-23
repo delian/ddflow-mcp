@@ -466,7 +466,7 @@ def cmd_replay(a, c: Ctx) -> int:
         print(f"  ! {p}", file=sys.stderr)
     code = FAIL if out.data["roundtrip"] else OK
     if out.data["files"]:
-        c.out(out.data["text"], out.body(("files",)))
+        c.out(out.data["text"], out.body(("files", "roundtrip")))
         return code
     c.out(
         out.data["text"],

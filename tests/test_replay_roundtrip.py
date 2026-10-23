@@ -96,7 +96,7 @@ def test_a_fold_that_drops_a_record_is_caught(history, monkeypatch):
     events = _log(repo).read_all()
     _forget_deletes(monkeypatch)
     problems = rt.check(events, fold(events, strict=False))
-    assert any("memorie M1 disappeared from the state at memory.forgotten" in p for p in problems)
+    assert any("M1 disappeared from memories at memory.forgotten" in p for p in problems)
 
 
 def test_a_record_deleted_and_recreated_is_still_caught(history, monkeypatch):
