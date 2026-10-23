@@ -622,3 +622,24 @@ def test_a_dropped_output_const_or_enum_is_an_output_break():
 def test_a_new_surface_is_pending_for_a_client_that_ignores_list_changed():
     v = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "ignores")
     assert v.pending == ("core: surface",)
+
+
+def test_a_bare_array_output_schema_under_meta_is_part_of_the_digest():
+    def with_meta(item):
+        t = tool()
+        t["_meta"] = {"ddflow/outputSchema": {"type": "array", "items": {"type": item}}}
+        return snap(tools=[t])
+
+    assert D.digest(with_meta("string")) != D.digest(with_meta("integer"))
+    assert D.classify(with_meta("string"), with_meta("integer"), "ignores").kind == "hard"
+
+
+def test_live_surfaces_names_every_tier_and_the_facade_and_restores_the_tier(tmp_path):
+    from ddflow.surfaces.mcp import Server
+    from ddflow.surfaces.tools.tiers import TIERS
+
+    srv = Server(_init_repo(tmp_path / "r"))
+    own = srv.tier
+    surfaces = D.live_surfaces(srv)
+    assert set(surfaces) == {*TIERS, "facade"} and srv.tier == own
+    assert D.classify_surfaces(surfaces, surfaces, "ignores").rung == 1
