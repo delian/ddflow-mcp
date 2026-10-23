@@ -425,8 +425,8 @@ family plus an `action` enum. The scripts are throwaway (not committed); this no
 
 Harness: `tests/eval/tool_diet/` (`td_run.py REVIEWER [--retry] [--repeat N]`, hand-run; the offline
 part is `test_tool_diet_eval.py`). 16 fixed plain-language requests (`td_scenarios.py`: claim, gate
-record/skip/status, bug found/fixed, task add, lesson add/search, decision add, release, merge, complete,
-rule search, status), each asked twice per surface, one tool call each, graded on the member tool
+record/skip/status, bug found/fixed, task add, lesson add/search, decision add, session prompt, release,
+merge, complete, rule search, status), each asked twice per surface, one tool call each, graded on the member tool
 reached and on the values carried (whole-token match); a family call is resolved by the server's own
 `family_schema.route`, and a member name is not on the family surface. Models are two families through
 their configured OpenAI-compatible endpoints: DeepSeek-V4.1-Flash and Kimi k3. 32 requests per cell, one
@@ -447,7 +447,7 @@ runs of the same harness).
   other actions: `verify_reason` on bug found, `worktree` on task add, `reviewer_model` and `timeout` on
   gate skip, or leaves out `gate`), each with a message that names the action.
 - Tagging each argument with its actions did not help Kimi on the first call (0.656 against 0.688) and
-  moved the retry by a noisy three requests: the noise is the 18 to 43 union arguments.
+  moved the retry by a noisy two requests: the noise is the 18 to 43 union arguments.
 - `ddflow_status` was mistaken for `ddflow_board` by DeepSeek on the flat list only.
 - The `next` hint default (MTD-next-hints) was NOT evaluated, so by D-mcp-tool-families it stays off.
 

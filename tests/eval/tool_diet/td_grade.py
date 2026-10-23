@@ -48,7 +48,8 @@ def _leaves(value: Any):
 
 def _carried(wanted: str, leaves: list[str]) -> bool:
     """``wanted`` stands as a whole token in some string (B-1 is not in B-10)."""
-    pattern = re.compile(rf"(?<![\w-]){re.escape(wanted)}(?![\w-])", re.IGNORECASE)
+    flags = 0 if any(c.isdigit() for c in wanted) else re.IGNORECASE  # ids are exact
+    pattern = re.compile(rf"(?<![\w-]){re.escape(wanted)}(?![\w-])", flags)
     return any(pattern.search(leaf) for leaf in leaves)
 
 

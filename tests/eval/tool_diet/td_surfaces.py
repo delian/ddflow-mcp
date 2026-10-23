@@ -81,14 +81,20 @@ def size(tools: list[dict[str, Any]]) -> int:
 def resolve(surface: str, name: str, args: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
     """``(member tool, its arguments, an error)`` for a call on ``surface``.
 
-    Flat: the name is the member. Families: the engine's own `route`, so what the eval grades
-    is what the server would run; a name that is a hot single or a self-named tool is itself."""
+    Both surfaces are held to the same server-side check of the member (`family_schema`'s
+    required and unknown arguments): a flat call with a missing or invented argument is as
+    invalid as a family one. Families: the engine's own `route`; a name that is a hot single
+    or a self-named tool is itself, any other member name is not on this surface."""
     if surface == "flat":
-        return (name, args, "") if name in TOOLS else ("", args, f"unknown tool {name}")
+        if name not in TOOLS:
+            return "", args, f"unknown tool {name}"
+        return name, args, family_schema._problem(family_schema.Routed(name, args, name))
     routed = family_schema.route(name, args)
     if isinstance(routed, str):
         return "", args, routed
     if routed is not None:
         return routed.tool, routed.args, ""
     shown = {f["function"]["name"] for f in family_tools()}
-    return (name, args, "") if name in shown else ("", args, f"{name} is not on this surface")
+    if name not in shown:
+        return "", args, f"{name} is not on this surface"
+    return name, args, family_schema._problem(family_schema.Routed(name, args, name))
