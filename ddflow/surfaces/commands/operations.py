@@ -270,6 +270,8 @@ def _pins_regenerate(a, c: Ctx) -> int:
         print(out.data["note"])
     for line in out.data.get("resolved", []):
         print(f"resolved {line}; `git add` marks it resolved")
+    for line in out.data.get("attributes", []):
+        print(f"{line} (a pin recipe lacked its merge line; commit .gitattributes with the pins)")
     for p in out.data.get("pins", []):
         state = "re-recorded" if p["regenerated"] else "current"
         print(f"{p['name']}: {state}")
