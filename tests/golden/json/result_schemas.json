@@ -38,7 +38,8 @@
    "tree",
    "port",
    "port_advice",
-   "broke"
+   "broke",
+   "bug"
   ],
   "output_schema": {
    "type": "object",
@@ -57,6 +58,7 @@
     "port": {},
     "port_advice": {},
     "broke": {},
+    "bug": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
