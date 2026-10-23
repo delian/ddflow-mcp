@@ -178,11 +178,11 @@ _CI_LINT_TITLE = re.compile(r"CI check failed: (?P<check>.+?)\s*$")
 
 
 def _lint_check(cfg, st, item: str) -> str:
-    """The check id of a CI-filed LINT bug (no `::` node id; it names one of
+    """The check id of a CI-filed LINT bug (not a pytest node id; it names one of
     `[bugs].lint_checks`), else ""."""
     bug = st.bugs.get(item)
     m = _CI_LINT_TITLE.search(bug.title) if bug is not None else None
-    if not m or "::" in m["check"]:
+    if not m or _is_node_id(m["check"]):  # a pytest node id is a test: it needs its test
         return ""
     low = m["check"].lower()
     return m["check"] if any(w.lower() in low for w in cfg.bugs.lint_checks) else ""
