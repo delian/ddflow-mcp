@@ -15,3 +15,7 @@ doc = "A question or approval was put to a person."
 [[kind]]
 name = "ask.withdrawn"
 doc = "The asker withdrew a question before it was answered."
+
+[[kind]]
+name = "ask.consumed"
+doc = "An agent spent one use of a person's approval on the exact command it was for."
