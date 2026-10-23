@@ -54,7 +54,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         "ddflow_session_prompt",
         ("ship it on friday",),
     ),
-    Scenario("Give up my lease on item T-4 without finishing it.", "ddflow_release", ("T-4",)),
+    Scenario("Release the lease I hold on item T-4.", "ddflow_release", ("T-4",)),
     Scenario(
         "Record a decision titled 'Use sqlite': we store the queue in sqlite.",
         "ddflow_decision_add",

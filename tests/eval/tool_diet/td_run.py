@@ -27,11 +27,20 @@ SYSTEM = (
 )
 
 
-def ask(rev, tools: list[dict], prompt: str, timeout: float) -> tuple[str, str, int]:
-    """``(tool name, arguments text, prompt tokens)`` of the model's first tool call."""
+def ask(
+    rev, tools: list[dict], prompt: str, timeout: float, after: list[dict] | None = None
+) -> tuple[str, str, int]:
+    """``(tool name, arguments text, prompt tokens)`` of the model's first tool call.
+
+    ``after``: messages that follow the request (a first call and the refusal it got), for the
+    one retry a real agent gets."""
     payload = {
         "model": rev.model,
-        "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": prompt},
+            *(after or []),
+        ],
         "tools": tools,
         "tool_choice": "auto",
         "max_tokens": 8000,
@@ -56,6 +65,35 @@ def ask(rev, tools: list[dict], prompt: str, timeout: float) -> tuple[str, str, 
     return fn.get("name", ""), fn.get("arguments", "{}"), used
 
 
+def retry(rev, tools, sc, surface, name, raw, timeout, first):
+    """Tell the model what the server said and let it call once more; keep the better call."""
+    from td_surfaces import resolve
+
+    try:
+        _m, _a, error = resolve(surface, name, json.loads(raw))
+    except ValueError:
+        error = "arguments were not valid JSON"
+    after = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": name, "arguments": raw},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": error},
+    ]
+    try:
+        name2, raw2, _ = ask(rev, tools, sc.prompt, timeout, after)
+    except Exception:
+        return first
+    return grade(sc, surface, name2, raw2)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("reviewer")
@@ -63,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--timeout", type=float, default=300)
     ap.add_argument("--repo", default=".")
+    ap.add_argument("--retry", action="store_true", help="give a refused call one retry")
     args = ap.parse_args(argv)
 
     from ddflow.services.review import load_reviewers
@@ -85,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
                     break
                 tokens.append(used)
                 g = grade(sc, surface, name, raw)
+                if args.retry and name and not g.valid:
+                    g = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
                 rows.append(g)
                 if not (g.tool_ok and g.args_ok and g.valid):
                     misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
