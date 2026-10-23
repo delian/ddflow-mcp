@@ -227,3 +227,16 @@ def test_the_handshake_does_not_write_to_the_repository(repo):
     before = sorted(p.name for p in repo.iterdir())
     _instructions(repo)
     assert sorted(p.name for p in repo.iterdir()) == before, "the handshake left a mark"
+
+
+def test_gates_with_no_tool_behind_them_are_still_said(repo):
+    from ddflow.services import prompts as P
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    run_cli(repo, "init")
+    vars_ = _instruction_vars(repo)
+    vars_["tool_tier_note"] = ""
+    vars_["gate_gaps"] = ["dedupe"]
+    text = P.render(P.resolve("mcp_instructions", repo), **vars_)
+    assert "Gates with no tool behind them: `dedupe`" in text
+    assert len(text.encode()) <= 1500 + 200, "the charter stays small with every notice on"

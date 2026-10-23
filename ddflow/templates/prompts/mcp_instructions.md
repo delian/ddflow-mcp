@@ -11,7 +11,7 @@
 
   Variables available (see `mcp_server._instruction_vars`). The shipped charter renders only
   adopted, tool_tier_note, task_pipeline, recoverable, rules_drift, actionable_companions, loops,
-  setup_todo, queue_is_empty, importable, imported_no_globs, imported_shipped_drift; the rest are
+  setup_todo, gate_gaps, queue_is_empty, importable, imported_no_globs, imported_shipped_drift; the rest are
   computed for a project template and for other surfaces, and are not rendered by default:
     adopted            bool    .ddflow/config.toml exists
     setup_todo         list    named setup gaps, each a sentence
@@ -60,6 +60,8 @@ More: `ddflow_recall "<topic>"`, `ddflow_help` topic `manual` (full workflow), `
 AGENTS.md needs the operator: ask, then `ddflow_setup`.
 {% endif %}{% if actionable_companions %}
 Companion tools not wired up: `ddflow_companions`; propose them to the operator.
+{% endif %}{% if gate_gaps %}
+Gates with no tool behind them:{% for g in gate_gaps %} `{{ g }}`{% endfor %}; record them `unavailable` or do the judgement yourself, never imply a tool ran.
 {% endif %}{% if loops %}
 The queue is looping: `ddflow_loops`.
 {% endif %}{% if setup_todo %}
