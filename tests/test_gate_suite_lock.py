@@ -52,6 +52,7 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
         "pytest; ddflow ci run",
         "ddflow ci run && pytest",
         "pytest | ddflow ci run",
+        "ddflow ci run\npytest",
     ):
         assert R.runs_whole_suite(_gate(locked)), locked
 

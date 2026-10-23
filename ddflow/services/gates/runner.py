@@ -110,7 +110,7 @@ def _runs_ddflow_ci(command: str) -> bool:
         words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    if any(w in _SHELL_OPERATORS for w in words) or not words:
+    if "\n" in command or any(w in _SHELL_OPERATORS for w in words) or not words:
         return False
     while words and (words[0] in ("uv", "run", "env") or "=" in words[0]):
         words = words[1:]
