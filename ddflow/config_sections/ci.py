@@ -43,6 +43,10 @@ class CiConfig:
         1,
         doc="The fewest workers `[ci].workers = auto` may compute, at least 1.",
     )
+    suite_min_workers: int = knob(
+        8,
+        doc="The fewest workers a run that holds the host-wide full-suite lock gets, however loaded the host (capped by max_workers; critical memory pressure still wins). The lock serialises every agent's full suite, so a holder cut to `-n 1` by the load clamp kept the rest waiting for hours. 1 turns the floor off.",
+    )
     max_workers: int = knob(
         48,
         doc="The most workers `[ci].workers = auto` may compute, however idle the host.",
