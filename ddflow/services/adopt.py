@@ -1203,7 +1203,7 @@ def _claude_extras(repo: Path, key: str, templates: Path, launch: str, image: st
     ]
     if key == LA.HARNESS:
         tier = Config.load(repo).mcp.worker_tools
-        out += [WM.write(repo, _launch_entry(launch, image), tier), WM.recipe()]
+        out += [WM.write(repo, _launch_entry(launch, image), tier), WM.recipe(tier=tier)]
     return out
 
 

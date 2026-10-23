@@ -48,12 +48,12 @@ def write(repo: Path, entry: Mapping[str, Any], tier: str) -> str:
     return f"wrote {REL}"
 
 
-def recipe(rel: str = REL) -> str:
+def recipe(rel: str = REL, tier: str = "core") -> str:
     """How to start a lane worker on that config (Claude Code), and the switch that decides
     whether the host defers tool schemas at all."""
     return (
         f"lane workers: `claude --mcp-config {rel} --strict-mcp-config` starts ddflow on the "
-        "`core` tier and no other MCP server (the user's connectors cost ~12K more). Claude Code "
+        f"`{tier}` tier and no other MCP server (the user's connectors cost ~12K more). Claude Code "
         "defers tool schemas on its own; `ENABLE_TOOL_SEARCH=false` (or a high `auto:N`) sends "
         "them all, which the core tier keeps small."
     )
@@ -63,7 +63,7 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
     """The doctor note when the host would send every ddflow schema: tool search switched off
     or set so high that nothing is deferred, while this project advertises the whole tool list.
     Empty on the `core`/`standard` tiers (already smaller) and on a default host."""
-    if tier == "core":
+    if tier in ("core", "standard"):
         return ""
     value = environ.get("ENABLE_TOOL_SEARCH", "").strip().lower()
     high = (
