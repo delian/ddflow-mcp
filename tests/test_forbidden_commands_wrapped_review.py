@@ -40,7 +40,6 @@ def _check(cmd: str):
         "nohup ddflow",
         "timeout .5s ddflow",
         "python3.13t -m ddflow",
-        "python --check-hash-based-pycs always -m ddflow",
         "python -mddflow",
         "pypy3 -m ddflow",
     ],
@@ -57,6 +56,9 @@ def test_the_documented_round_is_allowed_however_it_is_launched(launcher):
         "timeout 5 git push --force",
         "python-tools -m ddflow review X --gate critic --force --reason w",  # not an interpreter
         "python - -m ddflow review X --gate critic --force --reason w",  # the script is on stdin
+        "python -- -m ddflow review X --gate critic --force --reason w",  # a file named -m
+        "python --check-hash-based-pycs always -m ddflow review X --gate critic --force --reason w",
+        "timeout 5 5 ddflow review X --gate critic --force --reason w",  # a command named 5
         "python -c 'x' -m ddflow review X --gate critic --force --reason w",
     ],
 )

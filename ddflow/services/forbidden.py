@@ -169,7 +169,8 @@ def _head(words: list[str]) -> list[str]:
         elif wrapper and w.startswith("-"):
             i += 2 if w in _VALUED.get(wrapper, ()) else 1
         elif wrapper == "timeout" and _DURATION.fullmatch(w):
-            i += 1  # the duration is the wrapper's own word
+            i += 1  # the duration is the wrapper's own word...
+            wrapper = "timeout-run"  # ...and only the one: the next word is the command
         else:
             break
     return words[i:]
@@ -181,11 +182,11 @@ def _python_module(head: list[str]) -> list[str]:
         return head
     i = 1
     while i < len(head) and head[i].startswith("-") and head[i] != "-m":
-        if head[i] in ("-c", "-"):
-            return head  # an inline program or one read from stdin, not a module
+        if head[i] in ("-c", "-", "--"):
+            return head  # an inline program, stdin or a script after `--`, not a module
         if head[i].startswith("-m"):
             return [head[i][2:], *head[i + 1 :]]  # `-mddflow`
-        i += 2 if head[i] in ("-W", "-X", "--check-hash-based-pycs") else 1
+        i += 2 if head[i] in ("-W", "-X") else 1
     return head[i + 1 :] if i + 1 < len(head) and head[i] == "-m" else head
 
 
