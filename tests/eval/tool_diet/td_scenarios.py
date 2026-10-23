@@ -47,7 +47,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "Skip the docs gate on item T-1 because the change only touches tests.",
         "ddflow_gate_skip",
-        ("T-1", "docs"),
+        ("T-1", "docs", "tests"),
     ),
     Scenario(
         "Write down the operator's exact words for this session: 'ship it on friday'.",
