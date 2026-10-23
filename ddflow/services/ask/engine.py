@@ -309,6 +309,39 @@ def revoke(log, ask_id: str, *, actor: Actor) -> None:
         log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id, "revoked": True})
 
 
+def record_policy(
+    log,
+    cfg: Config,
+    *,
+    subject: str,
+    digest: str,
+    text: str,
+    command: Command,
+    rule_id: str,
+    agent: str,
+) -> str:
+    """A standing rule approved this command (RA-policy): the request, its answer by
+    ``policy:<rule>`` (not a person: ``human`` false, ``policy`` true) and its single spend, in one
+    transaction. Returns the ask id. Never reachable through `answer`: policy is no answer source."""
+    with log.transaction():
+        asked = request(log, cfg, subject=subject, digest=digest, text=text, command=command)
+        log.append(
+            "ask.answered",
+            asked.id,
+            {
+                "id": asked.id, "outcome": APPROVED, "digest": digest, "by": f"policy:{rule_id}",
+                "role": "policy", "via": "policy", "human": False, "coded": False,
+                "source": "policy", "level": 1, "policy": True,
+            },
+        )  # fmt: skip
+        log.append(
+            "ask.consumed",
+            asked.id,
+            {"id": asked.id, "by": agent, "verb": command.verb, "digest": digest},
+        )
+    return asked.id
+
+
 def sweep(log, now: float | None = None) -> list[str]:
     """Write the audit mark for every pending ask whose time has run out; return their ids."""
     done: list[str] = []
