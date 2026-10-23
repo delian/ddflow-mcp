@@ -257,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     if code:
         return code[0]
     # No result: either run() died (a crash) or a completed drain stopped us while stdin was open.
-    return 0 if done.is_set() else 1
+    return 0 if done.is_set() and t.is_alive() else 1
 
 
 if __name__ == "__main__":

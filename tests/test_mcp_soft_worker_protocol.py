@@ -110,7 +110,10 @@ def run_worker(frames, handler, *, drain_after=True, timeout=10):
     lines = [WP.encode(f) for f in frames]
     out = io.StringIO()
     t = threading.Thread(
-        target=worker.run, args=(Path("."), iter(lines), out), kwargs={"handler": handler}
+        target=worker.run,
+        args=(Path("."), iter(lines), out),
+        kwargs={"handler": handler},
+        daemon=True,
     )
     t.start()
     t.join(timeout)
@@ -232,6 +235,7 @@ def test_drain_finishes_the_inflight_request_then_says_drained_and_bye():
 
     def slow(conn, msg, notify):
         started.set()
+        threading.Timer(0.5, release.set).start()  # independent of how the worker reads input
         assert release.wait(10)
         return {"jsonrpc": "2.0", "id": 1, "result": {"done": True}}
 
@@ -242,9 +246,7 @@ def test_drain_finishes_the_inflight_request_then_says_drained_and_bye():
         yield WP.encode(WP.request(1, {"id": 1}, CONN))
         assert started.wait(10)
         yield WP.encode(WP.drain())
-        # The call is held until a timer lets it go, whatever the worker does with its input:
-        # a drain that did not wait for it would say `drained` first.
-        threading.Timer(0.5, release.set).start()
+        # A drain that did not wait for the held call would say `drained` before its answer.
         release.wait(10)
 
     out = io.StringIO()
