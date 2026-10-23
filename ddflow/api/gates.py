@@ -849,6 +849,8 @@ class Evidence:
     model_is_reviewer: bool = False
     #: Which tests a `ci run` took (`ci_scope.Plan.evidence`): recorded as `ci_scope`.
     ci_scope: dict[str, Any] | None = None
+    #: Seconds the run queued for the host suite lock (B1d51fb9da1): recorded as `waited_s`.
+    waited_s: float | None = None
     #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
     #: an MCP argument: it is what tells that record from an agent's typed `--command`.
     ran_by: str = ""
@@ -1068,6 +1070,8 @@ def _evidence_fields(
         ev["model"] = evidence.model
     if evidence.ci_scope:
         ev["ci_scope"] = evidence.ci_scope
+    if evidence.waited_s is not None:
+        ev["waited_s"] = evidence.waited_s
     if evidence.ran_by:
         ev["ran_by"] = evidence.ran_by
     if evidence.output_file:

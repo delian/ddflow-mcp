@@ -725,11 +725,20 @@ def head_sha(path: Path) -> str:
     return r.out if r.ok else ""
 
 
-def remove(repo: Path, cfg: Config, wt: Worktree, *, force: bool = False) -> GitResult:
-    """Remove a worktree, refusing to destroy unmerged work unless forced."""
+def remove(
+    repo: Path, cfg: Config, wt: Worktree, *, force: bool = False, landed_tip: str = ""
+) -> GitResult:
+    """Remove a worktree, refusing to destroy unmerged work unless forced.
+
+    ``landed_tip`` is the caller's proof that the commits ahead of the base, up to that
+    commit, are not work (a landed item's merge-main/pin leftovers): the commit count is not
+    a reason to refuse while HEAD is still that commit (a later one is work, and refuses),
+    but uncommitted files still are, and git itself refuses them atomically with the removal
+    (no ``--force``), so a file written after the check is not lost."""
     root = repo_root(repo)
     if not force:
         d, a = dirty(wt), ahead(wt)
+        a = 0 if landed_tip and a > 0 and head_sha(wt.path) == landed_tip else a
         if unreadable(d) or a < 0:
             # Unknown is not clean: an unmeasured tree may hold anything (B028b11b4cb).
             why = d[0][len(UNREADABLE) :] if unreadable(d) else f"no commit count vs {wt.base}"
