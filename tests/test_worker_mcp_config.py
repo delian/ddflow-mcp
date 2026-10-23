@@ -23,7 +23,7 @@ from ddflow.services import workermcp as WM
 from ddflow.surfaces.mcp import TOOLS, Server
 from ddflow.surfaces.tools.tiers import tier_tools
 
-REL = ".ddflow/local/worker-mcp.json"
+REL = WM.REL
 
 
 @pytest.fixture(autouse=True)
