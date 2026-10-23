@@ -248,6 +248,21 @@ def test_a_refusal_carries_no_hint(queued, monkeypatch):
 
 
 def test_a_read_that_has_no_emitter_is_unchanged(queued, monkeypatch):
+    monkeypatch.setenv("DDFLOW_MCP_NEXT_HINTS", "off")
+    off = _texts(queued, "ddflow_rule_list")
     monkeypatch.setenv("DDFLOW_MCP_NEXT_HINTS", "on")
-    body, _ = _call(queued, "ddflow_rule_list")
-    assert "next" not in body if isinstance(body, dict) else True
+    assert _texts(queued, "ddflow_rule_list") == off
+
+
+def test_a_body_that_already_has_a_next_keeps_it(queued, monkeypatch):
+    from ddflow.surfaces import mcp as M
+
+    class Out:
+        exit = 0
+        data = {"item": "T1"}
+
+    hint = lambda data: [{"tool": "ddflow_x", "why": "w", "args_hint": {}}]  # noqa: E731
+    assert M._with_next({"a": 1, "next": "mine"}, Out, hint) == {"a": 1, "next": "mine"}
+    assert M._with_next({"a": 1}, Out, hint)["next"] == hint({})
+    assert M._with_next({"a": 1}, Out, None) == {"a": 1}
+    assert M._with_next(["list"], Out, hint) == ["list"]
