@@ -50,7 +50,9 @@ def collect_decide(st, cfg, now, facts):
                 it.id,
                 what=f"{it.id}: {it.title}",
                 why="the lead cannot answer for the operator; the task lists the questions",
-                since=it.created_at,
+                since=max(
+                    [it.created_at, *(st.items[n].completed_at for n in it.needs if n in st.items)]
+                ),
                 default=default,
                 command=f"ddflow decision add --id D-{it.id}-Q1 --title <title> --decision <text>",
                 blocks=[it.id],
