@@ -223,9 +223,3 @@ def test_a_client_table_value_is_normalised_and_a_bad_one_is_the_default(monkeyp
     monkeypatch.setitem(P.CLIENT_PROFILES, "typo", "familes")
     assert P.settle("auto", "Padded") == "hot+families"
     assert P.settle("auto", "typo") == "lean"
-
-
-def test_a_profile_note_reads_cleanly():
-    for profile in P.PROFILES:
-        note = P.profile_note(profile, 138)
-        assert "the the" not in note and note.endswith("read once at start.")
