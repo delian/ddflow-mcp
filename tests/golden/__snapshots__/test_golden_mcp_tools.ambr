@@ -259,6 +259,10 @@
           "type": "string",
           "description": "A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on its first parent and pass on it; the fix task is ended naming it."
          },
+         "lint_exempt": {
+          "type": "string",
+          "description": "For a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test (what made the check green). Recorded as regression_verified=exempt-lint; instead of regression_test."
+         },
          "mutation": {
           "type": "string",
           "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
