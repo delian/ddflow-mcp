@@ -360,3 +360,16 @@ def test_write_refuses_a_snapshot_its_own_reader_would_reject(tmp_path, monkeypa
 def test_a_version_list_with_a_non_string_is_not_a_snapshot(key):
     assert any(key in p for p in S.problems(sample(**{key: ["2025-11-25", None]})))
     assert any(key in p for p in S.problems(sample(**{key: [123]})))
+
+
+def test_checking_for_drift_leaves_the_live_connection_untouched(tmp_path):
+    from ddflow.surfaces import ifacesnap
+
+    srv = _server(_git(tmp_path / "r"))
+    srv.protocol, srv.client_info = "2024-11-05", {"name": "claude-code", "version": "2.1.296"}
+    ifacesnap.drift(srv, ifacesnap.build(srv, instructions="x"))
+    ifacesnap.write(srv, instructions="x")
+    assert srv.protocol == "2024-11-05" and srv.client_info == {
+        "name": "claude-code",
+        "version": "2.1.296",
+    }

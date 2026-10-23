@@ -43,12 +43,14 @@ def build(server: Any, *, instructions: str) -> dict[str, Any]:
 def drift(server: Any, data: dict[str, Any]) -> list[str]:
     """Where the replies the shim would serve from `data` differ from the live server's own.
     Empty when they agree (the instructions text is the caller's, so it is not compared)."""
-    live_init = server._m_initialize({"id": 0, "params": {"protocolVersion": ""}}, False)["result"]
+    # The protocol module is where `Server._m_initialize` and `_discover` get these from; asking
+    # them directly keeps this check from touching the live connection's state.
+    live_init = proto.initialize_result(proto.legacy_version(""), "")
     mine = S.initialize_result(data, "")
     found = [
         k for k in ("protocolVersion", "capabilities", "serverInfo") if mine[k] != live_init[k]
     ]
-    live_disc = server._discover()
+    live_disc = proto.discover("")
     mine_disc = S.discover_result(data)
     found += [
         f"discover.{k}"
