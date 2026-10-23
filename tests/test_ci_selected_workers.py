@@ -6,7 +6,6 @@ gets the count `[ci].workers` computes (at most `max_workers`, never more than t
 from __future__ import annotations
 
 import re
-
 from types import SimpleNamespace as NS
 
 from ddflow.config import Config
