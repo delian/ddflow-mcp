@@ -283,3 +283,15 @@ def test_the_data_keeps_ranged_verified_and_expiring_rows_consistent():
     for e in C.ENTRIES:
         assert bool(e.min_version) == (e.source == "verified"), e.key
         assert bool(e.verified_version) == (e.source == "verified"), e.key
+
+
+def test_basis_says_how_each_kind_of_row_is_trusted():
+    assert C.basis(C.lookup({"name": "claude-code"})) == C.RANGED
+    assert C.basis(C.lookup({"name": "opencode"})) == C.EXPIRING
+    assert C.basis(C.lookup({"name": "qwen-code-mcp-client"})) == C.BY_NAME
+    today = date(2026, 10, 23)
+    for e in C.ENTRIES:  # effective() follows basis(): only a ranged row needs a version
+        if C.basis(e) == C.RANGED:
+            assert C.effective(e, "", today) == "unknown", e.key
+        else:
+            assert C.effective(e, "", today) in (e.list_changed, "unknown"), e.key
