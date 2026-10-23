@@ -83,8 +83,9 @@ def _problem(row: dict[str, Any] | None, canon: Canon, now: float) -> str:
 
 def spend(log, canon: Canon, ask_id: str, *, now: float | None = None) -> Decision:
     """Check ``ask_id`` against ``canon`` and, if it holds, record one use. All under the lock."""
-    now = clock.now_utc().timestamp() if now is None else now
     with log.transaction():
+        # read the clock INSIDE the lock: waiting for it must not make an expiry look earlier
+        now = clock.now_utc().timestamp() if now is None else now
         row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
         if why := _problem(row, canon, now):
             return Decision(False, f"refusing: {why}.", ask_id=ask_id)

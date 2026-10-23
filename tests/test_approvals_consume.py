@@ -253,12 +253,13 @@ def test_one_approval_is_spent_by_exactly_one_of_many_racing_processes(log, repo
         "from ddflow.services.approvals import consume as C;"
         "from ddflow.services.approvals.canon import Canon;"
         "c = Canon(verb='gate.skip.failed_review', agent='asker', item='fix-X', target='critic', state='s1');"
-        "ok = C.spend(EventLog(Path(sys.argv[1]), 'asker'), c, sys.argv[2], now=time.time()).ok;"
+        "ok = C.spend(EventLog(Path(sys.argv[1]), 'asker'), c, sys.argv[2], now=float(sys.argv[3])).ok;"
         "print('SPENT' if ok else 'REFUSED')"
     )
+    answered = clock.epoch(asks_of(_state(log))[filed.id]["answered_at"], default=0.0)
     procs = [
         subprocess.Popen(
-            [sys.executable, "-c", code, str(repo), filed.id],
+            [sys.executable, "-c", code, str(repo), filed.id, str(answered + 5)],
             stdout=subprocess.PIPE,
             text=True,
         )
@@ -267,3 +268,9 @@ def test_one_approval_is_spent_by_exactly_one_of_many_racing_processes(log, repo
     outs = [p.communicate()[0].strip() for p in procs]
     assert outs.count("SPENT") == 1 and outs.count("REFUSED") == 5, outs
     assert asks_of(_state(log))[filed.id]["used"] == 1
+
+
+def test_a_row_without_a_recorded_level_still_counts_as_a_terminals_word():
+    assert E.verified_level({"level": 0, "via": "cli"}) == 1
+    assert E.verified_level({"level": -1, "via": ""}) == 1
+    assert E.verified_level({}) == 1
