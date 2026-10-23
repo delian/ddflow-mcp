@@ -87,7 +87,7 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
 
 
-def runs_whole_suite(gdef: GateDef) -> bool:
+def _runs_whole_suite(gdef: GateDef) -> bool:
     """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
     command names test files (a narrowed run) or is a `ddflow ci run`, which takes the lock
     itself (taking it here too would wait on ourselves)."""
@@ -188,7 +188,7 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     command. A gate that starts a whole suite holds the host-wide full-suite lock `ci run`
     takes (several agents' unit_tests gates ran suites at once: Bf37f016693) and reads its
     worker count once the slot is held, with the holder's floor. `SuiteBusy` when none frees."""
-    holds = runs_whole_suite(gdef)
+    holds = _runs_whole_suite(gdef)
     queued_at = time.monotonic()
     who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
     with SL.hold(cfg, who) if holds else nullcontext():
