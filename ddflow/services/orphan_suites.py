@@ -180,3 +180,8 @@ def _kill(o: Orphan) -> str:
     """`kill -- -PGID` for a real group; a group id of 1 or less is no group (`kill -- -1` would
     signal every process the user may), so then only the process itself."""
     return f"kill -- -{o.pgid}" if o.pgid > 1 else f"kill {o.pid}"
+
+
+def notes() -> list[str]:
+    """The `doctor` NOTEs for this host right now: advice only, never a kill."""
+    return doctor_notes(orphaned_ci_suites())
