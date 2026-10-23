@@ -81,6 +81,7 @@ from .mcp_protocol import modernize as _modernize
 from .mcp_protocol import ok as _ok
 from .tools import ADD_TOOLS, DEDUPE_PROPERTIES, TOOLS  # noqa: F401
 from .tools import family_schema as _FAMILIES
+from .tools import profiles as _PROFILES
 from .tools._common import (  # noqa: F401
     _AGENT_KEYS,
     MCP_WAIT_DEFAULT_S,
@@ -96,6 +97,7 @@ from .tools._common import (  # noqa: F401
     _reopening,
     _wait_timeout,
 )
+from .tools.aliases import alias_for as _alias_for
 from .tools.tiers import (  # noqa: F401
     CORE_TOOLS,
     DEFAULT_TIER,
@@ -538,7 +540,10 @@ class Server:
             self.agent = harness_identity.own(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
-        self.tier = resolve_tier(self.repo)
+        configured = resolve_tier(self.repo)
+        #: `auto` waits for the client's name (the client table, `initialize`); until then, lean.
+        self._tier_auto = configured == _PROFILES.AUTO
+        self.tier = _PROFILES.settle(configured)
         #: `[mcp].output_schemas`, read ONCE here like the tier: declare an `outputSchema`
         #: and return `structuredContent` (D-compat-json-views).
         self.output_schemas = resolve_output_schemas(self.repo)
@@ -742,6 +747,8 @@ class Server:
         self.protocol = protocol.legacy_version(want)
         ci = params.get("clientInfo")
         self.client_info = dict(ci) if isinstance(ci, dict) else {}
+        if self._tier_auto:
+            self.tier = _PROFILES.settle(_PROFILES.AUTO, str(self.client_info.get("name", "")))
         return _ok(
             msg.get("id"),
             protocol.initialize_result(
@@ -758,21 +765,40 @@ class Server:
 
     def _m_tools_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
         advertised = tier_tools(self.tier)
-        return _ok(
-            msg.get("id"),
+        tools = [
             {
-                "tools": [
-                    {
-                        "name": n,
-                        "description": s["description"],
-                        "inputSchema": _schema(s),
-                        **(_result_declaration(n, s) if self._structured(modern) else {}),
-                    }
-                    for n, s in sorted(TOOLS.items())
-                    if n in advertised
-                ]
-            },
+                "name": n,
+                "description": s["description"],
+                "inputSchema": _schema(s),
+                **(_result_declaration(n, s) if self._structured(modern) else {}),
+            }
+            for n, s in sorted(TOOLS.items())
+            if n in advertised
+        ]
+        if self.tier in _PROFILES.PROFILES:  # the family tools are not in `TOOLS`
+            tools = sorted((*tools, *_PROFILES.family_entries(self.tier)), key=lambda t: t["name"])
+        return _ok(msg.get("id"), {"tools": tools})
+
+    def _resolve(self, asked: str, args: dict[str, Any]):
+        """``(routed, name, spec, args, used, clash)`` for a call to ``asked``.
+
+        A family call (`ddflow_gate action=record`) is its member's call: routed here, so
+        everything after sees the member; `route` has already refused a missing action, a
+        missing required argument or an unknown one, each naming the action (MTD-family-route)
+        -- ``routed`` is then that refusal, a string. An old tool name the profile does not list
+        is said once per session to be the family action that replaces it (D-compat;
+        MTD-aliases)."""
+        routed = _FAMILIES.route(asked, args)
+        if isinstance(routed, str):
+            return routed, asked, None, args, [], ""
+        name, spec, args, used, clash = _resolve_call(
+            *((routed.tool, routed.args) if routed else (asked, args))
         )
+        listed = _PROFILES.direct_tools(self.tier) if self.tier in _PROFILES.PROFILES else None
+        if spec is not None and not routed and listed is not None and name not in listed:
+            if alias := _alias_for(name):
+                used = [*used, alias]
+        return routed, name, spec, args, used, clash
 
     def _m_tools_call(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
         """`tools/call`: check the call (`_check_call`), then identify or run the tool."""
@@ -783,16 +809,9 @@ class Server:
         if ALLOW_OLDER in args:
             args = dict(args)
             allow_older = args.pop(ALLOW_OLDER)
-        # A family call (`ddflow_gate action=record`) is its member's call: routed here, so
-        # everything below sees the member; `route` has already refused a missing action, a
-        # missing required argument or an unknown one, each naming the action (MTD-family-route).
-        routed = _FAMILIES.route(params.get("name", ""), args)
+        routed, name, spec, args, used, clash = self._resolve(params.get("name", ""), args)
         if isinstance(routed, str):
             return _ok(mid, _text(routed, error=True))
-        call_name, call_args = (
-            (routed.tool, routed.args) if routed else (params.get("name", ""), args)
-        )
-        name, spec, args, used, clash = _resolve_call(call_name, call_args)
         # A routed call was checked by `route` (one rule, on the family's names); only an argument
         # given under both its current and an old spelling is left to say here.
         problem = (
