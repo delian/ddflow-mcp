@@ -4,6 +4,7 @@ limit is seen at commit time, not in the 15-minute ci gate. Real git repository.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -14,10 +15,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-pytest.importorskip("radon", reason="radon (a dev dependency) is not installed")
-
 from ddflow.services import complexity_budget as CB
 from ddflow.services import enforce as E
+
+#: the no-radon tests must run where radon is missing, so only the others skip
+needs_radon = pytest.mark.skipif(
+    importlib.util.find_spec("radon") is None, reason="radon (a dev dependency) is not installed"
+)
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -48,6 +52,7 @@ def _setup(repo: Path, branches: int, extra: str = "") -> Path:
     return repo
 
 
+@needs_radon
 def test_a_branch_added_to_a_function_at_the_limit_is_named_before_the_ci_gate(repo):
     _setup(repo, 20)  # CC 21, already grade D
     (repo / "m.py").write_text(_fn("near_limit", 21))
@@ -57,6 +62,7 @@ def test_a_branch_added_to_a_function_at_the_limit_is_named_before_the_ci_gate(r
     assert "m.py:1 near_limit CC 21 -> 22" in msg and "test_architecture_guards" in msg
 
 
+@needs_radon
 def test_a_function_crossing_into_grade_d_says_the_guard_will_fail(repo):
     _setup(repo, 19)  # CC 20
     (repo / "m.py").write_text(_fn("near_limit", 20))
@@ -65,6 +71,7 @@ def test_a_function_crossing_into_grade_d_says_the_guard_will_fail(repo):
     assert "CC 20 -> 21 (grade D: tests/test_architecture_guards.py will fail)" in msg
 
 
+@needs_radon
 def test_nearing_the_limit_is_a_warning_before_it_is_grade_d(repo):
     _setup(repo, 16)  # CC 17
     (repo / "m.py").write_text(_fn("near_limit", 17))  # CC 18
@@ -73,6 +80,7 @@ def test_nearing_the_limit_is_a_warning_before_it_is_grade_d(repo):
     assert "CC 17 -> 18 (3 below grade D)" in msg
 
 
+@needs_radon
 def test_an_untouched_or_simplified_function_is_not_named(repo):
     _setup(repo, 20)
     (repo / "m.py").write_text(_fn("near_limit", 19) + "\n" + _fn("other", 1))
@@ -81,6 +89,7 @@ def test_an_untouched_or_simplified_function_is_not_named(repo):
     assert "near_limit" not in msg and "complexity budget" not in msg
 
 
+@needs_radon
 def test_the_knob_turns_it_off(repo):
     _setup(repo, 20, "complexity_warn_at = 0\n")
     (repo / "m.py").write_text(_fn("near_limit", 21))
@@ -93,5 +102,15 @@ def test_without_radon_nothing_is_claimed(monkeypatch):
     assert CB.complexities(_fn("f", 30).encode()) == {}
 
 
+@needs_radon
 def test_a_file_that_does_not_parse_is_skipped():
     assert CB.complexities(b"def (:\n") == {}
+
+
+@needs_radon
+def test_a_method_is_measured_like_a_function():
+    body = "".join(f"        if x == {i}:\n            return {i}\n" for i in range(17))
+    src = ("class C:\n    def m(self, x):\n" + body + "        return -1\n").encode()
+    assert CB.complexities(src) == {"C.m": (2, 18)}
+    lines = CB.risen(["c.py"], lambda p: src, lambda p: None, 18)
+    assert lines and "C.m CC new -> 18" in lines[0]
