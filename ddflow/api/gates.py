@@ -702,8 +702,8 @@ def run(
 #: one to replace. (Quotes are scanned, not parsed: a command with an unbalanced quote keeps the
 #: remainder as written.)
 _CI_WORDS = re.compile(
-    r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*"|'[^']*'|\\.)+)"""
-    r"""|(?P<sep>\s--(?=\s|$))|(?P<timeout>\s--timeout(?:=|\s+)["']?\+?\d+["']?)""",
+    r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*(?:"|$)|'[^']*(?:'|$)|\\[^\n])+)"""  # an unclosed quote runs on
+    r"""|(?P<sep>(?:\s|\\\n)--(?=\s|$))|(?P<timeout>(?:\s|\\\n)--timeout(?:=|\s+)["']?[+-]?\d+["']?)""",
     re.S,
 )
 
