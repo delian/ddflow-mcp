@@ -233,3 +233,45 @@ def test_two_retries_racing_in_threads_take_a_parked_ticket_once(tmp_path):
         names = _race_once(tmp_path / f"q{round_}")
         kept = [n for n in names if n == "00000000000000000001-agent_a.ticket"]
         assert len(names) == 2 and len(kept) == 1, names  # one wins the place, one queues anew
+
+
+def test_a_ticket_unlinked_after_the_open_is_not_counted(tmp_path, monkeypatch):
+    import contextlib
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-gone.ticket"
+    ticket.write_text("")
+    real = SL.fsio.file_lock
+
+    @contextlib.contextmanager
+    def unlink_after_open(path, *a, **kw):
+        with real(path, *a, **kw):
+            Path(path).unlink()  # the lock is now on an inode with no name
+            yield
+
+    monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_open)
+    assert SL._live(queue, 120, 120) == []
+
+
+def test_an_expired_parked_ticket_removed_between_the_stat_and_the_lock_leaves_no_ghost(
+    tmp_path, monkeypatch
+):
+    import os
+    import time
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    parked = queue / "00000000000000000001-gone.parked"
+    parked.write_text("")
+    old = time.time() - 9999
+    os.utime(parked, (old, old))
+    real = SL.fsio.file_lock
+
+    def owner_took_it(path, *a, **kw):
+        Path(path).unlink(missing_ok=True)
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(SL.fsio, "file_lock", owner_took_it)
+    assert SL._live(queue, 120, 120) == []
+    assert list(queue.iterdir()) == []

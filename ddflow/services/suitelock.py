@@ -133,6 +133,8 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
             continue
         try:
             with fsio.file_lock(path, 0, create=False):  # got it: nobody owns this ticket (yet)
+                if not path.exists():  # unlinked after the open: the lock is on a dead inode
+                    continue
                 if age <= NEW_S:  # created, its owner has not locked it yet: it still has its place
                     live.append(path.name)
                 else:
