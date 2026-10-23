@@ -15,6 +15,10 @@ from ._kinds import kind_pipelines_problem
 class GatesConfig:
     """The per-task and per-phase quality pipelines."""
 
+    max_run_timeout_s: int = knob(
+        21600,
+        doc="The longest a single `gate run <id> <gate> --timeout N` (or the MCP `timeout` parameter, or `ddflow ci run --timeout N`) may ask a command gate to run, in seconds. A run needs the override on a loaded host without anyone editing the shared `[ci].timeout_s` / gate timeout; a larger request is refused (exit 3) naming this knob, so one agent cannot hold the host suite lock for days.",
+    )
     task_pipeline: list[str] = knob(
         factory=lambda: [
             "research",
