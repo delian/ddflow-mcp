@@ -158,3 +158,12 @@ def test_a_script_that_merely_receives_dash_m_is_not_the_pre_commit_module(tmp_p
         100,
     )  # fmt: skip
     assert _find(root) == []
+
+
+def test_an_unreadable_ancestor_suppresses_the_finding(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 40, 1, "whatever", 100)
+    (root / "40" / "cmdline").unlink()
+    (root / "40" / "cmdline").mkdir()  # reading it raises: present but unreadable
+    _proc(root, 51, 40, SUITE, 100)
+    assert _find(root) == []
