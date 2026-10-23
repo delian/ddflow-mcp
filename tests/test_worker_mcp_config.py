@@ -45,6 +45,22 @@ def test_a_docker_launch_forwards_the_tier_into_the_container():
     assert got["args"] == ["run", "-e", "DDFLOW_MCP_TOOLS=core", "-i", "--rm", "img"], got
     assert entry["args"] == ["run", "-i", "--rm", "img"], "the input must not be changed"
     assert WM.worker_entry({"command": "uvx", "args": ["x"]}, "core")["args"] == ["x"]
+    # not a `docker run`: left alone
+    exec_entry = {"command": "docker", "args": ["exec", "worker", "run"]}
+    assert WM.worker_entry(exec_entry, "core")["args"] == ["exec", "worker", "run"]
+    # a tier already forwarded is replaced, not shadowed (the last -e would win)
+    had = {"command": "docker", "args": ["run", "-e", "DDFLOW_MCP_TOOLS=all", "-e", "K=1", "img"]}
+    assert WM.worker_entry(had, "core")["args"] == [
+        "run",
+        "-e",
+        "DDFLOW_MCP_TOOLS=core",
+        "-e",
+        "K=1",
+        "img",
+    ]
+    again = WM.worker_entry(WM.worker_entry(had, "core"), "standard")
+    assert again["args"].count("DDFLOW_MCP_TOOLS=standard") == 1
+    assert not any("=core" in a for a in again["args"])
 
 
 def test_adopt_for_claude_writes_the_worker_config_and_says_how_to_use_it(repo):
