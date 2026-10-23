@@ -98,6 +98,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param("name", positional=True, nargs="?", default=""),
             Param("note", default=""),
+            Param(
+                "approval",
+                default="",
+                cli_help="an agent: the id of the operator's approval of exactly this entry (a refusal files the request and names it); never for a command reviewer",
+            ),
         ),
     ),
     Command(
