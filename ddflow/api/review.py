@@ -46,6 +46,7 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
+from ..services.gates import running as RUN
 from ..services.guidance import inject as GI
 from ..views import human
 from ._base import _load
@@ -1861,9 +1862,58 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     One gate is `_review_gate`, whose docstring has the rest.
     """
     args = dict(locals())  # first: every later local would leak into the kwargs
+    try:
+        with RUN.terminating():
+            return _review_checked(args)
+    except RUN.RunTerminated as stop:
+        return _terminated(args, stop.signame)
+
+
+def _terminated(args: dict[str, Any], signame: str) -> O.Outcome:
+    """A review ended by SIGTERM/SIGHUP (the usual `timeout`) before its reviewers answered:
+    said, and recorded `unavailable` for each gate asked -- never a pass, never silence
+    (Bed9d75dd1c). A delta keeps the earlier round it followed (`_keep_reviewed_round`)."""
+    repo, item = args["repo"], args["item"]
+    gate_names = [g.strip() for g in args["gate"].split(",") if g.strip()]
+    reason = (
+        f"the review was terminated by {signame} before a reviewer finished: "
+        "nothing was reviewed, which is not a pass"
+    )
+    if item and gate_names:
+        log, cfg, st = _load(repo, args["agent"])
+        gates = GD.load_gates(repo, cfg)
+        for g in gate_names:
+            _record(
+                repo,
+                log,
+                cfg,
+                st,
+                item,
+                g,
+                "unavailable",
+                args["called_from"],
+                gates,
+                reason=reason,
+            )
+    return O.nothing(
+        "review",
+        reason,
+        id=item,
+        gate=args["gate"],
+        outcome="unavailable",
+        findings=[],
+        text=reason,
+    )
+
+
+def _review_checked(args: dict[str, Any]) -> O.Outcome:
+    repo, item, agent, gate = args["repo"], args["item"], args["agent"], args["gate"]
     if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
         return refused
-    refused = _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reason)
+    refused = _misplaced(
+        repo, item, agent, gate, args["branch"], args["commit"], args["called_from"],
+        args["force"], args["reason"],
+    )  # fmt: skip
     if refused is not None:  # a refusal is falsy
         return refused
     asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
