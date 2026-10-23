@@ -11,7 +11,11 @@ are untouched: a person's terminal, `gate skip`.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+from .. import changes as CH
+from .reviewed_paths import REVIEWED_PATHS_FIELD, path_snapshot
 
 #: The tools that run a command gate's command themselves and record the result through
 #: `gate record`'s API (`Evidence.ran_by`). Any other value is not trusted.
@@ -30,6 +34,23 @@ def _refusal(it, gdef, gate: str, outcome: str, agent_why: str) -> str:
         f"--reason ...` (or `partial`). Setting a gate aside is the operator's "
         f"(`ddflow gate skip {it.id} {gate} --reason ...` from their terminal)."
     )
+
+
+def _judged_paths(it, gdef, outcome: str, tree: Any) -> dict[str, Any]:
+    """`reviewed_paths` for a hand-recorded AGENT pass: the content of the files the item
+    changes against its base, as a review round records it
+    (B-sync-main-makes-gates-stale-without-touching-globs). A judgment about the item's own
+    change (standards, bug_hunt, dedupe, a hand-recorded critic) is not stale because main
+    moved in files the item never touched, so staleness compares those paths, not the whole
+    tree. A command gate ran on the whole tree and keeps that comparison. {} when the item has
+    no recorded base, or git cannot say."""
+    if gdef is None or gdef.is_command_gate or outcome != "passed" or tree is None:
+        return {}
+    if not it.base or not Path(tree).is_dir():
+        return {}
+    paths = CH.changed_paths(tree, it.base, include=("committed", "tracked", "untracked"))
+    snap = path_snapshot(tree, paths) if paths is not None else None
+    return {} if snap is None else {REVIEWED_PATHS_FIELD: snap}
 
 
 def _gaps(command: str, output_file: str, tree: Any, host: str) -> dict[str, Any]:
@@ -56,4 +77,5 @@ def hand_record(
         return "", {}
     if why := _refusal(it, gdef, gate, outcome, agent_why):
         return why, {}
-    return "", _gaps(evidence.command, evidence.output_file, tree, host)
+    gaps = _gaps(evidence.command, evidence.output_file, tree, host)
+    return "", {**gaps, **_judged_paths(it, gdef, outcome, tree)}
