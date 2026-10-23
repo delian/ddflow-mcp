@@ -120,10 +120,20 @@ def _closer(state: str):
     return handler
 
 
+def h_withdrawn(st: State, ev: Event) -> None:
+    """The asker took a pending ask back -- or a person REVOKED an answered approval
+    (``revoked``): its outcome stays on the row, its state no longer lets anyone spend it."""
+    row = asks_of(st).get(_id(ev))
+    if row is not None and row["state"] == ANSWERED and ev.data.get("revoked") is True:
+        row.update(state=WITHDRAWN, revoked_by=str(ev.data.get("by", "")), revoked_at=ev.ts)
+        return
+    _closer(WITHDRAWN)(st, ev)
+
+
 ASK_HANDLERS = {
     "ask.requested": h_requested,
     "ask.answered": h_answered,
     "ask.consumed": h_consumed,
-    "ask.withdrawn": _closer(WITHDRAWN),
+    "ask.withdrawn": h_withdrawn,
     "ask.expired": _closer(EXPIRED),
 }

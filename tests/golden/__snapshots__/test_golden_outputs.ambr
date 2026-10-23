@@ -753,6 +753,13 @@
           so in pr mode it travels in the release request. A trunk or maintenance cut
           with `integration = "pr"` is refused: the bump would have no request to
           travel in. Empty (default): nothing is bumped.
+      gates.max_run_timeout_s = 21600   [default]
+          The longest a single `gate run <id> <gate> --timeout N` (or the MCP
+          `timeout` parameter, or `ddflow ci run --timeout N`) may ask a command gate
+          to run, in seconds. A run needs the override on a loaded host without anyone
+          editing the shared `[ci].timeout_s` / gate timeout; a larger request is
+          refused (exit 3) naming this knob, so one agent cannot hold the host suite
+          lock for days.
       gates.task_pipeline = ['research', 'rules', 'implement', 'rubber_duck', 'critic', 'standards', 'unit_tests', 'bug_hunt', 'dedupe', 'merge']   [default]
           Ordered gate ids every TASK passes through. Reorder or trim per project; ids
           must exist in [gate.*] definitions.
@@ -2437,6 +2444,11 @@
           How many characters of an agent's own reason are shown to the person in an
           approval request (default 300; the rest is cut with an ellipsis). The reason
           is quoted as untrusted text and is never part of what is approved.
+      approvals.min_digest_chars = 8   [default]
+          How many leading characters of a request's digest the person types back to
+          approve or deny it (default 8): `ddflow approvals approve ID --digest
+          XXXXXXXX`. It proves they read which request, so it cannot be answered
+          blind.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence

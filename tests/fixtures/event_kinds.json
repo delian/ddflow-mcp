@@ -78,7 +78,8 @@
   "ask.withdrawn": {
    "fields": {
     "by": ["str"],
-    "id": ["str"]
+    "id": ["str"],
+    "revoked": ["bool"]
    },
    "v": 1
   },
