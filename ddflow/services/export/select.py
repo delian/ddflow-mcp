@@ -115,12 +115,13 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
     R.get(doc)  # unknown kind: refused, listing the kinds
     why_agent = _is_agent(requested_agent, via_mcp)
     lock = _locked(st, doc)
-    why_agent = _unlock_by_approval(log, cfg, doc, lock, why_agent, approval)
     spec = ops.spec_for(cfg, doc, path=path, mode=mode, writing=True)  # mode/kind checks
     try:
         W.safe_target(repo, spec.path)
     except ExportError as exc:
         raise ExportError(str(exc), EXIT_REFUSED) from exc
+    # after the checks above: an approval must not be spent on a command that was never valid
+    why_agent = _unlock_by_approval(log, cfg, doc, lock, why_agent, approval)
     current = ops.spec_for(cfg, doc, writing=True)
     selected = list(ops.selection(cfg))
     unchanged = (

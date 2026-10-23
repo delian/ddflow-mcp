@@ -133,6 +133,9 @@ def operator_gate(
     file no request unless the agent says `--approval request`."""
     if approval_id and approval_id != REQUEST:
         return spend(log, canon, approval_id, now=now, cfg=cfg)
+    state = fold(log.read_all(), strict=False)
+    if stamp := PO.apply(log, cfg, state, canon, reason=reason):  # a standing rule (off by default)
+        return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     if not approval_id and not auto:
         return Decision(
             False,
@@ -140,9 +143,7 @@ def operator_gate(
             f"re-run with `--approval {REQUEST}`: a request id comes back and the operator "
             "answers it in chat.",
         )
-    state = fold(log.read_all(), strict=False)
-    if stamp := PO.apply(log, cfg, state, canon, reason=reason):  # a standing rule (off by default)
-        return Decision(True, stamp=stamp, ask_id=stamp["ask"])
+
     filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=approval_id != REQUEST)
     if filed is None:
         return Decision(
