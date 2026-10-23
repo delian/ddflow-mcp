@@ -1164,19 +1164,24 @@ def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_in
 
 def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
     """B81cf6e7dfd: the log records the `~/.claude/projects` default as `[REDACTED:path]`, so the
-    settled value never equalled the manifest's and the item came back in every plan."""
-    from ddflow.services.upgrade_plan import _unsettled
+    settled value never equalled the manifest's and the item came back in every plan. Settled
+    items now carry the digest of the value; two paths the log masks alike stay different."""
+    from ddflow.services.upgrade_plan import DIGEST, _unsettled
+
+    go(old, "all")
+    done = [c for u in upgrades(old) for c in u.get("config_changes") or []]
+    assert done and all(c.get("digest") for c in done), done
+    dirs = [c for c in done if c["key"] == "approvals.transcript_dirs"]
+    assert dirs and "REDACTED" in str(dirs[0]["new"]), dirs  # the log did mask it
 
     log = EventLog(old, "upgrader")
     new = ["~/.claude/projects"]
-    recorded = log.redacted("upgrade.applied", {"config_changes": [{"new": new}]})
-    seen = recorded["config_changes"][0]["new"]
-    assert seen != new, "the log no longer redacts this value: pick another to pin"
     item = {"id": "knob_added:a.b", "new": new}
-    assert _unsettled([item], {"knob_added:a.b": [seen]}, log) == []
-    # a changed default is news again, redacted or not
-    assert _unsettled([{**item, "new": ["/etc/passwd"]}], {"knob_added:a.b": [seen]}, log) != []
-    assert _unsettled([{**item, "new": []}], {"knob_added:a.b": [seen]}, log) != []
+    seen = {"knob_added:a.b": [f"{DIGEST}{dirs[0]['digest']}"]}
+    assert _unsettled([item], seen, log) == []
+    # a changed default is news again even where the log masks both alike
+    assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen, log) != []
+    assert _unsettled([{**item, "new": []}], seen, log) != []
 
 
 # -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
