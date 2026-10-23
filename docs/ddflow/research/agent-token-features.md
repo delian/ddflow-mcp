@@ -262,8 +262,9 @@ Placement (no parallel structure):
 | *pass 2:* **premium-request multiplier / model price** | **not a harness fact**: model-family data for CC-inventory (`ddflow/templates/context_families.toml`: input, cached, cache_write, output, long-context threshold and tier, multiplier, `legacy = true` for request-based multipliers). The descriptor only names the refresh source in `[meters].price_source` (Copilot SDK `models.list`, `billing.multiplier`) | the multiplier is obsolete for new Copilot plans (usage-based since 2026-06-01); prices belong with the model |
 | *pass 2:* **cache TTL stated but not settable** (Copilot "1 h / 24 h"), cache reads observable | `[tokens.cache]` `control = "harness"`, `ttl_stated`, `observe` (a `usage_fields` name) | three-valued rule: a stated value is not a setter |
 | *pass 2:* **context tier** (Copilot `--context default\|long_context`, Cursor `[context=N]`) | `[tokens.window]` `tier = <setter>`, `tier_values` | a tier is a window choice with a price effect |
-| *pass 2:* **instruction-file budgets** (Antigravity rules 24 000 bytes per file, 20 000-token aggregate; Windsurf 12 000 / 6 000 chars; Goose 64 KB MOIM) | `[caps]` key `instructions` (reserved by descriptor-v2 as the "instructions cap"): value `{bytes, tokens, chars}`, any subset | uses the reserved key, only fixes its shape |
-| *pass 2:* **several stop exit codes** (Qwen 53 turn limit, 55 wall/tool budget; Kimi 75 retryable vs 1 permanent) | `[meters]` `limit_exit_codes = { turns = 53, budget = 55 }` (map from kind to code); the single `limit_exit_code` stays valid for one code | one signal kind per code |
+| *pass 2:* **extra environment for a headless run** (Qwen `QWEN_CODE_UNATTENDED_RETRY=1`) | `[headless]` key `env = { NAME = "value" }` (static values; computed values use a `[tokens]`/`[caps]` setter) | headless launch data already lives here |
+| *pass 2:* **instruction-file budgets** (Antigravity rules 24 000 bytes per file, 20 000-token aggregate; Windsurf 12 000 / 6 000 chars; Goose 64 KB MOIM) | `[caps]` key `instructions` (reserved by descriptor-v2 as the "instructions cap"): value `{per_file = {bytes, tokens, chars}, aggregate = {bytes, tokens, chars}}`, any subset | uses the reserved key, only fixes its shape and scope |
+| *pass 2:* **several stop exit codes** (Qwen 53 turn limit, 55 wall/tool budget; Kimi 75 retryable vs 1 permanent) | `[meters]` `limit_exit_codes = { turns = 53, wall_time = 55, tool_calls = 55 }` (map from a `[caps]` key to the code it produces); the single `limit_exit_code` stays valid for one code | one signal kind per code; keys are the cap names |
 | *pass 2:* **resident tool schemas** (Qwen `tools.eager`, Copilot `toolSearch`, Kiro `toolSearch.*`) | `[caps]` key `tools_resident = <setter>` | extends the reserved "mcp tool cap" |
 | *pass 2:* **terms of automation** (Antigravity consumer plans) | `[headless]` key `terms = "ok"\|"api-key-only"\|"consumer-plans-prohibited"` with a `[verified]` source; the launcher refuses a lane whose auth is outside the allowed set | a legal constraint changes what the launcher may do |
 
@@ -418,7 +419,7 @@ tool_output = { env = "COPILOT_LARGE_OUTPUT_THRESHOLD_BYTES", value = "{bytes}" 
 tools_resident = { file = "settings.json", key = "toolSearch", value = "true" }
 
 [meters]
-limit_signal = "none"                            # exit code and text of a cap stop are U
+# limit_signal absent: the exit code and text of a --max-ai-credits stop are U (not verified, not "none")
 reset_source = "calendar:utc_month_start"        # AI credits reset 00:00:00 UTC on the 1st
 query = { kind = "rpc", via = "copilot-sdk", method = "account.getQuota", format = "json" }
 price_source = { kind = "rpc", via = "copilot-sdk", method = "models.list" }
@@ -442,7 +443,7 @@ command = "/compact"
 takes_instructions = true                        # "/compact <message>" summarises then answers
 
 [caps]
-instructions = { bytes = 24000, tokens = 20000 } # rules: per file / aggregate budget
+instructions = { per_file = { bytes = 24000 }, aggregate = { tokens = 20000 } }   # rules budget
 
 [meters]
 limit_signal = "message"
@@ -481,7 +482,7 @@ tools_resident = { file = "settings.json", key = "tools.eager", value = "{list}"
 
 [meters]
 limit_signal = "exit_code"
-limit_exit_codes = { turns = 53, budget = 55 }   # --max-session-turns / --max-wall-time and --max-tool-calls
+limit_exit_codes = { turns = 53, wall_time = 55, tool_calls = 55 }   # keys are the [caps] names above
 query = "/stats"
 ```
 
