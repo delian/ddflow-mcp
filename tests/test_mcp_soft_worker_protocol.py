@@ -1,0 +1,376 @@
+"""SU-worker-proto: the versioned shim<->worker protocol and the worker entry point.
+
+The worker is today's `Server` behind newline-delimited JSON frames over stdio pipes
+(D-soft-upgrade-architecture). It is stateless per request: the connection state (protocol,
+client info, agent, called_from) travels in each request frame. A worker that cannot speak the
+shim's protocol major answers with a typed error so the shim classifies the upgrade HARD.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from ddflow.surfaces import worker_protocol as WP
+
+ROOT = Path(__file__).resolve().parents[1]
+GOVERNS = ("ddflow/surfaces/worker.py", "ddflow/surfaces/worker_protocol.py")
+
+CONN = {
+    "protocol": "2025-06-18",
+    "client_info": {"name": "t", "version": "1"},
+    "agent": "a",
+    "called_from": "/x",
+}
+
+
+# ---- the frames ------------------------------------------------------------------------
+
+
+def test_a_frame_round_trips_as_one_line():
+    f = WP.request(7, {"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, CONN)
+    line = WP.encode(f)
+    assert line.endswith("\n") and line.count("\n") == 1
+    assert WP.decode(line) == f
+
+
+def test_every_frame_kind_has_a_constructor_and_validates():
+    frames = [
+        WP.hello(shim_proto=1),
+        WP.worker_hello(digest="d", version="1.2.3"),
+        WP.request(1, {"method": "x"}, CONN),
+        WP.response(1, {"jsonrpc": "2.0", "id": 1, "result": {}}),
+        WP.note(1, {"jsonrpc": "2.0", "method": "notifications/progress"}),
+        WP.drain(),
+        WP.drained(),
+        WP.bye("done"),
+        WP.error("bad_frame", "nope", id=2),
+    ]
+    for f in frames:
+        assert WP.decode(WP.encode(f)) == f
+
+
+@pytest.mark.parametrize(
+    "line,code",
+    [
+        ("not json\n", "bad_frame"),
+        ("[1,2]\n", "bad_frame"),
+        ('{"no_type": 1}\n', "bad_frame"),
+        ('{"t": "mystery"}\n', "unknown_frame"),
+        ('{"t": "req"}\n', "bad_frame"),
+        ('{"t": "req", "id": "x", "msg": {}, "conn": {}}\n', "bad_frame"),
+        ('{"t": "res", "id": 1}\n', "bad_frame"),
+    ],
+)
+def test_a_malformed_frame_raises_a_typed_error(line, code):
+    with pytest.raises(WP.ProtocolError) as e:
+        WP.decode(line)
+    assert e.value.code == code
+
+
+def test_a_blank_line_is_not_a_frame():
+    assert WP.decode("\n") is None
+
+
+def test_a_frame_may_carry_unknown_extra_fields_from_a_newer_minor():
+    f = {**WP.drain(), "future": 1}
+    assert WP.decode(json.dumps(f) + "\n")["t"] == "drain"
+
+
+# ---- negotiation ---------------------------------------------------------------------
+
+
+def test_same_major_is_accepted():
+    assert WP.negotiate(WP.hello(shim_proto=WP.PROTO_MAJOR)) is None
+
+
+def test_a_shim_of_another_major_is_refused_with_a_typed_error():
+    err = WP.negotiate(WP.hello(shim_proto=WP.PROTO_MAJOR + 1))
+    assert err["t"] == "error" and err["code"] == "incompatible_shim_proto"
+    assert err["worker_proto"] == WP.PROTO_MAJOR
+
+
+def test_a_hello_without_a_protocol_is_refused():
+    assert WP.negotiate({"t": "hello"})["code"] == "bad_frame"
+
+
+def test_shim_classifies_a_worker_hello_by_major():
+    ok = WP.worker_hello(digest="d", version="1")
+    assert WP.check_worker_hello(ok, shim_proto=WP.PROTO_MAJOR) is None
+    other = {**ok, "worker_proto": WP.PROTO_MAJOR + 1}
+    assert (
+        WP.check_worker_hello(other, shim_proto=WP.PROTO_MAJOR)["code"]
+        == "incompatible_worker_proto"
+    )
+
+
+# ---- the worker loop (in process, with a fake handler) --------------------------------
+
+
+def run_worker(frames, handler, *, drain_after=True, timeout=10):
+    """Run `worker.run` over in-memory streams; returns the frames it wrote."""
+    from ddflow.surfaces import worker
+
+    lines = [WP.encode(f) for f in frames]
+    out = io.StringIO()
+    t = threading.Thread(
+        target=worker.run, args=(Path("."), iter(lines), out), kwargs={"handler": handler}
+    )
+    t.start()
+    t.join(timeout)
+    assert not t.is_alive(), "the worker did not exit at EOF"
+    return [json.loads(x) for x in out.getvalue().splitlines()]
+
+
+def echo(conn, msg, notify):
+    return {
+        "jsonrpc": "2.0",
+        "id": msg.get("id"),
+        "result": {"agent": conn["agent"], "method": msg.get("method")},
+    }
+
+
+def test_the_worker_greets_first_then_answers_a_request():
+    out = run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(1, {"jsonrpc": "2.0", "id": 9, "method": "ping"}, CONN),
+        ],
+        echo,
+    )
+    assert out[0]["t"] == "hello" and out[0]["worker_proto"] == WP.PROTO_MAJOR
+    res = next(f for f in out if f["t"] == "res")
+    assert res["id"] == 1 and res["msg"]["result"] == {"agent": "a", "method": "ping"}
+
+
+def test_the_connection_state_of_each_request_reaches_the_handler():
+    seen = []
+
+    def handler(conn, msg, notify):
+        seen.append(conn)
+
+    other = {**CONN, "agent": "b", "protocol": "2024-11-05"}
+    run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(1, {"method": "x"}, CONN),
+            WP.request(2, {"method": "x"}, other),
+        ],
+        handler,
+    )
+    assert sorted(c["agent"] for c in seen) == ["a", "b"]
+    assert {c["protocol"] for c in seen} == {"2025-06-18", "2024-11-05"}
+
+
+def test_a_notification_gets_no_response_frame_but_is_acknowledged_by_id():
+    out = run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(4, {"jsonrpc": "2.0", "method": "notifications/initialized"}, CONN),
+        ],
+        lambda c, m, n: None,
+    )
+    res = next(f for f in out if f["t"] == "res")
+    assert res["id"] == 4 and res["msg"] is None
+
+
+def test_progress_notes_from_the_handler_are_relayed_tagged_with_the_request():
+    def handler(conn, msg, notify):
+        notify({"jsonrpc": "2.0", "method": "notifications/progress", "params": {"p": 1}})
+        return {"jsonrpc": "2.0", "id": 1, "result": {}}
+
+    out = run_worker([WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(5, {"id": 1}, CONN)], handler)
+    notes = [f for f in out if f["t"] == "note"]
+    assert notes and notes[0]["id"] == 5
+    assert out.index(notes[0]) < out.index(next(f for f in out if f["t"] == "res"))
+
+
+def test_a_crashing_handler_is_answered_with_an_internal_error_never_dropped():
+    def boom(conn, msg, notify):
+        raise RuntimeError("kaboom")
+
+    out = run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(1, {"jsonrpc": "2.0", "id": 8, "method": "x"}, CONN),
+            WP.request(2, {"jsonrpc": "2.0", "id": 9, "method": "y"}, CONN),
+        ],
+        boom,
+    )
+    res = {f["id"]: f["msg"] for f in out if f["t"] == "res"}
+    assert res[1]["error"]["code"] == -32603 and "kaboom" in res[1]["error"]["message"]
+    assert res[1]["id"] == 8 and 2 in res, "the worker must survive a failing request"
+
+
+def test_a_malformed_frame_gets_an_error_frame_and_the_worker_carries_on():
+    from ddflow.surfaces import worker
+
+    lines = [
+        WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)),
+        "garbage\n",
+        WP.encode(WP.request(1, {"method": "x"}, CONN)),
+    ]
+    out = io.StringIO()
+    worker.run(Path("."), iter(lines), out, handler=echo)
+    frames = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert any(f["t"] == "error" and f["code"] == "bad_frame" for f in frames)
+    assert any(f["t"] == "res" and f["id"] == 1 for f in frames)
+
+
+def test_an_incompatible_shim_gets_a_typed_error_and_the_worker_exits():
+    out = run_worker(
+        [WP.hello(shim_proto=WP.PROTO_MAJOR + 1), WP.request(1, {"method": "x"}, CONN)], echo
+    )
+    assert out[0]["t"] == "error" and out[0]["code"] == "incompatible_shim_proto"
+    assert not any(f["t"] == "res" for f in out), "no request may be served after a refused hello"
+
+
+def test_a_request_before_hello_is_refused():
+    out = run_worker([WP.request(1, {"method": "x"}, CONN)], echo)
+    assert any(f["t"] == "error" and f["code"] == "no_hello" for f in out)
+    assert not any(f["t"] == "res" for f in out)
+
+
+def test_drain_finishes_the_inflight_request_then_says_drained_and_bye():
+    gate = threading.Event()
+
+    def slow(conn, msg, notify):
+        gate.wait(5)
+        return {"jsonrpc": "2.0", "id": 1, "result": {"done": True}}
+
+    from ddflow.surfaces import worker
+
+    class Feed:
+        def __init__(self):
+            self.q = [
+                WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)),
+                WP.encode(WP.request(1, {"id": 1}, CONN)),
+            ]
+
+        def __iter__(self):
+            yield from self.q
+            time.sleep(0.2)  # the request is in flight now
+            yield WP.encode(WP.drain())
+            time.sleep(0.2)
+            assert not gate.is_set()
+            gate.set()  # let the slow call finish; drain must wait for it
+            time.sleep(0.2)
+
+    out = io.StringIO()
+    worker.run(Path("."), iter(Feed()), out, handler=slow)
+    kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
+    assert kinds.index("res") < kinds.index("drained") < kinds.index("bye")
+
+
+def test_requests_after_drain_are_refused_not_served():
+    from ddflow.surfaces import worker
+
+    lines = [
+        WP.encode(f)
+        for f in (
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.drain(),
+            WP.request(1, {"method": "x"}, CONN),
+        )
+    ]
+    out = io.StringIO()
+    worker.run(Path("."), iter(lines), out, handler=echo)
+    frames = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert any(f["t"] == "error" and f["code"] == "draining" and f["id"] == 1 for f in frames)
+    assert not any(f["t"] == "res" for f in frames)
+
+
+def test_concurrent_requests_are_answered_independently():
+    def handler(conn, msg, notify):
+        time.sleep(0.3 if msg["id"] == 1 else 0)
+        return {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
+
+    out = run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(1, {"id": 1}, CONN),
+            WP.request(2, {"id": 2}, CONN),
+        ],
+        handler,
+    )
+    order = [f["id"] for f in out if f["t"] == "res"]
+    assert sorted(order) == [1, 2] and order[0] == 2, "a slow call must not block a fast one"
+
+
+# ---- the real worker over real pipes -----------------------------------------------------
+
+
+def _spawn(repo):
+    return subprocess.Popen(
+        [sys.executable, "-m", "ddflow.surfaces.worker", "--repo", str(repo)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+        cwd=ROOT,
+    )
+
+
+def _git(path):
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    return path
+
+
+def _read(p, timeout=30):
+    box = []
+    t = threading.Thread(target=lambda: box.append(p.stdout.readline()), daemon=True)
+    t.start()
+    t.join(timeout)
+    assert box and box[0], "the worker did not answer"
+    return WP.decode(box[0])
+
+
+def test_the_real_worker_serves_tools_list_over_pipes(tmp_path):
+    p = _spawn(_git(tmp_path / "r"))
+    try:
+        p.stdin.write(WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)))
+        p.stdin.flush()
+        hello = _read(p)
+        assert hello["t"] == "hello" and hello["worker_proto"] == WP.PROTO_MAJOR
+        assert len(hello["digest"]) == 64 and hello["version"]
+        p.stdin.write(
+            WP.encode(WP.request(1, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, CONN))
+        )
+        p.stdin.flush()
+        res = _read(p)
+        assert res["t"] == "res" and res["msg"]["result"]["tools"]
+    finally:
+        p.stdin.close()
+        p.wait(timeout=30)
+
+
+def test_the_real_worker_exits_at_eof_with_a_bye(tmp_path):
+    p = _spawn(_git(tmp_path / "r"))
+    p.stdin.write(WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)))
+    p.stdin.flush()
+    _read(p)
+    p.stdin.close()
+    last = None
+    for line in p.stdout:
+        last = WP.decode(line)
+    assert p.wait(timeout=30) == 0 and last["t"] == "bye"
+
+
+def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
+    """A stray print or a child's output must not corrupt the frame stream."""
+    p = _spawn(_git(tmp_path / "r"))
+    try:
+        p.stdin.write(WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)))
+        p.stdin.write(WP.encode(WP.request(1, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, CONN)))
+        p.stdin.flush()
+        for _ in range(2):
+            WP.decode(p.stdout.readline())  # every line is a valid frame
+    finally:
+        p.stdin.close()
+        p.wait(timeout=30)
