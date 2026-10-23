@@ -34,12 +34,12 @@ from ._globwarn import missing_globs
 
 def _created(glob: str, created: set[str]) -> bool:
     """Is ``glob`` a path a plan item creates, or inside a directory one creates? A created
-    path is a directory when it ends in '/' or its last part has no extension."""
+    path is a directory only when it ends in '/' (`creates = ["newpkg/"]`): a name alone
+    cannot be told from a file, and nothing can exist under a file."""
     g = glob.rstrip("/")
     for c in created:
         base = c.rstrip("/")
-        is_dir = c.endswith("/") or "." not in base.rsplit("/", 1)[-1]
-        if g == base or (is_dir and g.startswith(base + "/")):
+        if g == base or (c.endswith("/") and g.startswith(base + "/")):
             return True
     return False
 
