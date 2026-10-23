@@ -437,11 +437,13 @@
 # ---
 # name: test_help[ddflow chore approve]
   '''
-  usage: ddflow chore approve [-h] [--note NOTE]
+  usage: ddflow chore approve [-h] [--note NOTE] [--approval APPROVAL]
   
   options:
-    -h, --help   show this help message and exit
-    --note NOTE  why, recorded with the approval
+    -h, --help           show this help message and exit
+    --note NOTE          why, recorded with the approval
+    --approval APPROVAL  an agent: the id of the operator's approval of exactly this list (a refusal
+                         files the request and names it)
   
   '''
 # ---
@@ -1026,17 +1028,19 @@
 # ---
 # name: test_help[ddflow grant add]
   '''
-  usage: ddflow grant add [-h] --item ITEM --gate GATE [--kind KIND] [--count COUNT] --reason REASON [--when WHEN]
+  usage: ddflow grant add [-h] --item ITEM --gate GATE [--kind KIND] [--count COUNT] --reason REASON [--approval APPROVAL] [--when WHEN]
   
   options:
-    -h, --help       show this help message and exit
-    --item ITEM      the item the grant is for
-    --gate GATE      the gate it covers (rubber_duck, critic)
-    --kind KIND      what is granted (review_round)
-    --count COUNT    how many rounds, up to [grants].max_count
-    --reason REASON  what the operator allowed and why
-    --when WHEN      make it STANDING: apply it mechanically when this predicate holds
-                     (tree_changed_after_triage)
+    -h, --help           show this help message and exit
+    --item ITEM          the item the grant is for
+    --gate GATE          the gate it covers (rubber_duck, critic)
+    --kind KIND          what is granted (review_round)
+    --count COUNT        how many rounds, up to [grants].max_count
+    --reason REASON      what the operator allowed and why
+    --approval APPROVAL  an agent: the id of the operator's approval of exactly this grant (a
+                         refusal files the request and names it)
+    --when WHEN          make it STANDING: apply it mechanically when this predicate holds
+                         (tree_changed_after_triage)
   
   '''
 # ---
@@ -2836,7 +2840,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2859,7 +2863,8 @@
     --line LINE
     --resources RESOURCES
     --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these -- the
-                          whole list, not an addition (see --add-globs); path globs, comma-separated
+                          whole list, not an addition (see --add-globs); an empty value means none,
+                          and a fix task then takes none from its bug; path globs, comma-separated
                           (a.py,src/**) or a JSON array; repeat the flag to add more -- every value
                           is kept
     --add-globs ADD_GLOBS
@@ -2874,6 +2879,10 @@
     --landed LANDED       record the commit (or <before>..<after>) on the base that holds this
                           item's work merged outside `ddflow merge`; refused unless it is on the
                           base and touches the item's globs
+    --parent PARENT       move the task under this phase or task ('' = top level)
+    --phase PHASE         same as --parent
+    --kind KIND           change the work kind: task, doc, research or job (the gate pipeline
+                          [gates].kind_pipelines gives it)
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   

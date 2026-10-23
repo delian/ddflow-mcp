@@ -969,7 +969,14 @@ def _implement_without_commits(
     if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
         return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
-    if not (r.ok and r.out.strip() == "0"):
+    if not r.ok:
+        return (
+            f"{it.id}'s branch could not be measured against {base} "
+            f"({(r.err or r.out).strip() or 'git rev-list failed'}): an unmeasured range is "
+            f"not a pass. Fix the base ref ([worktree].base_ref), or --force with a --reason "
+            f"if the item truly changes nothing."
+        )
+    if r.out.strip() != "0":
         return ""
     return (
         f"{it.id}'s branch has no commit ahead of {base}: there is nothing implemented to "
