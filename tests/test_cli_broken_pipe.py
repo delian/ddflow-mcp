@@ -51,13 +51,13 @@ def test_a_closed_pipe_ends_quietly(repo, argv):
 
 def test_the_handler_leaks_no_descriptor(monkeypatch, tmp_path, capsys):
     """Entering `main` with a closed pipe over and over (a harness) must not run it out of fds."""
-    from ddflow.surfaces import cli
+    from ddflow.surfaces import cli, cli_pipe
 
     def boom(argv=None):
         raise BrokenPipeError
 
     monkeypatch.setattr(cli, "_main", boom)
-    monkeypatch.setattr(cli.os, "dup2", lambda *a: None)  # keep pytest's own stdout
+    monkeypatch.setattr(cli_pipe.os, "dup2", lambda *a: None)  # keep pytest's own stdout
     before = len(os.listdir("/proc/self/fd"))
     for _ in range(20):
         assert cli.main([]) == cli.PIPE_CLOSED
