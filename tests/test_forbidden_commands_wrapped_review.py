@@ -40,6 +40,10 @@ def _check(cmd: str):
         "KIMI_API_KEY=x ddflow",
         "env KIMI_API_KEY=x timeout 580 ddflow",
         "nohup ddflow",
+        "uv --cache-dir /tmp/c run ddflow",
+        "uv --config-file uv.toml run -- ddflow",
+        "python -mddflow",
+        "pypy3 -m ddflow",
     ],
 )
 def test_the_documented_round_is_allowed_however_it_is_launched(launcher):
@@ -54,6 +58,7 @@ def test_the_documented_round_is_allowed_however_it_is_launched(launcher):
         "python -m ddflow merge X --force",
         "timeout 5 git push --force",
         "uv run pkill foo",
+        "python-tools -m ddflow review X --gate critic --force --reason w",  # not an interpreter
     ],
 )
 def test_other_force_flags_and_forbidden_commands_stay_refused_when_wrapped(cmd):
@@ -63,3 +68,23 @@ def test_other_force_flags_and_forbidden_commands_stay_refused_when_wrapped(cmd)
 def test_a_review_force_without_a_reason_says_what_is_accepted():
     msg = _check("ddflow review X --gate critic --force").message()
     assert "--force --reason" in msg and "anywhere" in msg, msg
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        'review X --force --reason "r" --gate critic',
+        'review X --reason "r" --gate critic --force',
+        'review X --gate critic --reason "r" --force',
+        'review --gate critic X --force --reason "r"',
+        'review X --gate rubber_duck,critic --force --reason "r" --chunk 2',
+    ],
+)
+def test_force_and_reason_may_sit_anywhere_among_the_review_arguments(tail):
+    assert _check(f"ddflow {tail}") is None, tail
+    assert _check(f"timeout 580 ddflow {tail}") is None, tail
+
+
+def test_a_uv_subcommand_other_than_run_is_the_uv_command_itself():
+    assert FB.matches("uv sync", ["uv", "sync"]) and FB.matches("uv pip", ["uv", "pip", "i"])
+    assert not FB.matches("pip install", ["uv", "pip", "install", "x"])

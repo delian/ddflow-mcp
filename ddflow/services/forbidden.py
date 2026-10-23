@@ -39,7 +39,7 @@ PRIMARY = "@primary"
 _WRAPPERS = frozenset(
     {
         "sudo", "env", "nohup", "time", "command", "exec", "nice", "xargs", "builtin", "doas",
-        "timeout", "uv",
+        "timeout",
     }
 )  # fmt: skip
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
@@ -148,10 +148,19 @@ _VALUED = {
     "env": frozenset({"-u", "-C", "-S"}),
     "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-a", "-d", "-E", "-l", "-i"}),
     "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
-    "uv": frozenset(
-        {"--with", "--project", "-p", "--python", "--directory", "--extra", "--group", "--package"}
-    ),
 }
+#: `uv`'s subcommands: `uv [global options] run ...` runs its command, any other subcommand is
+#: uv's own work (`uv pip install` is a `uv` command, not a `pip` one).
+_UV_SUBCOMMANDS = frozenset(
+    {"run", "sync", "pip", "venv", "tool", "python", "add", "remove", "lock", "init", "build"}
+    | {"publish", "export", "tree", "cache", "self", "version", "help", "format", "audit"}
+)
+#: `uv run`'s options that take their value as the next word.
+_UV_RUN_VALUED = frozenset(
+    {"--with", "--with-requirements", "--with-editable", "--python", "-p", "--project"}
+    | {"--directory", "--extra", "--group", "--package", "--env-file", "--index", "--script"}
+)
+_PYTHON = re.compile(r"(?:python|pypy)\d*(?:\.\d+)*\Z")
 _DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
 
 
@@ -169,21 +178,37 @@ def _head(words: list[str]) -> list[str]:
             i += 1
         elif wrapper and w.startswith("-"):
             i += 2 if w in _VALUED.get(wrapper, ()) else 1
-        elif (wrapper, w) == ("uv", "run") or (wrapper == "timeout" and _DURATION.fullmatch(w)):
-            i += 1  # `uv run` / the duration are the wrapper's own words
+        elif wrapper == "timeout" and _DURATION.fullmatch(w):
+            i += 1  # the duration is the wrapper's own word
+        elif w.rsplit("/", 1)[-1] == "uv" and (k := _uv_run(words, i)) >= 0:
+            i, wrapper = k, ""
         else:
             break
     return _python_module(words[i:])
 
 
+def _uv_run(words: list[str], i: int) -> int:
+    """Where the command `uv [global options] run [options] CMD` runs starts, or -1 when the
+    `uv` at ``i`` is the command itself (any other subcommand)."""
+    j = next((n for n in range(i + 1, len(words)) if words[n] in _UV_SUBCOMMANDS), len(words))
+    if j >= len(words) or words[j] != "run":
+        return -1
+    j += 1
+    while j < len(words) and words[j].startswith("-") and words[j] != "--":
+        j += 2 if words[j] in _UV_RUN_VALUED else 1
+    return j + 1 if j < len(words) and words[j] == "--" else j
+
+
 def _python_module(head: list[str]) -> list[str]:
     """`python [-P ...] -m mod args` as `mod args`: the module is the command that runs."""
-    if not head or not head[0].rsplit("/", 1)[-1].startswith("python"):
+    if not head or not _PYTHON.match(head[0].rsplit("/", 1)[-1]):
         return head
     i = 1
     while i < len(head) and head[i].startswith("-") and head[i] != "-m":
         if head[i] == "-c":
             return head  # an inline program, not a module
+        if head[i].startswith("-m"):
+            return [head[i][2:], *head[i + 1 :]]  # `-mddflow`
         i += 2 if head[i] in ("-W", "-X") else 1
     return head[i + 1 :] if i + 1 < len(head) and head[i] == "-m" else head
 
