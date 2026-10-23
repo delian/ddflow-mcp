@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import getpass
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,7 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
+from .stale_why import _differing_note
 
 
 @dataclass
@@ -354,7 +355,13 @@ class StaleNote:
 
 
 def stale_evidence_detail(
-    state: State, cfg: Config, item_id: str, cwd: Path, *, landed: str = ""
+    state: State,
+    cfg: Config,
+    item_id: str,
+    cwd: Path,
+    *,
+    landed: str = "",
+    own: Sequence[str] | None = None,
 ) -> list[StaleNote]:
     """A note for each gate whose evidence describes another tree, or cannot be checked.
 
@@ -374,6 +381,11 @@ def stale_evidence_detail(
     the same files. Evidence from before `source_tree` was recorded falls back to the
     fingerprint against a working tree, and against a commit only when it was taken on
     a clean tree (its commit then names the content).
+
+    ``own``, the item's own changed paths: a landing commit also holds what the base gained
+    since the gate ran. When the gate's tree can be rebuilt only differences in ``own`` make a
+    note (none for an item with no changes of its own; B-complete-different-tree-note-lists-
+    main-drift). Without ``own`` the whole tree is compared.
 
     Only gates in `gates.evidence_required` are checked. The others legitimately record
     before the work is finished: `implement` is *supposed* to precede the edits that
@@ -436,23 +448,8 @@ def stale_evidence_detail(
             continue
         else:
             continue
-        stale.append(StaleNote(gid, _what_differs(cwd, base, dirt, now, label)))
+        stale += _differing_note(StaleNote, gid, cwd, base, dirt, now, label, own)
     return sorted(stale)
-
-
-def _what_differs(cwd: Path, base: str, dirt: str, now: TreeEntries | None, label: str) -> str:
-    """Name the files, when the tree the gate ran on can be rebuilt (a clean commit)."""
-    then = commit_tree_entries(cwd, base) if base else None
-    paths = differing_paths(then, now) if then is not None and now is not None else []
-    shown = ", ".join(paths[:8]) + (f" (+{len(paths) - 8} more)" if len(paths) > 8 else "")  # noqa: PLR2004
-    if dirt == "clean" and paths:
-        return f"it ran on {base}; {label} differs in {shown}"
-    if paths:
-        return (
-            f"it ran on uncommitted edits over {base}, and {label} holds other content "
-            f"(files changed since {base}: {shown})"
-        )
-    return f"the content it ran on is not the content of {label}"
 
 
 def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements are kept apart on purpose

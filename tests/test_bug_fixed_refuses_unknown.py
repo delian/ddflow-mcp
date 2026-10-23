@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -325,4 +327,27 @@ def test_a_node_id_with_an_empty_name_is_refused(repo):
     ):
         out = api.bug_fixed(repo, "B1", regression_test=empty)
         assert out.exit == FAIL, (empty, out)
+    assert _open_bugs(repo) == 1
+
+
+@pytest.mark.parametrize("given", ["::test_boundary", "tests/test_fix.py"])
+def test_half_a_node_id_is_refused_not_closed_unverified(repo, given):
+    """B-bugfixed-accepts-bare-node-id: '::test_x' (the file part from an unset variable)
+    or a bare file path was accepted and closed the bug 'not-applicable', unchecked."""
+    run_cli(repo, "init")
+    _suite(repo)
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(repo, "B1", regression_test=given)
+    assert out.exit == REFUSED, out
+    assert "node id" in out.reason
+    assert _open_bugs(repo) == 1
+
+
+def test_a_file_with_an_empty_test_name_is_refused(repo):
+    """`"$FILE::$TEST"` with TEST unset: refused by the existence check, not accepted."""
+    run_cli(repo, "init")
+    _suite(repo)
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_fix.py::")
+    assert out.exit == FAIL, out
     assert _open_bugs(repo) == 1

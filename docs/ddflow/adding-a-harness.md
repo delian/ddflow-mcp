@@ -168,6 +168,15 @@ Every value is data a project may override in its config; the descriptor is the 
 the only source. The upgrade manifest records a changed descriptor, so a project learns its
 agent's facts moved.
 
+## Does the agent honour `list_changed`?
+
+Whether an agent re-fetches its tool list when the server says it changed decides whether an upgrade
+can be applied without restarting it. That fact is not in the descriptor: it lives in the client
+table, `ddflow/mcpshim/clients.py`, which the stdlib-only shim also reads. Add a row there with
+`harness = "<id>"` (and the `clientInfo.name` the agent sends, with its evidence); `ddflow harness
+show <id>` then prints it. An agent with no row is shown as `no client row` and treated as unknown,
+which is hard. `scripts/ci/mcp-client-probe row <id>` finds out for an agent whose CLI is installed.
+
 ## Checklist
 
 - [ ] `ddflow/harnesses/<id>.toml`, id equal to the file name, `[verified]` filled
