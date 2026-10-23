@@ -332,7 +332,18 @@ def _problem(st: State, ev: Event, exc: Exception) -> None:
     )
 
 
-def fold(events: list[Event], *, strict: bool = True) -> State:
+def _notify(observe: Callable[[State, Event], None] | None, st: State, ev: Event | None) -> None:
+    """Hand `fold`'s observer the state after `ev` (nothing before the first event)."""
+    if observe is not None and ev is not None:
+        observe(st, ev)
+
+
+def fold(
+    events: list[Event],
+    *,
+    strict: bool = True,
+    observe: Callable[[State, Event], None] | None = None,
+) -> State:
     """Replay events into state. Pure; no I/O; deterministic.
 
     Each event is first brought to the current shape of its kind (`upcasters.upcast`).
@@ -342,6 +353,10 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
     this one, where forward compatibility beats correctness of the unknown part -- but it
     counts what it skipped (`skipped_kinds`) and records what it could not apply
     (`fold_problems`), which doctor names.
+
+    ``observe(state, event)`` is called once the event has been applied (or skipped), for
+    every event in order: a read-only look at each intermediate state, which the replay
+    round trip uses to see a record disappear at the event that removed it.
     """
     st = State()
     # An adopted orphan lives on as the copy under its session; the id-less original
@@ -351,7 +366,10 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
         for ev in events
         if ev.kind in _SESSION_TEXT and isinstance(ev.data, dict) and ev.data.get("adopted_from")
     }
+    prev: Event | None = None
     for ev in events:
+        _notify(observe, st, prev)
+        prev = ev
         st.event_count += 1
         st.last_lamport = max(st.last_lamport, ev.lamport)
         if ev.kind in _SESSION_TEXT and ev.id in adopted:
@@ -403,4 +421,5 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
             # One malformed event no longer aborts the fold and hides every event after it
             # (B-uni-compat-events): it is recorded, `doctor` names it, and the fold goes on.
             _problem(st, cur, exc)
+    _notify(observe, st, prev)
     return st
