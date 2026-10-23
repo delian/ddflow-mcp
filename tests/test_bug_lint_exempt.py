@@ -24,7 +24,7 @@ def _file(repo: Path, bug: str, title: str) -> None:
 
 
 def test_a_ci_lint_bug_closes_with_a_recorded_reason_and_no_test(repo):
-    _file(repo, "Bci-ruff-format-1", "pre-push CI check failed: ruff-format")
+    _file(repo, "Bci-ruff-format-1", "merge CI check failed: ruff format --check (CI: Lint)")
     out = api.bug_fixed(repo, "Bci-ruff-format-1", lint_exempt="ruff format applied; check green")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "exempt-lint"
@@ -45,7 +45,7 @@ def test_a_bug_that_is_not_a_ci_lint_check_still_needs_its_test(repo):
 
 
 def test_the_reason_is_required_and_excludes_a_test(repo):
-    _file(repo, "Bci-ruff-format-2", "pre-push CI check failed: ruff-format")
+    _file(repo, "Bci-ruff-format-2", "merge CI check failed: ruff format --check (CI: Lint)")
     # (an empty reason is the ordinary path: it asks for the test)
     out = api.bug_fixed(repo, "Bci-ruff-format-2", lint_exempt="   ")
     assert out.exit == REFUSED and "reason" in out.reason, out.reason
@@ -54,9 +54,15 @@ def test_the_reason_is_required_and_excludes_a_test(repo):
 
 
 def test_the_cli_takes_lint_exempt(repo):
-    _file(repo, "Bci-ruff-format-3", "pre-push CI check failed: ruff-format")
+    _file(repo, "Bci-ruff-format-3", "merge CI check failed: ruff format --check (CI: Lint)")
     code, out, err = run_cli(
         repo, "bug", "fixed", "Bci-ruff-format-3", "--lint-exempt", "ruff format applied"
     )
     assert code == OK, err
     assert "exempt-lint" in out or "closed" in out
+
+
+def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
+    _file(repo, "Bci-bandit-1", "merge CI check failed: bandit (CI: Static security scan)")
+    out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="no test")
+    assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason

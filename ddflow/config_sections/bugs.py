@@ -33,6 +33,11 @@ class BugsConfig:
         check=id_problem,
     )
 
+    lint_checks: list[str] = knob(
+        factory=lambda: ["ruff", "(CI: Lint)", "format"],
+        doc="Substrings (case-insensitive) that make a CI-filed bug a LINT bug, whose check has no test to write: `ddflow bug fixed <Bci-...> --lint-exempt REASON` closes such a bug with the reason recorded (regression_verified=exempt-lint) instead of a `--regression-test`. A bug whose check id contains a pytest node (`::`), or matches none of these, still needs its regression test. Default: ruff, (CI: Lint), format.",
+    )
+
     #: What `bug found` collects about the machine and the tree it was found in
     #: (DX-bug-repro-bundle). Stored as an evidence blob, linked from the bug.
     repro_capture: str = knob(
