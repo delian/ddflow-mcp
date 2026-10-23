@@ -1,6 +1,6 @@
-# Decision proposal: common core, per-harness and per-model drivers that are mostly data
+# Decision record (proposal decided): common core, per-harness and per-model drivers that are mostly data
 
-State: **DECIDED** 2026-10-23 (answers below; operator chose option C with a plugin SDK now). Phase P-drivers, task DRV-research, 2026-10-23.
+State: **DECIDED** 2026-10-23 (answers below; operator chose option C with a plugin SDK now). Phase P-drivers, proposed by DRV-research, decided by DRV-decide, 2026-10-23.
 Evidence and labels: [research/driver-architecture.md](../research/driver-architecture.md) (V verified, R reported, U unknown).
 Operator request (verbatim, 2026-10-23): "Do you create drivers for every coding agent and model in order to keep the core code common and only adjust depending on which agent and model we communicate with and probably we could even adjust to the differences mostly with confirmation than code so it will be easier to adjust to future changes and coding agents? Respectively the same for agents that ddflow instantiate as subprocesses (if we plan that in the future)? Does this make sense? Can you research it?" ("confirmation" read as configuration.)
 Related, not duplicated: D-acp-r2, D-control-planes, D-config-layer-order, D-extension-seams, D-mcp-new-nouns, D-everything-configurable, D-model-routing, D-dsh-telemetry; HX-facts-core, P-agent-parity.descriptor-v2, DX-descriptor-vocab-dsh, ATF-descriptor-fields, CC-inventory, TE-limit-aware-routing, CP-backend-iface, AC-backend, AC-prefer, CM-packs.
