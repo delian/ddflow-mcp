@@ -18,6 +18,8 @@ Accepted limits (decided by the operator; a review finding inside them is not a 
   argument of a conflicting type would now fail: undeclared arguments are not the contract.
 - `$ref`, `allOf`/`anyOf`/`oneOf`/`not`, `if`/`then`, `patternProperties` and other keywords are
   not reasoned about; a difference in one of them is reported as a possible restriction.
+- An output array whose `items` narrows to `false` is reported (with an imprecise reason): a false
+  "problem", never a missed break.
 - Schema dialect details (format assertion, draft differences) are not modelled.
 """
 
