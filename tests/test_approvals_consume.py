@@ -14,6 +14,7 @@ import time
 import pytest
 
 from ddflow.config import Config
+from ddflow.core import clock
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -146,10 +147,13 @@ def test_the_state_changing_since_the_request_needs_a_new_approval(log):
 def test_an_approval_expires_after_its_use_window(log):
     cfg = Config()
     filed = _approved(log, cfg)
-    late = T0 + cfg.approvals.use_ttl_s + 1
+    answered = clock.epoch(asks_of(_state(log))[filed.id]["answered_at"], default=0.0)
+    late = answered + cfg.approvals.use_ttl_s + 1
     got = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=late)
     assert not got.ok and "request a new approval" in got.message
-    ok = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + cfg.approvals.use_ttl_s)
+    ok = C.operator_gate(
+        log, cfg, _canon(), approval_id=filed.id, now=answered + cfg.approvals.use_ttl_s
+    )
     assert ok.ok
 
 
@@ -249,12 +253,13 @@ def test_one_approval_is_spent_by_exactly_one_of_many_racing_processes(log, repo
         "from ddflow.services.approvals import consume as C;"
         "from ddflow.services.approvals.canon import Canon;"
         "c = Canon(verb='gate.skip.failed_review', agent='asker', item='fix-X', target='critic', state='s1');"
-        "ok = C.spend(EventLog(Path(sys.argv[1]), 'asker'), c, sys.argv[2], now=time.time()).ok;"
+        "ok = C.spend(EventLog(Path(sys.argv[1]), 'asker'), c, sys.argv[2], now=float(sys.argv[3])).ok;"
         "print('SPENT' if ok else 'REFUSED')"
     )
+    answered = clock.epoch(asks_of(_state(log))[filed.id]["answered_at"], default=0.0)
     procs = [
         subprocess.Popen(
-            [sys.executable, "-c", code, str(repo), filed.id],
+            [sys.executable, "-c", code, str(repo), filed.id, str(answered + 5)],
             stdout=subprocess.PIPE,
             text=True,
         )
@@ -263,3 +268,9 @@ def test_one_approval_is_spent_by_exactly_one_of_many_racing_processes(log, repo
     outs = [p.communicate()[0].strip() for p in procs]
     assert outs.count("SPENT") == 1 and outs.count("REFUSED") == 5, outs
     assert asks_of(_state(log))[filed.id]["used"] == 1
+
+
+def test_a_row_without_a_recorded_level_still_counts_as_a_terminals_word():
+    assert E.verified_level({"level": 0, "via": "cli"}) == 1
+    assert E.verified_level({"level": -1, "via": ""}) == 1
+    assert E.verified_level({}) == 1
