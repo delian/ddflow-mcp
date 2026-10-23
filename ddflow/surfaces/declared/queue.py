@@ -23,6 +23,14 @@ def _raw_globs(a: dict, key: str) -> list[str] | None:
     return None if v is None else list(v) if isinstance(v, list) else [v]
 
 
+def _parent_of(a: dict) -> str | None:
+    """`update --parent` / `--phase` (one field): None when neither is given."""
+    parent, phase = a.get("parent"), a.get("phase")
+    if parent is not None and phase is not None and parent != phase:
+        raise ValueError("--phase and --parent are the same field: give one")
+    return parent if parent is not None else phase
+
+
 def item_edit(a: dict):
     """The `ItemEdit` for `update`'s arguments: the ONE encoding, used by the MCP call and
     by `ddflow update` alike, so a field cannot be threaded through one and forgotten in
@@ -48,6 +56,8 @@ def item_edit(a: dict):
         worktree=a.get("worktree"),
         queue=bool(a.get("queue")),
         landed=a.get("landed"),
+        parent=_parent_of(a),
+        kind=a.get("kind"),
     )
 
 
@@ -423,9 +433,10 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "globs",
-                help="Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped.",
+                help="Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped. Empty: none, and a fix task then takes none from its bug.",
                 cli_help="REPLACES the item's globs (and a claimed item's lease) with these -- the "
-                "whole list, not an addition (see --add-globs); " + GLOBS_HELP,
+                "whole list, not an addition (see --add-globs); an empty value means none, and a fix "
+                "task then takes none from its bug; " + GLOBS_HELP,
                 action=_Globs,
             ),
             Param(
@@ -462,6 +473,22 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="record the commit (or <before>..<after>) on the base that holds this item's work merged outside `ddflow merge`; refused unless it is on the base and touches the item's globs",
             ),
             Param(
+                "parent",
+                help="Move the task under this phase (or task); empty makes it top level. Refused for a finished item, a missing parent, or a dependency cycle.",
+                cli_help="move the task under this phase or task ('' = top level)",
+            ),
+            Param(
+                "phase",
+                help="",
+                cli_help="same as --parent",
+                cli_only=True,
+            ),
+            Param(
+                "kind",
+                help="Work kind: task, doc, research or job (its gate pipeline).",
+                cli_help="change the work kind: task, doc, research or job (the gate pipeline [gates].kind_pipelines gives it)",
+            ),
+            Param(
                 "worktree",
                 help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch.",
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
@@ -474,6 +501,7 @@ COMMANDS: tuple[Command, ...] = (
             "--remove-tags": "CLI only: over MCP `tags` replaces the list (tools/list byte budget)",
             "--add-needs": "CLI only: over MCP `needs` replaces the list (tools/list byte budget)",
             "--remove-needs": "CLI only: over MCP `needs` replaces the list (tools/list byte budget)",
+            "--phase": "CLI only: the same field as `parent` (tools/list byte budget)",
         },
         tool_order=(
             "id",
@@ -488,6 +516,8 @@ COMMANDS: tuple[Command, ...] = (
             "resources",
             "queue",
             "landed",
+            "parent",
+            "kind",
             "worktree",
         ),
     ),

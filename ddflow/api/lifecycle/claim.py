@@ -236,7 +236,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
     bug_globs = None
-    if want is None and parked is not None and not parked.globs:
+    if want is None and parked is not None and not parked.globs and not parked.globs_declared:
         want, bug_globs = _bug_default(st, cfg, parked, log.agent_id)  # its bug declared files
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.

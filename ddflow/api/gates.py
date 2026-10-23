@@ -698,6 +698,60 @@ def run(
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
+#: Quoted words stay whole; the first bare `--` ends the ci options; a bare `--timeout N` is the
+#: one to replace. A CONSERVATIVE scanner for a one-line gate command, not a shell parser: an
+#: unclosed quote leaves the command unchanged. Accepted limits: no here-docs, no `$(...)`/backtick
+#: nesting, no option-level parsing (`ddflow ci run` itself refuses an option value that is
+#: `--timeout=N`), no `#` comments, no words built by quote concatenation (`+"3"0`).
+#: The one predicate for "a `ddflow ci run` line", used to decide and to insert.
+_CI_VERB = re.compile(r"^(\s*ddflow\s+ci\s+run)(?=\s|$)")
+_CI_WORDS = re.compile(
+    r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*"|'[^']*'|\\[^\n])+)"""
+    r"""|(?P<sep>(?:\s|\\\n)--(?=\s|$))|(?P<timeout>(?P<lead>\s|\\\n)--timeout(?:=|\s+)["']?[+-]?\d+["']?)""",
+    re.S,
+)
+
+
+def _quotes_balanced(command: str) -> bool:
+    """False when ``command`` ends inside a quote (a backslash escapes outside single quotes)."""
+    quote, i = "", 0
+    while i < len(command):
+        c = command[i]
+        if quote == "'":
+            quote = "" if c == "'" else quote
+        elif c == "\\":
+            i += 1
+        elif quote == '"':
+            quote = "" if c == '"' else quote
+        elif c in "'\"":
+            quote = c
+        i += 1
+    return not quote
+
+
+def _ci_command_with_timeout(command: str, timeout_s: int) -> str:
+    """``command`` (a `ddflow ci run ...` line) with its `--timeout` replaced by ``timeout_s``,
+    placed right after the verb. Only the ci options are touched: what follows a bare `--` belongs
+    to the test runner, and a quoted option value is left as written."""
+    if not _quotes_balanced(command):
+        return command  # cannot tell what is quoted: leave the line as written
+    out, pos = [], 0
+    for m in _CI_WORDS.finditer(command):
+        if m.lastgroup == "sep":
+            break
+        if m.lastgroup == "timeout":
+            # Drop only the option; a continuation (backslash-newline) before it stays as written.
+            keep = m.group("lead") if m.group("lead").startswith("\\") else ""
+            out.append(command[pos : m.start()] + keep)
+            pos = m.end()
+    else:
+        m = None
+    end = m.start() if m is not None else len(command)
+    out.append(command[pos:end])
+    head = _CI_VERB.sub(rf"\1 --timeout {timeout_s}", "".join(out), count=1)
+    return head + command[end:]
+
+
 def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
     """``gdef`` for one run that may take ``timeout_s`` (None: as declared; else 1..max): its own timeout, and
     the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
@@ -714,16 +768,8 @@ def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
             outcome="",
         )
     command = gdef.command or ""
-    if re.match(r"\s*ddflow\s+ci\s+run(\s|$)", command):
-        # Only the part before a `--`: what follows belongs to the test runner.
-        parts = re.split(r"(\s--(?:\s|$))", command, maxsplit=1)
-        head, sep, tail = parts[0], "".join(parts[1:2]), "".join(parts[2:])
-        head = re.sub(r"\s--timeout(?:=|\s+)\d+", "", head)
-        # Right after the verb, not at the end: after a `--` it would reach the test runner.
-        head = re.sub(
-            r"^(\s*ddflow\s+ci\s+run)(?=\s|$)", rf"\1 --timeout {timeout_s}", head, count=1
-        )
-        command = head + sep + tail
+    if _CI_VERB.match(command):
+        command = _ci_command_with_timeout(command, timeout_s)
     return replace(gdef, timeout_s=timeout_s, command=command)
 
 
@@ -923,7 +969,14 @@ def _implement_without_commits(
     if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
         return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
-    if not (r.ok and r.out.strip() == "0"):
+    if not r.ok:
+        return (
+            f"{it.id}'s branch could not be measured against {base} "
+            f"({(r.err or r.out).strip() or 'git rev-list failed'}): an unmeasured range is "
+            f"not a pass. Fix the base ref ([worktree].base_ref), or --force with a --reason "
+            f"if the item truly changes nothing."
+        )
+    if r.out.strip() != "0":
         return ""
     return (
         f"{it.id}'s branch has no commit ahead of {base}: there is nothing implemented to "

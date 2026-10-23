@@ -156,7 +156,7 @@ def test_only_the_asker_withdraws_a_waiting_request(proj):
 def test_requesting_by_hand_needs_a_verb_that_has_a_provider(proj, monkeypatch):
     code, _o, err = run_cli(proj, "approvals", "request", "grant.add", "--item", "T1", agent="bot")
     assert code != 0 and "cannot be requested by hand" in err  # no provider wired yet
-    monkeypatch.setitem(PS.PROVIDERS, "grant.add", lambda st, item, target, args: "state-1")
+    monkeypatch.setitem(PS.PROVIDERS.table, "grant.add", lambda st, item, target, args: "state-1")
     out = API.approvals_request(
         proj, "grant.add", item="T1", target="critic", reason="x", agent="bot"
     )
