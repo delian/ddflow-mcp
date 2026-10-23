@@ -6,6 +6,19 @@ could a client reading a result under the OLD output schema break on the new one
 toward reporting a problem (a possible restart) rather than missing one: a keyword they do not
 understand that differs counts as a restriction. Arguments the old schema did not declare are
 not part of its contract, so a newly declared optional argument is compatible.
+
+Why conservative: a false "problem" costs an agent restart; a missed one breaks a live agent's
+calls. So where the two checks cannot prove a change loosens, they report it.
+
+Accepted limits (decided by the operator; a review finding inside them is not a defect):
+
+- A false "problem" for a change that cannot reject any value in practice, e.g. a `pattern`
+  changed on an integer, or a removed optional argument.
+- A newly declared optional property is compatible, although a caller that passed an undeclared
+  argument of a conflicting type would now fail: undeclared arguments are not the contract.
+- `$ref`, `allOf`/`anyOf`/`oneOf`/`not`, `if`/`then`, `patternProperties` and other keywords are
+  not reasoned about; a difference in one of them is reported as a possible restriction.
+- Schema dialect details (format assertion, draft differences) are not modelled.
 """
 
 from __future__ import annotations
