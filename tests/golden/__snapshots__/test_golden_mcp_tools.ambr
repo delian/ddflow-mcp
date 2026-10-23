@@ -184,10 +184,18 @@
     'ddflow_bug_file_tasks': '''
       {
        "name": "ddflow_bug_file_tasks",
-       "description": "File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one per bug by default).",
+       "description": "File the fix task of ONE open bug that has none (`id`), or of every such bug (`all`: one-shot after an upgrade -- other agents' bugs too). With neither it only PREVIEWS (`dry_run` true in the answer) and files nothing. `ddflow_bug_found` files one per bug by default.",
        "inputSchema": {
         "type": "object",
         "properties": {
+         "id": {
+          "type": "string",
+          "description": "The open bug to file the fix task of."
+         },
+         "all": {
+          "type": "boolean",
+          "description": "File a fix task for EVERY open bug that has none, other agents' too. Without it and without `id`, only a preview."
+         },
          "dry_run": {
           "type": "boolean",
           "description": "List what would be filed; write nothing."
