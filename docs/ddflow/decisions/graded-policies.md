@@ -27,7 +27,7 @@ Spoken words (RFC 2119 flavour, upper case only in prompts), what they mean, and
 
 Two refinements, both orthogonal to the five words:
 
-- **locked** (company ENFORCED layer only): override = `none`. Nobody below can waive or deviate; only the company layer can lift it (its own expiring exception). This is `D-goals-principles` "org floor = block + none". `locked` is a property of the layer a record arrives in, not a sixth strength. For alternatives the separate marker is `closed` (D-GP-Q4): no lower layer may add an alternative to this requirement; `closed` and `locked` are independent axes and a company may set either or both.
+- **locked** (company ENFORCED layer only): override = `none`. Nobody below can waive or deviate; only the company layer can lift it (its own expiring exception). This is `D-goals-principles` "org floor = block + none". `locked` is a property of the layer a record arrives in, not a sixth strength. For alternatives the separate marker is `closed` (D-GP-Q4): no lower layer may add an alternative to this requirement; `closed` can be set alone (override stays open, alternatives frozen); `locked` implies `closed` (nothing below may waive, deviate or add an alternative). So `closed` is the narrower brake and `locked` the stronger one.
 - **mode** `audit | enforce` per record (Kubernetes PSA and Kyverno style): `audit` evaluates and reports at the strength's visibility but never blocks. This is the already-decided "a new policy audits one release, then enforces" (`D-CM-Q11`, `D-org-config` audit mode) generalised: a `required` policy can ship in `audit` first. Default for a company-pushed record: `audit` for the first release after it appears in the lock, then `enforce`; a project record defaults to `enforce`.
 
 Severity (impact if violated) is NOT strength. A `severity` label may rank and colour output; it never obliges (same rejection as `priority` in `D-requirements-model`). Out of scope for the first cut.
@@ -87,7 +87,7 @@ Layers are `D-config-layer-order`; policy is evaluated per layer and merged tigh
 |---|---|---|
 | strength | raise (recommended -> best-practice -> required) | lower below the company value |
 | polarity | keep | flip `forbidden` to allowed |
-| options | remove options (narrow); (Q4, DECIDED) add an alternative to a company `any`/`at_least` as an evaluable named check, reported in the digest and audit; add a new option inside an `all` conjunct | add an alternative when the company marked the requirement `closed` or `locked`; add one that is not an evaluable named check (D-GP-Q4; the older text forbidding all additions is superseded) |
+| options | remove options (narrow); (Q4, DECIDED) add an alternative to a company `any`/`at_least` as an evaluable named check, reported in the digest and audit; add a new option inside an `all` conjunct | add an alternative when the company marked the requirement `closed` or `locked`; add one that is not an evaluable named check (D-GP-Q4; the older text forbidding all additions is superseded; the answer covers `at_least` as the same construct as `any`, which is `at_least 1`) |
 | `at_least k` | raise k | lower k |
 | `any` -> `all` | yes (tighten) | `all` -> `any` |
 | mode | `audit` -> `enforce` | `enforce` -> `audit` |
@@ -225,4 +225,4 @@ The operator also confirmed KEEPING `D-audit-calls-2026-10-10` and `D-old-work-b
 
 ### Open notes (for the operator's review)
 
-- Q4 tension: company floors are tighten-only, and a project-added alternative can weaken a company any-of. Design default that follows the answer: a project may add an alternative by default; a company may mark a requirement `closed` (no added alternatives; a separate axis from the override-none `locked`) or `locked`; every added alternative is reported in the digest and audit; and it must itself be an evaluable named check, so an unavailable option never counts as a pass. Flagged for review: whether `closed` should be the default for `required` items.
+- Q4 tension: company floors are tighten-only, and a project-added alternative can weaken a company any-of. Design default that follows the answer: a project may add an alternative by default; a company may mark a requirement `closed` (no added alternatives; narrower than `locked`, which implies it) or `locked`; every added alternative is reported in the digest and audit; and it must itself be an evaluable named check, so an unavailable option never counts as a pass. Flagged for review: whether `closed` should be the default for `required` items.
