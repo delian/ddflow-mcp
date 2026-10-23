@@ -1446,7 +1446,8 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
     unless a project turns it on, decision D-gate-economy 3) so does a plain review of a
     gate that already has a recorded one.
 
-    `--full`, `--force` (a forced FULL round), `--chunk`, `--commit` and `--base` are left
+    `--full`, `--force` (past the budget: a full round unless `--delta` asks for a delta,
+    Ba93aec8448), `--chunk`, `--commit` and `--base` are left
     as they are asked for. A delta is only sound from a head the branch still contains: one
     that is no ancestor of the tip (rebased, amended) would diff the rebase's own changes,
     so it falls back to a full round and says why -- as does, for the automatic delta only,
@@ -2279,7 +2280,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     what changed since the head the gate's last review covered, as is a `commit`/`base`
     at or after that head) both count against `[review].max_rounds` (decision
     D-gate-economy 2); a `--chunk` re-run and triage never do.
-    `force` with a `reason` runs a full round past the cap, recorded in the evidence.
+    `force` with a `reason` runs a round past the cap (a full one, or a delta with `delta`),
+    recorded in the evidence.
 
     A plain review of a gate that already has a recorded review is a FULL re-review whose
     prompt carries the previous findings and their triage (`_with_previous_findings`,
