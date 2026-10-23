@@ -7,8 +7,9 @@ D-soft-upgrade-rule) or only takes effect after the agent restarts. Keyed by the
 
     capability(client_info, ...) -> "honours" | "ignores" | "unknown"      (unknown = hard)
 
-Ways to learn, strongest first: a `subscriptions/listen` opt-in (2026-07-28) -> honours; a runtime
-observation (SU-observe-client-capability) -> what it saw; the table. A table row is trusted as
+Ways to learn, strongest first: a `subscriptions/listen` opt-in (2026-07-28, the `listen_optin`
+argument) -> honours; a runtime observation (SU-observe-client-capability: `honours` or `ignores`;
+anything else means nothing was learned) -> what it saw; the table. A table row is trusted as
 follows:
 
 - a ranged row (`min_version`) only for versions at or above it (Claude Code and Kilo, whose
@@ -51,7 +52,6 @@ class Entry:
     names: tuple[str, ...] = ()  # the clientInfo.name strings (lower case); () = not known
     reconnect: str = "unknown"
     http_404: str = "unknown"
-    listen_optin: bool | None = None  # seen to open subscriptions/listen on 2026-07-28
     harness: str = ""  # the ddflow/harnesses/<id>.toml of the same agent
 
 
@@ -341,7 +341,7 @@ ENTRIES: tuple[Entry, ...] = (
     ),
 )
 
-_BY_NAME = {n: e for e in ENTRIES for n in e.names}
+_BY_NAME = {n: e for e in ENTRIES for n in (e.key, *e.names)}
 _BY_KEY = {e.key: e for e in ENTRIES}
 
 

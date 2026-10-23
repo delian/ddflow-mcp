@@ -222,3 +222,15 @@ def test_the_matrix_document_lists_the_rows_the_table_seeds():
     for e in C.ENTRIES:
         if e.source in ("verified", "source"):
             assert e.key.split("-")[0] in text, e.key
+
+
+def test_a_row_is_found_by_its_key_as_well_as_its_names():
+    assert cap("kimi") == "ignores"
+    assert cap("Kimi") == "ignores"
+    assert C.lookup({"name": "claude-code"}).key == "claude-code"
+
+
+def test_an_observation_of_unknown_means_nothing_was_learned():
+    assert cap("opencode", observed="unknown") == "honours"
+    assert cap("qwen-code-mcp-client", observed="unknown") == "ignores"
+    assert cap("some-new-agent", observed="unknown") == "unknown"
