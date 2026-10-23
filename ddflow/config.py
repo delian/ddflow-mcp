@@ -191,6 +191,14 @@ _NOT_SECTIONS = (
 )
 
 
+def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
+    """`[session.context_budget]` merges over the layers below key by key (per agent type); any
+    other knob's value is returned as it is."""
+    if key == "session.context_budget" and isinstance(value, dict):
+        return {**below, **value}
+    return value
+
+
 @dataclass
 class Config:
     lease: LeaseConfig = field(default_factory=LeaseConfig)
@@ -455,8 +463,7 @@ class Config:
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
             value = merge_signals(getattr(target, knob), value)
-        if key == "session.context_budget" and isinstance(value, dict):
-            value = {**getattr(target, knob), **value}  # per agent type, over the layers below
+        value = _merge_budget_table(key, getattr(target, knob), value)
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
@@ -500,11 +507,16 @@ class Config:
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
         self._forget_fallback(key, f"the {source} value {value!r}")
-        if key == "session.context_budget" and "global" in value:
-            # the table's `global` IS context_budget_tokens: one value, validated above with the rest
-            target.context_budget_tokens = value.pop("global")
+        self._fold_budget_global(key, target, value, source)
         setattr(target, knob, value)
         self.sources[key] = source
+
+    def _fold_budget_global(self, key: str, target: Any, value: Any, source: str) -> None:
+        """`[session.context_budget].global` IS `context_budget_tokens`: one value, folded in
+        after the table passed its check, with the knob's provenance following it."""
+        if key == "session.context_budget" and "global" in value:
+            target.context_budget_tokens = value.pop("global")
+            self.sources["session.context_budget_tokens"] = source
 
     def fallback_entries(self) -> set[str]:
         """The `unknown_knobs` entries that are strictest-fallback notes -- a value applied
