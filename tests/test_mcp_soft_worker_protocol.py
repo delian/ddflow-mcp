@@ -596,3 +596,16 @@ def test_a_request_with_a_null_id_is_still_owed_an_error_reply():
     res = {f["id"]: f["msg"] for f in out if f["t"] == "res"}
     assert res[1]["error"]["code"] == -32603 and res[1]["id"] is None
     assert res[2] is None
+
+
+def test_main_returns_1_when_run_dies_before_any_drain(monkeypatch):
+    from ddflow.surfaces import worker
+
+    def dying(repo, lines, out, **kw):
+        raise RuntimeError("boom")  # `done` is never set
+
+    monkeypatch.setattr(worker, "run", dying)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    t0 = time.time()
+    assert worker.main(["--repo", "."]) == 1
+    assert time.time() - t0 < 5, "main must not wait for a drain that will never come"
