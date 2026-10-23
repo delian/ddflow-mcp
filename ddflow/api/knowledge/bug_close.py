@@ -14,6 +14,7 @@ from ...infra import worktree as W
 from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
+from .bug_lint import _close_lint_exempt, _is_node_id
 from .bugs import _unknown_bug
 from .regression import _looks_like_several, _split_outside_brackets, _unresolved_tests
 
@@ -58,8 +59,14 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     verify_reason: str = "",
     mutation: dict[str, str] | None = None,
     landed: str = "",
+    lint_exempt: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
+
+    `lint_exempt` (Bee3becc481): the reason a CI-filed LINT bug (a `ruff format --check`
+    failure: its check id is not a pytest node id) has no regression test to name. It closes
+    without one, as `regression_verified = "exempt-lint"` with the reason; any other bug is
+    refused, and an empty reason is not a reason.
 
     `landed` (B256be593f0): a commit already on the base that holds the fix, for a fix task
     claimed AFTER its fix reached the base by some other commit -- it has no branch of its
@@ -96,6 +103,19 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             return O.failed("bug.fixed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
+    if lint_exempt:
+        takes_no = {"--landed": landed, "a mutation": mutation, "--verify-reason": verify_reason}
+        return _close_lint_exempt(
+            log,
+            cfg,
+            st,
+            item,
+            lint_exempt,
+            tests,
+            entry,
+            takes_no=[n for n, v in takes_no.items() if v],
+            record=_record_fixed,
+        )
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
@@ -163,11 +183,6 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
     )
-
-
-def _is_node_id(test: str) -> bool:
-    """A pytest node id of a python file: ``path/to/test_x.py::test_name``."""
-    return "::" in test and test.split("::", 1)[0].endswith(".py")
 
 
 def _landing_for(
