@@ -72,7 +72,7 @@ def test_a_bugs_fix_task_and_its_follow_up_keep_todays_ids(repo) -> None:
     bid = bug.data["id"]
     assert bug.data["fix_task"] == f"fix-{bid}"
     assert run_cli(repo, "abandon", f"fix-{bid}", "--reason", "wrong approach")[0] == 0
-    code, out, err = run_cli(repo, "--json", "bug", "file-tasks")
+    code, out, err = run_cli(repo, "--json", "bug", "file-tasks", "--all")
     assert code == 0, err
     assert f"fix-{bid}-2" in out, out
 
