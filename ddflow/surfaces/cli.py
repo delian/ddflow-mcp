@@ -326,7 +326,29 @@ provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names
 CONFLICT_SAFE = {("doctor",), ("help",)}
 
 
+#: The exit of a command whose reader closed the pipe (`| head -1`): shell convention for
+#: SIGPIPE, 128 + 13. Not one of ddflow's own codes, which say what the COMMAND decided.
+PIPE_CLOSED = 141
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
+    shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
+    try:
+        code = _main(argv)
+        sys.stdout.flush()  # buffered output meets a closed pipe here, not in a print
+        return code
+    except BrokenPipeError:
+        # What is left in the buffer must not be flushed again at interpreter exit, which
+        # would print "Exception ignored ... BrokenPipeError" after all.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        return PIPE_CLOSED
+
+
+def _main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     # What was typed, for the commands a refusal tells the caller to run instead.
