@@ -36,10 +36,10 @@ def _ladder_problem(value: Any) -> str:
 
 def _age_problem(value: Any) -> str:
     try:
-        clock.parse_duration(value)
+        seconds = clock.parse_duration(value)
     except (ValueError, TypeError) as exc:
         return str(exc)
-    return ""
+    return "" if seconds >= 0 else f"{value!r} is negative: a wait cannot be less than none"
 
 
 @declare("digest")

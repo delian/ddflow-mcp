@@ -139,6 +139,10 @@ def make(  # noqa: PLR0913 -- an entry has this many facets; callers name each
     """Build an entry from the source row of ``kind``: owner, chat route, answer text and the
     starting severity come from the table; age, impact and the ladder from State and Config."""
     row = by_kind()[kind]
+    blocks = (
+        (blocks,) if isinstance(blocks, str) else blocks
+    )  # a bare id is one id, not its letters
+    agents = (agents,) if isinstance(agents, str) else agents
     since_s = seconds(since)
     age = max(0.0, now - since_s) if since_s else 0.0
     blocked = tuple(sorted(dict.fromkeys(blocks)))
