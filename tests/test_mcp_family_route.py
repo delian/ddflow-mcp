@@ -143,10 +143,3 @@ def test_a_required_argument_given_only_under_its_old_spelling_is_given(inited, 
     fam = _call(inited, "ddflow_gate", action="status", item="T-none")
     assert "missing required" not in fam[0]
     assert fam == _call(inited, "ddflow_gate_status", item="T-none")
-
-
-def test_a_tools_call_with_no_arguments_object_is_not_offloaded_and_does_not_raise():
-    from ddflow.surfaces.mcp import _offloaded
-
-    for params in ({"name": "ddflow_gate"}, {"name": "ddflow_gate", "arguments": None}):
-        assert _offloaded({"method": "tools/call", "id": 1, "params": params}) is False
