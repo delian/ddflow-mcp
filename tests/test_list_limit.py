@@ -146,6 +146,24 @@ def test_mcp_note_does_not_say_raise_limit_at_the_maximum_and_reads_the_constant
     below = bound_list({**at_max, "limit": 20}, {})[1]
     assert "raise limit" in below
     assert f"{R.LIST_MAX_LIMIT}, a search {R.SEARCH_MAX_LIMIT}" in below
+    zero = bound_list({**at_max, "limit": 0}, {})[1]  # 0 is the sentinel for the most
+    assert "raise limit" not in zero
+
+
+def test_the_note_and_the_tool_follow_the_constants(monkeypatch):
+    from ddflow import api
+    from ddflow.api import surf_reporting as R
+    from ddflow.surfaces.mcp_bound import bound_list
+    from ddflow.surfaces.tools.operations import TOOLS
+
+    monkeypatch.setattr(R, "LIST_MAX_LIMIT", 777)
+    monkeypatch.setattr(R, "SEARCH_MAX_LIMIT", 77)
+    body = {"truncated": True, "rows": [1], "shown": 1, "total": 999, "limit": 20}
+    assert "777, a search 77" in bound_list(body, {})[1]
+    seen = {}
+    monkeypatch.setattr(api, "view_read", lambda repo, kind, **kw: seen.update(kw))
+    TOOLS["ddflow_list"]["api"](None, {"kind": "task", "limit": 0}, "a")
+    assert seen["limit"] == 777
 
 
 def test_a_refused_list_echoes_the_clamped_limit_not_the_requested_one():
