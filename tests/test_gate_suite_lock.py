@@ -59,3 +59,12 @@ def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
     R.run_command_gate(_gate("true -n {workers}"), tmp_path, cfg=_cfg())
     R.run_command_gate(_gate("true -n {workers}", "lint"), tmp_path, cfg=_cfg())
     assert seen == [True, False]
+
+
+def test_the_lock_wait_adds_to_the_admission_wait(tmp_path):
+    from types import SimpleNamespace as NS
+
+    p = NS(waited_s=2.0)
+    assert R._wait_evidence(_gate("true"), p, "", 8.0) == {"waited_s": 10.0}
+    assert R._wait_evidence(_gate("true"), NS(waited_s=0), "", 8.0) == {"waited_s": 8.0}
+    assert R._wait_evidence(_gate("true"), NS(waited_s=0), "", None) == {}
