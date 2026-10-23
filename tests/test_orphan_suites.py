@@ -115,3 +115,19 @@ def test_python_dash_m_ddflow_is_a_ddflow_process(tmp_path: Path):
 def test_the_note_never_advises_kill_minus_one(tmp_path: Path):
     note = OS.doctor_notes([OS.Orphan(7, 1, 30000.0, SUITE)])[0]
     assert "kill 7`" in note and "kill -- -1" not in note
+
+
+def test_a_ddflow_that_is_pid_1_counts(tmp_path: Path):
+    root = tmp_path / "proc"
+    root.mkdir()
+    (root / "stat").write_text("cpu 1\nbtime 1000\n")
+    _proc(root, 1, 0, "/usr/bin/ddflow mcp", 0)
+    _proc(root, 51, 1, SUITE, 100)
+    assert _find(root) == []
+
+
+def test_an_editor_opened_on_a_file_named_ddflow_is_not_a_ddflow_process(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 40, 1, "/usr/bin/vim ddflow", 100)
+    _proc(root, 51, 40, SUITE, 100)
+    assert [o.pid for o in _find(root)] == [51]

@@ -66,25 +66,31 @@ def _is_suite(argv: list[str]) -> bool:
 
 
 def _is_ddflow(argv: list[str]) -> bool:
-    """A ddflow process: the `ddflow` / `ddflow-mcp` executable, or `python -m ddflow...`."""
-    head = argv[:4]
-    if any(_base(w) in ("ddflow", "ddflow-mcp") for w in head[:2]):
+    """A ddflow process: the `ddflow` / `ddflow-mcp` executable, an interpreter running that
+    script, or `python -m ddflow...`. A file named ddflow handed to an editor is none of these."""
+    names = ("ddflow", "ddflow-mcp")
+    if not argv:
+        return False
+    if _base(argv[0]) in names:
         return True
-    return any(
-        a == "-m" and head[i + 1 : i + 2] and head[i + 1].startswith("ddflow")
-        for i, a in enumerate(head)
+    if not _base(argv[0]).startswith(("python", "uv")):
+        return False
+    rest = argv[1:4]
+    return any(_base(w) in names for w in rest[:1]) or any(
+        a == "-m" and rest[i + 1 : i + 2] and rest[i + 1].startswith("ddflow")
+        for i, a in enumerate(rest)
     )
 
 
 def _has_ddflow_ancestor(proc: Path, pid: int) -> bool:
     seen = set()
-    while pid > 1 and pid not in seen:
+    while pid >= 1 and pid not in seen:
         seen.add(pid)
         stat = _stat(proc, pid)
         if stat is None:
             return False
         pid = stat[0]
-        if pid > 1 and _is_ddflow(_argv(proc, pid)):
+        if pid >= 1 and _is_ddflow(_argv(proc, pid)):
             return True
     return False
 
