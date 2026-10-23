@@ -15,8 +15,6 @@ from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ..ask import engine as E
 
-SOON_S = 600  #: an unspent approval this close to the end of its use window is "about to expire"
-
 
 def _commands(state) -> list[dict[str, Any]]:
     return sorted(
@@ -91,7 +89,7 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
                 "its tier needs"
             )
         left = clock.epoch(r["answered_at"], default=0.0) + r["use_ttl_s"] - now
-        if r["used"] < r["uses"] and r["use_ttl_s"] and left < SOON_S:
+        if r["used"] < r["uses"] and r["use_ttl_s"] and left < cfg.approvals.expiry_warn_s:
             when = "expired unused" if left <= 0 else "will expire unused within minutes"
             out.append(f"{r['id']} ({r['verb']}) approved by {r['answered_by']} {when}")
     out.extend(standing_notes(cfg, state))
