@@ -38,7 +38,8 @@ included only when `[mcp].output_schemas` is on, and tool `annotations` only whe
 advertises them (it advertises none today; `_tool` reads them so the digest follows the day it
 does).
 
-Accepted limits: schema compatibility is the conservative subset check of `ifaceschema` (see
+Accepted limits: an unreadable instructions template is reported as a changed one (the
+digest still diverges, so no verdict is wrong); schema compatibility is the conservative subset check of `ifaceschema` (see
 its limits); `classify_surfaces` and `live_surfaces` have no caller until SU-upgrade-integration
 and SU-announce; the facade tools do not exist yet (MTD-search-call).
 
@@ -169,7 +170,7 @@ def live_surfaces(server: Any) -> dict[str, dict[str, Any]]:
         for tier in TIERS:
             server.tier = tier
             out[tier] = live_snapshot(server)
-        server.tier = own
+        server.tier = "all"  # the facade lists its two tools whatever tier the server runs at
         out["facade"] = live_snapshot(server, facade=True)
     finally:
         server.tier = own
