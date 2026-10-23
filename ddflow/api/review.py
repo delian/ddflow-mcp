@@ -51,6 +51,7 @@ from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
 from ..services.gates import running as RUN
 from ..services.guidance import inject as GI
+from ..services.review_noise import registered_submodules, without_stray_gitlinks
 from ..views import human
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
@@ -67,48 +68,6 @@ from .review_supersede import carry, round_evidence, superseded_digests
 #: (B-delta-review-output-mixed-with-other-agents). A registered submodule's update is.
 _NOISE_PATHSPEC = ("--", ".", *EVENTS_EXCLUDE)
 _NOISE_PREFIXES = (".ddflow/events/",)
-_GITLINK_FILE = re.compile(r"^diff --git a/(?P<path>.+?) b/.+$")
-
-
-def _is_gitlink_section(section: list[str]) -> bool:
-    """Does this file section of a diff change a gitlink (mode 160000)?"""
-    return any(
-        ln.startswith(("new file mode 160000", "deleted file mode 160000", "old mode 160000"))
-        or (ln.startswith("index ") and ln.rstrip().endswith(" 160000"))
-        for ln in section[:6]
-    )
-
-
-def _without_stray_gitlinks(diff: str, registered: set[str]) -> str:
-    """``diff`` without the file sections of gitlinks (mode 160000) at paths that are not
-    registered submodules: a nested repository added by accident is not work to review. A
-    registered submodule's pointer change stays."""
-    if "160000" not in diff:
-        return diff
-    sections: list[list[str]] = []
-    for line in diff.splitlines(keepends=True):
-        if line.startswith("diff --git "):
-            sections.append([])
-        if sections:
-            sections[-1].append(line)
-
-    def stray(sec: list[str]) -> bool:
-        m = _GITLINK_FILE.match(sec[0].rstrip("\n"))
-        return _is_gitlink_section(sec) and (m["path"] if m else "") not in registered
-
-    return "".join("".join(sec) for sec in sections if not stray(sec))
-
-
-def _registered_submodules(repo: Path, ref: str = "HEAD") -> set[str]:
-    """The paths `.gitmodules` of ``ref`` registers (none when it has no such file)."""
-    r = W.git(repo, "show", f"{ref}:.gitmodules")
-    if not r.ok:
-        return set()
-    return {
-        ln.split("=", 1)[1].strip()
-        for ln in r.out.splitlines()
-        if ln.strip().startswith("path") and "=" in ln
-    }
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -195,7 +154,7 @@ def diff_for(
     how = f"{base}...{branch} ({chosen})"
     if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
         return "", f"{how} could not be read: {d.err or d.out}"
-    out = _without_stray_gitlinks(d.out, _registered_submodules(repo, branch))
+    out = without_stray_gitlinks(d.out, registered_submodules(repo, base, branch))
     return (out + "\n") if out else "", how
 
 
@@ -204,7 +163,7 @@ def _tree_diff(wt_path: Path, base: str) -> tuple[str, str]:
     untracked file is a draft nobody committed (B2bf4d38cc1): it is named, not reviewed."""
     try:
         diff = W.capture_diff(wt_path, base, include_untracked=False, exclude=_NOISE_PREFIXES)
-        diff = _without_stray_gitlinks(diff, _registered_submodules(wt_path))
+        diff = without_stray_gitlinks(diff, registered_submodules(wt_path, base, "HEAD"))
     except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
         return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
     how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
@@ -1820,7 +1779,7 @@ def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     start = _delta_start(wt, "HEAD", head, base)
     # `start..HEAD` plus the tracked edits: what a review sent, with a git failure kept.
     diff = W.capture_diff(wt, include_untracked=False, since=start, exclude=_NOISE_PREFIXES)
-    return _without_stray_gitlinks(diff, _registered_submodules(wt))
+    return without_stray_gitlinks(diff, registered_submodules(wt, base, "HEAD"))
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
@@ -1831,7 +1790,7 @@ def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
     d = W.git(repo, "diff", "--no-color", *rng, *_NOISE_PATHSPEC)
     if not d.ok:  # never a wider range than asked: that would send the base's work
         raise RuntimeError(f"git diff {' '.join(rng)} failed: {d.err or d.out}")
-    out = _without_stray_gitlinks(d.out, _registered_submodules(repo, tip))
+    out = without_stray_gitlinks(d.out, registered_submodules(repo, base, head, tip))
     return (out + "\n") if out else ""
 
 
