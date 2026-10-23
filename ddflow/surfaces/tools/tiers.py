@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import DECLARED, TOOLS
+from .profiles import AUTO, DEFAULT_PROFILE, PROFILES, direct_tools, family_tools, profile_note
 
 # -- tool tiers -------------------------------------------------------------------------
 #
@@ -77,7 +78,12 @@ DEFAULT_TIER = "all"
 
 
 def tier_tools(tier: str) -> frozenset[str]:
-    """The tools `tools/list` advertises at `tier`; an unknown tier advertises everything."""
+    """The tools of `TOOLS` that `tools/list` advertises at `tier` by their own name; an unknown
+    tier advertises everything. A profile also lists family tools, which are not in `TOOLS`."""
+    if tier == AUTO:
+        tier = DEFAULT_PROFILE
+    if tier in PROFILES:
+        return frozenset(direct_tools(tier))
     if tier == "core":
         return CORE_TOOLS
     if tier == "standard":
@@ -99,13 +105,15 @@ def resolve_tier(repo: Path) -> str:
     """`[mcp].tools` for this repository (env `DDFLOW_MCP_TOOLS` wins), read once.
 
     Forward-compatible by construction: a value this version does not know (a newer
-    release's tier in a shared config), or a config that cannot be read at all, advertises
-    EVERYTHING rather than failing the handshake. Over-listing costs context; under-listing
+    release's tier in a shared config) advertises EVERYTHING rather than failing the handshake;
+    a config that cannot be read at all is the default (`auto`: the lean core). Over-listing costs context; under-listing
     would hide a tool the agent needs.
     """
     cfg = _config(repo)
-    tier = cfg.mcp.tools if cfg is not None else DEFAULT_TIER
-    return tier if tier in TIERS else DEFAULT_TIER
+    #: A config that cannot be read is the default (`auto`); a value this version does not know
+    #: is the newer release's, and lists everything.
+    tier = (cfg.mcp.tools if cfg is not None else AUTO).strip().lower() or AUTO
+    return tier if tier in (*TIERS, *PROFILES, AUTO) else DEFAULT_TIER
 
 
 def resolve_output_schemas(repo: Path) -> bool:
@@ -118,6 +126,10 @@ def resolve_output_schemas(repo: Path) -> bool:
 def tier_note(tier: str, *, names: bool = True) -> str:
     """What a tier hides and how to widen it. `ddflow_help` carries the names; the handshake
     (paid for on every session) only counts them and points at `ddflow_help`."""
+    if tier == AUTO:
+        tier = DEFAULT_PROFILE
+    if tier in PROFILES:
+        return profile_note(tier, len(set(TOOLS) | set(family_tools("families"))))
     if tier not in TIERS or tier == "all":
         return ""
     hidden = sorted(set(TOOLS) - tier_tools(tier))

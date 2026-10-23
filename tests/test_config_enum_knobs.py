@@ -361,7 +361,7 @@ def test_every_declared_choice_is_named_in_the_knobs_doc() -> None:
     for key, allowed in C.KNOB_CHOICES.items():
         doc = KNOB_DOCS[key]
         run = set(_alternatives(doc) or ())
-        quoted = set(re.findall(r"""['`"]([\w-]+)['`"]""", doc))
+        quoted = set(re.findall(r"""['`"]([\w+-]+)['`"]""", doc))
         missing = [v for v in allowed if v not in run | quoted]
         assert not missing, f"{key}: the doc does not name {missing} as a value"
 
