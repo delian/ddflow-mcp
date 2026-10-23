@@ -1225,6 +1225,10 @@ class EventLog:
                 hook(self, ev, size, size + len(line))
         return ev
 
+    def redacted(self, kind: str, data: dict[str, Any]) -> dict[str, Any]:
+        """``data`` as an event of ``kind`` would be written: for comparing a value with a record."""
+        return self._redact_data(kind, data)
+
     def _redact_data(self, kind: str, data: dict[str, Any]) -> dict[str, Any]:
         """``data`` with the free-text fields of ``kind`` redacted (`core.redact.LOG_TEXT_FIELDS`).
 
