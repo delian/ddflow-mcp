@@ -49,10 +49,13 @@ def attestations(path: Path) -> list[dict]:
                     and block.get("type") == "tool_use"
                     and block.get("name") == TOOL
                 ):
-                    uses[block["id"]] = {
+                    asked = (block.get("input") or {}).get("questions")
+                    uses[str(block.get("id"))] = {
                         "uuid": row.get("uuid"),
                         "questions": [
-                            q.get("question") for q in block["input"].get("questions", [])
+                            q["question"]
+                            for q in (asked if isinstance(asked, list) else [])
+                            if isinstance(q, dict) and isinstance(q.get("question"), str)
                         ],
                     }
         elif row.get("type") == "user":
@@ -198,6 +201,55 @@ def _selftest() -> int:
             "message": {"content": [{"type": "tool_result", "tool_use_id": "U9", "content": "x"}]},
         },
     ]
+    misshapen = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": TOOL}]}},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "U8",
+                        "name": TOOL,
+                        "input": {"questions": ["not a dict", 3]},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "assistant",
+            "uuid": "A9",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "U9",
+                        "name": TOOL,
+                        "input": {"questions": [{"question": "Multi?"}]},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "sourceToolAssistantUUID": "A9",
+            "permissionDecision": {"decision": "accept"},
+            "toolUseResult": {"answers": {"Multi?": ["a", "b"]}},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "U9", "content": "x"}]},
+        },
+        {
+            "type": "user",
+            "sourceToolAssistantUUID": "A9",
+            "permissionDecision": {"decision": "accept"},
+            "toolUseResult": {"answers": {"Multi?": []}},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "U9", "content": "x"}]},
+        },
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "m.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in misshapen))
+        assert answer_for(p, "Multi?") == ["a", "b"]  # the later EMPTY answer does not replace it
+        assert answer_for(p, "not a dict") is None
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "b.jsonl"
         p.write_text("\n".join(json.dumps(r) for r in bare))
