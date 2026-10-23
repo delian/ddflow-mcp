@@ -35,7 +35,6 @@ operator knows). An empty plan means the project is up to date.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -120,36 +119,31 @@ def settled_items(st: State) -> dict[str, list[Any]]:
     return out
 
 
-_MARK = re.compile(r"\[REDACTED(?::[^\]]*)?\]")
+def _recorded_form(log: Any, value: Any) -> Any:
+    """``value`` as the log would have written it (B81cf6e7dfd): the log redacts text, so a
+    `~/.claude/projects` default is recorded as `[REDACTED:path]` and never equals the
+    manifest's. Redacting the manifest's value the same way, on this machine, is an exact
+    comparison; a wildcard for the mark would also swallow a changed default."""
+    try:
+        data = log.redacted("upgrade.applied", {"config_changes": [{"new": value}]})
+        return data["config_changes"][0]["new"]
+    except Exception:
+        return value
 
 
-def _same_value(new: Any, recorded: Any) -> bool:
-    """Is the manifest's ``new`` what the log recorded? The log redacts text (B81cf6e7dfd): a
-    `~/.claude/projects` default is recorded as `[REDACTED:path]`, and which values are masked
-    depends on the machine (hostname, $HOME, patterns), so the plan cannot redact ``new`` the
-    same way. A recorded mark stands for one text span without a quote (so it cannot swallow a second
-    element of a serialized list), and the rest of the value must still match."""
-    if new == recorded:
-        return True
-    if isinstance(new, list | tuple) and isinstance(recorded, list | tuple):
-        return len(new) == len(recorded) and all(
-            _same_value(n, r) for n, r in zip(new, recorded, strict=True)
-        )
-    if isinstance(new, dict) and isinstance(recorded, dict):
-        return new.keys() == recorded.keys() and all(_same_value(new[k], recorded[k]) for k in new)
-    if not (isinstance(new, str) and isinstance(recorded, str) and _MARK.search(recorded)):
-        return False
-    parts = _MARK.split(recorded)
-    return re.fullmatch('[^"]+?'.join(re.escape(p) for p in parts), new, re.S) is not None
+def _unsettled(
+    items: list[dict[str, Any]], settled: dict[str, list[Any]], log: Any = None
+) -> list[dict[str, Any]]:
+    def done(i: dict[str, Any]) -> bool:
+        seen = settled.get(i["id"])
+        if seen is None:
+            return False
+        if not seen:
+            return True
+        new = i.get("new")
+        return new in seen or (log is not None and _recorded_form(log, new) in seen)
 
-
-def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
-    return [
-        i
-        for i in items
-        if i["id"] not in settled
-        or (settled[i["id"]] and not any(_same_value(i.get("new"), v) for v in settled[i["id"]]))
-    ]
+    return [i for i in items if not done(i)]
 
 
 def _wanted(c: UM.Change, baseline: str, running: str) -> bool:
@@ -634,7 +628,7 @@ def build(
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
         "records": contested_items(st),
-        "config": _unsettled(config_items(changes, cfg), settled),
+        "config": _unsettled(config_items(changes, cfg), settled, log),
         "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
         + reference_items(repo),
         "hooks": hook_items(repo),

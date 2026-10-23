@@ -1162,22 +1162,21 @@ def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_in
     assert not [i for i in newer["categories"]["config"] if i["action"] != UP.OPERATOR]
 
 
-def test_a_value_the_log_redacted_still_counts_as_settled() -> None:
+def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
     """B81cf6e7dfd: the log records the `~/.claude/projects` default as `[REDACTED:path]`, so the
     settled value never equalled the manifest's and the item came back in every plan."""
     from ddflow.services.upgrade_plan import _unsettled
 
-    item = {"id": "knob_added:a.b", "new": '["~/.claude/projects"]'}
-    redacted = {"knob_added:a.b": ['["[REDACTED:path]"]']}
-    assert _unsettled([item], redacted) == []
-    extra = {**item, "new": '["~/.claude/projects", "/etc/passwd"]'}  # a second element is news
-    assert _unsettled([extra], redacted) != []
-    listed = {"id": "knob_added:a.b", "new": ["~/.claude/projects"]}  # a parsed default
-    assert _unsettled([listed], {"knob_added:a.b": [["[REDACTED:path]"]]}) == []
-    assert _unsettled([{**listed, "new": []}], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []
-    # a value the mark cannot stand in for, or a plain different value, is news again
-    assert _unsettled([{**item, "new": "[]"}], redacted) != []
-    assert _unsettled([{**item, "new": "7"}], {"knob_added:a.b": ["8"]}) != []
+    log = EventLog(old, "upgrader")
+    new = ["~/.claude/projects"]
+    recorded = log.redacted("upgrade.applied", {"config_changes": [{"new": new}]})
+    seen = recorded["config_changes"][0]["new"]
+    assert seen != new, "the log no longer redacts this value: pick another to pin"
+    item = {"id": "knob_added:a.b", "new": new}
+    assert _unsettled([item], {"knob_added:a.b": [seen]}, log) == []
+    # a changed default is news again, redacted or not
+    assert _unsettled([{**item, "new": ["/etc/passwd"]}], {"knob_added:a.b": [seen]}, log) != []
+    assert _unsettled([{**item, "new": []}], {"knob_added:a.b": [seen]}, log) != []
 
 
 # -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
