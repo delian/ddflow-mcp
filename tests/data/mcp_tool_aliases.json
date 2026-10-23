@@ -109,11 +109,6 @@
   "0.2.8",
   "1.0"
  ],
- "ddflow_doctor": [
-  "ddflow_doctor action=check",
-  "0.2.8",
-  "1.0"
- ],
  "ddflow_dupes": [
   "ddflow_memory action=dupes",
   "0.2.8",
@@ -541,11 +536,6 @@
  ],
  "ddflow_wait": [
   "ddflow_lease action=wait",
-  "0.2.8",
-  "1.0"
- ],
- "ddflow_workflow": [
-  "ddflow_workflow action=show",
   "0.2.8",
   "1.0"
  ],
