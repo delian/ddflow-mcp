@@ -376,7 +376,7 @@ def effective(entry: Entry, version: object, today: date) -> str:
         if same and _prerelease(version):
             return UNKNOWN  # 2.1.296-beta.1 comes before the verified 2.1.296
         return entry.list_changed
-    if entry.list_changed == HONOURS and not entry.verified_version:
+    if entry.list_changed == HONOURS and entry.source != "verified":
         try:
             age = (today - date(*map(int, entry.checked.split("-")))).days
         except (TypeError, ValueError):
