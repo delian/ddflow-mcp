@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "mcp.worker_tools"
-new = "core"
+new = '"core"'
 why = "`ddflow adopt` writes `.ddflow/local/worker-mcp.json`, the ddflow server for lane workers on this tool tier (`DDFLOW_MCP_TOOLS`), started with `claude --mcp-config <file> --strict-mcp-config`."
 impact = "additive"
