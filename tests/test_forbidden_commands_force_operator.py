@@ -25,7 +25,8 @@ def _check(cmd: str):
 def test_a_refused_ddflow_force_names_the_operators_own_terminal():
     r = _check('ddflow complete RM-x --force --reason "operator authorised"')
     assert r is not None and r.entry == "--force"
-    assert "own terminal" in r.instead and "DDFLOW_HOOKS_ALLOW" in r.instead, r.instead
+    assert "own terminal" in r.instead, r.instead
+    assert r.message().count("DDFLOW_HOOKS_ALLOW") == 1, r.message()  # the lift, named once
 
 
 def test_a_launcher_does_not_change_the_route():
@@ -36,3 +37,10 @@ def test_a_launcher_does_not_change_the_route():
 def test_a_non_ddflow_force_keeps_the_plain_advice():
     r = _check("git branch -D x --force")
     assert r is not None and "own terminal" not in r.instead, r.instead
+
+
+def test_the_session_lift_the_message_names_really_lifts_it():
+    cmd = "ddflow complete RM-x --force"
+    assert (
+        FB.check(cmd, Config(), env={"DDFLOW_HOOKS_ALLOW": "--force"}, cwd="/nonexistent") is None
+    )
