@@ -284,6 +284,19 @@ def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> Non
         log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id})
 
 
+def revoke(log, ask_id: str, *, actor: Actor, now: float | None = None) -> None:
+    """An approver takes back an ANSWERED approval that still has uses left (RA-cli). A person's
+    act: the spend check (`consume`) refuses a revoked ask, and a use already spent stays spent."""
+    with log.transaction():
+        row = get(_state(log), ask_id)
+        if row is None or row["state"] != ANSWERED:
+            raise AskRefused(f"{ask_id} is not an answered approval")
+        why = require(actor, CAP_APPROVE)
+        if actor.source not in ANSWER_SOURCES or why:
+            raise AskRefused(why or f"revoking is a person's act, and {actor.id} acts as an agent")
+        log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id, "revoked": True})
+
+
 def sweep(log, now: float | None = None) -> list[str]:
     """Write the audit mark for every pending ask whose time has run out; return their ids."""
     done: list[str] = []
