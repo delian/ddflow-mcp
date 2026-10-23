@@ -152,10 +152,24 @@ def test_a_wildcard_glob_is_never_warned_and_nothing_hides_under_a_created_file(
     plan = tmp_path / "plan.toml"
     plan.write_text(
         '[A]\nglobs = []\ncreates = ["newpkg/new_a.py", "docs/index.html", "LICENSE"]\nacceptance = "done"\n'
-        '[B]\nglobs = ["newpkg/*.py", "docs/index.html/extra.js", "LICENSE/h.txt"]\nneeds = ["A"]\n'
+        '[B]\nglobs = ["newpkg/*.py", "docs/index.html/extra.js", "LICENSE/h.txt", "LICENSE/"]\nneeds = ["A"]\n'
         'acceptance = "done"\n'
     )
     code, out, err = run_cli(proj, "plan", "check", str(plan))
     assert code == 0, out + err
     assert "newpkg" not in out, out  # a wildcard is not a literal path: nothing to warn about
-    assert "docs/index.html/extra.js" in out and "LICENSE/h.txt" in out, out  # not under a file
+    assert "docs/index.html/extra.js" in out and "LICENSE/h.txt" in out and "LICENSE/" in out, (
+        out
+    )  # not under a file
+
+
+def test_a_bare_creates_name_covers_only_itself(proj, tmp_path):
+    """A name without a trailing slash may be a file, so it hides nothing beneath it."""
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["newpkg"]\ncreates = ["newpkg"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/inner/mod.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg/inner/mod.py" in out and "warning  A:" not in out, out
