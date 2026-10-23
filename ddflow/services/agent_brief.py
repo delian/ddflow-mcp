@@ -45,6 +45,7 @@ class Facts:
     lessons: list[str] = field(default_factory=list)
     rules: list[str] = field(default_factory=list)  # the rules charter, a line per rule
     decisions_all: int = 0  # how many decisions govern the item, shown or not
+    lean_note: str = ""  # the closing line of a LEAN brief (services.launchbrief)
 
 
 def split(text: str) -> list[tuple[str, str]]:
@@ -121,7 +122,7 @@ def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: i
     n_dec, n_les = len(f.decisions), len(f.lessons)
     while True:
         sections = _sections(tmpl, f, off, n_dec, n_les)
-        text = "\n\n".join(sections.values()) + "\n"
+        text = "\n\n".join([*sections.values(), *([f.lean_note] if f.lean_note else [])]) + "\n"
         if not max_chars or len(text) <= max_chars or not (n_dec or n_les):
             break
         if n_les:
