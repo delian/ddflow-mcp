@@ -30,6 +30,9 @@ def test_a_ci_lint_bug_closes_with_a_recorded_reason_and_no_test(repo):
     assert out.data["regression_verified"] == "exempt-lint"
     bug = fold(EventLog(repo).read_all()).bugs["Bci-ruff-format-1"]
     assert bug.fixed_at and not bug.regression_tests
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verify"]["reason"] == "ruff format applied; check green"
+    assert fixed.data["regression_verify"]["lint_check"] == "ruff format --check (CI: Lint)"
 
 
 def test_a_bug_that_is_not_a_ci_lint_check_still_needs_its_test(repo):
