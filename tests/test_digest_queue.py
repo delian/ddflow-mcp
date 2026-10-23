@@ -423,7 +423,9 @@ def test_a_quota_or_generic_expiry_is_not_a_missing_credential():
     it.gates["critic"] = GateRecord(
         gate="critic", outcome="unavailable", at=at(1), reason="quota exceeded; lease expired"
     )
-    assert build(st).entries == ()
+    assert not [
+        e for e in build(st).entries if e.kind == "credential"
+    ]  # a quota pause is agent_failed's gap, not a credential
 
 
 def test_a_template_command_is_filled_from_what_the_entry_blocks():
