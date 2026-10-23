@@ -60,4 +60,5 @@ def test_a_registered_submodules_pointer_change_is_still_reviewed(tmp_path):
     git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},lib")
     git(r, "commit", "-qm", "register lib")
     diff = RV._delta_of_branch(r, tip, head, "main")
-    assert "lib" in diff and "tmp.cDDAI7SLqb" not in diff, diff
+    assert "diff --git a/lib b/lib" in diff and f"+Subproject commit {head}" in diff, diff
+    assert "tmp.cDDAI7SLqb" not in diff, diff
