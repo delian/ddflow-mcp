@@ -29,8 +29,9 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
     body = H.payload(row)
     text = (
         f"Put this to the person with AskUserQuestion, unaltered (the question text carries the "
-        f"request id and digest), then run `ddflow approvals attest {ask_id}`:\n"
-        + json.dumps(body, indent=2)
+        f"request id and digest), then run `ddflow approvals attest {ask_id}`. The person may instead "
+        f"type `approve {ask_id} <first {cfg.approvals.min_digest_chars}+ digest characters>` (or `deny ...`) "
+        f"in their own chat:\n" + json.dumps(body, indent=2)
     )
     return O.ok("approvals.ask", id=ask_id, input=body, text=text)
 

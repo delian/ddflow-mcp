@@ -21,8 +21,9 @@ from ..services import leases as L
 from ._base import _load
 from .items import ItemEdit, plan_edit
 
-#: ItemEdit fields a batch entry may not set: they act on the checkout, not on the plan.
-_NOT_BATCHABLE = ("worktree", "queue", "landed")
+#: ItemEdit fields a batch entry may not set: they act on the checkout, not on the plan --
+#: or, `parent`/`kind`, are checked against the queue as it stands, which a batch changes.
+_NOT_BATCHABLE = ("worktree", "queue", "landed", "parent", "kind")
 _LISTS = (
     "needs",
     "add_needs",
