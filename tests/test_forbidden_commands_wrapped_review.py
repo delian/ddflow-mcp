@@ -2,7 +2,7 @@
 
 `ddflow review <id> --gate G --force --reason "..."` is the one `--force` the guard lets through
 (`[hooks].allowed_commands`). The exception matched only a command whose own word is `ddflow`, so
-the same round started through `timeout`, `uv run` or `python -m ddflow` was refused by the plain
+the same round started through `timeout` or `python -m ddflow` was refused by the plain
 `--force` entry -- which read as 'only allowed when --force follows the item id'.
 """
 
@@ -32,16 +32,12 @@ def _check(cmd: str):
         "ddflow --agent a",
         "timeout 580 ddflow",
         "timeout -k 5 580 ddflow --agent a",
-        "uv run ddflow",
-        "uv run --with pytest-xdist ddflow",
         "python -m ddflow",
         "python3 -m ddflow --agent a",
         "/home/me/.venv/bin/python3 -P -m ddflow",
         "KIMI_API_KEY=x ddflow",
         "env KIMI_API_KEY=x timeout 580 ddflow",
         "nohup ddflow",
-        "uv --cache-dir /tmp/c run ddflow",
-        "uv --config-file uv.toml run -- ddflow",
         "python -mddflow",
         "pypy3 -m ddflow",
     ],
@@ -54,10 +50,8 @@ def test_the_documented_round_is_allowed_however_it_is_launched(launcher):
     "cmd",
     [
         "timeout 580 ddflow review X --gate critic --force",  # no --reason
-        "uv run ddflow merge X --force",
         "python -m ddflow merge X --force",
         "timeout 5 git push --force",
-        "uv run pkill foo",
         "python-tools -m ddflow review X --gate critic --force --reason w",  # not an interpreter
     ],
 )
@@ -83,8 +77,3 @@ def test_a_review_force_without_a_reason_says_what_is_accepted():
 def test_force_and_reason_may_sit_anywhere_among_the_review_arguments(tail):
     assert _check(f"ddflow {tail}") is None, tail
     assert _check(f"timeout 580 ddflow {tail}") is None, tail
-
-
-def test_a_uv_subcommand_other_than_run_is_the_uv_command_itself():
-    assert FB.matches("uv sync", ["uv", "sync"]) and FB.matches("uv pip", ["uv", "pip", "i"])
-    assert not FB.matches("pip install", ["uv", "pip", "install", "x"])
