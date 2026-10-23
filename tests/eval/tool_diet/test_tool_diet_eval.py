@@ -96,3 +96,38 @@ def test_tally_counts_each_kind():
     )
     assert t["no_call"] == 1 and t["invalid"] == 0
     assert t["accuracy"] == 0.25
+
+
+def test_every_value_a_scenario_expects_comes_from_its_prompt():
+    import re
+
+    for sc in SCENARIOS:
+        for v in sc.values:
+            assert re.search(re.escape(v), sc.prompt, re.IGNORECASE), (sc.prompt, v)
+
+
+def test_a_retry_reports_the_second_call_and_its_tokens(monkeypatch):
+    import td_run
+
+    calls = []
+
+    def fake_ask(rev, tools, prompt, timeout, after=None):
+        calls.append(after)
+        return "ddflow_claim", '{"id": "T-2"}', 700
+
+    monkeypatch.setattr(td_run, "ask", fake_ask)
+    sc = SCENARIOS[2]
+    first = G.grade(sc, "flat", "ddflow_gate_record", {})
+    graded, name, _raw, used = td_run.retry(None, [], sc, "flat", "ddflow_complete", "{}", 1, first)
+    assert (graded.tool_ok, graded.args_ok, name, used) == (True, True, "ddflow_claim", 700)
+    assert calls[0][1]["role"] == "tool"  # the refusal is what the model is shown
+
+
+def test_the_tagged_surface_tells_a_members_own_action_argument_as_op(monkeypatch):
+    props = dict(TOOLS["ddflow_queue"]["properties"])
+    props["action"] = ("string", "add|run", True)
+    monkeypatch.setitem(TOOLS["ddflow_queue"], "properties", props)
+    view = next(f for f in S.hinted_family_tools() if f["function"]["name"] == "ddflow_view")[
+        "function"
+    ]["parameters"]["properties"]["action"]["description"]
+    assert "queue: op" in view and "queue: action" not in view
