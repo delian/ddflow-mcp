@@ -141,3 +141,20 @@ def test_a_pipx_style_shebang_launch_is_a_suite(tmp_path: Path):
         100,
     )  # fmt: skip
     assert [o.pid for o in _find(root)] == [51]
+
+
+def test_an_interpreter_option_before_the_ddflow_script_is_skipped(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 40, 1, "python3\x1f-u\x1f/home/u/.local/bin/ddflow\x1fgate", 100)
+    _proc(root, 51, 40, SUITE, 100)
+    assert _find(root) == []
+
+
+def test_a_script_that_merely_receives_dash_m_is_not_the_pre_commit_module(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(
+        root, 51, 1,
+        "python\x1fscript.py\x1f-m\x1fpre_commit_hooks\x1frun\x1f--hook-stage=pre-push\x1f--all-files",
+        100,
+    )  # fmt: skip
+    assert _find(root) == []

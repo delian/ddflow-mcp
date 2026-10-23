@@ -59,7 +59,11 @@ def _is_suite(argv: list[str]) -> bool:
     script = _base(head[0]).startswith("python") and any(
         _base(w) == "pre-commit" for w in head[1:2]
     )
-    module = "-m" in head and any(w.startswith("pre_commit") for w in head)
+    module = (
+        _base(head[0]).startswith("python")
+        and head[1:2] == ["-m"]
+        and head[2:3] in (["pre_commit"], ["pre_commit.main"])
+    )
     if not (direct or script or module):
         return False
     stage = any(
@@ -80,11 +84,12 @@ def _is_ddflow(argv: list[str]) -> bool:
         return True
     if not _base(argv[0]).startswith(("python", "uv")):
         return False
-    rest = argv[1:4]
-    return any(_base(w) in names for w in rest[:1]) or any(
-        a == "-m" and rest[i + 1 : i + 2] and rest[i + 1].startswith("ddflow")
-        for i, a in enumerate(rest)
-    )
+    rest = argv[1:]
+    while rest and rest[0].startswith("-") and rest[0] != "-m":  # an interpreter option (-u, -I)
+        rest = rest[1:]
+    if rest[:1] == ["-m"]:
+        return rest[1:2] != [] and rest[1].startswith("ddflow")
+    return bool(rest) and _base(rest[0]) in names
 
 
 def _has_ddflow_ancestor(proc: Path, pid: int) -> bool:
