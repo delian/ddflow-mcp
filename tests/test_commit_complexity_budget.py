@@ -128,3 +128,16 @@ def test_the_hook_says_nothing_without_radon(repo, monkeypatch):
     monkeypatch.setattr(CB, "cc_visit", None)
     code, msg = E.check_commit(repo)
     assert code == 0 and "complexity budget" not in msg
+
+
+@needs_radon
+def test_a_name_defined_twice_keeps_the_worse_definition():
+    body = "".join(f"    if x == {i}:\n        return {i}\n" for i in range(17))
+    src = ("def setup(x):\n" + body + "    return 0\n\n\ndef setup(x):\n    return 1\n").encode()
+    assert CB.complexities(src)["setup"] == (1, 18)
+
+
+@needs_radon
+def test_a_declared_non_utf8_source_is_still_measured():
+    src = "# -*- coding: latin-1 -*-\ndef caf\xe9(x):\n    return x\n".encode("latin-1")
+    assert list(CB.complexities(src)) == ["caf\xe9"]

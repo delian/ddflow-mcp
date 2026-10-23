@@ -11,6 +11,8 @@ is claimed clean).
 
 from __future__ import annotations
 
+import io
+import tokenize
 from collections.abc import Callable
 
 try:  # a dev dependency: absent, the check says nothing
@@ -30,11 +32,19 @@ def complexities(source: bytes | None) -> dict[str, tuple[int, int]]:
     if source is None or cc_visit is None:
         return {}
     try:
-        blocks = cc_visit(source.decode("utf-8", errors="replace"))
-    except (SyntaxError, ValueError):
+        encoding = tokenize.detect_encoding(io.BytesIO(source).readline)[0]  # PEP 263
+        blocks = cc_visit(source.decode(encoding, errors="replace"))
+    except (SyntaxError, ValueError, LookupError):
         return {}
+    found: dict[str, tuple[int, int]] = {}
     # cc_visit lists a class block whose methods are also listed on their own: functions only.
-    return {b.fullname: (b.lineno, b.complexity) for b in blocks if not hasattr(b, "methods")}
+    for b in blocks:
+        if hasattr(b, "methods"):
+            continue
+        # a name defined twice (under `if`/`else`): the worst of them is what to watch
+        if b.fullname not in found or b.complexity > found[b.fullname][1]:
+            found[b.fullname] = (b.lineno, b.complexity)
+    return found
 
 
 def risen(
