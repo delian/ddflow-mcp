@@ -50,6 +50,30 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals ask]
+  '''
+  usage: ddflow approvals ask [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow approvals attest]
+  '''
+  usage: ddflow approvals attest [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow approvals deny]
   '''
   usage: ddflow approvals deny [-h] [--digest DIGEST] id
@@ -127,16 +151,20 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,show,request,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,show,request,ask,attest,approve,deny,revoke,withdraw} ...
   
   positional arguments:
-    {list,show,request,approve,deny,revoke,withdraw}
+    {list,show,request,ask,attest,approve,deny,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
       show                one request as ddflow rendered it for the person, with its digest and
                           status
       request             an agent files an approval request for a gated command (a refusal does it
                           too)
+      ask                 the exact AskUserQuestion to put to the person for a request (the harness
+                          channel)
+      attest              record the person's answer from the harness transcript (never from your
+                          word)
       approve             a PERSON approves one request, once (refused under an agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
       revoke              a PERSON takes back an approval that is not spent yet
@@ -3214,6 +3242,8 @@
     'ddflow adopt',
     'ddflow approvals',
     'ddflow approvals approve',
+    'ddflow approvals ask',
+    'ddflow approvals attest',
     'ddflow approvals deny',
     'ddflow approvals list',
     'ddflow approvals request',
