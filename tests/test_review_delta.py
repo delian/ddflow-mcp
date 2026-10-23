@@ -410,7 +410,7 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
         "README.md",
         "ddflow/templates/drivers/implement-phase.md",
         "ddflow/templates/prompts/help/gates.md",
-        "ddflow/templates/prompts/mcp_instructions.md",
+        "ddflow/templates/prompts/help/manual.md",
     ):
         text = (root / rel).read_text()
         assert "delta_default" in text and ("--full" in text or "full=true" in text), rel

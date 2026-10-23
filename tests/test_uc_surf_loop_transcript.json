@@ -690,7 +690,7 @@
   ],
   2,
   "",
-  "usage: ddflow gate record [-h]\n                          [--outcome {passed,failed,unavailable,partial,skipped}]\n                          [--reason REASON] [--evidence EVIDENCE]\n                          [--command COMMAND] [--exit-code EXIT_CODE]\n                          [--model MODEL] [--reviewer-model REVIEWER_MODEL]\n                          [--reviewed-sha REVIEWED_SHA]\n                          [--output-file OUTPUT_FILE] [--force]\n                          id gate\nddflow gate record: error: argument --outcome: invalid choice: 'maybe' (choose from passed, failed, unavailable, partial, skipped)\n"
+  "usage: ddflow gate record [-h]\n                          [--outcome {passed,failed,unavailable,partial,skipped}]\n                          [--reason REASON] [--evidence EVIDENCE]\n                          [--command COMMAND] [--exit-code EXIT_CODE]\n                          [--model MODEL] [--reviewer-model REVIEWER_MODEL]\n                          [--reviewed-sha REVIEWED_SHA]\n                          [--output-file OUTPUT_FILE] [--approval APPROVAL]\n                          [--force]\n                          id gate\nddflow gate record: error: argument --outcome: invalid choice: 'maybe' (choose from passed, failed, unavailable, partial, skipped)\n"
  ],
  [
   [
