@@ -48,7 +48,7 @@ def collect_decide(st, cfg, now, facts):
                 now,
                 "decide",
                 it.id,
-                what=f"{it.id}: {it.title}",
+                what=f"{it.id}: {N.clip(it.title, cfg)}",
                 why="the lead cannot answer for the operator; the task lists the questions",
                 since=max(
                     [it.created_at, *(st.items[n].completed_at for n in it.needs if n in st.items)]
@@ -94,7 +94,7 @@ def collect_decision(st, cfg, now, facts):
             now,
             "decision",
             d.id,
-            what=f"decision {d.id} is proposed: {d.title}",
+            what=f"decision {d.id} is proposed: {N.clip(d.title, cfg)}",
             why="a proposed decision binds no one until a person accepts or supersedes it",
             since=d.at,
             default="accept it as written, unless you want to change it",

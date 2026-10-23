@@ -53,6 +53,8 @@ class Queue:
     entries: tuple[Entry, ...]
     #: Kinds not collected, with the reason; and what a caller did not supply.
     gaps: tuple[str, ...] = field(default=())
+    #: Always-true remarks about what the queue cannot show yet (not a missing fact).
+    notes: tuple[str, ...] = (ASK_NOTE,)
     now: float = 0.0
 
     def for_operator(self) -> tuple[Entry, ...]:
@@ -68,7 +70,7 @@ def build(st, cfg, now: float, facts: Facts | None = None) -> Queue:
     found: list[Entry] = []
     for src in SOURCES:
         found.extend(globals()[f"collect_{src.kind}"](st, cfg, now, facts))
-    gaps = [f"{k}: {why}" for k, why in sorted(UNCOLLECTED.items())] + [ASK_NOTE]
+    gaps = [f"{k}: {why}" for k, why in sorted(UNCOLLECTED.items())]
     if facts.health is None:
         gaps.append("lease: health was not checked (stalled and dead leases are not listed)")
-    return Queue(tuple(sorted(found, key=_order)), tuple(gaps), now)
+    return Queue(tuple(sorted(found, key=_order)), tuple(gaps), now=now)

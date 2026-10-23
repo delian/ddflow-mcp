@@ -424,3 +424,29 @@ def test_a_quota_or_generic_expiry_is_not_a_missing_credential():
         gate="critic", outcome="unavailable", at=at(1), reason="quota exceeded; lease expired"
     )
     assert build(st).entries == ()
+
+
+def test_a_template_command_is_filled_from_what_the_entry_blocks():
+    st = State()
+    item(st, "T1")
+    ask(st, "Q1", 1, verb="complete.force", subject="cmd:complete.force:T1:")
+    (e,) = build(st).entries
+    assert e.kind == "force_completion" and "<id>" not in e.command
+    st2 = State()
+    item(st2, "R", state=DONE)
+    item(st2, "D1", kind="doc", title="DECIDE: x", needs=["R"], created_at=at(1))
+    assert build(st2).entries[0].command.startswith("ddflow decision add --id D-D1-Q1")
+
+
+def test_a_title_that_quotes_a_key_is_masked_in_decision_and_decide_entries():
+    st = State()
+    bad = "rotate ghp_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8"
+    st.decisions["D-x"] = Decision(id="D-x", title=bad, status="proposed", at=at(2))
+    item(st, "D1", kind="doc", title="DECIDE: " + bad, created_at=at(1))
+    assert "ghp_a1b2" not in repr([e.as_dict() for e in build(st).entries])
+
+
+def test_gaps_are_missing_facts_and_notes_are_standing_remarks():
+    q = build(State(), facts=Facts(health=()))
+    assert not any(g.startswith("lease") for g in q.gaps)
+    assert q.notes and all("file" in n for n in q.notes)
