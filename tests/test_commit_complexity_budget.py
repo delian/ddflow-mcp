@@ -60,7 +60,8 @@ def test_a_branch_added_to_a_function_at_the_limit_is_named_before_the_ci_gate(r
     code, msg = E.check_commit(repo)
     assert code == 0, "advisory only: it must not refuse the commit"
     assert "m.py:1 near_limit CC 21 -> 22 (already grade D, getting worse)" in msg
-    assert "counted by" not in msg, "the guard counts functions over 20: this one was counted"
+    assert "will fail" not in msg and "counted by" not in msg
+    assert "refuses" not in msg, "the guard counts grade D; it does not refuse it by itself"
 
 
 @needs_radon
@@ -131,10 +132,11 @@ def test_the_hook_says_nothing_without_radon(repo, monkeypatch):
 
 
 @needs_radon
-def test_a_name_defined_twice_keeps_the_worse_definition():
+def test_a_name_defined_twice_is_two_functions():
     body = "".join(f"    if x == {i}:\n        return {i}\n" for i in range(17))
     src = ("def setup(x):\n" + body + "    return 0\n\n\ndef setup(x):\n    return 1\n").encode()
-    assert CB.complexities(src)["setup"] == (1, 18)
+    found = CB.complexities(src)
+    assert found["setup"] == (1, 18) and found["setup#2"][1] == 1
 
 
 @needs_radon
@@ -147,3 +149,12 @@ def test_the_tree_the_hook_reads_head_in_is_a_directory_not_an_id(repo):
     """`_complexity_note` runs `git show HEAD:<path>` in `_index_tree(repo)`."""
     _setup(repo, 3)
     assert E._index_tree(repo).is_dir()
+
+
+@needs_radon
+def test_the_second_definition_of_a_name_rising_is_seen():
+    def src(first: int, second: int) -> bytes:
+        return (_fn("setup", first) + "\n\n" + _fn("setup", second)).encode()
+
+    lines = CB.risen(["m.py"], lambda p: src(29, 17), lambda p: src(29, 4), 18)
+    assert len(lines) == 1 and "setup#2 CC 5 -> 18" in lines[0], lines

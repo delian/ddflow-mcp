@@ -38,12 +38,13 @@ def complexities(source: bytes | None) -> dict[str, tuple[int, int]]:
         return {}
     found: dict[str, tuple[int, int]] = {}
     # cc_visit lists a class block whose methods are also listed on their own: functions only.
-    for b in blocks:
-        if hasattr(b, "methods"):
-            continue
-        # a name defined twice (under `if`/`else`): the worst of them is what to watch
-        if b.fullname not in found or b.complexity > found[b.fullname][1]:
-            found[b.fullname] = (b.lineno, b.complexity)
+    for b in sorted((b for b in blocks if not hasattr(b, "methods")), key=lambda b: b.lineno):
+        # a name defined twice (under `if`/`else`) is two functions: `f` and `f#2`, by order
+        key, n = b.fullname, 1
+        while key in found:
+            n += 1
+            key = f"{b.fullname}#{n}"
+        found[key] = (b.lineno, b.complexity)
     return found
 
 

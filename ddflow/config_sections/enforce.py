@@ -116,7 +116,7 @@ class EnforceConfig:
     )
     complexity_warn_at: int = knob(
         18,
-        doc="The commit hook names a staged Python function whose cyclomatic complexity ROSE to this value or more (radon; grade D starts at 21, which tests/test_architecture_guards.py refuses), so a one-line `if` in a function already at the limit is seen at commit time and not 15 minutes later in the ci gate. Warning only; needs radon (a dev dependency), silent without it. 0 turns it off.",
+        doc="The commit hook names a staged Python function whose cyclomatic complexity ROSE to this value or more (radon; grade D starts at 21; tests/test_architecture_guards.py counts the functions above 20 per module and fails when a count rises), so a one-line `if` in a function already at the limit is seen at commit time and not 15 minutes later in the ci gate. Warning only; needs radon (a dev dependency), silent without it. 0 turns it off.",
     )
     doc_globs: list[str] = knob(
         factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc"],
