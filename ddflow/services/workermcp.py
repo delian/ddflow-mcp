@@ -34,7 +34,9 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
     if entry.get("command") == "docker" and args[:1] == ["run"]:
         # `env` reaches the `docker` client, not the container: forward the tier with `-e`,
         # replacing any value already forwarded (the last `-e` of a name would win).
-        out["args"] = ["run", "-e", f"{TIER_ENV}={tier}", *_without_tier(args[1:])]
+        # The entry is `_launch_entry`'s own: `run`, its options, then the image LAST. What follows
+        # the options is never touched.
+        out["args"] = ["run", "-e", f"{TIER_ENV}={tier}", *_without_tier(args[1:-1]), *args[-1:]]
     return out
 
 

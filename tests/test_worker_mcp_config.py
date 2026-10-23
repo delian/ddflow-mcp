@@ -58,6 +58,9 @@ def test_a_docker_launch_forwards_the_tier_into_the_container():
         "K=1",
         "img",
     ]
+    # arguments after the image belong to the container command, not to docker
+    cmd = {"command": "docker", "args": ["run", "img"]}
+    assert WM.worker_entry(cmd, "core")["args"] == ["run", "-e", "DDFLOW_MCP_TOOLS=core", "img"]
     again = WM.worker_entry(WM.worker_entry(had, "core"), "standard")
     assert again["args"].count("DDFLOW_MCP_TOOLS=standard") == 1
     assert not any("=core" in a for a in again["args"])
