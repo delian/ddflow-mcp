@@ -37,8 +37,11 @@ ENV_ALLOW = "DDFLOW_HOOKS_ALLOW"
 PRIMARY = "@primary"
 
 _WRAPPERS = frozenset(
-    {"sudo", "env", "nohup", "time", "command", "exec", "nice", "xargs", "builtin", "doas"}
-)
+    {
+        "sudo", "env", "nohup", "time", "command", "exec", "nice", "xargs", "builtin", "doas",
+        "timeout", "uv",
+    }
+)  # fmt: skip
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 #: git's global options that take their value as the NEXT word.
@@ -55,7 +58,9 @@ _INSTEAD = {
 }
 _FLAG_INSTEAD = (
     "no force flags: fix what the tool refused. The one exception is "
-    '`ddflow review <item> --force --reason "<why>"` for an extra review round'
+    '`ddflow review <item> --force --reason "<why>"` for an extra review round '
+    "(--gate and the other options may sit anywhere, --reason is required, and a "
+    "timeout/uv run/python -m launcher is fine)"
 )
 
 
@@ -142,12 +147,17 @@ _VALUED = {
     "nice": frozenset({"-n"}),
     "env": frozenset({"-u", "-C", "-S"}),
     "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-a", "-d", "-E", "-l", "-i"}),
+    "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
+    "uv": frozenset(
+        {"--with", "--project", "-p", "--python", "--directory", "--extra", "--group", "--package"}
+    ),
 }
+_DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
 
 
 def _head(words: list[str]) -> list[str]:
     """`words` from the command's own word on: wrappers, their options and values, and
-    VAR=x assignments dropped."""
+    VAR=x assignments dropped (`timeout 5 cmd`, `uv run cmd`, `python -m cmd` run `cmd`)."""
     i = 0
     wrapper = ""
     while i < len(words):
@@ -159,9 +169,23 @@ def _head(words: list[str]) -> list[str]:
             i += 1
         elif wrapper and w.startswith("-"):
             i += 2 if w in _VALUED.get(wrapper, ()) else 1
+        elif (wrapper, w) == ("uv", "run") or (wrapper == "timeout" and _DURATION.fullmatch(w)):
+            i += 1  # `uv run` / the duration are the wrapper's own words
         else:
             break
-    return words[i:]
+    return _python_module(words[i:])
+
+
+def _python_module(head: list[str]) -> list[str]:
+    """`python [-P ...] -m mod args` as `mod args`: the module is the command that runs."""
+    if not head or not head[0].rsplit("/", 1)[-1].startswith("python"):
+        return head
+    i = 1
+    while i < len(head) and head[i].startswith("-") and head[i] != "-m":
+        if head[i] == "-c":
+            return head  # an inline program, not a module
+        i += 2 if head[i] in ("-W", "-X") else 1
+    return head[i + 1 :] if i + 1 < len(head) and head[i] == "-m" else head
 
 
 def _args(head: list[str]) -> list[str]:
