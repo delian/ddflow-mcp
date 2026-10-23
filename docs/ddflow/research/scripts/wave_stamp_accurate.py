@@ -9,7 +9,11 @@ kinds are stamped too; running or leased items are skipped.
     python3 wave_stamp_accurate.py            # report only
     python3 wave_stamp_accurate.py --apply    # writes ddflow batch files and runs them (250 per batch)
 """
-import json, re, subprocess, sys, tempfile
+import json
+import re
+import subprocess
+import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -18,8 +22,8 @@ from ddflow.api._base import _load
 sys.setrecursionlimit(100000)
 AGENT = "qa-graph"
 _, _, st = _load(Path("."), AGENT)
-I = st.items
-L = {i: it for i, it in I.items() if it.state not in ("done", "abandoned") and not getattr(it, "removed", False)}
+ITEMS = st.items
+L = {i: it for i, it in ITEMS.items() if it.state not in ("done", "abandoned") and not getattr(it, "removed", False)}
 children = defaultdict(list)
 for i, it in L.items():
     if it.kind != "phase" and it.parent in L:

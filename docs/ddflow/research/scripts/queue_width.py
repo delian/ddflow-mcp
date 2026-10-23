@@ -32,9 +32,10 @@ path = [end]
 while D[path[-1]] > 0:
     path.append(next(p for p in prereq(path[-1]) if D[p] == D[path[-1]] - 1))
 print("critical path:", " <- ".join(path))
-print("\nphase tasks minwave maxwave chain width ready")
-for p in sorted(children, key=lambda p: (min(D[t] for t in children[p]), p)):
-    ts = set(children[p])
+
+
+def chain_levels(ts):
+    """Longest intra-phase chain level of each task of one phase."""
     memo = {}
 
     def lv(t):
@@ -43,27 +44,38 @@ for p in sorted(children, key=lambda p: (min(D[t] for t in children[p]), p)):
             memo[t] = max([lv(n) + 1 for n in L[t].needs if n in ts] or [0])
         return memo[t]
 
-    lvs = [lv(t) for t in ts]
+    return [lv(t) for t in ts]
+
+
+def lanes(ts):
+    """Tasks joined when they share a literal file (README.md ignored); the size of each lane."""
+    parent = {t: t for t in ts}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    by_glob = defaultdict(list)
+    for t in ts:
+        for g in L[t].globs:
+            if g != "README.md":
+                by_glob[g].append(t)
+    for group in by_glob.values():
+        for a in group[1:]:
+            parent[find(a)] = find(group[0])
+    return Counter(find(t) for t in ts)
+
+
+print("\nphase tasks minwave maxwave chain width ready")
+for p in sorted(children, key=lambda p: (min(D[t] for t in children[p]), p)):
+    ts = set(children[p])
+    lvs = chain_levels(ts)
     print(p, len(ts), min(D[t] for t in ts), max(D[t] for t in ts), max(lvs) + 1, max(Counter(lvs).values()),
           sum(1 for t in ts if D[t] == 0))
 print("\nlanes (tasks of one wave joined when they share a literal file; README.md ignored)")
 for w in (0, 1, 2):
     ts = [t for t in tasks if D[t] == w and L[t].state in ("open", "blocked")]
-    par = {t: t for t in ts}
-
-    def f(x):
-        while par[x] != x:
-            par[x] = par[par[x]]
-            x = par[x]
-        return x
-
-    byg = defaultdict(list)
-    for t in ts:
-        for g in L[t].globs:
-            if g != "README.md":
-                byg[g].append(t)
-    for v in byg.values():
-        for a in v[1:]:
-            par[f(a)] = f(v[0])
-    comp = Counter(f(t) for t in ts)
+    comp = lanes(ts)
     print(f"wave {w}: {len(ts)} tasks, {len(comp)} lanes, largest {sorted(comp.values(), reverse=True)[:6]}")
