@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -92,9 +93,18 @@ def runs_whole_suite(gdef: GateDef) -> bool:
     itself (taking it here too would wait on ourselves)."""
     return (
         gdef.id == "unit_tests"
-        and "ddflow ci" not in gdef.command
+        and not _runs_ddflow_ci(gdef.command)
         and WK.count_test_files(gdef.command) is None
     )
+
+
+def _runs_ddflow_ci(command: str) -> bool:
+    """Does the command invoke `ddflow ci ...` (as words, not inside a comment or a string)?"""
+    try:
+        words = shlex.split(command, comments=True)
+    except ValueError:
+        return False
+    return any(a.rsplit("/", 1)[-1] == "ddflow" and b == "ci" for a, b in zip(words, words[1:]))
 
 
 def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:

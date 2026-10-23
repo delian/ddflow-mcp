@@ -42,8 +42,12 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
         narrowed, _ = R.run_command_gate(
             _gate("python -c pass tests/test_a.py"), tmp_path, cfg=_cfg()
         )
-        nested, _ = R.run_command_gate(_gate("true # ddflow ci run"), tmp_path, cfg=_cfg())
-    assert (other, narrowed, nested) == ("passed", "passed", "passed")
+    assert (other, narrowed) == ("passed", "passed")
+    # a `ddflow ci run` takes the lock itself; a comment or a string naming it does not count
+    assert not R.runs_whole_suite(_gate("ddflow ci run --full"))
+    assert not R.runs_whole_suite(_gate("uv run ddflow ci run"))
+    assert R.runs_whole_suite(_gate("pytest # ddflow ci run"))
+    assert R.runs_whole_suite(_gate("pytest -k 'ddflow ci'"))
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
