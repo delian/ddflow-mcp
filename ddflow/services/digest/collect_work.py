@@ -18,7 +18,7 @@ from . import entry as N
 #: Rounds of the stage that checks main after a merge or on a schedule.
 MAIN_STAGES = ("merge", "schedule")
 _KEY_REASON = re.compile(
-    r"\b(api[ _-]?key|credentials?|token|secret|KIMI_API_KEY|unauthori[sz]ed|401|403)\b",
+    r"\b(api[ _-]?key|credentials?|secret|KIMI_API_KEY|unauthori[sz]ed|(?:invalid|bad|expired|missing) token|token (?:is |was )?(?:invalid|expired|missing)|401|403)\b",
     re.I,
 )
 _DEFAULT_LINE = re.compile(r"^.*\bdefault\b.*$", re.I | re.M)
