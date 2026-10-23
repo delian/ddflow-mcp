@@ -545,6 +545,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.answered", "via"): "a channel word",
     ("ask.answered", "source"): "an actor source word",
     ("ask.answered", "level"): "a number",
+    ("ask.answered", "proof"): "a channel's own evidence id, compared with the record it names",
     (
         "ask.answered",
         "code_presented",
