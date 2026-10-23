@@ -19,7 +19,8 @@ follows:
   (`MAX_AGE_DAYS` after `checked`) to unknown, because a client can drop support; an `ignores`
   row does not (the safe reading outlives the evidence).
 
-Consumers: the shim (SU-shim) and the announcement (SU-announce); nothing calls it before them.
+Consumers: `ddflow harness show` (api/harness.py) today; the shim (SU-shim) and the announcement
+(SU-announce) next.
 Prompts' `list_changed` is never relied on. The harness link (`harness`) names the descriptor in
 `ddflow/harnesses/` of the same agent, so the two can be joined without a second copy of the data.
 """
@@ -248,17 +249,6 @@ ENTRIES: tuple[Entry, ...] = (
         f"{_M}: superagent-ai/grok-cli fb97af8: tools built once at startup",
     ),
     _e(
-        "cursor-cli",
-        IGNORES,
-        "reported",
-        "",
-        None,
-        "2026-10-21",
-        f"{_M}: forum 161459: a new tool stays hidden until the session restarts",
-        reconnect="manual",
-        harness="cursor",
-    ),
-    _e(
         "cursor-ide",
         IGNORES,
         "reported",
@@ -266,6 +256,17 @@ ENTRIES: tuple[Entry, ...] = (
         None,
         "2026-10-21",
         f"{_M}: forum 166216: cache intentional, list_changed unreliable (stdio maybe ok)",
+        reconnect="manual",
+        harness="cursor",
+    ),
+    _e(
+        "cursor-cli",
+        IGNORES,
+        "reported",
+        "",
+        None,
+        "2026-10-21",
+        f"{_M}: forum 161459: a new tool stays hidden until the session restarts",
         reconnect="manual",
         harness="cursor",
     ),
@@ -345,6 +346,12 @@ ENTRIES: tuple[Entry, ...] = (
 _BY_NAME = {n: e for e in ENTRIES for n in (e.key, *e.names)}
 
 
+def by_harness(harness_id: str) -> Entry | None:
+    """The main row of the agent whose descriptor is `ddflow/harnesses/<id>.toml`: the first row
+    that names it (Cursor has an IDE row and a CLI row)."""
+    return next((e for e in ENTRIES if e.harness == harness_id), None)
+
+
 def version_tuple(text: object) -> tuple[int, ...] | None:
     """`v2.1.296-beta.1` -> (2, 1, 296); None when there is no numeric version."""
     m = re.match(r"v?(\d+(?:\.\d+)*)", str(text or "").strip())
@@ -365,9 +372,22 @@ def lookup(client_info: object) -> Entry | None:
     return _BY_NAME.get(_name(client_info))
 
 
+RANGED, EXPIRING, BY_NAME = "ranged", "expiring", "by name"
+
+
+def basis(entry: Entry) -> str:
+    """How `entry` is trusted: `ranged` (only from its `min_version`), `expiring` (an unverified
+    `honours` row, good for MAX_AGE_DAYS after `checked`) or `by name` (a row that does not age).
+    `effective` and `ddflow harness show` both read this, so they cannot disagree."""
+    if entry.min_version:
+        return RANGED
+    return EXPIRING if entry.list_changed == HONOURS and entry.source != "verified" else BY_NAME
+
+
 def effective(entry: Entry, version: object, today: date) -> str:
     """What `entry` says for a client of `version` on `today` (see the module docstring)."""
-    if entry.min_version:
+    kind = basis(entry)
+    if kind == RANGED:
         have, need = version_tuple(version), version_tuple(entry.min_version)
         if not (have and need and have >= need):
             return UNKNOWN
@@ -376,7 +396,7 @@ def effective(entry: Entry, version: object, today: date) -> str:
         if same and _prerelease(version):
             return UNKNOWN  # 2.1.296-beta.1 comes before the verified 2.1.296
         return entry.list_changed
-    if entry.list_changed == HONOURS and entry.source != "verified":
+    if kind == EXPIRING:
         try:
             age = (today - date(*map(int, entry.checked.split("-")))).days
         except (TypeError, ValueError):
