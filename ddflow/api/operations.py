@@ -31,6 +31,7 @@ from ..infra.store import Store
 from ..services import cleanup as CL
 from ..services import companions as C
 from ..services import enforce as E
+from ..services import eventcommit as EC
 from ..services import external as EX
 from ..services import flakes as FK
 from ..services import importer as IM
@@ -61,6 +62,7 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
     data: dict[str, Any] = {
         "trees": [plain(t) for t in plan.trees],
         "stale_branches": [plain(t) for t in plan.stale_branches],
+        "orphan_blobs": EC.orphan_blobs(repo),
         "needs_human": len(plan.needs_human),
         "actionable": len(plan.actionable),
         "applied": apply,

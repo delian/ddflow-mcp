@@ -17,6 +17,7 @@ from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
+from ..metrics.queued import _why_notes
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -31,7 +32,6 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
-from .reasons import _unavailable_reasons
 
 
 @dataclass
@@ -320,7 +320,7 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
-        why=_unavailable_reasons(it, rows),
+        why=_why_notes(it, rows),
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
