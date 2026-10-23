@@ -56,8 +56,10 @@ def test_a_missing_node_says_it_looked_in_every_worktree(repo, tmp_path):
     assert "tests/ of every worktree" in why, why
 
 
-def test_a_node_in_a_file_that_does_not_exist_is_named_whole(repo, tmp_path):
-    """The reported shape: `tests/x.py::name`, with no tests/x.py at all."""
+def test_a_node_in_a_file_that_does_not_exist_is_named_whole_and_once(repo, tmp_path):
+    """The reported shape: `tests/x.py::name`, with no tests/x.py at all -- mentioned twice,
+    and named once."""
     _project(repo, tmp_path)
-    why = _refusal(repo, "tests/x.py::name")
-    assert "probe names tests/x.py::name," in why, why
+    out = _triage(repo, 1, "refuted", "tests/x.py::name, and again tests/x.py::name")
+    assert out.exit != 0
+    assert out.reason.startswith("probe names tests/x.py::name, which"), out.reason

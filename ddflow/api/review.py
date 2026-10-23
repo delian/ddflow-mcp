@@ -291,7 +291,7 @@ def probe_problem(roots: list[Path], probe: str) -> str:
     missing, _unchecked = _unresolved_tests(roots[-1], ",".join(nodes)) if nodes else ([], [])
     if missing:
         return (
-            f"probe names {', '.join(missing)}, which no worktree defines "
+            f"probe names {', '.join(dict.fromkeys(missing))}, which no worktree defines "
             f"(looked in tests/ of every worktree)"
         )
     prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
