@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 #: What `[session].progress_after_complete` accepts (services/progress_line).
 PROGRESS_MODES = ("on", "phase", "off")
@@ -91,6 +91,25 @@ class SessionConfig:
     brief_lesson_count: int = knob(
         4,
         doc="How many task-relevant lessons the brief carries. Retrieved by relevance to the active task text, not by recency.",
+    )
+    context_budget_tokens: int = knob(
+        40000,
+        doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints) plus `start_notice_reserve_tokens` for the one-line upgrade notice, which cannot be counted without using it up. `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
+        check=int_at_least(0),
+    )
+    start_notice_reserve_tokens: int = knob(
+        100,
+        doc="Tokens `ddflow doctor` adds to the session start cost for the one-line upgrade or release notice that leads the first session after an upgrade. Measuring cannot count a pending notice without using it up (it is said once per version), so this reserve stands for it: the budget then holds even in that session. 0 reserves nothing.",
+        check=int_at_least(0),
+    )
+    start_bytes_per_token: float = knob(
+        4.0,
+        doc="Bytes (UTF-8) to a token in the session start cost estimate (`context_budget_tokens`). Four suits prose; JSON such as `tools/list` runs nearer three, so lower it to be stricter. No tokenizer is imported.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v < float("inf")
+            else "must be a finite number above 0"
+        ),
     )
     first_call: bool = knob(
         True,

@@ -31,7 +31,7 @@ from .evidence import (
     worktree_entries,
 )
 from .failed_gate import skipped_after_failure
-from .kinds import DiffPaths, evidence_problems, kind_pipeline, not_applicable
+from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
 
 
 @dataclass
@@ -508,7 +508,7 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             raise ValueError("skipping is disabled ([gates].allow_skip_with_reason)")
         if not reason:
             raise ValueError("a skip must carry --reason; an unexplained skip is invisible")
-    if outcome == "passed" and gdef and gdef.evidence and not evidence:
+    if outcome == "passed" and gdef and gdef.evidence and bare(evidence):
         raise ValueError(
             f"gate {gate!r} requires evidence to pass (it is in gates.evidence_required). "
             f"Attach what you observed: --evidence '<what you ran / what it said>', and/or "
