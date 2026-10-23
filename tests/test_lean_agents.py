@@ -60,7 +60,7 @@ def test_every_ddflow_tool_a_role_names_exists_and_none_is_an_operator_act():
 
 
 def test_the_roles_are_narrowed_the_way_their_work_is():
-    r, i, v = (set(LA.builtin_tools(x)) for x in ROLES)
+    r, i, v = (set([t for t in LA._tools_line(x) if not t.startswith("mcp__")]) for x in ROLES)
     assert not ({"Edit", "Write", "NotebookEdit"} & (r | v)), "researcher/reviewer must not edit"
     assert {"Edit", "Write"} <= i
     assert "ddflow_claim" in LA.ddflow_tools("implementer")

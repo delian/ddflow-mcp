@@ -1084,8 +1084,7 @@ def adopt(
             actions.append(_write_native_rule(repo, key, docs_dir))
         for dst, src in AGENT_COMMANDS.get(key, {}).items():
             actions.append(_write_command(repo, dst, templates / src))
-        for dst, src in LA.agent_files(key).items():  # lean role definitions (LS-agents)
-            actions.append(_write_command(repo, dst, templates / src, "agents"))
+        actions.extend(_write_agents(repo, key, templates))  # lean role definitions (LS-agents)
 
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
@@ -1190,6 +1189,14 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
     path.parent.mkdir(parents=True, exist_ok=True)
     replace_text(path, desired)
     return f"wrote {rel}"
+
+
+def _write_agents(repo: Path, key: str, templates: Path) -> list[str]:
+    """The lean role definitions for ``key`` (`services.leanagents`), each in its managed region."""
+    return [
+        _write_command(repo, dst, templates / src, "agents")
+        for dst, src in LA.agent_files(key).items()
+    ]
 
 
 def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> str:
