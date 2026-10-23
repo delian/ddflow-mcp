@@ -173,6 +173,7 @@ def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, 
         return NS(ran=True), ""
 
     monkeypatch.setattr(CI, "_execute", execute)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))  # never the host-wide lock
     for full in (False, True):
         CI._run_locked(cfg(), tmp_path, "ref", tmp_path, "cmd", None, 60, None, {}, full)
     assert [kw["holding_suite"] for kw in seen] == [False, True]
