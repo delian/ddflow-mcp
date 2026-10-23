@@ -91,3 +91,13 @@ def test_the_tool_takes_an_id_and_without_one_only_previews(repo):
     st = state(repo)
     assert "fix-B-one" in st.items and "fix-B-two" not in st.items
     assert call(repo, {"all": True})["filed"] == ["B-two"]
+
+
+def test_a_bare_api_call_previews_too(repo):
+    from ddflow.api import knowledge as K
+
+    seed(repo)
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.data["preview"] is True and out.data["dry_run"] is True
+    assert "fix-B-one" not in state(repo).items
+    assert K.bug_file_tasks(repo, every=True, agent="a").data["filed"] == ["B-one", "B-two"]
