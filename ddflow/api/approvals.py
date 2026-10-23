@@ -63,14 +63,14 @@ def _row(r: dict[str, Any], now: float) -> dict[str, Any]:
 
 
 def approvals_show(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
-    _log, _cfg, st = _load(repo, agent)
+    _log, cfg, st = _load(repo, agent)
     row = asks_of(st).get(ask_id)
     if row is None or not row["verb"]:
         return O.failed("approvals.show", f"no approval request {ask_id}")
     now = time.time()
     tail = f"\n  status  : {_status(row, now)}  (expires {row['expires_at']})"
     if row["state"] == "answered":
-        tail += f"\n  answered: {row['outcome']} by {row['answered_by']} via {row['via']}, level L{V.verified_level(row)}"
+        tail += f"\n  answered: {row['outcome']} by {row['answered_by']} via {row['via']}, level L{V.verified_level(row, cfg)}"
     return O.ok("approvals.show", approval=_row(row, now), text=row["text"] + tail)
 
 

@@ -19,8 +19,8 @@ def status(row: dict[str, Any], now: float) -> str:
     return E.status(row, now)
 
 
-def verified_level(row: dict[str, Any]) -> int:
-    return E.verified_level(row)
+def verified_level(row: dict[str, Any], cfg=None) -> int:
+    return E.verified_level(row, cfg)
 
 
 def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> None:
