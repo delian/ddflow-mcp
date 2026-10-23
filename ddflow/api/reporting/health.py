@@ -230,7 +230,6 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     """One note naming driver docs that differ from the templates this ddflow ships, each
     with WHAT the difference is (the Managed state): an unedited older release, a hand edit,
     a newer ddflow's format, or a copy with no stamp."""
-
     lagging = AD.driver_states(repo)
     if not lagging:
         return []
@@ -430,6 +429,7 @@ def doctor(
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
+    notes += AD.worker_notes(cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
