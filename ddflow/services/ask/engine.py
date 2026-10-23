@@ -322,7 +322,8 @@ def verified_level(row: dict[str, Any]) -> int:
     unless the row's channel registered a verifier that confirms the higher level it claims."""
     claimed = row.get("level", 0)
     check = LEVEL_VERIFIERS.get(row.get("via", ""))
-    return claimed if claimed > 1 and check is not None and check(row) else min(claimed, 1)
+    believed = claimed > 1 and check is not None and check(row)
+    return claimed if believed else 1  # an answered row is at least a terminal's word
 
 
 def judge(last: dict[str, Any], digest: str) -> Verdict:
