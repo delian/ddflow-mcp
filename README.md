@@ -1101,7 +1101,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 398 knobs.
+cadences, and the rest of the 401 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5291,7 +5291,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 398): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 401): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5835,7 +5835,7 @@ declared once and persists — see
 
 ## Configuration
 
-398 knobs across 42 sections, every one documented in place and listed, with its default
+401 knobs across 42 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5902,8 +5902,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7057e0b56aef -->
-<details><summary>All 398 knobs across 42 sections</summary>
+<!-- ddflow:begin README/knobs sha=3f005bfe01ee -->
+<details><summary>All 401 knobs across 42 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6019,6 +6019,9 @@ long default is left to `ddflow config --explain`.
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
 | `session.agent_brief_max_chars` | `9000` |  |
+| `session.agent_brief_budget_share` | `0.1` |  |
+| `session.agent_brief_min_chars` | `4000` |  |
+| `session.agent_brief_lean_chars` | `6000` |  |
 | `session.agent_brief_off` | `[]` |  |
 | `session.agent_brief_decisions` | `6` |  |
 | `session.agent_brief_pin_decisions` | `[]` |  |
