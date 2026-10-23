@@ -81,20 +81,20 @@ A waiver covers a record and, optionally, a single option or the whole expressio
 
 ## 4. Layering and escalation
 
-Layers are `D-config-layer-order`; policy is evaluated per layer and merged tighten-only with ONE combiner (replacing the five separate ones; see GP-model):
+Layers are `D-config-layer-order`; policy is evaluated per layer and merged tighten-only with ONE combiner (one decided exception, Q4: a project may add an evaluable alternative to a company `any`/`at_least` unless the requirement is `closed` or `locked`) (replacing the five separate ones; see GP-model):
 
 | Field | Lower layer may | May not |
 |---|---|---|
 | strength | raise (recommended -> best-practice -> required) | lower below the company value |
 | polarity | keep | flip `forbidden` to allowed |
-| options | remove options (narrow); add a new option only inside an `all` conjunct | (Q4, DECIDED: a project MAY add an alternative to a company `any`/`at_least` by default, as an evaluable named check, reported in the digest; a company `closed` marker forbids it, and a `locked` requirement is not changed by a lower layer. The older text here said no; superseded by D-GP-Q4.) |
+| options | remove options (narrow); (Q4, DECIDED) add an alternative to a company `any`/`at_least` as an evaluable named check, reported in the digest and audit; add a new option inside an `all` conjunct | add an alternative when the company marked the requirement `closed` or `locked`; add one that is not an evaluable named check (D-GP-Q4; the older text forbidding all additions is superseded) |
 | `at_least k` | raise k | lower k |
 | `any` -> `all` | yes (tighten) | `all` -> `any` |
 | mode | `audit` -> `enforce` | `enforce` -> `audit` |
 | scope (globs) | widen the scope | narrow below the company scope |
 | override | `waive` -> `none` (lock) | `none` -> anything |
 
-A project record that "loosens" is refused on every write surface (exit 3, naming the policy item, layer and revision, like `B-org-policy`), and at load for a hand edit it is ignored and reported by doctor (company policy wins, not fail-open). The only way to lower is a waiver or a company-issued exception. Escalation: a company may raise a best practice to `required` in a later release; the lock-bump update flow (`D-org-config`) shows that as a diff (section 8) and the record starts in `audit`.
+A project record that "loosens" (beyond the Q4 alternative-addition allowance above) is refused on every write surface (exit 3, naming the policy item, layer and revision, like `B-org-policy`), and at load for a hand edit it is ignored and reported by doctor (company policy wins, not fail-open). The only way to lower is a waiver or a company-issued exception. Escalation: a company may raise a best practice to `required` in a later release; the lock-bump update flow (`D-org-config`) shows that as a diff (section 8) and the record starts in `audit`.
 
 Opt-out of `best-practice` (a deviation): item scope by default; project/machine scope allowed with `review_by` and a reason; a company can set `opt_out = reason | approval | none` on a best practice (`approval` makes it a required-with-person-override, `none` is effectively required). Repeated deviations of one record are counted and shown (the `RQM-strength` "deviation counter"): a high deviation rate is the signal that the practice is wrong or badly worded.
 
@@ -144,7 +144,7 @@ Graded policy records ride the org bundle (`B-org-bundle`): files under `policie
 ## 9. Config, CLI, MCP, prompts
 
 - **Knobs** (all settable by file, CLI, MCP and prompt; every number a knob; enum choices declared, never comment-only, because of bug Beea0744a7b): `[policy].default_mode` (audit|enforce), `[policy].audit_releases` (1), `[policy].waiver_max_days` (90, tighten-only: company can lower), `[policy].deviation_scope_allowed` (item[,project,machine]), `[policy].charter_tokens` (one knob replacing `rules_charter_tokens` and `requirements.charter_tokens`, kept as aliases two releases per the deprecation lifecycle), `[policy].expr_max_depth` (2), `[policy].expr_max_options` (8), `[policy].evaluate_reviewer_options` (true; false makes model-judged options `unavailable` in hooks).
-- **CLI (extend `ddflow rule` and the requirement verbs, no new noun):** `rule add|edit --strength --mode --satisfied-by '<expr>' --option id=...`; `rule check [--item|--all]`, `rule explain <id>`, `rule deviate <id> --item --reason`, `rule waive <id> ...` (a request, approved by `ddflow approvals approve`), `rule list --strength`. `ddflow org diff` shows the policy-aware diff.
+- **CLI (extend `ddflow rule` and the requirement verbs, no new noun; the CLI noun stays `rule` while MCP routes the same actions through the one record family per D-GP-Q9, a decided divergence of surface naming only: the action names and params are identical so parity tests compare them):** `rule add|edit --strength --mode --satisfied-by '<expr>' --option id=...`; `rule check [--item|--all]`, `rule explain <id>`, `rule deviate <id> --item --reason`, `rule waive <id> ...` (a request, approved by `ddflow approvals approve`), `rule list --strength`. `ddflow org diff` shows the policy-aware diff.
 - **MCP: no new tool.** DECIDED (D-GP-Q9): the actions live in the ONE record family (`ddflow_record`, kind argument, per `D-mcp-new-nouns`), not the `rule` family; the older text below said `rule` family and is superseded. Add actions `check`, `explain`, `deviate`, `waive` and the new params on `add`/`edit`. `MTD-family-spec` (done) declares the matrix and `MTD-profiles` (open) chooses which clients see it; `doctor` family already carries `precommit`. Requirements use the same record; if `requirement` becomes its own family (RQM-surfaces) these actions are declared once and attached to both (one declaration, as `D-record-surface-contract-r2`). A new action adds roughly 0.4-0.6 KB to the family schema; the budget test (`MTD-budget-test`) reports it.
 - **Prompt-based management** (`r-company-workflows`): "make signing required for the payments repo but allow gpg, ssh or gitsign" is handled by the agent calling `rule add/edit` with the fields; a company can pin the prompt text (`B-org-kinds`).
 
@@ -196,7 +196,7 @@ Priority medium. Dependencies are real ids; no cycles. The phase is behind the o
 1. Five words (info, recommended, best-practice, required, forbidden)? DEFAULT yes; `forbidden` = required with negative polarity.
 2. Is best-practice "answer before complete" (comply or explain, blocks `complete` until answered)? DEFAULT yes for items with a mechanical check or a cited reviewer finding; never blocks the gate itself.
 3. `at_least k of n` in the first cut, or only all/any? DEFAULT include (small, same evaluator).
-4. May a project add an alternative to a company `any`? DEFAULT no (narrow only); a company can mark an `any` `extensible = true`.
+4. May a project add an alternative to a company `any`? DEFAULT no (narrow only); a company can mark an `any` `extensible = true`. ANSWERED YES (D-GP-Q4); the `extensible = true` marker is replaced by the inverse `closed` marker (extendable by default, mark to forbid).
 5. New company policy starts in `audit` for one release? DEFAULT yes (`D-CM-Q11`), per record overridable.
 6. Waiver cap 90 days and approval tier T2 for project waivers; company-layer exceptions to locked policy T3? DEFAULT yes.
 7. Best-practice opt-out scope: item only, or project/machine with `review_by`? DEFAULT item, project with `review_by` <= 180 days, machine off.
