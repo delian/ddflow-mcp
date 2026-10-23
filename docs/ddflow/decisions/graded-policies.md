@@ -1,6 +1,6 @@
 # Graded corporate policies: strength levels and "one of" alternatives
 
-**State: PROPOSAL.** Nothing here is decided. Task `GP-decide` (phase `P-graded-policies`) asks the operator the questions in section 9 and turns the answers into decision records; until then this file is the recommendation. Evidence: [research/graded-policies.md](../research/graded-policies.md).
+**State: DECIDED (operator, 2026-10-23).** The operator answered the section 13 questions (table at the end of section 13); each answer is a decision record `D-GP-Q1` .. `D-GP-Q11`. Where an answer differs from the recommendation (Q4, Q9) the answer governs and the text above is superseded by it. Evidence: [research/graded-policies.md](../research/graded-policies.md).
 
 Operator request, 2026-10-23, verbatim: "For the centralized corporate policies investigate the option to have soft and strict policies like rules too, like this is recommendation, this is nett practices, this is required, and each of them could be multiple options like it is required to do A or B or C..."
 
@@ -204,3 +204,25 @@ Priority medium. Dependencies are real ids; no cycles. The phase is behind the o
 9. Where does the MCP surface live: `rule` family (recommended) or a new `policy` family? DEFAULT `rule` family; no new tool.
 10. First acceptance policy: signed commits via gpg or ssh or gitsign? DEFAULT yes.
 11. Severity as a separate optional label? DEFAULT later, not in this phase.
+
+### Answers (operator, 2026-10-23)
+
+| Q | Answer | Record | Differs from default |
+|---|--------|--------|----------------------|
+| 1 | Five words: info, recommended, best-practice, required, forbidden. YES | D-GP-Q1 | no |
+| 2 | Best-practice must be answered (comply or explain) before `complete`. YES | D-GP-Q2 | no |
+| 3 | `at_least k of n` in the first cut. YES | D-GP-Q3 | no |
+| 4 | A project MAY add an alternative to a company `any`. YES | D-GP-Q4 | YES (default was no) |
+| 5 | New company policy audits one release first. YES | D-GP-Q5 | no |
+| 6 | Waiver cap 90 days; tier 2 project waivers; tier 3 company exceptions to a locked policy | D-GP-Q6 | no |
+| 7 | Opt-out per item, or per project with `review_by` <= 180 days | D-GP-Q7 | no |
+| 8 | One merged `[policy].charter_tokens`. YES | D-GP-Q8 | no |
+| 9 | MCP actions live in the ONE record family (D-mcp-new-nouns), not the `rule` family | D-GP-Q9 | YES (default was the rule family) |
+| 10 | Signed commits (gpg or ssh or gitsign) as the first any-of example. YES | D-GP-Q10 | no |
+| 11 | Severity label: later | D-GP-Q11 | no |
+
+The operator also confirmed KEEPING `D-audit-calls-2026-10-10` and `D-old-work-behind-core-docs-accepted` (`D-kept-audit-calls-and-old-work-2026-10-23`).
+
+### Open notes (for the operator's review)
+
+- Q4 tension: company floors are tighten-only, and a project-added alternative can weaken a company any-of. Design default that follows the answer: a project may add an alternative by default; a company may mark a requirement `closed` (no added alternatives) or `locked`; every added alternative is reported in the digest and audit; and it must itself be an evaluable named check, so an unavailable option never counts as a pass. Flagged for review: whether `closed` should be the default for `required` items.
