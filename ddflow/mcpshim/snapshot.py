@@ -70,9 +70,9 @@ def problems(data: Any) -> list[str]:
     for key in ("tools", "prompts"):
         items = data.get(key)
         if isinstance(items, list) and not all(
-            isinstance(i, dict) and isinstance(i.get("name"), str) for i in items
+            isinstance(i, dict) and isinstance(i.get("name"), str) and i["name"] for i in items
         ):
-            out.append(f"every entry of {key} needs a string name")
+            out.append(f"every entry of {key} needs a non-empty string name")
     return out
 
 
