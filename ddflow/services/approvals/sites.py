@@ -110,7 +110,7 @@ SITES: tuple[Site, ...] = (
         "A",
         T2,
         L1,
-        "the current [chore].globs",
+        "the current [chore].globs and skip_gates",
         ("ddflow/services/approval.py:grant", "ddflow/api/chore.py:chore_approve"),
         "ddflow chore approve",
     ),
