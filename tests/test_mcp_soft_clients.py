@@ -217,11 +217,17 @@ def test_keys_are_unique_and_lowercase():
     assert len(names) == len(set(names)) and all(n == n.lower() for n in names)
 
 
-def test_the_matrix_document_lists_the_rows_the_table_seeds():
-    text = (ROOT / "docs/ddflow/research/mcp-client-matrix.md").read_text().lower()
+def test_the_matrix_document_carries_the_evidence_each_row_cites():
+    """Each source row's `repo commit` (and each verified row's version) is in the matrix."""
+    import re
+
+    text = (ROOT / "docs/ddflow/research/mcp-client-matrix.md").read_text()
     for e in C.ENTRIES:
-        if e.source in ("verified", "source"):
-            assert e.key.split("-")[0] in text, e.key
+        if e.source == "verified":
+            assert e.verified_version in text, e.key
+        m = re.search(r"(\S+/\S+) ([0-9a-f]{6,})", e.evidence)
+        if e.source == "source" and m:
+            assert m.group(1).split("/")[-1] in text and m.group(2)[:6] in text, (e.key, m.groups())
 
 
 def test_a_row_is_found_by_its_key_as_well_as_its_names():
