@@ -19,7 +19,8 @@ follows:
   (`MAX_AGE_DAYS` after `checked`) to unknown, because a client can drop support; an `ignores`
   row does not (the safe reading outlives the evidence).
 
-Consumers: the shim (SU-shim) and the announcement (SU-announce); nothing calls it before them.
+Consumers: `ddflow harness show` (api/harness.py) today; the shim (SU-shim) and the announcement
+(SU-announce) next.
 Prompts' `list_changed` is never relied on. The harness link (`harness`) names the descriptor in
 `ddflow/harnesses/` of the same agent, so the two can be joined without a second copy of the data.
 """
