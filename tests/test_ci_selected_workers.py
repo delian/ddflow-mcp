@@ -140,5 +140,6 @@ def test_the_recorded_count_is_the_one_the_command_runs_with(monkeypatch):
     cmd = CI._with_workers(
         "pytest -n {workers} -n auto tests/test_a.py tests/test_b.py", cfg, used, "selected"
     )
-    assert "-n 1000" not in cmd, cmd
+    assert "-n 1000" not in cmd and "-n auto" not in cmd and "{workers}" not in cmd, cmd
+    assert cmd.count("-n 2") == 2, cmd
     assert used["selected"]["n"] == 2, used
