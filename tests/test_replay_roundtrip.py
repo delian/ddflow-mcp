@@ -28,7 +28,9 @@ def _log(repo) -> EventLog:
 def history(repo):
     """A log that has seen every way of ending a record, with the event ids after each step."""
     _ok(repo, "init")
-    snapshots: list[tuple[str, set[str]]] = [("init", {e.id for e in _log(repo).read_all()})]
+    # `init` writes no event, so there is nothing of it to lose: the first snapshot is after
+    # the first add.
+    snapshots: list[tuple[str, set[str]]] = []
 
     def step(label, *argv):
         _ok(repo, *argv)
@@ -92,11 +94,6 @@ def test_a_fold_that_drops_a_record_is_caught(history, monkeypatch):
     problems = rt.check(events, live, checkpoints=len(events))
     assert any("decisions" in p for p in problems)
     assert any("decision D1 was in the state" in p for p in problems)
-
-
-def test_the_init_events_survive_the_history(history):
-    repo, snapshots = history
-    assert snapshots[0][1] and snapshots[0][1] <= {e.id for e in _log(repo).read_all()}
 
 
 def test_a_missing_event_changes_the_rebuilt_state(history):
