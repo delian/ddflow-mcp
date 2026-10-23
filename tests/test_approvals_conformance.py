@@ -92,7 +92,7 @@ def _own_strings(scope: ast.AST) -> list[str]:
 def test_no_terminal_only_refusal_is_a_dead_end():
     dead = []
     for key, strings in refusals().items():
-        if key in S.TERMINAL_ONLY or key in S.NOT_A_REFUSAL:
+        if key in S.TERMINAL_ONLY or key in S.NOT_A_REFUSAL or key in S.NOT_YET_ROUTED:
             continue
         if not any(r in t for t in strings for r in ROUTE):
             dead.append(key)
@@ -104,7 +104,9 @@ def test_no_terminal_only_refusal_is_a_dead_end():
 
 def test_every_listed_exemption_is_real_and_has_a_reason():
     found = refusals()
-    for table in (S.TERMINAL_ONLY, S.NOT_A_REFUSAL):
+    for key, why in S.NOT_YET_ROUTED.items():
+        assert "RA-consume-sites-" in why, f"{key}: name the task that routes it"
+    for table in (S.TERMINAL_ONLY, S.NOT_A_REFUSAL, S.NOT_YET_ROUTED):
         for key, why in table.items():
             assert key in found, f"{key} no longer names a terminal: drop it from the table"
             assert len(why) > 20, key
