@@ -24,6 +24,11 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("reason", required=True, cli_help="what the operator allowed and why"),
             Param(
+                "approval",
+                default="",
+                cli_help="an agent: the id of the operator's approval of exactly this grant (a refusal files the request and names it)",
+            ),
+            Param(
                 "when",
                 default="",
                 cli_help="make it STANDING: apply it mechanically when this predicate holds (tree_changed_after_triage)",

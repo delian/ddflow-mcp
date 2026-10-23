@@ -15,6 +15,8 @@ GUARDS = (
     "tests/test_declared_export.py",
     "tests/test_ratchet_no_dead_knobs.py",
     "tests/compat/test_surface.py",
+    "tests/test_registry.py",  # hand-rolled register() idioms
+    "tests/test_no_agent_literals.py",  # hard-coded agent names
     "tests/test_ci_always_guards.py",  # this file: deleting a flag must be caught too
 )
 

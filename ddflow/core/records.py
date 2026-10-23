@@ -276,6 +276,9 @@ class Item:
     parent: str = ""  # a task's phase; "" for a phase
     needs: list[str] = field(default_factory=list)
     globs: list[str] = field(default_factory=list)
+    #: True once an `updated` event named the globs (even to none): the item's own say, so a
+    #: fix task with no globs of its own stops taking its bug's at claim (B5df7832d0a).
+    globs_declared: bool = field(default=False, metadata={"internal": True})
     #: What the work RUNS on, beside what it writes: `gpu:4`, `vllm-fleet`. Globs keep two
     #: agents out of one file; nothing kept two agents from both starting an 8-GPU run
     #: on an 8-GPU box. Counted against `[schedule] resources` capacities.
