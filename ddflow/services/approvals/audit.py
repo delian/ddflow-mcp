@@ -77,7 +77,7 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
         if r["state"] != ANSWERED or r["outcome"] != E.APPROVED:
             continue
         verdict = E.judge(r, r["digest"])
-        if not verdict.ok:
+        if not verdict.ok and not r["policy"]:  # a standing rule's answer is no person's by design
             out.append(
                 f"{r['id']} ({r['verb']}): an approved answer without proof -- {verdict.reason} "
                 "(written by hand?); it cannot be spent"
