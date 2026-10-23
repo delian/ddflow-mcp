@@ -4,7 +4,12 @@ and nothing the log once recorded may disappear.
 `ddflow replay --verify` runs `check`. Closing, abandoning, folding, superseding and
 forgetting are state changes; a record present after N events must still be present after
 N+k. A fold that drops one is the bug this finds, whether it is a handler deleting a key or
-a command removing an event."""
+a command removing an event.
+
+The prefix check is SAMPLED (`CHECKPOINTS` prefixes; every prefix when `checkpoints` is at
+least the number of events, which the test uses). A record that exists only between two
+sampled prefixes, or is removed and re-created under the same id, is not seen by a sampled
+run: a prefix fold costs a fold of the log, so an exact check is quadratic."""
 
 from __future__ import annotations
 
@@ -52,7 +57,7 @@ def check(events: list[Event], live: State, *, checkpoints: int = CHECKPOINTS) -
 
     1. the from-scratch fold equals `live` (every State field);
     2. no event id appears twice (a replay would apply it twice);
-    3. at `checkpoints` prefixes of the log, every record id present is still present in
+    3. at up to `checkpoints` sampled prefixes of the log, every record id present is still present in
        the full fold: nothing recorded was later removed from the state.
     """
     problems: list[str] = []
