@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import DECLARED, TOOLS
-from .profiles import AUTO, PROFILES, direct_tools, family_tools, profile_note
+from .profiles import AUTO, DEFAULT_PROFILE, PROFILES, direct_tools, family_tools, profile_note
 
 # -- tool tiers -------------------------------------------------------------------------
 #
@@ -80,6 +80,8 @@ DEFAULT_TIER = "all"
 def tier_tools(tier: str) -> frozenset[str]:
     """The tools of `TOOLS` that `tools/list` advertises at `tier` by their own name; an unknown
     tier advertises everything. A profile also lists family tools, which are not in `TOOLS`."""
+    if tier == AUTO:
+        tier = DEFAULT_PROFILE
     if tier in PROFILES:
         return frozenset(direct_tools(tier))
     if tier == "core":
@@ -108,7 +110,9 @@ def resolve_tier(repo: Path) -> str:
     would hide a tool the agent needs.
     """
     cfg = _config(repo)
-    tier = cfg.mcp.tools if cfg is not None else DEFAULT_TIER
+    #: A config that cannot be read is the default (`auto`); a value this version does not know
+    #: is the newer release's, and lists everything.
+    tier = (cfg.mcp.tools if cfg is not None else AUTO).strip().lower()
     return tier if tier in (*TIERS, *PROFILES, AUTO) else DEFAULT_TIER
 
 
