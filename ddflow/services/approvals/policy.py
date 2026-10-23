@@ -80,7 +80,6 @@ def apply(log, cfg: Config, state, canon: Canon, *, reason: str = "") -> dict[st
             continue
         if not rule.when(it, canon.target, cfg):
             continue
-        s = canon.site
         ask_id = E.record_policy(
             log,
             cfg,
@@ -88,14 +87,7 @@ def apply(log, cfg: Config, state, canon: Canon, *, reason: str = "") -> dict[st
             digest=canon.digest(),
             text=R.render(canon, reason, cfg.approvals.reason_chars)
             + f"\n  approved by standing rule: {rule_id}",
-            command=E.Command(
-                verb=canon.verb,
-                tier=s.tier,
-                min_level=s.min_level,
-                uses=1,
-                use_ttl_s=cfg.approvals.use_ttl_s,
-                canon=canon.json(),
-            ),
+            command=R.command_of(canon, cfg),
             rule_id=rule_id,
             agent=canon.agent,
         )
