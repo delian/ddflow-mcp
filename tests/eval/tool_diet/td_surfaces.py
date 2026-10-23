@@ -8,7 +8,7 @@ from typing import Any
 from ddflow.surfaces.registry import properties_schema
 from ddflow.surfaces.tools import TOOLS, families, family_schema
 
-SURFACES = ("flat", "families")
+SURFACES = ("flat", "families", "families_hint")
 
 
 def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:
@@ -39,8 +39,38 @@ def family_tools() -> list[dict[str, Any]]:
     return sorted(singles + fams, key=lambda f: f["function"]["name"])
 
 
+def hinted_family_tools() -> list[dict[str, Any]]:
+    """The family surface with each argument saying which actions take it, and the action
+    property saying what each action requires -- the variant that tests whether the union's
+    noise is what costs accuracy."""
+    out = []
+    for fn in family_tools():
+        name = fn["function"]["name"]
+        fam = families.FAMILIES.get(name)
+        if fam is None or fam.single:
+            out.append(fn)
+            continue
+        params = json.loads(json.dumps(fn["function"]["parameters"]))
+        used: dict[str, list[str]] = {}
+        needs = []
+        for act, tool in fam.members.items():
+            for arg in family_schema.member_props(tool):
+                used.setdefault("op" if arg == "action" else arg, []).append(act)
+            req = family_schema._requires(tool)
+            needs.append(f"{act}: {', '.join(req) if req else 'nothing'}")
+        for arg, acts in used.items():
+            prop = params["properties"][arg]
+            if len(acts) < len(fam.members):
+                prop["description"] = f"[{','.join(acts)}] " + prop.get("description", "")
+        params["properties"]["action"]["description"] = "Requires: " + "; ".join(needs)
+        out.append(_function(name, fn["function"]["description"], params))
+    return out
+
+
 def tools_for(surface: str) -> list[dict[str, Any]]:
-    return flat_tools() if surface == "flat" else family_tools()
+    if surface == "flat":
+        return flat_tools()
+    return hinted_family_tools() if surface == "families_hint" else family_tools()
 
 
 def size(tools: list[dict[str, Any]]) -> int:
