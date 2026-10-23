@@ -104,7 +104,7 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
     if lint_exempt:
-        return _close_lint_exempt(log, st, item, lint_exempt, tests, changelog_entry=entry)
+        return _close_lint_exempt(log, cfg, st, item, lint_exempt, tests, changelog_entry=entry)
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
@@ -174,21 +174,25 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     )
 
 
-_CI_LINT_TITLE = re.compile(r"CI check failed: (?P<check>\S+)\s*$")
+_CI_LINT_TITLE = re.compile(r"CI check failed: (?P<check>.+?)\s*$")
 
 
-def _lint_check(st, item: str) -> str:
-    """The check id of a CI-filed bug that is not a test (no `::` node id), else ""."""
+def _lint_check(cfg, st, item: str) -> str:
+    """The check id of a CI-filed LINT bug (no `::` node id; it names one of
+    `[bugs].lint_checks`), else ""."""
     bug = st.bugs.get(item)
     m = _CI_LINT_TITLE.search(bug.title) if bug is not None else None
-    return m["check"] if m and "::" not in m["check"] else ""
+    if not m or "::" in m["check"]:
+        return ""
+    low = m["check"].lower()
+    return m["check"] if any(w.lower() in low for w in cfg.bugs.lint_checks) else ""
 
 
-def _close_lint_exempt(log, st, item, reason, tests, *, changelog_entry) -> O.Outcome:
+def _close_lint_exempt(log, cfg, st, item, reason, tests, *, changelog_entry) -> O.Outcome:
     """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write."""
     if item not in st.bugs:
         return _unknown_bug("bug.fixed", item, st)
-    check = _lint_check(st, item)
+    check = _lint_check(cfg, st, item)
     if not check:
         return O.refused(
             "bug.fixed",
