@@ -351,6 +351,10 @@ def version_tuple(text: object) -> tuple[int, ...] | None:
     return tuple(int(p) for p in m.group(1).split(".")) if m else None
 
 
+def _prerelease(text: object) -> bool:
+    return re.match(r"v?\d+(?:\.\d+)*-", str(text or "").strip()) is not None
+
+
 def _name(client_info: object) -> str:
     name = client_info.get("name") if isinstance(client_info, dict) else None
     return name.strip().lower() if isinstance(name, str) else ""
@@ -367,7 +371,11 @@ def effective(
     """What `entry` says for a client of `version` on `today` (see the module docstring)."""
     if entry.min_version:
         have, need = version_tuple(version), version_tuple(entry.min_version)
-        return entry.list_changed if have and need and have >= need else UNKNOWN
+        if not (have and need and have >= need):
+            return UNKNOWN
+        if have == need and _prerelease(version):
+            return UNKNOWN  # 2.1.296-beta.1 comes before the verified 2.1.296
+        return entry.list_changed
     if entry.list_changed == HONOURS and not entry.verified_version:
         try:
             age = (today - date(*map(int, entry.checked.split("-")))).days
