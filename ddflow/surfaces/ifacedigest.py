@@ -59,7 +59,7 @@ def _tool(t: dict[str, Any]) -> dict[str, Any]:
         "inputSchema": t.get("inputSchema", {}),
         "annotations": t.get("annotations") or {},
     }
-    if t.get("outputSchema"):
+    if t.get("outputSchema") is not None:
         out["outputSchema"] = t["outputSchema"]
     return out
 
@@ -141,6 +141,13 @@ def live_snapshot(
 # -- schema compatibility ----------------------------------------------------------------
 
 
+def _norm(schema: Any) -> dict[str, Any]:
+    """A schema as a dict: `true` accepts anything, `false` accepts nothing."""
+    if isinstance(schema, dict):
+        return schema
+    return {} if schema is True else {"enum": []}
+
+
 def _types(schema: dict[str, Any]) -> set[str] | None:
     t = schema.get("type")
     if t is None:
@@ -157,12 +164,29 @@ def _widens(old: set[str], new: set[str]) -> bool:
 _LOWER_BOUNDS = ("minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties")
 _UPPER_BOUNDS = ("maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties")
 #: Keywords that restrict by value: any change (or addition) can reject a call.
-_EXACT = ("pattern", "format", "const", "multipleOf", "uniqueItems", "additionalProperties")
+_EXACT = ("pattern", "format", "multipleOf", "uniqueItems")
+#: Understood by `schema_problems` (compared above or by recursion), or irrelevant to validity.
+_KNOWN = {
+    "type", "enum", "required", "properties", "items", "const", "additionalProperties",
+    *_LOWER_BOUNDS, *_UPPER_BOUNDS, *_EXACT,
+    "description", "title", "default", "examples", "$comment", "deprecated", "readOnly",
+    "writeOnly", "$schema", "$id",
+}  # fmt: skip
 
 
 def _jset(values: list[Any]) -> set[str]:
     """JSON values as a set that tells 1 from "1" (canonical JSON text)."""
     return {json.dumps(v, sort_keys=True) for v in values}
+
+
+def _additional_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+    """`additionalProperties`: absent and `true` are the loosest; `false` or a schema narrows."""
+    was, now = old.get("additionalProperties", True), new.get("additionalProperties", True)
+    if now is True or now == was:
+        return []
+    if isinstance(now, dict) and isinstance(was, dict):
+        return [f"{where}: additionalProperties {p}" for p in schema_problems(was, now)]
+    return [f"{where}: additionalProperties restricted"]
 
 
 def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
@@ -176,9 +200,17 @@ def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -
         if key in new and (key not in old or new[key] < old[key]):
             out.append(f"{where}: {key} tightened")
     for key in _EXACT:
-        if key in new and new[key] != old.get(key, True if key == "additionalProperties" else None):
+        if key in new and new[key] != old.get(key):
             if not (key == "uniqueItems" and new[key] is False):
                 out.append(f"{where}: {key} changed")
+    if "const" in new and (
+        "const" not in old or json.dumps(new["const"]) != json.dumps(old["const"])
+    ):
+        out.append(f"{where}: const changed")
+    out += _additional_problems(old, new, where)
+    for key in sorted((set(old) | set(new)) - _KNOWN):
+        if old.get(key) != new.get(key):
+            out.append(f"{where}: {key} changed (not understood: assumed to restrict)")
     return out
 
 
@@ -186,6 +218,7 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
     """Why a call valid under `old` could fail under `new`; empty when `new` accepts all of
     `old`'s calls. Looks at types, required and removed arguments, enums and value bounds,
     `items`, and a constraint the old schema did not have."""
+    old, new = _norm(old), _norm(new)
     where = path or "arguments"
     problems: list[str] = []
     ot, nt = _types(old), _types(new)
@@ -207,21 +240,24 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
     return problems
 
 
-def output_problems(
-    old: dict[str, Any] | None, new: dict[str, Any] | None, path: str = ""
-) -> list[str]:
+def output_problems(old: Any, new: Any, path: str = "") -> list[str]:
     """Why a client reading a result under the OLD output schema could break on the new one:
-    a field it read is gone, or its type is no longer one the old schema allowed. A field the
-    new schema adds is harmless."""
-    if not old or not new:
+    the schema is gone, a field it read is gone or no longer required, or its type is no longer
+    one the old schema allowed. A field the new schema adds is harmless."""
+    if old is None:
         return []
     where = path or "result"
+    if new is None:
+        return [f"{where}: output schema removed"]
+    old, new = _norm(old), _norm(new)
     problems: list[str] = []
     ot, nt = _types(old), _types(new)
-    if ot and nt and not _widens(nt, ot):
-        problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt)}")
-    if isinstance(old.get("items"), dict) and isinstance(new.get("items"), dict):
-        problems += output_problems(old["items"], new["items"], f"{where}[]")
+    if ot and (nt is None or not _widens(nt, ot)):
+        problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt or [])}")
+    for name in sorted(set(old.get("required") or []) - set(new.get("required") or [])):
+        problems.append(f"{where}: {name} is no longer guaranteed")
+    if isinstance(old.get("items"), (dict, bool)) and old["items"] != {}:
+        problems += output_problems(old["items"], new.get("items") or {}, f"{where}[]")
     new_props = new.get("properties") or {}
     for name, sub in sorted((old.get("properties") or {}).items()):
         here = f"{path}.{name}" if path else name
@@ -306,6 +342,12 @@ def _diff_prompts(old: dict[str, Any], new: dict[str, Any], d: dict[str, list[st
     d["additive"] += [f"prompt {n}" for n in sorted(set(np_) - set(op))]
     for name in sorted(set(op) & set(np_)):
         d["incompatible"] += _prompt_problems(op[name], np_[name])
+        had = {a["name"] for a in op[name]["arguments"]}
+        d["additive"] += [
+            f"prompt {name}: argument {a['name']}"
+            for a in np_[name]["arguments"]
+            if a["name"] not in had and not a["required"]
+        ]
 
 
 def _diff(old: dict[str, Any], new: dict[str, Any]) -> dict[str, list[str]]:
@@ -370,20 +412,23 @@ def classify_surfaces(
     client: str = UNKNOWN,
     **kw: Any,
 ) -> Verdict:
-    """`classify` each named surface (flat, a profile, facade) and take the worst; a surface
-    that vanished or appeared counts as hard / additive."""
-    out: list[Verdict] = []
+    """`classify` each named surface (flat, a profile, facade). The kind and rung are the worst
+    surface's; the reasons and the pending list are every surface's, each prefixed with its
+    name. A surface that vanished counts as hard, one that appeared as additive."""
+    out: list[tuple[str, Verdict]] = []
     for name in sorted(set(old) | set(new)):
         if name not in new:
-            out.append(Verdict("hard", 5, (f"surface {name}: removed",)))
+            out.append((name, Verdict("hard", 5, ("removed",))))
         elif name not in old:
             honours = client == HONOURS  # rung 2: tell it to list again
-            out.append(Verdict("soft", 2 if honours else 3, (f"surface {name}: added",), honours))
+            out.append((name, Verdict("soft", 2 if honours else 3, ("added",), honours)))
         else:
-            v = classify(old[name], new[name], client, **kw)
-            out.append(
-                Verdict(
-                    v.kind, v.rung, tuple(f"{name}: {r}" for r in v.reasons), v.announce, v.pending
-                )
-            )
-    return worst(out)
+            out.append((name, classify(old[name], new[name], client, **kw)))
+    top = worst(v for _, v in out)
+    return Verdict(
+        top.kind,
+        top.rung,
+        tuple(f"{n}: {r}" for n, v in out for r in v.reasons),
+        any(v.announce for _, v in out),
+        tuple(f"{n}: {p}" for n, v in out for p in v.pending),
+    )

@@ -505,3 +505,79 @@ def test_a_template_that_cannot_be_read_does_not_hash_like_every_other_unreadabl
         prompts, "resolve", lambda a, b, c=None: (_ for _ in ()).throw(ValueError("x"))
     )
     assert D.live_snapshot(srv)["instructions_id"] != one
+
+
+def test_boolean_schemas_do_not_crash_the_check():
+    old = {"type": "object", "properties": {"a": False}}
+    new = {"type": "object", "properties": {"a": True}}
+    assert isinstance(D.schema_problems(old, new), list)
+    assert isinstance(D.schema_problems(new, old), list)
+
+
+def test_a_keyword_the_check_does_not_understand_is_treated_as_a_possible_restriction():
+    old = {"type": "object"}
+    new = {"type": "object", "patternProperties": {"^x": {"type": "string"}}}
+    assert any("patternProperties" in p for p in D.schema_problems(old, new))
+    assert D.schema_problems(old, {**old, "description": "words", "title": "t"}) == []
+
+
+def test_const_tells_true_from_one():
+    assert D.schema_problems({"const": True}, {"const": 1})
+
+
+def test_a_dropped_or_emptied_output_schema_is_an_output_break():
+    def out(schema):
+        t = tool()
+        if schema is not None:
+            t["outputSchema"] = schema
+        return snap(tools=[t])
+
+    typed = out({"type": "string"})
+    assert D.classify(typed, out(None), "ignores").kind == "hard"
+    assert D.classify(typed, out({}), "ignores").kind == "hard"
+
+
+def test_an_output_field_that_stops_being_required_is_an_output_break():
+    def out(required):
+        t = tool()
+        t["outputSchema"] = _obj({"a": {"type": "string"}}, required)
+        return snap(tools=[t])
+
+    assert D.classify(out(["a"]), out([]), "ignores").kind == "hard"
+    assert D.classify(out([]), out(["a"]), "ignores").kind == "soft"
+
+
+def test_a_new_optional_prompt_argument_is_listed_as_additive():
+    old = snap(prompts=[{"name": "p", "arguments": []}])
+    new = snap(prompts=[{"name": "p", "arguments": [{"name": "x", "required": False}]}])
+    v = D.classify(old, new, "ignores")
+    assert v.kind == "soft" and v.rung == 3
+    assert any("prompt p" in r and "x" in r for r in v.reasons)
+
+
+def test_classify_surfaces_keeps_every_surfaces_pending_and_reasons():
+    old = {"all": snap(), "core": snap()}
+    new = {
+        "all": snap(tools=[tool(), tool("ddflow_a")]),
+        "core": snap(tools=[tool(), tool("ddflow_b")]),
+    }
+    v = D.classify_surfaces(old, new, "ignores")
+    assert v.pending == ("all: tool ddflow_a", "core: tool ddflow_b")
+    assert any(r.startswith("all:") for r in v.reasons) and any(
+        r.startswith("core:") for r in v.reasons
+    )
+
+
+def test_loosening_additional_properties_is_compatible_and_tightening_is_not():
+    closed = {
+        "type": "object",
+        "properties": {"a": {"type": "string"}},
+        "additionalProperties": False,
+    }
+    open_ = {
+        "type": "object",
+        "properties": {"a": {"type": "string"}},
+        "additionalProperties": True,
+    }
+    assert D.schema_problems(closed, open_) == []
+    assert D.schema_problems(open_, closed)
