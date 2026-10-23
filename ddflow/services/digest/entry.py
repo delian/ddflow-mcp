@@ -155,6 +155,10 @@ def make(  # noqa: PLR0913 -- an entry has this many facets; callers name each
     since_s = seconds(since)
     age = max(0.0, now - since_s) if since_s else 0.0
     blocked = tuple(sorted(dict.fromkeys(blocks)))
+    subject = next(iter(blocked), key)  # what a template's <id>, <task> or <item> stands for
+    cmd = command or row.command
+    for ph in ("<id>", "<task>", "<item>", "<phase>"):
+        cmd = cmd.replace(ph, subject)
     chat = row.chat.replace("{id}", chat_ref or f"{kind}:{key}")
     return Entry(
         id=f"{kind}:{key}",
@@ -166,7 +170,7 @@ def make(  # noqa: PLR0913 -- an entry has this many facets; callers name each
         since_s=since_s,
         default=default,
         answer=answer or row.answer,
-        command=command or row.command,
+        command=cmd,
         chat=chat,
         blocks=blocked,
         agents=tuple(sorted(dict.fromkeys(agents))),
