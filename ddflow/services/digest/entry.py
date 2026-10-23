@@ -160,6 +160,9 @@ def make(  # noqa: PLR0913 -- an entry has this many facets; callers name each
     for ph in ("<id>", "<task>", "<item>", "<phase>"):
         cmd = cmd.replace(ph, subject)
     chat = row.chat.replace("{id}", chat_ref or f"{kind}:{key}")
+    severity = severity_at(kind, age, cfg)
+    if not since_s and rank(severity) < rank("needs"):
+        severity = "needs"  # an unreadable time is never shown as 'just now': it is unknown, so it is visible
     return Entry(
         id=f"{kind}:{key}",
         kind=kind,
@@ -175,7 +178,7 @@ def make(  # noqa: PLR0913 -- an entry has this many facets; callers name each
         blocks=blocked,
         agents=tuple(sorted(dict.fromkeys(agents))),
         impact=len(dependants(st, blocked)) + len(blocked),
-        severity=severity_at(kind, age, cfg),
+        severity=severity,
         age_s=age,
         detail=detail or {},
     )

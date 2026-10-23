@@ -19,7 +19,7 @@ _KIND_OF_VERB = {v: s.kind for s in SOURCES for v in s.sites}
 
 
 def kind_of(row: dict[str, Any]) -> str:
-    if not row["verb"] or row.get("type") == "question":
+    if row.get("type") == "question":
         return "question"
     return _KIND_OF_VERB.get(row["verb"], "approval")
 
@@ -43,8 +43,20 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
         if kind_of(row) != kind:
             continue
         item = _item_of(row["subject"])
-        verb = row["verb"] if kind != "question" else ""
+        is_q = kind == "question"
+        verb = row["verb"]
         who = row["requested_by"]
+        rid = quote(row["id"])
+        what = (
+            f"{who} asks (quoted, unchecked): {N.clip(row.get('text', ''), cfg)}"
+            if is_q
+            else f"{who} asks for `{verb or 'an approval'}`" + (f" on {item}" if item else "")
+        )
+        why = (
+            "an agent asked and no one has answered"
+            if is_q
+            else f"`{verb or 'this'}` is a person-only act (tier {row['tier'] or '?'}); an agent cannot do it"
+        )
         out.append(
             N.make(
                 st,
@@ -52,27 +64,19 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 now,
                 kind,
                 row["id"],
-                what=(
-                    f"{who} asks for `{verb}`" + (f" on {item}" if item else "")
-                    if verb
-                    else f"{who} asks (quoted, unchecked): {N.clip(row.get('text', ''), cfg)}"
-                ),
-                why=(
-                    f"`{verb}` is a person-only act (tier {row['tier'] or '?'}); an agent cannot do it"
-                    if verb
-                    else "an agent asked and no one has answered"
-                ),
+                what=what,
+                why=why,
                 since=row["requested_at"],
-                default=SAFE_DEFAULT if verb else _question_default(row),
-                command=f"ddflow approvals {'approve' if verb else 'show'} {quote(row['id'])}",
-                answer=f"approve or deny request {quote(row['id'])}" if verb else "",
+                default=_question_default(row) if is_q else SAFE_DEFAULT,
+                command=f"ddflow approvals {'show' if is_q else 'approve'} {rid}",
+                answer="" if is_q else f"approve or deny request {rid}",
                 blocks=[item] if item in st.items else [],
                 agents=[who],
-                chat_ref=row["id"] if verb else "",
+                chat_ref="" if is_q else row["id"],
                 detail={
                     "ask": row["id"],
                     "verb": verb,
-                    **({} if verb else {"question": N.clip(row.get("text", ""), cfg)}),
+                    **({"question": N.clip(row.get("text", ""), cfg)} if is_q else {}),
                 },
             )
         )

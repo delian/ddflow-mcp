@@ -57,11 +57,6 @@ class DigestConfig:
         doc="How long a red main may wait before its queue entry is 'urgent' (it starts at 'needs'). A duration such as 6h or 90m.",
         check=_age_problem,
     )
-    shown: int = knob(
-        20,
-        doc="How many queue entries `ddflow digest` prints in full before it counts the rest (`--json` always carries every entry). 0 prints none.",
-        check=int_at_least(0),
-    )
     text_chars: int = knob(
         400,
         doc="How many characters of a recorded text (an agent's question, a DECIDE task's default line, a failed check) a queue entry quotes before it cuts it. Quoted text has secrets masked first. 0 quotes none.",

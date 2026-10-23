@@ -81,6 +81,7 @@ def test_an_unlisted_verb_is_a_plain_approval_and_a_question_has_no_verb():
     st = State()
     ask(st, "Q1", 1, verb="grant.add", subject="cmd:grant.add:X:")
     ask(st, "Q2", 1)
+    asks_of(st)["Q2"]["type"] = "question"
     kinds = sorted(e.kind for e in build(st).entries)
     assert kinds == ["approval", "question"]
 
@@ -315,6 +316,7 @@ def test_a_credential_entry_never_copies_the_gate_reason():
 def test_a_question_shows_its_quoted_text_and_how_to_answer():
     st = State()
     ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["type"] = "question"
     asks_of(st)["Q9"]["text"] = "ship it\nnow?"
     (e,) = build(st).entries
     assert (
@@ -347,6 +349,7 @@ def test_an_abandoned_item_is_not_awaiting_a_spot_check():
 def test_quoted_text_is_masked_and_cut_by_the_knob():
     st = State()
     ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["type"] = "question"
     asks_of(st)["Q9"]["text"] = (
         "deploy with token ghp_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8 " + "x" * 600
     )
@@ -400,6 +403,7 @@ def test_a_decide_task_counts_from_when_it_became_askable():
 def test_a_question_that_quotes_a_key_is_masked():
     st = State()
     ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["type"] = "question"
     asks_of(st)["Q9"]["text"] = "KIMI_API_KEY=sk-" + "a1b2c3d4e5f6g7h8i9j0k1l2 expired, what now?"
     (e,) = build(st).entries
     assert "a1b2c3d4" not in repr(e.as_dict())
@@ -452,3 +456,34 @@ def test_gaps_are_missing_facts_and_notes_are_standing_remarks():
     q = build(State(), facts=Facts(health=()))
     assert not any(g.startswith("lease") for g in q.gaps)
     assert q.notes and all("file" in n for n in q.notes)
+
+
+def test_a_verbless_approval_is_an_approval_not_a_question():
+    st = State()
+    ask(st, "Q1", 1)
+    (e,) = build(st).entries
+    assert e.kind == "approval" and e.default.startswith("deny") and "show" not in e.command
+    assert e.command == "ddflow approvals approve Q1"
+
+
+@pytest.mark.parametrize(
+    ("reason", "listed"),
+    [
+        ("token limit reached", False),
+        ("invalid token for reviewer", True),
+        ("HTTP 401", True),
+        ("api key missing", True),
+    ],
+)
+def test_only_credential_wording_is_a_credential(reason, listed):
+    st = State()
+    it = item(st, "T")
+    it.gates["critic"] = GateRecord(gate="critic", outcome="unavailable", at=at(1), reason=reason)
+    assert bool([e for e in build(st).entries if e.kind == "credential"]) is listed
+
+
+def test_an_unreadable_since_is_visible_not_just_now():
+    st = State()
+    st.decisions["D-x"] = Decision(id="D-x", title="t", status="proposed", at="not a time")
+    (e,) = build(st).entries
+    assert e.age_s == 0 and e.severity == "needs"
