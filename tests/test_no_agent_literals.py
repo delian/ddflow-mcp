@@ -49,6 +49,15 @@ BASELINE: dict[str, tuple[int, str]] = {
         "the reference checker's table of known agent paths; read by `doctor`",
     ),
     "ddflow/services/review.py": (3, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/config_sections/approvals.py": (
+        2,
+        "the default transcript root ~/.claude/projects and its doc: a path the claude "
+        "harness writes, not a descriptor read (RA-channel-harness)",
+    ),
+    "ddflow/services/leanagents.py": (
+        1,
+        "HARNESS = 'claude': the lean agent definitions are a claude-only template set",
+    ),
     "ddflow/api/setup.py": (2, "the --claude/--gemini flag parameters of `hooks`"),
     "ddflow/services/adopt.py": (2, "the CLAUDE.md pointer written when claude is adopted"),
     "ddflow/services/hookwriters/__init__.py": (2, "the descriptor styles claude and gemini"),
@@ -148,3 +157,7 @@ def test_the_detector_can_fail():
     assert sites('D = ".claude"\n', ids, roots) == [1]
     assert sites('D = "x/.claude"\n', ids, roots) == []  # a path component, not a root
     assert sites('"""claude"""\ndef f():\n    """.claude/x"""\n', ids, roots) == []
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125, B630ffef2d8): it scans the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True

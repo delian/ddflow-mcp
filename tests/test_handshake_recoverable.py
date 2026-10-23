@@ -47,7 +47,7 @@ def test_clean_trees_are_not_announced_as_work_to_salvage(adopted, monkeypatch):
         [_rec(f"T{i}", HARNESS, False, adopted=True) for i in range(64)],
     )
     assert _instruction_vars(adopted)["recoverable"] == 0
-    assert "Waiting for you right now" not in _instructions(adopted)
+    assert "crashed worktree(s)" not in _instructions(adopted)
 
 
 def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkeypatch):
@@ -65,5 +65,5 @@ def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkey
     )
     assert _instruction_vars(adopted)["recoverable"] == 3
     text = _instructions(adopted)
-    assert "Waiting for you right now" in text
-    assert "3 worktree(s)" in text
+    assert "crashed worktree(s) may hold work" in text
+    assert "3 crashed worktree(s)" in text
