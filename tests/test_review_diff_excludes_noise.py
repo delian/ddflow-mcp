@@ -103,8 +103,25 @@ def test_a_file_replaced_by_an_unregistered_gitlink_is_dropped(tmp_path):
     assert "a/x" not in out and "ok.py" in out, out
 
 
-def test_a_section_with_an_unreadable_quoted_path_is_kept():
+def test_a_git_quoted_path_is_decoded_before_it_is_judged():
     from ddflow.services.review_noise import without_stray_gitlinks
 
-    diff = 'diff --git "a/caf\\303\\251" "b/caf\\303\\251"\nnew file mode 160000\n+Subproject commit b\n'
-    assert without_stray_gitlinks(diff, set()) == diff
+    quoted = (
+        'diff --git "a/caf\\303\\251" "b/caf\\303\\251"\n'
+        "new file mode 160000\n+Subproject commit b\n"
+    )
+    assert without_stray_gitlinks(quoted, set()) == "", "an unregistered nested repo is dropped"
+    assert without_stray_gitlinks(quoted, {"caf\u00e9"}) == quoted, "a registered one is kept"
+
+
+def test_a_trailing_comment_in_gitmodules_is_not_part_of_the_path():
+    from ddflow.services.review_noise import _paths_of
+
+    assert _paths_of('[submodule "l"]\n\tpath = lib # local copy\n\turl = x\n') == {"lib"}
+
+
+def test_a_single_commit_review_leaves_the_noise_out_too(tmp_path):
+    r, _head, tip = _branch_with_noise(tmp_path)
+    diff, _how = RV.commit_diff(r, git(r, "rev-parse", tip))
+    assert "a = 2" in diff
+    assert ".ddflow/events" not in diff and "tmp.cDDAI7SLqb" not in diff, diff

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..infra import worktree as W
 
-_HEADER = re.compile(r'^diff --git a/(?P<path>[^"]+?) b/(?P=path)$')
+_HEADER = re.compile(r'^diff --git (?:"a/(?P<q>(?:[^"\\]|\\.)*)"|a/(?P<p>.+?)) (?:"b/.*"|b/.*)$')
 _GITLINK_MODE = re.compile(
     r"^(?:(?:new file|deleted file|old|new) mode 160000|index \S+ 160000)$", re.M
 )
@@ -21,11 +21,22 @@ _HEADER_LINES = 8
 
 
 def _paths_of(text: str) -> set[str]:
-    return {
-        ln.split("=", 1)[1].strip()
-        for ln in text.splitlines()
-        if ln.strip().startswith("path") and "=" in ln
-    }
+    """The `path = ...` values of a `.gitmodules` text (a trailing # or ; comment dropped)."""
+    out = set()
+    for ln in text.splitlines():
+        if ln.strip().startswith("path") and "=" in ln:
+            value = re.split(r"\s[#;]", ln.split("=", 1)[1])[0].strip().strip('"')
+            if value:
+                out.add(value)
+    return out
+
+
+def _unquote(path: str) -> str:
+    """A path git C-quoted (`core.quotePath`: octal escapes for non-ASCII bytes)."""
+    try:
+        return path.encode().decode("unicode_escape").encode("latin-1").decode("utf-8")
+    except (UnicodeError, ValueError):
+        return path
 
 
 def registered_submodules(repo: Path, *refs: str) -> set[str]:
@@ -44,7 +55,7 @@ def registered_submodules(repo: Path, *refs: str) -> set[str]:
 
 def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
     """``diff`` without the file sections that change a gitlink at a path not in ``registered``.
-    A section whose path cannot be read (git quotes unusual names) is kept."""
+    A section whose header cannot be read is kept."""
     if "160000" not in diff:
         return diff
     sections: list[list[str]] = []
@@ -57,6 +68,9 @@ def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
     def stray(sec: list[str]) -> bool:
         head = "".join(sec[:_HEADER_LINES])
         m = _HEADER.match(sec[0].rstrip("\n"))
-        return bool(m) and bool(_GITLINK_MODE.search(head)) and m["path"] not in registered
+        if not m or not _GITLINK_MODE.search(head):
+            return False
+        path = _unquote(m["q"]) if m["q"] is not None else m["p"]
+        return path not in registered
 
     return "".join("".join(sec) for sec in sections if not stray(sec))

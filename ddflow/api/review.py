@@ -97,8 +97,9 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
                 f"commit {full[:12]}'s parent {base[:12]} is not in this clone (shallow?); "
                 f"its change cannot be computed here"
             )
-    d = W.git(repo, "diff", "--no-color", base, full)
-    return (d.out + "\n") if d.ok and d.out else "", f"commit {full[:12]} vs its first parent"
+    d = W.git(repo, "diff", "--no-color", base, full, *_NOISE_PATHSPEC)
+    out = without_stray_gitlinks(d.out, registered_submodules(repo, base, full)) if d.ok else ""
+    return (out + "\n") if out else "", f"commit {full[:12]} vs its first parent"
 
 
 #: How many untracked files a review names before saying "... (N in all)".
