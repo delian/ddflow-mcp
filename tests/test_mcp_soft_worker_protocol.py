@@ -549,3 +549,24 @@ def test_a_reply_nested_beyond_the_recursion_limit_is_an_error_frame_too():
 
     out = run_worker([WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(1, {"id": 1}, CONN)], deep)
     assert any(f["t"] == "error" and f["code"] == "unencodable" for f in out)
+
+
+def test_a_deeply_nested_line_is_a_bad_frame_not_a_crash():
+    with pytest.raises(WP.ProtocolError) as e:
+        WP.decode("[" * 200_000 + "1" + "]" * 200_000 + "\n")
+    assert e.value.code == "bad_frame"
+
+
+def test_drained_and_bye_are_adjacent_even_when_a_bad_frame_arrives_meanwhile():
+    from ddflow.surfaces import worker
+
+    for _ in range(30):
+        out = io.StringIO()
+        lines = [
+            WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)),
+            WP.encode(WP.drain()),
+            "not-json\n",
+        ]
+        worker.run(Path("."), iter(lines), out, handler=echo)
+        kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
+        assert kinds[-2:] == ["drained", "bye"], kinds

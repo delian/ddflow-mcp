@@ -78,7 +78,7 @@ class _Run:
         self.handler = handler or server_handler(repo)
         self.digest = digest
         self.out = out
-        self.wlock = threading.Lock()
+        self.wlock = threading.RLock()
         self.cv = threading.Condition()
         self.inflight = 0
         self.draining = False
@@ -113,7 +113,7 @@ class _Run:
             if self.said_bye:
                 return
             self.said_bye = True
-        self.write(WP.bye(reason))
+            self.write(WP.bye(reason))
 
     def serve(self, rid: int, conn: dict[str, Any], msg: dict[str, Any]) -> None:
         try:
@@ -165,8 +165,9 @@ class _Run:
 
         def finish() -> None:
             self.wait_idle()
-            self.write(WP.drained())
-            self.bye("drained")
+            with self.wlock:  # nothing may come between `drained` and `bye`
+                self.write(WP.drained())
+                self.bye("drained")
             self.done.set()
 
         t = threading.Thread(target=finish, name="ddflow-worker-drain", daemon=True)

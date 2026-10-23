@@ -80,7 +80,7 @@ def decode(line: str) -> dict[str, Any] | None:
         return None
     try:
         frame = json.loads(line)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:  # a malformed or absurdly nested line
         raise ProtocolError("bad_frame", f"not JSON: {exc}") from exc
     if not isinstance(frame, dict) or not isinstance(frame.get("t"), str):
         raise ProtocolError("bad_frame", "a frame is a JSON object with a string `t`")
