@@ -39,6 +39,7 @@ from typing import Any
 
 from ..config import Config
 from ..config_sections.upgrade import UPGRADE_BACKUPS
+from ..core.digest import of_obj
 from ..core.events import UNSTAMPED, UPGRADE_APPLIED_KIND, stamp_text
 from ..core.model import State
 from ..infra import tomlcfg as TC
@@ -600,7 +601,10 @@ def _record(
             "confirmed": reasons,
             "written": wrote or {},
             "config_changes": [
-                {k: i[k] for k in ("key", "change", "old", "new")}
+                {
+                    **{k: i[k] for k in ("key", "change", "old", "new")},
+                    "digest": of_obj(i.get("new")),
+                }
                 for i in todo
                 if i["category"] == "config" and i["id"] in ok
             ],
