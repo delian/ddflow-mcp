@@ -14,6 +14,8 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import functools
+import inspect
 import json
 import re
 import secrets
@@ -1833,6 +1835,26 @@ def _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reas
     return O.refused("review", why, id=item, gate=gate) if why else None
 
 
+def _ends_on_signal(fn):
+    """`fn` (a `review`) with SIGTERM/SIGHUP -- the usual `timeout` -- turned into a said and
+    recorded `unavailable` (`_terminated`) instead of a silent death (Bed9d75dd1c)."""
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def wrapper(*a, **kw):
+        bound = sig.bind(*a, **kw)
+        bound.apply_defaults()
+        started_at = clock.now_iso()
+        try:
+            with RUN.terminating():
+                return fn(*a, **kw)
+        except RUN.RunTerminated as stop:
+            return _terminated(dict(bound.arguments), stop.signame, started_at)
+
+    return wrapper
+
+
+@_ends_on_signal
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -1862,12 +1884,15 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     One gate is `_review_gate`, whose docstring has the rest.
     """
     args = dict(locals())  # first: every later local would leak into the kwargs
-    started_at = clock.now_iso()
-    try:
-        with RUN.terminating():
-            return _review_checked(args)
-    except RUN.RunTerminated as stop:
-        return _terminated(args, stop.signame, started_at)
+    if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
+        return refused
+    refused = _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reason)
+    if refused is not None:  # a refusal is falsy
+        return refused
+    asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
+    if len(asked) > 1:
+        return _review_gates(asked, args)
+    return _review_gate(**{**args, "gate": asked[0] if asked else gate})
 
 
 def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcome:
@@ -1907,22 +1932,6 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
         findings=[],
         text=reason,
     )
-
-
-def _review_checked(args: dict[str, Any]) -> O.Outcome:
-    repo, item, agent, gate = args["repo"], args["item"], args["agent"], args["gate"]
-    if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
-        return refused
-    refused = _misplaced(
-        repo, item, agent, gate, args["branch"], args["commit"], args["called_from"],
-        args["force"], args["reason"],
-    )  # fmt: skip
-    if refused is not None:  # a refusal is falsy
-        return refused
-    asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
-    if len(asked) > 1:
-        return _review_gates(asked, args)
-    return _review_gate(**{**args, "gate": asked[0] if asked else gate})
 
 
 #: What each review gate asks of a reviewer, for a combined review's intent. A gate with
