@@ -29,7 +29,13 @@ def effective_budget(session, target: str = "") -> int:
     value, folded in when the config is read) and the type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
     out; a type above the global does not raise it (D-session-start-budget). 0 when nothing is set."""
     table = session.context_budget or {}
-    levels = [session.context_budget_tokens, table.get(target, 0) if target else 0]
+    # A `global` key never survives the config loader (it becomes `context_budget_tokens`), but a
+    # session object built by hand may still carry one: it counts, as the same ceiling.
+    levels = [
+        session.context_budget_tokens,
+        table.get("global", 0),
+        table.get(target, 0) if target else 0,
+    ]
     return min((v for v in levels if v > 0), default=0)
 
 

@@ -56,7 +56,17 @@ def test_the_tables_global_key_is_the_same_value_as_the_global_knob(repo):
     local = repo / ".ddflow" / "local"
     local.mkdir(exist_ok=True)
     (local / "config.toml").write_text("[session]\ncontext_budget_tokens = 12000\n")
-    assert Config.load(repo).session.context_budget_tokens == 12000
+    later = Config.load(repo).session
+    assert later.context_budget_tokens == 12000
+    assert later.context_budget == {"claude": 25000}, "a scalar in a later layer keeps the table"
+    assert SC.effective_budget(later, "claude") == 12000
+    # a hand-built session carrying a `global` key still counts it, as the same ceiling
+    assert (
+        SC.effective_budget(
+            _session(context_budget_tokens=0, context_budget={"global": 30000}), "x"
+        )
+        == 30000
+    )
 
 
 def test_a_type_at_zero_lifts_nothing_and_leaves_the_global_in_force():
