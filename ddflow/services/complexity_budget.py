@@ -7,6 +7,10 @@ functions of the staged ``.py`` files against HEAD and names those whose complex
 ``[enforce].complexity_warn_at`` or more, while the agent can still fix it. Advisory: it
 never refuses a commit. radon is a dev dependency; without it nothing is said (and nothing
 is claimed clean).
+
+Accepted limitation (operator-reviewed): a function name defined more than once in one file
+(under `if`/`else`) is paired with HEAD by order (`f`, `f#2`). When a definition is added or
+removed the pairing can be wrong, so the note may miss a rise or add a warning. Advisory only.
 """
 
 from __future__ import annotations
