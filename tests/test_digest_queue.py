@@ -220,14 +220,81 @@ def test_entries_serialize_without_loss():
     } <= set(d)
 
 
-@pytest.mark.skipif(not Path(".ddflow/events").exists(), reason="no event log in this checkout")
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.skipif(
+    not (ROOT / ".ddflow" / "events").exists(), reason="no event log in this checkout"
+)
 def test_replay_over_the_real_log_is_sane_and_deterministic():
     from ddflow.infra.log import EventLog
 
-    root = Path(__file__).resolve().parents[1]
-    st = fold(EventLog(root, log_cfg=Config.load(root).log).read_all(), strict=False)
+    st = fold(EventLog(ROOT, log_cfg=Config.load(ROOT).log).read_all(), strict=False)
     a = Q.build(st, Config(), NOW + 1e6)
     b = Q.build(st, Config(), NOW + 1e6)
     assert [e.as_dict() for e in a.entries] == [e.as_dict() for e in b.entries]
     assert len({e.id for e in a.entries}) == len(a.entries)
     assert all(e.severity in S.SEVERITIES for e in a.entries)
+    # counts agree with the log, so an empty queue over a busy log cannot pass
+    from ddflow.services.ask import engine as E
+    from ddflow.services.digest import collect_asks as CA
+
+    when = NOW + 1e6
+    waiting = E.pending(st, when)
+    by_ask = sum(
+        e.kind in {CA.kind_of(r) for r in waiting} and "ask" in e.detail for e in a.entries
+    )
+    assert by_ask == len(waiting)
+    open_decides = [
+        i for i in st.items.values()
+        if i.kind == "doc" and i.state == OPEN and i.title.upper().startswith("DECIDE")
+        and all(st.items[n].state == DONE for n in i.needs if n in st.items)
+    ]  # fmt: skip
+    assert sum(e.kind == "decide" for e in a.entries) == len(open_decides)
+    assert sum(e.kind == "decision" for e in a.entries) == sum(
+        d.status == "proposed" for d in st.decisions.values()
+    )
+
+
+def test_an_info_kind_starts_below_nudge_and_still_rises():
+    cfg = Config()
+    assert severity_at("phase_close", 0, cfg) == "info"
+    assert severity_at("phase_close", 1 * H, cfg) == "needs"
+    assert severity_at("phase_close", 24 * H, cfg) == "urgent"
+
+
+def test_a_credential_entry_never_copies_the_gate_reason():
+    st = State()
+    it = item(st, "T")
+    it.gates["critic"] = GateRecord(
+        gate="critic", outcome="unavailable", at=at(1), reason="invalid api key: sk-abc123"
+    )
+    (e,) = build(st).entries
+    assert "sk-abc123" not in repr(e.as_dict())
+
+
+def test_a_question_shows_its_quoted_text_and_how_to_answer():
+    st = State()
+    ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["text"] = "ship it\nnow?"
+    (e,) = build(st).entries
+    assert (
+        e.kind == "question" and "ship it now?" in e.what and e.detail["question"] == "ship it now?"
+    )
+    assert e.command == "ddflow approvals approve Q9" and "approvals ask Q9" in e.chat
+
+
+def test_an_abandoned_item_is_not_awaiting_a_spot_check():
+    from ddflow.core.model import ABANDONED
+
+    st = State()
+    it = item(st, "T", state=ABANDONED)
+    it.gates["critic"] = GateRecord(
+        gate="critic",
+        outcome="passed",
+        at=at(1),
+        evidence={"passed_on_refutation": {"refuted": 1, "confirmed": 0, "rounds": 1}},
+    )
+    assert build(st).entries == ()
+    it.state = OPEN
+    assert [e.kind for e in build(st).entries] == ["gate_spotcheck"]  # the same gate, on live work

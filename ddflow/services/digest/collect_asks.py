@@ -31,6 +31,15 @@ def _item_of(subject: str) -> str:
     return parts[2].replace("%3A", ":").replace("%25", "%")
 
 
+QUOTE_CHARS = 400
+
+
+def _quote(row: dict[str, Any]) -> str:
+    """An agent's own words, shown only for a question (there is nothing else to show), cut and
+    on one line; a reader is told they are quoted."""
+    return " ".join(str(row.get("text", "")).split())[:QUOTE_CHARS]
+
+
 def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
     out = []
     for row in E.pending(st, now):
@@ -49,7 +58,7 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 what=(
                     f"{who} asks for `{verb}`" + (f" on {item}" if item else "")
                     if verb
-                    else f"{who} asks a question"
+                    else f"{who} asks (quoted, unchecked): {_quote(row)}"
                 ),
                 why=(
                     f"`{verb}` is a person-only act (tier {row['tier'] or '?'}); an agent cannot do it"
@@ -58,12 +67,16 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 ),
                 since=row["requested_at"],
                 default=SAFE_DEFAULT,
-                command=f"ddflow approvals approve {row['id']}" if verb else "",
-                answer=f"approve or deny request {row['id']}" if verb else "",
+                command=f"ddflow approvals approve {row['id']}",
+                answer=f"approve or deny request {row['id']}",
                 blocks=[item] if item in st.items else [],
                 agents=[who],
-                chat_ref=row["id"] if verb else "",
-                detail={"ask": row["id"], "verb": verb},
+                chat_ref=row["id"],
+                detail={
+                    "ask": row["id"],
+                    "verb": verb,
+                    **({} if verb else {"question": _quote(row)}),
+                },
             )
         )
     return out
