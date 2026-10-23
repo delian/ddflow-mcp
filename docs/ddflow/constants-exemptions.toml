@@ -141,6 +141,7 @@
 "ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = "worktree.stash_retry_pause_s"
 
 [exempt]
+"ddflow/mcpshim/clients.py:MAX_AGE_DAYS" = "how long an unverified `honours` row of the client table is trusted: a window on the data's freshness, passed as an argument by callers that want another, not a user tunable"
 "ddflow/mcpshim/probe_server.py:DEFAULT_DELAY_S" = "the default of the probe server's own --delay argument (how long delaybump waits before notifying); a test fixture's command-line default, set per run, outside ddflow's config"
 "ddflow/mcpshim/probe_server.py:SETTLE_S" = "a 20 ms pause that lets already-pipelined input reach the probe's log before it replies; a race mitigation inside a test fixture, not a tuning choice"
 "ddflow/services/suitelock.py:QUEUE_POLL_S" = "the sweep and heartbeat period of a queued suite waiter, the same kind of constant as the slot lock's own poll (slots.POLL_S); the wait it bounds is [ci].suite_wait_s"
