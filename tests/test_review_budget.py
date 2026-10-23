@@ -301,7 +301,7 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
     shipped = {
         "ddflow/templates/drivers/implement-phase.md": "max_rounds",
         "ddflow/templates/prompts/help/gates.md": "max_rounds",
-        "ddflow/templates/prompts/mcp_instructions.md": "max_rounds",
+        "ddflow/templates/prompts/help/manual.md": "max_rounds",
         "README.md": "review.max_rounds",
     }
     for rel, needle in shipped.items():

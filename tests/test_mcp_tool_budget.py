@@ -114,10 +114,10 @@ def test_shared_parameter_descriptions_are_not_repeated_in_full():
 
 def test_the_trimmed_text_still_has_a_home():
     """Shortening must not delete the semantics: `as_agent` is explained on
-    ddflow_identify, and the relation values in the handshake instructions."""
+    ddflow_identify, and the relation values in the manual (the handshake carries a charter)."""
     ident = TOOLS["ddflow_identify"]["description"]
     assert "as_agent" in ident and "--agent" in ident
-    template = Path(mcp_module.__file__).parent.parent / "templates/prompts/mcp_instructions.md"
+    template = Path(mcp_module.__file__).parent.parent / "templates/prompts/help/manual.md"
     text = template.read_text()
     for value in ("extends:ID", "duplicate_of:ID", "related:ID"):
         assert value in text, value
