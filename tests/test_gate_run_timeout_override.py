@@ -164,3 +164,18 @@ def test_the_shell_idiom_for_a_single_quote_inside_single_quotes_is_one_word():
     )
     out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
     assert out.command == "ddflow ci run --timeout 30 --reason 'it'\\''s --timeout 5'"
+
+
+def test_a_quoted_number_after_timeout_is_still_the_timeout():
+    for spelling in ("--timeout='5'", "--timeout '5'", '--timeout="5"'):
+        gate = GateDef(id="ci", title="ci", command=f"ddflow ci run {spelling}", timeout_s=1)
+        out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+        assert out.command == "ddflow ci run --timeout 30", spelling
+
+
+def test_ci_run_cannot_take_an_option_looking_value_so_nothing_is_swallowed(repo: Path):
+    """The rewrite has no option-level parsing: it relies on `ddflow ci run` refusing a value that
+    is itself `--timeout=N` (argparse: 'expected one argument'), so no valid command has one."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "ci", "run", "--base", "--timeout=5")
+    assert code == 2 and "expected one argument" in out + err
