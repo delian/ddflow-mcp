@@ -23,3 +23,4 @@ def test_force_still_records_over_an_unmeasurable_range(repo):
     assert run_cli(repo, "config", "worktree.base_ref", "no-such-ref", agent="a1")[0] == 0
     code, out, err = _implement(repo, "--force", "--reason", "base ref is being renamed")
     assert code == 0, out + err
+    assert _outcome(repo) == "passed"
