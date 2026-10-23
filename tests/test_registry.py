@@ -330,3 +330,7 @@ def test_the_ratchet_sees_a_hand_rolled_idiom(tmp_path):
     tree = ast.parse("_T = Registry()\n\ndef register(x):\n    return _T.register(x)\n")
     (fn,) = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
     assert not _mutates(fn, _module_names(tree))
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125, B630ffef2d8): it scans the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True
