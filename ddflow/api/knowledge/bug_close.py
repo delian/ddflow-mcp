@@ -153,15 +153,6 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     landing, why = _landing_for(repo, cfg, landed, tests, verify_regression)
     if why:
         return O.refused("bug.fixed", why, id=item)
-    half = _half_node_ids(tests)
-    if half and verify_regression:
-        return O.refused(
-            "bug.fixed",
-            f"--regression-test: {'; '.join(repr(h) for h in half)} is not a pytest node id "
-            f"(`path/to/test_x.py::test_name`): the file or the test name is missing, so "
-            f"nothing could be checked to fail without the fix. Check for an unset variable.",
-            id=item,
-        )
     verified, verify_ev = _verify_regression(
         repo,
         cfg,
@@ -214,7 +205,14 @@ def _landing_for(
     """`_landing` of ``--landed`` (none given: no landing, no refusal), plus the rule that
     every named test must be a node id it can run on the two trees; ``(None, refusal)``."""
     if not landed.strip():
-        return None, ""
+        half = _half_node_ids(tests) if verify_regression else []
+        return None, (
+            f"--regression-test: {'; '.join(repr(h) for h in half)} is not a pytest node id "
+            f"(`path/to/test_x.py::test_name`): the file or the test name is missing, so "
+            f"nothing could be checked to fail without the fix. Check for an unset variable."
+            if half
+            else ""
+        )
     landing, why = _landing(repo, cfg, landed)
     if why:
         return None, f"--landed: {why}"
