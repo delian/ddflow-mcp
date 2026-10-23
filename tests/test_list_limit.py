@@ -132,3 +132,27 @@ def test_mcp_note_pages_a_record_list_and_never_says_offset_none():
 def test_research_add_refuses_a_list_only_offset(seeded, cli):
     code, _out, err = cli(seeded, "research", "--offset", "3")
     assert code != 0 and "--offset" in err
+
+
+def test_mcp_note_does_not_say_raise_limit_at_the_maximum_and_reads_the_constants():
+    """B-list-cap-hardcoded-and-search-note: a search already at its 200 maximum was told to
+    'raise limit'; the maxima in the note are the constants, not copies of them."""
+    from ddflow.api import surf_reporting as R
+    from ddflow.surfaces.mcp_bound import bound_list
+
+    at_max = {"truncated": True, "rows": [1], "shown": 1, "total": 999, "record_kind": "search"}
+    note = bound_list({**at_max, "limit": R.SEARCH_MAX_LIMIT}, {})[1]
+    assert "raise limit" not in note and "narrow the filters" in note
+    below = bound_list({**at_max, "limit": 20}, {})[1]
+    assert "raise limit" in below
+    assert f"{R.LIST_MAX_LIMIT}, a search {R.SEARCH_MAX_LIMIT}" in below
+
+
+def test_a_refused_list_echoes_the_clamped_limit_not_the_requested_one():
+    from ddflow.api import surf_reporting as R
+    from ddflow.api.viewers import empty_list
+
+    assert empty_list("task", 5000)["limit"] == R.LIST_MAX_LIMIT
+    assert empty_list("search", 5000)["limit"] == R.SEARCH_MAX_LIMIT
+    assert empty_list("task", 0)["limit"] == R.LIST_MAX_LIMIT
+    assert empty_list("task", 7)["limit"] == 7
