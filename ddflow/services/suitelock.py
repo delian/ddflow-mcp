@@ -214,8 +214,8 @@ def hold(
     directory = Path(directory) if directory else state_dir()
     limit = max(1, int(cfg.ci.max_concurrent_suites))
     wait = max(0.0, float(cfg.ci.suite_wait_s))
-    stale_s = float(getattr(cfg.ci, "suite_queue_stale_s", 120))
-    grace_s = float(getattr(cfg.ci, "suite_queue_grace_s", 120))
+    stale_s = float(cfg.ci.suite_queue_stale_s)
+    grace_s = float(cfg.ci.suite_queue_grace_s)
     say = say or _say_default
     queue = directory / QUEUE
     start = time.monotonic()
