@@ -701,6 +701,8 @@ def run(
 #: Quoted words stay whole; the first bare `--` ends the ci options; a bare `--timeout N` is the
 #: one to replace. (Quotes are scanned, not parsed: a command with an unbalanced quote keeps the
 #: remainder as written.)
+#: The one predicate for "a `ddflow ci run` line", used to decide and to insert.
+_CI_VERB = re.compile(r"^(\s*ddflow\s+ci\s+run)(?=\s|$)")
 _CI_WORDS = re.compile(
     r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*(?:"|$)|'[^']*(?:'|$)|\\[^\n])+)"""  # an unclosed quote runs on
     r"""|(?P<sep>(?:\s|\\\n)--(?=\s|$))|(?P<timeout>(?:\s|\\\n)--timeout(?:=|\s+)["']?[+-]?\d+["']?)""",
@@ -723,9 +725,7 @@ def _ci_command_with_timeout(command: str, timeout_s: int) -> str:
         m = None
     end = m.start() if m is not None else len(command)
     out.append(command[pos:end])
-    head = re.sub(
-        r"^(\s*ddflow\s+ci\s+run)(?=\s|$)", rf"\1 --timeout {timeout_s}", "".join(out), count=1
-    )
+    head = _CI_VERB.sub(rf"\1 --timeout {timeout_s}", "".join(out), count=1)
     return head + command[end:]
 
 
@@ -745,7 +745,7 @@ def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
             outcome="",
         )
     command = gdef.command or ""
-    if re.match(r"\s*ddflow\s+ci\s+run(\s|$)", command):
+    if _CI_VERB.match(command):
         command = _ci_command_with_timeout(command, timeout_s)
     return replace(gdef, timeout_s=timeout_s, command=command)
 
