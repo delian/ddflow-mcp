@@ -703,7 +703,7 @@ def run(
 #: remainder as written.)
 _CI_WORDS = re.compile(
     r"""(?P<quoted>(?:"(?:[^"\\]|\\.)*"|'[^']*'|\\.)+)"""
-    r"""|(?P<sep>\s--(?=\s|$))|(?P<timeout>\s--timeout(?:=|\s+)\d+)"""
+    r"""|(?P<sep>\s--(?=\s|$))|(?P<timeout>\s--timeout(?:=|\s+)["']?\d+["']?)"""
 )
 
 
