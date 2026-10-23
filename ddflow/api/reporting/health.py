@@ -31,7 +31,6 @@ from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
 from ...services import logblobs as LB
-from ...services import orphan_suites as ORPHANS
 from ...services import pins_merge as PM
 from ...services import rates as RT
 from ...services import repairs as RP
@@ -348,9 +347,6 @@ def doctor(
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
-    # A NOTE: a ci suite that outlived its ddflow owner holds the host's load for hours; named,
-    # never killed (the operator decides).
-    notes.extend(ORPHANS.doctor_notes(ORPHANS.orphaned_ci_suites()))
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
