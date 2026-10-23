@@ -343,7 +343,6 @@ ENTRIES: tuple[Entry, ...] = (
 )
 
 _BY_NAME = {n: e for e in ENTRIES for n in (e.key, *e.names)}
-_BY_KEY = {e.key: e for e in ENTRIES}
 
 
 def version_tuple(text: object) -> tuple[int, ...] | None:
