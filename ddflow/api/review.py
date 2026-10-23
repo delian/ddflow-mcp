@@ -290,7 +290,10 @@ def probe_problem(roots: list[Path], probe: str) -> str:
     # The resolver `bug fixed --regression-test` uses: every worktree, bases, parametrize ids.
     missing, _unchecked = _unresolved_tests(roots[-1], ",".join(nodes)) if nodes else ([], [])
     if missing:
-        return f"probe names {', '.join(missing)}, which no worktree defines"
+        return (
+            f"probe names {', '.join(dict.fromkeys(missing))}, which no worktree defines "
+            f"(looked in tests/ of every worktree)"
+        )
     prose = _RUN_ARG.sub(" ", _PY_PATH.sub(" ", probe))  # a file's own name is not a test name
     bare = set(_BARE_TEST.findall(prose))
     if bare:
@@ -301,8 +304,28 @@ def probe_problem(roots: list[Path], probe: str) -> str:
         ]
         for name in sorted(bare):
             if not any(_defined_anywhere(t, name) for t in texts):
-                return f"probe names test {name!r}, but no file under tests/ defines it"
+                return _bare_problem(roots, name)
     return ""
+
+
+def _where(roots: list[Path]) -> str:
+    return ", ".join(str(r / "tests") for r in roots)
+
+
+def _bare_problem(roots: list[Path], name: str) -> str:
+    """Why a bare ``name`` in a probe is not a test: the stem of a test FILE (name the file
+    and a test in it), or defined nowhere under ``tests/`` (B3c2f2fea11)."""
+    for r in roots:
+        for f in sorted((r / "tests").rglob(f"{name}.py")):
+            rel = f.relative_to(r).as_posix()
+            return (
+                f"probe mentions {name!r}, the stem of {rel}, which is a file and not a test: "
+                f"name a test in it as {rel}::<test name>"
+            )
+    return (
+        f"probe names test {name!r}, but no test or class of that name is defined under "
+        f"tests/ (looked in {_where(roots)})"
+    )
 
 
 def _probe_refusal(repo: Path, it, probe: str) -> str:
@@ -310,7 +333,9 @@ def _probe_refusal(repo: Path, it, probe: str) -> str:
     roots = [r for r in (W.load_path(repo, it.worktree) if it.worktree else None, repo) if r]
     problem = probe_problem(roots, probe)
     return (
-        f"{problem}: a probe must name an existing test or a command that was run"
+        f"{problem}: a probe must name an existing test -- a path::node id "
+        f"(tests/test_x.py::test_y) or a test name defined under tests/ -- or a command that was "
+        f"run (pytest -k expr, ./script)"
         if problem
         else ""
     )
@@ -444,6 +469,9 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
         moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
+        if moved:  # a test the round did not review is not new work (triage_ignore_globs)
+            seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
+            moved = [p for p in moved if not RP.ignorable(p, seen, ignore)]
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""

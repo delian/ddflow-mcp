@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.auto_request"
+new = 'true'
+why = "A refused gated command files its own approval request."
