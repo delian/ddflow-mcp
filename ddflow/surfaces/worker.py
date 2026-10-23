@@ -7,7 +7,8 @@ worker's log. Each `req` frame carries the connection's state, so the worker kee
 fresh `Server` is built for every request (about a millisecond, R-su-worker-stateless), which is
 what lets the shim replace the worker under a live connection.
 
-A request never goes unanswered: a handler that raises is answered with a JSON-RPC internal
+A request that reaches a live worker never goes unanswered (one that arrives after the final
+`bye` is dropped by design, see worker_protocol): a handler that raises is answered with a JSON-RPC internal
 error, a malformed frame with an `error` frame, and the worker carries on. `drain` finishes
 what runs, refuses anything new, then says `drained` and `bye`.
 """
