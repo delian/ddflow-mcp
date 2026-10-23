@@ -25,7 +25,7 @@ def _not_a_person(kind: str, who: str, what: str) -> O.Outcome:
 def _answer(
     repo: Path, ask_id: str, outcome: str, kind: str, *, digest: str, agent: str
 ) -> O.Outcome:
-    if why := AN.agent_marker(agent):  # before anything is read
+    if why := AN.why_not_a_person(agent):  # before anything is read
         return _not_a_person(kind, why, "answering an approval")
     log, cfg, st = _load(repo, agent)
     actor = AN.person(cfg, agent)
@@ -57,7 +57,7 @@ def approvals_deny(repo: Path, ask_id: str, *, digest: str = "", agent: str = ""
 
 
 def approvals_revoke(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
-    if why := AN.agent_marker(agent):  # before anything is read
+    if why := AN.why_not_a_person(agent):  # before anything is read
         return _not_a_person("approvals.revoke", why, "revoking an approval")
     log, cfg, _st = _load(repo, agent)
     actor = AN.person(cfg, agent)
@@ -72,11 +72,11 @@ def approvals_revoke(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
 
 def digest_chars(repo: Path, agent: str = "") -> int:
     """How many leading digest characters the person types back (`[approvals].min_digest_chars`)."""
-    if is_agent(agent):  # no read for an agent; the verbs will refuse it
+    if is_an_agents_call(agent):  # no read for an agent; the verbs will refuse it
         return 0
     return _load(repo, agent)[1].approvals.min_digest_chars
 
 
-def is_agent(agent: str) -> bool:
+def is_an_agents_call(agent: str) -> bool:
     """Is this call an agent's (so the answer verbs will refuse it)? No state is read."""
-    return bool(AN.agent_marker(agent))
+    return bool(AN.why_not_a_person(agent))

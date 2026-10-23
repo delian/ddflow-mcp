@@ -44,7 +44,9 @@ def cmd_approvals_request(a, c: Ctx) -> int:
 
 def _digest_or_ask(a, c: Ctx) -> str:
     """The digest the person read: --digest, or typed at a terminal after the text is shown."""
-    if a.digest or AA.is_agent(c.requested_agent):  # an agent is refused by the API, unread
+    if a.digest or AA.is_an_agents_call(
+        c.requested_agent
+    ):  # an agent is refused by the API, unread
         return a.digest or ""
     if sys.stdin.isatty() and not c.json:
         shown = A.approvals_show(c.repo, a.id, agent=c.requested_agent)
