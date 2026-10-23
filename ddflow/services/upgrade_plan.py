@@ -113,7 +113,7 @@ def settled_items(st: State) -> dict[str, list[Any]]:
             break  # this one moved the stamp up: what came before it is history
         news = {
             f"{c.get('change')}:{c.get('key')}": (
-                f"{DIGEST}{c['digest']}" if c.get("digest") else c.get("new")
+                (DIGEST, c["digest"]) if c.get("digest") else c.get("new")
             )
             for c in u.get("config_changes") or []
         }
@@ -125,7 +125,7 @@ def settled_items(st: State) -> dict[str, list[Any]]:
 
 #: A settled value recorded by its digest: the log redacts text, so a `~/.claude/projects` default
 #: is written as `[REDACTED:path]` and says nothing of which value it was (B81cf6e7dfd).
-DIGEST = "digest:"
+DIGEST = "digest"  # a settled entry is the tuple (DIGEST, digest): no JSON value equals it
 
 
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
@@ -139,7 +139,7 @@ def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> li
         if seen is None:
             return False
         new = i.get("new")
-        return not seen or new in seen or f"{DIGEST}{of_obj(new)}" in seen
+        return not seen or new in seen or (DIGEST, of_obj(new)) in seen
 
     return [i for i in items if not done(i)]
 
