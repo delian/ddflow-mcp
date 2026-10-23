@@ -234,3 +234,9 @@ def test_an_observation_of_unknown_means_nothing_was_learned():
     assert cap("opencode", observed="unknown") == "honours"
     assert cap("qwen-code-mcp-client", observed="unknown") == "ignores"
     assert cap("some-new-agent", observed="unknown") == "unknown"
+
+
+def test_a_prerelease_of_the_verified_floor_is_below_it():
+    assert cap("claude-code", "2.1.296-beta.1") == "unknown"
+    assert cap("claude-code", "2.1.297-beta.1") == "honours"
+    assert cap("kilo", "7.8.12-rc1") == "unknown"
