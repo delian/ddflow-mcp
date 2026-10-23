@@ -113,6 +113,53 @@ def test_ranking_is_severity_then_impact_then_age_and_is_deterministic():
     assert mid.impact == 3  # A itself, C and D behind it
 
 
+def test_equal_severity_ranks_by_impact_before_age():
+    st = State()
+    item(st, "A")
+    item(st, "B")
+    item(st, "C", needs=["B"])
+    ask(st, "Q-a", 0.5, verb="grant.add", subject="cmd:grant.add:A:")  # older, impact 1
+    ask(st, "Q-b", 0.2, verb="grant.add", subject="cmd:grant.add:B:")  # newer, impact 2
+    assert {e.severity for e in build(st).entries} == {"nudge"}
+    assert [e.id for e in build(st).entries] == ["approval:Q-b", "approval:Q-a"]
+
+
+def test_a_bare_string_block_is_one_item_not_its_letters():
+    from ddflow.services.digest.entry import make
+
+    st = State()
+    item(st, "item1")
+    e = make(
+        st,
+        Config(),
+        NOW,
+        "approval",
+        "k",
+        what="w",
+        why="y",
+        since=at(1),
+        default="d",
+        blocks="item1",
+        agents="bob",
+    )
+    assert e.blocks == ("item1",) and e.agents == ("bob",) and e.impact == 1
+
+
+def test_plural_and_expired_credentials_are_recognised():
+    st = State()
+    it = item(st, "T")
+    it.gates["critic"] = GateRecord(
+        gate="critic", outcome="unavailable", at=at(1), reason="expired credentials"
+    )
+    assert [e.kind for e in build(st).entries] == ["credential"]
+
+
+def test_a_negative_red_main_wait_is_refused():
+    from ddflow.config_sections.digest import _age_problem
+
+    assert _age_problem("-1h") and _age_problem("6h") == ""
+
+
 def test_dependants_follow_needs_transitively_and_skip_done_items():
     st = State()
     item(st, "A")
