@@ -7,6 +7,7 @@ creating and abandoning a throwaway task just to have something to claim.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -58,6 +59,9 @@ def test_the_cli_claims_a_bug_id(repo):
     code, out, err = run_cli(repo, "claim", "Bs", "--no-worktree", agent="w")
     assert code == 0, out + err
     assert "fix-Bs" in out
+    code, out, err = run_cli(repo, "--json", "claim", "Bs", "--no-worktree", agent="w")
+    assert code == 0, err
+    assert json.loads(out)["bug"] == "Bs"
     assert state(repo).items["fix-Bs"].lease.holder == "w"
 
 
