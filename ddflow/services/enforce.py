@@ -62,6 +62,7 @@ from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirec
 from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
+from . import complexity_budget as CB
 from . import docsync, leases
 from . import drift as D
 from . import enforce_contested as EC
@@ -1370,7 +1371,24 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
     code, msg = _check_lease(repo, cfg, agent=agent)
     if env_msg:
         msg = "\n\n".join(m for m in (env_msg + "\n\n(warning only)", msg) if m)
+    if code == 0:  # a refusal says its own thing; the advisory rides on an allowed commit
+        msg = "\n\n".join(m for m in (msg, _complexity_note(repo, cfg)) if m)
     return Verdict(code, msg)
+
+
+def _complexity_note(repo: Path, cfg: Config) -> str:
+    """The commit-time warning for staged functions that rose towards the complexity guard."""
+    warn_at = cfg.enforce.complexity_warn_at
+    paths = staged_paths(repo) if warn_at > 0 else None
+    if not paths:
+        return ""
+    tree = _index_tree(repo)
+
+    def head(path: str) -> bytes | None:
+        r = G.run(tree, "show", f"HEAD:{path}", binary=True, timeout=P.TIMEOUTS["git_listing"])
+        return r.out_bytes if r.ok else None
+
+    return CB.advice(CB.risen(paths, lambda p: staged_bytes(repo, p, tree=tree), head, warn_at))
 
 
 def _split_leases(
