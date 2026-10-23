@@ -100,9 +100,8 @@ def test_the_payload_is_the_rendered_text_with_two_labelled_options(log, cfg):
     row = _file(log, cfg)
     body = H.payload(row)
     (q,) = body["questions"]
-    assert (q["question"] == row["text"] and row["id"] in row["text"]) or row["digest"][:16] in row[
-        "text"
-    ]
+    assert q["question"] == row["text"]
+    assert row["id"] in row["text"] and row["digest"][:16] in row["text"]
     assert [o["label"] for o in q["options"]] == list(H.labels(row["id"]))
 
 
@@ -212,9 +211,7 @@ def test_ask_and_attest_over_the_cli(repo, tmp_path):
     run_cli(repo, "init")
     projects = tmp_path / "projects"
     cfgfile = repo / ".ddflow" / "config.toml"
-    cfgfile.write_text(
-        cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = [{json.dumps(str(projects))}]\n"
-    )
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
     log = EventLog(repo, "bot")
     row = _file(log, Config())
     code, out, err = run_cli(repo, "--json", "approvals", "ask", row["id"], agent="bot")
