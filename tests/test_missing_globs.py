@@ -135,3 +135,14 @@ def test_plan_check_does_not_warn_about_a_path_an_item_declares_it_creates(proj,
     assert code == 0, out + err
     assert "new_a.py" not in out, out
     assert "warning  A:" in out and "src/real.py" in out  # a typo is still warned about
+
+
+def test_a_path_inside_a_directory_an_item_creates_is_not_warned(proj, tmp_path):
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["newpkg"]\ncreates = ["newpkg"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/inner/mod.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg" not in out, out
