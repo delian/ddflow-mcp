@@ -47,7 +47,10 @@ def old(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
     return root
 
 
-def test_old_project_upgrades_end_to_end(old: Path) -> None:
+def test_old_project_upgrades_end_to_end(old: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(
+        "DDFLOW_MCP_TOOLS", raising=False
+    )  # the suite pins it; an env value is not the project's
     code, out, err = run_cli(old, "upgrade", "--plan", agent=AGENT)
     assert code == 1 and "Traceback" not in err, (code, out, err)
     assert "upgrade item(s) pending" in out
