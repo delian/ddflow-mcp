@@ -178,7 +178,7 @@ class _Run:
         err = WP.negotiate(frame)
         if err is not None:
             self.write(err)
-            self.exit_code, self.exit_reason = 2, "refused"
+            self.exit_code, self.exit_reason = 3, "refused"  # ddflow: 3 is refused
             return False
         if frame.get("state_key"):
             protocol.state_key(bytes.fromhex(frame["state_key"]))
