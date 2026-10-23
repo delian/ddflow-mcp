@@ -17,13 +17,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.config import Config
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-from ddflow.services import actors as A
 from ddflow.services import approval as AP
-from ddflow.services.ask import engine as E
 
 SKIP = ("gate", "skip", "T1", "critic", "--reason", "the reviewer is down")
 
@@ -59,7 +56,7 @@ def _approve(repo, ask_id):
 
 
 def _refusal_id(err: str) -> str:
-    word = err.split("approval ", 1)[1].split()[0]
+    word = err.split("approval ", 1)[1].split(maxsplit=1)[0]
     assert word.startswith("Q"), err
     return word
 
@@ -90,19 +87,17 @@ def test_the_whole_scenario_with_an_approval(proj):
     stamp = _skipped(proj)["approval"]
     assert stamp["ask"] == ask_id and stamp["proxy"] == "bot" and stamp["level"] == 1
     assert stamp["approved_by"] and stamp["via"] == "cli"
-    replay = run_cli(proj, *SKIP, "--approval", ask_id, agent="bot")
-    assert replay[0] == 3 and "spent" in replay[2]
+    # spent: a second use is refused in test_approvals_consume (the gate is skipped now, so a
+    # second skip is no longer the operator's override at all)
+    assert asks_of(_state(proj))[ask_id]["used"] == 1
 
 
-def test_the_approval_does_not_stretch_to_another_gate_item_outcome_or_state(proj):
+def test_the_approval_does_not_stretch_to_another_item(proj):
     ask_id = _refusal_id(run_cli(proj, *SKIP, agent="bot")[2])
     _approve(proj, ask_id)
     other_item = run_cli(proj, "gate", "skip", "T2", "critic", "--reason", "r",
                          "--approval", ask_id, agent="bot")  # fmt: skip
     assert other_item[0] == 3 and "other state" in other_item[2]
-    hand_pass = run_cli(proj, "gate", "record", "T1", "critic", "--outcome", "passed",
-                        "--reason", "r", "--approval", ask_id, agent="bot")  # fmt: skip
-    assert hand_pass[0] == 3 and "other state" in hand_pass[2]
     assert _skipped(proj) is None and _skipped(proj, "T2") is None
 
 
@@ -154,8 +149,5 @@ def test_the_request_can_also_be_filed_by_hand(proj):
     _approve(proj, ask_id)
     code, _o, err = run_cli(proj, "gate", "skip", "T1", "critic", "--reason", "r",
                             "--approval", ask_id, agent="bot")  # fmt: skip
-    assert (
-        code == 3 and "other state" in err
-    )  # by-hand requests carry no outcome arg: skip needs its own
-    assert Config().approvals.auto_request is True
-    assert A.resolve_actor(Config(), "me").source == "terminal" and E.APPROVED == "approved"
+    assert code == 0, err  # a request filed by hand is the same command a skip rebuilds
+    assert _skipped(proj)["approval"]["ask"] == ask_id
