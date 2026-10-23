@@ -342,7 +342,11 @@ def main(argv: list[str] | None = None) -> int:
         # What is left in the buffer must not be flushed again at interpreter exit, which
         # would print "Exception ignored ... BrokenPipeError" after all.
         try:
-            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            null = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(null, sys.stdout.fileno())
+            finally:
+                os.close(null)
         except (OSError, ValueError):
             pass
         return PIPE_CLOSED
