@@ -2,8 +2,10 @@
 
 Every tool name that is not a hot single is an old name of ``<family> action=<verb>``. The
 old names stay callable (they are the members `family_schema.route` runs), are never advertised
-by a family profile, and are said ONCE per session (`registry.Notices`), as every rename is
-(D-compat). One `Alias` per name, generated from `families.ALIASES`; nothing is listed here.
+by a family profile, and are to be said ONCE per session (`registry.Notices`), as every rename is
+(D-compat). One `Alias` per name, generated from `families.ALIASES`; nothing is listed here. The
+engine says them only on a connection whose profile advertises the families (a flat connection
+still advertises these names, so they are not old there): MTD-profiles calls `alias_for` there.
 
 ``removed_in`` is the D-compat floor (1.0): the decision's two-release window is the least a
 profile may keep them, and removing earlier needs D-compat relaxed first (MTD-sunset).
