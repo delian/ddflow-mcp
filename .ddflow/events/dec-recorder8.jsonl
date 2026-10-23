@@ -1,0 +1,2 @@
+{"agent":"dec-recorder8","data":{"format_level":1,"install":"source-tree","version":"0.2.7"},"id":"e6cd2bdc2758a86cd5cb04216","kind":"ddflow.seen","lamport":101664,"schema":1,"subject":"ddflow","ts":"2026-10-23T17:15:14.469280Z"}
+{"agent":"dec-recorder8","data":{"auto":true,"item":"","redactions":0,"text":"can you make research for how to manage the same features on other coding agents, not only claude"},"id":"ec5a1389f14c42c2954322924","kind":"session.prompt","lamport":101665,"schema":1,"subject":"h-29b9661e-fc8b-5e4b-85cc-bfeb533757a2","ts":"2026-10-23T17:15:14.495248Z"}
