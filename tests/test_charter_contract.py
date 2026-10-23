@@ -81,8 +81,6 @@ def test_a_freshly_initialised_project_stays_small_with_every_notice_on(repo):
         assert must in full, f"a notice displaced {must!r}"
     base = _base(repo)
     assert full.startswith(base[:200])
-        "notices outgrew their share"
-    )
 
 
 def test_the_unadopted_charter_is_under_the_cap_too(repo):
