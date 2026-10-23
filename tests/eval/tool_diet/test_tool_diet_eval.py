@@ -169,7 +169,7 @@ def test_a_run_reports_the_first_call_and_the_retried_one_apart(monkeypatch):
     assert out["first_call"]["invalid"] == 1 and out["first_call"]["correct"] == 0
     assert out["correct"] == 1 and out["accuracy"] == 1.0
     assert out["prompt_tokens_mean"] == 110  # both asks are counted
-    assert [m.get("retry", False) for m in out["misses"]] == [False]
+    assert [m["retry"] for m in out["misses"]] == [False]
     assert out["misses"][0]["got"] == "ddflow_gate_record"
 
 
@@ -182,3 +182,20 @@ def test_a_non_object_argument_text_is_a_refusal_not_a_crash(monkeypatch):
     assert first.called and not first.valid
     graded, name, _raw, used = td_run.retry(None, [], sc, "flat", "ddflow_claim", "null", 1, first)
     assert graded.valid and name == "ddflow_claim" and used == 5
+
+
+def test_a_retry_that_never_came_back_adds_no_second_miss(monkeypatch):
+    import argparse
+
+    import td_run
+
+    def ask(rev, tools, prompt, timeout, after=None):
+        if after:
+            raise TimeoutError("no answer")
+        return "ddflow_gate_record", '{"id": "T-1"}', 100
+
+    monkeypatch.setattr(td_run, "ask", ask)
+    monkeypatch.setattr(td_run, "SCENARIOS", (SCENARIOS[2],))
+    out = td_run.run_surface(None, "flat", argparse.Namespace(repeat=1, timeout=1, retry=True))
+    assert len(out["misses"]) == 1 and out["misses"][0]["retry"] is False
+    assert out["prompt_tokens_mean"] == 100
