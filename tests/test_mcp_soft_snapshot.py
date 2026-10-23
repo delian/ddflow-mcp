@@ -434,3 +434,23 @@ def test_drift_notices_missing_modern_versions_in_the_discover_reply(tmp_path):
     snap = ifacesnap.build(srv, instructions="x")
     snap["modern_protocols"] = []
     assert "discover.supportedVersions" in ifacesnap.drift(srv, snap)
+
+
+def test_the_discover_reply_has_exactly_the_fields_the_live_one_has():
+    """There is no `modernProtocols` field: the modern versions are listed in `supportedVersions`."""
+    from ddflow.surfaces import mcp_protocol as proto
+
+    snap = sample(
+        protocols=list(proto.SUPPORTED_PROTOCOLS),
+        modern_protocols=list(proto.MODERN_PROTOCOLS),
+        capabilities=proto.capabilities(),
+    )
+    assert (
+        set(S.discover_result(snap))
+        == set(proto.discover(""))
+        == {
+            "supportedVersions",
+            "capabilities",
+            "instructions",
+        }
+    )
