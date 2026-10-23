@@ -56,7 +56,8 @@ def test_every_registered_tool_is_in_exactly_one_tier_set():
     )
 
 
-def test_config_and_surface_agree_on_the_tier_names():
+def test_config_and_surface_agree_on_the_tier_names(monkeypatch):
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
     assert tuple(MCP_TOOL_TIERS) == tuple(M.TIERS)
     assert M.DEFAULT_TIER == "all"  # what an unreadable config falls back to
     assert Config().mcp.tools == "auto"  # the lean core unless the client table says otherwise

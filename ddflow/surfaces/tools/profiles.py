@@ -66,6 +66,7 @@ def family_entries(profile: str) -> list[dict]:
 def settle(configured: str, client_name: str = "") -> str:
     """The profile a connection runs: ``configured`` unless it is ``auto``, which is the client
     table's entry for ``client_name`` or the lean core."""
+    configured = (configured or "").strip().lower()
     if configured != AUTO:
         return configured
     return CLIENT_PROFILES.get((client_name or "").strip().lower(), DEFAULT_PROFILE)

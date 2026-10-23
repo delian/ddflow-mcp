@@ -164,3 +164,25 @@ def test_listchanged_stays_false(repo):
     srv = Server(repo)
     caps = _rpc(srv, "initialize", {"protocolVersion": "2025-03-26"})["result"]["capabilities"]
     assert caps["tools"].get("listChanged", False) is False
+
+
+@pytest.mark.parametrize("spelled", ["AUTO", " Lean ", "LEAN", "auto"])
+def test_a_profile_is_read_whatever_its_case_or_padding(spelled, repo, monkeypatch):
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", spelled)
+    srv, tools = _listed(repo)
+    assert srv.tier == "lean" and len(tools) == 15
+    assert "`lean`" in P.profile_note(P.settle(spelled))
+
+
+def test_auto_that_reaches_tier_tools_is_the_lean_core():
+    from ddflow.surfaces.tools import tiers
+
+    assert tiers.tier_tools("auto") == frozenset(P.direct_tools("lean"))
+
+
+def test_a_config_that_cannot_be_read_is_the_default_profile_not_everything(repo, monkeypatch):
+    from ddflow.surfaces.tools import tiers
+
+    monkeypatch.setattr(tiers, "_config", lambda _repo: None)
+    assert tiers.resolve_tier(repo) == "auto"
+    assert Server(repo).tier == "lean"
