@@ -27,8 +27,7 @@ def test_a_gitattributes_line_it_adds_is_reported_with_its_reason(repo: Path):
     done = ddflow_cli(repo, "pins", "regenerate")
     assert done.returncode == 0, done.stderr
     assert "third.txt merge=pinsregen" in (repo / ".gitattributes").read_text()
-    assert ".gitattributes" in done.stdout and "third.txt" in done.stdout, done.stdout
-    assert "recipe" in done.stdout
+    assert "added 'third.txt merge=pinsregen' to .gitattributes (a pin recipe lacked" in done.stdout
 
 
 def test_nothing_is_said_when_gitattributes_is_already_current(repo: Path):
