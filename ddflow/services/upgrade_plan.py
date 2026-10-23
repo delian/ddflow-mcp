@@ -128,32 +128,17 @@ def settled_items(st: State) -> dict[str, list[Any]]:
 DIGEST = "digest:"
 
 
-def _recorded_form(log: Any, value: Any) -> Any:
-    """``value`` as the log would have written it (B81cf6e7dfd): the log redacts text, so a
-    `~/.claude/projects` default is recorded as `[REDACTED:path]` and never equals the
-    manifest's. Redacting the manifest's value the same way, on this machine, is an exact
-    comparison; a wildcard for the mark would also swallow a changed default."""
-    try:
-        data = log.redacted("upgrade.applied", {"config_changes": [{"new": value}]})
-        return data["config_changes"][0]["new"]
-    except Exception:
-        return value
+def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    """The items an earlier partial apply has not settled. A value is settled when its digest
+    was recorded; a record without one (written before the digest) holds only what the log
+    redacted, which cannot tell two masked values apart, so it settles no value: the item is
+    applied once more and that record carries the digest."""
 
-
-def _unsettled(
-    items: list[dict[str, Any]], settled: dict[str, list[Any]], log: Any = None
-) -> list[dict[str, Any]]:
     def done(i: dict[str, Any]) -> bool:
         seen = settled.get(i["id"])
         if seen is None:
             return False
-        if not seen:
-            return True
-        new = i.get("new")
-        if f"{DIGEST}{of_obj(new)}" in seen:
-            return True
-        # a log written before the digest: the value as the log redacted it
-        return new in seen or (log is not None and _recorded_form(log, new) in seen)
+        return not seen or f"{DIGEST}{of_obj(i.get('new'))}" in seen
 
     return [i for i in items if not done(i)]
 
@@ -640,7 +625,7 @@ def build(
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
         "records": contested_items(st),
-        "config": _unsettled(config_items(changes, cfg), settled, log),
+        "config": _unsettled(config_items(changes, cfg), settled),
         "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
         + reference_items(repo),
         "hooks": hook_items(repo),

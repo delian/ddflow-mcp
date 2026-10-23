@@ -1174,14 +1174,15 @@ def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
     dirs = [c for c in done if c["key"] == "approvals.transcript_dirs"]
     assert dirs and "REDACTED" in str(dirs[0]["new"]), dirs  # the log did mask it
 
-    log = EventLog(old, "upgrader")
     new = ["~/.claude/projects"]
     item = {"id": "knob_added:a.b", "new": new}
     seen = {"knob_added:a.b": [f"{DIGEST}{dirs[0]['digest']}"]}
-    assert _unsettled([item], seen, log) == []
+    assert _unsettled([item], seen) == []
     # a changed default is news again even where the log masks both alike
-    assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen, log) != []
-    assert _unsettled([{**item, "new": []}], seen, log) != []
+    assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen) != []
+    assert _unsettled([{**item, "new": []}], seen) != []
+    # a record from before the digest holds only the masked text: it settles nothing
+    assert _unsettled([item], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []
 
 
 # -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
