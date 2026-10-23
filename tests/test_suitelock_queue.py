@@ -304,3 +304,36 @@ def test_a_held_ticket_unlinked_after_the_open_is_not_counted(tmp_path, monkeypa
     with real(ticket, 0):  # the owner holds it
         monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_the_open)
         assert SL._live(queue, 120, 120) == []
+
+
+def test_an_expired_held_parked_ticket_unlinked_after_the_open_is_not_counted(
+    tmp_path, monkeypatch
+):
+    import contextlib
+    import os
+    import time
+
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    parked = queue / "00000000000000000001-held.parked"
+    old = time.time() - 9999
+    real = SL.fsio.file_lock
+
+    @contextlib.contextmanager
+    def unlink_after_the_open(path, *a, **kw):
+        orig_flock = fsio.fcntl.flock
+
+        def flock(fd, op):
+            Path(path).unlink(missing_ok=True)  # after os.open, before the flock finds it held
+            return orig_flock(fd, op)
+
+        monkeypatch.setattr(fsio.fcntl, "flock", flock)
+        with real(path, *a, **kw):
+            yield
+
+    with real(parked, 0):  # a retry holds it
+        os.utime(parked, (old, old))
+        monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_the_open)
+        assert SL._live(queue, 120, 120) == []
