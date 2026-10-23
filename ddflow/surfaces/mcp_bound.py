@@ -22,8 +22,10 @@ import copy
 import re
 from typing import Any
 
-from ..api import surf_reporting as R
 from ..core.textcut import clip
+from ..services import search as S
+from ..services import session_view as SV
+from ..services import viewers as V
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
 NEXT_BLOCKED_SHOWN = 10
@@ -259,8 +261,8 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         return out, note
     if body.get("truncated") is True and isinstance(body.get("rows"), list):
         # Only the record lists page; a search or session list carries no `next`.
-        cap = {"search": R.SEARCH_MAX_LIMIT, "session": R.SESSION_MAX_LIMIT}.get(
-            str(body.get("record_kind")), R.LIST_MAX_LIMIT
+        cap = {"search": S.MAX_LIMIT, "session": SV.MAX_LIMIT}.get(
+            str(body.get("record_kind")), V.MAX_LIMIT
         )
         if body.get("next") is not None:
             how = f"repeat the call with limit={body.get('limit')} offset={body['next']}"
@@ -271,7 +273,7 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         return body, (
             f"truncated: showing {body.get('shown')} of {body.get('total')}; "
             f"narrow the filters{f', or {how}' if how else ''} "
-            f"(limit 0 = the most a list gives: {R.LIST_MAX_LIMIT}, a search {R.SEARCH_MAX_LIMIT})."
+            f"(limit 0 = the most a list gives: {V.MAX_LIMIT}, a search {S.MAX_LIMIT})."
         )
     return body, None
 
