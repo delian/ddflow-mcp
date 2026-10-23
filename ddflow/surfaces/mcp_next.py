@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ..config import Config
 from .tools import families as _families
 from .tools import profiles as _profiles
 from .tools import tiers as _tiers
@@ -61,7 +62,9 @@ def _from_gate_result(args: dict, data: dict) -> list[dict]:
 
 
 def _from_gate_status(args: dict, data: dict) -> list[dict]:
-    item = str(data.get("item") or args.get("id") or "")
+    item = str(data.get("item") or data.get("id") or args.get("id") or "")
+    if isinstance(data.get("status"), dict):  # an outcome's data nests the pipeline state
+        data = data["status"]
     if not item or "complete" not in data:
         return []
     if data.get("complete"):
@@ -148,3 +151,12 @@ def hints(
         return []
     found = (_listed(h, profile) for h in emit(args if isinstance(args, dict) else {}, data))
     return fit([h for h in found if h is not None])[:limit]
+
+
+def resolve(repo: Any) -> int:
+    """`[mcp].next_hints` of ``repo`` (env `DDFLOW_MCP_NEXT_HINTS` wins) as a max, read once; a
+    config that cannot be read is off."""
+    try:
+        return limit(Config.load(repo).mcp.next_hints)
+    except Exception:
+        return 0
