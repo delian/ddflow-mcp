@@ -23,7 +23,11 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, TextIO
 
+from . import ifacedigest as D
+from . import mcp_protocol as protocol
 from . import worker_protocol as WP
+from .mcp import Server
+from .mcp_upgrade import running_version
 
 Handler = Callable[
     [dict[str, Any], dict[str, Any], Callable[[dict[str, Any]], None]], "dict[str, Any] | None"
@@ -34,8 +38,6 @@ def server_handler(repo: Path) -> Handler:
     """Serve a request with a `Server` built from the frame's connection state."""
 
     def handle(conn: dict[str, Any], msg: dict[str, Any], notify: Callable[[dict[str, Any]], None]):
-        from .mcp import Server
-
         called_from = conn.get("called_from")
         srv = Server(
             repo, conn.get("agent", ""), called_from=Path(called_from) if called_from else None
@@ -51,9 +53,6 @@ def server_handler(repo: Path) -> Handler:
 
 def live_digest(repo: Path) -> str:
     """The interface digest of the code this worker runs (all tiers and the facade)."""
-    from . import ifacedigest as D
-    from .mcp import Server
-
     surfaces = D.live_surfaces(Server(repo))
     return D.digest({"surfaces": {k: D.digest(v) for k, v in sorted(surfaces.items())}})
 
@@ -134,12 +133,8 @@ class _Run:
             self.write(err)
             return False
         if frame.get("state_key"):
-            from . import mcp_protocol as protocol
-
             protocol.state_key(bytes.fromhex(frame["state_key"]))
         digest = self.digest if self.digest is not None else live_digest(self.repo)
-        from .mcp_upgrade import running_version
-
         self.write(WP.worker_hello(digest=digest, version=running_version()))
         return True
 
