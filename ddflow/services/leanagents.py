@@ -97,5 +97,5 @@ def drift_notes(repo: Path) -> list[str]:
         return []
     listed = ", ".join(f"{p} ({s})" for p, s in sorted(got.items()))
     return [
-        f"lean agent definitions differ from this ddflow's: {listed}; `ddflow adopt --agents claude` refreshes them"
+        f"lean agent definitions differ from this ddflow's: {listed}; `ddflow adopt --agents claude` rewrites the managed region (a hand edit is saved beside the file)"
     ]

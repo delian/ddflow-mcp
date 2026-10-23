@@ -99,7 +99,9 @@ def test_adopt_for_claude_writes_the_three_definitions_and_is_idempotent(repo):
 
 
 def test_adopt_for_another_agent_writes_no_claude_definitions(repo):
-    run_cli(repo, "adopt", "--agents", "cursor")
+    code, _out, err = run_cli(repo, "adopt", "--agents", "cursor")
+    assert code == 0, err
+    assert (repo / "AGENTS.md").is_file(), "the adopt itself ran"
     assert not (repo / ".claude" / "agents").exists()
 
 
@@ -122,6 +124,32 @@ def test_a_hand_edit_inside_the_region_is_reported_as_drift(repo):
     assert FILES["reviewer"] not in states, "a current definition is not drift"
     notes = LA.drift_notes(repo)
     assert notes and FILES["implementer"] in notes[0]
+
+
+def test_adopt_refreshes_a_hand_edited_definition_and_saves_the_edit(repo):
+    run_cli(repo, "adopt", "--agents", "claude")
+    path = repo / FILES["implementer"]
+    path.write_text(path.read_text().replace("Call `ddflow_brief` first", "Call it whenever", 1))
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0 and "your edits are kept in" in out, out
+    assert "Call `ddflow_brief` first" in path.read_text()
+    assert LA.states(repo) == {}
+
+
+def test_the_frontmatter_is_valid_yaml_scalars():
+    """An unquoted `: ` inside a plain scalar makes Claude Code refuse the definition."""
+    for role in ROLES:
+        head = LA.template_text(role).split("\n---\n", 1)[0]
+        for line in head.splitlines():
+            key, _, val = line.partition(":")
+            if key in ("description",):
+                assert val.strip().startswith('"') and val.strip().endswith('"'), line
+
+
+def test_every_role_is_told_to_file_ddflow_defects_it_meets():
+    for role in ROLES:
+        assert "ddflow_bug_found" in LA.template_text(role).split("\n---\n", 1)[1], role
+        assert "ddflow_bug_found" in LA.ddflow_tools(role), role
 
 
 def test_an_unadopted_project_has_no_drift(repo):
