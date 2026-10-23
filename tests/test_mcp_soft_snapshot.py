@@ -373,3 +373,17 @@ def test_checking_for_drift_leaves_the_live_connection_untouched(tmp_path):
         "name": "claude-code",
         "version": "2.1.296",
     }
+
+
+def test_a_boolean_form_and_an_empty_version_are_not_a_snapshot():
+    assert S.problems(sample(form=True))
+    assert S.problems(sample(protocols=[""]))
+    assert S.problems(sample(modern_protocols=[""]))
+
+
+def test_initialize_negotiates_legacy_versions_only_as_the_live_server_does():
+    from ddflow.surfaces import mcp_protocol as proto
+
+    assert proto.legacy_version("2026-07-28") == proto.SUPPORTED_PROTOCOLS[0]  # the live rule
+    snap = sample(protocols=["2025-03-26"], modern_protocols=["2026-07-28"])
+    assert S.initialize_result(snap, "2026-07-28")["protocolVersion"] == "2025-03-26"

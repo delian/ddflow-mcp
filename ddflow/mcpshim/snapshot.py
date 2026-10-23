@@ -39,7 +39,7 @@ def path(repo: Path | str) -> Path:
 
 def _field_problems(data: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    if data.get("form") != FORM:
+    if type(data.get("form")) is not int or data["form"] != FORM:
         out.append(f"form {data.get('form')!r}, expected {FORM}")
     for key in _STRINGS:
         if not isinstance(data.get(key), str) or (key != "instructions" and not data[key]):
@@ -65,8 +65,8 @@ def problems(data: Any) -> list[str]:
     if isinstance(data.get("protocols"), list) and not data["protocols"]:
         out.append("protocols must name at least one version")
     for key in ("protocols", "modern_protocols"):
-        if isinstance(data.get(key), list) and not all(isinstance(v, str) for v in data[key]):
-            out.append(f"every entry of {key} must be a version string")
+        if isinstance(data.get(key), list) and not all(isinstance(v, str) and v for v in data[key]):
+            out.append(f"every entry of {key} must be a non-empty version string")
     for key in ("tools", "prompts"):
         items = data.get(key)
         if isinstance(items, list) and not all(
