@@ -32,6 +32,7 @@ def cfg(wait=0.0, limit=1):
             workers="auto",
             min_workers=1,
             max_workers=48,
+            suite_min_workers=8,
             command="",
             max_concurrent_suites=limit,
             suite_wait_s=wait,
@@ -122,7 +123,7 @@ def test_execute_runs_the_localized_config_and_logs_it(tmp_path: Path, monkeypat
     monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
     monkeypatch.setattr(WK, "compute", lambda c, f=None, **k: WK.Workers(7, {"loadavg": 1.0}))
     used: dict = {}
-    CI._execute(cfg(), tmp_path, CI.DEFAULT_COMMAND, None, 60, local=True, used=used)
+    CI._execute(cfg(), tmp_path, CI.DEFAULT_COMMAND, None, 60, holding_suite=True, used=used)
     assert "-n 7" in seen[1] and "-n auto" not in seen[1] and "-n auto" not in seen[0]
     assert used["hooks"]["n"] == 7
 
@@ -135,3 +136,46 @@ def test_a_crashed_holders_note_is_not_named(tmp_path: Path):
         SL._note(tmp_path, i).write_text('{"holder": "dead", "at": 1, "at_iso": "00:00:01"}')
     with SL.hold(cfg(limit=2), "agent-b", tmp_path):
         assert SL._holders(tmp_path, 2)["holder"] == "agent-b"
+
+
+def test_execute_gives_only_the_lock_holder_the_worker_floor(tmp_path: Path, monkeypatch):
+    """B-suite-lock-held-by-n1-run: the flag reaches `workers.compute` for both the command and
+    the localized hooks, and only when the run holds the suite lock."""
+    (tmp_path / CI.PRE_COMMIT_CONFIG).write_text(HOOK)
+    flags: list[bool] = []
+
+    class Fake:
+        def run(self, declared, **_):
+            return NS(ran=True, code=0, output="", elapsed_s=0, kind="", reason="")
+
+    def compute(c, f=None, **k):
+        flags.append(k.get("holding_suite", False))
+        return WK.Workers(2, {})
+
+    monkeypatch.setattr(CI, "CommandRunner", Fake)
+    monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
+    monkeypatch.setattr(WK, "compute", compute)
+    for cmd in (CI.DEFAULT_COMMAND, "pytest -n {workers} tests/test_a.py"):
+        flags.clear()
+        CI._execute(cfg(), tmp_path, cmd, None, 60, holding_suite=True, used={})
+        assert flags and all(flags), (cmd, flags)
+        flags.clear()
+        CI._execute(cfg(), tmp_path, cmd, None, 60, holding_suite=False, used={})
+        assert not any(flags) and (flags or cmd == CI.DEFAULT_COMMAND), (cmd, flags)
+
+
+def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, monkeypatch):
+    """The only caller of `_execute` is `_run_locked`; a selected run (no lock) must not get
+    the holder floor, a full-suite run must."""
+    seen: list[dict] = []
+
+    def execute(cfg_, tree, cmd, scope, budget, tick=None, **kw):
+        seen.append(kw)
+        return NS(ran=True), ""
+
+    monkeypatch.setattr(CI, "_execute", execute)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))  # never the host-wide lock
+    for full in (False, True):
+        CI._run_locked(cfg(), tmp_path, "ref", tmp_path, "cmd", None, 60, None, {}, full)
+    assert [kw["holding_suite"] for kw in seen] == [False, True]
+    assert all("local" not in kw for kw in seen)

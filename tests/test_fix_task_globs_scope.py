@@ -63,6 +63,6 @@ def test_file_tasks_keeps_the_scope_when_it_files_the_task_later(repo):
         repo, summary="the parser drops a line", item="T1", id="Bp", no_task=True, agent="a"
     )  # fmt: skip
     assert "fix-Bd" not in state(repo).items
-    K.bug_file_tasks(repo, agent="a")
+    K.bug_file_tasks(repo, every=True, agent="a")
     assert state(repo).items["fix-Bp"].globs == SRC  # the deferred path does have the item
     assert state(repo).items["fix-Bd"].globs == []
