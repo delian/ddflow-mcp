@@ -41,9 +41,9 @@ ALLOWED: dict[str, set[str]] = {
     "infra": {"config", "core"},
     "views": {"config", "core", "infra", "services"},
     "services": {"config", "core", "infra", "views"},
-    "api": {"config", "core", "infra", "services", "views"},
-    "surfaces": {"config", "core", "infra", "services", "views", "api"},
-    #: the MCP shim and its probes: stdlib only, imports no ddflow layer (it must stay tiny and
+    "api": {"config", "core", "infra", "services", "views", "mcpshim"},
+    "surfaces": {"config", "core", "infra", "services", "views", "api", "mcpshim"},
+    #: the MCP shim and its probes (api and surfaces read its snapshot format): stdlib only, imports no ddflow layer (it must stay tiny and
     #: able to outlive any upgrade of the layers it fronts)
     "mcpshim": set(),
 }
