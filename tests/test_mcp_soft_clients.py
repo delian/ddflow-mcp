@@ -262,3 +262,10 @@ def test_a_prerelease_with_extra_components_is_still_below_the_floor():
     assert cap("claude-code", "2.1.296.0-beta.1") == "unknown"
     assert cap("claude-code", "2.1.296.0") == "honours"
     assert cap("claude-code", "2.1.296.1-beta.1") == "honours"
+
+
+def test_only_a_verified_row_is_exempt_from_expiry():
+    verified = C.Entry("v", "honours", "verified", "1.0", None, "2020-01-01", "x")
+    assert C.effective(verified, "9", date(2026, 10, 23)) == "honours"
+    claimed = C.Entry("c", "honours", "source", "1.0", None, "2020-01-01", "x")
+    assert C.effective(claimed, "9", date(2026, 10, 23)) == "unknown"
