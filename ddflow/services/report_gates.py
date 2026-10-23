@@ -86,6 +86,19 @@ def earlier_tree(st, cfg, item_id: str, repo: Path, landed: str) -> dict[str, st
     }
 
 
+def _approval_tail(it, gate: str) -> str:
+    """` (approved by X via chat at L2, approval Q...)` when an operator's approval was spent on
+    the gate's skip (RA-audit-wire), else ""."""
+    for run in reversed(it.runs_of(gate)):
+        ap = (run.evidence or {}).get("approval")
+        if isinstance(ap, dict) and ap.get("ask"):
+            return (
+                f" (approved by {ap.get('approved_by', '?')} via {ap.get('via', '?')} "
+                f"at L{ap.get('level', '?')}, approval {ap['ask']})"
+            )
+    return ""
+
+
 def overrides(it, led: dict[str, Any], tests: list[dict], rows_: list[dict]) -> list[str]:
     """Every excuse on the record: a forced completion and what it overrode, skipped gates,
     a forced review round and its reason, a regression check that was overridden."""
@@ -96,7 +109,9 @@ def overrides(it, led: dict[str, Any], tests: list[dict], rows_: list[dict]) -> 
         )
     for g, rec in it.gates.items():
         if rec.outcome == "skipped":
-            out.append(f"gate {g} skipped: {rec.reason or 'no reason recorded'}")
+            out.append(
+                f"gate {g} skipped: {rec.reason or 'no reason recorded'}{_approval_tail(it, g)}"
+            )
     for run in it.gate_history:
         why = (run.evidence or {}).get("budget_forced")
         if why:
