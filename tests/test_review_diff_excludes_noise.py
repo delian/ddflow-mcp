@@ -103,21 +103,26 @@ def test_a_file_replaced_by_an_unregistered_gitlink_is_dropped(tmp_path):
     assert "a/x" not in out and "ok.py" in out, out
 
 
-def test_a_git_quoted_path_is_decoded_before_it_is_judged():
+def test_a_path_that_is_not_plain_is_kept_not_guessed_at():
     from ddflow.services.review_noise import without_stray_gitlinks
 
-    quoted = (
-        'diff --git "a/caf\\303\\251" "b/caf\\303\\251"\n'
-        "new file mode 160000\n+Subproject commit b\n"
+    for header in (
+        'diff --git "a/caf\\303\\251" "b/caf\\303\\251"',  # git C-quoted it
+        "diff --git a/lib b/foo b/lib b/foo",  # a path holding ' b/': the header is ambiguous
+        "diff --git a/lib # local b/lib # local",
+    ):
+        diff = f"{header}\nnew file mode 160000\n+Subproject commit b\n"
+        assert without_stray_gitlinks(diff, set()) == diff, header
+
+
+def test_git_reads_the_registered_paths_quotes_and_comments_included(tmp_path):
+    from ddflow.services.review_noise import registered_submodules
+
+    r, _head, _tip = _branch_with_noise(tmp_path)
+    (r / ".gitmodules").write_text(
+        '[submodule "a"]\n\tpath = lib # local copy\n[submodule "b"]\n\tpath = "x # y"\n'
     )
-    assert without_stray_gitlinks(quoted, set()) == "", "an unregistered nested repo is dropped"
-    assert without_stray_gitlinks(quoted, {"caf\u00e9"}) == quoted, "a registered one is kept"
-
-
-def test_a_trailing_comment_in_gitmodules_is_not_part_of_the_path():
-    from ddflow.services.review_noise import _paths_of
-
-    assert _paths_of('[submodule "l"]\n\tpath = lib # local copy\n\turl = x\n') == {"lib"}
+    assert registered_submodules(r) == {"lib", "x # y"}
 
 
 def test_a_single_commit_review_leaves_the_noise_out_too(tmp_path):
