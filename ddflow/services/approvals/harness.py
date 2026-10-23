@@ -28,6 +28,8 @@ from ..actors import resolve_actor
 from ..ask import engine as E
 
 TOOL = "AskUserQuestion"
+#: attest's message begins with this while the person has simply not answered yet (exit 2)
+WAITING = "nothing to attest yet: "
 VIA = "harness"
 LEVEL = 2
 
@@ -175,7 +177,7 @@ def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[
         return False, f"{ask_id} is {E.status(row, now)}"
     hit = find(cfg, row)
     if hit is None:
-        return False, (
+        return False, WAITING + (
             f"no answer to {ask_id} in the transcripts under {', '.join(cfg.approvals.transcript_dirs)}"
             f": put `ddflow approvals ask {ask_id}` to the person with AskUserQuestion first"
         )
@@ -184,7 +186,10 @@ def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[
     if outcome is None:
         return False, f"the answer {hit.answer!r} is neither {yes!r} nor {no!r}"
     actor = resolve_actor(
-        cfg, f"harness:{hit.file[:8]}", credential_role=cfg.agent.operator_role, authenticated=True
+        cfg,
+        f"harness:{Path(hit.file).stem}",
+        credential_role=cfg.agent.operator_role,
+        authenticated=True,
     )
     try:
         E.answer(

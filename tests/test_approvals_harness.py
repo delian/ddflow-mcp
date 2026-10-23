@@ -145,7 +145,7 @@ def test_what_the_agent_says_is_not_an_answer(log, cfg):
     note = {"type": "user", "uuid": "U9", "message": {"content": f"{yes}"}}
     _transcript(cfg, "s1", [claim, note])
     ok, message = H.attest(log, cfg, row["id"])
-    assert not ok and "no answer to" in message
+    assert not ok and message.startswith(H.WAITING)
 
 
 @pytest.mark.parametrize(
@@ -219,7 +219,7 @@ def test_ask_and_attest_over_the_cli(repo, tmp_path):
     question = json.loads(out)["input"]["questions"][0]["question"]
     assert question == row["text"]
     assert (
-        run_cli(repo, "approvals", "attest", row["id"], agent="bot")[0] == 3
+        run_cli(repo, "approvals", "attest", row["id"], agent="bot")[0] == 2
     )  # nothing answered yet
     d = projects / "slug"
     d.mkdir(parents=True)
