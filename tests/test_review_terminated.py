@@ -115,3 +115,22 @@ def test_a_sigtermed_review_leaves_an_earlier_finished_round_the_record(repo, tm
     gate = _gate(repo)
     assert gate["outcome"] == "passed", gate
     assert gate["evidence"]["unavailable_deltas"][0]["reason"].startswith("the review was"), gate
+
+
+def test_a_terminated_review_of_an_unknown_item_records_nothing(repo):
+    import ddflow.api.review as api
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "init")
+    before = len(EventLog(repo).read_all())
+    out = api._terminated(
+        {"repo": repo, "item": "NOPE", "gate": "critic", "agent": "", "called_from": None},
+        "SIGTERM",
+        "2000-01-01T00:00:00Z",
+    )
+    assert "terminated by SIGTERM" in out.reason
+    assert (
+        len(EventLog(repo).read_all()) == before
+        and "NOPE" not in fold(EventLog(repo).read_all(), strict=False).items
+    )
