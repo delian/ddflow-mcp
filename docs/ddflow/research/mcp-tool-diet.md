@@ -424,36 +424,37 @@ family plus an `action` enum. The scripts are throwaway (not committed); this no
 ## 11. Accuracy eval result (MTD-accuracy-eval, 2026-10-23)
 
 Harness: `tests/eval/tool_diet/` (`td_run.py REVIEWER [--retry] [--repeat N]`, hand-run; the offline
-part is `test_tool_diet_eval.py`). 16 fixed plain-language requests (claim, gate record/skip/status,
-bug found/fixed, task add, lesson add/search, decision add, release, merge, complete, rule search,
-status), each asked twice per surface, one tool call each, graded on the member tool reached and the
-values carried; a family call is resolved by the server's own `family_schema.route`. Models are two
-families through their configured OpenAI-compatible endpoints: DeepSeek-V4.1-Flash and Kimi k3
-(one run per cell: small samples, so differences of a call or two are noise).
+part is `test_tool_diet_eval.py`). 16 fixed plain-language requests (`td_scenarios.py`: claim, gate
+record/skip/status, bug found/fixed, task add, lesson add/search, decision add, release, merge, complete,
+rule search, status), each asked twice per surface, one tool call each, graded on the member tool
+reached and on the values carried (whole-token match); a family call is resolved by the server's own
+`family_schema.route`, and a member name is not on the family surface. Models are two families through
+their configured OpenAI-compatible endpoints: DeepSeek-V4.1-Flash and Kimi k3. 32 requests per cell, one
+run per cell: a difference of two or three requests is noise (the same cell moved by up to 0.06 between
+runs of the same harness).
 
 | Surface | Bytes shown | Prompt tokens (k3 / DeepSeek) | DeepSeek first call | Kimi k3 first call | DeepSeek +1 retry | Kimi k3 +1 retry |
 |---|---|---|---|---|---|---|
-| flat (123 tools) | 111,036 | 25,146 / 29,374 | 0.938 | 0.906 | 0.969 | 0.969 |
-| families (24 tools) | 51,698 | 11,878 / 14,677 | 1.000 | 0.688 | 0.969 | 0.875 |
-| families, arguments tagged with their actions | 56,740 | 13,618 / 16,147 | 0.969 | 0.688 | not run | not run |
+| flat (123 tools) | 111,036 | 25,146 / 29,374 | 0.938 | 0.938 | 0.938 | 1.000 |
+| families (24 tools) | 51,698 | 11,878 / 14,677 | 1.000 | 0.688 | 0.969 | 0.781 |
+| families, arguments tagged with their actions | 56,740 | 13,618 / 16,147 | 1.000 | 0.656 | 0.969 | 0.844 |
 
 (CONFIRMED, measured.) What it shows:
 
-- Families halve the prompt and DeepSeek reads them at least as well as the flat list.
-- Kimi k3 loses 22 points on the first call, from the union schema, not from choosing the wrong
-  family: it fills arguments that belong to other actions (`verify_reason` on bug found, `worktree` on
-  task add, `reviewer_model` and `timeout` on gate skip) or leaves out `gate`. Every one of those is
-  refused by `route` with a message naming the action; one retry recovers 19 of the 22 points.
-- Tagging each argument with its actions, and listing each action's required arguments on the `action`
-  property, did not help Kimi (0.688 both ways): the noise is the 18 to 43 union arguments, not a missing
-  hint.
+- Families halve the prompt, and DeepSeek reads them at least as well as the flat list.
+- Kimi k3 loses about 25 points on the first call and about 20 after one retry. The loss is the union
+  schema, not the choice of family: 8 of 32 calls are refused by `route` (it fills arguments that belong to
+  other actions: `verify_reason` on bug found, `worktree` on task add, `reviewer_model` and `timeout` on
+  gate skip, or leaves out `gate`), each with a message that names the action.
+- Tagging each argument with its actions did not help Kimi on the first call (0.656 against 0.688) and
+  moved the retry by a noisy three requests: the noise is the 18 to 43 union arguments.
 - `ddflow_status` was mistaken for `ddflow_board` by DeepSeek on the flat list only.
-- The `next` hint default (MTD-next-hints) was NOT evaluated: unavailable until hints exist.
+- The `next` hint default (MTD-next-hints) was NOT evaluated, so by D-mcp-tool-families it stays off.
 
-Reading against D-mcp-tool-families ("if families lose measurable call accuracy against flat tools the
-default reverts to flat plus profiles"): they lose on one of the two families on the first call, and
-about 9 points after the one retry a real agent gets. That is the operator's call. Cheaper levers that
-keep the byte saving, to try before reverting: fewer union arguments per family (move the seldom-used
-ones into a single `options` object, as section 4 suggested), splitting the widest families (`task` 43,
-`admin` 43, `view` 40 arguments) so no tool carries more than about 20, and the `hot+families` profile
-(36 tools) for clients that like direct names for the most-called verbs.
+Consequence under D-mcp-tool-families ("if families lose measurable call accuracy against flat tools the
+default reverts to flat plus profiles"): they lose on one of the two families, so `families` MUST NOT
+become the default profile until the operator accepts that (MTD-profiles keeps the flat default and
+ships `families` as an opt-in profile). Levers to try that keep the byte saving: fewer union arguments per
+family (move the seldom-used ones into one `options` object, as section 4 suggested), splitting the
+widest families (`task` 43, `admin` 43, `view` 40 arguments) so no tool carries more than about 20, and
+the `hot+families` profile (36 tools) for clients that like direct names for the most-called verbs.
