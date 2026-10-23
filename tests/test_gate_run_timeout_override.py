@@ -122,3 +122,13 @@ def test_a_verb_that_merely_starts_with_run_is_not_rewritten():
     gate = GateDef(id="ci", title="ci", command="ddflow ci run-analyze x", timeout_s=1)
     out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
     assert out.command == "ddflow ci run-analyze x" and out.timeout_s == 60
+
+
+def test_tabs_between_the_command_words_are_still_the_ci_verb():
+    gate = GateDef(id="ci", title="ci", command="ddflow\tci\trun\t--timeout\t5", timeout_s=1)
+    out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+    assert out.command == "ddflow\tci\trun --timeout 60"
+
+
+def test_the_knob_is_an_int_whatever_the_manifest_spells():
+    assert isinstance(Config().gates.max_run_timeout_s, int)
