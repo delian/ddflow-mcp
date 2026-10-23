@@ -60,16 +60,19 @@ def test_a_branch_added_to_a_function_at_the_limit_is_named_before_the_ci_gate(r
     code, msg = E.check_commit(repo)
     assert code == 0, "advisory only: it must not refuse the commit"
     assert "m.py:1 near_limit CC 21 -> 22 (already grade D, getting worse)" in msg
-    assert "will fail" not in msg, "the guard counts functions over 20: this one was counted"
+    assert "counted by" not in msg, "the guard counts functions over 20: this one was counted"
 
 
 @needs_radon
-def test_a_function_crossing_into_grade_d_says_the_guard_will_fail(repo):
+def test_a_function_crossing_into_grade_d_says_the_guard_counts_it(repo):
     _setup(repo, 19)  # CC 20
     (repo / "m.py").write_text(_fn("near_limit", 20))
     _git(repo, "add", "m.py")
     _, msg = E.check_commit(repo)
-    assert "CC 20 -> 21 (grade D: tests/test_architecture_guards.py will fail)" in msg
+    assert (
+        "CC 20 -> 21 (grade D: counted by tests/test_architecture_guards.py, which fails when a module's count rises)"
+        in msg
+    )
 
 
 @needs_radon
@@ -115,3 +118,13 @@ def test_a_method_is_measured_like_a_function():
     assert CB.complexities(src) == {"C.m": (2, 18)}
     lines = CB.risen(["c.py"], lambda p: src, lambda p: None, 18)
     assert lines and "C.m CC new -> 18" in lines[0]
+
+
+def test_the_hook_says_nothing_without_radon(repo, monkeypatch):
+    """The whole commit-hook path, with radon absent: allowed, and no complexity claim."""
+    _setup(repo, 20)
+    (repo / "m.py").write_text(_fn("near_limit", 21))
+    _git(repo, "add", "m.py")
+    monkeypatch.setattr(CB, "cc_visit", None)
+    code, msg = E.check_commit(repo)
+    assert code == 0 and "complexity budget" not in msg

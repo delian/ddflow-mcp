@@ -57,7 +57,9 @@ def risen(
                 if cc < GRADE_D_FROM:
                     verdict = f"{GRADE_D_FROM - cc} below grade D"
                 elif was < GRADE_D_FROM:
-                    verdict = f"grade D: {GUARD} will fail"
+                    verdict = (
+                        f"grade D: counted by {GUARD}, which fails when a module's count rises"
+                    )
                 else:  # already counted by the guard; it fails only when a module's count rises
                     verdict = "already grade D, getting worse"
                 out.append(f"  {path}:{line} {name} CC {was or 'new'} -> {cc} ({verdict})")
