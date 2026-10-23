@@ -98,6 +98,46 @@ def retry(rev, tools, sc, surface, name, raw, timeout, first):
     return grade(sc, surface, name2, raw2), name2, raw2, used2
 
 
+def run_surface(rev, surface: str, args) -> dict:
+    """One model on one surface: the report block (bytes, tallies, every miss)."""
+    tools = tools_for(surface)
+    rows, firsts, misses, tokens = [], [], [], []
+    for sc in SCENARIOS:
+        for _ in range(args.repeat):
+            try:
+                name, raw, used = ask(rev, tools, sc.prompt, args.timeout)
+            except Exception as exc:  # an unreachable or erroring model is a result
+                return {"error": f"{type(exc).__name__}: {exc}"}
+            tokens.append(used)
+            g = grade(sc, surface, name, raw)
+            firsts.append(g)
+            if not (g.tool_ok and g.args_ok and g.valid):
+                misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
+            if args.retry and name and not g.valid:
+                g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
+                if extra is not None:
+                    tokens.append(extra)
+                if not (g.tool_ok and g.args_ok and g.valid):
+                    misses.append(
+                        {
+                            "prompt": sc.prompt,
+                            "want": sc.tool,
+                            "got": name,
+                            "args": raw,
+                            "retry": True,
+                        }
+                    )
+            rows.append(g)
+    return {
+        "bytes": size(tools),
+        "tools": len(tools),
+        "prompt_tokens_mean": round(sum(tokens) / max(len(tokens), 1)),
+        **tally(rows),
+        "first_call": tally(firsts),
+        "misses": misses,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("reviewer")
@@ -117,47 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     rev = revs[args.reviewer]
     report: dict = {"reviewer": rev.name, "model": rev.model, "family": rev.family, "surfaces": {}}
     for surface in args.surfaces.split(","):
-        tools = tools_for(surface)
-        rows, firsts, misses, tokens = [], [], [], []
-        for sc in SCENARIOS:
-            for _ in range(args.repeat):
-                try:
-                    name, raw, used = ask(rev, tools, sc.prompt, args.timeout)
-                except Exception as exc:  # an unreachable or erroring model is a result
-                    report["surfaces"][surface] = {"error": f"{type(exc).__name__}: {exc}"}
-                    break
-                tokens.append(used)
-                g = grade(sc, surface, name, raw)
-                firsts.append(g)
-                if not (g.tool_ok and g.args_ok and g.valid):
-                    misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
-                if args.retry and name and not g.valid:
-                    g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
-                    if extra is not None:
-                        tokens.append(extra)
-                    if not (g.tool_ok and g.args_ok and g.valid):
-                        misses.append(
-                            {
-                                "prompt": sc.prompt,
-                                "want": sc.tool,
-                                "got": name,
-                                "args": raw,
-                                "retry": True,
-                            }
-                        )
-                rows.append(g)
-            else:
-                continue
-            break
-        else:
-            report["surfaces"][surface] = {
-                "bytes": size(tools),
-                "tools": len(tools),
-                "prompt_tokens_mean": round(sum(tokens) / max(len(tokens), 1)),
-                **tally(rows),
-                "first_call": tally(firsts),
-                "misses": misses,
-            }
+        report["surfaces"][surface] = run_surface(rev, surface, args)
     print(json.dumps(report, indent=1))
     return 0
 
