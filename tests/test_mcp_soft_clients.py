@@ -256,3 +256,9 @@ def test_no_caller_can_widen_the_expiry_window():
     with pytest.raises(TypeError):
         C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1), max_age_days=999999)
     assert C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1)) == "unknown"
+
+
+def test_a_prerelease_with_extra_components_is_still_below_the_floor():
+    assert cap("claude-code", "2.1.296.0-beta.1") == "unknown"
+    assert cap("claude-code", "2.1.296.0") == "honours"
+    assert cap("claude-code", "2.1.296.1-beta.1") == "honours"

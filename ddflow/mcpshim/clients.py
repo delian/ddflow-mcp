@@ -371,7 +371,9 @@ def effective(entry: Entry, version: object, today: date) -> str:
         have, need = version_tuple(version), version_tuple(entry.min_version)
         if not (have and need and have >= need):
             return UNKNOWN
-        if have == need and _prerelease(version):
+        pad = max(len(have), len(need))
+        same = have + (0,) * (pad - len(have)) == need + (0,) * (pad - len(need))
+        if same and _prerelease(version):
             return UNKNOWN  # 2.1.296-beta.1 comes before the verified 2.1.296
         return entry.list_changed
     if entry.list_changed == HONOURS and not entry.verified_version:
