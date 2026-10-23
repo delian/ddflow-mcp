@@ -155,7 +155,11 @@ def replay(repo: Path, *, out_dir: str = "", verify: bool = False, agent: str = 
     log, cfg, st = _load(repo, agent)
     steps = session.replay(log.read_all())
     problems = session.verify(st, repo, cfg) if verify else []
-    broken = roundtrip.check(log.read_all(), st) if verify else []
+    broken = (
+        roundtrip.check(log.read_all(), st, from_bytes=log.read_all(snapshot=False))
+        if verify
+        else []
+    )
     if out_dir:
         files = session.bundle(st, steps, Path(out_dir), cfg, project=repo.name)
         text = "wrote:\n" + "\n".join(f"  {f}" for f in files)
