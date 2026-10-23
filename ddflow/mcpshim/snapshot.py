@@ -64,6 +64,9 @@ def problems(data: Any) -> list[str]:
     out = _field_problems(data)
     if isinstance(data.get("protocols"), list) and not data["protocols"]:
         out.append("protocols must name at least one version")
+    for key in ("protocols", "modern_protocols"):
+        if isinstance(data.get(key), list) and not all(isinstance(v, str) for v in data[key]):
+            out.append(f"every entry of {key} must be a version string")
     for key in ("tools", "prompts"):
         items = data.get(key)
         if isinstance(items, list) and not all(
