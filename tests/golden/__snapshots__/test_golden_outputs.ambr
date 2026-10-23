@@ -2444,6 +2444,11 @@
           How many characters of an agent's own reason are shown to the person in an
           approval request (default 300; the rest is cut with an ellipsis). The reason
           is quoted as untrusted text and is never part of what is approved.
+      approvals.min_digest_chars = 8   [default]
+          How many leading characters of a request's digest the person types back to
+          approve or deny it (default 8): `ddflow approvals approve ID --digest
+          XXXXXXXX`. It proves they read which request, so it cannot be answered
+          blind.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
