@@ -251,3 +251,11 @@ def test_a_broad_glob_match_ranks_before_a_decision_that_does_not_match_the_file
         _applied("D-mmm-narrow", GLOBS, ["src/x.py"]),
     ]
     assert AB.decision_order(applied) == ["D-mmm-narrow", "D-zzz-broad", "D-aaa-other"]
+
+
+def test_the_brief_gives_each_agent_a_private_scratch_directory(proj):
+    """B-scratchpad-shared-between-agents: a lead's scratchpad is shared by all its subagents;
+    two wrote `cr1.out` and one overwrote the other's critic output."""
+    code, out, err = brief(proj, name="sub-7")
+    assert code == 0, err
+    assert "scratchpad" in out and "/sub-7/" in out and "shared by every" in out, out
