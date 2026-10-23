@@ -121,3 +121,17 @@ def test_a_tracked_file_with_a_space_is_a_nearest_path(proj):
     run_cli(proj, "task", "add", "T1", "--globs", "sorc/my file.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "src/my file.py" in out
+
+
+def test_plan_check_does_not_warn_about_a_path_an_item_declares_it_creates(proj, tmp_path):
+    """B-plan-check-new-file-warnings-noise: every new file of a plan was a 'does not exist'
+    warning; `creates = [...]` says it is expected, for the item and for the others listing it."""
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = ["src/new_a.py", "sorc/real.py"]\ncreates = ["src/new_a.py"]\n'
+        'acceptance = "done"\n[B]\nglobs = ["src/new_a.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "new_a.py" not in out, out
+    assert "warning  A:" in out and "src/real.py" in out  # a typo is still warned about
