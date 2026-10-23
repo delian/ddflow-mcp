@@ -110,7 +110,7 @@ def collect_gate_spotcheck(st, cfg, now, facts):
     floor = cfg.digest.spotcheck_min
     if not floor:
         return []
-    rows = [r for r in GO.refuted_passes(st) if st.items[r["item"]].state != DONE]
+    rows = [r for r in GO.refuted_passes(st) if _is_open(st.items[r["item"]])]
     if len(rows) < floor:
         return []
     items = sorted({r["item"] for r in rows})
@@ -148,7 +148,7 @@ def collect_credential(st, cfg, now, facts):
                         "credential",
                         f"{it.id}.{gate}",
                         what=f"{it.id}.{gate} could not run: a credential is missing or refused",
-                        why=(rec.reason or "")[:DEFAULT_TEXT_CHARS],
+                        why="the reviewer reported a missing or refused credential; the gate record has the detail (it is not copied here: it may quote a secret)",
                         since=rec.at,
                         default="provide the credential, then re-run the gate (never paste it in chat)",
                         blocks=[it.id],

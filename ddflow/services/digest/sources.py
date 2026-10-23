@@ -248,9 +248,9 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "session note or ask of kind question without an answer",
-        "answer in chat; the lead records it",
-        "ddflow session note <item> --text <answer>",
-        ASK,
+        "answer the question; the answer is recorded with who gave it",
+        "ddflow approvals approve <id>",
+        APPROVAL_ASK,
         "the asker",
     ),
     _s(

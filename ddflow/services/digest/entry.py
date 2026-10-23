@@ -91,7 +91,10 @@ def severity_at(kind: str, age_s: float, cfg) -> str:
         )
     else:
         first, second = parse_ladder(cfg.digest.escalate_after)
-        lifted = "urgent" if age_s >= second else "needs" if age_s >= first else "nudge"
+        floor = (
+            start if rank(start) < rank("nudge") else "nudge"
+        )  # an `info` kind starts below nudge
+        lifted = "urgent" if age_s >= second else "needs" if age_s >= first else floor
     return start if rank(start) >= rank(lifted) else lifted
 
 

@@ -41,6 +41,12 @@ UNCOLLECTED: dict[str, str] = {
     "agent_failed": "no run's failure text (rate or spend limit, crash) is recorded in the log yet",
 }
 
+#: Said once with every queue: what is only seen after an agent files the request.
+ASK_NOTE = (
+    "gate skips, partial gates, forced completions, chores and reviewers appear once the agent "
+    "files the request (a refusal does it when [approvals].auto_request is on)"
+)
+
 
 @dataclass(frozen=True)
 class Queue:
@@ -62,7 +68,7 @@ def build(st, cfg, now: float, facts: Facts | None = None) -> Queue:
     found: list[Entry] = []
     for src in SOURCES:
         found.extend(globals()[f"collect_{src.kind}"](st, cfg, now, facts))
-    gaps = [f"{k}: {why}" for k, why in sorted(UNCOLLECTED.items())]
+    gaps = [f"{k}: {why}" for k, why in sorted(UNCOLLECTED.items())] + [ASK_NOTE]
     if facts.health is None:
         gaps.append("lease: health was not checked (stalled and dead leases are not listed)")
     return Queue(tuple(sorted(found, key=_order)), tuple(gaps), now)
