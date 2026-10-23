@@ -172,3 +172,22 @@ def test_the_renderer_counts_bytes_so_a_non_ascii_brief_meets_the_same_cap():
     )
     assert AB.render(tmpl, f, max_chars=150)["over"], "100 chars but 200 bytes"
     assert not AB.render(tmpl, f, max_chars=250)["over"]
+
+
+def test_a_lone_surrogate_in_the_item_text_does_not_break_the_cap_check():
+    from ddflow.services import agent_brief as AB
+    from ddflow.services import prompts as P
+
+    tmpl = P.Template("t", "<!-- section: identity -->\n{{ title }}\n", "builtin", None)
+    f = AB.Facts(
+        agent="a",
+        item="I",
+        title="\udcff",
+        body="",
+        globs=[],
+        needs=[],
+        base="main",
+        lease_s=1,
+        heartbeat_s=1,
+    )
+    assert not AB.render(tmpl, f, max_chars=100)["over"]

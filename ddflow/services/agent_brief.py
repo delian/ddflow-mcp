@@ -110,6 +110,12 @@ def _sections(tmpl, f: Facts, off: set[str], n_dec: int, n_les: int) -> dict[str
     return out
 
 
+def _nbytes(text: str) -> int:
+    """UTF-8 bytes of ``text``; a lone surrogate (a filename decoded with surrogateescape) counts as one
+    replacement character instead of raising."""
+    return len(text.encode("utf-8", "replace"))
+
+
 def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: int = 0) -> dict:
     """The brief: ``{"text", "sections", "decisions_shown", "lessons_shown", "over"}``.
 
@@ -123,7 +129,7 @@ def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: i
     while True:
         sections = _sections(tmpl, f, off, n_dec, n_les)
         text = "\n\n".join([*sections.values(), *([f.lean_note] if f.lean_note else [])]) + "\n"
-        if not max_chars or len(text.encode()) <= max_chars or not (n_dec or n_les):
+        if not max_chars or _nbytes(text) <= max_chars or not (n_dec or n_les):
             break
         if n_les:
             n_les -= 1
@@ -134,7 +140,7 @@ def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: i
         "sections": sections,
         "decisions_shown": n_dec,
         "lessons_shown": n_les,
-        "over": bool(max_chars and len(text.encode()) > max_chars),
+        "over": bool(max_chars and _nbytes(text) > max_chars),
     }
 
 
