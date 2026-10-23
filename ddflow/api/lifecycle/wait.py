@@ -432,10 +432,21 @@ def wait(
 
 
 def _keep_alive(log, cfg, st):
-    """A tick renewing every live lease the waiter holds, at `[lease].heartbeat_s`; a no-op
-    when it holds none or `[lease].renew_long_commands` is off."""
-    tick, _every = LK.for_holder(log, cfg, st)
-    return tick or (lambda: None)
+    """A tick renewing every live lease the waiter holds once per `[lease].heartbeat_s`; a
+    no-op when it holds none or `[lease].renew_long_commands` is off. The interval is
+    enforced here: `for_holder` hands the pacing to its caller, and renewing on every poll
+    folds the whole log every couple of seconds."""
+    tick, every = LK.for_holder(log, cfg, st)
+    if tick is None:
+        return lambda: None
+    last = [time.monotonic()]
+
+    def paced() -> None:
+        if time.monotonic() - last[0] >= every:
+            last[0] = time.monotonic()
+            tick()
+
+    return paced
 
 
 def _end_wait(WT, w, keep: bool, cfg) -> None:

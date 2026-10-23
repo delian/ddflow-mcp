@@ -38,4 +38,6 @@ def test_a_blocked_wait_renews_the_waiters_own_lease(repo):
     before = _renewals(repo, "T4")
     out = A.wait(repo, item="T2", timeout_s=4, poll_s=0.2, agent=WAITER)
     assert not out.data["woke"], out.data  # still blocked by T1
-    assert _renewals(repo, "T4") > before, "the waiter's lease on T4 was never renewed"
+    renewed = _renewals(repo, "T4") - before
+    assert renewed > 0, "the waiter's lease on T4 was never renewed"
+    assert renewed <= 5, f"renewed {renewed}x in 4s at heartbeat_s=1: once per poll, not per beat"
