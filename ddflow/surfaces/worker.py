@@ -88,7 +88,17 @@ class _Run:
     def write(self, frame: dict[str, Any]) -> None:
         with self.wlock:
             try:
-                self.out.write(WP.encode(frame))
+                try:
+                    line = WP.encode(frame)
+                except (TypeError, ValueError) as exc:  # not JSON: say so rather than go silent
+                    line = WP.encode(
+                        WP.error(
+                            "unencodable",
+                            f"a {frame.get('t')} frame is not JSON: {exc}",
+                            id=frame.get("id"),
+                        )
+                    )
+                self.out.write(line)
                 self.out.flush()
             except (OSError, ValueError):
                 pass  # the shim is gone; finish quietly
@@ -248,16 +258,22 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout = sys.stderr
     done = threading.Event()
     code: list[int] = []
-    t = threading.Thread(
-        target=lambda: code.append(run(Path(args.repo), sys.stdin, out, done=done)), daemon=True
-    )
+
+    def target() -> None:
+        try:
+            code.append(run(Path(args.repo), sys.stdin, out, done=done))
+        except BaseException:  # run() died: record it, a crash is not a clean exit
+            print(traceback.format_exc(), file=sys.stderr)
+            code.append(1)
+
+    t = threading.Thread(target=target, daemon=True)
     t.start()
     while t.is_alive() and not done.is_set():
         t.join(0.1)
-    if code:
-        return code[0]
-    # No result: either run() died (a crash) or a completed drain stopped us while stdin was open.
-    return 0 if done.is_set() and t.is_alive() else 1
+    if done.is_set():
+        t.join(0.2)  # a run() that died as the drain finished still gets to say so
+    # No result yet means a completed drain stopped us while stdin was still open.
+    return code[0] if code else (0 if done.is_set() else 1)
 
 
 if __name__ == "__main__":
