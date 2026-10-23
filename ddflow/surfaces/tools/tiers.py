@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import DECLARED, TOOLS
+from .profiles import AUTO, PROFILES, direct_tools, family_tools, profile_note
 
 # -- tool tiers -------------------------------------------------------------------------
 #
@@ -77,7 +78,10 @@ DEFAULT_TIER = "all"
 
 
 def tier_tools(tier: str) -> frozenset[str]:
-    """The tools `tools/list` advertises at `tier`; an unknown tier advertises everything."""
+    """The tools of `TOOLS` that `tools/list` advertises at `tier` by their own name; an unknown
+    tier advertises everything. A profile also lists family tools, which are not in `TOOLS`."""
+    if tier in PROFILES:
+        return frozenset(direct_tools(tier))
     if tier == "core":
         return CORE_TOOLS
     if tier == "standard":
@@ -105,7 +109,7 @@ def resolve_tier(repo: Path) -> str:
     """
     cfg = _config(repo)
     tier = cfg.mcp.tools if cfg is not None else DEFAULT_TIER
-    return tier if tier in TIERS else DEFAULT_TIER
+    return tier if tier in (*TIERS, *PROFILES, AUTO) else DEFAULT_TIER
 
 
 def resolve_output_schemas(repo: Path) -> bool:
@@ -118,6 +122,8 @@ def resolve_output_schemas(repo: Path) -> bool:
 def tier_note(tier: str, *, names: bool = True) -> str:
     """What a tier hides and how to widen it. `ddflow_help` carries the names; the handshake
     (paid for on every session) only counts them and points at `ddflow_help`."""
+    if tier in PROFILES:
+        return profile_note(tier, len(TOOLS) + len(family_tools("families")))
     if tier not in TIERS or tier == "all":
         return ""
     hidden = sorted(set(TOOLS) - tier_tools(tier))
