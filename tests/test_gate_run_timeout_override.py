@@ -179,3 +179,17 @@ def test_ci_run_cannot_take_an_option_looking_value_so_nothing_is_swallowed(repo
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "ci", "run", "--base", "--timeout=5")
     assert code == 2 and "expected one argument" in out + err
+
+
+def test_a_signed_timeout_is_replaced_too():
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run --timeout=+5", timeout_s=1)
+    assert _with_run_timeout(Config(), gate, 30, "T1", "ci").command == (
+        "ddflow ci run --timeout 30"
+    )
+
+
+def test_a_backslash_newline_inside_a_quoted_value_keeps_the_value_whole():
+    command = 'ddflow ci run --reason "foo \\\n --timeout 7"'
+    gate = GateDef(id="ci", title="ci", command=command, timeout_s=1)
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == 'ddflow ci run --timeout 30 --reason "foo \\\n --timeout 7"'
