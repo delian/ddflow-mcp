@@ -36,12 +36,34 @@ def _mark(cfg: Any, signal: str, name: str, default: float | None) -> float | No
     return float(value) if isinstance(value, (int, float)) else default
 
 
+def _under_memory_pressure(
+    cfg: Any, n: int, lo: int, held: int, free: float | None, inputs: dict
+) -> int:
+    """``n`` cut by memory pressure: halved (not below ``held``, the suite holder's floor) above
+    the high mark, the minimum ``lo`` at the critical one."""
+    if free is None:
+        return n
+    pressure = 1.0 - free
+    crit = _mark(cfg, "memory_pressure", "critical", 0.95)
+    warn = _mark(cfg, "memory_pressure", "high", 0.85)
+    if crit is not None and pressure >= crit:
+        inputs["memory"] = "critical: minimum"
+        return lo
+    if warn is not None and pressure > warn:
+        inputs["memory"] = "high: halved"
+        return max(held, n // 2)
+    return n
+
+
 def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None = None,
-            cores: int | None = None) -> Workers:  # fmt: skip
-    """The worker count for ``files`` test files on this host, now, with its inputs."""
+            cores: int | None = None, holding_suite: bool = False) -> Workers:  # fmt: skip
+    """The worker count for ``files`` test files on this host, now, with its inputs.
+    ``holding_suite``: the run holds the host-wide full-suite lock, so load never cuts it
+    below ``[ci].suite_min_workers`` -- every other suite queues for as long as it runs."""
     ci = cfg.ci
     lo, hi = max(1, int(ci.min_workers)), max(1, int(ci.max_workers))
     hi = max(lo, hi)
+    held = min(hi, max(lo, int(ci.suite_min_workers or 1))) if holding_suite else lo
     setting = str(ci.workers or "").strip().lower() or "auto"
     inputs: dict[str, Any] = {"setting": setting, "min": lo, "max": hi, "files": files}
     if setting != "auto":
@@ -60,16 +82,11 @@ def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None
     else:
         loadavg = load * cores
         inputs["loadavg"] = round(loadavg, 2)
-        n = max(lo, min(hi, math.floor(cores * high - loadavg)))
+        n = max(held, min(hi, math.floor(cores * high - loadavg)))
         inputs["rule"] = "floor(cores * load_high - loadavg), clamped"
-    if free is not None:
-        pressure = 1.0 - free
-        crit = _mark(cfg, "memory_pressure", "critical", 0.95)
-        warn = _mark(cfg, "memory_pressure", "high", 0.85)
-        if crit is not None and pressure >= crit:
-            n, inputs["memory"] = lo, "critical: minimum"
-        elif warn is not None and pressure > warn:
-            n, inputs["memory"] = max(lo, n // 2), "high: halved"
+        if held > lo:
+            inputs["suite_floor"] = held
+    n = _under_memory_pressure(cfg, n, lo, held, free, inputs)
     if files is not None:
         n = min(n, files)
     n = max(1, n)
@@ -102,12 +119,13 @@ def uses(command: str) -> bool:
 
 
 def resolve(command: str, cfg: Any, files: int | None = None, *, source: Any = None,
-            cores: int | None = None) -> tuple[str, Workers | None]:  # fmt: skip
+            cores: int | None = None, holding_suite: bool = False
+            ) -> tuple[str, Workers | None]:  # fmt: skip
     """``command`` with ``{workers}`` replaced; the Workers used (None: it had none)."""
     if not uses(command):
         return command, None
     w = compute(cfg, files if files is not None else count_test_files(command), source=source,
-                cores=cores)  # fmt: skip
+                cores=cores, holding_suite=holding_suite)  # fmt: skip
     for form in _FORMS:
         command = command.replace(form, str(w.n))
     return command, w
@@ -116,12 +134,12 @@ def resolve(command: str, cfg: Any, files: int | None = None, *, source: Any = N
 _AUTO = re.compile(r"(?<![\w-])-n\s+auto(?![\w-])")
 
 
-def localize_auto(text: str, cfg: Any, *, source: Any = None,
-                  cores: int | None = None) -> tuple[str, Workers | None]:  # fmt: skip
+def localize_auto(text: str, cfg: Any, *, source: Any = None, cores: int | None = None,
+                  holding_suite: bool = False) -> tuple[str, Workers | None]:  # fmt: skip
     """``text`` (a pre-commit config) with each ``-n auto`` replaced by the computed count.
     ``auto`` is one worker per core, 192 of them on a big host; the committed file keeps it
     for GitHub CI and only the local copy a run reads says what this host can afford."""
     if not _AUTO.search(text):
         return text, None
-    w = compute(cfg, None, source=source, cores=cores)
+    w = compute(cfg, None, source=source, cores=cores, holding_suite=holding_suite)
     return _AUTO.sub(f"-n {w.n}", text), w
