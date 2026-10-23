@@ -455,6 +455,8 @@ class Config:
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
             value = merge_signals(getattr(target, knob), value)
+        if key == "session.context_budget" and isinstance(value, dict):
+            value = {**getattr(target, knob), **value}  # per agent type, over the layers below
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
