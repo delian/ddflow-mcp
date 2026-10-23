@@ -76,6 +76,8 @@ def apply(log, cfg: Config, state, canon: Canon, *, reason: str = "") -> dict[st
         rule = RULES.get(rule_id)
         if rule is None or rule.verb != canon.verb:
             continue
+        if canon.site.min_level > 1:  # a policy answer is a standing decision, never above L1
+            continue
         if used(state, rule_id, canon.subject()) >= cfg.approvals.policy_max_uses:
             continue
         if not rule.when(it, canon.target, cfg):
