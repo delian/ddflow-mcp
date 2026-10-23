@@ -230,12 +230,9 @@ def test_the_handshake_does_not_write_to_the_repository(repo):
 
 
 def test_gates_with_no_tool_behind_them_are_still_said(repo):
-    from ddflow.services import prompts as P
-    from ddflow.surfaces.mcp import _instruction_vars
-
+    """End to end: a fresh project has gates with no companion behind them, and the served
+    instructions say so (the signal the charter must not lose)."""
     run_cli(repo, "init")
-    vars_ = _instruction_vars(repo)
-    vars_["tool_tier_note"] = ""
-    vars_["gate_gaps"] = ["dedupe"]
-    text = P.render(P.resolve("mcp_instructions", repo), **vars_)
-    assert "Gates with no tool behind them: `dedupe`" in text
+    text = _instructions(repo)
+    assert "Gates with no tool behind them:" in text, text[-600:]
+    assert "never imply a tool ran" in text
