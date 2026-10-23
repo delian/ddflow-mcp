@@ -30,6 +30,11 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
     not changed."""
     out = dict(entry)
     out["env"] = {**dict(entry.get("env") or {}), TIER_ENV: tier}
+    args = list(entry.get("args") or [])
+    if entry.get("command") == "docker" and "run" in args:
+        # `env` reaches the `docker` client, not the container: forward the tier with `-e`.
+        at = args.index("run") + 1
+        out["args"] = [*args[:at], "-e", f"{TIER_ENV}={tier}", *args[at:]]
     return out
 
 

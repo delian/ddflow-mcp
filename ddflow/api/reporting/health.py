@@ -432,7 +432,7 @@ def doctor(
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
-    notes += [n for n in (WM.deferral_note(os.environ, tier=cfg.mcp.tools),) if n]
+    notes += [n for n in (WM.deferral_note(os.environ, tier=cfg.mcp.worker_tools),) if n]
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
