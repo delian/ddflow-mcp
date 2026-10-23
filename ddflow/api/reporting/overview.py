@@ -17,6 +17,7 @@ from ...services import gates as G
 from ...services import leases as L
 from ...services import upgrade_check as UC
 from ...services import waiting as WG
+from ...services.approvals import view as V
 from ...services.cleanup import removed_with_live_lease
 from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
@@ -228,6 +229,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
             "items": len({r["item"] for r in flagged}),
             "list": "ddflow gate list --refuted",
         }
+    if approvals := V.waiting_for_a_person(st):  # RA-cli: only when a request waits
+        data["approvals_pending"] = [
+            {"id": r["id"], "verb": r["verb"], "agent": r["requested_by"]} for r in approvals
+        ]
     if st.highest_version:
         # Which ddflow versions have worked on this log, and the highest (the version stamp).
         data["ddflow_version"] = {
@@ -265,6 +270,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "lessons": len(st.lessons),
         "open_bugs": len(open_bugs),
         "refuted": len(flagged),
+        "approvals": len(data.get("approvals_pending", ())),
         "release": release,
     }
     return O.ok("status", **data)

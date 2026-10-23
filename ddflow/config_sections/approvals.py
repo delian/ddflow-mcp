@@ -29,3 +29,7 @@ class ApprovalsConfig:
         300,
         doc="How many characters of an agent's own reason are shown to the person in an approval request (default 300; the rest is cut with an ellipsis). The reason is quoted as untrusted text and is never part of what is approved.",
     )
+    min_digest_chars: int = knob(
+        8,
+        doc="How many leading characters of a request's digest the person types back to approve or deny it (default 8): `ddflow approvals approve ID --digest XXXXXXXX`. It proves they read which request, so it cannot be answered blind.",
+    )
