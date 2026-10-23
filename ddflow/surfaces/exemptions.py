@@ -46,6 +46,12 @@ EXEMPTIONS: tuple[Command, ...] = (
         "agent identity like `approve`, so no tool carries it; `list` goes with it",
     ),
     Command(
+        path=("approvals",),
+        reason="a person's act (P-remote-approvals): `approve`, `deny` and `revoke` are refused under "
+        "any agent identity, so no tool carries them; an agent asks through its refusals and "
+        "`request`, and reads with `list`/`show` (a ddflow_session action later, RA-mcp)",
+    ),
+    Command(
         path=("plan",),
         reason="its only command, `plan check`, is CLI-only: a pre-filing convenience on a document",
     ),
