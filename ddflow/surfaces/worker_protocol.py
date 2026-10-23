@@ -57,7 +57,10 @@ _REQUIRED = {
         ("conn", lambda v: isinstance(v, dict)),
     ),
     "res": (("id", _int), ("msg", lambda v: v is None or isinstance(v, dict))),
-    "note": (("msg", lambda v: isinstance(v, dict)),),
+    "note": (
+        ("id", lambda v: v is None or _int(v)),
+        ("msg", lambda v: isinstance(v, dict)),
+    ),
     "error": (("code", lambda v: isinstance(v, str)), ("message", lambda v: isinstance(v, str))),
 }
 
@@ -82,6 +85,8 @@ def decode(line: str) -> dict[str, Any] | None:
     for field, ok in _REQUIRED.get(kind, ()):
         if field not in frame or not ok(frame[field]):
             raise ProtocolError("bad_frame", f"`{kind}` needs a valid `{field}`", frame.get("id"))
+    if kind == "hello" and not any(_int(frame.get(k)) for k in ("shim_proto", "worker_proto")):
+        raise ProtocolError("bad_frame", "`hello` needs an integer `shim_proto` or `worker_proto`")
     return frame
 
 
@@ -133,11 +138,22 @@ def error(code: str, message: str, *, id: Any = None, **extra: Any) -> dict[str,
     return out
 
 
+def _bad_hex(text: str) -> bool:
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return True
+    return False
+
+
 def negotiate(shim_hello: dict[str, Any]) -> dict[str, Any] | None:
     """Worker side: None to accept the shim's hello, else the `error` frame to answer with."""
     proto = shim_hello.get("shim_proto")
     if not _int(proto):
         return error("bad_frame", "a shim hello carries an integer `shim_proto`")
+    key = shim_hello.get("state_key", "")
+    if not isinstance(key, str) or _bad_hex(key):
+        return error("bad_frame", "`state_key` must be a hex string")
     if proto != PROTO_MAJOR:
         return error(
             "incompatible_shim_proto",
