@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -43,7 +42,6 @@ from ...services import startcost as SC
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
-from ...services import workermcp as WM
 from ...services import workflow as WF
 from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.completion import verdict
@@ -232,7 +230,6 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     """One note naming driver docs that differ from the templates this ddflow ships, each
     with WHAT the difference is (the Managed state): an unedited older release, a hand edit,
     a newer ddflow's format, or a copy with no stamp."""
-
     lagging = AD.driver_states(repo)
     if not lagging:
         return []
@@ -432,7 +429,7 @@ def doctor(
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
-    notes += [n for n in (WM.deferral_note(os.environ, tier=cfg.mcp.worker_tools),) if n]
+    notes += AD.worker_notes(cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 

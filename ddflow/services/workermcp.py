@@ -111,3 +111,12 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
         f"(~58K tokens on the `{tier}` tool tier): start workers on the `core` tier "
         f"(`[mcp].worker_tools`, {REL})"
     )
+
+
+def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str]:
+    """The doctor's notes for the worker config: ``deferral_note`` for the tier the workers run on
+    (`[mcp].worker_tools`), judged against the doctor's own environment unless one is given."""
+    import os
+
+    note = deferral_note(os.environ if environ is None else environ, tier=cfg.mcp.worker_tools)
+    return [note] if note else []

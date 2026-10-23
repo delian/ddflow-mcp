@@ -1193,6 +1193,11 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
     return f"wrote {rel}"
 
 
+def worker_notes(cfg) -> list[str]:
+    """The doctor's notes on the worker MCP config adopt writes (`services.workermcp`)."""
+    return WM.doctor_notes(cfg)
+
+
 def _claude_extras(repo: Path, key: str, templates: Path, launch: str, image: str) -> list[str]:
     """What adopt writes for Claude Code beyond its MCP entry and commands (P-lean-start): the lean
     role definitions (`services.leanagents`, each in its managed region) and the worker MCP config
