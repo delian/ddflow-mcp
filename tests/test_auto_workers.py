@@ -129,3 +129,9 @@ def test_high_memory_halving_does_not_cut_the_holder_below_its_floor():
     src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})  # high, not critical
     assert WK.compute(holder_cfg(8), None, source=src, cores=192, holding_suite=True).n == 8
     assert WK.compute(holder_cfg(8), None, source=src, cores=192).n == 1
+
+
+def test_an_explicit_worker_count_is_never_raised_by_the_holder_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})
+    c = holder_cfg(8, workers="4")
+    assert WK.compute(c, None, source=src, cores=192, holding_suite=True).n == 4

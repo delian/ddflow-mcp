@@ -160,4 +160,4 @@ def test_execute_gives_only_the_lock_holder_the_worker_floor(tmp_path: Path, mon
         assert flags and all(flags), (cmd, flags)
         flags.clear()
         CI._execute(cfg(), tmp_path, cmd, None, 60, holding_suite=False, used={})
-        assert not any(flags), (cmd, flags)
+        assert not any(flags) and (flags or cmd == CI.DEFAULT_COMMAND), (cmd, flags)
