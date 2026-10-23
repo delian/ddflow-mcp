@@ -362,7 +362,10 @@ def test_an_internal_failure_while_dispatching_is_an_error_frame_not_a_dead_work
 
     monkeypatch.setattr(worker.threading, "Thread", Failing)
     out = io.StringIO()
-    lines = [WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)), WP.encode(WP.request(1, {}, CONN))]
+    lines = [
+        WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)),
+        WP.encode(WP.request(1, {"jsonrpc": "2.0", "id": 9, "method": "x"}, CONN)),
+    ]
     code = worker.run(Path("."), iter(lines), out, handler=echo)
     frames = [json.loads(x) for x in out.getvalue().splitlines()]
     assert any(f["t"] == "res" and f["id"] == 1 and "error" in f["msg"] for f in frames)
@@ -570,3 +573,26 @@ def test_drained_and_bye_are_adjacent_even_when_a_bad_frame_arrives_meanwhile():
         worker.run(Path("."), iter(lines), out, handler=echo)
         kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
         assert kinds[-2:] == ["drained", "bye"], kinds
+
+
+def test_the_hello_constructor_refuses_a_state_key_the_worker_would_refuse():
+    with pytest.raises(ValueError):
+        WP.hello(state_key="session-1")
+    assert WP.negotiate(WP.hello(state_key="ab12")) is None
+
+
+def test_a_request_with_a_null_id_is_still_owed_an_error_reply():
+    def boom(conn, msg, notify):
+        raise RuntimeError("x")
+
+    out = run_worker(
+        [
+            WP.hello(shim_proto=WP.PROTO_MAJOR),
+            WP.request(1, {"jsonrpc": "2.0", "id": None, "method": "x"}, CONN),
+            WP.request(2, {"jsonrpc": "2.0", "method": "notifications/x"}, CONN),
+        ],
+        boom,
+    )
+    res = {f["id"]: f["msg"] for f in out if f["t"] == "res"}
+    assert res[1]["error"]["code"] == -32603 and res[1]["id"] is None
+    assert res[2] is None
