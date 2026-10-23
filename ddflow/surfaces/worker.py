@@ -249,7 +249,10 @@ def main(argv: list[str] | None = None) -> int:
     t.start()
     while t.is_alive() and not done.is_set():
         t.join(0.1)
-    return code[0] if code else 1  # run() died: that is a crash, not a clean exit
+    if code:
+        return code[0]
+    # No result: either run() died (a crash) or a completed drain stopped us while stdin was open.
+    return 0 if done.is_set() else 1
 
 
 if __name__ == "__main__":
