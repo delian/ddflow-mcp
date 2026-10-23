@@ -1,6 +1,6 @@
 # Decision proposal: context compaction advice, summary store and cache-aware policy
 
-State: PROPOSAL (nothing is built before CC-decide). Phase P-context-compaction, task CC-research, 2026-10-23.
+State: DECIDED 2026-10-23 (operator: all nine defaults; see Answers). Phase P-context-compaction, task CC-research, 2026-10-23.
 Evidence and labels: [research/context-compaction.md](../research/context-compaction.md), [research/context-compaction-cache.md](../research/context-compaction-cache.md).
 
 ## Proposal
@@ -31,7 +31,23 @@ Evidence and labels: [research/context-compaction.md](../research/context-compac
 | CC-Q8 | Retention of stored summaries vs the 90-day transcript default (B-am-retention)? | **summaries follow the session log (kept); chat turns follow retention** |
 | CC-Q9 | Cache keep-warm by ddflow (polling)? | **no; 1 h TTL setting instead (TE-subagent-ttl)** |
 
-Answers: none yet. Each is recorded as D-CC-* by CC-decide; thresholds and TTL are coordinated with TE-decide.
+## Answers
+
+DECIDED 2026-10-23. Operator (verbatim): "Accept all nine defaults".
+
+| Q | Answer | Record |
+|---|---|---|
+| CC-Q1 | B (advisor, instruction seed, summary store, cache lint) in four steps | D-CC-Q1 |
+| CC-Q2 | Marked `# Compact instructions` region owned by ddflow, opt-out per project | D-CC-Q2 |
+| CC-Q3 | PreCompact never blocks by default | D-CC-Q3 |
+| CC-Q4 | Lanes 150/250/350K, lead 250/400K, unknown 150/250K | D-CC-Q4 |
+| CC-Q5 | One nudge per level, 20 min cooldown, silent while waiting | D-CC-Q5 |
+| CC-Q6 | Advise only; automatic rotation only after the operator turns it on | D-CC-Q6 |
+| CC-Q7 | Store harness summary redacted; pointer-only when opaque | D-CC-Q7 |
+| CC-Q8 | Summaries follow the session log; chat turns follow retention | D-CC-Q8 |
+| CC-Q9 | No keep-warm polling; 1 h TTL setting instead | D-CC-Q9 |
+
+Not covered by these answers: CC-window-extend and the user-selectable auto-compact window are separate operator-requested behaviours (D-TE-Q2, token-spend.md); thresholds and TTL are one knob set with TE-decide (D-TE-Q1, D-TE-Q2).
 
 ## Alternatives rejected
 
