@@ -58,11 +58,13 @@ def test_the_reason_is_required_and_excludes_a_test(repo):
 
 def test_the_cli_takes_lint_exempt(repo):
     _file(repo, "Bci-ruff-format-3", "merge CI check failed: ruff format --check (CI: Lint)")
-    code, out, err = run_cli(
+    code, _out, err = run_cli(
         repo, "bug", "fixed", "Bci-ruff-format-3", "--lint-exempt", "ruff format applied"
     )
     assert code == OK, err
-    assert "exempt-lint" in out or "closed" in out
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verified"] == "exempt-lint"
+    assert fixed.data["regression_verify"]["reason"] == "ruff format applied"
 
 
 def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
@@ -74,3 +76,15 @@ def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
 def test_a_non_pytest_check_id_containing_colons_is_not_taken_for_a_test(repo):
     _file(repo, "Bci-ruff-colons", "merge CI check failed: ruff::format (CI: Lint)")
     assert api.bug_fixed(repo, "Bci-ruff-colons", lint_exempt="formatted").exit == OK
+
+
+def test_it_takes_no_landing_mutation_or_verify_reason(repo):
+    _file(repo, "Bci-ruff-format-4", "merge CI check failed: ruff format --check (CI: Lint)")
+    for kw in (
+        {"landed": "abc"},
+        {"mutation": {"file": "x", "old": "a", "new": "b"}},
+        {"verify_reason": "r"},
+    ):
+        out = api.bug_fixed(repo, "Bci-ruff-format-4", lint_exempt="formatted", **kw)
+        assert out.exit == REFUSED and "takes no" in out.reason, (kw, out.reason)
+    assert not fold(EventLog(repo).read_all()).bugs["Bci-ruff-format-4"].fixed_at

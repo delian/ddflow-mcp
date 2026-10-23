@@ -104,7 +104,17 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
     if lint_exempt:
-        return _close_lint_exempt(log, cfg, st, item, lint_exempt, tests, changelog_entry=entry)
+        takes_no = {"--landed": landed, "a mutation": mutation, "--verify-reason": verify_reason}
+        return _close_lint_exempt(
+            log,
+            cfg,
+            st,
+            item,
+            lint_exempt,
+            tests,
+            entry,
+            takes_no=[n for n, v in takes_no.items() if v],
+        )
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
@@ -188,7 +198,9 @@ def _lint_check(cfg, st, item: str) -> str:
     return m["check"] if any(w.lower() in low for w in cfg.bugs.lint_checks) else ""
 
 
-def _close_lint_exempt(log, cfg, st, item, reason, tests, *, changelog_entry) -> O.Outcome:
+def _close_lint_exempt(
+    log, cfg, st, item, reason, tests, changelog_entry, *, takes_no
+) -> O.Outcome:
     """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write."""
     if item not in st.bugs:
         return _unknown_bug("bug.fixed", item, st)
@@ -208,6 +220,9 @@ def _close_lint_exempt(log, cfg, st, item, reason, tests, *, changelog_entry) ->
         return O.refused(
             "bug.fixed", "--lint-exempt and --regression-test are alternatives; give one", id=item
         )
+    if takes_no:
+        why = f"--lint-exempt closes without a test; it takes no {', '.join(takes_no)}"
+        return O.refused("bug.fixed", why, id=item)
     payload = {
         "regression_test": "",
         "regression_tests": [],
