@@ -42,6 +42,13 @@ COMMANDS: tuple[Command, ...] = (
         summary="a person approves the current [chore].globs (refused under an agent identity)",
         tool="",
         reason="a person's act: refused for every agent identity, so no tool carries it",
-        params=(Param("note", default="", cli_help="why, recorded with the approval"),),
+        params=(
+            Param("note", default="", cli_help="why, recorded with the approval"),
+            Param(
+                "approval",
+                default="",
+                cli_help="an agent: the id of the operator's approval of exactly this list (a refusal files the request and names it)",
+            ),
+        ),
     ),
 )

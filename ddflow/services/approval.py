@@ -93,19 +93,25 @@ def grant(
     requested_agent: str = "",
     single_use: bool = False,
     extra: dict[str, Any] | None = None,
+    proxy: dict[str, Any] | None = None,
 ) -> Approval:
     """A PERSON approves ``subject`` as it is at ``digest`` (`approval.granted`).
+
+    ``proxy`` is the stamp of a person's approval of exactly this act that an AGENT spent
+    (`services/approvals/consume.operator_gate`, RA-consume): the agent identity is let
+    through, the grant is recorded as the approver's with the stamp naming the ask, channel and
+    level. Only a caller that holds a spent approval has one; no surface passes it through.
 
     ``single_use`` mints a token, returned in the `Approval` and recorded only as its
     hash: whoever presents it may act once (`use`). ``extra`` is carried in the event
     for the flow's own record (a reviewer's identity fields, say), never interpreted.
     Raises `ApprovalRefused` under an agent identity or without a subject and digest.
     """
-    if why := agent_marker(requested_agent):
+    if not proxy and (why := agent_marker(requested_agent)):
         raise ApprovalRefused(refusal(why))
     if not subject or not digest:
         raise ApprovalRefused("an approval needs a subject and the digest of what it approves")
-    actor = Actor(user=os_user(), host=H.short_host())
+    actor = Actor(user=str(proxy["approved_by"]) if proxy else os_user(), host=H.short_host())
     token = secrets.token_urlsafe(18) if single_use else ""
     data: dict[str, Any] = {
         **(extra or {}),
@@ -115,6 +121,7 @@ def grant(
         "host": actor.host,
         "human": actor.human,
         "note": note,
+        **({"proxy": dict(proxy)} if proxy else {}),
     }
     if token:
         data["token_hash"] = token_hash(token)

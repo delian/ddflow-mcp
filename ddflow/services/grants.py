@@ -29,6 +29,8 @@ from ..core.digest import content_digest
 from ..core.model import State, fold
 from ..core.registry import Registry
 from . import approval as AP
+from .approvals import consume as CN
+from .approvals import grant_site as GS
 
 PREFIX = "grant:"
 
@@ -164,7 +166,7 @@ def _next_id(st: State) -> str:
     return f"G{sum(1 for s in st.approvals if s.startswith(PREFIX)) + 1}"
 
 
-def add(
+def add(  # noqa: PLR0913 -- one keyword per facet of a grant; all keyword-only
     log,
     cfg,
     *,
@@ -176,13 +178,13 @@ def add(
     when: str = "",
     requested_agent: str = "",
     gates: Collection[str],
+    approval_id: str = "",
 ) -> Grant:
     """A PERSON grants ``count`` of ``kind`` on ``item``.``gate``. Raises `GrantRefused`
-    under an agent identity (first, before anything is read), and `GrantInvalid` for an
+    under an agent identity unless it spends a person's approval of exactly this grant
+    (``approval_id``, RA-consume-sites-2), and `GrantInvalid` for an
     unknown kind, predicate, item or gate (not in ``gates``), a count outside
     1..`[grants].max_count`, or no reason."""
-    if why := AP.agent_marker(requested_agent):
-        raise GrantRefused(AP.refusal(why))
     k = KINDS.get(kind)
     if k is None:
         raise GrantInvalid(f"unknown grant kind {kind!r}; the kinds are {', '.join(KINDS)}")
@@ -202,6 +204,12 @@ def add(
         "when": when,
         "expires": clock.iso_at(time.time() + ttl * 3600, timespec="seconds") if ttl > 0 else "",
     }  # fmt: skip
+    first = fold(log.read_all(), strict=False)
+    if item not in first.items:
+        raise GrantInvalid(f"no such item {item!r}")
+    # before the lock: spending an approval takes the log lock itself
+    what = {"item": item, "gate": gate, "kind": kind, "count": count, "when": when}
+    proxy = _agent_approval(log, cfg, first, requested_agent, approval_id, what, reason)
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         if item not in st.items:
@@ -211,10 +219,26 @@ def add(
             AP.grant(
                 log, PREFIX + gid, content_digest(f"{gid}{sorted(terms.items())}"),
                 note=reason.strip(), requested_agent=requested_agent, extra={"terms": terms},
+                proxy=proxy,
             )  # fmt: skip
         except AP.ApprovalRefused as exc:
             raise GrantRefused(str(exc)) from exc
     return next(g for g in grants(fold(log.read_all(), strict=False)) if g.id == gid)
+
+
+def _agent_approval(log, cfg, st, requested_agent: str, approval_id: str, what: dict, reason: str):
+    """None for a person; for an agent, the stamp of the person's approval it spends -- or a
+    `GrantRefused` that files the request and names the route (the agent identity is refused
+    exactly as before when there is no approval)."""
+    why = AP.agent_marker(requested_agent)
+    if not why:
+        return None
+    existing = [g.id for g in grants(st) if (g.item, g.gate) == (what["item"], what["gate"])]
+    canon = GS.grant_canon(log.agent_id, existing=existing, **what)
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval_id, reason=reason)
+    if not decision.ok:
+        raise GrantRefused(AP.refusal(why) + " " + decision.message)
+    return decision.stamp
 
 
 def pick(
