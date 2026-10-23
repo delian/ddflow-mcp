@@ -11,9 +11,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import outcome as O
 from ..core.handlers.asks import asks_of
 from ..services import actors as A
+from ..services.approvals import audit as AU
 from ..services.approvals import gate_skip as GS
 from ..services.approvals import request as R
 from ..services.approvals import state as PS
@@ -108,3 +110,22 @@ def approvals_withdraw(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome
     except V.AskRefused as exc:
         return O.refused("approvals.withdraw", str(exc))
     return O.ok("approvals.withdraw", id=ask_id, text=f"{ask_id} withdrawn")
+
+
+def approvals_log(
+    repo: Path, *, verb: str = "", agent_filter: str = "", since: str = "", agent: str = ""
+) -> O.Outcome:
+    """The audit timeline of command approvals and what looks wrong (RA-audit)."""
+    _log, cfg, st = _load(repo, agent)
+    floor = 0.0
+    if since:
+        try:
+            floor = clock.parse_ts(since).timestamp()
+        except (ValueError, TypeError):
+            return O.failed("approvals.log", f"--since {since!r} is not an ISO date or timestamp")
+    rows = AU.rows(st, cfg, verb=verb, agent=agent_filter, since=floor)
+    warnings = AU.findings(st, cfg)
+    text = "\n".join(AU.line(r) for r in rows) or "no approval requests"
+    if warnings:
+        text += "\n\nCheck:\n  " + "\n  ".join(warnings)
+    return O.ok("approvals.log", approvals=rows, warnings=warnings, text=text)
