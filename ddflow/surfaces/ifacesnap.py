@@ -66,7 +66,7 @@ def write(server: Any, *, instructions: str) -> bool:
     """Write the snapshot unconditionally; True. Refuses (ValueError) a snapshot whose replies
     would not match the live server's: a shim must never serve what the worker would not."""
     data = build(server, instructions=instructions)
-    if wrong := drift(server, data):
+    if wrong := S.problems(data) or drift(server, data):
         raise ValueError(f"the interface snapshot would not reproduce: {', '.join(wrong)}")
     data["written_at"] = round(time.time(), 3)
     mcp_snapshot.write(server.repo, S.dumps(data))
