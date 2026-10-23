@@ -123,14 +123,16 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
                 live.append(path.name)
                 continue
             try:  # expired: gone, unless a retry is taking it back right now
-                with fsio.file_lock(path, 0):
+                with fsio.file_lock(path, 0, create=False):
                     with contextlib.suppress(OSError):
                         path.unlink()
             except fsio.LockTimeout:
                 live.append(path.name)
+            except FileNotFoundError:
+                pass  # its owner took it or removed it: nothing to count, nothing to recreate
             continue
         try:
-            with fsio.file_lock(path, 0):  # got it: nobody owns this ticket (yet)
+            with fsio.file_lock(path, 0, create=False):  # got it: nobody owns this ticket (yet)
                 if age <= NEW_S:  # created, its owner has not locked it yet: it still has its place
                     live.append(path.name)
                 else:
@@ -139,6 +141,8 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
         except fsio.LockTimeout:
             if age <= stale_s:
                 live.append(path.name)
+        except FileNotFoundError:
+            continue  # the owner left between the stat and the lock: no ghost is made
     return sorted(live, key=lambda n: n.split(".")[0])
 
 

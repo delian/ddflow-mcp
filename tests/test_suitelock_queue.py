@@ -190,3 +190,46 @@ def test_two_retries_racing_for_one_parked_ticket_get_it_once(tmp_path: Path, mo
     second = SL._Ticket(queue, "agent-a", 120)  # its rename finds the file gone
     assert first.name == "00000000000000000001-agent_a.ticket"
     assert second.name != first.name  # the loser queues anew, it does not share or clobber
+
+
+def test_a_ticket_removed_between_the_stat_and_the_lock_is_not_brought_back(tmp_path, monkeypatch):
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-gone.ticket"
+    ticket.write_text("")
+    real = fsio.file_lock
+
+    def owner_leaves_first(path, *a, **kw):
+        Path(path).unlink(missing_ok=True)  # the owner finishes right after the scan's stat
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(SL.fsio, "file_lock", owner_leaves_first)
+    assert SL._live(queue, 120, 120) == []
+    assert list(queue.iterdir()) == []  # no ghost file
+
+
+def _race_once(queue: Path) -> list[str]:
+    queue.mkdir()
+    (queue / "00000000000000000001-agent_a.parked").write_text("")
+    barrier = threading.Barrier(2)
+    names: list[str] = []
+
+    def retry() -> None:
+        barrier.wait()
+        names.append(SL._Ticket(queue, "agent-a", 120).name)
+
+    threads = [threading.Thread(target=retry) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    return names
+
+
+def test_two_retries_racing_in_threads_take_a_parked_ticket_once(tmp_path):
+    for round_ in range(40):
+        names = _race_once(tmp_path / f"q{round_}")
+        kept = [n for n in names if n == "00000000000000000001-agent_a.ticket"]
+        assert len(names) == 2 and len(kept) == 1, names  # one wins the place, one queues anew
