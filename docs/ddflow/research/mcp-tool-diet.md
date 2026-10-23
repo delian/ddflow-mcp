@@ -431,23 +431,26 @@ reached and on the values carried (whole-token match); a family call is resolved
 `family_schema.route`, and a member name is not on the family surface. Models are two families through
 their configured OpenAI-compatible endpoints: DeepSeek-V4.1-Flash and Kimi k3. 32 requests per cell, one
 run per cell: a difference of two or three requests is noise (the same cell moved by up to 0.06 between
-runs of the same harness).
+runs of the same harness; every number here is from the last run).
 
 | Surface | Bytes shown | Prompt tokens (k3 / DeepSeek) | DeepSeek first call | Kimi k3 first call | DeepSeek +1 retry | Kimi k3 +1 retry |
 |---|---|---|---|---|---|---|
-| flat (123 tools) | 111,036 | 25,146 / 29,374 | 0.938 | 0.938 | 0.938 | 1.000 |
-| families (24 tools) | 51,698 | 11,878 / 14,677 | 1.000 | 0.688 | 0.969 | 0.781 |
-| families, arguments tagged with their actions | 56,740 | 13,618 / 16,147 | 1.000 | 0.656 | 0.969 | 0.844 |
+| flat (123 tools) | 111,036 | 25,146 / 29,374 | 1.000 | 0.938 | 1.000 | 0.938 |
+| families (24 tools) | 51,698 | 11,913 / 14,680 | 0.969 | 0.625 | 1.000 | 0.844 |
+| families, arguments tagged with their actions | 56,740 | 13,651 / 16,147 | 0.969 | 0.656 | 0.969 | 0.875 |
+
+Both surfaces are held to the same server-side argument check (required and unknown arguments), so a flat
+call with an invented argument is as invalid as a family one.
 
 (CONFIRMED, measured.) What it shows:
 
-- Families halve the prompt, and DeepSeek reads them at least as well as the flat list.
-- Kimi k3 loses about 25 points on the first call and about 20 after one retry. The loss is the union
-  schema, not the choice of family: 8 of 32 calls are refused by `route` (it fills arguments that belong to
+- Families halve the prompt, and DeepSeek reads them as well as the flat list (0.969 against 1.000 is one request).
+- Kimi k3 loses about 31 points on the first call and about 10 after one retry. The loss is the union
+  schema, not the choice of family: 8 of 32 first calls are refused by `route` (it fills arguments that belong to
   other actions: `verify_reason` on bug found, `worktree` on task add, `reviewer_model` and `timeout` on
   gate skip, or leaves out `gate`), each with a message that names the action.
-- Tagging each argument with its actions did not help Kimi on the first call (0.656 against 0.688) and
-  moved the retry by a noisy two requests: the noise is the 18 to 43 union arguments.
+- Tagging each argument with its actions barely helped Kimi (0.656 against 0.625 on the first call; the
+  retry moved by one request): the noise is the 18 to 43 union arguments.
 - `ddflow_status` was mistaken for `ddflow_board` by DeepSeek on the flat list only.
 - The `next` hint default (MTD-next-hints) was NOT evaluated, so by D-mcp-tool-families it stays off.
 
