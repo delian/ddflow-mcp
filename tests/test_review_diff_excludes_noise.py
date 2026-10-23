@@ -130,3 +130,20 @@ def test_a_single_commit_review_leaves_the_noise_out_too(tmp_path):
     diff, _how = RV.commit_diff(r, git(r, "rev-parse", tip))
     assert "a = 2" in diff
     assert ".ddflow/events" not in diff and "tmp.cDDAI7SLqb" not in diff, diff
+
+
+def test_a_delta_that_deletes_a_submodule_registered_at_the_previous_tip_keeps_the_deletion(
+    tmp_path,
+):
+    r, head, tip = _branch_with_noise(tmp_path)
+    (r / ".gitmodules").write_text('[submodule "lib"]\n\tpath = lib\n\turl = ../lib\n')
+    git(r, "add", ".gitmodules")
+    git(r, "update-index", "--add", "--cacheinfo", f"160000,{head},lib")
+    git(r, "commit", "-qm", "register lib")
+    reviewed = git(r, "rev-parse", "HEAD")  # the tip the last review covered
+    git(r, "rm", "-q", "--cached", "lib")
+    (r / ".gitmodules").write_text("")
+    git(r, "add", ".gitmodules")
+    git(r, "commit", "-qm", "drop lib")
+    diff = RV._delta_of_branch(r, tip, reviewed, "main")
+    assert "deleted file mode 160000" in diff and "a/lib" in diff, diff
