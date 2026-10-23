@@ -270,7 +270,9 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    extra = tuple(k for k in ("guidance", "glob_warnings", "globs_from_bug", "bug") if out.data.get(k))
+    extra = tuple(
+        k for k in ("guidance", "glob_warnings", "globs_from_bug", "bug") if out.data.get(k)
+    )
     return out.body(CLAIM_BODY + extra)
 
 
@@ -285,13 +287,43 @@ def _bug_globs_line(note: dict, item: str) -> str:
     return line
 
 
+def _claimed_line(item: str, d: dict) -> str:
+    via = f" (the fix task of bug {d['bug']})" if d.get("bug") else ""
+    return f"claimed {item}{via} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+
+
+def claim_via_bug(repo, a: dict, agent: str, called_from=None):
+    """`claim` of an item, or of an OPEN bug's fix task -- filed first when it has none
+    (Bee5f08be7b). An id in the queue always means the item; an unknown or closed bug is
+    left for `claim` to refuse as any unknown id. The answer's ``bug`` names the bug."""
+    api = _api()
+    target = api.knowledge.claim_target(repo, a["id"], agent)
+    if isinstance(target, O.Outcome):
+        return target
+    item, bug = target
+    out = api.claim(
+        repo,
+        item,
+        globs=a.get("globs", "") or "",
+        note=a.get("note", "") or "",
+        force=bool(a.get("force")),
+        no_worktree=bool(a.get("no_worktree")),
+        called_from=called_from,
+        resources=a.get("resources", "") or "",
+        agent=agent,
+        queue=bool(a.get("queue")),
+        break_lease=bool(a.get("break")),
+    )
+    if bug and out.exit == OK:
+        out.data["bug"] = bug
+    return out
+
+
 def claim_text(out, a, ctx) -> str:
     # a claim of a bug's fix task starts from how the bug was seen (DX-bug-repro-bundle)
-    # `claim <bug id>` claims the bug's fix task: name the task, not the bug.
-    item = out.data.get("item") or a["id"]
+    item = out.data["item"]  # `claim <bug id>` claims the bug's fix task
     d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), item).data
-    via = f" (the fix task of bug {d['bug']})" if d.get("bug") else ""
-    msg = f"claimed {item}{via} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    msg = _claimed_line(item, d)
     for b in d.get("broke") or []:
         msg += (
             f"\n  BROKE {b['item']}'s lease ({b['holder']}): no progress for "

@@ -16,8 +16,14 @@ from conftest import run_cli
 from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
-from ddflow.api import lifecycle as LC
 from ddflow.infra.log import EventLog
+from ddflow.surfaces.declared.lifecycle import COMMANDS
+from ddflow.surfaces.registry import by_tool
+
+
+def claim(repo, item):
+    """The door both surfaces use (`claim_via_bug`), as `ddflow claim` and `ddflow_claim` call it."""
+    return by_tool(COMMANDS)["ddflow_claim"].call(repo, {"id": item, "no_worktree": True}, "w")
 
 
 def seed(repo: Path) -> None:
@@ -29,7 +35,7 @@ def test_claiming_a_bug_with_no_task_files_it_and_claims_it(repo):
     seed(repo)
     K.bug_found(repo, summary="stray", id="Bs", no_task=True, agent="a")
     assert "fix-Bs" not in state(repo).items
-    out = LC.claim(repo, "Bs", agent="w", no_worktree=True)
+    out = claim(repo, "Bs")
     assert out.exit == 0, out.reason
     assert out.data["item"] == "fix-Bs" and out.data["bug"] == "Bs"
     st = state(repo)
@@ -40,7 +46,7 @@ def test_claiming_a_bug_with_no_task_files_it_and_claims_it(repo):
 def test_claiming_a_bug_with_a_task_claims_that_task(repo):
     seed(repo)
     K.bug_found(repo, summary="has one", id="Bt", agent="a")
-    out = LC.claim(repo, "Bt", agent="w", no_worktree=True)
+    out = claim(repo, "Bt")
     assert out.exit == 0 and out.data["item"] == "fix-Bt" and out.data["bug"] == "Bt"
 
 
@@ -48,8 +54,8 @@ def test_a_closed_or_unknown_id_is_still_no_such_item_and_files_nothing(repo):
     seed(repo)
     K.bug_found(repo, summary="x", id="Bc", no_task=True, agent="a")
     EventLog(repo, "x").append("bug.fixed", "Bc", {"regression_test": "t::x"})
-    assert LC.claim(repo, "Bc", agent="w", no_worktree=True).exit != 0
-    assert LC.claim(repo, "Bnope", agent="w", no_worktree=True).exit != 0
+    assert claim(repo, "Bc").exit != 0
+    assert claim(repo, "Bnope").exit != 0
     assert set(state(repo).items) == {"P1"}
 
 
@@ -69,5 +75,5 @@ def test_an_item_id_wins_over_a_bug_of_the_same_id(repo):
     seed(repo)
     EventLog(repo, "seed").append("task.added", "Bz", {"parent": "P1", "title": "t"})
     K.bug_found(repo, summary="z", id="Bz", no_task=True, agent="a")
-    out = LC.claim(repo, "Bz", agent="w", no_worktree=True)
+    out = claim(repo, "Bz")
     assert out.data["item"] == "Bz" and "bug" not in out.data

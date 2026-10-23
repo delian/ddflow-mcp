@@ -21,6 +21,7 @@ exists because the record is worthless without it:
 
 from __future__ import annotations
 
+from .bug_claim import claim_target  # noqa: F401
 from .bug_close import (  # noqa: F401
     NOTHING_TO_REMOVE,
     STILL_QUEUED,
