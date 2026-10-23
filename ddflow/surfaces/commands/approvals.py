@@ -44,13 +44,14 @@ def cmd_approvals_request(a, c: Ctx) -> int:
 
 def _digest_or_ask(a, c: Ctx) -> str:
     """The digest the person read: --digest, or typed at a terminal after the text is shown."""
-    if a.digest:
-        return a.digest
+    if a.digest or AA.is_agent(c.requested_agent):  # an agent is refused by the API, unread
+        return a.digest or ""
     if sys.stdin.isatty() and not c.json:
         shown = A.approvals_show(c.repo, a.id, agent=c.requested_agent)
         if shown.exit == OK:
             print(shown.data["text"])
-            return input("type the first 8 characters of the digest above to answer: ").strip()
+            n = AA.digest_chars(c.repo, c.requested_agent)
+            return input(f"type the first {n} characters of the digest above to answer: ").strip()
     return ""
 
 

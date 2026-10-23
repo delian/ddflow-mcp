@@ -9,7 +9,7 @@ from ..registry import Command, Param
 _DIGEST = Param(
     "digest",
     default="",
-    cli_help="the first 8+ characters of the digest `ddflow approvals show` printed: say which request you read",
+    cli_help="the first characters of the digest `ddflow approvals show` printed (a read-receipt that you looked at this request, not a secret)",
 )
 
 COMMANDS: tuple[Command, ...] = (

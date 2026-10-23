@@ -286,14 +286,17 @@ def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> Non
 
 def revoke(log, ask_id: str, *, actor: Actor, now: float | None = None) -> None:
     """An approver takes back an ANSWERED approval that still has uses left (RA-cli). A person's
-    act: the spend check (`consume`) refuses a revoked ask, and a use already spent stays spent."""
+    act, refused to any other identity before the ask is even looked up: the spend check
+    (`consume`) refuses a revoked ask, and a use already spent stays spent."""
+    why = require(actor, CAP_APPROVE)
+    if actor.source not in ANSWER_SOURCES or why:
+        raise AskRefused(why or f"revoking is a person's act, and {actor.id} acts as an agent")
     with log.transaction():
         row = get(_state(log), ask_id)
         if row is None or row["state"] != ANSWERED:
             raise AskRefused(f"{ask_id} is not an answered approval")
-        why = require(actor, CAP_APPROVE)
-        if actor.source not in ANSWER_SOURCES or why:
-            raise AskRefused(why or f"revoking is a person's act, and {actor.id} acts as an agent")
+        if row["uses"] and row["used"] >= row["uses"]:
+            raise AskRefused(f"{ask_id} is already spent: there is nothing left to revoke")
         log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id, "revoked": True})
 
 
