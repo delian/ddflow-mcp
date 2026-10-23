@@ -21,6 +21,17 @@ COMMANDS: tuple[Command, ...] = (
         params=(Param("all", type="boolean", default=False, cli_help="every request, any state"),),
     ),
     Command(
+        path=("approvals", "log"),
+        summary="the audit timeline of approvals (who asked, who answered, which channel and level, what was spent) and what looks wrong",
+        tool="",
+        reason="CLI-only with the rest of `approvals`: the operator's surface",
+        params=(
+            Param("verb", default="", cli_help="only this gated verb"),
+            Param("agent_filter", default="", cli_help="only this agent's requests"),
+            Param("since", default="", cli_help="only requests filed at or after this ISO date"),
+        ),
+    ),
+    Command(
         path=("approvals", "show"),
         summary="one request as ddflow rendered it for the person, with its digest and status",
         tool="",
@@ -38,6 +49,20 @@ COMMANDS: tuple[Command, ...] = (
             Param("target", default="", cli_help="the gate or other target"),
             Param("reason", default="", cli_help="why (shown to the person as untrusted text)"),
         ),
+    ),
+    Command(
+        path=("approvals", "ask"),
+        summary="the exact AskUserQuestion to put to the person for a request (the harness channel)",
+        tool="",
+        reason="CLI-only with the rest of `approvals`",
+        params=(Param("id", required=True, positional=True, cli_help="the request id"),),
+    ),
+    Command(
+        path=("approvals", "attest"),
+        summary="record the person's answer from the harness transcript (never from your word)",
+        tool="",
+        reason="CLI-only with the rest of `approvals`",
+        params=(Param("id", required=True, positional=True, cli_help="the request id"),),
     ),
     Command(
         path=("approvals", "approve"),
