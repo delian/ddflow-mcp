@@ -226,7 +226,7 @@ def _diff_tools(old: dict[str, Any], new: dict[str, Any], d: dict[str, list[str]
     d["incompatible"] += [f"tool {n} removed" for n in sorted(set(ot) - set(nt))]
     d["additive"] += [f"tool {n}" for n in sorted(set(nt) - set(ot))]
     for name in sorted(set(ot) & set(nt)):
-        if ot[name] == nt[name]:
+        if canonical(ot[name]) == canonical(nt[name]):
             continue
         problems = schema_problems(ot[name]["inputSchema"], nt[name]["inputSchema"])
         outputs = output_problems(ot[name].get("outputSchema"), nt[name].get("outputSchema"))

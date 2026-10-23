@@ -149,10 +149,9 @@ def output_problems(old: Any, new: Any, path: str = "") -> list[str]:
         problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt or [])}")
     for name in sorted(set(old.get("required") or []) - set(new.get("required") or [])):
         problems.append(f"{where}: {name} is no longer guaranteed")
-    if "const" in old and ("const" not in new or _canon(new["const"]) != _canon(old["const"])):
-        problems.append(f"{where}: const is no longer guaranteed")
-    if "enum" in old and ("enum" not in new or not _jset(new["enum"]) <= _jset(old["enum"])):
-        problems.append(f"{where}: enum is no longer guaranteed")
+    # What the new schema may emit must stay inside what the old one promised: the input
+    # constraint check with the two schemas swapped (bounds, enum, const, patterns, keywords).
+    problems += _constraint_problems(new, old, where)
     if isinstance(old.get("items"), (dict, bool)) and old["items"] != {}:
         problems += output_problems(old["items"], new.get("items") or {}, f"{where}[]")
     new_props = new.get("properties") or {}

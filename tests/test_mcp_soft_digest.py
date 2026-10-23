@@ -654,3 +654,22 @@ def test_a_tool_with_an_output_break_is_not_also_listed_as_extended():
     v = D.classify(out("a"), out("b"), "honours")
     assert any("output" in r for r in v.reasons)
     assert not any("extended" in r for r in v.reasons)
+
+
+def test_false_and_zero_are_different_json_values_in_a_tool_diff():
+    def with_const(v):
+        return snap(tools=[tool(schema={"type": "object", "properties": {"a": {"const": v}}})])
+
+    assert D.classify(with_const(False), with_const(0), "ignores").kind == "hard"
+
+
+def test_output_bounds_patterns_and_unknown_keywords_are_checked_like_input_ones():
+    def out(**kw):
+        t = tool()
+        t["outputSchema"] = {"type": "integer", **kw}
+        return snap(tools=[t])
+
+    assert D.classify(out(minimum=10), out(minimum=0), "ignores").kind == "hard"
+    assert D.classify(out(minimum=0), out(minimum=10), "ignores").kind == "soft"
+    assert D.classify(out(maximum=5), out(maximum=9), "ignores").kind == "hard"
+    assert D.classify(out(), out(contentMediaType="x"), "ignores").kind == "hard"
