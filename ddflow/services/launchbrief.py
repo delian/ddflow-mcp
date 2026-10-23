@@ -27,15 +27,15 @@ LEAN_NOTE = (
 
 @dataclass(frozen=True)
 class Sizing:
-    cap: int  # characters; 0 = no ceiling
+    cap: int  # UTF-8 bytes (what the renderer counts); 0 = no ceiling
     lean: bool
     budget: int  # the effective start budget it came from, tokens (0 = none)
 
 
 def sizing(session, target: str = "") -> Sizing:
     """The brief's cap and mode for a session of agent type ``target`` ("" = unknown)."""
-    # Tokens to characters is an estimate (`start_bytes_per_token`, about four to a token), the same
-    # one the start cost meter uses; a ceiling of 0 means none, and the floor applies to a DERIVED cap.
+    # Tokens to bytes at `start_bytes_per_token` (about four to a token), the same ratio the start cost
+    # meter uses, and the renderer counts bytes too; a ceiling of 0 means none, and the floor applies to a DERIVED cap.
     budget = SC.effective_budget(session, target)
     ceiling = session.agent_brief_max_chars
     cap = ceiling

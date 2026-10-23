@@ -160,7 +160,7 @@ class SessionConfig:
     )
     agent_brief_max_chars: int = knob(
         9000,
-        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+        doc="Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
     )
     agent_brief_budget_share: float = knob(
         0.1,
