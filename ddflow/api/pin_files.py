@@ -58,6 +58,7 @@ def pins_regenerate(
     if (
         not check
         and not after_merge
+        and not only  # `--only` names what to write: the attribute lines are written by a full run
         and attrs.exists()
         and "merge=pinsregen" in attrs.read_text("utf-8")
     ):
