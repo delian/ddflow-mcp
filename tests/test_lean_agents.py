@@ -133,6 +133,8 @@ def test_adopt_refreshes_a_hand_edited_definition_and_saves_the_edit(repo):
     code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
     assert code == 0 and "your edits are kept in" in out, out
     assert "Call `ddflow_brief` first" in path.read_text()
+    aside = path.with_name(path.name + ".local-edits")
+    assert aside.is_file() and "Call it whenever" in aside.read_text(), "the hand edit was lost"
     assert LA.states(repo) == {}
 
 
@@ -148,7 +150,8 @@ def test_the_frontmatter_is_valid_yaml_scalars():
 
 def test_every_role_is_told_to_file_ddflow_defects_it_meets():
     for role in ROLES:
-        assert "ddflow_bug_found" in LA.template_text(role).split("\n---\n", 1)[1], role
+        body = LA.template_text(role).split("\n---\n", 1)[1]
+        assert "ddflow_bug_found" in body and "before your context is compacted" in body, role
         assert "ddflow_bug_found" in LA.ddflow_tools(role), role
 
 
