@@ -45,7 +45,8 @@ INFRASTRUCTURE: dict[str, int] = {
 MARKER_CALLS: dict[str, int] = {
     "ddflow/api/gates.py:_agent_skip_refusal": 1,
     "ddflow/api/gates.py:record": 1,
-    "ddflow/services/grants.py:add": 1,
+    "ddflow/services/grants.py:_agent_approval": 1,
+    "ddflow/api/chore.py:chore_approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
     "ddflow/services/export/select.py:_is_agent": 1,  # the wrapper
@@ -92,7 +93,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the item, the grant kind and count, and the grants already recorded",
-        ("ddflow/services/grants.py:add",),
+        ("ddflow/services/grants.py:_agent_approval",),
         "ddflow grant add ...",
     ),
     Site(
@@ -110,7 +111,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the current [chore].globs",
-        ("ddflow/services/approval.py:grant",),
+        ("ddflow/services/approval.py:grant", "ddflow/api/chore.py:chore_approve"),
         "ddflow chore approve",
     ),
     Site(

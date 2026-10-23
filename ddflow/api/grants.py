@@ -13,7 +13,7 @@ from ._base import _load
 
 def grant_add(
     repo: Path, *, item: str, gate: str, kind: str, count: int, reason: str,
-    when: str = "", agent: str = "",
+    when: str = "", agent: str = "", approval: str = "",
 ) -> O.Outcome:  # fmt: skip
     """A PERSON records a grant. Refused under an agent identity."""
     log, cfg, _st = _load(repo, agent)
@@ -21,6 +21,7 @@ def grant_add(
         g = GR.add(
             log, cfg, item=item, gate=gate, kind=kind, count=count, reason=reason,
             when=when, requested_agent=agent, gates=G.load_gates(repo, cfg),
+            approval_id=approval,
         )  # fmt: skip
     except GR.GrantRefused as exc:
         return O.refused("grant.add", str(exc))
