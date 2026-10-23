@@ -443,7 +443,7 @@
         "properties": {
          "id": {
           "type": "string",
-          "description": "Item id to claim."
+          "description": "Item id to claim, or an open bug id (its fix task is claimed, filed first if none)."
          },
          "globs": {
           "type": "string",

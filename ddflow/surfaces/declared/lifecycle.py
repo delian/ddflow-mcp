@@ -164,6 +164,7 @@ COMMANDS: tuple[Command, ...] = (
             "port",
             "port_advice",
             "broke",
+            "bug",
         ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
@@ -171,7 +172,12 @@ COMMANDS: tuple[Command, ...] = (
         cli=CliPolicy(shown=(OK,), human=L.claim_text, body=L.claim_body),
         wants_called_from=True,
         params=(
-            Param("id", help="Item id to claim.", cli_help="", positional=True),
+            Param(
+                "id",
+                help="Item id to claim, or an open bug id (its fix task is claimed, filed first if none).",
+                cli_help="item id, or an open bug id: its fix task is claimed (filed first if it has none)",
+                positional=True,
+            ),
             Param(
                 "globs",
                 help="Comma-separated path globs this work will write.",
