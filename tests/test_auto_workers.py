@@ -120,6 +120,12 @@ def test_critical_memory_still_wins_over_the_holder_floor():
 
 def test_localize_auto_gives_the_holder_its_floor():
     src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})
-    text, w = WK.localize_auto("args: [-n, auto]\nx: -n auto\n", holder_cfg(8), source=src,
+    text, w = WK.localize_auto("x: -n auto\ny: -n auto\n", holder_cfg(8), source=src,
                                cores=192, holding_suite=True)  # fmt: skip
-    assert "-n 8" in text and w.n == 8
+    assert text == "x: -n 8\ny: -n 8\n" and w.n == 8
+
+
+def test_high_memory_halving_does_not_cut_the_holder_below_its_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})  # high, not critical
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192, holding_suite=True).n == 8
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192).n == 1

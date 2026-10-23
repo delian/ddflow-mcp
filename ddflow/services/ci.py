@@ -422,7 +422,9 @@ def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite
     with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
-        p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used)
+        p, out_prefix = _execute(
+            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
+        )
     return p, out_prefix, waited
 
 
@@ -543,17 +545,17 @@ def localize_hooks(
 
 
 def _execute(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, local=False, used=None
+    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, holding_suite=False, used=None
 ):
     """(the run that decided the verdict, the output of the run before it): the command as
     written, or -- for a selected scope -- the hooks without the suite, then the selected
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
-    cmd = _with_workers(cmd, cfg, used, "command", holding_suite=local)
+    cmd = _with_workers(cmd, cfg, used, "command", holding_suite=holding_suite)
     with (
         localize_hooks(tree, cfg, cmd, used, holding_suite=True)
-        if local
+        if holding_suite
         else nullcontext(cmd) as cmd
     ):
         return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
