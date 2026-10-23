@@ -10,8 +10,9 @@ are not hits:
 
 * the command line is cut into the commands of its pipelines and `;`/`&&`/`||` lists (and the
   string after `sh -c`), heredoc bodies dropped;
-* an entry's first word must be the command's own word, after `sudo`/`env`/`VAR=x` wrappers
-  (for `git`, its subcommand, after `-C dir` and the other global options);
+* an entry's first word must be the command's own word, after `sudo`/`env`/`timeout N`/`VAR=x`
+  wrappers (for `git`, its subcommand, after `-C dir` and the other global options); a
+  `python -m MOD` command also counts as `MOD`;
 * the rest of the entry's words are matched in order among the command's arguments, a flag
   anywhere (`-rf` matches `-fr`; `--force` matches `--force=1`), a path by its tail.
 An entry that starts with `-` is a flag and matches in any command.
@@ -150,12 +151,12 @@ _VALUED = {
     "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
 }
 _PYTHON = re.compile(r"(?:python|pypy)\d*(?:\.\d+)*\Z")
-_DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
+_DURATION = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)[smhd]?")
 
 
 def _head(words: list[str]) -> list[str]:
     """`words` from the command's own word on: wrappers, their options and values, and
-    VAR=x assignments dropped (`timeout 5 cmd` and `python -m cmd` run `cmd`)."""
+    VAR=x assignments dropped (`timeout 5 cmd` runs `cmd`)."""
     i = 0
     wrapper = ""
     while i < len(words):
@@ -171,7 +172,7 @@ def _head(words: list[str]) -> list[str]:
             i += 1  # the duration is the wrapper's own word
         else:
             break
-    return _python_module(words[i:])
+    return words[i:]
 
 
 def _python_module(head: list[str]) -> list[str]:
@@ -184,7 +185,7 @@ def _python_module(head: list[str]) -> list[str]:
             return head  # an inline program, not a module
         if head[i].startswith("-m"):
             return [head[i][2:], *head[i + 1 :]]  # `-mddflow`
-        i += 2 if head[i] in ("-W", "-X") else 1
+        i += 2 if head[i] in ("-W", "-X", "--check-hash-based-pycs") else 1
     return head[i + 1 :] if i + 1 < len(head) and head[i] == "-m" else head
 
 
@@ -214,13 +215,21 @@ def _word(entry: str, seen: str) -> bool:
 
 
 def matches(entry: str, words: list[str], *, ordered: bool = True) -> bool:
-    """Whether the command `words` is one the (primary-marker-free) `entry` describes."""
+    """Whether the command `words` is one the (primary-marker-free) `entry` describes. A
+    `python -m MOD args` command is both itself and `MOD args`: an entry may name either
+    (`python -m http.server` keeps matching; `ddflow review ...` is matched when launched as
+    `python -m ddflow review ...`)."""
     want = entry.split()
     if not want:
         return False
     head = _head(words)
     if not head:
         return False
+    heads = [head, _python_module(head)]
+    return any(_matches_head(want, h, ordered) for h in heads if h)
+
+
+def _matches_head(want: list[str], head: list[str], ordered: bool) -> bool:
     if want[0].startswith("-"):
         return any(_word(want[0], w) for w in head) and (
             _inorder(want[1:], head)

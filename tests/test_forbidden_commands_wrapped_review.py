@@ -38,6 +38,8 @@ def _check(cmd: str):
         "KIMI_API_KEY=x ddflow",
         "env KIMI_API_KEY=x timeout 580 ddflow",
         "nohup ddflow",
+        "timeout .5s ddflow",
+        "python --check-hash-based-pycs always -m ddflow",
         "python -mddflow",
         "pypy3 -m ddflow",
     ],
@@ -77,3 +79,11 @@ def test_a_review_force_without_a_reason_says_what_is_accepted():
 def test_force_and_reason_may_sit_anywhere_among_the_review_arguments(tail):
     assert _check(f"ddflow {tail}") is None, tail
     assert _check(f"timeout 580 ddflow {tail}") is None, tail
+
+
+def test_a_python_m_entry_of_the_operator_keeps_matching():
+    """`python -m MOD` is MOD for an entry that names MOD and itself for one that names python."""
+    words = ["python", "-m", "http.server", "8000"]
+    assert FB.matches("python -m http.server", words)
+    assert FB.matches("http.server 8000", words)
+    assert not FB.matches("python -m other", words)
