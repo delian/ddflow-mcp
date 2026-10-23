@@ -35,3 +35,11 @@ def test_nothing_is_said_when_gitattributes_is_already_current(repo: Path):
     assert ddflow_cli(repo, "pins", "regenerate", "--install").returncode == 0
     done = ddflow_cli(repo, "pins", "regenerate")
     assert ".gitattributes" not in done.stdout
+
+
+def test_the_line_is_reported_even_when_the_run_then_fails(repo: Path):
+    _installed_then_a_recipe_added(repo)
+    done = ddflow_cli(repo, "pins", "regenerate", "--only", "nosuch")
+    assert done.returncode != 0
+    assert "third.txt merge=pinsregen" in (repo / ".gitattributes").read_text()
+    assert ".gitattributes" in done.stderr + done.stdout, done.stderr

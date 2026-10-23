@@ -76,7 +76,9 @@ def pins_regenerate(
     if not check:
         _record_written(primary, repo, before, watched)
     if rep.problem:
-        return O.failed("pins", rep.problem)
+        return O.failed(
+            "pins", rep.problem, **({"attributes": attr_actions} if attr_actions else {})
+        )
     return _regenerate_outcome(rep, check, attr_actions)
 
 

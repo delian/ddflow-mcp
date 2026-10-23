@@ -257,6 +257,8 @@ def _pins_regenerate(a, c: Ctx) -> int:
         return out.exit
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
+        for line in out.data.get("attributes", []):
+            print(line, file=sys.stderr)
         for p in out.data.get("pins", []):
             if p["stale"] or p["error"]:
                 print(f"  {p['name']}: {p['error'] or 'stale'} ({', '.join(p['files'])})")
