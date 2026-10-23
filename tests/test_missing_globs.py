@@ -128,8 +128,8 @@ def test_plan_check_does_not_warn_about_a_path_an_item_declares_it_creates(proj,
     warning; `creates = [...]` says it is expected, for the item and for the others listing it."""
     plan = tmp_path / "plan.toml"
     plan.write_text(
-        '[A]\nglobs = ["src/new_a.py", "sorc/real.py"]\ncreates = ["src/new_a.py"]\n'
-        'acceptance = "done"\n[B]\nglobs = ["src/new_a.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+        '[A]\nglobs = ["newpkg/new_a.py", "sorc/real.py"]\ncreates = ["newpkg/new_a.py"]\n'
+        'acceptance = "done"\n[B]\nglobs = ["newpkg/new_a.py"]\nneeds = ["A"]\nacceptance = "done"\n'
     )
     code, out, err = run_cli(proj, "plan", "check", str(plan))
     assert code == 0, out + err
