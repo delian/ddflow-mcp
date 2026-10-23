@@ -136,19 +136,7 @@ COMMANDS: tuple[Command, ...] = (
         "another agent holds it or an overlapping item, and names what you could take "
         "instead. NEVER steals an expired lease: a crashed agent's tree often holds "
         "finished work.",
-        call=lambda repo, a, agent, called_from=None: _api().claim(
-            repo,
-            a["id"],
-            globs=a.get("globs", "") or "",
-            note=a.get("note", "") or "",
-            force=bool(a.get("force")),
-            no_worktree=bool(a.get("no_worktree")),
-            called_from=called_from,
-            resources=a.get("resources", "") or "",
-            agent=agent,
-            queue=bool(a.get("queue")),
-            break_lease=bool(a.get("break")),
-        ),
+        call=L.claim_via_bug,
         # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
         # the caller is standing in it -- over MCP the payload is the only way an agent
         # learns it has to move there.

@@ -27,7 +27,6 @@ from ...services.leaseclock import localize
 from .._base import _load
 from .._globwarn import missing_globs
 from ..reporting import new_reports
-from .claim_bug import fix_task_of_bug
 from .claim_choice import _bug_default, _tree_choice, _widened
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
@@ -195,39 +194,6 @@ class _Bound(NamedTuple):
 
 
 def claim(  # noqa: PLR0913 -- the door's own flags
-    repo: Path,
-    item: str,
-    *,
-    globs: str = "",
-    note: str = "",
-    force: bool = False,
-    no_worktree: bool = False,
-    called_from: Path | None = None,
-    resources: str = "",
-    agent: str = "",
-    queue: bool = False,
-    break_lease: bool = False,
-) -> O.Outcome:
-    """Acquire a lease and (optionally) bind a worktree. Exit 3 if refused.
-
-    ``item`` may name an OPEN bug instead: its fix task is claimed, and filed first when the
-    bug has none (the answer's ``bug`` names it).
-    """
-    got = fix_task_of_bug(repo, item, agent)
-    if isinstance(got, O.Outcome):
-        return got
-    task, bug = got
-    out = _claim(
-        repo, task, globs=globs, note=note, force=force, no_worktree=no_worktree,
-        called_from=called_from, resources=resources, agent=agent, queue=queue,
-        break_lease=break_lease,
-    )  # fmt: skip
-    if bug and out.exit == O.OK:
-        out.data["bug"] = bug
-    return out
-
-
-def _claim(  # noqa: PLR0913 -- the door's own flags
     repo: Path,
     item: str,
     *,
