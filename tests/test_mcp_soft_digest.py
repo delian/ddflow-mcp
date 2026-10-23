@@ -581,3 +581,44 @@ def test_loosening_additional_properties_is_compatible_and_tightening_is_not():
     }
     assert D.schema_problems(closed, open_) == []
     assert D.schema_problems(open_, closed)
+
+
+def test_items_narrowed_to_false_is_a_restriction_and_to_true_is_not():
+    arr = {"type": "object", "properties": {"xs": {"type": "array", "items": {"type": "string"}}}}
+    no = {"type": "object", "properties": {"xs": {"type": "array", "items": False}}}
+    assert D.schema_problems(arr, no)
+    anything = {"type": "object", "properties": {"xs": {"type": "array", "items": True}}}
+    assert D.schema_problems(arr, anything) == []
+
+
+def test_additional_properties_empty_schema_is_as_loose_as_true():
+    base = {"type": "object", "properties": {"a": {"type": "string"}}}
+    assert D.schema_problems(base, {**base, "additionalProperties": {}}) == []
+    closed = {**base, "additionalProperties": False}
+    assert D.schema_problems(closed, {**base, "additionalProperties": {}}) == []
+    assert D.schema_problems(closed, {**base, "additionalProperties": {"type": "string"}}) == []
+    assert D.schema_problems(base, {**base, "additionalProperties": {"type": "string"}})
+
+
+def test_const_objects_compare_by_value_not_key_order():
+    assert D.schema_problems({"const": {"a": 1, "b": 2}}, {"const": {"b": 2, "a": 1}}) == []
+
+
+def test_an_empty_type_list_matches_nothing_and_is_a_restriction():
+    assert D.schema_problems({"type": "string"}, {"type": []})
+
+
+def test_a_dropped_output_const_or_enum_is_an_output_break():
+    def out(**kw):
+        t = tool()
+        t["outputSchema"] = {"type": "string", **kw}
+        return snap(tools=[t])
+
+    assert D.classify(out(const="ok"), out(), "ignores").kind == "hard"
+    assert D.classify(out(enum=["a", "b"]), out(enum=["a", "b", "c"]), "ignores").kind == "hard"
+    assert D.classify(out(enum=["a", "b"]), out(enum=["a"]), "ignores").kind == "soft"
+
+
+def test_a_new_surface_is_pending_for_a_client_that_ignores_list_changed():
+    v = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "ignores")
+    assert v.pending == ("core: surface",)
