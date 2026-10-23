@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -192,7 +193,7 @@ def pending(state, now: float | None = None) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: r["requested_at"])
 
 
-def answer(
+def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-only
     log,
     cfg: Config,
     ask_id: str,
@@ -203,6 +204,7 @@ def answer(
     code: str = "",
     text: str = "",
     via: str = "cli",
+    level: int = 0,
     now: float | None = None,
 ) -> dict[str, Any]:
     """Record a person's answer. Raises `AskRefused` unless every invariant holds. Returns the
@@ -234,6 +236,7 @@ def answer(
                 "human": human,
                 "coded": bool(code),
                 "source": actor.source,
+                "level": level if level >= 1 else 1,
                 "code_presented": code,  # spent now: kept so `verdict` can re-hash it
             },
         )
@@ -304,7 +307,31 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
         return Verdict(
             False, f"{subject} is " + ("waiting for an answer" if waiting else "not approved")
         )
-    last = answered[-1]
+    return judge(answered[-1], digest)
+
+
+#: Channel word (`via`) -> a function that re-verifies, from the answered row alone, that the
+#: channel's proof holds (a transcript row, a signature, a code). A level above 1 is believed only
+#: when its channel registered one and it says yes: an answer line written by hand claims any
+#: level it likes.
+LEVEL_VERIFIERS: dict[str, Callable[[dict[str, Any]], bool]] = {}
+
+
+def verified_level(row: dict[str, Any]) -> int:
+    """The assurance level of an answered row that can be shown to hold: 1 (a terminal's word)
+    unless the row's channel registered a verifier that confirms the higher level it claims."""
+    claimed = row.get("level", 0)
+    check = LEVEL_VERIFIERS.get(row.get("via", ""))
+    return claimed if claimed > 1 and check is not None and check(row) else min(claimed, 1)
+
+
+def judge(last: dict[str, Any], digest: str) -> Verdict:
+    """Is this ANSWERED approval row an approval of ``digest`` by a person? The proof is
+    re-checked here, not trusted from the row's own flags (B-ask-verdict-trusts-hand-appended-answer):
+    a recorded source, the one-time code when the ask had one."""
+    subject = last["subject"]
+    if last["state"] != ANSWERED:
+        return Verdict(False, f"{subject} is not answered", last)
     if last["outcome"] != APPROVED:
         return Verdict(False, f"{subject} was denied by {last['answered_by']}", last)
     if not (last["human"] or last["bot_answerable"]):
