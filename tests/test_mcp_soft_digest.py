@@ -159,10 +159,11 @@ def test_live_snapshot_leaves_out_the_release_version(tmp_path, monkeypatch):
     from ddflow.surfaces.mcp import Server
 
     repo = _init_repo(tmp_path / "r")
-    srv = Server(repo)
-    before = D.digest(D.live_snapshot(srv))
+    monkeypatch.setitem(mcp_protocol.SERVER_INFO, "version", "1.1.1")
+    before = D.digest(D.live_snapshot(Server(repo)))
     monkeypatch.setitem(mcp_protocol.SERVER_INFO, "version", "99.99.99")
-    assert D.digest(D.live_snapshot(srv)) == before
+    assert D.digest(D.live_snapshot(Server(repo))) == before
+    assert "99.99.99" not in D.canonical(D.live_snapshot(Server(repo)))
 
 
 def test_each_tier_has_its_own_digest(tmp_path):
@@ -176,11 +177,24 @@ def test_each_tier_has_its_own_digest(tmp_path):
     assert D.digest(D.live_snapshot(srv)) != core
 
 
-def test_facade_snapshot_lists_only_the_two_facade_tools(tmp_path):
+def test_facade_snapshot_lists_exactly_the_two_facade_tools(tmp_path, monkeypatch):
+    from ddflow.surfaces import mcp
+    from ddflow.surfaces.mcp import Server
+
+    # The facade tools (MTD-search-call) are not registered yet: register stand-ins so the
+    # filter is tested against a registry that has them.
+    spec = next(iter(mcp.TOOLS.values()))
+    for name in D.FACADE_TOOLS:
+        monkeypatch.setitem(mcp.TOOLS, name, spec)
+    s = D.live_snapshot(Server(_init_repo(tmp_path / "r")), facade=True)
+    assert {t["name"] for t in s["tools"]} == set(D.FACADE_TOOLS)
+
+
+def test_facade_snapshot_is_empty_until_the_facade_tools_exist(tmp_path):
     from ddflow.surfaces.mcp import Server
 
     s = D.live_snapshot(Server(_init_repo(tmp_path / "r")), facade=True)
-    assert {t["name"] for t in s["tools"]} <= set(D.FACADE_TOOLS)
+    assert s["tools"] == []
 
 
 # ---- schema compatibility ------------------------------------------------------------
@@ -355,7 +369,7 @@ def test_the_verdict_is_deterministic_and_lists_reasons_in_a_stable_order():
     new = snap(tools=[tool("c", description="z"), tool("d")])
     first = D.classify(old, new, "ignores")
     assert first == D.classify(old, new, "ignores")
-    assert list(first.reasons) == sorted(first.reasons) or len(first.reasons) >= 2
+    assert first.reasons[1:] == ("tool a removed", "tool b removed")
 
 
 def test_worst_picks_the_hardest_verdict_across_surfaces():
@@ -370,3 +384,40 @@ def test_classify_surfaces_compares_each_named_surface_and_takes_the_worst():
     new = {"all": snap(), "core": snap(shim_proto=2)}
     v = D.classify_surfaces(old, new, "honours")
     assert v.kind == "hard" and any("core" in r for r in v.reasons)
+
+
+def test_integer_to_number_is_a_broadening_and_untyped_to_typed_is_a_restriction():
+    assert (
+        D.schema_problems(_obj({"n": {"type": "integer"}}), _obj({"n": {"type": "number"}})) == []
+    )
+    assert D.schema_problems(_obj({"n": {"type": "number"}}), _obj({"n": {"type": "integer"}}))
+    assert D.schema_problems(_obj({"n": {}}), _obj({"n": {"type": "string"}}))
+    assert D.schema_problems(_obj({"n": {"type": "string"}}), _obj({"n": {}})) == []
+
+
+def test_facade_mode_still_compares_prompts_because_clients_see_them_either_way():
+    old = snap(
+        tools=[tool("ddflow_search"), tool("ddflow_call")], prompts=[{"name": "p", "arguments": []}]
+    )
+    new = snap(tools=[tool("ddflow_search"), tool("ddflow_call")])
+    assert D.classify(old, new, "ignores", facade=True).kind == "hard"
+
+
+def test_a_changed_output_schema_is_judged_from_the_consumers_side():
+    def with_out(props):
+        t = tool()
+        t["outputSchema"] = _obj(props)
+        return snap(tools=[t])
+
+    base = with_out({"a": {"type": "string"}})
+    wider = with_out({"a": {"type": "string"}, "b": {"type": "string"}})
+    changed = with_out({"a": {"type": "integer"}})
+    assert D.classify(base, wider, "ignores", schema_grace=False).kind == "soft"
+    assert D.classify(base, changed, "ignores", schema_grace=False).kind == "hard"
+
+
+def test_a_new_surface_is_announced_to_a_client_that_honours_list_changed():
+    v = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "honours")
+    assert v.kind == "soft" and v.announce is True
+    quiet = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "ignores")
+    assert quiet.announce is False
