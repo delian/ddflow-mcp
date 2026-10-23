@@ -293,13 +293,13 @@ def test_serving_every_reply_from_a_real_snapshot_takes_milliseconds(tmp_path):
 
     repo = _git(tmp_path / "r")
     ifacesnap.write(_server(repo), instructions="x")
-    t0 = time.process_time()
+    t0 = time.perf_counter()
     snap = S.read(repo)
     S.initialize_result(snap, "2025-11-25")
     S.discover_result(snap)
     S.tools_list_result(snap)
     S.prompts_list_result(snap)
-    assert time.process_time() - t0 < 2.0  # generous: a cold Server needs seconds, this does not
+    assert time.perf_counter() - t0 < 5.0  # wall clock: a sleep or a worker wake-up must fail it
 
 
 def test_drift_is_empty_for_a_fresh_snapshot_and_names_what_a_stale_one_gets_wrong(tmp_path):
@@ -425,3 +425,12 @@ def test_drift_notices_a_missing_legacy_version(tmp_path):
     assert any(
         "initialize[" + proto.SUPPORTED_PROTOCOLS[-1] + "]" in d for d in ifacesnap.drift(srv, snap)
     )
+
+
+def test_drift_notices_missing_modern_versions_in_the_discover_reply(tmp_path):
+    from ddflow.surfaces import ifacesnap
+
+    srv = _server(_git(tmp_path / "r"))
+    snap = ifacesnap.build(srv, instructions="x")
+    snap["modern_protocols"] = []
+    assert "discover.supportedVersions" in ifacesnap.drift(srv, snap)
