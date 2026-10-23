@@ -157,13 +157,13 @@ def negotiate(shim_hello: dict[str, Any]) -> dict[str, Any] | None:
     proto = shim_hello.get("shim_proto")
     if not _int(proto):
         return error("bad_frame", "a shim hello carries an integer `shim_proto`")
-    key = shim_hello.get("state_key", "")
-    if not isinstance(key, str) or _bad_hex(key):
-        return error("bad_frame", "`state_key` must be a hex string")
     if proto != PROTO_MAJOR:
         return error(
             "incompatible_shim_proto",
             f"this worker speaks protocol {PROTO_MAJOR}, the shim {proto}",
             worker_proto=PROTO_MAJOR,
         )
+    key = shim_hello.get("state_key", "")
+    if not isinstance(key, str) or _bad_hex(key):
+        return error("bad_frame", "`state_key` must be a hex string")
     return None
