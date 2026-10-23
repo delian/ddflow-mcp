@@ -83,7 +83,7 @@ def advice(lines: list[str]) -> str:
     more = f"\n  ... and {len(lines) - SHOWN} more" if len(lines) > SHOWN else ""
     return (
         "complexity budget (warning only): a function you touched is at or near radon grade D "
-        f"(CC {GRADE_D_FROM}+), which {GUARD} refuses:\n"
+        f"(CC {GRADE_D_FROM}+), which {GUARD} counts:\n"
         + "\n".join(lines[:SHOWN])
         + more
         + "\nSplit it before the ci gate finds it; `[enforce].complexity_warn_at = 0` turns this off."
