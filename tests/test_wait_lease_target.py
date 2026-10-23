@@ -53,6 +53,8 @@ def test_wait_on_a_free_file_is_ready_at_once(proj):
 
 
 def test_wait_on_a_file_wakes_when_the_holder_releases(proj):
+    assert not A.wait(proj, lease="src/*.py", timeout_s=0, agent=WAITER).data["woke"]  # held now
+
     def release():
         time.sleep(1.0)
         A.release(proj, "T1", agent=HOLDER)
