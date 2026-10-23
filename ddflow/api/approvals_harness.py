@@ -41,4 +41,6 @@ def approvals_attest(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
     ok, message = H.attest(log, cfg, ask_id)
     if ok:
         return O.ok("approvals.attest", id=ask_id, text=message)
+    if message.startswith(H.WAITING):  # not answered yet: come back, not a refusal
+        return O.nothing("approvals.attest", message, id=ask_id)
     return O.refused("approvals.attest", message)
