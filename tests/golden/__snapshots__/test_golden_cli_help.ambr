@@ -50,6 +50,30 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals ask]
+  '''
+  usage: ddflow approvals ask [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow approvals attest]
+  '''
+  usage: ddflow approvals attest [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow approvals deny]
   '''
   usage: ddflow approvals deny [-h] [--digest DIGEST] id
@@ -127,16 +151,20 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,show,request,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,show,request,ask,attest,approve,deny,revoke,withdraw} ...
   
   positional arguments:
-    {list,show,request,approve,deny,revoke,withdraw}
+    {list,show,request,ask,attest,approve,deny,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
       show                one request as ddflow rendered it for the person, with its digest and
                           status
       request             an agent files an approval request for a gated command (a refusal does it
                           too)
+      ask                 the exact AskUserQuestion to put to the person for a request (the harness
+                          channel)
+      attest              record the person's answer from the harness transcript (never from your
+                          word)
       approve             a PERSON approves one request, once (refused under an agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
       revoke              a PERSON takes back an approval that is not spent yet
@@ -2976,7 +3004,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -2986,6 +3014,9 @@
     --globs GLOBS        with --item: the globs you will claim with, so READY means that claim will
                          succeed; path globs, comma-separated (a.py,src/**) or a JSON array; repeat
                          the flag to add more -- every value is kept
+    --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
+                         or a path/glob (until no other agent's live lease covers it); a bare wait
+                         returns the first ready item at once
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
@@ -3214,6 +3245,8 @@
     'ddflow adopt',
     'ddflow approvals',
     'ddflow approvals approve',
+    'ddflow approvals ask',
+    'ddflow approvals attest',
     'ddflow approvals deny',
     'ddflow approvals list',
     'ddflow approvals request',

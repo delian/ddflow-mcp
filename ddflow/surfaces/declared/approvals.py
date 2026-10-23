@@ -40,6 +40,20 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("approvals", "ask"),
+        summary="the exact AskUserQuestion to put to the person for a request (the harness channel)",
+        tool="",
+        reason="CLI-only with the rest of `approvals`",
+        params=(Param("id", required=True, positional=True, cli_help="the request id"),),
+    ),
+    Command(
+        path=("approvals", "attest"),
+        summary="record the person's answer from the harness transcript (never from your word)",
+        tool="",
+        reason="CLI-only with the rest of `approvals`",
+        params=(Param("id", required=True, positional=True, cli_help="the request id"),),
+    ),
+    Command(
         path=("approvals", "approve"),
         summary="a PERSON approves one request, once (refused under an agent identity)",
         tool="",
