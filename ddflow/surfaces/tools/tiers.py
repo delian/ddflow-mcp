@@ -126,6 +126,8 @@ def resolve_output_schemas(repo: Path) -> bool:
 def tier_note(tier: str, *, names: bool = True) -> str:
     """What a tier hides and how to widen it. `ddflow_help` carries the names; the handshake
     (paid for on every session) only counts them and points at `ddflow_help`."""
+    if tier == AUTO:
+        tier = DEFAULT_PROFILE
     if tier in PROFILES:
         return profile_note(tier, len(set(TOOLS) | set(family_tools("families"))))
     if tier not in TIERS or tier == "all":

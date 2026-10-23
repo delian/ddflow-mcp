@@ -183,6 +183,7 @@ def test_auto_that_reaches_tier_tools_is_the_lean_core():
 def test_a_config_that_cannot_be_read_is_the_default_profile_not_everything(repo, monkeypatch):
     from ddflow.surfaces.tools import tiers
 
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
     monkeypatch.setattr(tiers, "_config", lambda _repo: None)
     assert tiers.resolve_tier(repo) == "auto"
     assert Server(repo).tier == "lean"
@@ -194,3 +195,14 @@ def test_the_note_counts_each_tool_once(monkeypatch):
     total = len(set(TOOLS) | set(P.family_tools("families")))
     assert f"of {total})" in tiers.tier_note("lean")
     assert total == len(TOOLS) + 13  # 15 families, two of which are tools already
+
+
+def test_an_empty_knob_is_auto_and_auto_has_a_note(repo, monkeypatch):
+    from ddflow.surfaces.tools import tiers
+
+    assert P.settle("") == P.settle("  ") == "lean"
+    assert tiers.tier_note("auto") == tiers.tier_note("lean")
+    monkeypatch.setitem(P.CLIENT_PROFILES, "hosty", "families")
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", " AUTO ")
+    _srv, tools = _listed(repo, clientInfo={"name": "Hosty"})
+    assert len(tools) == 24  # an upper-case or padded auto still waits for the client's name
