@@ -88,3 +88,9 @@ def test_it_takes_no_landing_mutation_or_verify_reason(repo):
         out = api.bug_fixed(repo, "Bci-ruff-format-4", lint_exempt="formatted", **kw)
         assert out.exit == REFUSED and "takes no" in out.reason, (kw, out.reason)
     assert not fold(EventLog(repo).read_all()).bugs["Bci-ruff-format-4"].fixed_at
+
+
+def test_only_a_title_that_starts_as_the_ci_filing_does_is_a_ci_bug(repo):
+    _file(repo, "B-fake", "Not a CI check failed: ruff format --check (CI: Lint)")
+    out = api.bug_fixed(repo, "B-fake", lint_exempt="no test, honest")
+    assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason

@@ -184,7 +184,7 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     )
 
 
-_CI_LINT_TITLE = re.compile(r"CI check failed: (?P<check>.+?)\s*$")
+_CI_LINT_TITLE = re.compile(r"^\S+ CI check failed: (?P<check>.+?)\s*$")
 
 
 def _lint_check(cfg, st, item: str) -> str:
