@@ -116,3 +116,9 @@ def test_a_tab_after_the_double_dash_also_ends_the_ci_part():
     )
     out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
     assert out.command == "ddflow ci run --timeout 60 --\tpytest --timeout=30"
+
+
+def test_a_verb_that_merely_starts_with_run_is_not_rewritten():
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run-analyze x", timeout_s=1)
+    out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+    assert out.command == "ddflow ci run-analyze x" and out.timeout_s == 60

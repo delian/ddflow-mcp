@@ -697,7 +697,7 @@ def run(
 
 
 def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
-    """``gdef`` for one run that may take ``timeout_s`` (0: as declared): its own timeout, and
+    """``gdef`` for one run that may take ``timeout_s`` (None: as declared; else 1..max): its own timeout, and
     the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
     outside ``[gates].max_run_timeout_s`` is the refusal instead."""
     if timeout_s is None or gdef is None:
@@ -712,13 +712,13 @@ def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
             outcome="",
         )
     command = gdef.command or ""
-    if command.strip().startswith("ddflow ci run"):
+    if re.match(r"\s*ddflow ci run(\s|$)", command):
         # Only the part before a `--`: what follows belongs to the test runner.
         parts = re.split(r"(\s--(?:\s|$))", command, maxsplit=1)
         head, sep, tail = parts[0], "".join(parts[1:2]), "".join(parts[2:])
         head = re.sub(r"\s--timeout(?:=|\s+)\d+", "", head)
         # Right after the verb, not at the end: after a `--` it would reach the test runner.
-        head = re.sub(r"^(\s*ddflow ci run)", rf"\1 --timeout {timeout_s}", head, count=1)
+        head = re.sub(r"^(\s*ddflow ci run)(?=\s|$)", rf"\1 --timeout {timeout_s}", head, count=1)
         command = head + sep + tail
     return replace(gdef, timeout_s=timeout_s, command=command)
 
