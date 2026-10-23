@@ -1,8 +1,8 @@
 """B-test-suite-guard-fires-on-concurrent-edit: an agent editing a tracked file in the worktree
-while the suite runs is not the suite modifying the real repository.
+while the unit_tests gate runs the suite there is not the suite modifying the real repository.
 
-The leak the guard exists for stages something (a one-line README.md `git add`ed by a fixture)
-or commits; an UNSTAGED edit is the working copy being worked on."""
+Under that gate only INDEX-side status lines are compared (a fixture's stray `git add`, an
+intent-to-add ` A`); everywhere else, as before, every tracked-file line is."""
 
 from __future__ import annotations
 
@@ -13,28 +13,45 @@ import _isolation as ISO
 
 def _fake_git(porcelain: str):
     def run(*args: str):
-        if args[:2] == ("rev-parse", "--git-common-dir"):
-            return SimpleNamespace(stdout="", returncode=0)
-        if args[:1] == ("status",):
-            return SimpleNamespace(stdout=porcelain, returncode=0)
-        return SimpleNamespace(stdout="", returncode=0)
+        out = porcelain if args[:1] == ("status",) else ""
+        return SimpleNamespace(stdout=out, returncode=0)
 
     return run
 
 
-def test_an_unstaged_edit_by_someone_else_is_not_a_change_the_suite_made(monkeypatch):
-    monkeypatch.setattr(ISO, "_git", _fake_git(" M tests/test_a.py\n M ddflow/x.py\n"))
+EDITS = " M tests/test_a.py\n M ddflow/x.py\n"
+
+
+def test_under_the_unit_tests_gate_an_unstaged_edit_is_not_the_suites(monkeypatch):
+    monkeypatch.setenv("DDFLOW_RUNNING_GATE", "unit_tests")
+    monkeypatch.setattr(ISO, "_git", _fake_git(EDITS))
     assert ISO.snapshot()["status"] == []
 
 
-def test_a_staged_change_still_is(monkeypatch):
-    monkeypatch.setattr(
-        ISO, "_git", _fake_git("A  README.md\nM  docs/a.md\nMM ddflow/y.py\n M ddflow/z.py\n")
-    )
-    assert ISO.snapshot()["status"] == ["A  README.md", "M  docs/a.md", "MM ddflow/y.py"]
+def test_under_that_gate_staged_and_intent_to_add_lines_still_are(monkeypatch):
+    monkeypatch.setenv("DDFLOW_RUNNING_GATE", "unit_tests")
+    porcelain = "A  README.md\nM  docs/a.md\nMM ddflow/y.py\n A new.py\n M ddflow/z.py\n"
+    monkeypatch.setattr(ISO, "_git", _fake_git(porcelain))
+    assert ISO.snapshot()["status"] == [
+        " A new.py",
+        "A  README.md",
+        "M  docs/a.md",
+        "MM ddflow/y.py",
+    ]
 
 
-def test_the_guard_does_not_fire_when_only_an_edit_appeared_during_the_run(monkeypatch):
+def test_anywhere_else_an_unstaged_edit_is_still_a_change(monkeypatch):
+    for gate in (None, "ci"):
+        if gate:
+            monkeypatch.setenv("DDFLOW_RUNNING_GATE", gate)
+        else:
+            monkeypatch.delenv("DDFLOW_RUNNING_GATE", raising=False)
+        monkeypatch.setattr(ISO, "_git", _fake_git(EDITS))
+        assert ISO.snapshot()["status"] == sorted(EDITS.splitlines()), gate
+
+
+def test_the_guard_stays_quiet_when_an_edit_appears_during_a_unit_tests_run(monkeypatch):
+    monkeypatch.setenv("DDFLOW_RUNNING_GATE", "unit_tests")
     monkeypatch.setattr(ISO, "_git", _fake_git(""))
     before = ISO.snapshot()
     monkeypatch.setattr(ISO, "_git", _fake_git(" M tests/test_a.py\n"))

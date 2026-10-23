@@ -124,12 +124,20 @@ def stray_commits(since: str) -> list[str]:
     return out
 
 
-def staged_status(lines: list[str]) -> list[str]:
-    """The `status --porcelain` lines that have something in the INDEX (first column not blank):
-    what a fixture's stray `git add` leaves. An unstaged edit (`" M"`) is the working copy being
-    worked on -- an agent editing a test while the gate runs it -- and is not the suite's
-    (B-test-suite-guard-fires-on-concurrent-edit)."""
-    return sorted(line for line in lines if line[:1] not in (" ", "?", ""))
+#: The gate whose command runs in the agent's OWN worktree, where the agent may keep editing
+#: while it runs (`ddflow gate run unit_tests`); `ci` and the hooks run in a scratch checkout.
+LIVE_TREE_GATE = "unit_tests"
+
+
+def tracked_status(lines: list[str]) -> list[str]:
+    """The `status --porcelain` lines the guard compares. Under the `unit_tests` gate (the
+    suite runs in the agent's live worktree) only lines with something in the INDEX -- what a
+    fixture's stray `git add` leaves; an unstaged edit (`" M"`) is the agent working on a test
+    while the gate runs it, not the suite's (B-test-suite-guard-fires-on-concurrent-edit).
+    Everywhere else (a scratch checkout, a hook, a hand run) every line is compared, as before."""
+    if os.environ.get("DDFLOW_RUNNING_GATE") != LIVE_TREE_GATE:
+        return sorted(lines)
+    return sorted(line for line in lines if line[:1] not in (" ", "?", "") or line[:2] == " A")
 
 
 def snapshot(*, status: bool = True) -> dict[str, object]:
@@ -139,7 +147,7 @@ def snapshot(*, status: bool = True) -> dict[str, object]:
     snap["head"] = _head()
     if status:
         r = _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).ddflow")
-        snap["status"] = staged_status(r.stdout.splitlines()) if r.returncode == 0 else None
+        snap["status"] = tracked_status(r.stdout.splitlines()) if r.returncode == 0 else None
     return snap
 
 
