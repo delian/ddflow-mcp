@@ -1298,6 +1298,13 @@
       bugs.phase = 'bugs'   [default]
           The standing phase (default `bugs`) every fix task is filed under, whatever
           item the bug names. Made on first use, with the title `Bugs`.
+      bugs.lint_checks = ['ruff', '(CI: Lint)', 'format']   [default]
+          Substrings (case-insensitive) that make a CI-filed bug a LINT bug, whose
+          check has no test to write: `ddflow bug fixed <Bci-...> --lint-exempt
+          REASON` closes such a bug with the reason recorded
+          (regression_verified=exempt-lint) instead of a `--regression-test`. A bug
+          whose check id contains a pytest node (`::`), or matches none of these,
+          still needs its regression test. Default: ruff, (CI: Lint), format.
       bugs.repro_capture = 'full'   [default]
           How much of a reproduction bundle `bug found` stores with the bug (default
           `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
@@ -2473,6 +2480,23 @@
           How many seconds before the end of its use window `ddflow approvals log`
           starts to say an approved-but-unspent request will expire unused (default
           600).
+      approvals.policy = []   [default]
+          Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4).
+          Each id names a rule registered in code (`ddflow approvals log` lists what
+          fired): `skip_after_unavailable` (an agent may skip a failed review gate
+          whose reviewer was recorded unavailable `policy_unavailable_runs` times),
+          `accept_baseline_red` (an agent may accept a partial that ddflow measured
+          baseline-red). A rule approves only its own verb, at most `policy_max_uses`
+          times per item and target, and every use is recorded as an approval answered
+          by `policy:<id>`, never by a person. An agent surface cannot write this
+          knob.
+      approvals.policy_max_uses = 1   [default]
+          How many times one standing rule may approve the same item and target
+          (default 1). A rule past its cap falls back to asking a person.
+      approvals.policy_unavailable_runs = 3   [default]
+          How many recorded `unavailable` runs of a review gate the rule
+          `skip_after_unavailable` needs before it lets an agent skip that gate's
+          failure (default 3).
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence

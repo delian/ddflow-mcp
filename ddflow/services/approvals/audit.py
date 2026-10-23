@@ -77,7 +77,7 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
         if r["state"] != ANSWERED or r["outcome"] != E.APPROVED:
             continue
         verdict = E.judge(r, r["digest"])
-        if not verdict.ok:
+        if not verdict.ok and not r["policy"]:  # a standing rule's answer is no person's by design
             out.append(
                 f"{r['id']} ({r['verb']}): an approved answer without proof -- {verdict.reason} "
                 "(written by hand?); it cannot be spent"
@@ -92,6 +92,14 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
         if r["used"] < r["uses"] and r["use_ttl_s"] and left < cfg.approvals.expiry_warn_s:
             when = "expired unused" if left <= 0 else "will expire unused within minutes"
             out.append(f"{r['id']} ({r['verb']}) approved by {r['answered_by']} {when}")
+    by_rule: dict[str, int] = {}
+    for r in _commands(state):
+        if r["policy"]:
+            by_rule[r["answered_by"]] = by_rule.get(r["answered_by"], 0) + 1
+    out += [
+        f"{n} approval(s) granted by standing rule {who} (not a person)"
+        for who, n in sorted(by_rule.items())
+    ]
     out.extend(standing_notes(cfg, state))
     return out
 
