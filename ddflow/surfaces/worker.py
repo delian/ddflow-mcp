@@ -154,8 +154,13 @@ class _Run:
             self.bye("drained")
             self.done.set()
 
-        self.drain_thread = threading.Thread(target=finish, name="ddflow-worker-drain", daemon=True)
-        self.drain_thread.start()
+        t = threading.Thread(target=finish, name="ddflow-worker-drain", daemon=True)
+        try:
+            t.start()
+        except BaseException:
+            self.draining = False  # nothing is draining: the shim may try again
+            raise
+        self.drain_thread = t
 
     def hello(self, frame: dict[str, Any]) -> bool:
         err = WP.negotiate(frame)
