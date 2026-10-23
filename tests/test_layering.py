@@ -43,6 +43,9 @@ ALLOWED: dict[str, set[str]] = {
     "services": {"config", "core", "infra", "views"},
     "api": {"config", "core", "infra", "services", "views"},
     "surfaces": {"config", "core", "infra", "services", "views", "api"},
+    #: the MCP shim and its probes: stdlib only, imports no ddflow layer (it must stay tiny and
+    #: able to outlive any upgrade of the layers it fronts)
+    "mcpshim": set(),
 }
 
 #: Packages that are PART of a layer rather than a layer of their own: `config` is one
