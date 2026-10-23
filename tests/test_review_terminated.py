@@ -1,9 +1,9 @@
 """A review killed by `timeout` (SIGTERM) says so and records the gate unavailable (bug
-Bed9d75dd1c): it used to vanish -- output ended mid-wait, no error, nothing on the record."""
+Bed9d75dd1c): it used to vanish -- output ended mid-wait, no error, nothing on the record --
+and its exit waited out the slowest reviewer. An earlier finished round stays the record."""
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import signal
@@ -22,15 +22,20 @@ from helpers import git as _git
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="signals are POSIX")
 
 
-def _setup(repo: Path, tmp_path: Path) -> Path:
-    began = tmp_path / "began"
-    cli = tmp_path / "slow-reviewer"
-    cli.write_text(f"#!/bin/sh\ncat >/dev/null\ntouch '{began}'\nsleep 120\n")
+def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
+    """A reviewer that answers at once, or sleeps while `slow` exists; branch `feat` with a
+    change. Returns (the file the slow reviewer touches when it starts, the `slow` switch)."""
+    began, slow = tmp_path / "began", tmp_path / "slow"
+    cli = tmp_path / "reviewer"
+    cli.write_text(
+        f"#!/bin/sh\ncat >/dev/null\nif [ -e '{slow}' ]; then touch '{began}'; sleep 120; fi\n"
+        "echo 'STATUS: NO FINDINGS'\n"
+    )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
-        "[worktree]\nenabled = false\n"
-        f'[[reviewer]]\nname = "slow"\nkind = "command"\ncommand = "{cli}"\n'
+        "[worktree]\nenabled = false\n[review]\nmax_rounds = 0\n"
+        f'[[reviewer]]\nname = "r"\nkind = "command"\ncommand = "{cli}"\n'
         'model = "gemini-2.5-pro"\ngates = ["critic"]\n'
     )
     _git(repo, "add", "-A")
@@ -40,11 +45,11 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     (repo / "x.py").write_text("x = 1\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "work")
-    return began
+    return began, slow
 
 
-def test_a_sigtermed_review_says_so_and_records_the_gate_unavailable(repo, tmp_path):
-    began = _setup(repo, tmp_path)
+def _review_and_term(repo: Path, began: Path) -> str:
+    """Start `ddflow review`, SIGTERM it once its reviewer is running; its output."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     p = subprocess.Popen(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "review", "T1", "--gate", "critic",
@@ -52,19 +57,40 @@ def test_a_sigtermed_review_says_so_and_records_the_gate_unavailable(repo, tmp_p
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         start_new_session=True, cwd=str(repo),
     )  # fmt: skip
-    deadline = time.monotonic() + 120
-    while not began.exists() and time.monotonic() < deadline:
-        time.sleep(0.1)
-    if not began.exists():
-        p.kill()
-        raise AssertionError("the reviewer never started: " + "".join(p.communicate()))
-    p.send_signal(signal.SIGTERM)
-    p.wait(timeout=60)  # the review ends on its own; the reviewer it started may linger
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(p.pid, signal.SIGKILL)
-    out, err = p.communicate(timeout=30)
-    text = out + err
+    try:
+        deadline = time.monotonic() + 120
+        while not began.exists() and time.monotonic() < deadline and p.poll() is None:
+            time.sleep(0.1)
+        assert began.exists(), "the reviewer never started"
+        p.send_signal(signal.SIGTERM)
+        out, err = p.communicate(timeout=60)  # it must end by itself, reviewer cancelled
+        return out + err
+    finally:
+        if p.poll() is None:
+            os.killpg(p.pid, signal.SIGKILL)
+
+
+def _gate(repo: Path) -> dict:
+    _code, shown, _err = run_cli(repo, "--json", "show", "T1")
+    return json.loads(shown)["gates"]["critic"]
+
+
+def test_a_sigtermed_review_says_so_and_records_the_gate_unavailable(repo, tmp_path):
+    began, slow = _setup(repo, tmp_path)
+    slow.touch()
+    text = _review_and_term(repo, began)
     assert "terminated by SIGTERM" in text and "not a pass" in text, text
-    _code, shown, _e = run_cli(repo, "--json", "show", "T1")
-    gate = json.loads(shown)["gates"]["critic"]
+    gate = _gate(repo)
     assert gate["outcome"] == "unavailable" and "SIGTERM" in gate["reason"], gate
+
+
+def test_a_sigtermed_review_leaves_an_earlier_finished_round_the_record(repo, tmp_path):
+    began, slow = _setup(repo, tmp_path)
+    assert run_cli(repo, "review", "T1", "--gate", "critic", "--branch", "feat")[0] == 0
+    assert _gate(repo)["outcome"] == "passed"
+    slow.touch()
+    text = _review_and_term(repo, began)
+    assert "terminated by SIGTERM" in text, text
+    gate = _gate(repo)
+    assert gate["outcome"] == "passed", gate
+    assert gate["evidence"]["unavailable_deltas"][0]["reason"].startswith("the review was"), gate
