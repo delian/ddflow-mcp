@@ -55,6 +55,14 @@ def _no_ambient_mcp_tool_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _own_suite_lock_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
+    """The host-wide full-suite lock lives under ``$XDG_STATE_HOME``. A test that runs a
+    `unit_tests` gate (or `ci run`) would queue on the REAL lock -- held by the very ci run
+    this suite is part of -- and wait on itself. Each test gets a lock directory of its own."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state")))
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A real git repository. Real, not mocked: every worktree, lease-recovery and
