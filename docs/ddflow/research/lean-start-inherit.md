@@ -3,7 +3,7 @@
 Closes the UNKNOWNs of section 1 of [lean-start.md](lean-start.md). Evidence labels as there: MEASURED =
 read from `claude -p ... --output-format json` or `stream-json` usage on this machine (Claude Code 2.1.296,
 model `haiku`, 2026-10-23); "first-turn input" is input + cache_creation + cache_read of the first request.
-One run per cell unless stated, so +-0.3K noise; the repeated cells (V2, V6) came out identical.
+One run per cell unless stated, so +-0.3K noise; the two cells that were re-run (V2 and V6) each reproduced their first-run value exactly.
 
 Probe project: a throwaway git repository, `ddflow init` and `ddflow adopt --agents claude` (CLAUDE.md 2,540 B,
 the three lean agent definitions of LS-agents, `.ddflow/local/worker-mcp.json` of LS-worker-mcp-config), run from
@@ -23,10 +23,11 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
 
 - ddflow's names cost 1.4K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
   V12) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool search on.
-- ddflow undeferred is 28.5K (V13 against V10), the core tier does NOT undercut the all tier here: V8 55.7K against
-  V13 52.7K. The earlier "core 54.7K against all 84.2K" (lean-start.md, probes K and L) was on a different
-  baseline; UNKNOWN why a core-tier server weighs as much as the all tier in this run (one run each; schema bytes by
-  our meter say 8.8K against 26.6K tokens).
+- ddflow undeferred is 28.5K (V13 against V10) on this tree, half of the 58.4K of lean-start.md probe L (the
+  charter replaced a 3.1K instruction block and the tool-diet work has landed since; the split is UNKNOWN). The core
+  tier does NOT undercut the all tier here: V8 55.7K against V13 52.7K, where lean-start.md measured core 54.7K
+  against all 84.2K (probes K and L). UNKNOWN why a core-tier server weighs as much as the all tier in this run (one
+  run each; the schema bytes/4 ESTIMATE says 8.8K against 26.6K tokens, which the run does not show).
 - The hypothesis of lean-start.md (1M-window models do not defer) is REFUTED for haiku: its `modelUsage` reports a
   1,000,000-token window and V0 still deferred ddflow. Opus is not measured (no Opus spend).
 
