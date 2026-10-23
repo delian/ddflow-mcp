@@ -41,3 +41,19 @@ class ApprovalsConfig:
         factory=lambda: ["~/.claude/projects"],
         doc="Where the harness channel looks for session transcripts (`*.jsonl`) that hold the answer to an approval question (default ~/.claude/projects). Only files modified since the request was filed are read.",
     )
+    expiry_warn_s: int = knob(
+        600,
+        doc="How many seconds before the end of its use window `ddflow approvals log` starts to say an approved-but-unspent request will expire unused (default 600).",
+    )
+    policy: list[str] = knob(
+        factory=list,
+        doc="Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4). Each id names a rule registered in code (`ddflow approvals log` lists what fired): `skip_after_unavailable` (an agent may skip a failed review gate whose reviewer was recorded unavailable `policy_unavailable_runs` times), `accept_baseline_red` (an agent may accept a partial that ddflow measured baseline-red). A rule approves only its own verb, at most `policy_max_uses` times per item and target, and every use is recorded as an approval answered by `policy:<id>`, never by a person. An agent surface cannot write this knob.",
+    )
+    policy_max_uses: int = knob(
+        1,
+        doc="How many times one standing rule may approve the same item and target (default 1). A rule past its cap falls back to asking a person.",
+    )
+    policy_unavailable_runs: int = knob(
+        3,
+        doc="How many recorded `unavailable` runs of a review gate the rule `skip_after_unavailable` needs before it lets an agent skip that gate's failure (default 3).",
+    )

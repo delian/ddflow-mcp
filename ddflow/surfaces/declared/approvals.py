@@ -21,6 +21,17 @@ COMMANDS: tuple[Command, ...] = (
         params=(Param("all", type="boolean", default=False, cli_help="every request, any state"),),
     ),
     Command(
+        path=("approvals", "log"),
+        summary="the audit timeline of approvals (who asked, who answered, which channel and level, what was spent) and what looks wrong",
+        tool="",
+        reason="CLI-only with the rest of `approvals`: the operator's surface",
+        params=(
+            Param("verb", default="", cli_help="only this gated verb"),
+            Param("agent_filter", default="", cli_help="only this agent's requests"),
+            Param("since", default="", cli_help="only requests filed at or after this ISO date"),
+        ),
+    ),
+    Command(
         path=("approvals", "show"),
         summary="one request as ddflow rendered it for the person, with its digest and status",
         tool="",
