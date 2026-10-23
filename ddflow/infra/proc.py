@@ -22,6 +22,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -391,7 +392,13 @@ def _shell_group(
         kwargs["start_new_session"] = True
     if input is not None:
         kwargs["stdin"] = PIPE
-    p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
+    watcher = _start_watcher()
+    try:
+        p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
+    except BaseException:
+        _arm_watcher(watcher, None)
+        raise
+    _arm_watcher(watcher, p)
     deadline = None if timeout is None else time.monotonic() + timeout
     try:
         if input is not None:
@@ -416,6 +423,75 @@ def _shell_group(
         kill_group(p)
         _drain(p)
         raise
+
+
+#: The watcher: started BY the owner BEFORE the command and told the command's process group on
+#: its stdin once that exists, so the only moment the command runs unwatched is the pipe write
+#: after it starts: microseconds (bug Bdced4d9917). It polls whether the owner is still its
+#: parent; when the owner is gone it kills the group until it is gone, and it ends when the
+#: group is gone (or at once if the owner died before it was told a group). The last argv element
+#: names it for `ps` and the tests.
+_WATCHER = (
+    "import os, signal, sys, time\n"
+    "owner = int(sys.argv[1])\n"
+    "line = sys.stdin.readline()\n"
+    "if not line.strip():\n"
+    "    sys.exit(0)\n"
+    "group = int(line)\n"
+    "def alive():\n"
+    "    try:\n"
+    "        os.killpg(group, 0)\n"
+    "    except OSError:\n"
+    "        return False\n"
+    "    return True\n"
+    "while os.getppid() == owner and alive():\n"
+    "    time.sleep(1)\n"
+    "for _ in range(50):\n"
+    "    try:\n"
+    "        os.killpg(group, signal.SIGKILL)\n"
+    "    except ProcessLookupError:\n"
+    "        break\n"
+    "    except OSError:\n"
+    "        pass\n"
+    "    time.sleep(0.2)\n"
+    "# ddflow-owner-watch\n"
+)
+
+
+def _start_watcher() -> subprocess.Popen | None:
+    """Start the watcher of the command about to start (Ba3b7509530: a suite ran 8.3 hours after
+    the gate run that started it was killed, and nothing reaped it). A SIGKILLed owner cannot
+    clean up after itself, so a small process outside the group does it. Best effort: a
+    watcher that cannot start leaves the old behaviour."""
+    if os.name != "posix":
+        return None
+    try:
+        w = subprocess.Popen(  # nosec B603 - our own interpreter and a fixed script
+            [sys.executable, "-c", _WATCHER, str(os.getpid()), "ddflow-owner-watch"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+            text=True,
+        )
+    except (OSError, ValueError):
+        return None
+    # Reaped when it ends (a long-lived owner must not collect a zombie per command).
+    threading.Thread(target=w.wait, name="owner-watch-reaper", daemon=True).start()
+    return w
+
+
+def _arm_watcher(w: subprocess.Popen | None, p: subprocess.Popen | None) -> None:
+    """Tell the watcher which group to guard (``p`` None: the command never started)."""
+    if w is None or w.stdin is None:
+        return
+    with contextlib.suppress(OSError, ValueError):
+        try:
+            if p is not None and os.getpgid(p.pid) == p.pid:  # it leads a group of its own
+                w.stdin.write(f"{p.pid}\n")
+        finally:
+            w.stdin.close()
 
 
 def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
