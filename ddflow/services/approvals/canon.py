@@ -19,8 +19,6 @@ from typing import Any
 from ...core.digest import content_digest
 from . import sites
 
-CANON_VERSION = 1
-
 
 class UnknownVerb(ValueError):
     """A verb nobody inventoried (`sites.SITES`): it is not a gated command."""
@@ -55,7 +53,7 @@ class Canon:
 
     def record(self) -> dict[str, Any]:
         return {
-            "v": CANON_VERSION,
+            "v": 1,
             "verb": self.verb,
             "agent": self.agent,
             "item": self.item,
