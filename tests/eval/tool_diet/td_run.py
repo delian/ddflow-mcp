@@ -62,7 +62,7 @@ def ask(
     if not calls:
         return "", "", used
     fn = calls[0]["function"]
-    return fn.get("name", ""), fn.get("arguments", "{}"), used
+    return fn.get("name", ""), fn.get("arguments") or "{}", used
 
 
 def retry(rev, tools, sc, surface, name, raw, timeout, first):

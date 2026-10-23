@@ -430,7 +430,7 @@ merge, complete, rule search, status), each asked twice per surface, one tool ca
 reached and on the values carried (whole-token match); a family call is resolved by the server's own
 `family_schema.route`, and a member name is not on the family surface. Models are two families through
 their configured OpenAI-compatible endpoints: DeepSeek-V4.1-Flash and Kimi k3. 32 requests per cell, one
-run per cell: a difference of two or three requests is noise (the same cell moved by up to 0.06 between
+run per cell: a difference of two requests is noise (the same cell moved by up to 0.06 between
 runs of the same harness; every number here is from the last run).
 
 | Surface | Bytes shown | Prompt tokens (k3 / DeepSeek) | DeepSeek first call | Kimi k3 first call | DeepSeek +1 retry | Kimi k3 +1 retry |

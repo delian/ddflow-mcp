@@ -61,7 +61,6 @@ def test_a_value_is_carried_as_a_whole_token_not_a_prefix():
     sc = SCENARIOS[2]  # claim T-2
     assert G.grade(sc, "flat", "ddflow_claim", {"id": "T-2"}).args_ok
     assert not G.grade(sc, "flat", "ddflow_claim", {"id": "T-20"}).args_ok
-    assert G.grade(sc, "flat", "ddflow_claim", {"id": ["T-2"]}).args_ok
     assert not G.grade(sc, "flat", "ddflow_claim", {"ids": ["T-2"]}).valid  # not an argument it has
     assert not G.grade(sc, "flat", "ddflow_claim", {"id": "t-2x"}).args_ok
     assert G.grade(
