@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.start_bytes_per_token"
+new = "4.0"
+why = "The bytes-per-token ratio of the session start cost estimate."
+impact = "additive"
