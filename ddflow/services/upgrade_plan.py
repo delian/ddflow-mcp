@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.digest import of_obj
 from ..core.events import UNSTAMPED, is_older, is_stamp, version_key
 from ..core.model import State
 from ..core.records import contested_summary, record_pools
@@ -111,7 +112,10 @@ def settled_items(st: State) -> dict[str, list[Any]]:
         if version_key(str(u.get("to", ""))) > version_key(str(u.get("from", "")) or "0.0.0"):
             break  # this one moved the stamp up: what came before it is history
         news = {
-            f"{c.get('change')}:{c.get('key')}": c.get("new") for c in u.get("config_changes") or []
+            f"{c.get('change')}:{c.get('key')}": (
+                (DIGEST, c["digest"]) if c.get("digest") else c.get("new")
+            )
+            for c in u.get("config_changes") or []
         }
         for i in u.get("items") or []:
             if isinstance(i, str):
@@ -119,12 +123,25 @@ def settled_items(st: State) -> dict[str, list[Any]]:
     return out
 
 
+#: A settled value recorded by its digest: the log redacts text, so a `~/.claude/projects` default
+#: is written as `[REDACTED:path]` and says nothing of which value it was (B81cf6e7dfd).
+DIGEST = "digest"  # a settled entry is the tuple (DIGEST, digest): no JSON value equals it
+
+
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
-    return [
-        i
-        for i in items
-        if i["id"] not in settled or (settled[i["id"]] and i.get("new") not in settled[i["id"]])
-    ]
+    """The items an earlier partial apply has not settled. A value is settled when its digest
+    was recorded. A record from before the digest holds only the value as the log wrote it
+    (possibly masked, which cannot tell two values apart), so it settles nothing: that item is
+    applied once more, and the new record carries the digest."""
+
+    def done(i: dict[str, Any]) -> bool:
+        seen = settled.get(i["id"])
+        if seen is None:
+            return False
+        new = i.get("new")
+        return not seen or (DIGEST, of_obj(new)) in seen
+
+    return [i for i in items if not done(i)]
 
 
 def _wanted(c: UM.Change, baseline: str, running: str) -> bool:
