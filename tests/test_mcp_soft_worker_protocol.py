@@ -413,8 +413,10 @@ def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
         p.stdin.write(WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)))
         p.stdin.write(WP.encode(WP.request(1, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, CONN)))
         p.stdin.flush()
-        for _ in range(2):
-            assert _read(p)["t"] in WP.KINDS  # every line is a valid frame
+        assert _read(p)["t"] == "hello" and _read(p)["t"] == "res"
+        p.stdin.close()
+        assert _read(p)["t"] == "bye"  # and then nothing but EOF
+        assert p.stdout.read() == ""
     finally:
         p.stdin.close()
         p.wait(timeout=30)
@@ -432,3 +434,31 @@ def test_a_clean_drain_exits_zero_even_while_stdin_stays_open(tmp_path):
         assert p.wait(timeout=30) == 0  # stdin is still open: the exit is the drain's
     finally:
         p.kill()
+
+
+def test_a_worker_hello_without_digest_and_version_is_not_a_frame():
+    with pytest.raises(WP.ProtocolError):
+        WP.decode('{"t":"hello","worker_proto":1}\n')
+    assert WP.decode(WP.encode(WP.worker_hello(digest="d", version="1")))["digest"] == "d"
+
+
+def test_a_drain_that_cannot_start_its_thread_is_an_error_and_the_worker_still_says_bye(
+    monkeypatch,
+):
+    from ddflow.surfaces import worker
+
+    real = threading.Thread
+
+    class Failing(real):
+        def start(self):
+            if self.name == "ddflow-worker-drain":
+                raise RuntimeError("can't start new thread")
+            super().start()
+
+    monkeypatch.setattr(worker.threading, "Thread", Failing)
+    out = io.StringIO()
+    lines = [WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)), WP.encode(WP.drain())]
+    code = worker.run(Path("."), iter(lines), out, handler=echo)
+    frames = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert any(f["t"] == "error" and f["code"] == "internal" for f in frames)
+    assert frames[-1]["t"] == "bye" and code == 0

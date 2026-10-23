@@ -12,6 +12,7 @@ Frames (every one has `t`, the kind):
     req      shim -> worker  {id, msg, conn}                  one MCP message
     res      worker -> shim  {id, msg}                        its answer (`msg` null: none owed)
     note     worker -> shim  {id, msg}                        a frame sent while serving `id`
+                                                              (`id` null: not tied to a request)
     drain    shim -> worker  {}                               finish what runs, take nothing new
     drained  worker -> shim  {}                               nothing is running
     bye      either          {reason?}                        the last frame
@@ -85,6 +86,11 @@ def decode(line: str) -> dict[str, Any] | None:
     for field, ok in _REQUIRED.get(kind, ()):
         if field not in frame or not ok(frame[field]):
             raise ProtocolError("bad_frame", f"`{kind}` needs a valid `{field}`", frame.get("id"))
+    if kind == "hello" and "worker_proto" in frame:
+        if not all(isinstance(frame.get(k), str) for k in ("digest", "version")):
+            raise ProtocolError(
+                "bad_frame", "a worker `hello` needs a string `digest` and `version`"
+            )
     if kind == "hello" and not any(_int(frame.get(k)) for k in ("shim_proto", "worker_proto")):
         raise ProtocolError("bad_frame", "`hello` needs an integer `shim_proto` or `worker_proto`")
     return frame
