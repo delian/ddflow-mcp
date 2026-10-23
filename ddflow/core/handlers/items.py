@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..events import Event, changelog_of
-from ..records import ABANDONED, BLOCKED, DONE, OPEN, RUNNING, Item, State
+from ..records import ABANDONED, BLOCKED, DONE, OPEN, RUNNING, WORK_KINDS, Item, State
 from ._common import _item
 
 
@@ -112,6 +112,10 @@ def _h_updated(st: State, ev: Event, kind: str) -> None:
     for f in ("needs", "globs", "tags", "resources"):
         if f in d:
             setattr(it, f, list(d[f]))
+    if "globs" in d:
+        it.globs_declared = True
+    if d.get("kind") in WORK_KINDS and it.kind != "phase":
+        it.kind = d["kind"]
     if "priority" in d:
         it.priority = int(d["priority"])
     for f in ("landed_before", "landed_after"):
