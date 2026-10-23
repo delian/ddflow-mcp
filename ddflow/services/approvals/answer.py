@@ -8,6 +8,7 @@ non-person again; this module only resolves who the person is."""
 from __future__ import annotations
 
 from ..actors import Actor, resolve_actor
+from ..approval import agent_marker as _agent_marker
 from ..approval import os_user
 from ..ask import engine as E
 
@@ -15,6 +16,11 @@ ANSWER_SOURCES = E.ANSWER_SOURCES
 APPROVED = E.APPROVED
 DENIED = E.DENIED
 AskRefused = E.AskRefused
+
+
+def agent_marker(agent: str) -> str:
+    """Why this call is an agent's ("" for a person at a terminal); checked before any read."""
+    return _agent_marker(agent)
 
 
 def person(cfg, agent: str) -> Actor:

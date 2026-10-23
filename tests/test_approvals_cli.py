@@ -127,12 +127,21 @@ def test_deny_blocks_the_spend_and_revoke_takes_an_approval_back(proj):
     assert not got.ok and "withdrawn" in got.message
 
 
-def test_a_revoke_after_the_spend_changes_nothing_already_done(proj):
+def test_a_revoke_after_the_spend_is_refused_and_changes_nothing_already_done(proj):
     filed = _file(proj)
     assert _approve(proj, filed)[0] == 0
     log = EventLog(proj, "bot")
     assert C.operator_gate(log, Config(), _canon(), approval_id=filed.id, now=time.time()).ok
-    assert asks_of(_state(proj))[filed.id]["used"] == 1
+    code, _o, err = run_cli(proj, "approvals", "revoke", filed.id)
+    assert code == 3 and "already spent" in err
+    row = asks_of(_state(proj))[filed.id]
+    assert row["used"] == 1 and row["state"] == "answered"
+
+
+def test_an_agent_is_refused_before_the_ask_is_even_looked_up(proj):
+    for verb in ("approve", "deny", "revoke"):
+        code, _o, err = run_cli(proj, "approvals", verb, "Qdoesnotexist", agent="bot")
+        assert code == 3 and "person's act" in err, (verb, err)  # not "no approval request"
 
 
 def test_only_the_asker_withdraws_a_waiting_request(proj):

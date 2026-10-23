@@ -45,8 +45,8 @@
   
   options:
     -h, --help       show this help message and exit
-    --digest DIGEST  the first 8+ characters of the digest `ddflow approvals show` printed: say
-                     which request you read
+    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
+                     receipt that you looked at this request, not a secret)
   
   '''
 # ---
@@ -59,8 +59,8 @@
   
   options:
     -h, --help       show this help message and exit
-    --digest DIGEST  the first 8+ characters of the digest `ddflow approvals show` printed: say
-                     which request you read
+    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
+                     receipt that you looked at this request, not a secret)
   
   '''
 # ---
