@@ -33,6 +33,12 @@ def _instructions(repo: Path) -> str:
     return fn(repo)
 
 
+def _manual(repo: Path) -> str:
+    from ddflow.services import help as H
+
+    return H.render_topic("manual", repo)
+
+
 # -- bootstrap ------------------------------------------------------------------------
 
 
@@ -73,10 +79,8 @@ def test_the_pipeline_shown_is_the_project_s_own(repo):
 
 def test_the_agent_is_told_what_to_record_and_when(repo):
     """Each recording duty, with the tool that performs it."""
-    from ddflow.services import help as H
-
     run_cli(repo, "init")
-    text = H.render_topic("manual", repo)  # the charter keeps the duties short, the manual in full
+    text = _manual(repo)  # the charter keeps the duties short, the manual in full
     for tool in (
         "ddflow_session_prompt",
         "ddflow_decision_add",
@@ -93,10 +97,8 @@ def test_the_agent_is_told_what_to_record_and_when(repo):
 
 
 def test_every_companion_is_named_with_the_gates_it_serves(repo):
-    from ddflow.services import help as H
-
     run_cli(repo, "init")
-    text = H.render_topic("manual", repo)
+    text = _manual(repo)
     for name in ("roborev", "codeguide", "context7", "OptMem"):
         assert name in text, f"{name} is not named, so it will not be used"
     assert "ddflow_companions" in text
@@ -108,12 +110,11 @@ def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
     The state-specific list (install command per companion) is `ddflow_companions`, so the
     handshake stays a charter; the rules for proposing are in the manual.
     """
-    from ddflow.services import help as H
 
     run_cli(repo, "init")
     text = _instructions(repo)
     assert "not wired up" in text and "ddflow_companions" in text and "Propose" in text
-    manual = H.render_topic("manual", repo)
+    manual = _manual(repo)
     assert "Propose; never install" in manual
     assert "unavailable" in manual and "install nothing unasked" in text
 
