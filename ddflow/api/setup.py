@@ -622,6 +622,19 @@ def _after_compaction(repo: Path, stdin: str) -> list[str]:
     ]
 
 
+#: The static text the SessionStart hook prints around the brief (LS-charter): a heading and
+#: the contract in a few lines, <= 1K chars together (tests/test_charter_contract.py). The hooks,
+#: leases and gate refusals enforce it; the text only says what they will refuse.
+SESSION_START_HEADER = "# ddflow session start\n"
+SESSION_START_FOOTER = (
+    "_Contract: `ddflow_brief` first; claim an item (`ddflow_claim`) before you edit; ask the "
+    "operator when something is missing or ambiguous, never guess; a tool or reviewer that could "
+    "not run is `unavailable`, never `passed`. A subagent passes `as_agent` on every call. More: "
+    "`ddflow_recall`, `ddflow_help`, `ddflow_rule_show id=<id>`; `ddflow_memory_add` records a "
+    "fact about this machine._"
+)
+
+
 def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
@@ -629,7 +642,7 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     remove it. Every failure becomes one line of text saying what to run instead.
     """
 
-    parts = ["# ddflow session start", ""]
+    parts = [SESSION_START_HEADER]
     try:
         parts += _after_compaction(repo, stdin)
     except Exception as exc:  # never fail a session start
@@ -677,8 +690,7 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     parts += _companion_lines(repo)
     parts += [
         "",
-        "_Use the ddflow MCP tools for the queue. A subagent passes `as_agent` on every "
-        "call; `ddflow_memory_add` records a fact about this machine for the next session._",
+        SESSION_START_FOOTER,
     ]
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
 
