@@ -48,13 +48,15 @@ Pure functions over plain data; only `live_snapshot` touches a running `Server`.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from ..api import surf_mcp
+from ..core import digest as DG
+from . import mcp_protocol as proto
 from .ifaceschema import output_problems, schema_problems
+from .tools.tiers import TIERS
 
 #: Bumped when the canonical form changes, so a digest of one form is never compared to another.
 FORM = 1
@@ -117,12 +119,12 @@ def snapshot(
 
 
 def canonical(snap: dict[str, Any]) -> str:
-    """Compact JSON with sorted keys: the bytes the digest is taken over."""
-    return json.dumps(snap, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    """Compact JSON with sorted keys: the text the digest is taken over."""
+    return DG.canonical(snap)
 
 
 def digest(snap: dict[str, Any]) -> str:
-    return hashlib.sha256(canonical(snap).encode("ascii")).hexdigest()
+    return DG.content_digest(canonical(snap))
 
 
 def live_snapshot(
@@ -137,21 +139,18 @@ def live_snapshot(
     The instructions template id is the sha256 of the UNRENDERED template, so the
     per-session variables in the rendered text do not change the digest.
     """
-    from ..services import prompts as P
-    from . import mcp_protocol as proto
-
     tools = server._m_tools_list({"id": 0}, False)["result"]["tools"]
     if facade:
         tools = [t for t in tools if t["name"] in FACADE_TOOLS]
     prompts = server._m_prompts_list({"id": 0}, False)["result"]["prompts"]
     try:
-        text = P.resolve("mcp_instructions", server.repo).text
+        text = surf_mcp.instructions_template(server.repo)
     except Exception as exc:  # a broken override must not stop an upgrade being classified
         text = f"unreadable: {type(exc).__name__}: {exc}"
     return snapshot(
         tools=tools,
         prompts=prompts,
-        instructions_id=hashlib.sha256(text.encode()).hexdigest(),
+        instructions_id=DG.content_digest(text),
         capabilities=proto.capabilities(),
         protocols=[*proto.SUPPORTED_PROTOCOLS, *proto.MODERN_PROTOCOLS],
         shim_proto=shim_proto,
@@ -162,8 +161,6 @@ def live_snapshot(
 def live_surfaces(server: Any) -> dict[str, dict[str, Any]]:
     """Every surface a server can expose, by name: one per tool tier and the facade. The
     server's own tier is restored; the result is what `classify_surfaces` compares."""
-    from .tools.tiers import TIERS
-
     own = server.tier
     try:
         out = {}
