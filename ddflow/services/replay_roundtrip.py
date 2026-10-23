@@ -49,15 +49,11 @@ def vanished(events: list[Event]) -> list[str]:
 
     def observe(st: State, ev: Event) -> None:
         for name, seen in ever.items():
-            now = getattr(st, name)
-            if len(now) > len(seen):
-                seen.update(now)
-            if len(seen) > len(now):
-                for rid in sorted(seen - now.keys()):
-                    gone.append(
-                        f"{name[:-1]} {rid} disappeared from the state at {ev.kind} {ev.id}"
-                    )
-                    seen.discard(rid)
+            now = getattr(st, name).keys()
+            for rid in sorted(seen - now):  # a swap (one out, one in) keeps the length
+                gone.append(f"{name[:-1]} {rid} disappeared from the state at {ev.kind} {ev.id}")
+            seen.clear()
+            seen.update(now)
 
     fold(events, strict=False, observe=observe)
     return gone
