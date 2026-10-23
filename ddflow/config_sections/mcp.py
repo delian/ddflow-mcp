@@ -12,6 +12,10 @@ from ._docs import declare, knob
 #: config validation does not depend on the surface above it; `tests/test_mcp_tool_tiers.py`
 #: asserts the two lists agree.
 MCP_TOOL_TIERS = ("core", "standard", "all")
+
+#: What `[mcp].tools` accepts: the profiles of `surfaces/tools/profiles.py` (`auto` is the lean
+#: core unless the client table names another) and the flat tiers above.
+MCP_TOOL_CHOICES = ("auto", "lean", "families", "hot+families", *MCP_TOOL_TIERS)
 #: `[mcp].output_schemas`.
 MCP_OUTPUT_SCHEMAS = ("off", "on")
 #: `[mcp].on_upgrade`.
@@ -24,9 +28,9 @@ class McpConfig:
     """The MCP server's own knobs. A START-TIME choice: read once when a connection starts."""
 
     tools: str = knob(
-        "all",
-        doc="Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). A newer release's tier in a config file is tolerated (see below).",
-        choices=MCP_TOOL_TIERS,
+        "auto",
+        doc="Which tools `tools/list` advertises. `auto` (default) is `lean`, the 9 hot single tools plus the gate, bug, session, task, view and memory families (15 tools, about 30 KB), unless the client table names another profile for the connecting client. `families` is every family (24 tools), `hot+families` adds the 12 most-called direct tools (36). A family is ONE tool with an `action` (`ddflow_gate` with `action=record`); nothing is removed by a profile: every tool, every family action and every old tool name stays callable, and `ddflow_help` names what a profile hides. The flat tiers: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). A newer release's tier in a config file is tolerated (see below).",
+        choices=MCP_TOOL_CHOICES,
         strictest=("all", "no safety dimension; every tool advertised, as without the knob"),
     )
 

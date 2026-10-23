@@ -58,7 +58,8 @@ def test_every_registered_tool_is_in_exactly_one_tier_set():
 
 def test_config_and_surface_agree_on_the_tier_names():
     assert tuple(MCP_TOOL_TIERS) == tuple(M.TIERS)
-    assert Config().mcp.tools == M.DEFAULT_TIER == "all"
+    assert M.DEFAULT_TIER == "all"  # what an unreadable config falls back to
+    assert Config().mcp.tools == "auto"  # the lean core unless the client table says otherwise
 
 
 def test_default_is_all_and_byte_identical_to_the_unfiltered_list(repo):
@@ -87,6 +88,7 @@ def test_tier_lists_exactly_its_tools(repo, monkeypatch):
 
 
 def test_config_file_sets_the_tier_and_env_overrides_it(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
     (repo / ".ddflow").mkdir()
     (repo / ".ddflow" / "config.toml").write_text('[mcp]\ntools = "core"\n')
     assert Server(repo).tier == "core"
