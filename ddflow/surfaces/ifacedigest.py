@@ -27,6 +27,16 @@ The facade tools do not exist yet (MTD-search-call), so `live_snapshot(facade=Tr
 today; the filter is written against their names so it holds the day they are registered.
 Prompts stay in a facade snapshot: a client sees them whatever the tool list holds.
 
+What is IN the digest: tool names, descriptions, input and output schemas, annotations; prompt
+names and their arguments (name, required); the instructions template id; capabilities;
+protocol versions; the shim and worker protocol numbers. What is NOT: the release version, the
+rendered instructions text, prompt titles and descriptions (cosmetic: a changed description is
+never an interface break), and anything a client cannot see.
+
+Accepted limits: schema compatibility is the conservative subset check of `ifaceschema` (see
+its limits); `classify_surfaces` and `live_surfaces` have no caller until SU-upgrade-integration
+and SU-announce; the facade tools do not exist yet (MTD-search-call).
+
 Pure functions over plain data; only `live_snapshot` touches a running `Server`.
 """
 
