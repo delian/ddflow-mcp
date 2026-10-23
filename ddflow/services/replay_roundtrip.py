@@ -14,7 +14,8 @@ from ..core.events import Event
 from ..core.model import fold
 from ..core.records import State
 
-#: The State collections whose keys are records (a key that goes missing is a deletion).
+#: The State collections whose keys are records (a key that goes missing is a deletion); `defs`
+#: holds the managed definitions (doc types, schedules, triggers, skills, agents, rules).
 RECORD_COLLECTIONS = (
     "items",
     "bugs",
@@ -24,6 +25,7 @@ RECORD_COLLECTIONS = (
     "memories",
     "jobs",
     "sessions",
+    "defs",
 )
 
 
