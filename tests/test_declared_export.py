@@ -90,3 +90,8 @@ def test_the_command_line_halves_keep_their_defaults_and_types():
     assert parse("precommit").ddflow_cmd == "ddflow" and parse("precommit", "--write").write
     with pytest.raises(SystemExit):
         parse("bisect", "V")  # --cmd is required
+
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True
