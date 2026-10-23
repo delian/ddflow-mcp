@@ -193,3 +193,23 @@ def test_a_backslash_newline_inside_a_quoted_value_keeps_the_value_whole():
     gate = GateDef(id="ci", title="ci", command=command, timeout_s=1)
     out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
     assert out.command == 'ddflow ci run --timeout 30 --reason "foo \\\n --timeout 7"'
+
+
+def test_a_timeout_on_a_continuation_line_and_a_negative_one_are_replaced():
+    cases = {
+        "ddflow ci run \\\n--timeout 30 -- pytest": "ddflow ci run --timeout 60  -- pytest",
+        "ddflow ci run --timeout=-5 -- pytest": "ddflow ci run --timeout 60 -- pytest",
+        "ddflow ci run --timeout +5": "ddflow ci run --timeout 60",
+        "ddflow ci run --timeout='+5'": "ddflow ci run --timeout 60",
+    }
+    for before, after in cases.items():
+        gate = GateDef(id="ci", title="ci", command=before, timeout_s=1)
+        assert _with_run_timeout(Config(), gate, 60, "T1", "ci").command == after, before
+
+
+def test_an_unclosed_quote_keeps_the_rest_as_written():
+    gate = GateDef(
+        id="ci", title="ci", command='ddflow ci run --reason "msg --timeout 7', timeout_s=1
+    )
+    out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+    assert out.command == 'ddflow ci run --timeout 60 --reason "msg --timeout 7'
