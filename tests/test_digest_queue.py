@@ -278,10 +278,10 @@ def test_replay_over_the_real_log_is_sane_and_deterministic():
     from ddflow.services.digest import collect_asks as CA
 
     waiting = E.pending(st, when)
-    by_ask = sum(
-        e.kind in {CA.kind_of(r) for r in waiting} and "ask" in e.detail for e in a.entries
-    )
-    assert by_ask == len(waiting)
+    from collections import Counter
+
+    asked = Counter(e.kind for e in a.entries if "ask" in e.detail)
+    assert asked == Counter(CA.kind_of(r) for r in waiting)
     open_decides = [
         i for i in st.items.values()
         if i.kind == "doc" and i.state == OPEN and i.title.upper().startswith("DECIDE")
