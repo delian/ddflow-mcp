@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from ddflow.services import orphan_suites as OS
 
 SUITE = "pre-commit run --hook-stage pre-push --all-files"
+SH = "sh -c '" + SUITE + "'"
 
 
 def _proc(root: Path, pid: int, ppid: int, cmd: str, start_ticks: int, pgrp: int | None = None):
@@ -14,7 +16,11 @@ def _proc(root: Path, pid: int, ppid: int, cmd: str, start_ticks: int, pgrp: int
     d.mkdir(parents=True, exist_ok=True)
     rest = ["S", str(ppid), str(pgrp or pid), "0"] + ["0"] * 15 + [str(start_ticks)]
     (d / "stat").write_text(f"{pid} (x y) {' '.join(rest)} 0 0\n")
-    (d / "cmdline").write_bytes(cmd.replace(" ", "\0").encode())
+    (d / "cmdline").write_bytes(
+        b"\0".join(w.encode() for w in cmd.split("\x1f"))
+        if "\x1f" in cmd
+        else cmd.replace(" ", "\0").encode()
+    )
 
 
 def _tree(tmp: Path) -> Path:
@@ -34,17 +40,17 @@ def _find(root: Path, **kw):
 
 def test_a_suite_under_a_dead_owner_is_named(tmp_path: Path):
     root = _tree(tmp_path)
-    _proc(root, 50, 1, "sh -c " + SUITE, 100)  # the gate's shell, reparented to init
+    _proc(root, 50, 1, "sh\x1f-c\x1f" + SUITE, 100)  # the gate's shell, reparented to init
     _proc(root, 51, 50, SUITE, 100, pgrp=50)
     found = _find(root)
-    assert [o.pid for o in found] == [50] and found[0].pgid == 50  # one per group
+    assert [o.pid for o in found] == [51] and found[0].pgid == 50  # the suite, not its shell
     assert "kill -- -50" in OS.doctor_notes(found)[0]
 
 
 def test_a_suite_with_a_live_ddflow_above_it_is_not_orphaned(tmp_path: Path):
     root = _tree(tmp_path)
     _proc(root, 40, 1, "python -m ddflow gate run T ci", 100)
-    _proc(root, 50, 40, "sh -c " + SUITE, 100)
+    _proc(root, 50, 40, "sh\x1f-c\x1f" + SUITE, 100)
     _proc(root, 51, 50, SUITE, 100)
     assert _find(root) == []
 
@@ -64,7 +70,7 @@ def test_another_command_is_not_a_suite(tmp_path: Path):
 def test_another_users_suite_is_not_the_callers(tmp_path: Path):
     root = _tree(tmp_path)
     _proc(root, 51, 1, SUITE, 100)
-    assert _find(root, uid=1234567) == []
+    assert _find(root, uid=os.getuid() + 1) == []
 
 
 def test_an_unreadable_proc_gives_nothing(tmp_path: Path):
@@ -84,3 +90,28 @@ def test_doctor_names_an_orphaned_suite(monkeypatch, repo):
 
     out = doctor(repo)
     assert "orphaned ci suite: pid 4242" in str(out.data) + (out.reason or "")
+
+
+def test_a_shell_that_only_mentions_the_command_is_not_a_suite(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 51, 1, "sh\x1f-c\x1fecho " + SUITE + "; sleep 3600", 100)
+    assert _find(root) == []
+
+
+def test_a_wrapper_script_with_ddflow_in_its_path_is_not_a_ddflow_process(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 40, 1, "/bin/bash /home/u/ddflow/wrapper.sh", 100)
+    _proc(root, 51, 40, SUITE, 100)
+    assert [o.pid for o in _find(root)] == [51]
+
+
+def test_python_dash_m_ddflow_is_a_ddflow_process(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 40, 1, "/usr/bin/python3 -m ddflow.surfaces.cli gate run T ci", 100)
+    _proc(root, 51, 40, SUITE, 100)
+    assert _find(root) == []
+
+
+def test_the_note_never_advises_kill_minus_one(tmp_path: Path):
+    note = OS.doctor_notes([OS.Orphan(7, 1, 30000.0, SUITE)])[0]
+    assert "kill 7`" in note and "kill -- -1" not in note

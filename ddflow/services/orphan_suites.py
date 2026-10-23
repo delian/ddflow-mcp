@@ -35,22 +35,44 @@ def _stat(proc: Path, pid: int) -> tuple[int, int, int] | None:
         return None
 
 
-def _cmdline(proc: Path, pid: int) -> str:
+def _argv(proc: Path, pid: int) -> list[str]:
     try:
-        return (
-            (proc / str(pid) / "cmdline")
-            .read_bytes()
-            .replace(b"\0", b" ")
-            .decode("utf-8", "replace")
-            .strip()
-        )
+        raw = (proc / str(pid) / "cmdline").read_bytes()
     except OSError:
-        return ""
+        return []
+    return [w.decode("utf-8", "replace") for w in raw.split(b"\0") if w]
 
 
-def _is_suite(cmd: str) -> bool:
-    return (
-        "pre-commit" in cmd and "--hook-stage" in cmd and "pre-push" in cmd and "--all-files" in cmd
+def _base(word: str) -> str:
+    return word.rsplit("/", 1)[-1]
+
+
+def _is_suite(argv: list[str]) -> bool:
+    """`pre-commit run --hook-stage pre-push --all-files` as the process's OWN argv: a shell
+    that merely has the words in its `-c` string is not the suite (its child is)."""
+    if not argv:
+        return False
+    head = argv[:3]
+    if _base(head[0]) != "pre-commit" and not (
+        "-m" in head and any(w.startswith("pre_commit") for w in argv[:4])
+    ):
+        return False
+    stage = any(
+        (a == "--hook-stage" and argv[i + 1 : i + 2] == ["pre-push"])
+        or a == "--hook-stage=pre-push"
+        for i, a in enumerate(argv)
+    )
+    return "run" in argv and stage and "--all-files" in argv
+
+
+def _is_ddflow(argv: list[str]) -> bool:
+    """A ddflow process: the `ddflow` / `ddflow-mcp` executable, or `python -m ddflow...`."""
+    head = argv[:4]
+    if any(_base(w) in ("ddflow", "ddflow-mcp") for w in head[:2]):
+        return True
+    return any(
+        a == "-m" and head[i + 1 : i + 2] and head[i + 1].startswith("ddflow")
+        for i, a in enumerate(head)
     )
 
 
@@ -62,7 +84,7 @@ def _has_ddflow_ancestor(proc: Path, pid: int) -> bool:
         if stat is None:
             return False
         pid = stat[0]
-        if pid > 1 and "ddflow" in _cmdline(proc, pid):
+        if pid > 1 and _is_ddflow(_argv(proc, pid)):
             return True
     return False
 
@@ -101,8 +123,8 @@ def orphaned_ci_suites(
     except OSError:
         return []
     for pid in entries:
-        cmd = _cmdline(proc, pid)
-        if not _is_suite(cmd):
+        argv = _argv(proc, pid)
+        if not _is_suite(argv):
             continue
         try:
             if (proc / str(pid)).stat().st_uid != uid:
@@ -115,7 +137,7 @@ def orphaned_ci_suites(
         age = now - (boot_time + stat[2] / ticks)
         if age >= min_age_s and stat[1] not in groups and not _has_ddflow_ancestor(proc, pid):
             groups.add(stat[1])  # the shell and the suite it started are one finding
-            found.append(Orphan(pid, stat[1], round(age, 1), cmd))
+            found.append(Orphan(pid, stat[1], round(age, 1), " ".join(argv)))
     return found
 
 
@@ -124,6 +146,12 @@ def doctor_notes(orphans: list[Orphan]) -> list[str]:
     return [
         f"orphaned ci suite: pid {o.pid} (process group {o.pgid}) has run {o.age_s / 3600:.1f} h "
         f"with no ddflow process above it, so it starves other runs and loads the host; "
-        f"`{o.cmd[:120]}` -- end it with `kill -- -{o.pgid}` once you have checked it is not wanted"
+        f"`{o.cmd[:120]}` -- end it with `{_kill(o)}` once you have checked it is not wanted"
         for o in orphans
     ]
+
+
+def _kill(o: Orphan) -> str:
+    """`kill -- -PGID` for a real group; a group id of 1 or less is no group (`kill -- -1` would
+    signal every process the user may), so then only the process itself."""
+    return f"kill -- -{o.pgid}" if o.pgid > 1 else f"kill {o.pid}"
