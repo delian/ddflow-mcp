@@ -32,6 +32,12 @@ from ._base import _load
 from ._globwarn import missing_globs
 
 
+def _created(glob: str, created: set[str]) -> bool:
+    """Is ``glob`` a path a plan item creates, or inside a directory one creates?"""
+    g = glob.rstrip("/")
+    return any(g == c.rstrip("/") or g.startswith(c.rstrip("/") + "/") for c in created)
+
+
 def _items(data: Any) -> dict[str, Any] | None:
     """The plan as {id: item} from whatever the document holds, or None if it holds none."""
     if isinstance(data, list):
@@ -155,7 +161,7 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
         for w in missing_globs(
             repo,
             cfg,
-            [str(g) for g in plan[iid].get("globs", []) if str(g) not in created],
+            [str(g) for g in plan[iid].get("globs", []) if not _created(str(g), created)],
             tracked,
         )
     ]
