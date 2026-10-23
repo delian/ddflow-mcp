@@ -17,6 +17,7 @@ file. Accepted for tier T2 only (a T3 verb needs level 4, which this never reach
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,54 @@ def scan(path: Path, question: str, marker: str) -> list[Attested]:
     return found
 
 
+#: What the person types in their own chat: `approve|deny <request id> <first characters of the digest>`
+TYPED = re.compile(r"^\s*(approve|deny)\s+(Q[0-9a-f]+)\s+([0-9a-f]+)\s*$", re.IGNORECASE)
+
+
+def _human_text(row: dict[str, Any]) -> str:
+    content = (row.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            str(b.get("text", ""))
+            for b in content
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+    return ""
+
+
+def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested]:
+    """Answers the person TYPED in their chat: a user row the harness marked `origin.kind == human`
+    whose whole text is `approve|deny <this request id> <digest prefix>`. An agent's text, a tool
+    result, a notification and a quotation inside a longer message are not such rows."""
+    found: list[Attested] = []
+    for line in path.read_text(errors="replace").splitlines():
+        if ask["id"] not in line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("type") != "user" or (row.get("origin") or {}).get("kind") != "human":
+            continue
+        m = TYPED.match(_human_text(row))
+        if not m or m.group(2) != ask["id"] or row.get("toolUseResult"):
+            continue
+        prefix = m.group(3).lower()
+        if len(prefix) >= min_chars and ask["digest"].startswith(prefix):
+            word = "Approve" if m.group(1).lower() == "approve" else "Deny"
+            found.append(
+                Attested(
+                    f"typed:{row.get('uuid')}",
+                    f"{word} {ask['id']}",
+                    str(row.get("timestamp", "")),
+                    path.name,
+                )
+            )
+    return found
+
+
 def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     """Every accepted answer to this request's question, from transcripts touched since the
     request was filed (oldest first)."""
@@ -145,6 +194,7 @@ def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     hits: list[Attested] = []
     for path in _files(cfg, since):
         hits += scan(path, row["text"], row["id"])
+        hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
     return hits
 
 
