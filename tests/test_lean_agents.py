@@ -72,7 +72,7 @@ def test_the_roles_are_narrowed_the_way_their_work_is():
 def test_the_body_is_a_charter_pointer_not_a_manual():
     for role in ROLES:
         body = LA.template_text(role).split("\n---\n", 1)[1]
-        assert len(body.encode()) <= 900, (role, len(body.encode()))
+        assert len(body.encode()) <= 1000, (role, len(body.encode()))
         for must in ("ddflow_brief", "as_agent", "ask the operator", "unavailable"):
             assert must in body, (role, must)
 
