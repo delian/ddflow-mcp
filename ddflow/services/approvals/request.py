@@ -60,6 +60,7 @@ def render(
 
 def command_of(canon: Canon, cfg: Config) -> E.Command:
     """What makes the ask a gated command's: verb, tier, level, one use, the use window, the record."""
+    s = canon.site
     return E.Command(
         verb=canon.verb,
         tier=s.tier,
