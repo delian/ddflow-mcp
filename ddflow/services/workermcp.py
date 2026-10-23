@@ -107,7 +107,7 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
     if value not in ("false",) and not high:
         return ""
     return (
-        f"ENABLE_TOOL_SEARCH={environ['ENABLE_TOOL_SEARCH']} makes the host send every ddflow schema "
+        f"ENABLE_TOOL_SEARCH={value} makes the host send every ddflow schema "
         f"(~58K tokens on the `{tier}` tool tier): start workers on the `core` tier "
         f"(`[mcp].worker_tools`, {REL})"
     )
