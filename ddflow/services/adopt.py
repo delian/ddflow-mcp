@@ -1193,9 +1193,10 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
     return f"wrote {rel}"
 
 
-def worker_notes(cfg) -> list[str]:
-    """The doctor's notes on the worker MCP config adopt writes (`services.workermcp`)."""
-    return WM.doctor_notes(cfg)
+def adopt_notes(repo: Path, cfg) -> list[str]:
+    """The doctor's notes on what adopt writes for Claude Code beyond its MCP entry: the worker MCP
+    config (`services.workermcp`) and the lean agent definitions (`services.leanagents`)."""
+    return WM.doctor_notes(cfg) + LA.drift_notes(repo)
 
 
 def _claude_extras(repo: Path, key: str, templates: Path, launch: str, image: str) -> list[str]:
