@@ -2431,6 +2431,19 @@
           How many hours an operator grant stays usable after it is added (default 48;
           0 = never expires). An expired grant is still listed, marked expired, and a
           review no longer cites it.
+      approvals.use_ttl_s = 3600   [default]
+          How many seconds after a person answered an approval it can still be spent
+          (default 3600, one hour; D-RA-Q9). A later use is refused and the agent
+          files a new request. The window to ANSWER is `[agent].ask_ttl_s`.
+      approvals.auto_request = True   [default]
+          When true (default; D-RA-Q12), a gated command refused to an agent files the
+          approval request itself and names its id in the refusal, so the operator
+          sees exactly what to approve. When false the refusal only names the route
+          and the agent files the request.
+      approvals.reason_chars = 300   [default]
+          How many characters of an agent's own reason are shown to the person in an
+          approval request (default 300; the rest is cut with an ellipsis). The reason
+          is quoted as untrusted text and is never part of what is approved.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
