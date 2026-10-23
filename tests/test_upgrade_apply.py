@@ -1176,7 +1176,7 @@ def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
 
     new = ["~/.claude/projects"]
     item = {"id": "knob_added:a.b", "new": new}
-    seen = {"knob_added:a.b": [f"{DIGEST}{dirs[0]['digest']}"]}
+    seen = {"knob_added:a.b": [(DIGEST, dirs[0]["digest"])]}
     assert _unsettled([item], seen) == []
     # a changed default is news again even where the log masks both alike
     assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen) != []
