@@ -131,3 +131,13 @@ def test_an_editor_opened_on_a_file_named_ddflow_is_not_a_ddflow_process(tmp_pat
     _proc(root, 40, 1, "/usr/bin/vim ddflow", 100)
     _proc(root, 51, 40, SUITE, 100)
     assert [o.pid for o in _find(root)] == [51]
+
+
+def test_a_pipx_style_shebang_launch_is_a_suite(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(
+        root, 51, 1,
+        "/usr/bin/python3\x1f/home/u/.local/bin/pre-commit\x1frun\x1f--hook-stage\x1fpre-push\x1f--all-files",
+        100,
+    )  # fmt: skip
+    assert [o.pid for o in _find(root)] == [51]
