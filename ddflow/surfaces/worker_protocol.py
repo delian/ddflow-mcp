@@ -16,6 +16,9 @@ Frames (every one has `t`, the kind):
     drain    shim -> worker  {}                               finish what runs, take nothing new
     drained  worker -> shim  {}                               nothing is running
     bye      either          {reason?}                        the last frame
+                                                              (a request that reaches a worker
+                                                              after it is unanswered: the shim
+                                                              sends it to the next worker)
     error    either          {code, message, id?}             a typed refusal
 
 Versioning: `PROTO_MAJOR` changes when a frame stops meaning what it did; an unknown extra field
@@ -86,7 +89,7 @@ def decode(line: str) -> dict[str, Any] | None:
     for field, ok in _REQUIRED.get(kind, ()):
         if field not in frame or not ok(frame[field]):
             raise ProtocolError("bad_frame", f"`{kind}` needs a valid `{field}`", frame.get("id"))
-    if kind == "hello" and "worker_proto" in frame:
+    if kind == "hello" and "worker_proto" in frame and "shim_proto" not in frame:
         if not all(isinstance(frame.get(k), str) for k in ("digest", "version")):
             raise ProtocolError(
                 "bad_frame", "a worker `hello` needs a string `digest` and `version`"
