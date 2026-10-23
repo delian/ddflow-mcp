@@ -298,7 +298,7 @@
 # ---
 # name: test_help[ddflow bug fixed]
   '''
-  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] [--landed LANDED] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] [--landed LANDED] [--lint-exempt LINT_EXEMPT] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
   
   positional arguments:
     id
@@ -326,6 +326,9 @@
                           when both forms are given
     --landed LANDED       a commit already on the base that holds the fix: the test must fail on its
                           first parent and pass on it; the bug's fix task is ended naming it
+    --lint-exempt LINT_EXEMPT
+                          close a CI-filed lint bug (no test to write) with this reason, recorded,
+                          instead of --regression-test
     --lesson LESSON
     --lesson-title LESSON_TITLE
     --lesson-rule LESSON_RULE
