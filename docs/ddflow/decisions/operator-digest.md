@@ -62,7 +62,7 @@ AW-inbox into OD-queue; DX-status-digest into OD-digest (OD-cli owns the `digest
 |---|---|---|---|
 | Q1 | Which option? | C, built as B first | A only; B only |
 | Q2 | Who is "the operator" queue for: only entries a person must answer, with lead-owned entries behind `--all`? | Yes | one list for both |
-| Q3 | Escalation of an unanswered entry | nudge at creation, needs after 1h, urgent after 24h (6h for red main) | none; fixed |
+| Q3 | Escalation of an unanswered entry | `escalate_after = "1h, 24h"`: nudge at creation, needs after 1h, urgent after 24h (`escalate_after_red_main = 6h`) | none; fixed |
 | Q4 | Fold AW-inbox, DX-status-digest and AW-since-cursor into OD-queue / OD-digest / OD-seen? | Yes | keep separate and make OD depend on them |
 | Q5 | ETA shown where? | digest and `Progress:` per phase, range plus "estimate"; never in SessionStart | nowhere; everywhere |
 | Q6 | What does SessionStart/brief carry? | one line: count, oldest age, top 3 titles | nothing (rule only) |
