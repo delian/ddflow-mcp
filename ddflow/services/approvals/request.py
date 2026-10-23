@@ -58,6 +58,19 @@ def render(
     return "\n".join(lines)
 
 
+def command_of(canon: Canon, cfg: Config) -> E.Command:
+    """What makes the ask a gated command's: verb, tier, level, one use, the use window, the record."""
+    s = canon.site
+    return E.Command(
+        verb=canon.verb,
+        tier=s.tier,
+        min_level=s.min_level,
+        uses=1,
+        use_ttl_s=cfg.approvals.use_ttl_s,
+        canon=canon.json(),
+    )
+
+
 def pending_for(state, canon: Canon, now: float | None = None) -> dict | None:
     """An open request for exactly this command by this agent, if one is waiting."""
 
@@ -92,7 +105,6 @@ def file(
     digest = canon.digest()
     if (row := pending_for(state, canon, now)) is not None:
         return Filed(row["id"], False, digest)
-    s = canon.site
     ask_id = E.new_ask_id()  # in the text: no two requests share a question, whatever their digest
     asked = E.request(
         log,
@@ -102,13 +114,6 @@ def file(
         text=render(canon, reason, cfg.approvals.reason_chars, uses=1, ask_id=ask_id),
         digest=digest,
         now=now,
-        command=E.Command(
-            verb=canon.verb,
-            tier=s.tier,
-            min_level=s.min_level,
-            uses=1,
-            use_ttl_s=cfg.approvals.use_ttl_s,
-            canon=canon.json(),
-        ),
+        command=command_of(canon, cfg),
     )
     return Filed(asked.id, True, digest)
