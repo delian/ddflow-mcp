@@ -387,3 +387,22 @@ def test_initialize_negotiates_legacy_versions_only_as_the_live_server_does():
     assert proto.legacy_version("2026-07-28") == proto.SUPPORTED_PROTOCOLS[0]  # the live rule
     snap = sample(protocols=["2025-03-26"], modern_protocols=["2026-07-28"])
     assert S.initialize_result(snap, "2026-07-28")["protocolVersion"] == "2025-03-26"
+
+
+def test_refresh_notices_a_prompt_description_that_the_digest_does_not_cover(tmp_path, monkeypatch):
+    from ddflow.surfaces import ifacesnap
+
+    repo = _git(tmp_path / "r")
+    srv = _server(repo)
+    ifacesnap.write(srv, instructions="x")
+    real = srv._m_prompts_list
+
+    def changed(msg, modern):
+        out = real(msg, modern)
+        if out["result"]["prompts"]:
+            out["result"]["prompts"][0] = {**out["result"]["prompts"][0], "description": "reworded"}
+        return out
+
+    monkeypatch.setattr(srv, "_m_prompts_list", changed)
+    assert ifacesnap.refresh(srv, instructions="x") is True
+    assert S.read(repo)["prompts"][0]["description"] == "reworded"
