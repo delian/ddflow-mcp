@@ -139,7 +139,10 @@ def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> li
         if seen is None:
             return False
         new = i.get("new")
-        return not seen or new in seen or (DIGEST, of_obj(new)) in seen
+        if (DIGEST, of_obj(new)) in seen:
+            return True
+        # a pre-digest verbatim record; a masked one equals only its own mask, never a value
+        return not seen or any(v == new and "[REDACTED" not in json.dumps(v) for v in seen)
 
     return [i for i in items if not done(i)]
 
