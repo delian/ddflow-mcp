@@ -1120,15 +1120,32 @@ def _made_tree(repo: Path, lease: Lease) -> Path | None:
     return W.load_path(repo, lease.worktree).resolve() if lease.worktree else None
 
 
-def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> bool:
+def _counts_as_mine(
+    repo: Path, lease: Lease, me: str, here: Path | None, bound: bool = False
+) -> bool:
     """A lease is "mine" if I hold it, OR if it created the very tree this commit is
     happening in. The second test is the robust one: the hook runs inside a worktree,
     and the lease that produced that worktree is the relevant claim no matter which
-    process id or identity string made it."""
-    if lease.holder == me:
-        return True
+    process id or identity string made it.
+
+    ``bound``: this commit's tree is some live lease's own. Then my lease bound to a
+    DIFFERENT tree is that item's, not this commit's: counting it listed the other item's
+    files under "You hold" and let them through from the wrong tree (Bc57d0b031a,
+    B9929ecb6ea). A lease of mine with no tree of its own still covers it."""
     leased_tree = W.load_path(repo, lease.worktree) if lease.worktree else None
-    return bool(here and leased_tree and leased_tree.resolve() == here)
+    if here and leased_tree and leased_tree.resolve() == here:
+        return True
+    return lease.holder == me and not (bound and leased_tree)
+
+
+def _tree_bound(repo: Path, state, cfg: Config, here: Path | None, now: float) -> bool:
+    """Is ``here`` the tree some live, unfinished lease created?"""
+    if here is None:
+        return False
+    return any(
+        lz.worktree and W.load_path(repo, lz.worktree).resolve() == here
+        for lz in leases.unfinished_leases(state, cfg, now).values()
+    )
 
 
 def _lapsed_lines(
@@ -1357,14 +1374,14 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
 
 
 def _split_leases(
-    repo: Path, state, cfg: Config, me: str, here: Path, now: float
+    repo: Path, state, cfg: Config, me: str, here: Path, now: float, bound: bool = False
 ) -> tuple[list[str], dict[str, str], bool]:
     """(globs I hold, glob -> "item (holder)" of every other live lease, whether I hold any)."""
     mine: list[str] = []
     others: dict[str, str] = {}
     holds_any = False
     for item_id, lease in leases.unfinished_leases(state, cfg, now).items():  # as for `update`
-        if _counts_as_mine(repo, lease, me, here):
+        if _counts_as_mine(repo, lease, me, here, bound):
             holds_any = True
             mine.extend(lease.globs)
         else:
@@ -1438,6 +1455,7 @@ def _lapsed_mine(
     here: Path,
     now: float,
     grace_s: float,
+    bound: bool = False,
 ) -> list:
     """A lease that WOULD have been mine, by the same two tests, but has lapsed and was
     not taken over. Invisible above, so the message said "(no live lease)" and "claim
@@ -1449,7 +1467,7 @@ def _lapsed_mine(
     return [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, grace_s).items()
-        if _counts_as_mine(repo, lease, me, here)
+        if _counts_as_mine(repo, lease, me, here, bound)
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
         and not any(globs_overlap(g, o) for g in lease.globs for o in others)
     ]
@@ -1547,7 +1565,7 @@ def _uncovered_message(
 
 
 def _with_contested(
-    repo: Path, log, cfg, state, paths, uncovered, me, here, now
+    repo: Path, log, cfg, state, paths, uncovered, me, here, now, bound=False
 ) -> tuple[list[str], dict[str, str]]:
     """``uncovered`` plus the paths a wildcard of mine covers that another live lease holds
     too (`enforce_contested`), and those paths with their holders."""
@@ -1556,7 +1574,7 @@ def _with_contested(
         cfg,
         state,
         paths,
-        lambda lz: _counts_as_mine(repo, lz, me, here),
+        lambda lz: _counts_as_mine(repo, lz, me, here, bound),
         lambda lz: here is not None and _made_tree(repo, lz) == here,
         now,
     )
@@ -1588,14 +1606,17 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)
-    mine, others, holds_any = _split_leases(repo, state, cfg, me, here, now)
+    bound = _tree_bound(repo, state, cfg, here, now)
+    mine, others, holds_any = _split_leases(repo, state, cfg, me, here, now, bound)
 
     # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
     uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
-    uncovered, twice = _with_contested(repo, log, cfg, state, paths, uncovered, me, here, now)
+    uncovered, twice = _with_contested(
+        repo, log, cfg, state, paths, uncovered, me, here, now, bound
+    )
     if not uncovered:
         return Verdict(OK, "")
 
@@ -1604,7 +1625,9 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     stolen.update(twice)
     uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
-    lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
+    lapsed = _lapsed_mine(
+        repo, state, uncovered, others, me, here, now, cfg.lease.grace_s, bound
+    )
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
     if not uncovered:
         return Verdict(OK, note)
