@@ -34,5 +34,7 @@ def cmd_chore_commit(a, c: Ctx) -> int:
 
 
 def cmd_chore_approve(a, c: Ctx) -> int:
-    out = A.chore_approve(c.repo, agent=c.requested_agent, note=a.note or "")
+    out = A.chore_approve(
+        c.repo, agent=c.requested_agent, note=a.note or "", approval=a.approval or ""
+    )
     return _finish(c, out, APPROVE_PAYLOAD)
