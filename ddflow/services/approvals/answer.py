@@ -7,8 +7,8 @@ non-person again; this module only resolves who the person is."""
 
 from __future__ import annotations
 
+from .. import identity as ID
 from ..actors import Actor, resolve_actor
-from ..approval import agent_marker as _agent_marker
 from ..approval import os_user
 from ..ask import engine as E
 
@@ -18,9 +18,9 @@ DENIED = E.DENIED
 AskRefused = E.AskRefused
 
 
-def agent_marker(agent: str) -> str:
+def why_not_a_person(agent: str) -> str:
     """Why this call is an agent's ("" for a person at a terminal); checked before any read."""
-    return _agent_marker(agent)
+    return ID.agent_marker(agent)
 
 
 def person(cfg, agent: str) -> Actor:

@@ -194,3 +194,21 @@ def test_an_answer_with_a_wrong_digest_does_not_print_the_right_one(proj):
     filed = _file(proj)
     code, _o, err = run_cli(proj, "approvals", "approve", filed.id, "--digest", "zzzzzzzz")
     assert code == 3 and filed.digest[:8] not in err
+
+
+def test_the_answer_api_refuses_an_agent_without_reading_anything(tmp_path, monkeypatch):
+    from ddflow.api import approvals_answer as AA
+
+    def boom(*a, **k):
+        raise AssertionError("an agent's call read the repo before it was refused")
+
+    monkeypatch.setattr(AA, "_load", boom)
+    nowhere = tmp_path / "no" / "such" / "repo"
+    for out in (
+        AA.approvals_approve(nowhere, "Q1", digest="abcdefgh", agent="bot"),
+        AA.approvals_deny(nowhere, "Q1", digest="abcdefgh", agent="bot"),
+        AA.approvals_revoke(nowhere, "Q1", agent="bot"),
+    ):
+        assert out.exit == 3 and "person's act" in out.reason
+    assert AA.digest_chars(nowhere, "bot") == 0
+    assert not nowhere.exists()
