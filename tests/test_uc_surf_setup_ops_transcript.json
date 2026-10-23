@@ -224,7 +224,7 @@
   ],
   3,
   "",
-  "acknowledging is the operator's: this call is an agent's (--agent tx). Run `ddflow export ack` from your own terminal\n"
+  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval Qbb252e900f requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve Qbb252e900f` from their own terminal (or answers it over a channel they use); then re-run this command with --approval Qbb252e900f. It is single-use, bound to this exact command and its current state, and expires.\n"
  ],
  [
   [
@@ -717,7 +717,7 @@
   ],
   3,
   "",
-  "refusing: approving is a person's act, and this command runs under an agent identity (--agent tx). Run it from your own terminal.\n"
+  "no reviewer named 'nosuch' (reviewer)\n"
  ],
  [
   [
@@ -1194,7 +1194,7 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 25 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
+  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
  ],
  [
   [
@@ -1202,7 +1202,7 @@
    "onboard"
   ],
   1,
-  "{\n  \"schema\": \"onboard@1\",\n  \"checks\": [\n    {\n      \"name\": \"mcp handshake\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no ddflow entry registered in .mcp.json\"\n    },\n    {\n      \"name\": \"hooks armed\",\n      \"outcome\": \"failed\",\n      \"detail\": \"not armed: pre-commit, commit-msg\"\n    },\n    {\n      \"name\": \"trailer refused\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no commit-msg hook to probe\"\n    },\n    {\n      \"name\": \"brief/next answer\",\n      \"outcome\": \"passed\",\n      \"detail\": \"brief 25 line(s); next: ready\"\n    },\n    {\n      \"name\": \"freeze ratchet\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"nothing was imported here; no ratchet expected\"\n    }\n  ],\n  \"text\": \"unavailable mcp handshake: no ddflow entry registered in .mcp.json\\nfailed      hooks armed: not armed: pre-commit, commit-msg\\nunavailable trailer refused: no commit-msg hook to probe\\npassed      brief/next answer: brief 25 line(s); next: ready\\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\"\n}\n",
+  "{\n  \"schema\": \"onboard@1\",\n  \"checks\": [\n    {\n      \"name\": \"mcp handshake\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no ddflow entry registered in .mcp.json\"\n    },\n    {\n      \"name\": \"hooks armed\",\n      \"outcome\": \"failed\",\n      \"detail\": \"not armed: pre-commit, commit-msg\"\n    },\n    {\n      \"name\": \"trailer refused\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no commit-msg hook to probe\"\n    },\n    {\n      \"name\": \"brief/next answer\",\n      \"outcome\": \"passed\",\n      \"detail\": \"brief 26 line(s); next: ready\"\n    },\n    {\n      \"name\": \"freeze ratchet\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"nothing was imported here; no ratchet expected\"\n    }\n  ],\n  \"text\": \"unavailable mcp handshake: no ddflow entry registered in .mcp.json\\nfailed      hooks armed: not armed: pre-commit, commit-msg\\nunavailable trailer refused: no commit-msg hook to probe\\npassed      brief/next answer: brief 26 line(s); next: ready\\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\"\n}\n",
   ""
  ],
  [
@@ -1212,7 +1212,7 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 25 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
+  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
  ],
  [
   [
@@ -1267,7 +1267,7 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 25 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\nunavailable suite green: no gate.unit_tests.command configured\n5 of 6 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet, suite green\n"
+  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\nunavailable suite green: no gate.unit_tests.command configured\n5 of 6 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet, suite green\n"
  ],
  [
   [
