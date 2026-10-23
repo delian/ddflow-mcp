@@ -2172,13 +2172,14 @@ def _intent_missing(item: str, gate: str, how: str) -> O.Outcome:
 
 
 def _flag_conflict(full: bool, force: bool, delta: bool, item: str, gate: str) -> O.Outcome | None:
-    """`--full`/`--force` against `--delta`: a full round and a delta contradict each other."""
-    if not ((full or force) and delta):
+    """`--full` against `--delta`: a full round and a delta contradict each other. `--force`
+    is past the round budget, not a kind of round, so a forced round may be a delta
+    (Ba93aec8448)."""
+    if not (full and delta):
         return None
-    flag = "--full" if full else "--force"
     return O.failed(
         "review",
-        f"{flag} and --delta contradict each other: {flag} is a full round, --delta "
+        "--full and --delta contradict each other: --full is a full round, --delta "
         "reviews only what changed since the reviewed head.",
         id=item,
         gate=gate,
