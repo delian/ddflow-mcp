@@ -11,7 +11,7 @@ Add two things to the record ddflow already has for rules, decisions and (planne
 1. a **strength** with five spoken levels, defined as a fixed view over the existing `enforcement x override` pair;
 2. a **satisfied_by** expression: `all`, `any`, or `at_least k` over a set of named **options**, each option an existing check (a gate outcome, a config value, a tool present, an evidence kind, a command, a pattern, a file).
 
-Company policy is the same record arriving from the org bundle in the top layer, pinned by digest; a project may raise strength and narrow options, never lower or widen. Everything evaluates three-valued (pass, fail, unavailable) and `unavailable` is never a pass.
+Company policy is the same record arriving from the org bundle in the top layer, pinned by digest; a project may raise strength and narrow options, and never lower strength; widening is limited to the Q4 exception (a project may add an evaluable alternative to a company `any`/`at_least` unless the requirement is `closed` or `locked`). Everything evaluates three-valued (pass, fail, unavailable) and `unavailable` is never a pass.
 
 ## 2. The strength scale
 
@@ -139,7 +139,7 @@ Reuse existing event kinds where they exist; register new ones only with their f
 
 ## 8. Company packs: distribution, pinning, diff review
 
-Graded policy records ride the org bundle (`B-org-bundle`): files under `policies/` with front matter, in the same shape as `.ddflow/rules/`. Pinned in `.ddflow/org.lock` by digest (`B-org-lock`, `CM-packs-verify`); a changed upstream pack is detected by the watch (`CM-packs-watch`) and applied only on the operator's permission with a diff (`D-CM-Q9`, `CM-packs-diff`). The diff is policy-aware (GP-org): it lists per record `strength raised/lowered`, `options added/removed`, `mode`, `locked`, `new/removed`, sorted most severe first, and states which projects' current waivers it would invalidate. The record from an org bundle is read-only in the project (`B-org-kinds`); the project layers its own on top (section 4). Executable parts (a `command` option written by a company) stay inert until a person approves their digest (`D-org-config`). A pack that fails to load: fail open with a loud warning (`D-org-config` 3), but a previously verified cached copy is used first.
+Graded policy records ride the org bundle (`B-org-bundle`): files under `policies/` with front matter, in the same shape as `.ddflow/rules/`. Pinned in `.ddflow/org.lock` by digest (`B-org-lock`, `CM-packs-verify`); a changed upstream pack is detected by the watch (`CM-packs-watch`) and applied only on the operator's permission with a diff (`D-CM-Q9`, `CM-packs-diff`). The diff is policy-aware (GP-org): it lists per record `strength raised/lowered`, `options added/removed`, `mode`, `locked`, `closed`, `new/removed`, sorted most severe first, and states which projects' current waivers it would invalidate. The record from an org bundle is read-only in the project (`B-org-kinds`); the project layers its own on top (section 4). Executable parts (a `command` option written by a company) stay inert until a person approves their digest (`D-org-config`). A pack that fails to load: fail open with a loud warning (`D-org-config` 3), but a previously verified cached copy is used first.
 
 ## 9. Config, CLI, MCP, prompts
 
