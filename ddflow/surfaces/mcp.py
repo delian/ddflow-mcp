@@ -80,6 +80,7 @@ from .mcp_protocol import modern_check as _modern_check
 from .mcp_protocol import modernize as _modernize
 from .mcp_protocol import ok as _ok
 from .tools import ADD_TOOLS, DEDUPE_PROPERTIES, TOOLS  # noqa: F401
+from .tools import family_schema as _FAMILIES
 from .tools._common import (  # noqa: F401
     _AGENT_KEYS,
     MCP_WAIT_DEFAULT_S,
@@ -782,7 +783,16 @@ class Server:
         if ALLOW_OLDER in args:
             args = dict(args)
             allow_older = args.pop(ALLOW_OLDER)
-        name, spec, args, used, clash = _resolve_call(params.get("name", ""), args)
+        # A family call (`ddflow_gate action=record`) is its member's call: routed here, so
+        # everything below sees the member; `route` has already refused a missing action, a
+        # missing required argument or an unknown one, each naming the action (MTD-family-route).
+        routed = _FAMILIES.route(params.get("name", ""), args)
+        if isinstance(routed, str):
+            return _ok(mid, _text(routed, error=True))
+        call_name, call_args = (
+            (routed.tool, routed.args) if routed else (params.get("name", ""), args)
+        )
+        name, spec, args, used, clash = _resolve_call(call_name, call_args)
         problem = self._check_call(name, spec, args, clash)
         if problem:
             return _ok(mid, _text(problem, error=True))
