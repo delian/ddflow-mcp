@@ -3,12 +3,14 @@ event id disappears across close, abandon, fold, supersede and forget (DX-replay
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 
 import pytest
 from conftest import run_cli
 
+from ddflow.core import model
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import replay_roundtrip as rt
@@ -67,7 +69,7 @@ def test_rebuilt_state_equals_live_state_and_nothing_is_lost(history):
     log = _log(repo)
     events = log.read_all()
     live = fold(events, strict=False)
-    assert rt.check(events, live, checkpoints=len(events)) == []
+    assert rt.check(events, live) == []
     # Every record the history ended is still there, in its ended state.
     assert {"A", "B", "C", "D"} <= set(live.items)
     assert live.items["C"].state == "abandoned" and live.items["B"].state == "abandoned"
@@ -78,22 +80,51 @@ def test_rebuilt_state_equals_live_state_and_nothing_is_lost(history):
         assert earlier <= later, label
 
 
+def _forget_deletes(monkeypatch):
+    """The mutation: forgetting a memory deletes it instead of marking it."""
+    real = model.HANDLERS["memory.forgotten"]
+
+    def deleting(st, ev):
+        real(st, ev)
+        st.memories.pop(ev.subject, None)
+
+    monkeypatch.setitem(model.HANDLERS, "memory.forgotten", deleting)
+
+
 def test_a_fold_that_drops_a_record_is_caught(history, monkeypatch):
     repo, _ = history
     events = _log(repo).read_all()
-    live = fold(events, strict=False)
-    real = rt.fold
+    _forget_deletes(monkeypatch)
+    problems = rt.check(events, fold(events, strict=False))
+    assert any("memorie M1 disappeared from the state at memory.forgotten" in p for p in problems)
 
-    def dropping(evs, **kw):
-        st = real(evs, **kw)
-        if len(evs) == len(events):
-            st.decisions.pop("D1", None)  # the mutation: a superseded decision is deleted
-        return st
 
-    monkeypatch.setattr(rt, "fold", dropping)
-    problems = rt.check(events, live, checkpoints=len(events))
-    assert any("decisions" in p for p in problems)
-    assert any("decision D1 was in the state" in p for p in problems)
+def test_a_record_deleted_and_recreated_is_still_caught(history, monkeypatch):
+    repo, _ = history
+    events = _log(repo).read_all()
+    added = next(e for e in events if e.kind == "memory.recorded" and e.subject == "M1")
+    again = dataclasses.replace(added, id="again-" + added.id, lamport=events[-1].lamport + 1)
+    events = [*events, again]
+    assert "M1" in fold(events, strict=False).memories  # the final state has it
+    _forget_deletes(monkeypatch)
+    assert any("M1 disappeared" in p for p in rt.vanished(events))
+
+
+def test_a_record_that_lives_between_two_events_is_caught(history, monkeypatch):
+    repo, _ = history
+    events = _log(repo).read_all()
+    _forget_deletes(monkeypatch)
+    # M1 is created by one event and deleted by the very next; no sample of prefixes sees it.
+    kinds = [e.kind for e in events]
+    assert kinds.index("memory.forgotten") == kinds.index("memory.recorded") + 1
+    assert rt.vanished(events)
+
+
+def test_an_event_missing_from_the_read_is_reported(history):
+    repo, _ = history
+    events = _log(repo).read_all()
+    live = fold(events[:-1], strict=False)
+    assert any("bytes" in p for p in rt.check(events[:-1], live, from_bytes=events))
 
 
 def test_a_missing_event_changes_the_rebuilt_state(history):

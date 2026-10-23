@@ -3,13 +3,8 @@ and nothing the log once recorded may disappear.
 
 `ddflow replay --verify` runs `check`. Closing, abandoning, folding, superseding and
 forgetting are state changes; a record present after N events must still be present after
-N+k. A fold that drops one is the bug this finds, whether it is a handler deleting a key or
-a command removing an event.
-
-The prefix check is SAMPLED (`CHECKPOINTS` prefixes; every prefix when `checkpoints` is at
-least the number of events, which the test uses). A record that exists only between two
-sampled prefixes, or is removed and re-created under the same id, is not seen by a sampled
-run: a prefix fold costs a fold of the log, so an exact check is quadratic."""
+every later event. A fold that drops one is the bug this finds, whether a handler deletes a
+key or a command removes an event from the log."""
 
 from __future__ import annotations
 
@@ -31,9 +26,6 @@ RECORD_COLLECTIONS = (
     "sessions",
 )
 
-#: How many prefixes `check` folds by default: each costs one fold of the log.
-CHECKPOINTS = 16
-
 
 def record_ids(st: State) -> dict[str, frozenset[str]]:
     """Collection -> the ids of the records in it."""
@@ -45,37 +37,54 @@ def differing_fields(a: State, b: State) -> list[str]:
     return [f.name for f in fields(State) if getattr(a, f.name) != getattr(b, f.name)]
 
 
-def _prefix_ends(n: int, checkpoints: int) -> list[int]:
-    if checkpoints <= 0 or n <= 1:
-        return []
-    step = max(1, n // checkpoints)
-    return sorted({*range(step, n, step)})
+def vanished(events: list[Event]) -> list[str]:
+    """Every record that was in the state after some event and not after a later one.
+
+    One fold, observed after each event, so it is exact: a record removed and re-created
+    under the same id, or one that lives only between two events, is reported at the event
+    that removed it. A record is reported once per removal.
+    """
+    ever: dict[str, set[str]] = {name: set() for name in RECORD_COLLECTIONS}
+    gone: list[str] = []
+
+    def observe(st: State, ev: Event) -> None:
+        for name, seen in ever.items():
+            now = getattr(st, name)
+            if len(now) > len(seen):
+                seen.update(now)
+            if len(seen) > len(now):
+                for rid in sorted(seen - now.keys()):
+                    gone.append(
+                        f"{name[:-1]} {rid} disappeared from the state at {ev.kind} {ev.id}"
+                    )
+                    seen.discard(rid)
+
+    fold(events, strict=False, observe=observe)
+    return gone
 
 
-def check(events: list[Event], live: State, *, checkpoints: int = CHECKPOINTS) -> list[str]:
+def check(events: list[Event], live: State, *, from_bytes: list[Event] | None = None) -> list[str]:
     """Problems found replaying `events` from scratch against the `live` folded state.
 
     1. the from-scratch fold equals `live` (every State field);
     2. no event id appears twice (a replay would apply it twice);
-    3. at up to `checkpoints` sampled prefixes of the log, every record id present is still present in
-       the full fold: nothing recorded was later removed from the state.
+    3. no record disappears at any event (`vanished`);
+    4. given `from_bytes` (the log re-read from its bytes, not its snapshot), every event id
+       there is in `events`: a snapshot that lost an event is a deletion nobody asked for.
     """
     problems: list[str] = []
-    rebuilt = fold(events, strict=False)
-    for name in differing_fields(rebuilt, live):
+    for name in differing_fields(fold(events, strict=False), live):
         problems.append(f"rebuilt state differs from the live state in {name!r}")
     seen: set[str] = set()
     for ev in events:
         if ev.id and ev.id in seen:
             problems.append(f"event id {ev.id} occurs twice in the log")
         seen.add(ev.id)
-    final = record_ids(rebuilt)
-    for end in _prefix_ends(len(events), checkpoints):
-        earlier = record_ids(fold(events[:end], strict=False))
-        for name, ids in earlier.items():
-            for gone in sorted(ids - final[name]):
+    problems += vanished(events)
+    if from_bytes is not None:
+        for ev in from_bytes:
+            if ev.id not in seen:
                 problems.append(
-                    f"{name[:-1] if name.endswith('s') else name} {gone} was in the state after "
-                    f"{end} events and is gone from the full replay"
+                    f"event {ev.kind} {ev.id} is in the log's bytes and not in its read"
                 )
     return problems
