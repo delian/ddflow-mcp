@@ -42,11 +42,6 @@ def ddflow_tools(role: str) -> list[str]:
     return [t.removeprefix(SERVER_PREFIX) for t in _tools_line(role) if t.startswith(SERVER_PREFIX)]
 
 
-def builtin_tools(role: str) -> list[str]:
-    """The Claude Code built-in tools the role's definition names."""
-    return [t for t in _tools_line(role) if not t.startswith("mcp__")]
-
-
 def agents_dir(key: str = HARNESS) -> str | None:
     """Where the harness keeps subagent definitions (its descriptor's `[subagents].dir`)."""
     h = HR.get(key)

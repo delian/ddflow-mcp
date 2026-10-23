@@ -12,6 +12,8 @@ baseline = 0
 # `option_string`, which vulture reports at cli.py and is the protocol's signature,
 # not dead code.)
 [kept]
+# Per-role schema cost of a lean agent definition (LS-agents); the doctor note wires it.
+"ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-agents-doctor-note"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
 "ddflow/services/doctypes/sources.py:render_type" = "B-dt-ownership"
 # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
