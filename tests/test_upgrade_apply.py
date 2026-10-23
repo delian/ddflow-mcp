@@ -1170,6 +1170,8 @@ def test_a_value_the_log_redacted_still_counts_as_settled() -> None:
     item = {"id": "knob_added:a.b", "new": '["~/.claude/projects"]'}
     redacted = {"knob_added:a.b": ['["[REDACTED:path]"]']}
     assert _unsettled([item], redacted) == []
+    extra = {**item, "new": '["~/.claude/projects", "/etc/passwd"]'}  # a second element is news
+    assert _unsettled([extra], redacted) != []
     listed = {"id": "knob_added:a.b", "new": ["~/.claude/projects"]}  # a parsed default
     assert _unsettled([listed], {"knob_added:a.b": [["[REDACTED:path]"]]}) == []
     assert _unsettled([{**listed, "new": []}], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []

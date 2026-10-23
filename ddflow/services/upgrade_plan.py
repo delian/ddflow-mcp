@@ -127,7 +127,8 @@ def _same_value(new: Any, recorded: Any) -> bool:
     """Is the manifest's ``new`` what the log recorded? The log redacts text (B81cf6e7dfd): a
     `~/.claude/projects` default is recorded as `[REDACTED:path]`, and which values are masked
     depends on the machine (hostname, $HOME, patterns), so the plan cannot redact ``new`` the
-    same way. A recorded mark stands for any text, so the rest of the value must still match."""
+    same way. A recorded mark stands for one text span without a quote (so it cannot swallow a second
+    element of a serialized list), and the rest of the value must still match."""
     if new == recorded:
         return True
     if isinstance(new, list | tuple) and isinstance(recorded, list | tuple):
@@ -139,7 +140,7 @@ def _same_value(new: Any, recorded: Any) -> bool:
     if not (isinstance(new, str) and isinstance(recorded, str) and _MARK.search(recorded)):
         return False
     parts = _MARK.split(recorded)
-    return re.fullmatch(".+?".join(re.escape(p) for p in parts), new, re.S) is not None
+    return re.fullmatch('[^"]+?'.join(re.escape(p) for p in parts), new, re.S) is not None
 
 
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
