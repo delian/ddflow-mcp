@@ -35,7 +35,7 @@ class Source:
     severity: str
     #: The fact in State that makes it true ("module:function" collectors are named by OD-queue).
     detected_from: str
-    #: "ddflow.services.digest.queue:collect_<kind>"; OD-queue's test resolves every one.
+    #: "ddflow.services.digest.queue:collect_<kind>", the name OD-queue must provide (its test makes resolution strict).
     collector: str
     #: How it is answered, in words (may be an act outside ddflow, e.g. raising a limit).
     answer: str
@@ -201,7 +201,7 @@ SOURCES: tuple[Source, ...] = (
         "urgent",
         "latest ci.recorded on main failed, or the red-main bug is open",
         "see the fix task; nothing merges until main is green",
-        "ddflow show <fix task>",
+        "ddflow show <task>",
         ASK,
         "every merge; impact is the ready queue",
     ),

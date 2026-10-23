@@ -36,7 +36,6 @@ def test_kinds_unique_and_rows_complete():
         assert s.owner in S.OWNERS and s.severity in S.SEVERITIES
         for f in (s.what, s.detected_from, s.answer, s.command, s.chat, s.blocks):
             assert f.strip(), (s.kind, f)
-        assert s.collector == f"ddflow.services.digest.queue:collect_{s.kind}"
 
 
 def test_operator_rows_have_a_chat_route_and_lead_rows_do_not_pretend():
@@ -100,3 +99,15 @@ def test_every_command_resolves_against_the_real_parser():
         stray = [w for w in rest if re.fullmatch(r"[a-z][a-z-]*", w)]
         subs = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
         assert not (subs and stray and rest[0] == stray[0]), (s.kind, stray)
+
+
+def test_collectors_resolve_once_the_queue_module_exists():
+    """OD-queue lands `queue.py`; from then on every named collector must exist and be callable."""
+    import importlib
+    import importlib.util
+
+    for s in S.SOURCES:
+        mod, _, fn = s.collector.partition(":")
+        assert re.fullmatch(r"collect_[a-z_]+", fn) and mod == "ddflow.services.digest.queue"
+        if importlib.util.find_spec(mod) is not None:
+            assert callable(getattr(importlib.import_module(mod), fn, None)), s.kind
