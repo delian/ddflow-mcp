@@ -52,18 +52,18 @@ def _is_suite(argv: list[str]) -> bool:
     that merely has the words in its `-c` string is not the suite (its child is)."""
     if not argv:
         return False
-    head = argv[:4]
+    head = list(argv[:6])
+    py = _base(head[0]).startswith("python")
+    if py:  # skip interpreter options (-u, -I) up to the script or -m
+        i = 1
+        while i < len(head) and head[i].startswith("-") and head[i] != "-m":
+            i += 1
+        head = [head[0], *head[i:]]
     # `pre-commit`, an interpreter running that script (a pipx/uv install is a shebang script),
     # or `python -m pre_commit`.
     direct = _base(head[0]) == "pre-commit"
-    script = _base(head[0]).startswith("python") and any(
-        _base(w) == "pre-commit" for w in head[1:2]
-    )
-    module = (
-        _base(head[0]).startswith("python")
-        and head[1:2] == ["-m"]
-        and head[2:3] in (["pre_commit"], ["pre_commit.main"])
-    )
+    script = py and any(_base(w) == "pre-commit" for w in head[1:2])
+    module = py and head[1:2] == ["-m"] and head[2:3] in (["pre_commit"], ["pre_commit.main"])
     if not (direct or script or module):
         return False
     stage = any(
@@ -101,14 +101,14 @@ def _has_ddflow_ancestor(proc: Path, pid: int) -> bool:
         seen.add(pid)
         stat = _stat(proc, pid)
         if stat is None:
-            return (proc / str(pid)).exists()  # gone: the chain ends; unreadable: unknown
+            return True  # a parent is always there: if it cannot be read (hidepid) it is unknown
         pid = stat[0]
         if pid < 1:
             break
         try:
             raw = (proc / str(pid) / "cmdline").read_bytes()
         except OSError:
-            return (proc / str(pid)).exists()  # unreadable: unknown; gone: the chain ends
+            return True  # unreadable or hidden: unknown, and a parent is always there
         if _is_ddflow([w.decode("utf-8", "replace") for w in raw.split(b"\0") if w]):
             return True
     return False
