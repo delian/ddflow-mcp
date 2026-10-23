@@ -62,9 +62,9 @@ def _from_gate_result(args: dict, data: dict) -> list[dict]:
 
 
 def _from_gate_status(args: dict, data: dict) -> list[dict]:
-    item = str(data.get("item") or data.get("id") or args.get("id") or "")
-    if isinstance(data.get("status"), dict):  # an outcome's data nests the pipeline state
-        data = data["status"]
+    state = data["status"] if isinstance(data.get("status"), dict) else data  # nested in an outcome
+    item = str(data.get("item") or data.get("id") or state.get("item") or args.get("id") or "")
+    data = state
     if not item or "complete" not in data:
         return []
     if data.get("complete"):
