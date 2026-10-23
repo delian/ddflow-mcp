@@ -22,6 +22,7 @@ def cmd_grant_add(a, c: Ctx) -> int:
     out = A.grant_add(
         c.repo, item=a.item, gate=a.gate, kind=a.kind or "review_round", count=int(a.count),
         reason=a.reason or "", when=a.when or "", agent=c.requested_agent,
+        approval=a.approval or "",
     )  # fmt: skip
     return _finish(c, out, "grant")
 
