@@ -43,7 +43,7 @@ Sonnet 5.5, ...) are as the vendor pages show them today.
    (a) **a launch-time spend cap outside Claude**: Copilot `--max-ai-credits N` (soft, min 30), Qwen `--max-wall-time` / `--max-tool-calls` / `--max-session-turns`, Grok `--max-turns`, Junie `--max-steps`, Roo `allowedMaxCost`;
    (b) **per-run token and cache numbers in headless output**: Antigravity `agy -p --output-format json` carries `usage.cache_read_tokens`, Cline `run_result.usage`, Amp stream-json `cache_*`, Qwen `/stats`, Copilot SDK `assistant.usage` and `account.getQuota` (a real quota endpoint with `resetDate`);
    (c) **resident-prefix levers**: Qwen `tools.eager` + `tool_search` (byte-stable), Copilot/VS Code tool search (vendor-measured about 18 % fewer tokens on Anthropic models), Antigravity rules budget (24 KB per file, 20 000 tokens), Kiro `toolSearch.*`.
-   Two corrections: Copilot's **premium-request multiplier is legacy** (since 2026-06-01 usage is per-token AI Credits, 1 credit = $0.01); and **Antigravity's FAQ forbids wrapping `agy` in another agent on consumer plans** (API key or Gemini Enterprise only).
+   Two corrections: Copilot's **premium-request multiplier is legacy** (since 2026-06-01 usage is per-token AI Credits, 1 credit = $0.01); and **Antigravity's FAQ forbids wrapping `agy` in another agent on consumer plans** (API key and Gemini Enterprise terms are not stated: U, warn).
 
 ## 2. The matrix
 
@@ -238,7 +238,7 @@ are written in the lane's own directory, never in the operator's user config (D-
 5. **Docs conflict** worth a probe: Kilo `preserve_recent_tokens` (docs 8 000 vs source 15 000), OpenCode `compaction.prune` (docs false vs Kilo true), Copilot session/weekly limit pages (es vs en), `--yes` vs `--yes-always` in Aider, Cursor binary name (`agent` vs `cursor-agent`), Codex subagent isolation (fork vs summary). Pass 2 adds: Copilot `--max-ai-credits` scope (CLI reference "for each response ... resets per user message" vs how-to "in a session") and subagent depth default (settings 6 vs env table 4); Antigravity `--print-timeout` default (headless page 5m vs CLI reference 0s); Junie `--effort` levels (`low,medium,high` vs `minimal...max`); Cline auto-compact doc ("falls back to rule-based truncation") vs SDK source (agentic mode for any model); Roo `condensingApiConfigId` (docs era) vs current schema (absent).
 6. **Claude-only advisor inputs** (`prompt_cache_likely_expired`, `estimated_cache_write_usd`, transcript `usage`) have no counterpart elsewhere except Qwen hook input (`context_usage`, `context_limit`, `input_tokens`), Codex rollout `token_count` (R), Cline `usage` events, Amp stream-json `cache_*` tokens and Kilo/OpenCode `stats`/DB. Elsewhere context size is an estimate. Pass 2 adds Antigravity json/stream-json `usage.cache_read_tokens` (cumulative per session in a stream), Copilot SDK `assistant.usage` / `session.usage_info` (`current_tokens`/`token_limit`) / `account.getQuota`, Cursor `preCompact` input `context_usage_percent`, and Qwen `/stats`.
 7. File as defects (D-file-ddflow-defects): the `kimi` descriptor still describes kimi-cli (R-kimi, existing P-agent-parity.kimi-descriptor); `adding-a-harness.md` lacks every field proposed below (ATF-descriptor-fields).
-8. **Terms-of-service gate** (pass 2): Antigravity consumer plans do not permit wrapping `agy` in another agent or rotating accounts (FAQ); ddflow needs a descriptor fact for it (`[headless].terms`, section 5) so the launcher refuses a consumer-login lane and accepts an API-key or Gemini Enterprise lane. Not researched for the other agents: U (their terms were not read).
+8. **Terms-of-service gate** (pass 2): Antigravity consumer plans do not permit wrapping `agy` in another agent or rotating accounts (FAQ); ddflow needs a descriptor fact for it (`[headless].terms`, section 5) so the launcher refuses a consumer-login lane and warns on an API-key or Gemini Enterprise lane (their terms are not stated). Not researched for the other agents: U (their terms were not read).
 
 ## 5. Proposed descriptor extension (schema, reuse of existing vocabulary)
 
@@ -428,7 +428,7 @@ price_source = { kind = "rpc", via = "copilot-sdk", method = "models.list" }
 ```toml
 # ddflow/harnesses/antigravity.toml (additions; pass 2; hooks/instructions blocks already exist)
 [headless]
-terms  = { consumer_login = "prohibited", api_key = "ok", enterprise = "ok" }   # FAQ: wrapping agy in other agents / account rotation not supported on consumer plans; API key / Gemini Enterprise per its verdict (enterprise: U in the docs, the FAQ names consumer plans only)
+terms  = { consumer_login = "prohibited", api_key = "unknown", enterprise = "unknown" }   # FAQ names consumer plans only; api_key / enterprise are not stated, so unknown (the launcher warns, does not refuse)
 argv   = ["agy", "-p", "{prompt}", "--output-format", "json"]
 resume = ["--conversation", "{session}"]
 model  = ["--model", "{slug}"]                   # slugs from `agy models`
@@ -440,7 +440,7 @@ observe = "cache_read"
 
 [tokens.compact]
 command = "/compact"
-takes_instructions = true                        # "/compact <message>" summarises then answers
+takes_instructions = false                       # "/compact <message>" summarises, then answers the message: not focus instructions
 
 [caps]
 instructions = { per_file = { bytes = 24000 }, aggregate = { tokens = 20000 } }   # rules budget
@@ -508,7 +508,7 @@ When a descriptor has no `[tokens]`, `[meters]` limit keys or `[headless].resume
 | May the launcher write a lane-private config file (Kimi ratio, Gemini/Qwen settings) for non-env knobs? | yes, inside the lane's own directory only, never user config |
 | Probe real limit messages by exhausting a quota? | no; record from user-supplied transcripts only; the cell stays `unavailable` |
 | Research Antigravity, Roo and closed IDEs further? | **done in pass 2** (pass2 sections 2 and 4); remaining U cells need live agents (ATF-fixtures) |
-| Launch Antigravity lanes with a consumer login? | no: FAQ prohibits wrapping `agy` in other agents on consumer plans; accept API key (`modelProvider: "gemini"`, `GEMINI_API_KEY`) or Gemini Enterprise only (ATF-Q8) |
+| Launch Antigravity lanes with a consumer login? | no: FAQ prohibits wrapping `agy` in other agents on consumer plans; API key (`modelProvider: "gemini"`, `GEMINI_API_KEY`) and Gemini Enterprise are not covered by the FAQ sentence: allowed with a warning (ATF-Q8) |
 | Set a Copilot `--max-ai-credits` default per lane? | operator-set, no default shipped; the first cap outside Claude, but its scope (per response vs per session) is unverified (ATF-Q9) |
 
 ## 8. Sources (read 2026-10-23)
