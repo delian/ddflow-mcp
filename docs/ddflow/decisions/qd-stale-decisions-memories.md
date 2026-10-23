@@ -1,6 +1,6 @@
 # Decision: spent decisions, reviewer holder, stale memories
 
-Source: QD-decide-stale-decisions-memories, queue dedupe review 2026-10-23. Operator answer 2026-10-23 (relayed by the lead, not a verbatim quote): retire the six more spent decisions; refresh the reviewer-holder decision to what is actually true, flagging any operator-only change; ddflow chore approve is the operator's act.
+Source: QD-decide-stale-decisions-memories, queue dedupe review 2026-10-23. Operator answer 2026-10-23 (relayed by the lead, not a verbatim quote): retire the spent decisions that qa-dupes listed (six listed; four retired, two held because the evidence says they are live, see 1); refresh the reviewer-holder decision to what is actually true, flagging any operator-only change; ddflow chore approve is the operator's act.
 
 ## 1. Spent decisions (D-spent-decisions-2026-10-23-r2)
 Retired by supersession, history kept, evidence checked in the queue today:
