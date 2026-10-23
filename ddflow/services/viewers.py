@@ -19,6 +19,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import clock
+from ..core import limits as L
 from ..core import progress as PR
 from ..core.model import Bug, Item, Lesson, ResearchNote, Session, State
 from .export.query import ExportError, _cutoff
@@ -26,7 +27,7 @@ from .export.safe import redact_text
 
 KINDS = ("task", "phase", "bug", "research", "lesson", "session")
 DEFAULT_LIMIT = 50
-MAX_LIMIT = 1000
+MAX_LIMIT = L.LIST_MAX_LIMIT
 _TITLE_MAX = 120
 
 
