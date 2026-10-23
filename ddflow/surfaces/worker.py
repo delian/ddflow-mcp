@@ -92,7 +92,11 @@ class _Run:
             try:
                 try:
                     line = WP.encode(frame)
-                except (TypeError, ValueError) as exc:  # not JSON: say so rather than go silent
+                except (
+                    TypeError,
+                    ValueError,
+                    RecursionError,
+                ) as exc:  # not JSON: say so rather than go silent
                     line = WP.encode(
                         WP.error(
                             "unencodable",

@@ -538,3 +538,14 @@ def test_a_refused_hello_exits_3_the_ddflow_code_for_refused():
         Path("."), iter([WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR + 1))]), out, handler=echo
     )
     assert code == 3
+
+
+def test_a_reply_nested_beyond_the_recursion_limit_is_an_error_frame_too():
+    def deep(conn, msg, notify):
+        v: object = 1
+        for _ in range(sys.getrecursionlimit() + 50):
+            v = [v]
+        return {"jsonrpc": "2.0", "id": 1, "result": {"x": v}}
+
+    out = run_worker([WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(1, {"id": 1}, CONN)], deep)
+    assert any(f["t"] == "error" and f["code"] == "unencodable" for f in out)
