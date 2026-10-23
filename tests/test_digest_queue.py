@@ -403,3 +403,24 @@ def test_a_question_that_quotes_a_key_is_masked():
     asks_of(st)["Q9"]["text"] = "KIMI_API_KEY=sk-" + "a1b2c3d4e5f6g7h8i9j0k1l2 expired, what now?"
     (e,) = build(st).entries
     assert "a1b2c3d4" not in repr(e.as_dict())
+
+
+@pytest.mark.parametrize(
+    "kind", ["idle", "runaway", "crashed", "locked", "unresponsive", "stalled"]
+)
+def test_every_health_finding_kind_becomes_a_lease_entry(kind):
+    class F:
+        item, holder, age_s, detail, fix = "", "h", 10.0, "d", "ddflow health"
+
+    F.kind = kind
+    es = [e for e in build(State(), facts=Facts(health=(F(),))).entries if e.kind == "lease"]
+    assert len(es) == 1
+
+
+def test_a_quota_or_generic_expiry_is_not_a_missing_credential():
+    st = State()
+    it = item(st, "T")
+    it.gates["critic"] = GateRecord(
+        gate="critic", outcome="unavailable", at=at(1), reason="quota exceeded; lease expired"
+    )
+    assert build(st).entries == ()
