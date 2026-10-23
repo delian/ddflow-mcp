@@ -49,12 +49,12 @@ def test_a_command_without_n_auto_or_a_placeholder_is_left_alone(monkeypatch):
     assert CI._with_workers(plain, Config(), {}, "selected") == plain
 
 
-def test_the_worker_cap_is_a_knob_of_the_selected_run_too(monkeypatch):
+def test_a_fixed_worker_count_applies_to_the_selected_run_too(monkeypatch):
     _idle(monkeypatch)
     cfg = Config()
     cfg.ci.workers = "6"  # fixed
     files = " ".join(f"tests/test_{i}.py" for i in range(20))
-    cmd = CI._with_workers(SELECTED.format(files=files), cfg, {}, "always")
+    cmd = CI._with_workers(SELECTED.format(files=files), cfg, {}, "selected")
     assert "-n 6 " in cmd, cmd
     _ = NS
 
@@ -77,3 +77,31 @@ def test_the_knob_zero_never_queues_a_selection_and_the_whole_suite_always_does(
     hooks = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
     assert CI._needs_suite_slot(cfg, hooks, _scope(500)) is False
     assert CI._needs_suite_slot(cfg, CI.DEFAULT_COMMAND, None) is True
+
+
+def test_the_boundary_is_more_than_the_limit_not_the_limit():
+    cfg = Config()
+    hooks = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
+    assert CI._needs_suite_slot(cfg, hooks, _scope(20)) is False
+    assert CI._needs_suite_slot(cfg, hooks, _scope(21)) is True
+    assert CI._needs_suite_slot(cfg, hooks, _scope(15, always=5)) is False
+    assert CI._needs_suite_slot(cfg, hooks, _scope(15, always=6)) is True
+
+
+def test_a_placeholder_beside_n_auto_leaves_no_n_auto(monkeypatch):
+    _idle(monkeypatch)
+    cmd = CI._with_workers(
+        "pytest -n {workers} tests/a.py && pytest -n auto tests/b.py", Config(), {}, "selected"
+    )
+    assert "-n auto" not in cmd and "{workers}" not in cmd, cmd
+
+
+def test_the_slot_holders_floor_reaches_the_selected_stages(monkeypatch):
+    monkeypatch.setattr(
+        WK.S.HostSignals, "sample", lambda self: {"load": 9.0, "memory_free_frac": 0.9}
+    )  # far over the load mark
+    monkeypatch.setattr(WK.os, "cpu_count", lambda: 192)
+    files = " ".join(f"tests/test_{i}.py" for i in range(30))
+    cmd = SELECTED.format(files=files)
+    assert "-n 1 " in CI._with_workers(cmd, Config(), {}, "selected")
+    assert "-n 8 " in CI._with_workers(cmd, Config(), {}, "selected", holding_suite=True)

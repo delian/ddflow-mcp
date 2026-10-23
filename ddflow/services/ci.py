@@ -499,10 +499,12 @@ def _with_workers(
 ) -> str:
     """``cmd`` with ``{workers}`` replaced, the count and its inputs noted under ``stage``."""
     cmd, auto = WK.resolve(cmd, cfg, holding_suite=holding_suite)
-    if auto is None:  # the hook entry a selection is cut from says `-n auto`: one per core
-        cmd, auto = WK.localize_auto(
-            cmd, cfg, holding_suite=holding_suite, files=WK.count_test_files(cmd)
-        )
+    # the hook entry a selection is cut from says `-n auto` (one per core), with or without a
+    # `{workers}` beside it
+    cmd, more = WK.localize_auto(
+        cmd, cfg, holding_suite=holding_suite, files=WK.count_test_files(cmd)
+    )
+    auto = auto or more
     if auto:
         used[stage] = {"n": auto.n, **auto.inputs}
     return cmd
@@ -574,10 +576,12 @@ def _execute(
         if holding_suite
         else nullcontext(cmd) as cmd
     ):
-        return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
+        return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected, holding_suite)
 
 
-def _run_stages(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected):
+def _run_stages(
+    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected, holding_suite=False
+):
     on_tick, tick_s = tick or (None, 0)
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
@@ -604,7 +608,7 @@ def _run_stages(cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, use
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
     for at, (raw, label) in enumerate(todo):
-        cmd_ = _with_workers(raw, cfg, used, label)
+        cmd_ = _with_workers(raw, cfg, used, label, holding_suite=holding_suite)
         before += f"\n$ {cmd_}\n"
         p = CommandRunner().run(
             Declared(cmd_, "the pre-commit `tests` hook"),
