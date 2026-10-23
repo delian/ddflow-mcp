@@ -1655,6 +1655,13 @@
           (the hook refuses); `config --set`, `ddflow_configure` and the environment
           refuse it, and so does loading ddflow's own source tree, where the file and
           the code are one commit.
+      enforce.complexity_warn_at = 18   [default]
+          The commit hook names a staged Python function whose cyclomatic complexity
+          ROSE to this value or more (radon; grade D starts at 21, which
+          tests/test_architecture_guards.py refuses), so a one-line `if` in a function
+          already at the limit is seen at commit time and not 15 minutes later in the
+          ci gate. Warning only; needs radon (a dev dependency), silent without it. 0
+          turns it off.
       enforce.doc_globs = ['**/*.md', '**/*.rst', '**/*.adoc']   [default]
           Which tracked files are documentation for stale_docs, in git's glob pathspec
           syntax (`*` stops at `/`, `**/` is any depth). A matching file is searched

@@ -114,6 +114,10 @@ class EnforceConfig:
         choices=BLOCK_WARN_OFF,
         strictest=("block", "the hook refuses"),
     )
+    complexity_warn_at: int = knob(
+        18,
+        doc="The commit hook names a staged Python function whose cyclomatic complexity ROSE to this value or more (radon; grade D starts at 21, which tests/test_architecture_guards.py refuses), so a one-line `if` in a function already at the limit is seen at commit time and not 15 minutes later in the ci gate. Warning only; needs radon (a dev dependency), silent without it. 0 turns it off.",
+    )
     doc_globs: list[str] = knob(
         factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc"],
         doc="Which tracked files are documentation for stale_docs, in git's glob pathspec syntax (`*` stops at `/`, `**/` is any depth). A matching file is searched for stale mentions, and its own removed lines are never taken as code removals. `*.txt` is deliberately NOT a default: CMakeLists.txt and requirements.txt are code, and calling them docs hid every name they removed; add a project's own text docs by path.",
