@@ -437,10 +437,10 @@ def test_the_lifted_blocker_is_only_the_one_about_the_bugs_being_closed(repo):
 def test_file_tasks_on_the_cli(repo):
     seed(repo)
     EventLog(repo, "old").append("bug.found", "B-old", {"item": "", "summary": "stray"})
-    code, out, err = run_cli(repo, "bug", "file-tasks")
+    code, out, err = run_cli(repo, "bug", "file-tasks", "--all")
     assert code == 0, err
     assert "fix-B-old" in out
-    code, _, _ = run_cli(repo, "bug", "file-tasks")
+    code, _, _ = run_cli(repo, "bug", "file-tasks", "--all")
     assert code == 2
 
 
