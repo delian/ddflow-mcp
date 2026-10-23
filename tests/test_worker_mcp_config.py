@@ -53,6 +53,7 @@ def test_a_docker_launch_forwards_the_tier_into_the_container():
     got = WM.worker_entry(entry, "core")
     assert got["args"] == ["run", "-e", "DDFLOW_MCP_TOOLS=core", "-i", "--rm", "img"], got
     assert entry["args"] == ["run", "-i", "--rm", "img"], "the input must not be changed"
+    assert "env" not in got, "the client-side env would be inert; the -e flag carries the tier"
     assert WM.worker_entry({"command": "uvx", "args": ["x"]}, "core")["args"] == ["x"]
     # not a `docker run`: left alone
     exec_entry = {"command": "docker", "args": ["exec", "worker", "run"]}

@@ -39,6 +39,9 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
         # The entry is `_launch_entry`'s own: `run`, its options, then the image LAST. What follows
         # the options is never touched.
         out["args"] = ["run", "-e", f"{TIER_ENV}={tier}", *_without_tier(args[1:-1]), *args[-1:]]
+        out["env"] = {k: v for k, v in out["env"].items() if k != TIER_ENV}  # inert on the client
+        if not out["env"]:
+            del out["env"]
     return out
 
 
