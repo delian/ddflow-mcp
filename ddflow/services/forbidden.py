@@ -150,7 +150,7 @@ _VALUED = {
     "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-a", "-d", "-E", "-l", "-i"}),
     "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
 }
-_PYTHON = re.compile(r"(?:python|pypy)\d*(?:\.\d+)*\Z")
+_PYTHON = re.compile(r"(?:python|pypy)\d*(?:\.\d+)*[a-z]?\Z")
 _DURATION = re.compile(r"(?:\d+(?:\.\d*)?|\.\d+)[smhd]?")
 
 
@@ -181,8 +181,8 @@ def _python_module(head: list[str]) -> list[str]:
         return head
     i = 1
     while i < len(head) and head[i].startswith("-") and head[i] != "-m":
-        if head[i] == "-c":
-            return head  # an inline program, not a module
+        if head[i] in ("-c", "-"):
+            return head  # an inline program or one read from stdin, not a module
         if head[i].startswith("-m"):
             return [head[i][2:], *head[i + 1 :]]  # `-mddflow`
         i += 2 if head[i] in ("-W", "-X", "--check-hash-based-pycs") else 1

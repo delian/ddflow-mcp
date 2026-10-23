@@ -39,6 +39,7 @@ def _check(cmd: str):
         "env KIMI_API_KEY=x timeout 580 ddflow",
         "nohup ddflow",
         "timeout .5s ddflow",
+        "python3.13t -m ddflow",
         "python --check-hash-based-pycs always -m ddflow",
         "python -mddflow",
         "pypy3 -m ddflow",
@@ -55,6 +56,8 @@ def test_the_documented_round_is_allowed_however_it_is_launched(launcher):
         "python -m ddflow merge X --force",
         "timeout 5 git push --force",
         "python-tools -m ddflow review X --gate critic --force --reason w",  # not an interpreter
+        "python - -m ddflow review X --gate critic --force --reason w",  # the script is on stdin
+        "python -c 'x' -m ddflow review X --gate critic --force --reason w",
     ],
 )
 def test_other_force_flags_and_forbidden_commands_stay_refused_when_wrapped(cmd):
