@@ -85,9 +85,10 @@ from a session that did nothing, and the log is what lets this project be rebuil
 A tool or reviewer that could not run is recorded `unavailable`, **never** `passed`.
 A gate gets `[review].max_rounds` (default 2) `ddflow_review` rounds per item, full and
 delta alike; then settle each finding with `ddflow_review_triage`.
-A plain `ddflow_review` of a gate with a recorded review is a full re-review: the whole
-diff plus the previous findings and your triage of each (`[review].delta_default`, default
-off; `full=true` when it is on); `delta=true` reviews only the new commits. Changing `review.delta_default` is
+A plain `ddflow_review` of a gate with a recorded review is a full re-review while
+`[review].delta_default` is off (the default): the whole diff plus the previous findings and
+your triage of each. With `delta_default` on, a plain call is a delta review and `full=true`
+asks for the full one; `delta=true` always reviews only the new commits. Changing `review.delta_default` is
 reported to the operator like the cap.
 Do not raise the cap yourself: a `ddflow_configure` change to `review.*` is reported to
 the operator.

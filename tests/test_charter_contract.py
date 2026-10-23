@@ -83,5 +83,13 @@ def test_the_session_start_framing_carries_the_contract_in_a_kilobyte(repo):
 
     framing = SESSION_START_HEADER + SESSION_START_FOOTER
     assert len(framing.encode()) <= 1000, len(framing.encode())
-    for must in ("claim", "operator", "unavailable", "ddflow_brief"):
+    for must in (
+        "claim",
+        "operator",
+        "unavailable",
+        "ddflow_brief",
+        "ddflow_recall",
+        "ddflow_help",
+        "ddflow_rule_show",
+    ):
         assert must in framing, must

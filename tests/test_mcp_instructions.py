@@ -122,8 +122,14 @@ def test_the_companion_line_is_only_said_when_one_needs_action(repo):
     from ddflow.services import prompts as P
     from ddflow.surfaces.mcp import _instruction_vars
 
+    from ddflow.services import companions as CO
+
     run_cli(repo, "init")
+    comp = next(c for c in CO.load(repo) if c.id == "context7")
+    CO.register(repo, comp, "claude")
     vars_ = _instruction_vars(repo)
+    # The real decision: a registered companion is not among those that need action.
+    assert "context7" not in [c["id"] for c in vars_["actionable_companions"]]
     vars_["tool_tier_note"] = ""
     vars_["actionable_companions"] = []
     assert "not wired up" not in P.render(P.resolve("mcp_instructions", repo), **vars_)
