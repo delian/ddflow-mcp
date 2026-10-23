@@ -796,7 +796,7 @@ class Server:
         # A routed call was checked by `route` (one rule, on the family's names); only an argument
         # given under both its current and an old spelling is left to say here.
         problem = (
-            (f"bad arguments: {clash}" if clash else "")
+            (f"{routed.display}: bad arguments: {clash}" if clash else "")
             if routed
             else self._check_call(name, spec, args, clash)
         )
