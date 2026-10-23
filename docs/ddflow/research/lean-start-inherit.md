@@ -1,6 +1,6 @@
 # Lean start: what subagents inherit, measured (LS-inherit-probe)
 
-Closes the UNKNOWNs of section 1 of [lean-start.md](lean-start.md). Evidence labels as there: MEASURED =
+Closes the subagent-inheritance UNKNOWN of section 1 of [lean-start.md](lean-start.md) and re-measures other cells of it (the Opus difference and the core-tier cost stay open). Evidence labels as there: MEASURED =
 read from `claude -p ... --output-format json` or `stream-json` usage on this machine (Claude Code 2.1.296,
 model `haiku`, 2026-10-23); "first-turn input" is input + cache_creation + cache_read of the first request.
 One run per cell unless stated, so +-0.3K noise; the two cells that were re-run (V2 and V6) each reproduced their first-run value exactly.
