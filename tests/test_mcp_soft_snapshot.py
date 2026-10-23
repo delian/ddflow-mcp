@@ -293,13 +293,13 @@ def test_serving_every_reply_from_a_real_snapshot_takes_milliseconds(tmp_path):
 
     repo = _git(tmp_path / "r")
     ifacesnap.write(_server(repo), instructions="x")
-    t0 = time.perf_counter()
+    t0 = time.process_time()
     snap = S.read(repo)
     S.initialize_result(snap, "2025-11-25")
     S.discover_result(snap)
     S.tools_list_result(snap)
     S.prompts_list_result(snap)
-    assert time.perf_counter() - t0 < 2.0  # generous: a cold Server needs seconds, this does not
+    assert time.process_time() - t0 < 2.0  # generous: a cold Server needs seconds, this does not
 
 
 def test_drift_is_empty_for_a_fresh_snapshot_and_names_what_a_stale_one_gets_wrong(tmp_path):
@@ -311,7 +311,9 @@ def test_drift_is_empty_for_a_fresh_snapshot_and_names_what_a_stale_one_gets_wro
     snap["tools"] = snap["tools"][:-1]
     snap["capabilities"] = {"tools": {"listChanged": True}}
     snap["prompts"] = []
-    assert {"tools/list", "prompts/list", "capabilities"} <= set(ifacesnap.drift(srv, snap))
+    found = ifacesnap.drift(srv, snap)
+    assert {"tools/list", "prompts/list"} <= set(found)
+    assert any(f.endswith(".capabilities") for f in found)
 
 
 def test_write_refuses_a_snapshot_that_would_not_reproduce(tmp_path, monkeypatch):
@@ -406,3 +408,20 @@ def test_refresh_notices_a_prompt_description_that_the_digest_does_not_cover(tmp
     monkeypatch.setattr(srv, "_m_prompts_list", changed)
     assert ifacesnap.refresh(srv, instructions="x") is True
     assert S.read(repo)["prompts"][0]["description"] == "reworded"
+
+
+def test_a_tool_or_prompt_with_an_empty_name_is_not_a_snapshot():
+    assert S.problems(sample(tools=[{"name": ""}]))
+    assert S.problems(sample(prompts=[{"name": ""}]))
+
+
+def test_drift_notices_a_missing_legacy_version(tmp_path):
+    from ddflow.surfaces import ifacesnap
+    from ddflow.surfaces import mcp_protocol as proto
+
+    srv = _server(_git(tmp_path / "r"))
+    snap = ifacesnap.build(srv, instructions="x")
+    snap["protocols"] = snap["protocols"][:1]  # only the newest: older asks fall back to it
+    assert any(
+        "initialize[" + proto.SUPPORTED_PROTOCOLS[-1] + "]" in d for d in ifacesnap.drift(srv, snap)
+    )

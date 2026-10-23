@@ -45,11 +45,15 @@ def drift(server: Any, data: dict[str, Any]) -> list[str]:
     Empty when they agree (the instructions text is the caller's, so it is not compared)."""
     # The protocol module is where `Server._m_initialize` and `_discover` get these from; asking
     # them directly keeps this check from touching the live connection's state.
-    live_init = proto.initialize_result(proto.legacy_version(""), "")
-    mine = S.initialize_result(data, "")
-    found = [
-        k for k in ("protocolVersion", "capabilities", "serverInfo") if mine[k] != live_init[k]
-    ]
+    found: list[str] = []
+    for want in (*proto.SUPPORTED_PROTOCOLS, ""):  # every version a client may ask for, and none
+        live_init = proto.initialize_result(proto.legacy_version(want), "")
+        mine = S.initialize_result(data, want)
+        found += [
+            f"initialize[{want}].{k}"
+            for k in ("protocolVersion", "capabilities", "serverInfo")
+            if mine[k] != live_init[k]
+        ]
     live_disc = proto.discover("")
     mine_disc = S.discover_result(data)
     found += [
