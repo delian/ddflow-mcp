@@ -3,6 +3,7 @@ for with the operator's chat approval; a command reviewer (it runs a program) is
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -47,9 +48,9 @@ def _state(repo):
 
 
 def _ask_id(text: str) -> str:
-    word = text.split("approval ", 1)[1].split(maxsplit=1)[0]
-    assert word.startswith("Q"), text
-    return word
+    found = re.search(r"approval (Q[0-9a-f]+)", text)
+    assert found, text
+    return found.group(1)
 
 
 def _answer(repo, ask_id):
