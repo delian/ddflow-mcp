@@ -510,6 +510,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
             called_from=called_from,
             force=bool(a.get("force")),
+            approval=a.get("approval", "") or "",
         ),
         payload=("gate", "outcome", "warning"),
         render=L.record_text,
@@ -574,6 +575,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "approval",
+                help="An operator approval id (Q...) for this exact override; a refusal names it.",
+                cli_help="the id of the operator's approval of this exact override: a refused call files the request and names the id; a person answers it with `ddflow approvals approve`",
+                default="",
+            ),
+            Param(
                 "force",
                 type="boolean",
                 cli_only=True,
@@ -592,6 +599,7 @@ COMMANDS: tuple[Command, ...] = (
             "command",
             "exit_code",
             "output_file",
+            "approval",
         ),
     ),
     Command(
@@ -622,6 +630,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             agent=agent,
             force=bool(a.get("force")),
+            approval=a.get("approval", "") or "",
         ),
         payload=("gate", "outcome"),
         render=L.record_text,
@@ -655,6 +664,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_only=True,
             ),
             Param("output_file", default="", cli_only=True),
+            Param(
+                "approval",
+                help="An operator approval id (Q...) for this exact override; a refusal names it.",
+                cli_help="the id of the operator's approval of this exact override: a refused call files the request and names the id; a person answers it with `ddflow approvals approve`",
+                default="",
+            ),
             Param(
                 "force",
                 type="boolean",
