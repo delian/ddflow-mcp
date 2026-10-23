@@ -1139,11 +1139,11 @@ def _counts_as_mine(
 
 
 def _tree_bound(repo: Path, state, cfg: Config, here: Path | None, now: float) -> bool:
-    """Is ``here`` the tree some unfinished lease created -- live, or lapsed (its holder's
-    other items are no more this tree's for the lapse)?"""
+    """Is ``here`` the tree some lease created -- live or lapsed, finished item or not (its
+    holder's other items are no more this tree's for either)?"""
     if here is None:
         return False
-    held = [*leases.unfinished_leases(state, cfg, now).values()]
+    held = [*state.active_leases(now, cfg.lease.grace_s).values()]
     held += state.expired_leases(now, cfg.lease.grace_s).values()
     return any(lz.worktree and W.load_path(repo, lz.worktree).resolve() == here for lz in held)
 
@@ -1529,7 +1529,13 @@ def _uncovered_message(
     if len(uncovered) > MAX_LISTED_PATHS:
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
-    if stolen:
+    if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
+        lines += [
+            "These paths belong to another item YOU hold, bound to a tree of its own: commit",
+            "them there, or widen THIS item's claim (`ddflow update <ID> --globs '...'`).",
+            "",
+        ]
+    elif stolen:
         lines += [
             "STOP: paths marked above are leased by ANOTHER agent. Committing them races",
             "that agent's work. Coordinate, or wait for the lease to be released.",
@@ -1625,9 +1631,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     stolen.update(twice)
     uncovered, stolen = _without_branch_changed(repo, uncovered, stolen)
-    lapsed = _lapsed_mine(
-        repo, state, uncovered, others, me, here, now, cfg.lease.grace_s, bound
-    )
+    lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s, bound)
     uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
     if not uncovered:
         return Verdict(OK, note)
