@@ -1,0 +1,572 @@
+{
+ "ddflow_abandon": [
+  "ddflow_lease action=abandon",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_batch": [
+  "ddflow_task action=batch",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_bisect": [
+  "ddflow_doctor action=bisect",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_block": [
+  "ddflow_lease action=block",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_board": [
+  "ddflow_view action=board",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_bug_file_tasks": [
+  "ddflow_bug action=file_tasks",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_bug_fixed": [
+  "ddflow_bug action=fixed",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_bug_found": [
+  "ddflow_bug action=found",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_bug_invalid": [
+  "ddflow_bug action=invalid",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_cadence": [
+  "ddflow_view action=cadence",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_ci": [
+  "ddflow_gate action=ci",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_cleanup": [
+  "ddflow_doctor action=cleanup",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_companions": [
+  "ddflow_reviewers action=companions",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_companions_add": [
+  "ddflow_reviewers action=companions_add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_companions_verify": [
+  "ddflow_reviewers action=companions_verify",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_configure": [
+  "ddflow_admin action=configure",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_decision_add": [
+  "ddflow_decision action=add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_decision_applicable": [
+  "ddflow_decision action=applicable",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_decision_list": [
+  "ddflow_decision action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_decision_show": [
+  "ddflow_decision action=show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_decision_supersede": [
+  "ddflow_decision action=supersede",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_docs": [
+  "ddflow_view action=docs",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_doctor": [
+  "ddflow_doctor action=check",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_dupes": [
+  "ddflow_memory action=dupes",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_export": [
+  "ddflow_admin action=export",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_external_sync": [
+  "ddflow_admin action=external_sync",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_flow_choose": [
+  "ddflow_workflow action=flow_choose",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_flow_show": [
+  "ddflow_workflow action=flow_show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_list": [
+  "ddflow_gate action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_record": [
+  "ddflow_gate action=record",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_run": [
+  "ddflow_gate action=run",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_skip": [
+  "ddflow_gate action=skip",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_status": [
+  "ddflow_gate action=status",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_gate_verify": [
+  "ddflow_gate action=verify",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_health": [
+  "ddflow_view action=health",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_history": [
+  "ddflow_view action=history",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_hooks": [
+  "ddflow_doctor action=hooks",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_import": [
+  "ddflow_admin action=import",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_import_verify": [
+  "ddflow_admin action=import_verify",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_job_add": [
+  "ddflow_job action=add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_job_end": [
+  "ddflow_job action=end",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_job_list": [
+  "ddflow_job action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_job_run": [
+  "ddflow_job action=run",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_lanes": [
+  "ddflow_view action=lanes",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_lesson_add": [
+  "ddflow_memory action=lesson_add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_lesson_search": [
+  "ddflow_memory action=lesson_search",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_lesson_verify": [
+  "ddflow_memory action=lesson_verify",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_link": [
+  "ddflow_memory action=link",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_list": [
+  "ddflow_view action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_loops": [
+  "ddflow_view action=loops",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_memory_add": [
+  "ddflow_memory action=add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_memory_forget": [
+  "ddflow_memory action=forget",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_memory_list": [
+  "ddflow_memory action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_metrics": [
+  "ddflow_view action=metrics",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_onboard": [
+  "ddflow_admin action=onboard",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_phase_add": [
+  "ddflow_task action=phase_add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_phase_close": [
+  "ddflow_task action=phase_close",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_pins": [
+  "ddflow_view action=pins",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_pr_status": [
+  "ddflow_reviewers action=pr_status",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_pr_sync": [
+  "ddflow_reviewers action=pr_sync",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_pr_threads": [
+  "ddflow_reviewers action=pr_threads",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_precommit": [
+  "ddflow_doctor action=precommit",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_progress": [
+  "ddflow_view action=progress",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_promote_add": [
+  "ddflow_ship action=promote_add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_promote_deployed": [
+  "ddflow_ship action=promote_deployed",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_promote_status": [
+  "ddflow_ship action=promote_status",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_prompts": [
+  "ddflow_admin action=prompts",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_queue": [
+  "ddflow_view action=queue",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rebuild": [
+  "ddflow_doctor action=rebuild",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_recall": [
+  "ddflow_memory action=recall",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_record": [
+  "ddflow_doctor action=record",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_recover": [
+  "ddflow_doctor action=recover",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_release": [
+  "ddflow_lease action=release",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_remove": [
+  "ddflow_task action=remove",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rename": [
+  "ddflow_task action=rename",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_render": [
+  "ddflow_view action=render",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_replay": [
+  "ddflow_doctor action=replay",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_research_add": [
+  "ddflow_task action=research_add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_resolve": [
+  "ddflow_task action=resolve",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_review": [
+  "ddflow_reviewers action=review",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_review_triage": [
+  "ddflow_reviewers action=review_triage",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_reviewers_detect": [
+  "ddflow_reviewers action=detect",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_reviewers_list": [
+  "ddflow_reviewers action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_add": [
+  "ddflow_rule action=add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_edit": [
+  "ddflow_rule action=edit",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_list": [
+  "ddflow_rule action=list",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_remove": [
+  "ddflow_rule action=remove",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_search": [
+  "ddflow_rule action=search",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_show": [
+  "ddflow_rule action=show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_rule_sync": [
+  "ddflow_rule action=sync",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_end": [
+  "ddflow_session action=end",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_note": [
+  "ddflow_session action=note",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_prompt": [
+  "ddflow_session action=prompt",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_start": [
+  "ddflow_session action=start",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_setup": [
+  "ddflow_admin action=setup",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_similar": [
+  "ddflow_memory action=similar",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_split": [
+  "ddflow_task action=split",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_status": [
+  "ddflow_view action=status",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_sync": [
+  "ddflow_admin action=sync",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_task_add": [
+  "ddflow_task action=add",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_task_fold": [
+  "ddflow_task action=fold",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_tests": [
+  "ddflow_gate action=tests",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_unblock": [
+  "ddflow_lease action=unblock",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_update": [
+  "ddflow_task action=update",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_upgrade": [
+  "ddflow_admin action=upgrade",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_verify": [
+  "ddflow_doctor action=verify",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_version_cut": [
+  "ddflow_ship action=version_cut",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_version_show": [
+  "ddflow_ship action=version_show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_wait": [
+  "ddflow_lease action=wait",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_workflow": [
+  "ddflow_workflow action=show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_workflow_drop": [
+  "ddflow_workflow action=drop",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_workflow_gate": [
+  "ddflow_workflow action=gate",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_workflow_pipeline": [
+  "ddflow_workflow action=pipeline",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_workflow_state": [
+  "ddflow_workflow action=state",
+  "0.2.8",
+  "1.0"
+ ]
+}
