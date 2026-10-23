@@ -302,8 +302,8 @@ def revoke(log, ask_id: str, *, actor: Actor) -> None:
         raise AskRefused(why or f"revoking is a person's act, and {actor.id} acts as an agent")
     with log.transaction():
         row = get(_state(log), ask_id)
-        if row is None or row["state"] != ANSWERED:
-            raise AskRefused(f"{ask_id} is not an answered approval")
+        if row is None or row["state"] != ANSWERED or row["outcome"] != APPROVED:
+            raise AskRefused(f"{ask_id} is not an approved approval: nothing to revoke")
         if row["uses"] and row["used"] >= row["uses"]:
             raise AskRefused(f"{ask_id} is already spent: there is nothing left to revoke")
         log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id, "revoked": True})
