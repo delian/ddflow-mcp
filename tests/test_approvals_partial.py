@@ -62,7 +62,16 @@ def test_a_re_recorded_partial_needs_a_new_approval(repo):
     assert code != 0 and "other state" in err
 
 
-def test_the_agent_cannot_use_another_verbs_approval_and_a_person_is_unchanged(repo):
+def test_the_agent_cannot_use_another_verbs_approval(repo):
+    _partial_item(repo)
+    other = _ask_id(run_cli(repo, "chore", "approve", agent="bot")[2])
+    _answer(repo, other)
+    code, _o, err = _accept(repo, "--approval", other)
+    assert code != 0 and "approval for 'chore.approve'" in err
+    assert _state(repo).items["T1"].gate_outcome("unit_tests") == "partial"
+
+
+def test_a_person_accepts_a_partial_as_before(repo):
     _partial_item(repo)
     code, out, err = _accept(repo, agent="")
     assert code == 0, (out, err)

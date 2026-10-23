@@ -226,14 +226,19 @@ SITES: tuple[Site, ...] = (
 #: (`[approvals]`, `[agent].roles/actors`), signer pins and key rotation (no signer exists yet),
 #: `[hooks].forbidden_commands`, disabling hooks, company-layer floors.
 TERMINAL_ONLY: dict[str, str] = {
+    "ddflow/services/reviewer_trust.py:write": (
+        "T3: a command reviewer runs any program and can print any verdict, so only a person "
+        "adds one; over chat it would let whoever types into the session run code"
+    ),
+}
+
+#: Refusals NOT yet routed, honestly listed with the follow-up that routes them (not T3: the
+#: conformance test requires the reason to name its task, so this table only shrinks).
+NOT_YET_ROUTED: dict[str, str] = {
     "ddflow/surfaces/declared/export.py:<module>": (
         "NOT YET ROUTED (follow-up RA-consume-sites-4): `export --force` (override of hand-edit "
         "protection) and the per-machine `--local` selection are still the operator's terminal acts; "
         "the lock, the lock lift and the acknowledgement are routed (export.lock/unlock/ack)"
-    ),
-    "ddflow/services/reviewer_trust.py:write": (
-        "T3: a command reviewer runs any program and can print any verdict, so only a person "
-        "adds one; over chat it would let whoever types into the session run code"
     ),
 }
 
