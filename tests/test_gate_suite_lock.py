@@ -48,17 +48,15 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    seen: list[bool] = []
-    real = R.WK.resolve
-
-    def resolve(command, cfg, files=None, **kw):
-        seen.append(kw.get("holding_suite", False))
-        return real(command, cfg, files, **kw)
-
-    monkeypatch.setattr(R.WK, "resolve", resolve)
-    R.run_command_gate(_gate("true -n {workers}"), tmp_path, cfg=_cfg())
-    R.run_command_gate(_gate("true -n {workers}", "lint"), tmp_path, cfg=_cfg())
-    assert seen == [True, False]
+    # a host far over its load mark: the clamp alone would give one worker
+    monkeypatch.setattr(
+        R.WK.S.HostSignals, "sample", lambda self: {"load": 9.0, "memory_free_frac": 0.9}
+    )
+    cfg = _cfg()
+    suite = R.run_command_gate(_gate("true -n {workers}"), tmp_path, cfg=cfg)[1]
+    other = R.run_command_gate(_gate("true -n {workers}", "lint"), tmp_path, cfg=cfg)[1]
+    assert suite["workers"]["n"] == cfg.ci.suite_min_workers > 1, suite
+    assert other["workers"]["n"] == 1, other
 
 
 def test_the_lock_wait_adds_to_the_admission_wait(tmp_path):
