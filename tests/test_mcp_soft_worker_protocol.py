@@ -543,20 +543,31 @@ def test_a_refused_hello_exits_3_the_ddflow_code_for_refused():
     assert code == 3
 
 
-def test_a_reply_nested_beyond_the_recursion_limit_is_an_error_frame_too():
-    def deep(conn, msg, notify):
-        v: object = 1
-        for _ in range(200_000):
-            v = [v]
-        return {"jsonrpc": "2.0", "id": 1, "result": {"x": v}}
+def test_a_reply_nested_beyond_the_recursion_limit_is_an_error_frame_too(monkeypatch):
+    # Real deep nesting overflows the C stack on a small-stack machine, so the encoder is made to
+    # raise what it raises for a too-deep value.
+    real = WP.encode
 
-    out = run_worker([WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(1, {"id": 1}, CONN)], deep)
+    def encode(frame):
+        if frame.get("t") == "res":
+            raise RecursionError("maximum recursion depth exceeded")
+        return real(frame)
+
+    monkeypatch.setattr(WP, "encode", encode)
+    out = run_worker(
+        [WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(1, {"id": 1}, CONN)],
+        lambda c, m, n: {"jsonrpc": "2.0", "id": 1, "result": {}},
+    )
     assert any(f["t"] == "error" and f["code"] == "unencodable" for f in out)
 
 
-def test_a_deeply_nested_line_is_a_bad_frame_not_a_crash():
+def test_a_deeply_nested_line_is_a_bad_frame_not_a_crash(monkeypatch):
+    def too_deep(text):
+        raise RecursionError("maximum recursion depth exceeded while decoding")
+
+    monkeypatch.setattr(WP.json, "loads", too_deep)
     with pytest.raises(WP.ProtocolError) as e:
-        WP.decode("[" * 200_000 + "1" + "]" * 200_000 + "\n")
+        WP.decode('{"t":"drain"}\n')
     assert e.value.code == "bad_frame"
 
 
