@@ -99,8 +99,8 @@ def snapshot(
     instructions_id: str = "",
     capabilities: dict[str, Any] | None = None,
     protocols: Iterable[str] = (),
-    shim_proto: int = 1,
-    worker_proto: int = 1,
+    shim_proto: int = SHIM_PROTO,
+    worker_proto: int = WORKER_PROTO,
 ) -> dict[str, Any]:
     """The canonical interface of one exposed surface (a profile, flat, or the facade)."""
     return {
