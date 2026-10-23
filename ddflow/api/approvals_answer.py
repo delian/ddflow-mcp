@@ -72,6 +72,8 @@ def approvals_revoke(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
 
 def digest_chars(repo: Path, agent: str = "") -> int:
     """How many leading digest characters the person types back (`[approvals].min_digest_chars`)."""
+    if is_agent(agent):  # no read for an agent; the verbs will refuse it
+        return 0
     return _load(repo, agent)[1].approvals.min_digest_chars
 
 
