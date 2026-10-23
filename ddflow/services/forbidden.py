@@ -60,7 +60,7 @@ _FLAG_INSTEAD = (
     "no force flags: fix what the tool refused. The one exception is "
     '`ddflow review <item> --force --reason "<why>"` for an extra review round '
     "(--gate and the other options may sit anywhere, --reason is required, and a "
-    "timeout/uv run/python -m launcher is fine)"
+    "timeout or python -m launcher is fine)"
 )
 
 
@@ -149,24 +149,13 @@ _VALUED = {
     "xargs": frozenset({"-n", "-I", "-L", "-P", "-s", "-a", "-d", "-E", "-l", "-i"}),
     "timeout": frozenset({"-k", "-s", "--kill-after", "--signal"}),
 }
-#: `uv`'s subcommands: `uv [global options] run ...` runs its command, any other subcommand is
-#: uv's own work (`uv pip install` is a `uv` command, not a `pip` one).
-_UV_SUBCOMMANDS = frozenset(
-    {"run", "sync", "pip", "venv", "tool", "python", "add", "remove", "lock", "init", "build"}
-    | {"publish", "export", "tree", "cache", "self", "version", "help", "format", "audit"}
-)
-#: `uv run`'s options that take their value as the next word.
-_UV_RUN_VALUED = frozenset(
-    {"--with", "--with-requirements", "--with-editable", "--python", "-p", "--project"}
-    | {"--directory", "--extra", "--group", "--package", "--env-file", "--index", "--script"}
-)
 _PYTHON = re.compile(r"(?:python|pypy)\d*(?:\.\d+)*\Z")
 _DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
 
 
 def _head(words: list[str]) -> list[str]:
     """`words` from the command's own word on: wrappers, their options and values, and
-    VAR=x assignments dropped (`timeout 5 cmd`, `uv run cmd`, `python -m cmd` run `cmd`)."""
+    VAR=x assignments dropped (`timeout 5 cmd` and `python -m cmd` run `cmd`)."""
     i = 0
     wrapper = ""
     while i < len(words):
@@ -180,23 +169,9 @@ def _head(words: list[str]) -> list[str]:
             i += 2 if w in _VALUED.get(wrapper, ()) else 1
         elif wrapper == "timeout" and _DURATION.fullmatch(w):
             i += 1  # the duration is the wrapper's own word
-        elif w.rsplit("/", 1)[-1] == "uv" and (k := _uv_run(words, i)) >= 0:
-            i, wrapper = k, ""
         else:
             break
     return _python_module(words[i:])
-
-
-def _uv_run(words: list[str], i: int) -> int:
-    """Where the command `uv [global options] run [options] CMD` runs starts, or -1 when the
-    `uv` at ``i`` is the command itself (any other subcommand)."""
-    j = next((n for n in range(i + 1, len(words)) if words[n] in _UV_SUBCOMMANDS), len(words))
-    if j >= len(words) or words[j] != "run":
-        return -1
-    j += 1
-    while j < len(words) and words[j].startswith("-") and words[j] != "--":
-        j += 2 if words[j] in _UV_RUN_VALUED else 1
-    return j + 1 if j < len(words) and words[j] == "--" else j
 
 
 def _python_module(head: list[str]) -> list[str]:
