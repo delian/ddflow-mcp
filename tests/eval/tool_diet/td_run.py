@@ -69,7 +69,7 @@ def ask(
 
 
 def retry(rev, tools, sc, surface, name, raw, timeout, first):
-    """Tell the model what the server said and let it call once more; keep the better call."""
+    """Tell the model what the server said and let it call once more; the retried call stands (a retry that never came back leaves the first)."""
     from td_surfaces import resolve
 
     try:
