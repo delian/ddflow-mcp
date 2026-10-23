@@ -1,7 +1,8 @@
 """The cached interface snapshot the shim answers from (SU-init-fast).
 
-The worker writes `.ddflow/local/mcp-interface.json` when it starts and whenever the interface
-digest changes (`ddflow.surfaces.ifacesnap`); the shim reads it and serves `initialize`,
+The worker WILL write `.ddflow/local/mcp-interface.json` when it starts and whenever the interface
+digest changes (`ddflow.surfaces.ifacesnap`; the call is SU-init-fast-hook, nothing calls it
+yet); the shim (SU-shim) will read it and serves `initialize`,
 `server/discover`, `tools/list` and `prompts/list` without waking the worker, so a connection
 costs milliseconds instead of the seconds a cold worker needs.
 
