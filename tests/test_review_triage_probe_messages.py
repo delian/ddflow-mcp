@@ -52,4 +52,5 @@ def test_a_test_file_stem_is_answered_with_the_file_and_the_node_form(repo, tmp_
 def test_a_missing_node_says_it_looked_in_every_worktree(repo, tmp_path):
     _project(repo, tmp_path)
     why = _refusal(repo, "tests/test_real.py::test_not_there")
+    assert "tests/test_real.py::test_not_there" in why, why  # the whole id, not its leaf
     assert "tests/ of every worktree" in why, why
