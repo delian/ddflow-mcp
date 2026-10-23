@@ -4,6 +4,7 @@ and its exit waited out the slowest reviewer. An earlier finished round stays th
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -48,26 +49,30 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     return began, slow
 
 
-def _review_and_term(repo: Path, began: Path) -> str:
-    """Start `ddflow review`, SIGTERM it once its reviewer is running; its output."""
+def _review_and_term(repo: Path, began: Path, tmp_path: Path) -> str:
+    """Start `ddflow review`, SIGTERM it once its reviewer is running; its output. The output
+    goes to a file, not a pipe: nothing to drain, and no EOF held open by a lingering reviewer."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
-    p = subprocess.Popen(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "review", "T1", "--gate", "critic",
-         "--full", "--branch", "feat"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
-        start_new_session=True, cwd=str(repo),
-    )  # fmt: skip
-    try:
-        deadline = time.monotonic() + 120
-        while not began.exists() and time.monotonic() < deadline and p.poll() is None:
-            time.sleep(0.1)
-        assert began.exists(), "the reviewer never started"
-        p.send_signal(signal.SIGTERM)
-        out, err = p.communicate(timeout=60)  # it must end by itself, reviewer cancelled
-        return out + err
-    finally:
-        if p.poll() is None:
-            os.killpg(p.pid, signal.SIGKILL)
+    log = tmp_path / "review.out"
+    with log.open("w") as sink:
+        p = subprocess.Popen(
+            [sys.executable, "-m", "ddflow", "--repo", str(repo), "review", "T1", "--gate",
+             "critic", "--full", "--branch", "feat"],
+            stdout=sink, stderr=subprocess.STDOUT, text=True, env=env,
+            start_new_session=True, cwd=str(repo),
+        )  # fmt: skip
+        try:
+            deadline = time.monotonic() + 120
+            while not began.exists() and time.monotonic() < deadline and p.poll() is None:
+                time.sleep(0.1)
+            assert began.exists(), "the reviewer never started: " + log.read_text()
+            p.send_signal(signal.SIGTERM)
+            p.wait(timeout=60)  # it must end by itself, with its reviewer cancelled
+        except BaseException:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGKILL)  # the group still exists: p is not reaped
+            raise
+    return log.read_text()
 
 
 def _gate(repo: Path) -> dict:
@@ -78,7 +83,7 @@ def _gate(repo: Path) -> dict:
 def test_a_sigtermed_review_says_so_and_records_the_gate_unavailable(repo, tmp_path):
     began, slow = _setup(repo, tmp_path)
     slow.touch()
-    text = _review_and_term(repo, began)
+    text = _review_and_term(repo, began, tmp_path)
     assert "terminated by SIGTERM" in text and "not a pass" in text, text
     gate = _gate(repo)
     assert gate["outcome"] == "unavailable" and "SIGTERM" in gate["reason"], gate
@@ -89,7 +94,7 @@ def test_a_sigtermed_review_leaves_an_earlier_finished_round_the_record(repo, tm
     assert run_cli(repo, "review", "T1", "--gate", "critic", "--branch", "feat")[0] == 0
     assert _gate(repo)["outcome"] == "passed"
     slow.touch()
-    text = _review_and_term(repo, began)
+    text = _review_and_term(repo, began, tmp_path)
     assert "terminated by SIGTERM" in text, text
     gate = _gate(repo)
     assert gate["outcome"] == "passed", gate
