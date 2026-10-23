@@ -5,6 +5,8 @@ gets the count `[ci].workers` computes (at most `max_workers`, never more than t
 
 from __future__ import annotations
 
+import re
+
 from types import SimpleNamespace as NS
 
 from ddflow.config import Config
@@ -141,5 +143,5 @@ def test_the_recorded_count_is_the_one_the_command_runs_with(monkeypatch):
         "pytest -n {workers} -n auto tests/test_a.py tests/test_b.py", cfg, used, "selected"
     )
     assert "-n 1000" not in cmd and "-n auto" not in cmd and "{workers}" not in cmd, cmd
-    assert cmd.count("-n 2") == 2, cmd
+    assert len(re.findall(r"-n 2(?!\d)", cmd)) == 2, cmd
     assert used["selected"]["n"] == 2, used
