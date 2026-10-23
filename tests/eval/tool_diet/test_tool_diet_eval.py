@@ -33,16 +33,26 @@ def test_the_flat_surface_is_every_tool_and_the_family_surface_is_24():
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
-def test_the_right_call_is_graded_correct_on_both_surfaces(scenario):
-    """A call built from the member's own place in the family table grades correct."""
+def test_the_right_name_and_action_reach_the_scenarios_member_on_both_surfaces(scenario):
     family, action = families.placement(scenario.tool)
-    for surface, name, args in (
-        ("flat", scenario.tool, {}),
-        ("families", family, {"action": action} if action else {}),
-    ):
-        member, _args, error = S.resolve(surface, name, args)
-        # arguments are not under test here; only that the name/action reaches the member
-        assert member == scenario.tool or "missing required" in error
+    member, _args, error = S.resolve("flat", scenario.tool, {})
+    assert (member, error) == (scenario.tool, "")
+    member, _args, error = S.resolve("families", family, {"action": action} if action else {})
+    # a bare action reaches the member, or is refused by THAT action for lack of its arguments
+    assert member == scenario.tool or error.startswith(f"{family} action={action}: missing")
+
+
+def test_a_member_name_is_not_on_the_family_surface():
+    member, _args, error = S.resolve("families", "ddflow_gate_record", {"id": "T-1"})
+    assert member == "" and "not on this surface" in error
+    assert S.resolve("families", "ddflow_claim", {"id": "T-1"})[0] == "ddflow_claim"
+
+
+def test_a_value_is_carried_as_a_whole_token_not_a_prefix():
+    sc = SCENARIOS[2]  # claim T-2
+    assert G.grade(sc, "flat", "ddflow_claim", {"id": "T-2"}).args_ok
+    assert not G.grade(sc, "flat", "ddflow_claim", {"id": "T-20"}).args_ok
+    assert G.grade(sc, "flat", "ddflow_claim", {"ids": ["T-2"]}).args_ok
 
 
 def test_a_complete_call_is_correct_and_each_kind_of_miss_is_told_apart():
@@ -61,7 +71,9 @@ def test_a_complete_call_is_correct_and_each_kind_of_miss_is_told_apart():
     missing = G.grade(sc, "families", "ddflow_gate", {"action": "record"})
     assert not missing.valid
     assert G.grade(sc, "flat", "", "") == (False, False, False, False)
-    assert not G.grade(sc, "flat", "ddflow_gate_record", "{not json").valid
+    bad = G.grade(sc, "flat", "ddflow_gate_record", "{not json")
+    assert bad.called and not bad.valid
+    assert G.tally([bad])["invalid"] == 1 and G.tally([bad])["wrong_tool"] == 0
     assert not G.grade(sc, "flat", "ddflow_nope", {}).valid
 
 
@@ -75,11 +87,12 @@ def test_tally_counts_each_kind():
         G.grade(sc, "flat", "", ""),
     ]
     t = G.tally(rows)
-    assert (t["calls"], t["correct"], t["wrong_tool"], t["wrong_args"], t["no_call"]) == (
+    assert (t["requests"], t["calls"], t["correct"], t["wrong_tool"], t["wrong_args"]) == (
         4,
-        1,
+        3,
         1,
         1,
         1,
     )
+    assert t["no_call"] == 1 and t["invalid"] == 0
     assert t["accuracy"] == 0.25

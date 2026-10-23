@@ -88,10 +88,10 @@ def retry(rev, tools, sc, surface, name, raw, timeout, first):
         {"role": "tool", "tool_call_id": "c1", "content": error},
     ]
     try:
-        name2, raw2, _ = ask(rev, tools, sc.prompt, timeout, after)
+        name2, raw2, used2 = ask(rev, tools, sc.prompt, timeout, after)
     except Exception:
-        return first
-    return grade(sc, surface, name2, raw2)
+        return first, name, raw, 0
+    return grade(sc, surface, name2, raw2), name2, raw2, used2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,7 +125,8 @@ def main(argv: list[str] | None = None) -> int:
                 tokens.append(used)
                 g = grade(sc, surface, name, raw)
                 if args.retry and name and not g.valid:
-                    g = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
+                    g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
+                    tokens.append(extra)
                 rows.append(g)
                 if not (g.tool_ok and g.args_ok and g.valid):
                     misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
