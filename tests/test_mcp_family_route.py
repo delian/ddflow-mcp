@@ -130,3 +130,16 @@ def test_ddflow_workflow_without_an_action_is_the_legacy_tool(inited):
     text, err = _call(inited, "ddflow_workflow")
     assert not err
     assert (text, err) == _call(inited, "ddflow_workflow", action="show")
+
+
+def test_a_required_argument_given_only_under_its_old_spelling_is_given(inited, monkeypatch):
+    from ddflow.surfaces.registry import Alias
+    from ddflow.surfaces.tools import TOOLS
+
+    spec = TOOLS["ddflow_gate_status"]
+    props = dict(spec["properties"])
+    assert props["id"][2]
+    monkeypatch.setitem(spec, "arg_aliases", {"item": Alias("argument", "item", "id", "0.2.3")})
+    fam = _call(inited, "ddflow_gate", action="status", item="T-none")
+    assert "missing required" not in fam[0]
+    assert fam == _call(inited, "ddflow_gate_status", item="T-none")

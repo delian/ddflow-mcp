@@ -94,12 +94,16 @@ def missing_required(routed: Routed) -> list[str]:
     """The arguments the routed member requires and the call lacks, by their family names.
 
     Missing is absent, ``None`` or ``""`` -- what the engine's own check calls missing -- while
-    ``0`` and ``False`` are values."""
-    props = TOOLS[routed.tool]["properties"]
+    ``0`` and ``False`` are values. An argument given under an old spelling the member still
+    accepts (``arg_aliases``) is given."""
+    spec = TOOLS[routed.tool]
+    olds = {a.new: old for old, a in (spec.get("arg_aliases") or {}).items()}
     return [
         OP if n == ACTION else n
-        for n, (_t, _d, req) in props.items()
-        if req and routed.args.get(n) in (None, "")
+        for n, (_t, _d, req) in spec["properties"].items()
+        if req
+        and routed.args.get(n) in (None, "")
+        and routed.args.get(olds.get(n, n)) in (None, "")
     ]
 
 
