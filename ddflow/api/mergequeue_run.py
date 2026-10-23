@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import outcome as O
+from ..core.globs import under_any
 from ..infra import git as G
 from ..infra import worktree as W
 from ..services import flakes as FL
@@ -39,7 +40,7 @@ def _ident(tree: Path) -> list[str]:
 
 
 def _is_pin(path: str, files: list[str]) -> bool:
-    return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in files)
+    return under_any(path, files)
 
 
 def _merge_pin_text(tree: Path, path: str) -> bool:

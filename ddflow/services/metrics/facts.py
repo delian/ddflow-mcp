@@ -37,6 +37,9 @@ class Outcome:
     model: str = ""  # the reviewer's model, when a review recorded one
     reason: str = ""
     elapsed_s: float | None = None  # a review's own recorded wall time
+    #: Seconds of ``elapsed_s`` spent queued for the host suite lock or an admission slot
+    #: (B1d51fb9da1); None for an older log, which never recorded it.
+    waited_s: float | None = None
 
 
 @dataclass
@@ -114,6 +117,7 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         model=model if isinstance(model, str) else "",
         reason=str(d.get("reason") or ""),
         elapsed_s=_float(evidence.get("elapsed_s")),
+        waited_s=_float(evidence.get("waited_s")),
     )
 
 
