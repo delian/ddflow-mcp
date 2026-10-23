@@ -53,26 +53,28 @@ def plan(
 def _parent_problem(
     cfg, st: State, it: Item, parent: str, line_frozen: Callable[[State, Item], str]
 ) -> str:
-    if not parent:
-        return ""
-    to = st.items.get(parent)
-    if to is None or to.removed:
-        return f"no such parent {parent!r}. Add the phase or task first."
-    if parent == it.id or parent in st.descendants(it.id):
-        return f"{parent} is {it.id} itself or beneath it: that would make {it.id} its own ancestor"
-    if to.terminal:
-        return f"{parent} is {to.state}: nothing is moved under a finished item"
-    if to.is_work and to.lease is not None:
-        return (
-            f"{parent} is claimed ({to.lease.holder}): a task moved under it makes it an "
-            f"umbrella, which holds no lease. Release it first."
-        )
+    to = st.items.get(parent) if parent else None
+    if parent:
+        if to is None or to.removed:
+            return f"no such parent {parent!r}. Add the phase or task first."
+        if parent == it.id or parent in st.descendants(it.id):
+            return (
+                f"{parent} is {it.id} itself or beneath it: that would make {it.id} its own "
+                f"ancestor"
+            )
+        if to.terminal:
+            return f"{parent} is {to.state}: nothing is moved under a finished item"
+        if to.is_work and to.lease is not None:
+            return (
+                f"{parent} is claimed ({to.lease.holder}): a task moved under it makes it an "
+                f"umbrella, which holds no lease. Release it first."
+            )
     trial = _moved(st, it, parent)
     if effective_line(trial, trial.items[it.id]) != effective_line(st, it):
         # An item inherits its phase's release line: moving it re-aims it like `--line` does.
         frozen = line_frozen(st, it)
         if frozen:
-            return f"{parent} is on another release line than {it.parent or 'its phase'}. {frozen}"
+            return f"{parent or 'top level'} is on another release line than {it.parent or 'its phase'}. {frozen}"
     cycle = _new_cycle(cfg, st, trial)
     if cycle:
         return (
