@@ -44,7 +44,7 @@ def route(ask_id: str, canon: Canon, *, new: bool) -> str:
     )
 
 
-def _problem(row: dict[str, Any] | None, canon: Canon, now: float, cfg: Config | None) -> str:
+def _problem(row: dict[str, Any] | None, canon: Canon, now: float, level: int) -> str:
     if row is None or not row["verb"]:
         return "no such approval request"
     ask_id = row["id"]
@@ -67,7 +67,6 @@ def _problem(row: dict[str, Any] | None, canon: Canon, now: float, cfg: Config |
     verdict = E.judge(row, canon.digest())
     if not verdict.ok:
         return verdict.reason
-    level = E.verified_level(row, cfg)
     if level < row["min_level"]:
         return (
             f"{ask_id} was answered at a level that holds up as L{level} but '{canon.verb}' "
@@ -90,7 +89,9 @@ def spend(
         # read the clock INSIDE the lock: waiting for it must not make an expiry look earlier
         now = clock.now_utc().timestamp() if now is None else now
         row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
-        if why := _problem(row, canon, now, cfg):
+        # once: the level of a harness answer depends on a file outside the lock
+        level = E.verified_level(row, cfg) if row is not None else 0
+        if why := _problem(row, canon, now, level):
             return Decision(False, f"refusing: {why}.", ask_id=ask_id)
         assert row is not None
         log.append(
@@ -104,7 +105,7 @@ def spend(
             "ask": ask_id,
             "approved_by": row["answered_by"],
             "via": row["via"],
-            "level": E.verified_level(row, cfg),
+            "level": level,
             "digest": row["digest"],
             "proxy": canon.agent,
         },

@@ -212,7 +212,9 @@ def test_ask_and_attest_over_the_cli(repo, tmp_path):
     run_cli(repo, "init")
     projects = tmp_path / "projects"
     cfgfile = repo / ".ddflow" / "config.toml"
-    cfgfile.write_text(cfgfile.read_text() + f'\n[approvals]\ntranscript_dirs = ["{projects}"]\n')
+    cfgfile.write_text(
+        cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = [{json.dumps(str(projects))}]\n"
+    )
     log = EventLog(repo, "bot")
     row = _file(log, Config())
     code, out, err = run_cli(repo, "--json", "approvals", "ask", row["id"], agent="bot")
@@ -234,3 +236,26 @@ def test_ask_and_attest_over_the_cli(repo, tmp_path):
     here.approvals.transcript_dirs = [str(projects)]
     spent = C.operator_gate(log, here, _canon(), approval_id=row["id"])
     assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_a_later_duplicate_answer_does_not_undo_a_recorded_one(log, cfg):
+    row = _file(log, cfg)
+    yes, _ = H.labels(row["id"])
+    rows = _approved_row(row)
+    path = _transcript(cfg, "s1", rows)
+    assert H.attest(log, cfg, row["id"])[0]
+    again = [
+        _asked(row["text"], uid="A2", tool_id="U2"),
+        _answered(row["text"], yes, uid="A2", tool_id="U2"),
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows + again))
+    assert E.verified_level(asks_of(_state(log))[row["id"]], cfg) == 2
+
+
+def test_ask_refuses_a_verb_that_chat_can_never_approve(log, cfg, repo):
+    from ddflow.api import approvals_harness as AH
+
+    run_cli(repo, "init")
+    t3 = _file(log, cfg, _canon(verb="config.reviewer_command", item="", target=""))
+    out = AH.approvals_ask(repo, t3["id"], agent="bot")
+    assert out.exit == 3 and "never approved over chat" in out.reason

@@ -21,6 +21,11 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
         return O.failed("approvals.ask", f"no approval request {ask_id}")
     if not cfg.approvals.accept_harness:
         return O.refused("approvals.ask", "the harness channel is off ([approvals].accept_harness)")
+    if row["min_level"] > H.LEVEL:
+        return O.refused(
+            "approvals.ask",
+            f"'{row['verb']}' needs level L{row['min_level']}: never approved over chat",
+        )
     body = H.payload(row)
     text = (
         f"Put this to the person with AskUserQuestion, unaltered (the question text carries the "
