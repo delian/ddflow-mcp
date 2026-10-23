@@ -17,6 +17,11 @@ from ..core.records import WORK_KINDS, Item, State
 from ..core.schedule import inherited_deps
 
 
+class Refusal(str):
+    """Why a move waits on somebody else (a claim, a forked branch): refused (exit 3), where a
+    plain string is bad input (exit 1)."""
+
+
 def plan(
     cfg,
     st: State,
@@ -71,7 +76,7 @@ def _parent_problem(
         if to.terminal:
             return f"{parent} is {to.state}: nothing is moved under a finished item"
         if to.is_work and to.lease is not None:
-            return (
+            return Refusal(
                 f"{parent} is claimed ({to.lease.holder}): a task moved under it makes it an "
                 f"umbrella, which holds no lease. Release it first."
             )
@@ -80,7 +85,10 @@ def _parent_problem(
         # An item inherits its phase's release line: moving it re-aims it like `--line` does.
         frozen = line_frozen(st, it)
         if frozen:
-            return f"{parent or 'top level'} is on another release line than {it.parent or 'its phase'}. {frozen}"
+            return Refusal(
+                f"{parent or 'top level'} is on another release line than "
+                f"{it.parent or 'its phase'}. {frozen}"
+            )
     cycle = _new_cycle(cfg, st, trial)
     if cycle:
         return (
