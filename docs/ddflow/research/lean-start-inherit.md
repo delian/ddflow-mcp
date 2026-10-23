@@ -49,7 +49,7 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
   this tree's real definitions). With tool search off the definitions cost the same (V9 = V6 = 17.2K; V11 = V5 = 10.1K): the
   allow-list, not deferral, bounds them.
 - FINDING: the core-tier worker config makes a role definition WORSE (V6 17.2K, V15 19.9K against V14 9.8K and
-  V2 12.6K). The role's `tools:` names ddflow tools outside the core tier (review, triage, research, memory); a
+  V2 12.6K). The role's `tools:` names ddflow tools outside the core tier (implementer: `release`, `research_add`, `review_triage`, `rule_search`, `rule_show`; reviewer: `decision_applicable`, `review_triage`, `rule_search`, `rule_show`; researcher: nine, among them `research_add` and `rule_show`); a
   core-tier server does not list them, and the combination costs more. Use ONE of the two levers: the role
   definition with the all-tier project config (best: V14 with strict, V2 without), or the core-tier worker config
   for a worker with no role definition (V1). LS-worker-mcp-config's recipe says so (follow-up filed).
