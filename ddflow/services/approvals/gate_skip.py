@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from ...core.digest import content_digest
+from ..gates import failed_review as GO
 from .canon import Canon
 
 VERB = "gate.skip.failed_review"
@@ -43,8 +44,6 @@ def canon_for(it, gate: str, item: str, why: str, agent: str, outcome: str) -> C
 
 
 def provider(st, item: str, gate: str, args: dict[str, str]) -> str:
-    from ..gates import failed_review as GO
-
     it = st.items.get(item)
     if it is None:
         raise ValueError(f"no such item {item!r}")
