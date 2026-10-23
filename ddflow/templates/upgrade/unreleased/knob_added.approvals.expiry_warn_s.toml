@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.expiry_warn_s"
+new = '600'
+why = "How long before its use window ends an unspent approval is reported as about to expire."
