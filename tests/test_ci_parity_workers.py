@@ -32,6 +32,7 @@ def cfg(wait=0.0, limit=1):
             workers="auto",
             min_workers=1,
             max_workers=48,
+            suite_min_workers=8,
             command="",
             max_concurrent_suites=limit,
             suite_wait_s=wait,

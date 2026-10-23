@@ -10,7 +10,7 @@ from ddflow.services import workers as WK
 
 def cfg(workers="auto", lo=1, hi=48, marks=None):
     return NS(
-        ci=NS(workers=workers, min_workers=lo, max_workers=hi),
+        ci=NS(workers=workers, min_workers=lo, max_workers=hi, suite_min_workers=1),
         schedule=NS(signals=marks or {"load_per_core": {"high": 0.75}}),
     )
 
