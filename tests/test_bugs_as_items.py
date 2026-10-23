@@ -346,7 +346,7 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     assert dry.exit == 0 and dry.data["filed"] == ["B-old"]
     assert dry.data["linked"] == ["B-linked", "B-hand"]
     assert "fix-B-old" not in state(repo).items
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 0 and out.data["filed"] == ["B-old"]
     assert out.data["linked"] == ["B-linked", "B-hand"]
     assert state(repo).bugs["B-hand"].fix_task == "fix-B-hand"
@@ -357,7 +357,7 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     assert st.bugs["B-old"].fix_task == "fix-B-old"
     assert st.bugs["B-linked"].fix_task == "B-fix-x"
     assert "fix-B-done" not in st.items
-    again = K.bug_file_tasks(repo, agent="a")
+    again = K.bug_file_tasks(repo, every=True, agent="a")
     assert again.exit == 2 and again.data["filed"] == [] and again.data["linked"] == []
 
 
@@ -369,10 +369,10 @@ def test_file_tasks_repairs_a_bug_whose_fix_task_was_never_written(repo):
         "bug.found", "B-cut", {"item": "T1", "summary": "cut off", "fix_task": "fix-B-cut"}
     )
     assert "fix-B-cut" not in state(repo).items
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 0 and out.data["filed"] == ["B-cut"], out.data
     assert state(repo).items["fix-B-cut"].globs == ["src/parser.py"]
-    assert K.bug_file_tasks(repo, agent="a").exit == 2
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2
 
 
 def test_a_re_report_files_the_task_the_record_names_and_lacks(repo):
@@ -408,7 +408,7 @@ def test_file_tasks_brings_back_a_fix_task_that_was_removed_while_its_bug_stayed
     K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
     EventLog(repo, "op").append("task.removed", "fix-Bx", {"reason": "by mistake"})
     assert state(repo).items["fix-Bx"].removed
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 0 and out.data["filed"] == ["Bx"], out.data
     fix = state(repo).items["fix-Bx"]
     assert not fix.removed and fix.state == "open" and fix.globs == ["src/parser.py"]

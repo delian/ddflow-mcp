@@ -356,7 +356,7 @@ def _needs_fix_task(st, b, cfg=None) -> bool:
 
 
 def bug_file_tasks(
-    repo: Path, *, bug_id: str = "", every: bool = True, dry_run: bool = False, agent: str = ""
+    repo: Path, *, bug_id: str = "", every: bool = False, dry_run: bool = False, agent: str = ""
 ) -> O.Outcome:
     """Give every OPEN bug that has no fix task one -- the one-shot upgrade for a log
     written before `bug found` filed them, and the repair for a bug whose `fix_task` names
@@ -366,21 +366,12 @@ def bug_file_tasks(
     `fix-<bug>` filed (``filed``), as `bug found` would have. Nothing to do is exit 2.
     ``dry_run`` reports and writes nothing. ``bug_id`` narrows it to that one bug (an
     unknown or closed one is a failure; one with a fix task already is nothing to do).
-    Both surfaces pass ``every=False`` unless asked for the bulk form: with neither a bug
-    nor ``every`` this is a preview (``dry_run``, ``preview`` true), because filing tasks for
+    ``every`` is the bulk form: with neither a bug nor ``every`` this is a preview (``dry_run``, ``preview`` true), because filing tasks for
     every open bug -- other agents' too -- was what a bare `bug file-tasks` did, and it
     listed them as if it had not (B-bug-file-tasks-no-id-files-all)."""
     log, cfg, st = _load(repo, agent)
     preview = not bug_id and not every
     dry_run = dry_run or preview
-    if bug_id:
-        b = st.bugs.get(bug_id)
-        if b is None:
-            return O.failed("bug.file_tasks", f"no such bug {bug_id!r}", id=bug_id)
-        if not b.open:
-            return O.failed(
-                "bug.file_tasks", f"bug {bug_id} is not open: nothing to file a task for", id=bug_id
-            )
     filed: list[str] = []
     linked: list[str] = []
     tasks: dict[str, str] = {}
@@ -388,6 +379,17 @@ def bug_file_tasks(
     links: dict[str, dict[str, str]] = {}
     with log.transaction():
         st = fold(log.read_all(), strict=False)
+        # Checked on THIS fold, inside the lock: a bug filed or closed since `_load` counts.
+        if bug_id:
+            b = st.bugs.get(bug_id)
+            if b is None:
+                return O.failed("bug.file_tasks", f"no such bug {bug_id!r}", id=bug_id)
+            if not b.open:
+                return O.failed(
+                    "bug.file_tasks",
+                    f"bug {bug_id} is not open: nothing to file a task for",
+                    id=bug_id,
+                )
         todo = sorted(
             (
                 b

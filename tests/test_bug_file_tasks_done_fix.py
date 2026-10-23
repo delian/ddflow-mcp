@@ -41,17 +41,17 @@ def test_a_report_left_on_a_done_fix_task_is_refiled(repo):
     log.append("item.completed", "fix-Bx", {"sha": "abc"})
     dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
     assert dry.data["filed"] == ["Brep"], dry.data
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 0 and out.data["filed"] == ["Brep"], out.data
     st = state(repo)
     assert st.bugs["Brep"].fix_task == "fix-Brep" and st.items["fix-Brep"].fixes == ["Brep"]
-    assert K.bug_file_tasks(repo, agent="a").exit == 2, "refiled once, not on every run"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "refiled once, not on every run"
 
 
 def test_a_report_left_on_an_abandoned_fix_task_is_refiled(repo):
     log = seed(repo)
     log.append("item.abandoned", "fix-Bx", {"reason": "superseded"})
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     # Bx too: its own fix-Bx is the abandoned one (B974e34fa83).
     assert out.data["tasks"] == {"Brep": "fix-Brep", "Bx": "fix-Bx-2"}, out.data
     assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
@@ -60,14 +60,14 @@ def test_a_report_left_on_an_abandoned_fix_task_is_refiled(repo):
 def test_a_tasks_own_bug_on_its_done_task_is_left_for_verify_reopen(repo):
     log = seed(repo)
     log.append("item.completed", "fix-Bx", {"sha": "abc"})  # Bx still open: did not hold
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert "Bx" not in out.data["filed"] + out.data["linked"], out.data
     assert state(repo).bugs["Bx"].fix_task == "fix-Bx"
 
 
 def test_a_report_on_a_running_fix_task_is_still_its_fix(repo):
     seed(repo)
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 2, out.data
 
 
@@ -79,10 +79,10 @@ def test_a_report_whose_own_fix_task_already_finished_is_linked_once(repo):
     log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
     log.append("item.completed", "fix-Brep", {"sha": "abc"})
     log.append("item.completed", "fix-Bx", {"sha": "abc"})
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.data["linked"] == ["Brep"] and out.data["filed"] == [], out.data
     assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
-    assert K.bug_file_tasks(repo, agent="a").exit == 2
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2
 
 
 def test_a_bug_its_abandoned_task_was_filed_to_fix_is_refiled(repo):
@@ -93,10 +93,10 @@ def test_a_bug_its_abandoned_task_was_filed_to_fix_is_refiled(repo):
     log.append("bug.found", "Brep", {"fix_task": "T-both"})
     log.append("item.abandoned", "T-both", {"reason": "superseded"})
     log.append("item.completed", "fix-Bx", {"sha": "abc"})  # not open to link to either
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.data["filed"] == ["Brep"], out.data
     assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
-    assert K.bug_file_tasks(repo, agent="a").exit == 2
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2
 
 
 def test_a_bugs_own_abandoned_fix_task_gets_a_successor(repo):
@@ -106,14 +106,14 @@ def test_a_bugs_own_abandoned_fix_task_gets_a_successor(repo):
     log.append("item.abandoned", "fix-Bx", {"reason": "looked invalid"})
     dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
     assert "Bx" in dry.data["filed"], dry.data
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.data["tasks"]["Bx"] == "fix-Bx-2", out.data
     st = state(repo)
     assert st.bugs["Bx"].fix_task == "fix-Bx-2" and st.items["fix-Bx-2"].fixes == ["Bx"]
     assert st.items["fix-Bx"].state == "abandoned", "the abandoned one is left as it was"
-    assert K.bug_file_tasks(repo, agent="a").exit == 2, "filed once"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "filed once"
     log.append("item.abandoned", "fix-Bx-2", {"reason": "again"})
-    assert K.bug_file_tasks(repo, agent="a").data["tasks"]["Bx"] == "fix-Bx-3"
+    assert K.bug_file_tasks(repo, every=True, agent="a").data["tasks"]["Bx"] == "fix-Bx-3"
 
 
 def test_the_successor_closes_the_bug_on_completion(repo):
@@ -123,7 +123,7 @@ def test_the_successor_closes_the_bug_on_completion(repo):
 
     log = seed(repo)
     log.append("item.abandoned", "fix-Bx", {"reason": "looked invalid"})
-    K.bug_file_tasks(repo, agent="a")
+    K.bug_file_tasks(repo, every=True, agent="a")
     t = repo / "tests" / "test_p_regress.py"
     t.parent.mkdir(exist_ok=True)
     t.write_text("def test_last_line():\n    pass\n")
@@ -160,7 +160,7 @@ def test_the_links_name_an_open_fix_task_too(repo):
     log.append("bug.found", "Brep", {"summary": "r", "item": "fix-Bx"})  # no link yet
     out = K.bug_file_tasks(repo, dry_run=True, agent="a")
     assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
-    out = K.bug_file_tasks(repo, agent="a")
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
 
 

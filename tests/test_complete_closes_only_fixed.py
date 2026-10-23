@@ -64,7 +64,7 @@ def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(rep
     st = state(repo)
     assert st.bugs["Bup"].fix_task == "fix-Bup" and st.items["fix-Bup"].fixes == ["Bup"]
     assert st.items["fix-Bup"].state == "open" and st.items["fix-Bup"].parent == "bugs"
-    assert K.bug_file_tasks(repo, agent="a").exit == 2, "nothing left without a fix task"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "nothing left without a fix task"
 
 
 def test_a_reported_bug_does_not_block_the_fix_tasks_completion(repo):
@@ -150,7 +150,7 @@ def test_reopen_unlinks_a_done_task_that_never_fixed_it_so_file_tasks_files_one(
     out = bug_reopen(repo, "Bup", reason="not fixed by fix-Bx", agent="a")
     assert out.exit == 0 and out.data["fix_task"] == "", out.data
     assert state(repo).bugs["Bup"].fix_task == ""
-    filed = K.bug_file_tasks(repo, agent="a")
+    filed = K.bug_file_tasks(repo, every=True, agent="a")
     assert filed.data["filed"] == ["Bup"], filed.data
     assert state(repo).items["fix-Bup"].fixes == ["Bup"]
 
