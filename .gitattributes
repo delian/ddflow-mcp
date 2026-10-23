@@ -5,3 +5,4 @@ tests/golden/__snapshots__/** merge=pinsregen
 tests/golden/json/result_schemas.json merge=pinsregen
 tests/test_uc_surf_setup_ops_transcript.json merge=pinsregen
 tests/test_uc_surf_loop_transcript.json merge=pinsregen
+tests/data/uc_surf_knowledge_pin.json merge=pinsregen
