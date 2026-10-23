@@ -261,6 +261,7 @@ def test_the_brief_gives_each_agent_a_private_scratch_directory(proj):
         code, out, err = brief(proj, name=name)
         assert code == 0, err
         line = next(ln for ln in out.splitlines() if "scratchpad" in ln)
+        assert "write only there" in line and "never a bare name" in line
         assert "shared by every subagent" in line and f"named exactly `{name}`" in line, line
         assert "<scratchpad>" not in out  # no unfilled placeholder
         texts[name] = line
