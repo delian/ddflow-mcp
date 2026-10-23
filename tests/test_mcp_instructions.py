@@ -119,10 +119,9 @@ def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
 
 
 def test_the_companion_line_is_only_said_when_one_needs_action(repo):
+    from ddflow.services import companions as CO
     from ddflow.services import prompts as P
     from ddflow.surfaces.mcp import _instruction_vars
-
-    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")

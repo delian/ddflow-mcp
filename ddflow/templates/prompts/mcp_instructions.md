@@ -9,7 +9,10 @@
     ddflow prompts eject mcp_instructions      -> .ddflow/prompts/mcp_instructions.md
     [prompts] mcp_instructions = "path/to.md"   -> anywhere else
 
-  Variables available (see `mcp_server._instruction_vars`):
+  Variables available (see `mcp_server._instruction_vars`). The shipped charter renders only
+  adopted, tool_tier_note, task_pipeline, recoverable, rules_drift, actionable_companions, loops,
+  setup_todo, queue_is_empty, importable, imported_no_globs, imported_shipped_drift; the rest are
+  computed for a project template and for other surfaces, and are not rendered by default:
     adopted            bool    .ddflow/config.toml exists
     setup_todo         list    named setup gaps, each a sentence
     companions         list    {id, title, gates, state, install, url, default}
