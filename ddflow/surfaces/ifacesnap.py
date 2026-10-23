@@ -3,7 +3,7 @@
 `build` collects what `mcpshim.snapshot` serves: it asks the server for its own `tools/list` and
 `prompts/list` replies (so the snapshot cannot drift from them), takes the capabilities,
 identity and protocol versions from `mcp_protocol`, and the digest from `ifacedigest`.
-`refresh` writes only when something a client could see changed, so a restart that changes
+`refresh` writes only when something it serves changed, so a restart that changes
 nothing leaves the file (and the shim's page cache) alone.
 
 `instructions` is the TEXT the shim will serve at `initialize`: the caller passes the stable
@@ -76,14 +76,11 @@ def write(server: Any, *, instructions: str) -> bool:
 
 
 def refresh(server: Any, *, instructions: str) -> bool:
-    """Write only if the stored snapshot is missing, invalid, from another version, or differs in
-    digest, tier or instructions. True when it wrote."""
+    """Write only if the stored snapshot is missing, invalid, or differs in anything it serves
+    (compared whole, not by digest: prompt titles and descriptions are served but are not in the
+    interface digest). True when it wrote."""
     new = build(server, instructions=instructions)
     old = S.read(server.repo)
-    if (
-        old is not None
-        and S.fresh(old, new["version"])
-        and all(old[k] == new[k] for k in ("digest", "tier", "instructions"))
-    ):
+    if old is not None and {k: v for k, v in old.items() if k != "written_at"} == new:
         return False
     return write(server, instructions=instructions)
