@@ -14,7 +14,10 @@ from ._base import _load
 
 
 def empty_list(kind: str, limit: int = V.DEFAULT_LIMIT) -> dict[str, Any]:
-    """The list payload with no rows: what a refused list carries, so `.rows` always exists."""
+    """The list payload with no rows: what a refused list carries, so `.rows` always exists.
+    Its `limit` is the one the engine would have used: 0 is the most, a larger one is cut."""
+    cap = {"search": S.MAX_LIMIT, "session": SV.MAX_LIMIT}.get(kind, V.MAX_LIMIT)
+    limit = cap if limit == 0 else min(limit, cap)
     return {
         "record_kind": kind,
         "rows": [],
