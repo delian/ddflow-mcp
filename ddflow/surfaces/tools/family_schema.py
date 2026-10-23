@@ -17,7 +17,14 @@ from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
 from . import TOOLS
 from .families import FAMILIES, Family
 
-__all__ = ("family_entry", "family_listing", "member_props", "missing_required", "route")
+__all__ = (
+    "family_entry",
+    "family_listing",
+    "member_of",
+    "member_props",
+    "missing_required",
+    "route",
+)
 
 ACTION = "action"
 #: A member that has an argument of its own called ``action`` (queue, ci, prompts, hooks,
@@ -131,6 +138,17 @@ def family_entry(name: str) -> dict[str, Any]:
 def family_listing() -> list[dict[str, Any]]:
     """The ``tools/list`` entries of the 15 family tools, in `FAMILIES` order."""
     return [family_entry(n) for n, f in FAMILIES.items() if not f.single]
+
+
+def member_of(name: str, args: Any) -> str:
+    """The tool a ``tools/call`` of ``name`` runs: the member a family call selects, else ``name``.
+    No validation -- `route` refuses a bad call; this only says which tool it WOULD run, for the
+    server's choice of worker (a family call to a long gate is a long call)."""
+    family = FAMILIES.get(name)
+    action = args.get(ACTION) if isinstance(args, dict) else None
+    if family is None or family.single or not isinstance(action, str):
+        return name
+    return family.members.get(action, name)
 
 
 def route(name: str, args: dict[str, Any]) -> Routed | str | None:

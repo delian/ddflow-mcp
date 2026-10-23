@@ -793,7 +793,13 @@ class Server:
             (routed.tool, routed.args) if routed else (params.get("name", ""), args)
         )
         name, spec, args, used, clash = _resolve_call(call_name, call_args)
-        problem = self._check_call(name, spec, args, clash)
+        # A routed call was checked by `route` (one rule, on the family's names); only an argument
+        # given under both its current and an old spelling is left to say here.
+        problem = (
+            (f"bad arguments: {clash}" if clash else "")
+            if routed
+            else self._check_call(name, spec, args, clash)
+        )
         if problem:
             return _ok(mid, _text(problem, error=True))
         # An argument kept only for callers of an older release: dropped here, so no api
@@ -1388,7 +1394,8 @@ def _offloaded(msg: dict[str, Any]) -> bool:
         and msg.get("id") is not None
         and isinstance(params, dict)
         and isinstance(params.get("name"), str)  # a list name must not end the loop
-        and params["name"] in OFFLOADED
+        # a family call is as long as the member it selects (`ddflow_gate action=run`)
+        and _FAMILIES.member_of(params["name"], params.get("arguments")) in OFFLOADED
     )
 
 
