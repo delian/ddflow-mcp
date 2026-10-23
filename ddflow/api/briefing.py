@@ -5,6 +5,7 @@ gathers what the item adds to it (decisions, lessons) from the log."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from ..core import outcome as O
@@ -13,6 +14,8 @@ from ..core.budget import approx_tokens
 from ..infra import worktree as W
 from ..infra.store import Store
 from ..services import agent_brief as AB
+from ..services import harnessreg as HR
+from ..services import launchbrief as LBS
 from ..services import prompts as P
 from ..services import searchcore as SC
 from ..services.guidance import charter as CH
@@ -97,12 +100,10 @@ def agent_brief(
         pinned = len({i for i in cfg.session.agent_brief_pin_decisions if i in st.decisions})
         shown = max(cfg.session.agent_brief_decisions, pinned)
         facts.decisions = decisions[: max(0, shown)]
-        got = AB.render(
-            tmpl,
-            facts,
-            off=cfg.session.agent_brief_off,
-            max_chars=cfg.session.agent_brief_max_chars,
-        )
+        size = LBS.sizing(cfg.session, HR.detect(os.environ))
+        off = [*cfg.session.agent_brief_off, *(LBS.LEAN_OFF if size.lean else ())]
+        facts.lean_note = LBS.LEAN_NOTE if size.lean else ""
+        got = AB.render(tmpl, facts, off=off, max_chars=size.cap)
     except P.TemplateError as exc:
         return O.failed("brief", str(exc), text="")
     return O.ok(

@@ -1,0 +1,7 @@
+[[change]]
+kind = "knob_changed"
+key = "mcp.tools"
+old = "\"all\""
+new = "\"auto\""
+why = "Which tools `tools/list` advertises. `auto` is the lean core: the 9 hot single tools plus the gate, bug, session, task, view and memory families (15 tools, about 30 KB, from 123 tools and about 105 KB). `families`, `hot+families` and the flat tiers are opt-in."
+effect = "an MCP client that never set [mcp].tools now lists 15 tools (the hot singles and six families, each one tool with an `action`) instead of all 123; nothing is removed: every tool, every family action and every old tool name stays callable, the first call by a hidden old name notes the family action that replaces it, and `ddflow_help` names what is hidden. Set [mcp].tools = \"all\" (or DDFLOW_MCP_TOOLS=all) for the previous list"

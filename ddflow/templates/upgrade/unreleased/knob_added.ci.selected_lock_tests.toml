@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.selected_lock_tests"
+new = "20"
+why = "A selected ci run of more test files than this queues for the host-wide full-suite slot like the whole suite; its pytest workers are always the computed count (never -n auto)."
+impact = "additive"
