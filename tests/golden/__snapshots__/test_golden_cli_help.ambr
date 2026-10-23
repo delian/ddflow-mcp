@@ -98,6 +98,19 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals log]
+  '''
+  usage: ddflow approvals log [-h] [--verb VERB] [--agent-filter AGENT_FILTER] [--since SINCE]
+  
+  options:
+    -h, --help            show this help message and exit
+    --verb VERB           only this gated verb
+    --agent-filter AGENT_FILTER
+                          only this agent's requests
+    --since SINCE         only requests filed at or after this ISO date
+  
+  '''
+# ---
 # name: test_help[ddflow approvals request]
   '''
   usage: ddflow approvals request [-h] [--item ITEM] [--target TARGET] [--reason REASON] verb
@@ -151,12 +164,14 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
   
   positional arguments:
-    {list,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,log,show,request,ask,attest,approve,deny,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
+      log                 the audit timeline of approvals (who asked, who answered, which channel
+                          and level, what was spent) and what looks wrong
       show                one request as ddflow rendered it for the person, with its digest and
                           status
       request             an agent files an approval request for a gated command (a refusal does it
@@ -507,7 +522,8 @@
   usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] [--break] id
   
   positional arguments:
-    id
+    id                    item id, or an open bug id: its fix task is claimed (filed first if it has
+                          none)
   
   options:
     -h, --help            show this help message and exit
@@ -3258,6 +3274,7 @@
     'ddflow approvals attest',
     'ddflow approvals deny',
     'ddflow approvals list',
+    'ddflow approvals log',
     'ddflow approvals request',
     'ddflow approvals revoke',
     'ddflow approvals show',

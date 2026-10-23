@@ -220,9 +220,15 @@ def lock_path_for(path: Path | str) -> Path:
 
 @contextlib.contextmanager
 def file_lock(
-    lock: Path | str, timeout_s: float | None = None, *, poll_s: float = LOCK_POLL_S
+    lock: Path | str,
+    timeout_s: float | None = None,
+    *,
+    poll_s: float = LOCK_POLL_S,
+    create: bool = True,
 ) -> Iterator[None]:
     """Hold an exclusive `flock` on the file `lock` (created if missing) for the block.
+    ``create=False`` locks only a file that is there (`FileNotFoundError` otherwise, nothing
+    made): a probe of someone else's lock file must not bring a removed one back.
 
     `timeout_s=None` waits as long as it takes; a number gives up with `LockTimeout` when
     someone else still holds it after that many seconds (0: one try), retrying every
@@ -230,8 +236,9 @@ def file_lock(
     when the block ends, by an exception too, and with the process if it dies.
     """
     lock = Path(lock)
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
+    if create:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, (os.O_CREAT if create else 0) | os.O_RDWR, 0o644)
     try:
         if timeout_s is None:
             fcntl.flock(fd, fcntl.LOCK_EX)

@@ -190,3 +190,150 @@ def test_two_retries_racing_for_one_parked_ticket_get_it_once(tmp_path: Path, mo
     second = SL._Ticket(queue, "agent-a", 120)  # its rename finds the file gone
     assert first.name == "00000000000000000001-agent_a.ticket"
     assert second.name != first.name  # the loser queues anew, it does not share or clobber
+
+
+def test_a_ticket_removed_between_the_stat_and_the_lock_is_not_brought_back(tmp_path, monkeypatch):
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-gone.ticket"
+    ticket.write_text("")
+    real = fsio.file_lock
+
+    def owner_leaves_first(path, *a, **kw):
+        Path(path).unlink(missing_ok=True)  # the owner finishes right after the scan's stat
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(SL.fsio, "file_lock", owner_leaves_first)
+    assert SL._live(queue, 120, 120) == []
+    assert list(queue.iterdir()) == []  # no ghost file
+
+
+def _race_once(queue: Path) -> list[str]:
+    queue.mkdir()
+    (queue / "00000000000000000001-agent_a.parked").write_text("")
+    barrier = threading.Barrier(2)
+    names: list[str] = []
+
+    def retry() -> None:
+        barrier.wait()
+        names.append(SL._Ticket(queue, "agent-a", 120).name)
+
+    threads = [threading.Thread(target=retry) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    return names
+
+
+def test_two_retries_racing_in_threads_take_a_parked_ticket_once(tmp_path):
+    for round_ in range(40):
+        names = _race_once(tmp_path / f"q{round_}")
+        kept = [n for n in names if n == "00000000000000000001-agent_a.ticket"]
+        assert len(names) == 2 and len(kept) == 1, names  # one wins the place, one queues anew
+
+
+def test_a_ticket_unlinked_after_the_open_is_not_counted(tmp_path, monkeypatch):
+    import contextlib
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-gone.ticket"
+    ticket.write_text("")
+    real = SL.fsio.file_lock
+
+    @contextlib.contextmanager
+    def unlink_after_open(path, *a, **kw):
+        with real(path, *a, **kw):
+            Path(path).unlink()  # the lock is now on an inode with no name
+            yield
+
+    monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_open)
+    assert SL._live(queue, 120, 120) == []
+
+
+def test_an_expired_parked_ticket_removed_between_the_stat_and_the_lock_leaves_no_ghost(
+    tmp_path, monkeypatch
+):
+    import os
+    import time
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    parked = queue / "00000000000000000001-gone.parked"
+    parked.write_text("")
+    old = time.time() - 9999
+    os.utime(parked, (old, old))
+    real = SL.fsio.file_lock
+
+    def owner_took_it(path, *a, **kw):
+        Path(path).unlink(missing_ok=True)
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(SL.fsio, "file_lock", owner_took_it)
+    assert SL._live(queue, 120, 120) == []
+    assert list(queue.iterdir()) == []
+
+
+def test_a_held_ticket_unlinked_after_the_open_is_not_counted(tmp_path, monkeypatch):
+    import contextlib
+
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-held.ticket"
+    real = SL.fsio.file_lock
+
+    @contextlib.contextmanager
+    def unlink_after_the_open(path, *a, **kw):
+        # os.open succeeded on the name; the owner (which holds the lock) unlinks it before the
+        # scan's flock finds it held, so LockTimeout is raised for a name that is gone.
+        orig_flock = fsio.fcntl.flock
+
+        def flock(fd, op):
+            Path(path).unlink(missing_ok=True)
+            return orig_flock(fd, op)
+
+        monkeypatch.setattr(fsio.fcntl, "flock", flock)
+        with real(path, *a, **kw):
+            yield
+
+    with real(ticket, 0):  # the owner holds it
+        monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_the_open)
+        assert SL._live(queue, 120, 120) == []
+
+
+def test_an_expired_held_parked_ticket_unlinked_after_the_open_is_not_counted(
+    tmp_path, monkeypatch
+):
+    import contextlib
+    import os
+    import time
+
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    parked = queue / "00000000000000000001-held.parked"
+    old = time.time() - 9999
+    real = SL.fsio.file_lock
+
+    @contextlib.contextmanager
+    def unlink_after_the_open(path, *a, **kw):
+        orig_flock = fsio.fcntl.flock
+
+        def flock(fd, op):
+            Path(path).unlink(missing_ok=True)  # after os.open, before the flock finds it held
+            return orig_flock(fd, op)
+
+        monkeypatch.setattr(fsio.fcntl, "flock", flock)
+        with real(path, *a, **kw):
+            yield
+
+    with real(parked, 0):  # a retry holds it
+        os.utime(parked, (old, old))
+        monkeypatch.setattr(SL.fsio, "file_lock", unlink_after_the_open)
+        assert SL._live(queue, 120, 120) == []

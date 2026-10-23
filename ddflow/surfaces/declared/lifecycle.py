@@ -136,19 +136,7 @@ COMMANDS: tuple[Command, ...] = (
         "another agent holds it or an overlapping item, and names what you could take "
         "instead. NEVER steals an expired lease: a crashed agent's tree often holds "
         "finished work.",
-        call=lambda repo, a, agent, called_from=None: _api().claim(
-            repo,
-            a["id"],
-            globs=a.get("globs", "") or "",
-            note=a.get("note", "") or "",
-            force=bool(a.get("force")),
-            no_worktree=bool(a.get("no_worktree")),
-            called_from=called_from,
-            resources=a.get("resources", "") or "",
-            agent=agent,
-            queue=bool(a.get("queue")),
-            break_lease=bool(a.get("break")),
-        ),
+        call=L.claim_via_bug,
         # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
         # the caller is standing in it -- over MCP the payload is the only way an agent
         # learns it has to move there.
@@ -164,6 +152,7 @@ COMMANDS: tuple[Command, ...] = (
             "port",
             "port_advice",
             "broke",
+            "bug",
         ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
@@ -171,7 +160,12 @@ COMMANDS: tuple[Command, ...] = (
         cli=CliPolicy(shown=(OK,), human=L.claim_text, body=L.claim_body),
         wants_called_from=True,
         params=(
-            Param("id", help="Item id to claim.", cli_help="", positional=True),
+            Param(
+                "id",
+                help="Item id to claim, or an open bug id (its fix task is claimed, filed first if none).",
+                cli_help="item id, or an open bug id: its fix task is claimed (filed first if it has none)",
+                positional=True,
+            ),
             Param(
                 "globs",
                 help="Comma-separated path globs this work will write.",
