@@ -543,7 +543,7 @@ def test_a_refused_hello_exits_3_the_ddflow_code_for_refused():
 def test_a_reply_nested_beyond_the_recursion_limit_is_an_error_frame_too():
     def deep(conn, msg, notify):
         v: object = 1
-        for _ in range(sys.getrecursionlimit() + 50):
+        for _ in range(200_000):
             v = [v]
         return {"jsonrpc": "2.0", "id": 1, "result": {"x": v}}
 
