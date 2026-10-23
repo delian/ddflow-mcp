@@ -11,6 +11,7 @@ declared here.
 from __future__ import annotations
 
 from ..registry import Command, Param, by_tool
+from ..startcost_texts import start_texts
 from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
 
@@ -311,6 +312,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
             parser=sources()[0],
             tools=sources()[1],
+            start_texts=start_texts,
             accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
