@@ -267,6 +267,8 @@ def test_replay_over_the_real_log_is_sane_and_deterministic():
 
     events = EventLog(ROOT, log_cfg=Config.load(ROOT).log).read_all()
     st = fold(events, strict=False)
+    if not events:
+        pytest.skip("an empty event log has nothing to replay")
     when = max(clock.epoch(ev.ts) for ev in events)  # the queue as of the log's newest event
     a = Q.build(st, Config(), when)
     b = Q.build(st, Config(), when)
@@ -285,7 +287,7 @@ def test_replay_over_the_real_log_is_sane_and_deterministic():
     open_decides = [
         i for i in st.items.values()
         if i.kind == "doc" and i.state == OPEN and i.title.upper().startswith("DECIDE")
-        and all(st.items[n].state == DONE for n in i.needs if n in st.items)
+        and all(n in st.items and st.items[n].state == DONE for n in i.needs)
     ]  # fmt: skip
     assert sum(e.kind == "decide" for e in a.entries) == len(open_decides)
     assert sum(e.kind == "decision" for e in a.entries) == sum(
@@ -385,3 +387,19 @@ def test_a_lease_finding_detail_is_masked():
 
     (e,) = [x for x in build(State(), facts=Facts(health=(F(),))).entries if x.kind == "lease"]
     assert "ghp_a1b2" not in e.why
+
+
+def test_a_decide_task_counts_from_when_it_became_askable():
+    st = State()
+    item(st, "R", state=DONE, completed_at=at(2))
+    item(st, "D1", kind="doc", title="DECIDE: x", needs=["R"], created_at=at(50))
+    (e,) = build(st).entries
+    assert e.age_s == 2 * H  # not 50h: it could not be asked before R was done
+
+
+def test_a_question_that_quotes_a_key_is_masked():
+    st = State()
+    ask(st, "Q9", 1)
+    asks_of(st)["Q9"]["text"] = "KIMI_API_KEY=sk-" + "a1b2c3d4e5f6g7h8i9j0k1l2 expired, what now?"
+    (e,) = build(st).entries
+    assert "a1b2c3d4" not in repr(e.as_dict())
