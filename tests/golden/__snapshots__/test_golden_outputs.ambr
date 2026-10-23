@@ -1298,6 +1298,13 @@
       bugs.phase = 'bugs'   [default]
           The standing phase (default `bugs`) every fix task is filed under, whatever
           item the bug names. Made on first use, with the title `Bugs`.
+      bugs.lint_checks = ['ruff', '(CI: Lint)', 'format']   [default]
+          Substrings (case-insensitive) that make a CI-filed bug a LINT bug, whose
+          check has no test to write: `ddflow bug fixed <Bci-...> --lint-exempt
+          REASON` closes such a bug with the reason recorded
+          (regression_verified=exempt-lint) instead of a `--regression-test`. A bug
+          whose check id contains a pytest node (`::`), or matches none of these,
+          still needs its regression test. Default: ruff, (CI: Lint), format.
       bugs.repro_capture = 'full'   [default]
           How much of a reproduction bundle `bug found` stores with the bug (default
           `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
@@ -2639,11 +2646,12 @@
           The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.max_concurrent_suites = 1   [default]
           How many full test suites (the CI-parity run of `ddflow ci run --full`, the
-          merge queue and the after-merge check) may run at once on this host, counted
-          across every project and agent of the user through a lock in the user's
-          state directory. A run over the limit waits `suite_wait_s`, then is
-          UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-
-          scope runs are not limited.
+          merge queue, the after-merge check and the `unit_tests` gate when its
+          command names no test file) may run at once on this host, counted across
+          every project and agent of the user through a lock in the user's state
+          directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE
+          ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are
+          not limited.
       ci.suite_wait_s = 1800   [default]
           Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
           before it reports who holds it.
