@@ -50,7 +50,7 @@ NOTICES = {
     "setup_todo": [],
 }
 #: The worst case a freshly initialised project shows: every setup gap and unwired companion at once.
-FRESH_INIT_MAX = 2400
+FRESH_INIT_MAX = 2300  # measured 2208 bytes: the cap above plus the notices, nothing else
 
 
 def _base(repo: Path) -> str:
@@ -77,7 +77,13 @@ def test_a_freshly_initialised_project_stays_small_with_every_notice_on(repo):
     run_cli(repo, "init")
     full = _instructions(repo)
     assert len(full.encode()) <= FRESH_INIT_MAX, f"{len(full.encode())} bytes:\n{full}"
-    assert full.startswith(_base(repo)[:200])
+    for must in CONTRACT:  # the contract survives every notice being on
+        assert must in full, f"a notice displaced {must!r}"
+    base = _base(repo)
+    assert full.startswith(base[:200])
+    assert len(full.encode()) - len(base.encode()) <= FRESH_INIT_MAX - 1200, (
+        "notices outgrew their share"
+    )
 
 
 def test_the_unadopted_charter_is_under_the_cap_too(repo):
