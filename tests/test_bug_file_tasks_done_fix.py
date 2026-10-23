@@ -173,6 +173,8 @@ def test_the_links_name_an_open_fix_task_too(repo):
     assert out.data["tasks"] == {"Bother": "fix-Bother"}, out.data
     out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.data["links"] == {"Brep": {"task": "B-hand", "state": "open"}}, out.data
+    assert out.data["tasks"] == {"Bother": "fix-Bother"}, out.data
+    assert state(repo).items["fix-Bother"].fixes == ["Bother"]
 
 
 def test_json_carries_the_links(repo):
