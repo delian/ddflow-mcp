@@ -17,6 +17,7 @@ from pathlib import Path
 from ..core.bookkeeping import STATE_DIR
 from ..infra import git as G
 from ..infra import paths as PA
+from . import orphan_suites as OS
 from . import tree_bin as TB
 
 #: Paths a merge from a worktree is allowed to leave staged in the primary: the event log
@@ -127,3 +128,10 @@ def doctor_notes(repo: Path) -> list[str]:
         *stale_primary_notes(repo),
         *TB.stale_notes(Path.cwd()),  # the ddflow running is not the tree's own
     ]
+
+
+def host_notes() -> list[str]:
+    """Notes about this HOST, not the repository: a ci suite that outlived its ddflow owner
+    (named, never killed). Kept apart from `doctor_notes` so a repository check does not depend
+    on what else is running."""
+    return OS.notes()
