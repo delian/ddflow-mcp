@@ -255,6 +255,9 @@ def _pins_regenerate(a, c: Ctx) -> int:
     if c.json:
         emit_json(out.body())
         return out.exit
+    # .gitattributes is tracked: whatever the run's verdict, say what was written to it
+    for line in out.data.get("attributes", []):
+        print(f"{line} (a pin recipe lacked its merge line; commit .gitattributes with the pins)")
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         for p in out.data.get("pins", []):
