@@ -19,6 +19,7 @@ from ...core.handlers.asks import ANSWERED, asks_of
 from ...core.model import fold
 from ..ask import engine as E
 from . import harness as H  # noqa: F401 -- registers the level verifier of the harness channel
+from . import policy as PO
 from . import request as R
 from . import sites
 from .canon import Canon
@@ -126,6 +127,8 @@ def operator_gate(
     if approval_id:
         return spend(log, canon, approval_id, now=now, cfg=cfg)
     state = fold(log.read_all(), strict=False)
+    if stamp := PO.apply(log, cfg, state, canon, reason=reason):  # a standing rule (off by default)
+        return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=True)
     if filed is None:
         return Decision(
