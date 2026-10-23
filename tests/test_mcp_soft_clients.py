@@ -240,3 +240,11 @@ def test_a_prerelease_of_the_verified_floor_is_below_it():
     assert cap("claude-code", "2.1.296-beta.1") == "unknown"
     assert cap("claude-code", "2.1.297-beta.1") == "honours"
     assert cap("kilo", "7.8.12-rc1") == "unknown"
+
+
+def test_the_expiry_window_is_not_a_parameter_of_capability():
+    import inspect
+
+    assert "max_age_days" not in inspect.signature(C.capability).parameters
+    # an unverified honours row is unknown once it is older than the fixed window
+    assert C.capability({"name": "opencode"}, today=date(2027, 6, 1)) == "unknown"
