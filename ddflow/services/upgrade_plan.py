@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.digest import of_obj
 from ..core.events import UNSTAMPED, is_older, is_stamp, version_key
 from ..core.model import State
 from ..core.records import contested_summary, record_pools
@@ -111,12 +112,20 @@ def settled_items(st: State) -> dict[str, list[Any]]:
         if version_key(str(u.get("to", ""))) > version_key(str(u.get("from", "")) or "0.0.0"):
             break  # this one moved the stamp up: what came before it is history
         news = {
-            f"{c.get('change')}:{c.get('key')}": c.get("new") for c in u.get("config_changes") or []
+            f"{c.get('change')}:{c.get('key')}": (
+                f"{DIGEST}{c['digest']}" if c.get("digest") else c.get("new")
+            )
+            for c in u.get("config_changes") or []
         }
         for i in u.get("items") or []:
             if isinstance(i, str):
                 out.setdefault(i, []).extend([news[i]] if i in news else [])
     return out
+
+
+#: A settled value recorded by its digest: the log redacts text, so a `~/.claude/projects` default
+#: is written as `[REDACTED:path]` and says nothing of which value it was (B81cf6e7dfd).
+DIGEST = "digest:"
 
 
 def _recorded_form(log: Any, value: Any) -> Any:
@@ -141,6 +150,9 @@ def _unsettled(
         if not seen:
             return True
         new = i.get("new")
+        if f"{DIGEST}{of_obj(new)}" in seen:
+            return True
+        # a log written before the digest: the value as the log redacted it
         return new in seen or (log is not None and _recorded_form(log, new) in seen)
 
     return [i for i in items if not done(i)]
