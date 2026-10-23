@@ -161,3 +161,19 @@ def test_execute_gives_only_the_lock_holder_the_worker_floor(tmp_path: Path, mon
         flags.clear()
         CI._execute(cfg(), tmp_path, cmd, None, 60, holding_suite=False, used={})
         assert not any(flags) and (flags or cmd == CI.DEFAULT_COMMAND), (cmd, flags)
+
+
+def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, monkeypatch):
+    """The only caller of `_execute` is `_run_locked`; a selected run (no lock) must not get
+    the holder floor, a full-suite run must."""
+    seen: list[dict] = []
+
+    def execute(cfg_, tree, cmd, scope, budget, tick=None, **kw):
+        seen.append(kw)
+        return NS(ran=True), ""
+
+    monkeypatch.setattr(CI, "_execute", execute)
+    for full in (False, True):
+        CI._run_locked(cfg(), tmp_path, "ref", tmp_path, "cmd", None, 60, None, {}, full)
+    assert [kw["holding_suite"] for kw in seen] == [False, True]
+    assert all("local" not in kw for kw in seen)
