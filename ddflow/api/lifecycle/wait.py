@@ -10,9 +10,9 @@ from typing import Any
 
 from ...core import globspec as GS
 from ...core import outcome as O
+from ...core.admission import conflicts, shared_globs
 from ...core.clock import WAIT_MAX_S
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
-from ...core.globs import overlap as globs_overlap
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from ...core.schedule import Blocked, plan
@@ -163,19 +163,20 @@ def _judge(st, cfg, me: str, item: str, phase: str, kind: str, want, repo, lease
     if not lease:
         return _judge_wait(st, cfg, me, item, phase, kind, want, repo)
     live = st.active_leases(time.time(), cfg.lease.grace_s)
-    return _judge_lease(st, lease, {i: lz for i, lz in live.items() if lz.holder != me})
+    return _judge_lease(st, cfg, lease, {i: lz for i, lz in live.items() if lz.holder != me})
 
 
-def _judge_lease(st, target: str, others: dict[str, Any]) -> dict[str, Any]:
+def _judge_lease(st, cfg, target: str, others: dict[str, Any]) -> dict[str, Any]:
     """`_judge_wait` for a LEASE: ``target`` is an agent id (ready once it holds nothing) or
-    a path/glob (ready once no other agent's live lease covers it). Ready names the target,
-    not an item: nothing here is claimed, the caller goes on to what it was waiting to do."""
+    a path/glob (ready once no other agent's live lease covers it, as `claim` judges cover:
+    a shared glob overlaps nothing). Ready names the target, not an item: nothing here is
+    claimed, the caller goes on to what it was waiting to do."""
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
-    held = {
-        i: lz
-        for i, lz in others.items()
-        if not st.items[i].terminal
-        and (lz.holder == target or any(globs_overlap(g, target) for g in lz.globs))
+    unfinished = {i: lz for i, lz in others.items() if not st.items[i].terminal}
+    by_holder = {i: lz for i, lz in unfinished.items() if lz.holder == target}
+    shared = shared_globs(cfg)
+    held = by_holder or {
+        i: lz for i, lz in unfinished.items() if conflicts([target], lz.globs, shared)
     }
     if not held:
         return {**out, "status": "ready", "ready": [target], "why": f"no live lease holds {target}"}

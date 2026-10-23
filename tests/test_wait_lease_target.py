@@ -67,3 +67,11 @@ def test_wait_on_a_file_wakes_when_the_holder_releases(proj):
 def test_lease_and_item_together_are_refused(proj):
     out = A.wait(proj, item="T1", lease="src/a.py", timeout_s=0, agent=WAITER)
     assert out.exit == 1 and "lease" in out.reason, (out.exit, out.reason)
+
+
+def test_a_shared_glob_is_not_held_against_a_waiter(proj):
+    assert run_cli(proj, "config", "lease.shared_globs", '["docs/CHANGELOG.md"]')[0] == 0
+    run_cli(proj, "task", "add", "T5", "--globs", "docs/CHANGELOG.md")
+    assert A.claim(proj, "T5", no_worktree=True, agent=HOLDER).ok
+    out = A.wait(proj, lease="docs/CHANGELOG.md", timeout_s=0, agent=WAITER)
+    assert out.data["woke"], out.data  # claim would grant it too
