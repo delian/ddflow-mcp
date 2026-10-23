@@ -7,6 +7,7 @@ was not evaluated, MTD-accuracy-eval)."""
 from __future__ import annotations
 
 import json
+from typing import ClassVar
 
 import pytest
 
@@ -259,7 +260,7 @@ def test_a_body_that_already_has_a_next_keeps_it(queued, monkeypatch):
 
     class Out:
         exit = 0
-        data = {"item": "T1"}
+        data: ClassVar[dict] = {"item": "T1"}
 
     hint = lambda data: [{"tool": "ddflow_x", "why": "w", "args_hint": {}}]  # noqa: E731
     assert M._with_next({"a": 1, "next": "mine"}, Out, hint) == {"a": 1, "next": "mine"}
