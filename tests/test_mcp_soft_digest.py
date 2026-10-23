@@ -491,19 +491,21 @@ def test_schema_grace_is_off_unless_the_caller_says_the_worker_has_it():
 def test_a_template_that_cannot_be_read_does_not_hash_like_every_other_unreadable_one(
     tmp_path, monkeypatch
 ):
-    from ddflow.services import prompts
+    from ddflow.api import surf_mcp as prompts
     from ddflow.surfaces.mcp import Server
 
     srv = Server(_init_repo(tmp_path / "r"))
 
-    def boom(a, b, c=None):
+    def boom(a):
         raise RuntimeError(a)
 
-    monkeypatch.setattr(prompts, "resolve", boom)
+    monkeypatch.setattr(prompts, "instructions_template", boom)
     one = D.live_snapshot(srv)["instructions_id"]
-    monkeypatch.setattr(
-        prompts, "resolve", lambda a, b, c=None: (_ for _ in ()).throw(ValueError("x"))
-    )
+
+    def other(a):
+        raise ValueError("x")
+
+    monkeypatch.setattr(prompts, "instructions_template", other)
     assert D.live_snapshot(srv)["instructions_id"] != one
 
 

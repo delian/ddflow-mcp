@@ -25,8 +25,9 @@ Accepted limits (decided by the operator; a review finding inside them is not a 
 
 from __future__ import annotations
 
-import json
 from typing import Any
+
+from ..core import digest as DG
 
 
 def _norm(schema: Any) -> dict[str, Any]:
@@ -64,7 +65,7 @@ _KNOWN = {
 
 def _canon(value: Any) -> str:
     """One JSON value as canonical text: tells 1 from "1" and true from 1, ignores key order."""
-    return json.dumps(value, sort_keys=True)
+    return DG.canonical(value)
 
 
 def _jset(values: list[Any]) -> set[str]:
@@ -83,22 +84,39 @@ def _additional_problems(old: dict[str, Any], new: dict[str, Any], where: str) -
     return [f"{where}: additionalProperties {p}" for p in schema_problems(base, now)]
 
 
-def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+def _bound_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+    out = [
+        f"{where}: {key} tightened"
+        for key in _LOWER_BOUNDS
+        if key in new and (key not in old or new[key] > old[key])
+    ]
+    out += [
+        f"{where}: {key} tightened"
+        for key in _UPPER_BOUNDS
+        if key in new and (key not in old or new[key] < old[key])
+    ]
+    return out
+
+
+def _value_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+    """enum, const and the keywords that restrict by value."""
     out: list[str] = []
     if "enum" in new and ("enum" not in old or not _jset(old["enum"]) <= _jset(new["enum"])):
         out.append(f"{where}: enum narrowed")
-    for key in _LOWER_BOUNDS:
-        if key in new and (key not in old or new[key] > old[key]):
-            out.append(f"{where}: {key} tightened")
-    for key in _UPPER_BOUNDS:
-        if key in new and (key not in old or new[key] < old[key]):
-            out.append(f"{where}: {key} tightened")
-    for key in _EXACT:
-        if key in new and new[key] != old.get(key):
-            if not (key == "uniqueItems" and new[key] is False):
-                out.append(f"{where}: {key} changed")
     if "const" in new and ("const" not in old or _canon(new["const"]) != _canon(old["const"])):
         out.append(f"{where}: const changed")
+    for key in _EXACT:
+        if (
+            key in new
+            and new[key] != old.get(key)
+            and not (key == "uniqueItems" and new[key] is False)
+        ):
+            out.append(f"{where}: {key} changed")
+    return out
+
+
+def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+    out = _bound_problems(old, new, where) + _value_problems(old, new, where)
     out += _additional_problems(old, new, where)
     for key in sorted((set(old) | set(new)) - _KNOWN):
         if old.get(key) != new.get(key):
