@@ -125,3 +125,15 @@ def test_a_policy_use_reaches_the_gate_skip_end_to_end(proj):
     run = [r for r in _state(proj).items["T1"].runs_of("critic") if r.outcome == "skipped"][-1]
     assert run.evidence["approval"]["via"] == "policy"
     assert run.evidence["approval"]["approved_by"] == "policy:skip_after_unavailable"
+
+
+def test_a_rule_never_approves_a_verb_that_needs_more_than_level_one(proj, monkeypatch):
+    log = EventLog(proj, "bot")
+    cfg = _cfg(policy=["skip_after_unavailable"])
+    t3 = PO.Rule("t3rule", "config.reviewer_command", "x", lambda it, target, c: True)
+    monkeypatch.setitem(PO.RULES, "t3rule", t3)
+    cfg.approvals.policy = ["t3rule"]
+    from ddflow.services.approvals.canon import Canon
+
+    canon = Canon(verb="config.reviewer_command", agent="bot", item="T1")
+    assert not C.operator_gate(log, cfg, canon).ok
