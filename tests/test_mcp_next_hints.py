@@ -78,7 +78,7 @@ def test_merge_is_hinted_only_when_the_gates_are_complete():
 
 
 def test_a_gate_result_points_back_at_the_status_of_the_item_in_the_call():
-    for tool in ("ddflow_gate_record", "ddflow_gate_skip", "ddflow_gate_run"):
+    for tool in ("ddflow_gate_record", "ddflow_gate_skip", "ddflow_gate_run", "ddflow_review"):
         got = N.hints(tool, {"id": "T9", "gate": "ci"}, {"gate": "ci", "outcome": "passed"}, "all")
         assert got[0]["tool"] == "ddflow_gate_status" and got[0]["args_hint"] == {"id": "T9"}
 
@@ -240,12 +240,13 @@ def _texts(repo, tool, **args):
     return [c["text"] for c in reply["result"]["content"]]
 
 
-def test_a_text_result_carries_the_hints_as_a_last_block(queued, monkeypatch):
+def test_a_text_result_carries_the_hints_as_a_block_after_the_document(queued, monkeypatch):
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", "all")
     monkeypatch.setenv("DDFLOW_MCP_NEXT_HINTS", "1")
     texts = _texts(queued, "ddflow_gate_status", id="T1")
     assert not texts[0].startswith("next: ")  # the document stays first
     block = next(t for t in texts if t.startswith("next: "))
+    assert texts.index(block) > 0  # after the document, before any footer the server adds
     hints = json.loads(block.removeprefix("next: "))
     assert len(hints) == 1 and hints[0]["tool"] == "ddflow_gate_record"
     assert hints[0]["args_hint"] == {"id": "T1", "gate": "research"}
