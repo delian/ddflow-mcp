@@ -237,8 +237,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -293,8 +291,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -350,8 +346,6 @@
   tuple(
     0,
     '''
-      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
-      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -2498,6 +2492,19 @@
           tolerated (see below). An unrecognised value in a config file is warned
           about, reported by `doctor` and falls back to 'all', the strictest (no
           safety dimension; every tool advertised, as without the knob); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      mcp.worker_tools = 'core'   [default]
+          The tool tier of the MCP config `ddflow adopt` writes for lane workers
+          (`.ddflow/local/worker-mcp.json`, started with `claude --mcp-config <file>
+          --strict-mcp-config`): it sets `DDFLOW_MCP_TOOLS` in the server's
+          environment. `core` (default) saves ~27K first-turn tokens on a host that
+          sends every schema (84.2K against 54.7K measured); `standard` or `all` for
+          workers that need the rest. It hides schemas, never tools: every tool stays
+          callable by name. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'core', the strictest (no safety
+          dimension; fewer schemas advertised, every tool still callable); `config
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.

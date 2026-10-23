@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ from ...services import startcost as SC
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
+from ...services import workermcp as WM
 from ...services import workflow as WF
 from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.completion import verdict
@@ -430,6 +432,7 @@ def doctor(
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
+    notes += [n for n in (WM.deferral_note(os.environ, tier=cfg.mcp.tools),) if n]
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 

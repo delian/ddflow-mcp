@@ -24,6 +24,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..config import Config
 from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
@@ -32,6 +33,7 @@ from . import harnessreg as HR
 from . import install_info as _INSTALL
 from . import leanagents as LA
 from . import shared_files as SF
+from . import workermcp as WM
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     SHAPE_COPILOT,
@@ -1084,7 +1086,7 @@ def adopt(
             actions.append(_write_native_rule(repo, key, docs_dir))
         for dst, src in AGENT_COMMANDS.get(key, {}).items():
             actions.append(_write_command(repo, dst, templates / src))
-        actions.extend(_write_agents(repo, key, templates))  # lean role definitions (LS-agents)
+        actions.extend(_claude_extras(repo, key, templates, launch, image))
 
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
@@ -1191,12 +1193,18 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
     return f"wrote {rel}"
 
 
-def _write_agents(repo: Path, key: str, templates: Path) -> list[str]:
-    """The lean role definitions for ``key`` (`services.leanagents`), each in its managed region."""
-    return [
+def _claude_extras(repo: Path, key: str, templates: Path, launch: str, image: str) -> list[str]:
+    """What adopt writes for Claude Code beyond its MCP entry and commands (P-lean-start): the lean
+    role definitions (`services.leanagents`, each in its managed region) and the worker MCP config
+    (`services.workermcp`) with the line that says how to start a worker on it."""
+    out = [
         _write_command(repo, dst, templates / src, "agents")
         for dst, src in LA.agent_files(key).items()
     ]
+    if key == LA.HARNESS:
+        tier = Config.load(repo).mcp.worker_tools
+        out += [WM.write(repo, _launch_entry(launch, image), tier), WM.recipe()]
+    return out
 
 
 def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> str:
