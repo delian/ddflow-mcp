@@ -235,4 +235,24 @@ def test_gates_with_no_tool_behind_them_are_still_said(repo):
     run_cli(repo, "init")
     text = _instructions(repo)
     assert "Gates with no tool behind them:" in text, text[-600:]
-    assert "never imply a tool ran" in text
+    assert "never imply one ran" in text
+
+
+def test_a_registered_companion_is_absent_from_the_served_notice(repo):
+    """End to end on the served text: context7 is registered, so the notice names the others only."""
+    from ddflow.services import companions as CO
+
+    run_cli(repo, "init")
+    comp = next(c for c in CO.load(repo) if c.id == "context7")
+    CO.register(repo, comp, "claude")
+    line = next(ln for ln in _instructions(repo).splitlines() if "not wired up" in ln)
+    assert "context7" not in line and "roborev" in line, line
+
+
+def test_every_default_companion_carries_the_install_command_the_charter_points_at(repo):
+    """The charter names `ddflow_companions` for install commands, so each default one has one."""
+    from ddflow.services import companions as CO
+
+    run_cli(repo, "init")
+    bare = [c.id for c in CO.load(repo) if c.default and not c.install]
+    assert not bare, f"default companions without an install command: {bare}"
