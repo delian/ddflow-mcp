@@ -24,6 +24,10 @@ from ddflow.infra.log import EventLog
 from ddflow.services import upgrade_apply as UA
 from ddflow.services import upgrade_plan as UP
 
+#: Read by `ddflow tests --item` (B81cf6e7dfd): the plan is built from the unreleased manifest
+#: fragments, data no import reaches, so a new knob fragment must select these tests.
+GOVERNS = ("ddflow/templates/upgrade/**", "ddflow/services/upgrade_manifest.py")
+
 OLD = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
 DRIVER = "docs/ddflow/drivers/implement-phase.md"
 
@@ -1156,6 +1160,29 @@ def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_in
     newer = UP.build(old, log, cfg, st, running="9.9.9")
 
     assert not [i for i in newer["categories"]["config"] if i["action"] != UP.OPERATOR]
+
+
+def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
+    """B81cf6e7dfd: the log records the `~/.claude/projects` default as `[REDACTED:path]`, so the
+    settled value never equalled the manifest's and the item came back in every plan. Settled
+    items now carry the digest of the value; two paths the log masks alike stay different."""
+    from ddflow.services.upgrade_plan import DIGEST, _unsettled
+
+    go(old, "all")
+    done = [c for u in upgrades(old) for c in u.get("config_changes") or []]
+    assert done and all(c.get("digest") for c in done), done
+    dirs = [c for c in done if c["key"] == "approvals.transcript_dirs"]
+    assert dirs and "REDACTED" in str(dirs[0]["new"]), dirs  # the log did mask it
+
+    new = ["~/.claude/projects"]
+    item = {"id": "knob_added:a.b", "new": new}
+    seen = {"knob_added:a.b": [(DIGEST, dirs[0]["digest"])]}
+    assert _unsettled([item], seen) == []
+    # a changed default is news again even where the log masks both alike
+    assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen) != []
+    assert _unsettled([{**item, "new": []}], seen) != []
+    # a pre-digest record settles nothing (the item is re-acknowledged once, then carries a digest)
+    assert _unsettled([item], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []
 
 
 # -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
