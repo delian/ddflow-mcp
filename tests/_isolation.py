@@ -124,6 +124,14 @@ def stray_commits(since: str) -> list[str]:
     return out
 
 
+def staged_status(lines: list[str]) -> list[str]:
+    """The `status --porcelain` lines that have something in the INDEX (first column not blank):
+    what a fixture's stray `git add` leaves. An unstaged edit (`" M"`) is the working copy being
+    worked on -- an agent editing a test while the gate runs it -- and is not the suite's
+    (B-test-suite-guard-fires-on-concurrent-edit)."""
+    return sorted(line for line in lines if line[:1] not in (" ", "?", ""))
+
+
 def snapshot(*, status: bool = True) -> dict[str, object]:
     """The real repository's local config, ``core.bare``, HEAD and tracked-file status (less
     ``.ddflow``, which ddflow itself keeps writing)."""
@@ -131,7 +139,7 @@ def snapshot(*, status: bool = True) -> dict[str, object]:
     snap["head"] = _head()
     if status:
         r = _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).ddflow")
-        snap["status"] = sorted(r.stdout.splitlines()) if r.returncode == 0 else None
+        snap["status"] = staged_status(r.stdout.splitlines()) if r.returncode == 0 else None
     return snap
 
 
