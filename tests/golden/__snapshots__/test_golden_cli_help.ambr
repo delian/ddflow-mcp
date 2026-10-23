@@ -2976,7 +2976,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -2986,6 +2986,9 @@
     --globs GLOBS        with --item: the globs you will claim with, so READY means that claim will
                          succeed; path globs, comma-separated (a.py,src/**) or a JSON array; repeat
                          the flag to add more -- every value is kept
+    --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
+                         or a path/glob (until no other agent's live lease covers it); a bare wait
+                         returns the first ready item at once
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
