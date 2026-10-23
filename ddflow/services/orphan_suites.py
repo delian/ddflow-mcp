@@ -52,10 +52,15 @@ def _is_suite(argv: list[str]) -> bool:
     that merely has the words in its `-c` string is not the suite (its child is)."""
     if not argv:
         return False
-    head = argv[:3]
-    if _base(head[0]) != "pre-commit" and not (
-        "-m" in head and any(w.startswith("pre_commit") for w in argv[:4])
-    ):
+    head = argv[:4]
+    # `pre-commit`, an interpreter running that script (a pipx/uv install is a shebang script),
+    # or `python -m pre_commit`.
+    direct = _base(head[0]) == "pre-commit"
+    script = _base(head[0]).startswith("python") and any(
+        _base(w) == "pre-commit" for w in head[1:2]
+    )
+    module = "-m" in head and any(w.startswith("pre_commit") for w in head)
+    if not (direct or script or module):
         return False
     stage = any(
         (a == "--hook-stage" and argv[i + 1 : i + 2] == ["pre-push"])
