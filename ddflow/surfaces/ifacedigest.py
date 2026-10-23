@@ -174,19 +174,25 @@ _KNOWN = {
 }  # fmt: skip
 
 
+def _canon(value: Any) -> str:
+    """One JSON value as canonical text: tells 1 from "1" and true from 1, ignores key order."""
+    return json.dumps(value, sort_keys=True)
+
+
 def _jset(values: list[Any]) -> set[str]:
-    """JSON values as a set that tells 1 from "1" (canonical JSON text)."""
-    return {json.dumps(v, sort_keys=True) for v in values}
+    return {_canon(v) for v in values}
 
 
 def _additional_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
-    """`additionalProperties`: absent and `true` are the loosest; `false` or a schema narrows."""
+    """`additionalProperties`: absent, `true` and `{}` are the loosest, `false` the tightest, a
+    schema in between."""
     was, now = old.get("additionalProperties", True), new.get("additionalProperties", True)
-    if now is True or now == was:
+    if now is True or now in ({}, was) or was is False:
         return []
-    if isinstance(now, dict) and isinstance(was, dict):
-        return [f"{where}: additionalProperties {p}" for p in schema_problems(was, now)]
-    return [f"{where}: additionalProperties restricted"]
+    if now is False:
+        return [f"{where}: additionalProperties restricted"]
+    base = was if isinstance(was, dict) else {}
+    return [f"{where}: additionalProperties {p}" for p in schema_problems(base, now)]
 
 
 def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
@@ -203,9 +209,7 @@ def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -
         if key in new and new[key] != old.get(key):
             if not (key == "uniqueItems" and new[key] is False):
                 out.append(f"{where}: {key} changed")
-    if "const" in new and (
-        "const" not in old or json.dumps(new["const"]) != json.dumps(old["const"])
-    ):
+    if "const" in new and ("const" not in old or _canon(new["const"]) != _canon(old["const"])):
         out.append(f"{where}: const changed")
     out += _additional_problems(old, new, where)
     for key in sorted((set(old) | set(new)) - _KNOWN):
@@ -222,7 +226,7 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
     where = path or "arguments"
     problems: list[str] = []
     ot, nt = _types(old), _types(new)
-    if nt and (ot is None or not _widens(ot, nt)):
+    if nt is not None and (ot is None or not _widens(ot, nt)):
         problems.append(f"{where}: type changed from {sorted(ot or [])} to {sorted(nt)}")
     problems += _constraint_problems(old, new, where)
     for name in sorted(set(new.get("required") or []) - set(old.get("required") or [])):
@@ -234,9 +238,12 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
             problems.append(f"{sub}: argument removed")
         else:
             problems += schema_problems(old_props[name], new_props[name], sub)
-    if isinstance(new.get("items"), dict) and new["items"]:
+    new_items = new.get("items")
+    if new_items is False and old.get("items") is not False:
+        problems.append(f"{where}[]: items restricted")
+    elif isinstance(new_items, dict) and new_items:
         old_items = old.get("items") if isinstance(old.get("items"), dict) else {}
-        problems += schema_problems(old_items, new["items"], f"{where}[]")
+        problems += schema_problems(old_items, new_items, f"{where}[]")
     return problems
 
 
@@ -256,6 +263,10 @@ def output_problems(old: Any, new: Any, path: str = "") -> list[str]:
         problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt or [])}")
     for name in sorted(set(old.get("required") or []) - set(new.get("required") or [])):
         problems.append(f"{where}: {name} is no longer guaranteed")
+    if "const" in old and ("const" not in new or _canon(new["const"]) != _canon(old["const"])):
+        problems.append(f"{where}: const is no longer guaranteed")
+    if "enum" in old and ("enum" not in new or not _jset(new["enum"]) <= _jset(old["enum"])):
+        problems.append(f"{where}: enum is no longer guaranteed")
     if isinstance(old.get("items"), (dict, bool)) and old["items"] != {}:
         problems += output_problems(old["items"], new.get("items") or {}, f"{where}[]")
     new_props = new.get("properties") or {}
@@ -421,7 +432,8 @@ def classify_surfaces(
             out.append((name, Verdict("hard", 5, ("removed",))))
         elif name not in old:
             honours = client == HONOURS  # rung 2: tell it to list again
-            out.append((name, Verdict("soft", 2 if honours else 3, ("added",), honours)))
+            pending = () if honours else ("surface",)
+            out.append((name, Verdict("soft", 2 if honours else 3, ("added",), honours, pending)))
         else:
             out.append((name, classify(old[name], new[name], client, **kw)))
     top = worst(v for _, v in out)
