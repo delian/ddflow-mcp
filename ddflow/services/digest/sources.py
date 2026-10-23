@@ -15,6 +15,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ddflow.services.approvals import sites
+
+__all__ = ("EXEMPT_SITES", "SOURCES", "by_kind", "covered_sites", "unregistered_sites")
+
 OPERATOR, LEAD = "operator", "lead"
 OWNERS = (OPERATOR, LEAD)
 #: Rising with age (D-OD-Q3): nudge -> needs -> urgent.
@@ -283,7 +287,5 @@ def covered_sites() -> set[str]:
 
 def unregistered_sites() -> list[str]:
     """Operator-only verbs in `approvals/sites.py` that no source covers and no exemption names."""
-    from ddflow.services.approvals import sites
-
     have = covered_sites()
     return sorted(s.verb for s in sites.SITES if s.verb not in have)
