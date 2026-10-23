@@ -216,3 +216,10 @@ def test_a_blank_knob_is_the_default_profile_and_a_note_never_raises(repo, monke
     )
     assert tiers.resolve_tier(repo) == "auto"
     assert "`all`" in P.profile_note("leaner") and "15" not in P.profile_note("hot+families")
+
+
+def test_a_client_table_value_is_normalised_and_a_bad_one_is_the_default(monkeypatch):
+    monkeypatch.setitem(P.CLIENT_PROFILES, "padded", " Hot+Families ")
+    monkeypatch.setitem(P.CLIENT_PROFILES, "typo", "familes")
+    assert P.settle("auto", "Padded") == "hot+families"
+    assert P.settle("auto", "typo") == "lean"
