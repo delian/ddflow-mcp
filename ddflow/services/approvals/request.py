@@ -40,6 +40,7 @@ def render(
     canon: Canon, reason: str = "", limit: int = 300, uses: int = 1, ask_id: str = ""
 ) -> str:
     """The text the person answers, built from the canonical record only."""
+    s = canon.site
     lines = [
         f"Approve gated command '{canon.verb}' for agent {canon.agent}?"
         + (f"  [request {ask_id}]" if ask_id else ""),
