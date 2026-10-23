@@ -5,6 +5,7 @@ own row (`gate.skip.failed_review` -> `gate_skip`) is not also reported as a gen
 
 from __future__ import annotations
 
+from shlex import quote
 from typing import Any
 
 from ..ask import engine as E
@@ -42,7 +43,7 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
         if kind_of(row) != kind:
             continue
         item = _item_of(row["subject"])
-        verb = row["verb"]
+        verb = row["verb"] if kind != "question" else ""
         who = row["requested_by"]
         out.append(
             N.make(
@@ -63,10 +64,8 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 ),
                 since=row["requested_at"],
                 default=SAFE_DEFAULT if verb else _question_default(row),
-                command=f"ddflow approvals approve {row['id']}"
-                if verb
-                else f"ddflow approvals show {row['id']}",
-                answer=f"approve or deny request {row['id']}" if verb else "",
+                command=f"ddflow approvals {'approve' if verb else 'show'} {quote(row['id'])}",
+                answer=f"approve or deny request {quote(row['id'])}" if verb else "",
                 blocks=[item] if item in st.items else [],
                 agents=[who],
                 chat_ref=row["id"] if verb else "",

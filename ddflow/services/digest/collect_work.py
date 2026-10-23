@@ -199,7 +199,7 @@ def collect_lease(st, cfg, now, facts):
                 "lease",
                 f"{f.kind}:{f.item or f.holder}",
                 what=f"{f.kind.upper()} {f.item or '-'} held by {f.holder or '-'}",
-                why=f.detail,
+                why=N.clip(f.detail, cfg),
                 since=clock.iso_at(now - f.age_s),
                 default=f.fix,
                 command=f.fix if f.fix.startswith("ddflow ") else "ddflow health",
