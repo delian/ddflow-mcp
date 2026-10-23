@@ -31,7 +31,7 @@ def _norm(schema: Any) -> dict[str, Any]:
     """A schema as a dict: `true` accepts anything, `false` accepts nothing."""
     if isinstance(schema, dict):
         return schema
-    return {} if schema is True else {"enum": []}
+    return {} if schema is True or schema is None else {"enum": []}
 
 
 def _types(schema: dict[str, Any]) -> set[str] | None:

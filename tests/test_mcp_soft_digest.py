@@ -673,3 +673,8 @@ def test_output_bounds_patterns_and_unknown_keywords_are_checked_like_input_ones
     assert D.classify(out(minimum=0), out(minimum=10), "ignores").kind == "soft"
     assert D.classify(out(maximum=5), out(maximum=9), "ignores").kind == "hard"
     assert D.classify(out(), out(contentMediaType="x"), "ignores").kind == "hard"
+
+
+def test_a_missing_schema_means_no_restriction_not_accepts_nothing():
+    assert D.schema_problems(None, {}) == []
+    assert D.schema_problems({}, None) == []
