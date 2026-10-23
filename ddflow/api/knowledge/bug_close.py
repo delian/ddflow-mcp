@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -58,8 +59,14 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     verify_reason: str = "",
     mutation: dict[str, str] | None = None,
     landed: str = "",
+    lint_exempt: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
+
+    `lint_exempt` (Bee3becc481): the reason a CI-filed LINT bug (a `ruff format --check`
+    failure: its check id is not a pytest node id) has no regression test to name. It closes
+    without one, as `regression_verified = "exempt-lint"` with the reason; any other bug is
+    refused, and an empty reason is not a reason.
 
     `landed` (B256be593f0): a commit already on the base that holds the fix, for a fix task
     claimed AFTER its fix reached the base by some other commit -- it has no branch of its
@@ -96,6 +103,8 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             return O.failed("bug.fixed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
+    if lint_exempt:
+        return _close_lint_exempt(log, st, item, lint_exempt, tests, changelog_entry=entry)
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
@@ -162,6 +171,55 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         # The lesson that now holds the text: the new one, or the one it was added to.
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
+    )
+
+
+_CI_LINT_TITLE = re.compile(r"CI check failed: (?P<check>\S+)\s*$")
+
+
+def _lint_check(st, item: str) -> str:
+    """The check id of a CI-filed bug that is not a test (no `::` node id), else ""."""
+    bug = st.bugs.get(item)
+    m = _CI_LINT_TITLE.search(bug.title) if bug is not None else None
+    return m["check"] if m and "::" not in m["check"] else ""
+
+
+def _close_lint_exempt(log, st, item, reason, tests, *, changelog_entry) -> O.Outcome:
+    """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write."""
+    if item not in st.bugs:
+        return _unknown_bug("bug.fixed", item, st)
+    check = _lint_check(st, item)
+    if not check:
+        return O.refused(
+            "bug.fixed",
+            f"--lint-exempt is for a CI-filed lint bug (a check that is not a test); {item} is "
+            "not one. Name the regression test that guards it.",
+            id=item,
+        )
+    if not reason.strip():
+        return O.refused(
+            "bug.fixed", "--lint-exempt needs the reason (recorded): what made it green", id=item
+        )
+    if tests:
+        return O.refused(
+            "bug.fixed", "--lint-exempt and --regression-test are alternatives; give one", id=item
+        )
+    payload = {
+        "regression_test": "",
+        "regression_tests": [],
+        "lesson": "",
+        "regression_verified": "exempt-lint",
+        "regression_verify": {"lint_check": check, "reason": reason.strip()},
+        **({"changelog": changelog_entry} if changelog_entry else {}),
+    }
+    _record_fixed(log, item, payload, None)
+    return O.ok(
+        "bug.fixed",
+        id=item,
+        regression_test="",
+        regression_tests=[],
+        regression_verified="exempt-lint",
+        regression_verify=payload["regression_verify"],
     )
 
 
