@@ -109,9 +109,11 @@ def test_doctor_carries_the_note(repo, monkeypatch):
     assert not any("every ddflow schema" in n for n in json.loads(out)["notes"])
 
 
-def test_the_recipe_names_the_tier_the_file_carries(repo):
+def test_the_recipe_names_the_tier_the_file_carries(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_MCP_WORKER_TOOLS", raising=False)
+    assert "only the `core` tier keeps that small" in WM.recipe(tier="all")
     assert "`standard` tier" in WM.recipe(tier="standard")
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "mcp.worker_tools", "standard")
     _code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
-    assert "`standard` tier" in out and "`core` tier" not in out
+    assert "`standard` tier" in out and "starts ddflow on the `core` tier" not in out

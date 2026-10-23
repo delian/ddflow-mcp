@@ -55,7 +55,7 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
         f"lane workers: `claude --mcp-config {rel} --strict-mcp-config` starts ddflow on the "
         f"`{tier}` tier and no other MCP server (the user's connectors cost ~12K more). Claude Code "
         "defers tool schemas on its own; `ENABLE_TOOL_SEARCH=false` (or a high `auto:N`) sends "
-        "them all, which the core tier keeps small."
+        "them all up front, and only the `core` tier keeps that small."
     )
 
 
