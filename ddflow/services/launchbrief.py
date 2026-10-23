@@ -29,7 +29,6 @@ LEAN_NOTE = (
 class Sizing:
     cap: int  # UTF-8 bytes (what the renderer counts); 0 = no ceiling
     lean: bool
-    budget: int  # the effective start budget it came from, tokens (0 = none)
 
 
 def sizing(session, target: str = "") -> Sizing:
@@ -46,4 +45,4 @@ def sizing(session, target: str = "") -> Sizing:
     lean = (
         bool(cap) and session.agent_brief_lean_chars > 0 and cap <= session.agent_brief_lean_chars
     )
-    return Sizing(cap=cap, lean=lean, budget=budget)
+    return Sizing(cap=cap, lean=lean)
