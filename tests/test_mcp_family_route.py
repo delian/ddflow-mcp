@@ -79,3 +79,26 @@ def test_a_members_own_action_argument_goes_through_op(inited):
 def test_a_non_string_action_is_an_error(inited):
     text, err = _call(inited, "ddflow_gate", action=3)
     assert err and "must be one of" in text
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "offloaded"),
+    [
+        ("ddflow_gate", {"action": "run"}, True),
+        ("ddflow_gate", {"action": "verify"}, True),
+        ("ddflow_gate", {"action": "ci"}, True),
+        ("ddflow_reviewers", {"action": "review"}, True),
+        ("ddflow_lease", {"action": "wait"}, True),
+        ("ddflow_doctor", {"action": "verify"}, True),
+        ("ddflow_gate", {"action": "list"}, False),
+        ("ddflow_gate", {"action": 3}, False),
+        ("ddflow_gate", {}, False),
+        ("ddflow_gate_run", {}, True),
+        ("ddflow_brief", {}, False),
+    ],
+)
+def test_a_family_call_to_a_long_member_runs_in_a_worker(name, args, offloaded):
+    from ddflow.surfaces.mcp import _offloaded
+
+    msg = {"method": "tools/call", "id": 1, "params": {"name": name, "arguments": args}}
+    assert _offloaded(msg) is offloaded
