@@ -251,8 +251,8 @@ def _bounds() -> dict[str, Any]:
 def _with_next(full: Any, out: Any, hint: Callable[[dict[str, Any]], list] | None) -> Any:
     """``full`` plus the advisory ``next`` hints (`mcp_next`), derived from the outcome's own data
     -- never a second query -- and only on a success that answered with an object."""
-    if hint is None or not isinstance(full, dict) or out.exit != OK:
-        return full
+    if hint is None or not isinstance(full, dict) or out.exit != OK or "next" in full:
+        return full  # a body that already has a `next` of its own keeps it
     hints = hint(out.data)
     return {**full, "next": hints} if hints else full
 
@@ -260,8 +260,8 @@ def _with_next(full: Any, out: Any, hint: Callable[[dict[str, Any]], list] | Non
 def _text_with_next(
     result: dict[str, Any], out: Any, hint: Callable[[dict[str, Any]], list] | None
 ) -> dict[str, Any]:
-    """A text result (a document, not an object) carries the hints as a last block
-    ``next: [...]``, so its first block stays the document."""
+    """A text result (a document, not an object) carries the hints as a block ``next: [...]``
+    after the document, so its first block stays the document."""
     if hint is not None and out.exit == OK and (hints := hint(out.data)):
         text = "next: " + json.dumps(hints, separators=(",", ":"))
         result["content"].append({"type": "text", "text": text})
