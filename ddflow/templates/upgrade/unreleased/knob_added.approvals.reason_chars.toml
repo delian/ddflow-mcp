@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.reason_chars"
+new = '300'
+why = "How much of an agent's own reason an approval request shows the person."
