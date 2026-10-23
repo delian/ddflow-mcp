@@ -354,7 +354,7 @@ def doctor(
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
-    notes.extend(RH.doctor_notes(repo))  # a stray identity, core.bare, a stale primary
+    notes.extend([*RH.doctor_notes(repo), *RH.host_notes()])  # identity, core.bare, orphan suites
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
