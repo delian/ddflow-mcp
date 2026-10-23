@@ -84,6 +84,7 @@ def test_adopt_for_claude_writes_the_worker_config_and_says_how_to_use_it(repo):
     assert f"--mcp-config {REL}" in out and "--strict-mcp-config" in out, out
     code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
     assert code == 0 and f"{REL} is current" in out, out
+    assert "--strict-mcp-config" not in out, "the hint is said when the file is written"
 
 
 def test_the_knob_picks_the_tier_in_the_file(repo):
