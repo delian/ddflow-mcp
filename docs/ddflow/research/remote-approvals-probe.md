@@ -54,6 +54,15 @@ Claude app while the CLI process, its tools and its files live on this host. The
   from this host, so whether the transcript exists there, where, and in which shape is unconfirmed. Until someone runs
   the script in one, the harness channel is inert there (D-RA-Q5 already says so).
 
+## Real-world result (2026-10-23)
+
+**CONFIRMED in this local Claude Code session (bridge, `sdk-cli`):** the operator approved a
+`gate skip` of `RA-probe-harness.rubber_duck` in chat through the flow built from these findings,
+four skips in all: the skip was refused and filed a request; `ddflow approvals ask` printed the
+question; it was put to the operator with AskUserQuestion unaltered; `ddflow approvals attest`
+read the answer from the harness-written transcript; the skip re-run with `--approval ID` was
+recorded with `evidence.approval`. Remote and cloud-sandbox sessions remain **UNVERIFIED**.
+
 ## Unavailable (not run; reasons)
 
 * **MCP elicitation** (`elicitation/create` from the ddflow server during a tool call, answered by the client UI
