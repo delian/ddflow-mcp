@@ -191,6 +191,14 @@ _NOT_SECTIONS = (
 )
 
 
+def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
+    """`[session.context_budget]` merges over the layers below key by key (per agent type); any
+    other knob's value is returned as it is."""
+    if key == "session.context_budget" and isinstance(value, dict):
+        return {**below, **value}
+    return value
+
+
 @dataclass
 class Config:
     lease: LeaseConfig = field(default_factory=LeaseConfig)
@@ -455,6 +463,7 @@ class Config:
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
             value = merge_signals(getattr(target, knob), value)
+        value = _merge_budget_table(key, getattr(target, knob), value)
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
