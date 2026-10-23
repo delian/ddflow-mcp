@@ -186,3 +186,11 @@ def test_a_config_that_cannot_be_read_is_the_default_profile_not_everything(repo
     monkeypatch.setattr(tiers, "_config", lambda _repo: None)
     assert tiers.resolve_tier(repo) == "auto"
     assert Server(repo).tier == "lean"
+
+
+def test_the_note_counts_each_tool_once(monkeypatch):
+    from ddflow.surfaces.tools import tiers
+
+    total = len(set(TOOLS) | set(P.family_tools("families")))
+    assert f"of {total})" in tiers.tier_note("lean")
+    assert total == len(TOOLS) + 13  # 15 families, two of which are tools already

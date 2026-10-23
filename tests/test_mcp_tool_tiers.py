@@ -63,7 +63,7 @@ def test_config_and_surface_agree_on_the_tier_names(monkeypatch):
     assert Config().mcp.tools == "auto"  # the lean core unless the client table says otherwise
 
 
-def test_default_is_all_and_byte_identical_to_the_unfiltered_list(repo):
+def test_all_is_byte_identical_to_the_unfiltered_list(repo):
     expected = [
         {"name": n, "description": s["description"], "inputSchema": _schema(s)}
         for n, s in sorted(TOOLS.items())

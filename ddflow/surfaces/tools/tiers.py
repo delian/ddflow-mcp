@@ -105,8 +105,8 @@ def resolve_tier(repo: Path) -> str:
     """`[mcp].tools` for this repository (env `DDFLOW_MCP_TOOLS` wins), read once.
 
     Forward-compatible by construction: a value this version does not know (a newer
-    release's tier in a shared config), or a config that cannot be read at all, advertises
-    EVERYTHING rather than failing the handshake. Over-listing costs context; under-listing
+    release's tier in a shared config) advertises EVERYTHING rather than failing the handshake;
+    a config that cannot be read at all is the default (`auto`: the lean core). Over-listing costs context; under-listing
     would hide a tool the agent needs.
     """
     cfg = _config(repo)
@@ -127,7 +127,7 @@ def tier_note(tier: str, *, names: bool = True) -> str:
     """What a tier hides and how to widen it. `ddflow_help` carries the names; the handshake
     (paid for on every session) only counts them and points at `ddflow_help`."""
     if tier in PROFILES:
-        return profile_note(tier, len(TOOLS) + len(family_tools("families")))
+        return profile_note(tier, len(set(TOOLS) | set(family_tools("families"))))
     if tier not in TIERS or tier == "all":
         return ""
     hidden = sorted(set(TOOLS) - tier_tools(tier))
