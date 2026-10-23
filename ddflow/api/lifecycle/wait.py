@@ -162,6 +162,14 @@ def _judge(st, cfg, me: str, item: str, phase: str, kind: str, want, repo, lease
     """The verdict for what the caller waits on: a lease, or an item (or anything)."""
     if not lease:
         return _judge_wait(st, cfg, me, item, phase, kind, want, repo)
+    if lease == me:
+        return {
+            "status": "hopeless",
+            "why": f"{lease} is you: waiting on your own leases never ends. Release them instead.",
+            "waiting_on": [],
+            "ready": [],
+            "blocked": [],
+        }
     live = st.active_leases(time.time(), cfg.lease.grace_s)
     return _judge_lease(st, cfg, lease, {i: lz for i, lz in live.items() if lz.holder != me})
 
