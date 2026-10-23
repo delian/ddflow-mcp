@@ -36,11 +36,14 @@ def untrusted(reason: str, limit: int) -> str:
     return '"' + flat.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def render(canon: Canon, reason: str = "", limit: int = 300, uses: int = 1) -> str:
+def render(
+    canon: Canon, reason: str = "", limit: int = 300, uses: int = 1, ask_id: str = ""
+) -> str:
     """The text the person answers, built from the canonical record only."""
     s = canon.site
     lines = [
-        f"Approve gated command '{canon.verb}' for agent {canon.agent}?",
+        f"Approve gated command '{canon.verb}' for agent {canon.agent}?"
+        + (f"  [request {ask_id}]" if ask_id else ""),
         f"  command : {s.command}",
         f"  item    : {canon.item or '-'}    target: {canon.target or '-'}",
         f"  acts on : {s.digest}",
@@ -90,11 +93,13 @@ def file(
     if (row := pending_for(state, canon, now)) is not None:
         return Filed(row["id"], False, digest)
     s = canon.site
+    ask_id = E.new_ask_id()  # in the text: no two requests share a question, whatever their digest
     asked = E.request(
         log,
         cfg,
+        ask_id=ask_id,
         subject=canon.subject(),
-        text=render(canon, reason, cfg.approvals.reason_chars, uses=1),
+        text=render(canon, reason, cfg.approvals.reason_chars, uses=1, ask_id=ask_id),
         digest=digest,
         now=now,
         command=E.Command(
