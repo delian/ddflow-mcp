@@ -43,24 +43,24 @@ def test_the_effective_budget_is_the_min_of_global_and_type():
     assert SC.effective_budget(s, "cursor") == 40000
 
 
-def test_the_tables_global_key_is_the_same_value_as_the_global_knob(repo):
+def test_the_tables_global_key_and_the_global_knob_are_one_ceiling_the_smaller_wins(repo):
     run_cli(repo, "init")
     cfgp = repo / ".ddflow" / "config.toml"
     cfgp.write_text(
         cfgp.read_text() + "\n[session.context_budget]\nglobal = 30000\nclaude = 25000\n"
     )
     got = Config.load(repo).session
-    assert got.context_budget_tokens == 30000 and "global" not in got.context_budget
     assert SC.effective_budget(got, "claude") == 25000 and SC.effective_budget(got, "x") == 30000
-    # the later layer's spelling wins, whichever knob it uses
+    # a lower scalar in a later layer: the smaller applies, in either layer order
     local = repo / ".ddflow" / "local"
     local.mkdir(exist_ok=True)
     (local / "config.toml").write_text("[session]\ncontext_budget_tokens = 12000\n")
     later = Config.load(repo).session
-    assert later.context_budget_tokens == 12000
-    assert later.context_budget == {"claude": 25000}, "a scalar in a later layer keeps the table"
-    assert SC.effective_budget(later, "claude") == 12000
-    # a hand-built session carrying a `global` key still counts it, as the same ceiling
+    assert later.context_budget == {"global": 30000, "claude": 25000}, "the table is kept whole"
+    assert (
+        SC.effective_budget(later, "claude") == 12000 and SC.effective_budget(later, "x") == 12000
+    )
+    # a hand-built session may carry the table key too
     assert (
         SC.effective_budget(
             _session(context_budget_tokens=0, context_budget={"global": 30000}), "x"
@@ -210,11 +210,3 @@ def test_an_invalid_global_in_the_table_is_refused_when_the_config_loads(repo):
 def test_a_misspelled_agent_type_is_called_out_in_the_doctor_line():
     cost = SC.measure({"a": "x" * 40}, bytes_per_token=4.0, budget=0, targets={"calude": 100})
     assert "calude [no such agent type: never matches]: 10 tokens (budget 100)" in cost.line()
-
-
-def test_the_globals_provenance_follows_the_table_spelling(repo):
-    run_cli(repo, "init")
-    cfgp = repo / ".ddflow" / "config.toml"
-    cfgp.write_text(cfgp.read_text() + "\n[session.context_budget]\nglobal = 31000\n")
-    cfg = Config.load(repo)
-    assert cfg.sources["session.context_budget_tokens"] != "default", cfg.sources

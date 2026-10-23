@@ -26,11 +26,10 @@ from . import harnessreg as HR
 def effective_budget(session, target: str = "") -> int:
     """The start budget, in tokens, of a session of agent type ``target`` ("" = unknown): the
     smaller of the global ceiling (`context_budget_tokens`; the table's `global` key is the same
-    value, folded in when the config is read) and the type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
+    value, whichever spelling is set; if both are, the smaller applies) and the type's `[session.context_budget]` entry. A level that is 0 or unset sets no ceiling and drops
     out; a type above the global does not raise it (D-session-start-budget). 0 when nothing is set."""
     table = session.context_budget or {}
-    # A `global` key never survives the config loader (it becomes `context_budget_tokens`), but a
-    # session object built by hand may still carry one: it counts, as the same ceiling.
+    # `global` in the table is another spelling of the scalar; set both and the smaller applies.
     levels = [
         session.context_budget_tokens,
         table.get("global", 0),
