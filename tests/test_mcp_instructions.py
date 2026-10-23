@@ -114,7 +114,7 @@ def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
     assert "not wired up" in text and "ddflow_companions" in text and "propose" in text
     manual = H.render_topic("manual", repo)
     assert "Propose; never install" in manual
-    assert "unavailable" in manual and "without asking" in text + manual or "unasked" in text
+    assert "unavailable" in manual and "install nothing unasked" in text
 
 
 def test_the_companion_line_is_only_said_when_one_needs_action(repo):
