@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.policy_max_uses"
+new = '1'
+why = "How many times one standing rule may approve the same item and target."
