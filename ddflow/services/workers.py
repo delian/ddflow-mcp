@@ -36,8 +36,11 @@ def _mark(cfg: Any, signal: str, name: str, default: float | None) -> float | No
     return float(value) if isinstance(value, (int, float)) else default
 
 
-def _under_memory_pressure(cfg: Any, n: int, lo: int, free: float | None, inputs: dict) -> int:
-    """``n`` cut by memory pressure: halved above the high mark, the minimum at the critical one."""
+def _under_memory_pressure(
+    cfg: Any, n: int, lo: int, held: int, free: float | None, inputs: dict
+) -> int:
+    """``n`` cut by memory pressure: halved (not below ``held``, the suite holder's floor) above
+    the high mark, the minimum ``lo`` at the critical one."""
     if free is None:
         return n
     pressure = 1.0 - free
@@ -48,7 +51,7 @@ def _under_memory_pressure(cfg: Any, n: int, lo: int, free: float | None, inputs
         return lo
     if warn is not None and pressure > warn:
         inputs["memory"] = "high: halved"
-        return max(lo, n // 2)
+        return max(held, n // 2)
     return n
 
 
@@ -83,7 +86,7 @@ def compute(cfg: Any, files: int | None = None, *, source: S.SignalSource | None
         inputs["rule"] = "floor(cores * load_high - loadavg), clamped"
         if held > lo:
             inputs["suite_floor"] = held
-    n = _under_memory_pressure(cfg, n, lo, free, inputs)
+    n = _under_memory_pressure(cfg, n, lo, held, free, inputs)
     if files is not None:
         n = min(n, files)
     n = max(1, n)
