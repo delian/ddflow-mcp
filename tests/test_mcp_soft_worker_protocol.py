@@ -101,16 +101,6 @@ def test_a_hello_without_a_protocol_is_refused():
     assert WP.negotiate({"t": "hello"})["code"] == "bad_frame"
 
 
-def test_shim_classifies_a_worker_hello_by_major():
-    ok = WP.worker_hello(digest="d", version="1")
-    assert WP.check_worker_hello(ok, shim_proto=WP.PROTO_MAJOR) is None
-    other = {**ok, "worker_proto": WP.PROTO_MAJOR + 1}
-    assert (
-        WP.check_worker_hello(other, shim_proto=WP.PROTO_MAJOR)["code"]
-        == "incompatible_worker_proto"
-    )
-
-
 # ---- the worker loop (in process, with a fake handler) --------------------------------
 
 

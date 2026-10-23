@@ -19,8 +19,9 @@ Frames (every one has `t`, the kind):
 
 Versioning: `PROTO_MAJOR` changes when a frame stops meaning what it did; an unknown extra field
 (a newer minor) is ignored. A worker refuses a shim of another major with
-`incompatible_shim_proto`; a shim refuses a worker of another major with
-`incompatible_worker_proto`: either is a HARD upgrade (D-soft-upgrade-rule, rung 5).
+`incompatible_shim_proto`; the shim (SU-shim) refuses a worker of another major with
+`incompatible_worker_proto` by comparing the `worker_proto` of the worker's hello with its
+own: either is a HARD upgrade (D-soft-upgrade-rule, rung 5).
 
 Stdlib only: the shim imports this module and must stay small.
 """
@@ -142,21 +143,5 @@ def negotiate(shim_hello: dict[str, Any]) -> dict[str, Any] | None:
             "incompatible_shim_proto",
             f"this worker speaks protocol {PROTO_MAJOR}, the shim {proto}",
             worker_proto=PROTO_MAJOR,
-        )
-    return None
-
-
-def check_worker_hello(
-    worker_hello_frame: dict[str, Any], *, shim_proto: int = PROTO_MAJOR
-) -> dict[str, Any] | None:
-    """Shim side: None to accept the worker's hello, else the typed refusal (a HARD upgrade)."""
-    proto = worker_hello_frame.get("worker_proto")
-    if not _int(proto):
-        return error("bad_frame", "a worker hello carries an integer `worker_proto`")
-    if proto != shim_proto:
-        return error(
-            "incompatible_worker_proto",
-            f"the shim speaks protocol {shim_proto}, this worker {proto}",
-            worker_proto=proto,
         )
     return None
