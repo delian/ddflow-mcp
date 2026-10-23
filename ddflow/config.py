@@ -507,16 +507,8 @@ class Config:
                 return
             raise InvalidValue(f"invalid {key} = {value!r}: {why}")
         self._forget_fallback(key, f"the {source} value {value!r}")
-        self._fold_budget_global(key, target, value, source)
         setattr(target, knob, value)
         self.sources[key] = source
-
-    def _fold_budget_global(self, key: str, target: Any, value: Any, source: str) -> None:
-        """`[session.context_budget].global` IS `context_budget_tokens`: one value, folded in
-        after the table passed its check, with the knob's provenance following it."""
-        if key == "session.context_budget" and "global" in value:
-            target.context_budget_tokens = value.pop("global")
-            self.sources["session.context_budget_tokens"] = source
 
     def fallback_entries(self) -> set[str]:
         """The `unknown_knobs` entries that are strictest-fallback notes -- a value applied
