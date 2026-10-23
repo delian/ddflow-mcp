@@ -43,13 +43,22 @@ def test_claiming_a_bug_with_a_task_claims_that_task(repo):
     assert out.exit == 0 and out.data["item"] == "fix-Bt" and out.data["bug"] == "Bt"
 
 
-def test_a_closed_or_unknown_id_is_still_no_such_item(repo):
+def test_a_closed_or_unknown_id_is_still_no_such_item_and_files_nothing(repo):
     seed(repo)
-    K.bug_found(repo, summary="x", id="Bc", agent="a")
+    K.bug_found(repo, summary="x", id="Bc", no_task=True, agent="a")
     EventLog(repo, "x").append("bug.fixed", "Bc", {"regression_test": "t::x"})
     assert LC.claim(repo, "Bc", agent="w", no_worktree=True).exit != 0
     assert LC.claim(repo, "Bnope", agent="w", no_worktree=True).exit != 0
-    assert "fix-Bc" not in state(repo).items or state(repo).items["fix-Bc"].lease is None
+    assert set(state(repo).items) == {"P1"}
+
+
+def test_the_cli_claims_a_bug_id(repo):
+    seed(repo)
+    K.bug_found(repo, summary="stray", id="Bs", no_task=True, agent="a")
+    code, out, err = run_cli(repo, "claim", "Bs", "--no-worktree", agent="w")
+    assert code == 0, out + err
+    assert "fix-Bs" in out
+    assert state(repo).items["fix-Bs"].lease.holder == "w"
 
 
 def test_an_item_id_wins_over_a_bug_of_the_same_id(repo):
