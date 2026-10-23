@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.transcript_dirs"
+new = '["~/.claude/projects"]'
+why = "Where the harness channel looks for session transcripts."
