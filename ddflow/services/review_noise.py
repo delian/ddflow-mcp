@@ -13,30 +13,22 @@ from pathlib import Path
 
 from ..infra import worktree as W
 
-_HEADER = re.compile(r'^diff --git (?:"a/(?P<q>(?:[^"\\]|\\.)*)"|a/(?P<p>.+?)) (?:"b/.*"|b/.*)$')
+#: Only a plain path is judged: a name with a space, a quote, a backslash or non-ASCII bytes
+#: (git C-quotes some, leaves others in an ambiguous `a/X b/X` header) is KEPT, never guessed at.
+_HEADER = re.compile(r"^diff --git a/(?P<p>[\w./@+-]+) b/(?P=p)$")
 _GITLINK_MODE = re.compile(
     r"^(?:(?:new file|deleted file|old|new) mode 160000|index \S+ 160000)$", re.M
 )
 _HEADER_LINES = 8
 
 
-def _paths_of(text: str) -> set[str]:
-    """The `path = ...` values of a `.gitmodules` text (a trailing # or ; comment dropped)."""
-    out = set()
-    for ln in text.splitlines():
-        if ln.strip().startswith("path") and "=" in ln:
-            value = re.split(r"\s[#;]", ln.split("=", 1)[1])[0].strip().strip('"')
-            if value:
-                out.add(value)
-    return out
-
-
-def _unquote(path: str) -> str:
-    """A path git C-quoted (`core.quotePath`: octal escapes for non-ASCII bytes)."""
-    try:
-        return path.encode().decode("unicode_escape").encode("latin-1").decode("utf-8")
-    except (UnicodeError, ValueError):
-        return path
+def _paths_of(repo: Path, *source: str) -> set[str]:
+    """The submodule paths git's own config parser reads from ``source`` (`git config`'s
+    `--blob <ref>:.gitmodules` or `--file <path>`): quoting and comments are git's to read."""
+    r = W.git(repo, "config", *source, "--get-regexp", r"^submodule\..*\.path$")
+    if not r.ok:
+        return set()
+    return {ln.split(" ", 1)[1].strip() for ln in r.out.splitlines() if " " in ln}
 
 
 def registered_submodules(repo: Path, *refs: str) -> set[str]:
@@ -44,18 +36,17 @@ def registered_submodules(repo: Path, *refs: str) -> set[str]:
     tree: a diff's two sides (and an uncommitted `git submodule add`) all count."""
     found: set[str] = set()
     for ref in refs:
-        shown = W.git(repo, "show", f"{ref}:.gitmodules") if ref else None
-        if shown is not None and shown.ok:
-            found |= _paths_of(shown.out)
+        if ref:
+            found |= _paths_of(repo, "--blob", f"{ref}:.gitmodules")
     on_disk = Path(repo) / ".gitmodules"
     if on_disk.is_file():
-        found |= _paths_of(on_disk.read_text("utf-8", errors="replace"))
+        found |= _paths_of(repo, "--file", str(on_disk))
     return found
 
 
 def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
     """``diff`` without the file sections that change a gitlink at a path not in ``registered``.
-    A section whose header cannot be read is kept."""
+    A section whose header is not a plain `a/P b/P` is kept."""
     if "160000" not in diff:
         return diff
     sections: list[list[str]] = []
@@ -70,7 +61,6 @@ def without_stray_gitlinks(diff: str, registered: set[str]) -> str:
         m = _HEADER.match(sec[0].rstrip("\n"))
         if not m or not _GITLINK_MODE.search(head):
             return False
-        path = _unquote(m["q"]) if m["q"] is not None else m["p"]
-        return path not in registered
+        return m["p"] not in registered
 
     return "".join("".join(sec) for sec in sections if not stray(sec))
