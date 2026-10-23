@@ -130,19 +130,16 @@ DIGEST = "digest"  # a settled entry is the tuple (DIGEST, digest): no JSON valu
 
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """The items an earlier partial apply has not settled. A value is settled when its digest
-    was recorded, or a pre-digest record holds it verbatim. A pre-digest record of a value the log
-    masked holds only the mask, which cannot tell two masked values apart, so it settles no
-    value: the item is applied once more and that record carries the digest."""
+    was recorded. A record from before the digest holds only the value as the log wrote it
+    (possibly masked, which cannot tell two values apart), so it settles nothing: that item is
+    applied once more, and the new record carries the digest."""
 
     def done(i: dict[str, Any]) -> bool:
         seen = settled.get(i["id"])
         if seen is None:
             return False
         new = i.get("new")
-        if (DIGEST, of_obj(new)) in seen:
-            return True
-        # a pre-digest verbatim record; a masked one equals only its own mask, never a value
-        return not seen or any(v == new and "[REDACTED" not in json.dumps(v) for v in seen)
+        return not seen or (DIGEST, of_obj(new)) in seen
 
     return [i for i in items if not done(i)]
 

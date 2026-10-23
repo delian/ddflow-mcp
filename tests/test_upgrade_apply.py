@@ -1181,11 +1181,7 @@ def test_a_value_the_log_redacted_still_counts_as_settled(old: Path) -> None:
     # a changed default is news again even where the log masks both alike
     assert _unsettled([{**item, "new": ["/home/x/projects"]}], seen) != []
     assert _unsettled([{**item, "new": []}], seen) != []
-    # a pre-digest record of an unmasked value still settles it
-    assert _unsettled([{"id": "knob_changed:f.g", "new": True}], {"knob_changed:f.g": [True]}) == []
-    mask = "[REDACTED:path]"  # a value that is the mask itself is not settled by a masked record
-    assert _unsettled([{"id": "knob_added:a.b", "new": mask}], {"knob_added:a.b": [mask]}) != []
-    # a record from before the digest holds only the masked text: it settles nothing
+    # a pre-digest record settles nothing (the item is re-acknowledged once, then carries a digest)
     assert _unsettled([item], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []
 
 
