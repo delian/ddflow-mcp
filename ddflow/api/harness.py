@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..mcpshim import clients
 from ..services import adopt as AD
 from ..services import claudehooks as CH
 from ..services import harnessreg as HR
@@ -106,6 +107,16 @@ def harness_list(repo: Path) -> O.Outcome:
     return O.ok("harness_list", harnesses=rows, message="\n".join(lines))
 
 
+def _list_changed_line(harness_id: str) -> str:
+    """Does this agent re-fetch its tool list on `notifications/tools/list_changed`? From the
+    client table (`mcpshim/clients.py`), joined by descriptor id; what decides a soft upgrade."""
+    row = clients.by_harness(harness_id)
+    if row is None:
+        return f"{'list_changed':<13} no client row (unknown: treated as hard)"
+    version = f" {row.verified_version}" if row.verified_version else ""
+    return f"{'list_changed':<13} {row.list_changed} ({row.source}{version}, {row.key})"
+
+
 def harness_show(repo: Path, which: str) -> O.Outcome:
     h = HR.get(which)
     if h is None:
@@ -119,6 +130,7 @@ def harness_show(repo: Path, which: str) -> O.Outcome:
     lines = [f"{h.id} ({h.family}), adopted: {h.id in AD.adopted_agents(repo)}"]
     lines += [f"  {e:<13} {lv[e]}" for e in HR.CANONICAL_EVENTS]
     lines += [f"  {k:<13} {v}" for k, v in feats.items()]
+    lines.append("  " + _list_changed_line(h.id))
     if h.verified.unverified:
         lines.append("  not verified: " + ", ".join(h.verified.unverified))
     return O.ok("harness_show", id=h.id, levels=lv, features=feats, message="\n".join(lines))

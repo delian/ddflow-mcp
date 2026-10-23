@@ -345,6 +345,12 @@ ENTRIES: tuple[Entry, ...] = (
 _BY_NAME = {n: e for e in ENTRIES for n in (e.key, *e.names)}
 
 
+def by_harness(harness_id: str) -> Entry | None:
+    """The main row of the agent whose descriptor is `ddflow/harnesses/<id>.toml`: the first row
+    that names it (Cursor has an IDE row and a CLI row)."""
+    return next((e for e in ENTRIES if e.harness == harness_id), None)
+
+
 def version_tuple(text: object) -> tuple[int, ...] | None:
     """`v2.1.296-beta.1` -> (2, 1, 296); None when there is no numeric version."""
     m = re.match(r"v?(\d+(?:\.\d+)*)", str(text or "").strip())
