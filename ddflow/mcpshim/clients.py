@@ -16,9 +16,10 @@ follows:
   versions are real and were probed); below it, or with no usable version, the answer is unknown;
 - any other row by name alone (opencode sends `"unknown"`, Qwen a constant `0.0.1`, Continue a
   constant `1.0.0`: their versions say nothing), and an `honours` row nobody verified expires
-  (`max_age_days` after `checked`) to unknown, because a client can drop support; an `ignores`
+  (`MAX_AGE_DAYS` after `checked`) to unknown, because a client can drop support; an `ignores`
   row does not (the safe reading outlives the evidence).
 
+Consumers: the shim (SU-shim) and the announcement (SU-announce); nothing calls it before them.
 Prompts' `list_changed` is never relied on. The harness link (`harness`) names the descriptor in
 `ddflow/harnesses/` of the same agent, so the two can be joined without a second copy of the data.
 """
@@ -391,7 +392,6 @@ def capability(
     listen_optin: bool = False,
     observed: str | None = None,
     today: date | None = None,
-    max_age_days: int = MAX_AGE_DAYS,
 ) -> str:
     """`honours`, `ignores` or `unknown` (treated as hard) for the connected client."""
     if listen_optin:
@@ -402,4 +402,4 @@ def capability(
     if entry is None:
         return UNKNOWN
     version = client_info.get("version") if isinstance(client_info, dict) else None
-    return effective(entry, version, today or date.today(), max_age_days=max_age_days)
+    return effective(entry, version, today or date.today())
