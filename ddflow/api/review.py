@@ -1780,7 +1780,7 @@ def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     start = _delta_start(wt, "HEAD", head, base)
     # `start..HEAD` plus the tracked edits: what a review sent, with a git failure kept.
     diff = W.capture_diff(wt, include_untracked=False, since=start, exclude=_NOISE_PREFIXES)
-    return without_stray_gitlinks(diff, registered_submodules(wt, base, "HEAD"))
+    return without_stray_gitlinks(diff, registered_submodules(wt, base, "HEAD", start, head))
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
@@ -1791,7 +1791,7 @@ def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
     d = W.git(repo, "diff", "--no-color", *rng, *_NOISE_PATHSPEC)
     if not d.ok:  # never a wider range than asked: that would send the base's work
         raise RuntimeError(f"git diff {' '.join(rng)} failed: {d.err or d.out}")
-    out = without_stray_gitlinks(d.out, registered_submodules(repo, base, head, tip))
+    out = without_stray_gitlinks(d.out, registered_submodules(repo, base, head, start, tip))
     return (out + "\n") if out else ""
 
 
