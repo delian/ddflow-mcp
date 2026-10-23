@@ -39,7 +39,7 @@ class Source:
     collector: str
     #: How it is answered, in words (may be an act outside ddflow, e.g. raising a limit).
     answer: str
-    #: The runnable `ddflow ...` command that answers or inspects it, with <placeholders>.
+    #: The runnable `ddflow ...` command that answers or inspects it, as a template: each <placeholder> is filled from the entry.
     command: str
     #: How the lead puts it to the operator in chat.
     chat: str
@@ -84,7 +84,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "kind doc, title starts DECIDE, open, needs done",
         "answer the task's questions; the lead records each as a decision",
-        "ddflow decision add --id D-<task>-Q<n> ...",
+        "ddflow decision add --id D-<task>-Q<n> --title <title> --decision <text>",
         ASK,
         "every item whose needs reach the task",
     ),
@@ -95,7 +95,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "gate at its round cap, or unavailable with no alternative",
         "approve the skip, then re-run it with the approval id",
-        "ddflow gate skip <id> <gate> --reason ...",
+        "ddflow gate skip <id> <gate> --reason <reason>",
         APPROVAL_ASK,
         "the item and its dependants",
         ("gate.skip.failed_review",),
@@ -119,7 +119,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "pipeline complete except a refused gate; the hook refuses an agent's --force",
         "approve the forced completion",
-        "ddflow complete <id> --force ...",
+        "ddflow complete <id> --force --reason <reason>",
         APPROVAL_ASK,
         "the item and dependants",
         ("complete.force",),
@@ -155,7 +155,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "export document selection changed, not acknowledged",
         "acknowledge the selection",
-        "ddflow export ack ...",
+        "ddflow export ack <document>",
         APPROVAL_ASK,
         "none",
         ("export.ack",),
@@ -167,7 +167,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "plan proposed, not confirmed",
         "confirm or reject the plan",
-        "ddflow plan confirm --yes --reason ...",
+        "ddflow plan confirm --yes --reason <reason>",
         ASK,
         "the work the plan creates",
         ("plan.confirm",),
@@ -221,7 +221,7 @@ SOURCES: tuple[Source, ...] = (
         "an agent's run failed (rate or spend limit, crash)",
         OPERATOR,
         "needs",
-        "run record failure text, or lease expired with no heartbeat",
+        "run record failure text (rate or spend limit, crash); an expired lease is the `lease` source",
         "restart the agent; raise the limit if that was the cause",
         "ddflow show <item>",
         ASK,
@@ -245,7 +245,7 @@ SOURCES: tuple[Source, ...] = (
         "needs",
         "session note or ask of kind question without an answer",
         "answer in chat; the lead records it",
-        "ddflow session note <item> ...",
+        "ddflow session note <item> --text <answer>",
         ASK,
         "the asker",
     ),
