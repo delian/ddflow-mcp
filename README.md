@@ -1100,7 +1100,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 381 knobs.
+cadences, and the rest of the 384 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5290,7 +5290,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 381): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 384): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5834,7 +5834,7 @@ declared once and persists — see
 
 ## Configuration
 
-381 knobs across 41 sections, every one documented in place and listed, with its default
+384 knobs across 42 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5901,8 +5901,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=0c193e327243 -->
-<details><summary>All 381 knobs across 41 sections</summary>
+<!-- ddflow:begin README/knobs sha=df9924da6063 -->
+<details><summary>All 384 knobs across 42 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6209,6 +6209,9 @@ long default is left to `ddflow config --explain`.
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
 | `grants.max_count` | `3` |  |
 | `grants.ttl_h` | `48` |  |
+| `approvals.use_ttl_s` | `3600` |  |
+| `approvals.auto_request` | `true` |  |
+| `approvals.reason_chars` | `300` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
