@@ -145,11 +145,19 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
         return O.refused("plan.check", "the queue cannot be read, so the plan cannot be checked")
     report, cfg = _report(repo, plan, queue)
     tracked = _tracked(repo)
-    # Warnings, not findings: a path the plan does not find may be a file it creates.
+    # Warnings, not findings: a path the plan does not find may be a file it creates, and a
+    # plan item says so with `creates = [...]` (B-plan-check-new-file-warnings-noise): a path
+    # ANY item creates is expected missing, wherever the others list it.
+    created = {str(c) for v in plan.values() for c in PA._list(v, "creates")}
     warnings = [
         {"id": iid, "detail": w}
         for iid in sorted(plan)
-        for w in missing_globs(repo, cfg, [str(g) for g in plan[iid].get("globs", [])], tracked)
+        for w in missing_globs(
+            repo,
+            cfg,
+            [str(g) for g in plan[iid].get("globs", []) if str(g) not in created],
+            tracked,
+        )
     ]
     warnings += [
         {"id": iid, "detail": w}
