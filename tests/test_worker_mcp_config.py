@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -22,6 +24,13 @@ from ddflow.surfaces.mcp import TOOLS, Server
 from ddflow.surfaces.tools.tiers import tier_tools
 
 REL = ".ddflow/local/worker-mcp.json"
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_tier_env(monkeypatch):
+    """The tiers come from knobs; an inherited override must not decide a test."""
+    for name in ("DDFLOW_MCP_TOOLS", "DDFLOW_MCP_WORKER_TOOLS", "ENABLE_TOOL_SEARCH"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_the_knob_defaults_to_core_and_takes_only_known_tiers(repo):
