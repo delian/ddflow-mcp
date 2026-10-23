@@ -112,12 +112,14 @@ def run_surface(rev, surface: str, args) -> dict:
             g = grade(sc, surface, name, raw)
             firsts.append(g)
             if not (g.tool_ok and g.args_ok and g.valid):
-                misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
+                misses.append(
+                    {"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw, "retry": False}
+                )
             if args.retry and name and not g.valid:
                 g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
                 if extra is not None:
                     tokens.append(extra)
-                if not (g.tool_ok and g.args_ok and g.valid):
+                if extra is not None and not (g.tool_ok and g.args_ok and g.valid):
                     misses.append(
                         {
                             "prompt": sc.prompt,

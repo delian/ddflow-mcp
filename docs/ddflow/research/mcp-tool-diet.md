@@ -451,13 +451,12 @@ call with an invented argument is as invalid as a family one.
   gate skip, or leaves out `gate`), each with a message that names the action.
 - Tagging each argument with its actions barely helped Kimi (0.656 against 0.625 on the first call; the
   retry moved by one request): the noise is the 18 to 43 union arguments.
-- `ddflow_status` was mistaken for `ddflow_board` by DeepSeek on the flat list only.
 - The `next` hint default (MTD-next-hints) was NOT evaluated, so by D-mcp-tool-families it stays off.
 
-Consequence under D-mcp-tool-families ("if families lose measurable call accuracy against flat tools the
-default reverts to flat plus profiles"): they lose on one of the two families, so `families` MUST NOT
-become the default profile until the operator accepts that (MTD-profiles keeps the flat default and
-ships `families` as an opt-in profile). Levers to try that keep the byte saving: fewer union arguments per
-family (move the seldom-used ones into one `options` object, as section 4 suggested), splitting the
-widest families (`task` 43, `admin` 43, `view` 40 arguments) so no tool carries more than about 20, and
-the `hot+families` profile (36 tools) for clients that like direct names for the most-called verbs.
+Decision (operator, 2026-10-23, Ddcde0f5b95): the default profile is the lean core of 15 tools; the wide
+families (24), hot+families (36) and the flat tiers are opt-in. Under D-mcp-tool-families families lose
+measurable accuracy (Kimi k3 0.625 against 0.938 on the first call, 0.844 against 0.938 after a retry), so
+they are not the default. Routing is unchanged: every family and old name stays callable. Levers to try
+for the wide families that keep the byte saving: fewer union arguments per family (move the seldom-used
+ones into one `options` object, as section 4 suggested), and splitting the widest families (`task` 43,
+`admin` 43, `view` 40 arguments) so no tool carries more than about 20.
