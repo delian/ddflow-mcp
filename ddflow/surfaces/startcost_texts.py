@@ -31,3 +31,25 @@ def start_texts(repo: Path, agent: str = "") -> dict[str, str]:
         texts["tools/list"] = json.dumps(tools, separators=(",", ":"))
         texts["brief"] = brief(repo, check_recovery=False, agent=agent).data.get("text", "")
     return texts
+
+
+def schema_tokens(names, *, bytes_per_token: float = 4.0) -> int:
+    """Tokens (bytes over a ratio, as the meter counts them) of the compact `tools/list` entries
+    for ``names``: what a client that loads those schemas up front pays."""
+    mcp = importlib.import_module("ddflow.surfaces.mcp")
+    entries = [
+        {
+            "name": n,
+            "description": mcp.TOOLS[n]["description"],
+            "inputSchema": mcp._schema(mcp.TOOLS[n]),
+        }
+        for n in sorted(set(names))
+        if n in mcp.TOOLS
+    ]
+    return round(len(json.dumps(entries, separators=(",", ":")).encode("utf-8")) / bytes_per_token)
+
+
+def role_tokens(role: str, *, bytes_per_token: float = 4.0) -> int:
+    """The ddflow schema tokens a lean agent definition (`services.leanagents`) admits for ``role``."""
+    LA = importlib.import_module("ddflow.services.leanagents")
+    return schema_tokens(LA.ddflow_tools(role), bytes_per_token=bytes_per_token)
