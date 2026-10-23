@@ -1078,13 +1078,14 @@
           40,000-token budget it is the fixed 9,000-character ceiling, for a small
           window it shrinks. With no start budget the ceiling alone applies.
       session.agent_brief_min_chars = 4000   [default]
-          The floor, in characters, of the launch brief's derived cap: the identity,
-          item, lease, merge and report text is not worth cutting below it.
+          The floor, in UTF-8 bytes (characters, for ASCII text), of the launch
+          brief's derived cap: the identity, item, lease, merge and report text is not
+          worth cutting below it.
       session.agent_brief_lean_chars = 6000   [default]
-          Under this derived cap the launch brief is LEAN: the testing, review, gate
-          and filing sections, the project's own text and the lessons are left out
-          (the gates enforce the rules; one line says where the rest is). 0 never goes
-          lean.
+          Under this derived cap (UTF-8 bytes) the launch brief is LEAN: the testing,
+          review, gate and filing sections, the project's own text and the lessons are
+          left out (the gates enforce the rules; one line says where the rest is). 0
+          never goes lean.
       session.agent_brief_off = []   [default]
           Sections of the launch brief to leave out: identity, item, rules, decisions,
           lessons, start, tests, reviews, gates, finish, forbidden, filing, project,
