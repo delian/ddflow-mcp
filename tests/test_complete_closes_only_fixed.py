@@ -26,6 +26,13 @@ from ddflow.infra.log import EventLog
 from ddflow.services import verify as SV
 
 
+def report_on(repo, summary, item, bid):
+    """A report left linked to ``item`` as its fix, as an older ddflow filed it (since
+    B8fb4a2ec4a `bug found` gives a bug of another task its own fix task)."""
+    K.bug_found(repo, summary=summary, item=item, id=bid, no_task=True, agent="a")
+    EventLog(repo, "legacy").append("bug.found", bid, {"fix_task": item})
+
+
 def seed(repo: Path) -> str:
     """A done task T1 with bug Bx found on it (so `fix-Bx` is filed), and a regression
     test file that exists."""
@@ -44,9 +51,8 @@ def seed(repo: Path) -> str:
 def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(repo):
     node = seed(repo)
     # Both are filed against the open fix task, so `bug found` links them to it.
-    K.bug_found(repo, summary="reviewer took the MCP down", item="fix-Bx", id="Bup",
-                scope="ddflow", agent="a")  # fmt: skip
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "reviewer took the MCP down", "fix-Bx", "Bup")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     st = state(repo)
     assert st.bugs["Bup"].fix_task == "fix-Bx" and st.bugs["Bflake"].fix_task == "fix-Bx"
     pass_pipeline(repo, "fix-Bx")
@@ -71,7 +77,7 @@ def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(rep
 
 def test_a_reported_bug_does_not_block_the_fix_tasks_completion(repo):
     seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     pass_pipeline(repo, "fix-Bx")
     out = LC.complete(repo, "fix-Bx", model="claude-opus-5", agent="a")
     blockers = [b for b in out.data["blockers"] if b.startswith("fixes open bug(s) ")]
@@ -82,7 +88,7 @@ def test_a_bug_with_its_own_fix_task_is_closed_by_that_task_only(repo):
     """B90101e389c: linked to fix-B297ede2447 by its report, with fix-B90101e389c filed
     for it by hand (`fixes` = [it])."""
     node = seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     EventLog(repo, "seed").append(
         "task.added",
         "fix-Bflake",
@@ -100,7 +106,7 @@ def test_a_bug_with_its_own_fix_task_is_closed_by_that_task_only(repo):
 
 def test_verify_does_not_hold_a_reported_bug_against_the_completed_task(repo):
     node = seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     pass_pipeline(repo, "fix-Bx")
     assert LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node,
                        agent="a").exit == 0  # fmt: skip
@@ -132,7 +138,7 @@ def test_a_wrongly_closed_bug_can_be_reopened_and_closed_again(repo):
 def test_reopen_points_the_bug_at_its_own_open_fix_task(repo):
     """The linked task that closed it is done; its own `fix-<bug>` is the fix now."""
     node = seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     log = EventLog(repo, "seed")
     log.append("bug.fixed", "Bflake", {"regression_test": node})  # the old sweep
     log.append("task.added", "fix-Bflake",
@@ -145,7 +151,7 @@ def test_reopen_points_the_bug_at_its_own_open_fix_task(repo):
 
 def test_reopen_unlinks_a_done_task_that_never_fixed_it_so_file_tasks_files_one(repo):
     node = seed(repo)
-    K.bug_found(repo, summary="reviewer took the MCP down", item="fix-Bx", id="Bup", agent="a")
+    report_on(repo, "reviewer took the MCP down", "fix-Bx", "Bup")
     log = EventLog(repo, "seed")
     log.append("bug.fixed", "Bup", {"regression_test": node})  # the old sweep
     log.append("item.completed", "fix-Bx", {"sha": "abc"})
@@ -221,7 +227,7 @@ def test_reopening_a_bug_whose_own_fix_did_not_hold_keeps_its_task_for_verify(re
 def test_with_file_task_off_the_reports_stay_open_and_the_warning_says_no_task(repo):
     """roborev job 1428 #2: `[bugs] file_task = false` files nothing, and says so."""
     node = seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + "\n[bugs]\nfile_task = false\n")
     pass_pipeline(repo, "fix-Bx")
@@ -235,7 +241,7 @@ def test_the_reports_get_their_tasks_before_the_completion_is_written(repo):
     """roborev job 1428 #1: a crash after the refile and before `item.completed` must not
     strand the reports on a done task -- so the refile is written first."""
     node = seed(repo)
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Bflake")
     pass_pipeline(repo, "fix-Bx")
     assert LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node,
                        agent="a").exit == 0  # fmt: skip
