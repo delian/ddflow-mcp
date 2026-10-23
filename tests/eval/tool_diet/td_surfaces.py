@@ -56,7 +56,7 @@ def hinted_family_tools() -> list[dict[str, Any]]:
         for act, tool in fam.members.items():
             for arg in family_schema.member_props(tool):
                 used.setdefault("op" if arg == "action" else arg, []).append(act)
-            req = family_schema._requires(tool)
+            req = family_schema._requires(tool)  # already by the family's names (op)
             needs.append(f"{act}: {', '.join(req) if req else 'nothing'}")
         for arg, acts in used.items():
             prop = params["properties"][arg]
@@ -90,4 +90,5 @@ def resolve(surface: str, name: str, args: dict[str, Any]) -> tuple[str, dict[st
         return "", args, routed
     if routed is not None:
         return routed.tool, routed.args, ""
-    return (name, args, "") if name in TOOLS else ("", args, f"unknown tool {name}")
+    shown = {f["function"]["name"] for f in family_tools()}
+    return (name, args, "") if name in shown else ("", args, f"{name} is not on this surface")
