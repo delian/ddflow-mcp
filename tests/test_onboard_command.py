@@ -121,8 +121,8 @@ def test_an_adopted_project_with_unimported_history_is_offered_it_too(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "todo.md").write_text("## P1\n\n- [ ] **P1.1** — work\n")
     text = _instructions(tmp_path)
-    assert "the queue is empty" in text
-    assert "the `onboard` prompt also cuts the workflow over" in text
+    assert "queue is empty" in text
+    assert "`onboard` prompt also cuts the workflow over" in text
 
 
 def test_an_unscoped_run_names_no_scope():

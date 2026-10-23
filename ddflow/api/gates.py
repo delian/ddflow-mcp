@@ -41,6 +41,8 @@ from ..services import prompts as P
 from ..services import roborev as RR
 from ..services import testscope as TSC
 from ..services import testselect as TS
+from ..services.approvals import gate_skip as GS
+from ..services.approvals.consume import operator_gate
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import failed_gate as OC
@@ -1092,11 +1094,12 @@ def _docs_gate_export(
 
 
 def _evidence_fields(
-    evidence: Evidence, item: str, gate: str
+    evidence: Evidence, item: str, gate: str, approval: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], O.Outcome | None]:
     """The event's evidence from what the caller supplied, or the failure (an unreadable
-    ``--output-file``)."""
-    ev: dict[str, Any] = {}
+    ``--output-file``). ``approval`` is the stamp of an operator approval spent on this
+    override (who approved, by which channel and level, which digest)."""
+    ev: dict[str, Any] = {"approval": approval} if approval else {}
     if evidence.note:
         ev["note"] = evidence.note
     if evidence.command:
@@ -1124,39 +1127,64 @@ def _evidence_fields(
     return ev, None
 
 
+def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
+    """The question `_agent_skip_refusal` asks the approvals engine when an agent sets aside a
+    failed review: ``how`` is (skip?, the outcome word being hand-recorded)."""
+    skip, outcome = how
+    word = "skipped" if skip else outcome
+
+    def ask(why: str):
+        canon = GS.canon_for(it, gate, item, why, log.agent_id, word)
+        return operator_gate(log, cfg, canon, approval_id=approval, reason=reason)
+
+    return ask
+
+
 def _agent_skip_refusal(
-    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool, required=()
-) -> O.Outcome | None:
+    it, gdef, gate: str, item: str, agent: str, hard_skip: bool, hand: bool, required=(), gated=None
+) -> tuple[O.Outcome | None, dict]:
     """D-failed-review-gate (B85841c0846): replacing the FAILED outcome of a review gate whose
     confirmed findings were never re-reviewed -- by a skip, or a hand-recorded pass,
     unavailable or partial -- is the operator's override. An agent (`--agent`, DDFLOW_AGENT,
     a harness's shell) is refused; the person records the reason. A review that really runs
     (`ddflow review`, a triage) does not come through here.
 
+    ``gated`` (RA-consume): a callable taking the reason the gate is unresolved and returning
+    the approval decision (`approvals.consume.Decision`). An agent with a person's approval of
+    exactly this override is let through and the approval's stamp is returned for the record.
+
     DX-skip-failed-gate: a skip of any other REQUIRED gate that is FAILED is refused for
     everyone (`skip_over_failure_refusal`); a failure is recorded as one, or as unavailable."""
     if hard_skip and not (gdef and gdef.reviewer):
         if why := OC.skip_over_failure_refusal(it, gate, item, required):
-            return O.refused("gate.record", why, id=item, gate=gate, outcome="")
+            return O.refused("gate.record", why, id=item, gate=gate, outcome=""), {}
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
-        return None
+        return None, {}
     why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
-        return None
-    return O.refused(
-        "gate.record",
-        f"{gate} failed ({why}); setting it aside past those findings is the operator's "
-        f"override, and this call is an agent's ({marker}). Fix and re-run "
-        f"`ddflow review {item} --gate {gate}`, or ask the operator to run "
-        f"`ddflow gate skip {item} {gate} --reason ...` from their own terminal.",
-        id=item,
-        gate=gate,
-        outcome="",
+        return None, {}
+    route = ""
+    if gated is not None:
+        decision = gated(why)
+        if decision.ok:
+            return None, decision.stamp
+        route = " " + decision.message
+    return (
+        O.refused(
+            "gate.record",
+            f"{gate} failed ({why}); setting it aside past those findings is the operator's "
+            f"override, and this call is an agent's ({marker}). Fix and re-run "
+            f"`ddflow review {item} --gate {gate}`, or get the operator's approval.{route}",
+            id=item,
+            gate=gate,
+            outcome="",
+        ),
+        {},
     )
 
 
-def record(
+def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
     repo: Path,
     item: str,
     gate: str,
@@ -1168,6 +1196,7 @@ def record(
     agent: str = "",
     called_from: Path | None = None,
     force: bool = False,
+    approval: str = "",
 ) -> O.Outcome:
     """Record an outcome an agent produced, or skip the gate on the record.
 
@@ -1184,7 +1213,7 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    refused = _agent_skip_refusal(
+    refused, approval_stamp = _agent_skip_refusal(
         it,
         gdef,
         gate,
@@ -1193,6 +1222,7 @@ def record(
         skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
+        gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
     if refused is not None:
         return refused
@@ -1215,7 +1245,7 @@ def record(
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
 
     result = "skipped" if skip else outcome
-    ev, bad = _evidence_fields(evidence, item, gate)
+    ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)
     if bad is not None:
         return bad
 

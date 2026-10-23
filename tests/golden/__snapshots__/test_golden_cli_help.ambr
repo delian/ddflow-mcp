@@ -36,6 +36,117 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals approve]
+  '''
+  usage: ddflow approvals approve [-h] [--digest DIGEST] id
+  
+  positional arguments:
+    id               the request id
+  
+  options:
+    -h, --help       show this help message and exit
+    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
+                     receipt that you looked at this request, not a secret)
+  
+  '''
+# ---
+# name: test_help[ddflow approvals deny]
+  '''
+  usage: ddflow approvals deny [-h] [--digest DIGEST] id
+  
+  positional arguments:
+    id               the request id
+  
+  options:
+    -h, --help       show this help message and exit
+    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
+                     receipt that you looked at this request, not a secret)
+  
+  '''
+# ---
+# name: test_help[ddflow approvals list]
+  '''
+  usage: ddflow approvals list [-h] [--all]
+  
+  options:
+    -h, --help  show this help message and exit
+    --all       every request, any state
+  
+  '''
+# ---
+# name: test_help[ddflow approvals request]
+  '''
+  usage: ddflow approvals request [-h] [--item ITEM] [--target TARGET] [--reason REASON] verb
+  
+  positional arguments:
+    verb             the gated verb
+  
+  options:
+    -h, --help       show this help message and exit
+    --item ITEM      the item the command acts on
+    --target TARGET  the gate or other target
+    --reason REASON  why (shown to the person as untrusted text)
+  
+  '''
+# ---
+# name: test_help[ddflow approvals revoke]
+  '''
+  usage: ddflow approvals revoke [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow approvals show]
+  '''
+  usage: ddflow approvals show [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow approvals withdraw]
+  '''
+  usage: ddflow approvals withdraw [-h] id
+  
+  positional arguments:
+    id          the request id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow approvals]
+  '''
+  usage: ddflow approvals [-h] {list,show,request,approve,deny,revoke,withdraw} ...
+  
+  positional arguments:
+    {list,show,request,approve,deny,revoke,withdraw}
+      list                the approval requests waiting for a person, and the approved ones not yet
+                          spent
+      show                one request as ddflow rendered it for the person, with its digest and
+                          status
+      request             an agent files an approval request for a gated command (a refusal does it
+                          too)
+      approve             a PERSON approves one request, once (refused under an agent identity)
+      deny                a PERSON denies one request (refused under an agent identity)
+      revoke              a PERSON takes back an approval that is not spent yet
+      withdraw            the asker takes back its own request while it waits
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow approve]
   '''
   usage: ddflow approve [-h] [--note NOTE] [--reject] [--reason REASON] id gate
@@ -761,7 +872,7 @@
 # ---
 # name: test_help[ddflow gate record]
   '''
-  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] [--force] id gate
+  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] [--approval APPROVAL] [--force] id gate
   
   positional arguments:
     id
@@ -785,6 +896,9 @@
                           the commit the review tool ran on (roborev review <sha>); refused when it
                           is not the item's branch head or a commit of its branch
     --output-file OUTPUT_FILE
+    --approval APPROVAL   the id of the operator's approval of this exact override: a refused call
+                          files the request and names the id; a person answers it with `ddflow
+                          approvals approve`
     --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
                           on the event)
   
@@ -813,7 +927,7 @@
 # ---
 # name: test_help[ddflow gate skip]
   '''
-  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] [--force] id gate
+  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] [--approval APPROVAL] [--force] id gate
   
   positional arguments:
     id
@@ -831,6 +945,9 @@
     --model MODEL         the REVIEWER's model, for family independence (the author's is `complete
                           --model`); an author-family name on a reviewer gate is refused
     --output-file OUTPUT_FILE
+    --approval APPROVAL   the id of the operator's approval of this exact override: a refused call
+                          files the request and names the id; a person answers it with `ddflow
+                          approvals approve`
     --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
                           on the event)
   
@@ -993,8 +1110,8 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, lanes, mcp, memory, metrics,
-                parallel, recovery, upgrade, verify, workflow. Omit for the overview.
+    topic       one of: cli, config, customise, export, gates, import, lanes, manual, mcp, memory,
+                metrics, parallel, recovery, upgrade, verify, workflow. Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -2952,13 +3069,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2970,6 +3087,7 @@
       rename              move an item to a new id (and phase), re-pointing every needs edge
       chore               commit or approve chore files (no reviewer)
       grant               record or list the operator's grants (extra review rounds)
+      approvals           approval requests for operator-gated commands (a person answers)
       plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
@@ -3090,6 +3208,14 @@
     'ddflow',
     'ddflow abandon',
     'ddflow adopt',
+    'ddflow approvals',
+    'ddflow approvals approve',
+    'ddflow approvals deny',
+    'ddflow approvals list',
+    'ddflow approvals request',
+    'ddflow approvals revoke',
+    'ddflow approvals show',
+    'ddflow approvals withdraw',
     'ddflow approve',
     'ddflow batch',
     'ddflow bisect',
