@@ -157,14 +157,14 @@ def test_version_ordering_handles_prefixes_and_suffixes():
 
 
 def test_a_stale_honours_row_without_a_verified_version_falls_back_to_unknown():
-    old = C.Entry("zed2", "honours", "source", "", None, "2026-01-01", "x", reconnect="unknown")
-    assert C.effective(old, "9.9", date(2026, 10, 23), max_age_days=100) == "unknown"
-    assert C.effective(old, "9.9", date(2026, 3, 1), max_age_days=100) == "honours"
+    old = C.Entry("zed2", "honours", "source", "", None, "2025-01-01", "x", reconnect="unknown")
+    assert C.effective(old, "9.9", date(2026, 10, 23)) == "unknown"
+    assert C.effective(old, "9.9", date(2025, 3, 1)) == "honours"
 
 
 def test_a_stale_ignores_row_stays_ignores():
     old = C.Entry("old", "ignores", "source", "", None, "2020-01-01", "x", reconnect="unknown")
-    assert C.effective(old, "1", date(2026, 10, 23), max_age_days=100) == "ignores"
+    assert C.effective(old, "1", date(2026, 10, 23)) == "ignores"
 
 
 def test_a_verified_row_with_a_version_does_not_expire_by_age():
@@ -248,3 +248,11 @@ def test_the_expiry_window_is_not_a_parameter_of_capability():
     assert "max_age_days" not in inspect.signature(C.capability).parameters
     # an unverified honours row is unknown once it is older than the fixed window
     assert C.capability({"name": "opencode"}, today=date(2027, 6, 1)) == "unknown"
+
+
+def test_no_caller_can_widen_the_expiry_window():
+    with pytest.raises(TypeError):
+        C.capability({"name": "opencode"}, today=date(2027, 6, 1), max_age_days=999999)
+    with pytest.raises(TypeError):
+        C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1), max_age_days=999999)
+    assert C.effective(C.lookup({"name": "opencode"}), "", date(2027, 6, 1)) == "unknown"

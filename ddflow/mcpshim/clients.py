@@ -366,9 +366,7 @@ def lookup(client_info: object) -> Entry | None:
     return _BY_NAME.get(_name(client_info))
 
 
-def effective(
-    entry: Entry, version: object, today: date, *, max_age_days: int = MAX_AGE_DAYS
-) -> str:
+def effective(entry: Entry, version: object, today: date) -> str:
     """What `entry` says for a client of `version` on `today` (see the module docstring)."""
     if entry.min_version:
         have, need = version_tuple(version), version_tuple(entry.min_version)
@@ -382,7 +380,7 @@ def effective(
             age = (today - date(*map(int, entry.checked.split("-")))).days
         except (TypeError, ValueError):
             return UNKNOWN
-        return entry.list_changed if age <= max_age_days else UNKNOWN
+        return entry.list_changed if age <= MAX_AGE_DAYS else UNKNOWN
     return entry.list_changed
 
 
