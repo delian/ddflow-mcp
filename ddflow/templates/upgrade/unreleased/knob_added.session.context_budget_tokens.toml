@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.context_budget_tokens"
+new = "40000"
+why = "`ddflow doctor` shows the first-turn token cost of ddflow (instructions, tools/list, brief) against this budget."
+impact = "additive"
