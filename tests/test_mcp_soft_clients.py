@@ -275,3 +275,11 @@ def test_only_a_verified_row_is_exempt_from_expiry():
     assert C.effective(verified, "9", date(2026, 10, 23)) == "honours"
     claimed = C.Entry("c", "honours", "source", "1.0", None, "2020-01-01", "x")
     assert C.effective(claimed, "9", date(2026, 10, 23)) == "unknown"
+
+
+def test_the_data_keeps_ranged_verified_and_expiring_rows_consistent():
+    """The expiry and the version floor are two checks on one fact (is this row verified?):
+    the table must not hold a row where they could disagree."""
+    for e in C.ENTRIES:
+        assert bool(e.min_version) == (e.source == "verified"), e.key
+        assert bool(e.verified_version) == (e.source == "verified"), e.key
