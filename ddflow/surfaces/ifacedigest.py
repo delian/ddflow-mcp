@@ -33,6 +33,11 @@ protocol versions; the shim and worker protocol numbers. What is NOT: the releas
 rendered instructions text, prompt titles and descriptions (cosmetic: a changed description is
 never an interface break), and anything a client cannot see.
 
+The digest is of what a client of THIS repository's configuration sees: `outputSchema` is
+included only when `[mcp].output_schemas` is on, and tool `annotations` only when the server
+advertises them (it advertises none today; `_tool` reads them so the digest follows the day it
+does).
+
 Accepted limits: schema compatibility is the conservative subset check of `ifaceschema` (see
 its limits); `classify_surfaces` and `live_surfaces` have no caller until SU-upgrade-integration
 and SU-announce; the facade tools do not exist yet (MTD-search-call).
