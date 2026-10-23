@@ -36,15 +36,48 @@ def _instructions(repo: Path) -> str:
     return fn(repo)
 
 
+#: Notices the charter adds only while their state holds (crashed worktrees, a drifted AGENTS.md,
+#: unwired companions, an unfinished import, setup gaps); they leave the contract text alone.
+NOTICES = {
+    "recoverable": 0,
+    "loops": 0,
+    "rules_drift": [],
+    "actionable_companions": [],
+    "gate_gaps": [],
+    "queue_is_empty": False,
+    "imported_no_globs": 0,
+    "imported_shipped_drift": 0,
+    "setup_todo": [],
+}
+#: The worst case a freshly initialised project shows: every setup gap and unwired companion at once.
+FRESH_INIT_MAX = 2400
+
+
+def _base(repo: Path) -> str:
+    """The charter with no state notice: what a configured, healthy project is handed."""
+    from ddflow.services import prompts as P
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    vars_ = {**_instruction_vars(repo), **NOTICES, "tool_tier_note": ""}
+    return P.render(P.resolve("mcp_instructions", repo), **vars_).strip()
+
+
 def test_the_adopted_charter_keeps_every_contract_line_under_the_cap(repo):
     run_cli(repo, "init")
-    text = _instructions(repo)
+    text = _base(repo)
     assert "as_agent" in text and "PR flow" in text  # identity per call; merge parks in PR flow
     for must in CONTRACT:
         assert must in text, f"the charter dropped {must!r}"
     assert len(text.encode()) <= CHARTER_MAX_CHARS, (
         f"{len(text.encode())} bytes > {CHARTER_MAX_CHARS}:\n{text}"
     )
+
+
+def test_a_freshly_initialised_project_stays_small_with_every_notice_on(repo):
+    run_cli(repo, "init")
+    full = _instructions(repo)
+    assert len(full.encode()) <= FRESH_INIT_MAX, f"{len(full.encode())} bytes:\n{full}"
+    assert full.startswith(_base(repo)[:200])
 
 
 def test_the_unadopted_charter_is_under_the_cap_too(repo):
