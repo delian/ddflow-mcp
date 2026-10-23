@@ -141,7 +141,7 @@ def test_a_path_inside_a_directory_an_item_creates_is_not_warned(proj, tmp_path)
     plan = tmp_path / "plan.toml"
     plan.write_text(
         '[A]\nglobs = ["newpkg/"]\ncreates = ["newpkg/"]\nacceptance = "done"\n'
-        '[B]\nglobs = ["newpkg/inner/mod.py"]\nneeds = ["A"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/inner/mod.py", "newpkg"]\nneeds = ["A"]\nacceptance = "done"\n'
     )
     code, out, err = run_cli(proj, "plan", "check", str(plan))
     assert code == 0, out + err

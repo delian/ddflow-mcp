@@ -36,7 +36,9 @@ def _created(glob: str, created: set[str]) -> bool:
     """Is ``glob`` a path a plan item creates, or inside a directory one creates? A created
     path is a directory only when it ends in '/' (`creates = ["newpkg/"]`): a name alone
     cannot be told from a file, and nothing can exist under a file, so it covers itself only."""
-    return any(glob == c or (c.endswith("/") and glob.startswith(c)) for c in created)
+    return any(
+        glob == c or (c.endswith("/") and (glob == c[:-1] or glob.startswith(c))) for c in created
+    )
 
 
 def _items(data: Any) -> dict[str, Any] | None:
