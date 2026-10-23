@@ -130,15 +130,16 @@ DIGEST = "digest:"
 
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """The items an earlier partial apply has not settled. A value is settled when its digest
-    was recorded; a record without one (written before the digest) holds only what the log
-    redacted, which cannot tell two masked values apart, so it settles no value: the item is
-    applied once more and that record carries the digest."""
+    was recorded, or a pre-digest record holds it verbatim. A pre-digest record of a value the log
+    masked holds only the mask, which cannot tell two masked values apart, so it settles no
+    value: the item is applied once more and that record carries the digest."""
 
     def done(i: dict[str, Any]) -> bool:
         seen = settled.get(i["id"])
         if seen is None:
             return False
-        return not seen or f"{DIGEST}{of_obj(i.get('new'))}" in seen
+        new = i.get("new")
+        return not seen or new in seen or f"{DIGEST}{of_obj(new)}" in seen
 
     return [i for i in items if not done(i)]
 
