@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.min_digest_chars"
+new = '8'
+why = "How many leading characters of a request's digest the person types back to answer it."

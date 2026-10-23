@@ -33,10 +33,10 @@ def _answer(
     if row is None or not row["verb"]:
         return O.failed(kind, f"no approval request {ask_id}")
     shown = row["digest"]
-    if len(digest) < AN.MIN_DIGEST or not shown.startswith(digest.lower()):
+    if len(digest) < cfg.approvals.min_digest_chars or not shown.startswith(digest.lower()):
         return O.refused(
             kind,
-            f"say which one you read: pass --digest with the first {AN.MIN_DIGEST}+ characters of "
+            f"say which one you read: pass --digest with the first {cfg.approvals.min_digest_chars}+ characters of "
             f"the digest shown by `ddflow approvals show {ask_id}` ({shown[:16]}...)",
         )
     try:

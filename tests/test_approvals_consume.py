@@ -14,6 +14,7 @@ import time
 import pytest
 
 from ddflow.config import Config
+from ddflow.core import clock
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -146,10 +147,13 @@ def test_the_state_changing_since_the_request_needs_a_new_approval(log):
 def test_an_approval_expires_after_its_use_window(log):
     cfg = Config()
     filed = _approved(log, cfg)
-    late = T0 + cfg.approvals.use_ttl_s + 1
+    answered = clock.epoch(asks_of(_state(log))[filed.id]["answered_at"], default=0.0)
+    late = answered + cfg.approvals.use_ttl_s + 1
     got = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=late)
     assert not got.ok and "request a new approval" in got.message
-    ok = C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + cfg.approvals.use_ttl_s)
+    ok = C.operator_gate(
+        log, cfg, _canon(), approval_id=filed.id, now=answered + cfg.approvals.use_ttl_s
+    )
     assert ok.ok
 
 
