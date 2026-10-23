@@ -167,6 +167,13 @@ WAIT = Command(
             "succeed; " + GLOBS_HELP,
         ),
         Param(
+            "lease",
+            default="",
+            help="wait for a lease instead of an item: an agent id (until it holds nothing) or a "
+            "path/glob (until no other agent's live lease covers it); a bare wait returns the "
+            "first ready item at once",
+        ),
+        Param(
             "timeout",
             type="number",
             default=None,
