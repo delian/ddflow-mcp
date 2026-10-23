@@ -266,7 +266,7 @@ Placement (no parallel structure):
 | *pass 2:* **instruction-file budgets** (Antigravity rules 24 000 bytes per file, 20 000-token aggregate; Windsurf 12 000 / 6 000 chars; Goose 64 KB MOIM) | `[caps]` key `instructions` (reserved by descriptor-v2 as the "instructions cap"): value `{per_file = {bytes, tokens, chars}, aggregate = {bytes, tokens, chars}}`, any subset | uses the reserved key, only fixes its shape and scope |
 | *pass 2:* **several stop exit codes** (Qwen 53 turn limit, 55 wall/tool budget; Kimi 75 retryable vs 1 permanent) | `[meters]` `limit_exit_codes = { turns = 53, wall_time = 55, tool_calls = 55 }` (map from a `[caps]` key to the code it produces); the single `limit_exit_code` stays valid for one code | one signal kind per code; keys are the cap names |
 | *pass 2:* **resident tool schemas** (Qwen `tools.eager`, Copilot `toolSearch`, Kiro `toolSearch.*`) | `[caps]` key `tools_resident = <setter>` | extends the reserved "mcp tool cap" |
-| *pass 2:* **terms of automation** (Antigravity consumer plans) | `[headless]` key `terms = "ok"\|"api-key-only"\|"consumer-plans-prohibited"` with a `[verified]` source; the launcher refuses a lane whose auth is outside the allowed set | a legal constraint changes what the launcher may do |
+| *pass 2:* **terms of automation** (Antigravity consumer plans) | `[headless]` key `terms = { consumer_login = "ok"\|"prohibited"\|"unknown", api_key = ..., enterprise = ... }` (one entry per auth class, same three values) with a `[verified]` source; the launcher refuses a lane whose auth class is `prohibited` | a legal constraint changes what the launcher may do |
 
 `[tokens]` keys (each is a value, `none = true`, or absent = not verified; a value may carry the HX-facts-core fact record):
 
@@ -275,7 +275,7 @@ Placement (no parallel structure):
                      ttl_values = ["5m","1h"]; default_ttl = "5m"
                      set = <setter> | {main = <setter>, subagent = <setter>}   # a setter is the launch mechanism below; the table form splits main and subagent
                      headless_ttl_fixed = "5m"                        # Goose: headless forces 5m
-                     ttl_stated = "1h"                                # pass 2: a TTL the vendor states but the user cannot set (control = "harness", Copilot)
+                     ttl_stated = "1h" | { openai = "24h", default = "1h" }   # pass 2: a TTL the vendor states but the user cannot set (control = "harness", Copilot); a table when it differs by model family
                      observe = "cache_read"                           # pass 2: the [meters].usage_fields name that shows cache reads
 [tokens.window]      set = <setter>  unit = "tokens" | "ratio" | "percent"  min = .. max = ..
                      tier = <setter>  tier_values = [..]               # pass 2: window tier with a price effect (Copilot --context)
@@ -399,7 +399,7 @@ output = ["--output-format", "json", "-s"]
 
 [tokens.cache]
 control = "harness"                              # the client sets retention; no user setting
-ttl_stated = "1h"                                # vendor text: "24 hours for OpenAI models and 1 hour for most others"
+ttl_stated = { openai = "24h", default = "1h" } # vendor text: "24 hours for OpenAI models and 1 hour for most others"
 
 [tokens.window]
 tier = { argv = ["--context", "{tier}"] }
@@ -428,7 +428,7 @@ price_source = { kind = "rpc", via = "copilot-sdk", method = "models.list" }
 ```toml
 # ddflow/harnesses/antigravity.toml (additions; pass 2; hooks/instructions blocks already exist)
 [headless]
-terms  = "api-key-only"                          # FAQ: wrapping agy in other agents / account rotation not supported on consumer plans
+terms  = { consumer_login = "prohibited", api_key = "ok", enterprise = "ok" }   # FAQ: wrapping agy in other agents / account rotation not supported on consumer plans; API key / Gemini Enterprise per its verdict (enterprise: U in the docs, the FAQ names consumer plans only)
 argv   = ["agy", "-p", "{prompt}", "--output-format", "json"]
 resume = ["--conversation", "{session}"]
 model  = ["--model", "{slug}"]                   # slugs from `agy models`
