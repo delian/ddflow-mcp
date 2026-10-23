@@ -22,8 +22,9 @@ GOLDEN = Path(__file__).parent / "data" / "mcp_tool_aliases.json"
 
 
 def test_one_alias_per_old_name_that_is_not_a_hot_single():
-    assert set(A.ALIASES) == set(TOOLS) - set(F.HOT_SINGLES)
-    assert len(A.ALIASES) == 114
+    own = {"ddflow_doctor", "ddflow_workflow"}
+    assert set(A.ALIASES) == set(TOOLS) - set(F.HOT_SINGLES) - own
+    assert len(A.ALIASES) == 112
     for old, alias in A.ALIASES.items():
         assert isinstance(alias, R.Alias)
         assert (alias.kind, alias.old) == ("tool", old)
@@ -34,14 +35,14 @@ def test_each_alias_says_the_family_and_action_and_keeps_the_name_until_1_0():
         family, action = F.placement(old)
         assert family in alias.new and f"action={action}" in alias.new
         assert alias.since == A.SINCE
-        assert alias.removed_in == "1.0"
+        assert alias.removed_in == "1.0" == A.REMOVED_IN
         assert f"'{old}'" in alias.notice()
 
 
 def test_hot_singles_unknown_names_and_the_two_self_named_tools_are_not_noted():
     for name in ("ddflow_brief", "ddflow_nope", "ddflow_doctor", "ddflow_workflow"):
         assert A.alias_for(name) is None
-    assert "ddflow_doctor" in A.ALIASES  # still in the table: it is a member of its family
+    assert not {"ddflow_doctor", "ddflow_workflow"} & set(A.ALIASES)  # current tools, not old
     assert A.alias_for("ddflow_gate_record") is A.ALIASES["ddflow_gate_record"]
 
 
