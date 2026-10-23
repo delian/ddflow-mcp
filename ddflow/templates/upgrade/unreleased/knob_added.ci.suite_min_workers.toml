@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.suite_min_workers"
+new = "8"
+why = "A run holding the host-wide full-suite lock keeps at least this many pytest workers under load, so one loaded-host run cannot hold the lock for hours at -n 1."
+impact = "additive"

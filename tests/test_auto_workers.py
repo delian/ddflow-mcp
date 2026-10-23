@@ -91,3 +91,35 @@ def test_the_gate_runner_substitutes_the_workers(tmp_path):
     assert outcome == "passed" and "n=3" in ev["tail"]
     assert ev["command"] == "echo n={workers}" and ev["command_run"] == "echo n=3"
     assert ev["workers"]["n"] == 3 and ev["workers"]["setting"] == "3"
+
+
+def holder_cfg(floor, **kw):
+    c = cfg(**kw)
+    c.ci.suite_min_workers = floor
+    return c
+
+
+def test_suite_lock_holder_is_not_clamped_to_one_worker():
+    """B-suite-lock-held-by-n1-run: a busy host gave the lock holder `-n 1` for hours."""
+    c = holder_cfg(8)
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})  # loadavg >> cores * high
+    assert WK.compute(c, None, source=src, cores=192, holding_suite=True).n == 8
+    assert WK.compute(c, None, source=src, cores=192).n == 1  # a selected run still yields
+
+
+def test_suite_floor_never_exceeds_the_ceiling_or_the_files():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})
+    assert WK.compute(holder_cfg(8, hi=4), None, source=src, cores=192, holding_suite=True).n == 4
+    assert WK.compute(holder_cfg(8), 3, source=src, cores=192, holding_suite=True).n == 3
+
+
+def test_critical_memory_still_wins_over_the_holder_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.02})
+    assert WK.compute(holder_cfg(8), None, source=src, cores=192, holding_suite=True).n == 1
+
+
+def test_localize_auto_gives_the_holder_its_floor():
+    src = FakeSource({"load": 1.5, "memory_free_frac": 0.9})
+    text, w = WK.localize_auto("args: [-n, auto]\nx: -n auto\n", holder_cfg(8), source=src,
+                               cores=192, holding_suite=True)  # fmt: skip
+    assert "-n 8" in text and w.n == 8

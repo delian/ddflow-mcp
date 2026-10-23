@@ -2588,6 +2588,12 @@
           gate evidence (D-agent-test-etiquette).
       ci.min_workers = 1   [default]
           The fewest workers `[ci].workers = auto` may compute, at least 1.
+      ci.suite_min_workers = 8   [default]
+          The fewest workers a run that holds the host-wide full-suite lock gets,
+          however loaded the host (capped by max_workers; critical memory pressure
+          still wins). The lock serialises every agent's full suite, so a holder cut
+          to `-n 1` by the load clamp kept the rest waiting for hours. 1 turns the
+          floor off.
       ci.max_workers = 48   [default]
           The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.max_concurrent_suites = 1   [default]

@@ -492,9 +492,11 @@ def _worker_log(scope) -> dict[str, dict]:
     return used
 
 
-def _with_workers(cmd: str, cfg: Config, used: dict[str, dict], stage: str) -> str:
+def _with_workers(
+    cmd: str, cfg: Config, used: dict[str, dict], stage: str, holding_suite: bool = False
+) -> str:
     """``cmd`` with ``{workers}`` replaced, the count and its inputs noted under ``stage``."""
-    cmd, auto = WK.resolve(cmd, cfg)
+    cmd, auto = WK.resolve(cmd, cfg, holding_suite=holding_suite)
     if auto:
         used[stage] = {"n": auto.n, **auto.inputs}
     return cmd
@@ -513,7 +515,14 @@ def _holder(repo: Path, ref: str) -> str:
 
 @contextmanager
 def localize_hooks(
-    tree: Path, cfg: Config, cmd: str, used: dict[str, dict], *, source=None, cores=None
+    tree: Path,
+    cfg: Config,
+    cmd: str,
+    used: dict[str, dict],
+    *,
+    source=None,
+    cores=None,
+    holding_suite: bool = False,
 ) -> Iterator[str]:
     """``cmd``, or -- when the pre-commit config of ``tree`` says ``-n auto`` (one pytest worker
     per core) -- ``cmd`` reading a temporary copy that says the count this host can afford now
@@ -522,7 +531,9 @@ def localize_hooks(
     config = tree / PRE_COMMIT_CONFIG
     w = None
     if "pre-commit run" in cmd and config.is_file():
-        text, w = WK.localize_auto(config.read_text(), cfg, source=source, cores=cores)
+        text, w = WK.localize_auto(
+            config.read_text(), cfg, source=source, cores=cores, holding_suite=holding_suite
+        )
     if w is None:
         yield cmd
         return
@@ -539,8 +550,12 @@ def _execute(
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
-    cmd = _with_workers(cmd, cfg, used, "command")
-    with localize_hooks(tree, cfg, cmd, used) if local else nullcontext(cmd) as cmd:
+    cmd = _with_workers(cmd, cfg, used, "command", holding_suite=local)
+    with (
+        localize_hooks(tree, cfg, cmd, used, holding_suite=True)
+        if local
+        else nullcontext(cmd) as cmd
+    ):
         return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
 
 
