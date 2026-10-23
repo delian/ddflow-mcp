@@ -54,3 +54,10 @@ def test_a_missing_node_says_it_looked_in_every_worktree(repo, tmp_path):
     why = _refusal(repo, "tests/test_real.py::test_not_there")
     assert "tests/test_real.py::test_not_there" in why, why  # the whole id, not its leaf
     assert "tests/ of every worktree" in why, why
+
+
+def test_a_node_in_a_file_that_does_not_exist_is_named_whole(repo, tmp_path):
+    """The reported shape: `tests/x.py::name`, with no tests/x.py at all."""
+    _project(repo, tmp_path)
+    why = _refusal(repo, "tests/x.py::name")
+    assert "probe names tests/x.py::name," in why, why
