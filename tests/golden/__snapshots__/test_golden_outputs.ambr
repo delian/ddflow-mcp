@@ -2548,6 +2548,19 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      mcp.worker_tools = 'core'   [default]
+          The tool tier of the MCP config `ddflow adopt` writes for lane workers
+          (`.ddflow/local/worker-mcp.json`, started with `claude --mcp-config <file>
+          --strict-mcp-config`): it sets `DDFLOW_MCP_TOOLS` in the server's
+          environment. `core` (default) saves ~27K first-turn tokens on a host that
+          sends every schema (84.2K against 54.7K measured); `standard` or `all` for
+          workers that need the rest. It hides schemas, never tools: every tool stays
+          callable by name. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'core', the strictest (no safety
+          dimension; fewer schemas advertised, every tool still callable); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       mcp.output_schemas = 'off'   [default]
           Whether `tools/list` declares an `outputSchema` for every tool whose result
           is a JSON object of declared fields (not `show`, `decision_show` or
@@ -2646,11 +2659,12 @@
           The most workers `[ci].workers = auto` may compute, however idle the host.
       ci.max_concurrent_suites = 1   [default]
           How many full test suites (the CI-parity run of `ddflow ci run --full`, the
-          merge queue and the after-merge check) may run at once on this host, counted
-          across every project and agent of the user through a lock in the user's
-          state directory. A run over the limit waits `suite_wait_s`, then is
-          UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-
-          scope runs are not limited.
+          merge queue, the after-merge check and the `unit_tests` gate when its
+          command names no test file) may run at once on this host, counted across
+          every project and agent of the user through a lock in the user's state
+          directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE
+          ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are
+          not limited.
       ci.suite_wait_s = 1800   [default]
           Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
           before it reports who holds it.

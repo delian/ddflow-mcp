@@ -337,10 +337,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         (v.blockers if blocks else v.warnings).append(readme)
 
     cwd, landed = _tree_being_completed(repo, it)
-    stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)
-    for note in refine_stale_notes(
-        stale, it, cwd, landed, changed_paths(repo, it), cfg.review.triage_ignore_globs
-    ):
+    own = changed_paths(repo, it)
+    stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
+    for note in refine_stale_notes(stale, it, cwd, landed, own, cfg.review.triage_ignore_globs):
         if note.unverified:
             v.warnings.append(
                 f"{note.gate} passed, but whether on the tree you are completing could "
