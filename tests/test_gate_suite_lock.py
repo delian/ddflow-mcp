@@ -45,7 +45,7 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
     assert (other, narrowed) == ("passed", "passed")
     # a command that IS one `ddflow ci ...` takes the lock itself; anything more is a suite
     for ok in ("ddflow ci run --full", "uv run ddflow ci run", "env X=1 /usr/bin/ddflow ci run"):
-        assert not R.runs_whole_suite(_gate(ok)), ok
+        assert not R._runs_whole_suite(_gate(ok)), ok
     for locked in (
         "pytest # ddflow ci run",
         "pytest -k 'ddflow ci'",
@@ -54,7 +54,7 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
         "pytest | ddflow ci run",
         "ddflow ci run\npytest",
     ):
-        assert R.runs_whole_suite(_gate(locked)), locked
+        assert R._runs_whole_suite(_gate(locked)), locked
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
