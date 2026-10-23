@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.max_run_timeout_s"
+new = '21600'
+why = "A per-run `gate run --timeout` is bounded (bug B-gate-run-ci-timeout-under-load)."
+impact = "additive"
