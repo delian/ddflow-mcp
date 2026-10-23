@@ -264,7 +264,7 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         )
         if body.get("next") is not None:
             how = f"repeat the call with limit={body.get('limit')} offset={body['next']}"
-        elif isinstance(body.get("limit"), int) and body["limit"] >= cap:
+        elif isinstance(body.get("limit"), int) and (body["limit"] == 0 or body["limit"] >= cap):
             how = None  # already at the most this kind gives: only narrowing helps
         else:
             how = "raise limit"
