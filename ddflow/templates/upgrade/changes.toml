@@ -956,3 +956,10 @@ key = "session.report_brief_chars"
 new = "200"
 why = "Characters `ddflow report --brief` keeps of each free-text entry; ids and shas are never cut."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.triage_ignore_globs"
+new = '["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]'
+why = "Files added since a review round that match these globs (tests) do not void a triage pass or make a judged gate stale."
+impact = "additive"
