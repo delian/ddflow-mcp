@@ -26,6 +26,8 @@ from __future__ import annotations
 from ..core.digest import content_digest
 from ..core.model import Item, State, fold
 from . import approval as AP
+from .approvals import consume as CN
+from .approvals.canon import Canon
 from .gates import baseline_red as BR
 from .gates.defs import required_gates
 
@@ -68,7 +70,15 @@ def accepted(state: State, it: Item, gate: str) -> AP.Verdict:
     return AP.check(state, subject(it.id, gate), digest(it, gate))
 
 
-def grant(log, it: Item, gate: str, *, note: str = "", requested_agent: str = "") -> AP.Approval:
+def grant(
+    log,
+    it: Item,
+    gate: str,
+    *,
+    note: str = "",
+    requested_agent: str = "",
+    proxy: dict | None = None,
+) -> AP.Approval:
     """Record the acceptance. Raises `AP.ApprovalRefused` under an agent identity, and
     `ValueError` when the gate's outcome is not a partial."""
     if why := refusal(it, gate):
@@ -80,11 +90,20 @@ def grant(log, it: Item, gate: str, *, note: str = "", requested_agent: str = ""
         digest(it, gate),
         note=note or f"accepted partial: {rec.reason[:200]}",
         requested_agent=requested_agent,
+        proxy=proxy,
     )
 
 
 def approve(
-    log, cfg, item_id: str, gate: str, *, note: str = "", reject: bool = False, agent: str = ""
+    log,
+    cfg,
+    item_id: str,
+    gate: str,
+    *,
+    note: str = "",
+    reject: bool = False,
+    agent: str = "",
+    approval: str = "",
 ) -> str:
     """`ddflow approve` of a gate that is not a human gate: accept its baseline-red partial.
     Returns the line to print; raises `ValueError` (the CLI prints it) when there is none."""
@@ -100,8 +119,16 @@ def approve(
             f"{gate!r} is not a required gate ([gates].required): a partial outcome of an "
             f"advisory gate blocks nothing, so there is nothing to accept"
         )
+    proxy = None
+    if why := AP.agent_marker(agent):
+        canon = Canon(verb="approve.partial", agent=log.agent_id, item=item_id, target=gate,
+                      state=digest(it, gate))  # fmt: skip
+        decision = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=note)
+        if not decision.ok:
+            raise ValueError(AP.refusal(why) + " " + decision.message)
+        proxy = decision.stamp
     try:
-        got = grant(log, it, gate, note=note, requested_agent=agent)
+        got = grant(log, it, gate, note=note, requested_agent=agent, proxy=proxy)
     except AP.ApprovalRefused as exc:
         raise ValueError(str(exc)) from exc
     return (

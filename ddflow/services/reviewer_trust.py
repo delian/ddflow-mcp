@@ -36,6 +36,8 @@ from ..infra import tomlcfg as TC
 from . import approval as AP
 from . import identity as ID
 from .approval import os_user as _user
+from .approvals import consume as CN
+from .approvals.canon import Canon
 from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401
 
 #: The fields that decide WHO is reviewing and what it is called. A change to any of
@@ -165,15 +167,36 @@ def pending(repo: Path, st: Any) -> list[dict[str, Any]]:
     return out
 
 
-def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "") -> str:
+def _agent_route(repo: Path, rev, name: str, dig: str, why: str, approval: str, note: str) -> dict:
+    """For an agent: the stamp of the operator's approval of exactly this reviewer entry, or a
+    `ReviewerRefused` that names the route. An entry that runs a program (kind command) is T3:
+    only a person at a terminal vouches for it (it executes code and prints any verdict)."""
+    if rev.kind == "command":
+        raise ReviewerRefused(
+            AP.refusal(why)
+            + f" Reviewer {name!r} runs a program (kind command), so it is T3: terminal only, "
+            "never approved over chat."
+        )
+    log = _log(Path(repo), "")
+    canon = Canon(verb="reviewers.approve", agent=log.agent_id, item=name, state=dig)
+    decision = CN.operator_gate(
+        log, Config.load(Path(repo)), canon, approval_id=approval, reason=note
+    )
+    if not decision.ok:
+        raise ReviewerRefused(AP.refusal(why) + " " + decision.message)
+    return decision.stamp
+
+
+def approve(
+    repo: Path, name: str, *, requested_agent: str = "", note: str = "", approval: str = ""
+) -> str:
     """A PERSON vouches for reviewer ``name`` as it is configured now. Returns the line.
 
     Refused under any agent identity, as `ddflow approve` is a person's act: an agent
     that could approve the reviewer it wrote would make the whole record decorative.
     """
 
-    if why := agent_marker(requested_agent):  # before anything is read: not an agent's to see
-        raise ReviewerRefused(AP.refusal(why))
+    why = agent_marker(requested_agent)  # before anything is read: not an agent's to see
     from .review import load_reviewers  # deferred: review -> gates -> reviewer_trust
 
     revs = {r.name: r for r in load_reviewers(Path(repo))}
@@ -182,6 +205,7 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
         known = ", ".join(sorted(revs)) or "none configured"
         raise ReviewerRefused(f"no reviewer named {name!r} ({known})")
     dig = digest(rev)
+    proxy = _agent_route(repo, rev, name, dig, why, approval, note) if why else None
     try:
         granted = AP.grant(
             _log(Path(repo), ""),
@@ -190,6 +214,7 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
             note=note,
             requested_agent=requested_agent,
             extra={k: str(getattr(rev, k, "") or "") for k in IDENTITY},
+            proxy=proxy,
         )
     except AP.ApprovalRefused as exc:
         raise ReviewerRefused(str(exc)) from exc
