@@ -33,6 +33,7 @@ Stdlib only: the shim imports this module and must stay small.
 from __future__ import annotations
 
 import json
+import string
 from typing import Any
 
 PROTO_MAJOR = 1
@@ -148,11 +149,8 @@ def error(code: str, message: str, *, id: Any = None, **extra: Any) -> dict[str,
 
 
 def _bad_hex(text: str) -> bool:
-    try:
-        bytes.fromhex(text)
-    except ValueError:
-        return True
-    return False
+    """Not a plain even-length hex string (`bytes.fromhex` alone skips whitespace)."""
+    return len(text) % 2 != 0 or any(c not in string.hexdigits for c in text)
 
 
 def negotiate(shim_hello: dict[str, Any]) -> dict[str, Any] | None:

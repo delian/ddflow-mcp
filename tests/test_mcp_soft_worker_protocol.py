@@ -320,7 +320,7 @@ def test_a_bare_hello_and_a_note_without_an_id_are_not_frames():
     assert WP.decode('{"t":"note","id":null,"msg":{}}\n')["id"] is None
 
 
-@pytest.mark.parametrize("bad", ["xyz", 123, ["a"], "abc"])
+@pytest.mark.parametrize("bad", ["xyz", 123, ["a"], "abc", " ", "ab cd", "12 34"])
 def test_a_malformed_state_key_is_refused_not_a_crash(bad):
     err = WP.negotiate({"t": "hello", "shim_proto": WP.PROTO_MAJOR, "state_key": bad})
     assert err["t"] == "error" and err["code"] == "bad_frame"
@@ -528,3 +528,13 @@ def test_nothing_is_written_after_bye():
 def test_a_hello_of_another_major_with_both_fields_is_refused_as_incompatible():
     frame = WP.decode('{"t":"hello","shim_proto":2,"worker_proto":2}\n')
     assert WP.negotiate(frame)["code"] == "incompatible_shim_proto"
+
+
+def test_a_refused_hello_exits_3_the_ddflow_code_for_refused():
+    from ddflow.surfaces import worker
+
+    out = io.StringIO()
+    code = worker.run(
+        Path("."), iter([WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR + 1))]), out, handler=echo
+    )
+    assert code == 3
