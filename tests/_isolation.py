@@ -124,6 +124,31 @@ def stray_commits(since: str) -> list[str]:
     return out
 
 
+#: The gate whose command runs in the agent's OWN worktree, where the agent may keep editing
+#: while it runs (`ddflow gate run unit_tests`); `ci` and the hooks run in a scratch checkout.
+LIVE_TREE_GATE = "unit_tests"
+
+
+def tracked_status(lines: list[str]) -> list[str]:
+    """The `status --porcelain` lines the guard compares. Under the `unit_tests` gate (the
+    suite runs in the agent's live worktree) only the INDEX side of each line: what a fixture's
+    stray `git add` leaves (`A `, `M `, an intent-to-add ` A`). An unstaged edit (`" M"`, or the
+    worktree column turning `M ` into `MM`) is the agent working on a test while the gate runs
+    it (B-test-suite-guard-fires-on-concurrent-edit). KNOWN LIMIT, accepted: there the suite
+    writing a tracked file WITHOUT `git add` cannot be told from the agent's edit and is not
+    caught; everywhere else (a scratch checkout, a hook, a hand run) every line is compared."""
+    if os.environ.get("DDFLOW_RUNNING_GATE") != LIVE_TREE_GATE:
+        return sorted(lines)
+    index_side = []
+    for line in lines:
+        x, path = line[:1], line[3:]
+        if line[:2] == " A":
+            index_side.append(f" A {path}")  # intent-to-add: the index holds an entry
+        elif x not in (" ", "?", ""):
+            index_side.append(f"{x}  {path}")
+    return sorted(index_side)
+
+
 def snapshot(*, status: bool = True) -> dict[str, object]:
     """The real repository's local config, ``core.bare``, HEAD and tracked-file status (less
     ``.ddflow``, which ddflow itself keeps writing)."""
@@ -131,7 +156,7 @@ def snapshot(*, status: bool = True) -> dict[str, object]:
     snap["head"] = _head()
     if status:
         r = _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).ddflow")
-        snap["status"] = sorted(r.stdout.splitlines()) if r.returncode == 0 else None
+        snap["status"] = tracked_status(r.stdout.splitlines()) if r.returncode == 0 else None
     return snap
 
 

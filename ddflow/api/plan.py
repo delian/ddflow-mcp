@@ -32,6 +32,15 @@ from ._base import _load
 from ._globwarn import missing_globs
 
 
+def _created(glob: str, created: set[str]) -> bool:
+    """Is ``glob`` a path a plan item creates, or inside a directory one creates? A created
+    path is a directory only when it ends in '/' (`creates = ["newpkg/"]`): a name alone
+    cannot be told from a file, and nothing can exist under a file, so it covers itself only."""
+    return any(
+        glob == c or (c.endswith("/") and (glob == c[:-1] or glob.startswith(c))) for c in created
+    )
+
+
 def _items(data: Any) -> dict[str, Any] | None:
     """The plan as {id: item} from whatever the document holds, or None if it holds none."""
     if isinstance(data, list):
@@ -145,11 +154,19 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
         return O.refused("plan.check", "the queue cannot be read, so the plan cannot be checked")
     report, cfg = _report(repo, plan, queue)
     tracked = _tracked(repo)
-    # Warnings, not findings: a path the plan does not find may be a file it creates.
+    # Warnings, not findings: a path the plan does not find may be a file it creates, and a
+    # plan item says so with `creates = [...]` (B-plan-check-new-file-warnings-noise): a path
+    # ANY item creates is expected missing, wherever the others list it.
+    created = {str(c) for v in plan.values() for c in PA._list(v, "creates")}
     warnings = [
         {"id": iid, "detail": w}
         for iid in sorted(plan)
-        for w in missing_globs(repo, cfg, [str(g) for g in plan[iid].get("globs", [])], tracked)
+        for w in missing_globs(
+            repo,
+            cfg,
+            [str(g) for g in plan[iid].get("globs", []) if not _created(str(g), created)],
+            tracked,
+        )
     ]
     warnings += [
         {"id": iid, "detail": w}
