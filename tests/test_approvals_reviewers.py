@@ -62,7 +62,8 @@ def test_an_agent_vouches_for_a_tool_written_http_reviewer_with_the_operators_ap
     code, _o, err = run_cli(proj, "reviewers", "approve", "lan", agent="bot")
     assert code == 3 and "approval Q" in err and "--approval" in err
     ask_id = _ask_id(err)
-    assert asks_of(_state(proj))[ask_id]["verb"] == "reviewers.approve"
+    row = asks_of(_state(proj))[ask_id]
+    assert row["verb"] == "reviewers.approve" and row["requested_by"] == "bot"  # the named agent
     _answer(proj, ask_id)
     code, out, err = run_cli(proj, "reviewers", "approve", "lan", "--approval", ask_id, agent="bot")
     assert code == 0, (out, err)

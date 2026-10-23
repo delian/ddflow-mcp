@@ -167,7 +167,9 @@ def pending(repo: Path, st: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _agent_route(repo: Path, rev, name: str, dig: str, why: str, approval: str, note: str) -> dict:
+def _agent_route(
+    repo: Path, rev, name: str, dig: str, why: str, approval: str, note: str, agent: str
+) -> dict:
     """For an agent: the stamp of the operator's approval of exactly this reviewer entry, or a
     `ReviewerRefused` that names the route. An entry that runs a program (kind command) is T3:
     only a person at a terminal vouches for it (it executes code and prints any verdict)."""
@@ -177,7 +179,7 @@ def _agent_route(repo: Path, rev, name: str, dig: str, why: str, approval: str, 
             + f" Reviewer {name!r} runs a program (kind command), so it is T3: terminal only, "
             "never approved over chat."
         )
-    log = _log(Path(repo), "")
+    log = _log(Path(repo), agent)  # the agent that runs this, not the clone-derived id
     canon = Canon(verb="reviewers.approve", agent=log.agent_id, item=name, state=dig)
     decision = CN.operator_gate(
         log, Config.load(Path(repo)), canon, approval_id=approval, reason=note
@@ -207,7 +209,9 @@ def approve(
         known = ", ".join(sorted(revs)) or "none configured"
         raise ReviewerRefused(f"no reviewer named {name!r} ({known})")
     dig = digest(rev)
-    proxy = _agent_route(repo, rev, name, dig, why, approval, note) if why else None
+    proxy = (
+        _agent_route(repo, rev, name, dig, why, approval, note, requested_agent) if why else None
+    )
     try:
         granted = AP.grant(
             _log(Path(repo), ""),
