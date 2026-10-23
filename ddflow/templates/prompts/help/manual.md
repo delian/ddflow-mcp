@@ -8,7 +8,7 @@ a drifted AGENTS.md, setup gaps, an unfinished import, crashed worktrees) is not
 This repository's work is a queue managed by ddflow. Follow it — the rules below are
 enforced by the tools, not merely requested.
 
-**Call `ddflow_brief` FIRST, before anything else** (one of several agents or subagents on this repository: name yourself first, see below). It returns work left over from a
+**Call `ddflow_brief` FIRST, before anything else.** If you are one of several agents or subagents on this repository, pass `as_agent` (your role name) on that call and every later one, as set out below. It returns work left over from a
 crashed agent, what is ready to start now, why everything else is blocked, the
 architectural decisions that govern the files you are about to touch, and the past
 lessons ranked against this task. It replaces reading this project's rule and lesson
