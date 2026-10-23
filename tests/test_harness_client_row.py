@@ -43,8 +43,14 @@ def test_show_says_unknown_for_an_agent_with_an_unknown_row(repo):
     assert "unknown" in line(repo, "antigravity")
 
 
-def test_show_says_not_verified_for_an_agent_with_no_row(repo):
-    assert "no client row" in line(repo, "glm") or "not verified" in line(repo, "glm")
+def test_show_says_no_client_row_for_an_agent_without_one(repo):
+    assert "no client row (unknown: treated as hard)" in line(repo, "glm")
+
+
+def test_show_says_when_a_row_is_trusted(repo):
+    assert "trusted from 2.1.296" in line(repo, "claude")
+    assert "expires unless verified" in line(repo, "opencode")
+    assert "by name" in line(repo, "qwen")
 
 
 def test_by_harness_returns_the_main_row_of_an_agent():
