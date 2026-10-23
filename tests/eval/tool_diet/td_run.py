@@ -43,6 +43,7 @@ def ask(
         ],
         "tools": tools,
         "tool_choice": "auto",
+        "parallel_tool_calls": False,
         "max_tokens": 8000,
         **rev.extra_body,
     }
@@ -61,6 +62,8 @@ def ask(
     calls = msg.get("tool_calls") or []
     if not calls:
         return "", "", used
+    if len(calls) > 1:  # the request asks for exactly one call; several is not one
+        return "<several tool calls>", "{}", used
     fn = calls[0]["function"]
     return fn.get("name", ""), fn.get("arguments") or "{}", used
 

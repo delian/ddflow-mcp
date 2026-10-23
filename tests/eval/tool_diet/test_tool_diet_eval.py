@@ -198,3 +198,38 @@ def test_a_retry_that_never_came_back_adds_no_second_miss(monkeypatch):
     out = td_run.run_surface(None, "flat", argparse.Namespace(repeat=1, timeout=1, retry=True))
     assert len(out["misses"]) == 1 and out["misses"][0]["retry"] is False
     assert out["prompt_tokens_mean"] == 100
+
+
+def test_several_tool_calls_in_one_answer_are_not_a_correct_call(monkeypatch):
+    import io
+    import json as _json
+    import urllib.request
+
+    import td_run
+
+    body = {
+        "choices": [
+            {
+                "message": {
+                    "tool_calls": [
+                        {"function": {"name": "ddflow_claim", "arguments": '{"id": "T-2"}'}},
+                        {"function": {"name": "ddflow_merge", "arguments": '{"id": "T-2"}'}},
+                    ]
+                }
+            }
+        ],
+        "usage": {"prompt_tokens": 9},
+    }
+    sent = {}
+
+    def fake_open(req, timeout=0):
+        sent.update(_json.loads(req.data))
+        return io.BytesIO(_json.dumps(body).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_open)
+    rev = type(
+        "R", (), {"model": "m", "extra_body": {}, "base_url": "http://x", "api_key": lambda s: ""}
+    )()
+    name, raw, used = td_run.ask(rev, [], "Claim item T-2", 1)
+    assert sent["parallel_tool_calls"] is False
+    assert not G.grade(SCENARIOS[2], "flat", name, raw).valid and used == 9
