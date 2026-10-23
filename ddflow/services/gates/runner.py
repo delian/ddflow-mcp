@@ -98,13 +98,23 @@ def runs_whole_suite(gdef: GateDef) -> bool:
     )
 
 
+_SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
+
+
 def _runs_ddflow_ci(command: str) -> bool:
-    """Does the command invoke `ddflow ci ...` (as words, not inside a comment or a string)?"""
+    """Is the WHOLE command one `ddflow ci ...` invocation (optionally via `uv run` or a path)?
+    Such a command takes the suite lock itself; taking it here too would wait on ourselves. A
+    command that also does anything else (`pytest; ddflow ci run`) is not exempt: its other
+    parts run a suite that needs the lock held for it."""
     try:
-        words = shlex.split(command, comments=True)
+        words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    return any(a.rsplit("/", 1)[-1] == "ddflow" and b == "ci" for a, b in zip(words, words[1:]))
+    if any(w in _SHELL_OPERATORS for w in words) or not words:
+        return False
+    while words and (words[0] in ("uv", "run", "env") or "=" in words[0]):
+        words = words[1:]
+    return bool(words[:1]) and words[0].rsplit("/", 1)[-1] == "ddflow" and words[1:2] == ["ci"]
 
 
 def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
