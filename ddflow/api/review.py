@@ -1862,17 +1862,20 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     One gate is `_review_gate`, whose docstring has the rest.
     """
     args = dict(locals())  # first: every later local would leak into the kwargs
+    started_at = clock.now_iso()
     try:
         with RUN.terminating():
             return _review_checked(args)
     except RUN.RunTerminated as stop:
-        return _terminated(args, stop.signame)
+        return _terminated(args, stop.signame, started_at)
 
 
-def _terminated(args: dict[str, Any], signame: str) -> O.Outcome:
+def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcome:
     """A review ended by SIGTERM/SIGHUP (the usual `timeout`) before its reviewers answered:
-    said, and recorded `unavailable` for each gate asked -- never a pass, never silence
-    (Bed9d75dd1c). A delta keeps the earlier round it followed (`_keep_reviewed_round`)."""
+    said, and recorded `unavailable` for each gate asked that gained no outcome in this run
+    -- never a pass, never silence, never over a round this run already recorded. Marked a
+    delta so an earlier finished round stays the gate's record (`_keep_reviewed_round`)
+    (Bed9d75dd1c)."""
     repo, item = args["repo"], args["item"]
     gate_names = [g.strip() for g in args["gate"].split(",") if g.strip()]
     reason = (
@@ -1882,19 +1885,15 @@ def _terminated(args: dict[str, Any], signame: str) -> O.Outcome:
     if item and gate_names:
         log, cfg, st = _load(repo, args["agent"])
         gates = GD.load_gates(repo, cfg)
+        it = st.items.get(item)
         for g in gate_names:
+            rec = it.gates.get(g) if it else None
+            if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
+                continue  # this run already recorded it
             _record(
-                repo,
-                log,
-                cfg,
-                st,
-                item,
-                g,
-                "unavailable",
-                args["called_from"],
-                gates,
-                reason=reason,
-            )
+                repo, log, cfg, st, item, g, "unavailable", args["called_from"], gates,
+                reason=reason, evidence={"review_kind": "delta"},
+            )  # fmt: skip
     return O.nothing(
         "review",
         reason,
