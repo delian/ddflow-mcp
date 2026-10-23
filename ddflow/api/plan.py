@@ -33,9 +33,15 @@ from ._globwarn import missing_globs
 
 
 def _created(glob: str, created: set[str]) -> bool:
-    """Is ``glob`` a path a plan item creates, or inside a directory one creates?"""
+    """Is ``glob`` a path a plan item creates, or inside a directory one creates? A created
+    path is a directory when it ends in '/' or its last part has no extension."""
     g = glob.rstrip("/")
-    return any(g == c.rstrip("/") or g.startswith(c.rstrip("/") + "/") for c in created)
+    for c in created:
+        base = c.rstrip("/")
+        is_dir = c.endswith("/") or "." not in base.rsplit("/", 1)[-1]
+        if g == base or (is_dir and g.startswith(base + "/")):
+            return True
+    return False
 
 
 def _items(data: Any) -> dict[str, Any] | None:
