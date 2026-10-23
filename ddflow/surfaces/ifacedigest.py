@@ -14,7 +14,8 @@ out on purpose: it changes on every upgrade).
 3. the change is additive -- soft for every client (new tools appear after a restart for a
    client that ignores `list_changed`);
 4. an existing tool's schema changed incompatibly -- soft only with schema grace (the worker
-   accepts the previous arguments for one version);
+   accepts the previous arguments for one version; the caller says so, the default is that it
+   does not);
 5. HARD: a shim or protocol change, always and over every other rung; or an incompatible
    change to an existing tool or prompt for a client that does not honour `list_changed`,
    with no schema grace. A client of unknown capability is treated as one that ignores.
@@ -39,6 +40,10 @@ from typing import Any
 
 #: Bumped when the canonical form changes, so a digest of one form is never compared to another.
 FORM = 1
+#: The shim<->worker protocol majors (SU-worker-proto owns them once it lands): a change of
+#: either is a HARD upgrade whatever the rest of the interface did.
+SHIM_PROTO = 1
+WORKER_PROTO = 1
 #: The two tools a facade-mode server lists (MTD-search-call).
 FACADE_TOOLS = ("ddflow_search", "ddflow_call")
 HONOURS, IGNORES, UNKNOWN = "honours", "ignores", "unknown"
@@ -99,7 +104,13 @@ def digest(snap: dict[str, Any]) -> str:
     return hashlib.sha256(canonical(snap).encode("ascii")).hexdigest()
 
 
-def live_snapshot(server: Any, *, facade: bool = False) -> dict[str, Any]:
+def live_snapshot(
+    server: Any,
+    *,
+    facade: bool = False,
+    shim_proto: int = SHIM_PROTO,
+    worker_proto: int = WORKER_PROTO,
+) -> dict[str, Any]:
     """The snapshot of a running `Server` for its tier (or, with `facade`, its facade tools).
 
     The instructions template id is the sha256 of the UNRENDERED template, so the
@@ -114,14 +125,16 @@ def live_snapshot(server: Any, *, facade: bool = False) -> dict[str, Any]:
     prompts = server._m_prompts_list({"id": 0}, False)["result"]["prompts"]
     try:
         text = P.resolve("mcp_instructions", server.repo).text
-    except Exception:  # a broken override must not stop an upgrade being classified
-        text = "unreadable"
+    except Exception as exc:  # a broken override must not stop an upgrade being classified
+        text = f"unreadable: {type(exc).__name__}: {exc}"
     return snapshot(
         tools=tools,
         prompts=prompts,
         instructions_id=hashlib.sha256(text.encode()).hexdigest()[:16],
         capabilities=proto.capabilities(),
         protocols=[*proto.SUPPORTED_PROTOCOLS, *proto.MODERN_PROTOCOLS],
+        shim_proto=shim_proto,
+        worker_proto=worker_proto,
     )
 
 
@@ -140,18 +153,45 @@ def _widens(old: set[str], new: set[str]) -> bool:
     return all(t in new or (t == "integer" and "number" in new) for t in old)
 
 
+#: Validation keywords where a larger value is looser / a smaller value is looser.
+_LOWER_BOUNDS = ("minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties")
+_UPPER_BOUNDS = ("maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties")
+#: Keywords that restrict by value: any change (or addition) can reject a call.
+_EXACT = ("pattern", "format", "const", "multipleOf", "uniqueItems", "additionalProperties")
+
+
+def _jset(values: list[Any]) -> set[str]:
+    """JSON values as a set that tells 1 from "1" (canonical JSON text)."""
+    return {json.dumps(v, sort_keys=True) for v in values}
+
+
+def _constraint_problems(old: dict[str, Any], new: dict[str, Any], where: str) -> list[str]:
+    out: list[str] = []
+    if "enum" in new and ("enum" not in old or not _jset(old["enum"]) <= _jset(new["enum"])):
+        out.append(f"{where}: enum narrowed")
+    for key in _LOWER_BOUNDS:
+        if key in new and (key not in old or new[key] > old[key]):
+            out.append(f"{where}: {key} tightened")
+    for key in _UPPER_BOUNDS:
+        if key in new and (key not in old or new[key] < old[key]):
+            out.append(f"{where}: {key} tightened")
+    for key in _EXACT:
+        if key in new and new[key] != old.get(key, True if key == "additionalProperties" else None):
+            if not (key == "uniqueItems" and new[key] is False):
+                out.append(f"{where}: {key} changed")
+    return out
+
+
 def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") -> list[str]:
     """Why a call valid under `old` could fail under `new`; empty when `new` accepts all of
-    `old`'s calls. Looks at types, required arguments, removed arguments, enums, items."""
+    `old`'s calls. Looks at types, required and removed arguments, enums and value bounds,
+    `items`, and a constraint the old schema did not have."""
     where = path or "arguments"
     problems: list[str] = []
     ot, nt = _types(old), _types(new)
     if nt and (ot is None or not _widens(ot, nt)):
         problems.append(f"{where}: type changed from {sorted(ot or [])} to {sorted(nt)}")
-    if "enum" in new and (
-        "enum" not in old or not set(map(str, old["enum"])) <= set(map(str, new["enum"]))
-    ):
-        problems.append(f"{where}: enum narrowed")
+    problems += _constraint_problems(old, new, where)
     for name in sorted(set(new.get("required") or []) - set(old.get("required") or [])):
         problems.append(f"{where}: new required argument {name}")
     old_props, new_props = old.get("properties") or {}, new.get("properties") or {}
@@ -161,8 +201,9 @@ def schema_problems(old: dict[str, Any], new: dict[str, Any], path: str = "") ->
             problems.append(f"{sub}: argument removed")
         else:
             problems += schema_problems(old_props[name], new_props[name], sub)
-    if isinstance(old.get("items"), dict) and isinstance(new.get("items"), dict):
-        problems += schema_problems(old["items"], new["items"], f"{where}[]")
+    if isinstance(new.get("items"), dict) and new["items"]:
+        old_items = old.get("items") if isinstance(old.get("items"), dict) else {}
+        problems += schema_problems(old_items, new["items"], f"{where}[]")
     return problems
 
 
@@ -179,6 +220,8 @@ def output_problems(
     ot, nt = _types(old), _types(new)
     if ot and nt and not _widens(nt, ot):
         problems.append(f"{where}: type changed from {sorted(ot)} to {sorted(nt)}")
+    if isinstance(old.get("items"), dict) and isinstance(new.get("items"), dict):
+        problems += output_problems(old["items"], new["items"], f"{where}[]")
     new_props = new.get("properties") or {}
     for name, sub in sorted((old.get("properties") or {}).items()):
         here = f"{path}.{name}" if path else name
@@ -247,8 +290,8 @@ def _diff_tools(old: dict[str, Any], new: dict[str, Any], d: dict[str, list[str]
         if ot[name] == nt[name]:
             continue
         problems = schema_problems(ot[name]["inputSchema"], nt[name]["inputSchema"])
-        problems += [
-            f"output {p}"
+        d["incompatible"] += [
+            f"tool {name}: output {p}"
             for p in output_problems(ot[name].get("outputSchema"), nt[name].get("outputSchema"))
         ]
         if problems:
@@ -280,7 +323,7 @@ def classify(
     client: str = UNKNOWN,
     *,
     facade: bool = False,
-    schema_grace: bool = True,
+    schema_grace: bool = False,
 ) -> Verdict:
     """Soft or hard, by the five rungs, for a client that `honours`, `ignores` or is of
     `unknown` capability (treated as ignoring: the safe reading)."""

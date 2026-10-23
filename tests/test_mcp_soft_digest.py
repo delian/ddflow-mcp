@@ -418,6 +418,90 @@ def test_a_changed_output_schema_is_judged_from_the_consumers_side():
 
 def test_a_new_surface_is_announced_to_a_client_that_honours_list_changed():
     v = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "honours")
-    assert v.kind == "soft" and v.announce is True
+    assert (v.kind, v.rung, v.announce) == ("soft", 2, True)
     quiet = D.classify_surfaces({"flat": snap()}, {"flat": snap(), "core": snap()}, "ignores")
     assert quiet.announce is False
+
+
+def test_a_constraint_added_where_there_was_none_is_a_restriction():
+    arr = {"type": "object", "properties": {"a": {"type": "array"}}}
+    typed = {"type": "object", "properties": {"a": {"type": "array", "items": {"type": "string"}}}}
+    assert D.schema_problems(arr, typed)
+    s1 = {"type": "object", "properties": {"s": {"type": "string"}}}
+    s2 = {"type": "object", "properties": {"s": {"type": "string", "minLength": 5}}}
+    assert D.schema_problems(s1, s2)
+    assert D.schema_problems(s2, s1) == []
+
+
+def test_tightened_and_loosened_bounds():
+    def n(**kw):
+        return {"type": "object", "properties": {"n": {"type": "integer", **kw}}}
+
+    assert D.schema_problems(n(minimum=0), n(minimum=1))
+    assert D.schema_problems(n(minimum=1), n(minimum=0)) == []
+    assert D.schema_problems(n(maximum=9), n(maximum=5))
+    assert D.schema_problems(n(maximum=5), n(maximum=9)) == []
+    assert D.schema_problems(n(pattern="a"), n(pattern="b"))
+
+
+def test_enum_values_of_different_json_types_are_different():
+    one = {"type": "object", "properties": {"v": {"enum": [1]}}}
+    text = {"type": "object", "properties": {"v": {"enum": ["1"]}}}
+    both = {"type": "object", "properties": {"v": {"enum": [1, "1"]}}}
+    assert D.schema_problems(one, text)
+    assert D.schema_problems(both, one)
+    assert D.schema_problems(one, both) == []
+
+
+def test_array_items_of_an_output_are_checked():
+    def out(item):
+        t = tool()
+        t["outputSchema"] = {"type": "array", "items": {"type": item}}
+        return snap(tools=[t])
+
+    assert D.classify(out("string"), out("integer"), "ignores").kind == "hard"
+    assert D.classify(out("string"), out("string"), "ignores").rung == 1
+
+
+def test_an_output_break_is_not_rescued_by_schema_grace():
+    def out(field):
+        t = tool()
+        t["outputSchema"] = _obj({field: {"type": "string"}}, [field])
+        return snap(tools=[t])
+
+    v = D.classify(out("a"), out("b"), "ignores", schema_grace=True)
+    assert (v.kind, v.rung) == ("hard", 5)
+
+
+def test_a_live_snapshot_carries_the_declared_protocol_numbers(tmp_path):
+    from ddflow.surfaces.mcp import Server
+
+    s = D.live_snapshot(Server(_init_repo(tmp_path / "r")))
+    assert (s["shim_proto"], s["worker_proto"]) == (D.SHIM_PROTO, D.WORKER_PROTO)
+    bumped = D.live_snapshot(Server(_init_repo(tmp_path / "r2")), shim_proto=D.SHIM_PROTO + 1)
+    assert D.classify(s, bumped, "honours").kind == "hard"
+
+
+def test_schema_grace_is_off_unless_the_caller_says_the_worker_has_it():
+    new = snap(tools=[tool(schema=_obj(SCHEMA["properties"], ["id", "mode"]))])
+    assert D.classify(snap(), new, "ignores").kind == "hard"
+    assert D.classify(snap(), new, "ignores", schema_grace=True).kind == "soft"
+
+
+def test_a_template_that_cannot_be_read_does_not_hash_like_every_other_unreadable_one(
+    tmp_path, monkeypatch
+):
+    from ddflow.services import prompts
+    from ddflow.surfaces.mcp import Server
+
+    srv = Server(_init_repo(tmp_path / "r"))
+
+    def boom(a, b, c=None):
+        raise RuntimeError(a)
+
+    monkeypatch.setattr(prompts, "resolve", boom)
+    one = D.live_snapshot(srv)["instructions_id"]
+    monkeypatch.setattr(
+        prompts, "resolve", lambda a, b, c=None: (_ for _ in ()).throw(ValueError("x"))
+    )
+    assert D.live_snapshot(srv)["instructions_id"] != one
