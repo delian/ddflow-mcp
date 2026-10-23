@@ -7,15 +7,24 @@ is the reason the move is refused.
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
+from ..core.flow import effective_line
 from ..core.graph import find_cycles
 from ..core.records import WORK_KINDS, Item, State
 from ..core.schedule import inherited_deps
 
 
-def plan(cfg, st: State, it: Item, parent: str | None, kind: str | None) -> dict[str, Any] | str:
+def plan(
+    cfg,
+    st: State,
+    it: Item,
+    parent: str | None,
+    kind: str | None,
+    line_frozen: Callable[[State, Item], str],
+) -> dict[str, Any] | str:
     """``{"parent": ..}`` / ``{"kind": ..}`` for the parts that change ``it``, else why not.
 
     Both are for live work that is not finished: a done item is history, and a phase is a
@@ -29,21 +38,21 @@ def plan(cfg, st: State, it: Item, parent: str | None, kind: str | None) -> dict
     if not it.is_work:
         what = "moved" if parent is not None else "given a work kind"
         return f"{it.id} is a phase: it is top level, and cannot be {what}"
-    if kind is not None and kind != it.kind:
-        if kind not in WORK_KINDS:
-            return f"unknown kind {kind!r}: use {', '.join(WORK_KINDS)}"
-        out["kind"] = kind
-    elif kind is not None and kind not in WORK_KINDS:
+    if kind is not None and kind not in WORK_KINDS:
         return f"unknown kind {kind!r}: use {', '.join(WORK_KINDS)}"
+    if kind is not None and kind != it.kind:
+        out["kind"] = kind
     if parent is not None and parent != it.parent:
-        bad = _parent_problem(cfg, st, it, parent)
+        bad = _parent_problem(cfg, st, it, parent, line_frozen)
         if bad:
             return bad
         out["parent"] = parent
     return out
 
 
-def _parent_problem(cfg, st: State, it: Item, parent: str) -> str:
+def _parent_problem(
+    cfg, st: State, it: Item, parent: str, line_frozen: Callable[[State, Item], str]
+) -> str:
     if not parent:
         return ""
     to = st.items.get(parent)
@@ -58,7 +67,13 @@ def _parent_problem(cfg, st: State, it: Item, parent: str) -> str:
             f"{parent} is claimed ({to.lease.holder}): a task moved under it makes it an "
             f"umbrella, which holds no lease. Release it first."
         )
-    cycle = _new_cycle(cfg, st, it, parent)
+    trial = _moved(st, it, parent)
+    if effective_line(trial, trial.items[it.id]) != effective_line(st, it):
+        # An item inherits its phase's release line: moving it re-aims it like `--line` does.
+        frozen = line_frozen(st, it)
+        if frozen:
+            return f"{parent} is on another release line than {it.parent or 'its phase'}. {frozen}"
+    cycle = _new_cycle(cfg, st, trial)
     if cycle:
         return (
             f"moving {it.id} under {parent} would close a dependency cycle ("
@@ -68,7 +83,15 @@ def _parent_problem(cfg, st: State, it: Item, parent: str) -> str:
     return ""
 
 
-def _new_cycle(cfg, st: State, it: Item, parent: str) -> list[str]:
+def _moved(st: State, it: Item, parent: str) -> State:
+    """A copy of ``st`` with ``it`` under ``parent``."""
+    trial = copy.copy(st)
+    trial.__dict__.pop("_children_cache", None)  # the parent -> children index is per fold
+    trial.items = {**st.items, it.id: replace(it, parent=parent)}
+    return trial
+
+
+def _new_cycle(cfg, st: State, trial: State) -> list[str]:
     """A dependency cycle, through inherited needs, that exists with ``it`` under ``parent``
     and did not before -- or []. (The direct-needs graph `find_cycles` defaults to misses
     the one a phase's own needs make.)"""
@@ -78,8 +101,5 @@ def _new_cycle(cfg, st: State, it: Item, parent: str) -> list[str]:
         edges = lambda i: [d for _owner, d in inherited_deps(state, i, cfg)]  # noqa: E731
         return {tuple(c) for c in find_cycles(live, edges)}
 
-    trial = copy.copy(st)
-    trial.__dict__.pop("_children_cache", None)
-    trial.items = {**st.items, it.id: replace(it, parent=parent)}
     found = sorted(cycles(trial) - cycles(st))
     return list(found[0]) if found else []

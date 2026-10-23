@@ -177,3 +177,12 @@ def test_batch_does_not_take_parent_or_kind(repo):
         code, _, err = run_cli(repo, "batch", "--edits", json.dumps([entry]))
         assert code != 0, err
     assert state(repo).items["T1"].parent == "P1" and state(repo).items["T1"].kind == "task"
+
+
+def test_a_move_to_a_phase_on_another_line_is_refused_for_a_forked_task(repo):
+    log = _seed(repo)
+    log.append("phase.updated", "P2", {"line": "v2"})
+    log.append("worktree.created", "T1", {"path": "/x", "branch": "b", "base": "main"})
+    code, _, err = run_cli(repo, "update", "T1", "--phase", "P2")
+    assert code != 0 and "release line" in err
+    assert state(repo).items["T1"].parent == "P1"
