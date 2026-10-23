@@ -287,8 +287,11 @@ def _bug_globs_line(note: dict, item: str) -> str:
 
 def claim_text(out, a, ctx) -> str:
     # a claim of a bug's fix task starts from how the bug was seen (DX-bug-repro-bundle)
-    d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), a["id"]).data
-    msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    # `claim <bug id>` claims the bug's fix task: name the task, not the bug.
+    item = out.data.get("item") or a["id"]
+    d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), item).data
+    via = f" (the fix task of bug {d['bug']})" if d.get("bug") else ""
+    msg = f"claimed {item}{via} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
     for b in d.get("broke") or []:
         msg += (
             f"\n  BROKE {b['item']}'s lease ({b['holder']}): no progress for "
@@ -339,7 +342,7 @@ def claim_text(out, a, ctx) -> str:
     if not d["globs"]:
         msg += (
             f"\n  The commit hook refuses files no glob covers; to cover yours: "
-            f"ddflow --agent {ctx.log.agent_id} update {a['id']} --globs <comma,separated>"
+            f"ddflow --agent {ctx.log.agent_id} update {item} --globs <comma,separated>"
         )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
