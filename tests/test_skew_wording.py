@@ -45,7 +45,7 @@ def test_the_driver_and_the_instructions_recognise_the_guard_by_that_opener():
         text = _flat(path)
         assert f'begins "{OPENER} X"' in text, path
         assert "merge main" in text, path
-    text = _flat("ddflow/templates/prompts/mcp_instructions.md")
+    text = _flat("ddflow/templates/prompts/help/manual.md")  # the charter points here (LS-charter)
     assert f'begins "{OPENER} X"' in text and "merge main" in text
 
 
