@@ -474,3 +474,23 @@ def test_a_drain_that_cannot_start_its_thread_is_an_error_and_the_worker_still_s
     frames = [json.loads(x) for x in out.getvalue().splitlines()]
     assert any(f["t"] == "error" and f["code"] == "internal" for f in frames)
     assert frames[-1]["t"] == "bye" and code == 0
+
+
+def test_a_reply_that_is_not_json_is_an_error_frame_not_silence():
+    def odd(conn, msg, notify):
+        return {"jsonrpc": "2.0", "id": 1, "result": {"x": object()}}
+
+    out = run_worker([WP.hello(shim_proto=WP.PROTO_MAJOR), WP.request(1, {"id": 1}, CONN)], odd)
+    assert any(f["t"] == "error" and f["code"] == "unencodable" and f["id"] == 1 for f in out)
+
+
+def test_main_reports_a_crashed_run_as_exit_1_even_after_a_drain_flag(monkeypatch):
+    from ddflow.surfaces import worker
+
+    def dying(repo, lines, out, **kw):
+        kw["done"].set()
+        raise RuntimeError("stdin broke")
+
+    monkeypatch.setattr(worker, "run", dying)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert worker.main(["--repo", "."]) == 1
