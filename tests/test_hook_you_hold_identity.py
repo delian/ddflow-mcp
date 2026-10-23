@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -72,3 +73,28 @@ def test_a_holder_outside_any_leased_tree_is_covered_by_all_its_leases(repo, cfg
     monkeypatch.chdir(repo)
     assert E.check_commit(repo, cfg, agent="owner") == (0, "")
     assert tree.is_dir()
+
+
+def test_a_lapsed_trees_commit_is_not_covered_by_the_holders_other_item(repo, cfg, monkeypatch):
+    tree = _setup(repo, cfg, lease=False)  # T1's tree exists
+    cfg.enforce.commit_without_lease = "block"
+    cfg.enforce.lapsed_lease = "refuse"
+    EventLog(repo, "owner").append(  # T1's lease, taken long ago and never renewed
+        "lease.acquired",
+        "T1",
+        {
+            "holder": "owner",
+            "at": time.time() - 10 * cfg.lease.ttl_s,
+            "ttl_s": cfg.lease.ttl_s,
+            "globs": ["src/*"],
+            "worktree": W.store_path(repo, tree),
+            "branch": "",
+        },
+    )
+    _second_item(repo, cfg, "owner", "docs/x.md", tree=True)  # live
+    subprocess.run(["git", "-C", str(tree), "reset", "-q", "src/new.py"], check=True)
+    _stage(tree, "docs/x.md")
+    monkeypatch.chdir(tree)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 1, msg
+    assert "You hold: src/*" not in msg and "docs/x.md" in msg, msg
