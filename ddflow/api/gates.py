@@ -1094,11 +1094,12 @@ def _docs_gate_export(
 
 
 def _evidence_fields(
-    evidence: Evidence, item: str, gate: str
+    evidence: Evidence, item: str, gate: str, approval: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], O.Outcome | None]:
     """The event's evidence from what the caller supplied, or the failure (an unreadable
-    ``--output-file``)."""
-    ev: dict[str, Any] = {}
+    ``--output-file``). ``approval`` is the stamp of an operator approval spent on this
+    override (who approved, by which channel and level, which digest)."""
+    ev: dict[str, Any] = {"approval": approval} if approval else {}
     if evidence.note:
         ev["note"] = evidence.note
     if evidence.command:
@@ -1128,8 +1129,9 @@ def _evidence_fields(
 
 def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
     """The question `_agent_skip_refusal` asks the approvals engine when an agent sets aside a
-    failed review: ``how`` is True for a skip, else the outcome word being hand-recorded."""
-    word = "skipped" if how is True else str(how)
+    failed review: ``how`` is (skip?, the outcome word being hand-recorded)."""
+    skip, outcome = how
+    word = "skipped" if skip else outcome
 
     def ask(why: str):
         canon = GS.canon_for(it, gate, item, why, log.agent_id, word)
@@ -1220,7 +1222,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
-        gated=_override_gate(log, cfg, it, gate, item, skip or outcome, approval, reason),
+        gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
     if refused is not None:
         return refused
@@ -1243,10 +1245,9 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
 
     result = "skipped" if skip else outcome
-    ev, bad = _evidence_fields(evidence, item, gate)
+    ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)
     if bad is not None:
         return bad
-    ev.update({"approval": approval_stamp} if approval_stamp else {})  # who approved, how
 
     warning = _docs_gate_export(
         repo,
