@@ -171,4 +171,5 @@ def test_a_non_ci_command_gate_records_the_slot_wait_it_was_admitted_after(tmp_p
 
     monkeypatch.setattr(cmdrunner.CommandRunner, "run", slow)
     outcome, ev = R.run_command_gate(GateDef(id="unit_tests", command="echo ok"), tmp_path)
-    assert outcome == "passed" and ev["waited_s"] == 3.2
+    # the admission wait, plus the (here immediate) host suite lock a unit_tests gate takes
+    assert outcome == "passed" and 3.2 <= ev["waited_s"] < 3.7
