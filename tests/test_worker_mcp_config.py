@@ -117,3 +117,14 @@ def test_the_recipe_names_the_tier_the_file_carries(repo, monkeypatch):
     run_cli(repo, "config", "--set", "mcp.worker_tools", "standard")
     _code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
     assert "`standard` tier" in out and "starts ddflow on the `core` tier" not in out
+
+
+def test_the_unreleased_knob_fragment_loads_with_a_json_default():
+    """`new` is JSON-encoded in a manifest fragment; a bare `core` made every `ddflow upgrade` fail."""
+    from ddflow.services import upgrade_manifest as UM
+
+    manifest = UM.load()  # raises ManifestError on a fragment it cannot read
+    change = next(
+        c for _v, _d, changes in manifest.releases for c in changes if c.key == "mcp.worker_tools"
+    )
+    assert change.new == "core"
