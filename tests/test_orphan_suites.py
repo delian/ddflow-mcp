@@ -166,3 +166,17 @@ def test_an_unreadable_ancestor_suppresses_the_finding(tmp_path: Path):
     (root / "40" / "cmdline").mkdir()  # reading it raises: present but unreadable
     _proc(root, 51, 40, SUITE, 100)
     assert _find(root) == []
+
+
+def test_an_interpreter_option_before_pre_commit_or_dash_m_is_skipped(tmp_path: Path):
+    root = _tree(tmp_path)
+    args = "run\x1f--hook-stage\x1fpre-push\x1f--all-files"
+    _proc(root, 51, 1, "python3\x1f-u\x1f/usr/local/bin/pre-commit\x1f" + args, 100)
+    _proc(root, 61, 1, "python3\x1f-u\x1f-m\x1fpre_commit\x1f" + args, 100)
+    assert sorted(o.pid for o in _find(root)) == [51, 61]
+
+
+def test_an_ancestor_that_cannot_be_looked_up_suppresses_the_finding(tmp_path: Path):
+    root = _tree(tmp_path)
+    _proc(root, 51, 77, SUITE, 100)  # its parent 77 is not visible at all (hidepid)
+    assert _find(root) == []
