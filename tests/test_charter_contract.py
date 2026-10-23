@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from test_mcp_instructions import _instructions  # one helper for the served text
 
 #: The cap from the research (docs/ddflow/research/lean-start.md section 5, lever 3).
 CHARTER_MAX_CHARS = 1500
@@ -28,12 +29,6 @@ CONTRACT = (
     "ddflow_help",
     "ddflow_rule_show",  # D-rules-charter: the full text of ANY rule on demand
 )
-
-
-def _instructions(repo: Path) -> str:
-    from ddflow.surfaces.mcp import _instructions as fn
-
-    return fn(repo)
 
 
 #: Notices the charter adds only while their state holds (crashed worktrees, a drifted AGENTS.md,
