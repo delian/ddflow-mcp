@@ -27,6 +27,19 @@ entry into each agent's own config: `.mcp.json` (Claude Code), `.gemini/settings
 Ask it anything about itself with `ddflow_help`, and ask what the rules are here with
 `ddflow_workflow`.
 
+## Lane workers: start them lean
+
+Every ddflow schema a worker loads is first-turn context (84.2K against 54.7K on the `core` tier,
+measured). For Claude Code, `ddflow adopt` also writes `.ddflow/local/worker-mcp.json` (git-ignored: it
+records this machine's launcher), the same server with `DDFLOW_MCP_TOOLS` set from `[mcp].worker_tools`
+(`core` by default). Start a worker with
+
+    claude --mcp-config .ddflow/local/worker-mcp.json --strict-mcp-config
+
+`--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~12K).
+`ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
+A tier hides schemas, never tools: every tool stays callable by name.
+
 ## What to put in AGENTS.md / CLAUDE.md
 
 `ddflow adopt` writes this for you, as a managed block between
