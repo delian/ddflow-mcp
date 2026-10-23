@@ -207,9 +207,11 @@ def test_a_timeout_on_a_continuation_line_and_a_negative_one_are_replaced():
         assert _with_run_timeout(Config(), gate, 60, "T1", "ci").command == after, before
 
 
-def test_an_unclosed_quote_keeps_the_rest_as_written():
-    gate = GateDef(
-        id="ci", title="ci", command='ddflow ci run --reason "msg --timeout 7', timeout_s=1
-    )
-    out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
-    assert out.command == 'ddflow ci run --timeout 60 --reason "msg --timeout 7'
+def test_an_unclosed_quote_leaves_the_command_unchanged():
+    for command in (
+        'ddflow ci run --reason "msg --timeout 7',
+        "ddflow ci run --reason 'a --timeout 7",
+    ):
+        gate = GateDef(id="ci", title="ci", command=command, timeout_s=1)
+        out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+        assert out.command == command and out.timeout_s == 60
