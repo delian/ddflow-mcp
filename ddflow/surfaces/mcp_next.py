@@ -120,6 +120,7 @@ _EMITTERS = {
     "ddflow_gate_record": _from_gate_result,
     "ddflow_gate_skip": _from_gate_result,
     "ddflow_gate_run": _from_gate_result,
+    "ddflow_review": _from_gate_result,
     "ddflow_gate_status": _from_gate_status,
     "ddflow_merge": _from_merge,
     "ddflow_complete": _from_complete,
