@@ -140,3 +140,8 @@ def test_the_scan_is_not_vacuous():
     keys = [k for k, *_ in Config.load().explain()]
     assert len(keys) > 20, f"only {len(keys)} knobs enumerated; did the scan break?"
     assert _sources().count("cfg.") > 20, "the source scan returned almost nothing"
+
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True

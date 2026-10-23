@@ -212,3 +212,8 @@ def test_a_committed_snapshot_is_what_the_releases_wheel_prints(version: str) ->
         cwd="/",
     ).stdout
     assert json.loads(printed) == load(version)
+
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B7d4ab0b268): its input is the whole
+#: code base, so no import closure can know a change breaks it.
+ALWAYS = True
