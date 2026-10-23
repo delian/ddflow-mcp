@@ -152,13 +152,12 @@ def test_mcp_note_does_not_say_raise_limit_at_the_maximum_and_reads_the_constant
 
 def test_the_note_and_the_tool_follow_the_constants(monkeypatch):
     from ddflow import api
-    from ddflow.services import search as S
-    from ddflow.services import viewers as V
+    from ddflow.core import limits as L
     from ddflow.surfaces.mcp_bound import bound_list
     from ddflow.surfaces.tools.operations import TOOLS
 
-    monkeypatch.setattr(V, "MAX_LIMIT", 5000)
-    monkeypatch.setattr(S, "MAX_LIMIT", 77)
+    monkeypatch.setattr(L, "LIST_MAX_LIMIT", 5000)
+    monkeypatch.setattr(L, "SEARCH_MAX_LIMIT", 77)
     body = {"truncated": True, "rows": [1], "shown": 1, "total": 999, "limit": 20}
     assert "5000, a search 77" in bound_list(body, {})[1]
     seen = {}

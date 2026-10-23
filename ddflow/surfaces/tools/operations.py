@@ -6,15 +6,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...services import search as S
-from ...services import viewers as V
+from ...core import limits as L
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_list": {
         "description": (
             "Read-only lists, newest first, 25 rows unless `limit` "
-            f"(0 = the most: {V.MAX_LIMIT}, search {S.MAX_LIMIT}); a cut says so. "
+            f"(0 = the most: {L.LIST_MAX_LIMIT}, search {L.SEARCH_MAX_LIMIT}); a cut says so. "
             "`kind`: task|phase|bug|research|lesson|session|search. Bugs and lessons: the live ones unless `all`/`state`. "
             "History: ddflow_history."
         ),
@@ -30,7 +29,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "item": ("string", "kind=bug: only bugs against this item.", False),
             "limit": (
                 "integer",
-                f"Rows (default 25; 0 = the most: {V.MAX_LIMIT}, search {S.MAX_LIMIT}).",
+                f"Rows (default 25; 0 = the most: {L.LIST_MAX_LIMIT}, search {L.SEARCH_MAX_LIMIT}).",
                 False,
             ),
             "offset": ("integer", "Skip this many rows (paging; a cut list says `next`).", False),
@@ -50,7 +49,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             owner=a.get("owner", "") or "",
             since=a.get("since", "") or "",
             item=a.get("item", "") or "",
-            limit=(S.MAX_LIMIT if a.get("kind") == "search" else V.MAX_LIMIT)
+            limit=(L.SEARCH_MAX_LIMIT if a.get("kind") == "search" else L.LIST_MAX_LIMIT)
             if a.get("limit") == 0
             else int(a.get("limit") or 25),
             offset=int(a.get("offset") or 0),
