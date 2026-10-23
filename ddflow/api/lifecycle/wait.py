@@ -10,12 +10,14 @@ from typing import Any
 
 from ...core import globspec as GS
 from ...core import outcome as O
+from ...core.admission import conflicts, shared_globs
 from ...core.clock import WAIT_MAX_S
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from ...core.schedule import Blocked, plan
 from ...infra.log import EventLog
+from ...services import leasekeep as LK
 from ...services import leases as L
 from ...services import waits as WT
 from .._base import _load
@@ -156,6 +158,51 @@ def _judge_wait(
     return {**out, "status": "blocked", "why": f"{item}: deps — {b.detail}", "waiting_on": moving}
 
 
+def _judge(st, cfg, me: str, item: str, phase: str, kind: str, want, repo, lease: str):
+    """The verdict for what the caller waits on: a lease, or an item (or anything)."""
+    if not lease:
+        return _judge_wait(st, cfg, me, item, phase, kind, want, repo)
+    if lease == me:
+        return {
+            "status": "hopeless",
+            "why": f"{lease} is you: waiting on your own leases never ends. Release them instead.",
+            "waiting_on": [],
+            "ready": [],
+            "blocked": [],
+        }
+    live = st.active_leases(time.time(), cfg.lease.grace_s)
+    return _judge_lease(st, cfg, lease, {i: lz for i, lz in live.items() if lz.holder != me})
+
+
+def _judge_lease(st, cfg, target: str, others: dict[str, Any]) -> dict[str, Any]:
+    """`_judge_wait` for a LEASE: ``target`` is an agent id (ready once it holds nothing) or
+    a path/glob (ready once no other agent's live lease covers it, as `claim` judges cover:
+    a shared glob overlaps nothing). Ready names the target, not an item: nothing here is
+    claimed, the caller goes on to what it was waiting to do."""
+    out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
+    unfinished = {i: lz for i, lz in others.items() if not st.items[i].terminal}
+    by_holder = {i: lz for i, lz in unfinished.items() if lz.holder == target}
+    shared = shared_globs(cfg)
+    held = by_holder or {
+        i: lz for i, lz in unfinished.items() if conflicts([target], lz.globs, shared)
+    }
+    if not held:
+        return {**out, "status": "ready", "ready": [target], "why": f"no live lease holds {target}"}
+    return {
+        **out,
+        "status": "blocked",
+        "waiting_on": sorted(held),
+        "why": f"{target} is held: " + ", ".join(f"{i} ({lz.holder})" for i, lz in held.items()),
+    }
+
+
+def _ready_advice(v: dict[str, Any], lease: str) -> str:
+    """What to do on waking: claim the item, or (waiting on a lease) go on."""
+    if lease:
+        return f"{lease} is free of other agents' leases: claim what you need now."
+    return f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same release woke too."
+
+
 def _judge_any(
     st, cfg, me: str, phase: str, kind: str, now: float, live, repo: Path | None = None
 ) -> dict[str, Any]:
@@ -273,10 +320,12 @@ def _freed(st, cfg, was: list[str], me: str) -> list[str]:
     return out
 
 
-def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
+def _wait_globs(globs, item: str, lease: str = "") -> tuple[list[str] | None, str]:
     """(the globs `wait` judges the item's claim on, or None for its stored ones; why
     they cannot be used, or "")."""
     want = GS.parse(globs) or None
+    if lease and (item or want):
+        return None, "lease is what to wait on instead of an item or globs: give one"
     if want and not item:
         # The any-wait judges every item on its own globs; accepting these and dropping
         # them would answer READY for a claim they then refuse.
@@ -284,7 +333,7 @@ def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
     return want, GS.problem(want or [])
 
 
-def wait(
+def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     repo: Path,
     *,
     item: str = "",
@@ -296,8 +345,13 @@ def wait(
     agent: str = "",
     on_progress=None,
     globs: str | list[str] | None = None,
+    lease: str = "",
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
+
+    ``lease`` (instead of ``item``) waits for a LEASE: an agent id until it holds nothing, or
+    a path/glob until no other agent's live lease covers it. A bare wait returns the first
+    ready item at once, whatever it is -- it cannot wait on a lease (Bff1731a132).
 
     ``globs`` (with ``item``) are the globs the caller will claim with: READY then means
     that claim is not refused for them. Without them, the item's stored globs are used.
@@ -329,7 +383,7 @@ def wait(
     }
     if timeout < 0 or poll <= 0:
         return O.failed("wait", "timeout and max-s must be >= 0 and poll > 0 seconds", **empty)
-    want, bad = _wait_globs(globs, item)
+    want, bad = _wait_globs(globs, item, lease)
     if bad:
         return O.failed("wait", bad, **empty)
     log, cfg, st = _load(repo, agent)
@@ -352,10 +406,7 @@ def wait(
             "waited_s": round(waited),
         }
         if v["status"] == "ready":
-            data["advice"] = (
-                f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same "
-                f"release woke too."
-            )
+            data["advice"] = _ready_advice(v, lease)
             return O.ok("wait", **data)
         if v["status"] == "hopeless":
             return O.nothing("wait", f"Not waiting: {v['why']}", **data)
@@ -369,7 +420,7 @@ def wait(
             **data,
         )
 
-    v = _judge_wait(st, cfg, me, item, phase, kind, want, repo)
+    v = _judge(st, cfg, me, item, phase, kind, want, repo, lease)
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
@@ -399,12 +450,16 @@ def wait(
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
     seen = None  # an EventLog.mark() once taken
     checked = started
+    # The waiter's OWN leases stay alive while it waits (Bf81c097a89): hours of waiting once
+    # lapsed the very claim the wait was for.
+    keep_alive = _keep_alive(log, cfg, st)
     try:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
                 return result(v, time.monotonic() - started, [])
             time.sleep(min(poll, left))
+            keep_alive()
             # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
             ext = log.mark(clock=False)
             if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
@@ -412,7 +467,7 @@ def wait(
             seen, checked = ext, time.monotonic()
             log, cfg, st = _load(repo, agent)
             was = v
-            v = _judge_wait(st, cfg, me, item, phase, kind, want, repo)
+            v = _judge(st, cfg, me, item, phase, kind, want, repo, lease)
             if v["status"] != "blocked":
                 keep = v["status"] == "ready" and bool(item)
                 freed = _freed(st, cfg, was["waiting_on"], me)
@@ -424,6 +479,24 @@ def wait(
                 WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
     finally:
         _end_wait(WT, w, keep, cfg)
+
+
+def _keep_alive(log, cfg, st):
+    """A tick renewing every live lease the waiter holds once per `[lease].heartbeat_s`; a
+    no-op when it holds none or `[lease].renew_long_commands` is off. The interval is
+    enforced here: `for_holder` hands the pacing to its caller, and renewing on every poll
+    folds the whole log every couple of seconds."""
+    tick, every = LK.for_holder(log, cfg, st)
+    if tick is None:
+        return lambda: None
+    last = [time.monotonic()]
+
+    def paced() -> None:
+        if time.monotonic() - last[0] >= every:
+            last[0] = time.monotonic()
+            tick()
+
+    return paced
 
 
 def _end_wait(WT, w, keep: bool, cfg) -> None:

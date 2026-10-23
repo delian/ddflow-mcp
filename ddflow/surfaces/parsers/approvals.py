@@ -21,6 +21,8 @@ def register(s: argparse._SubParsersAction) -> None:
             ("approvals", "list"): H.cmd_approvals_list,
             ("approvals", "show"): H.cmd_approvals_show,
             ("approvals", "request"): H.cmd_approvals_request,
+            ("approvals", "ask"): H.cmd_approvals_ask,
+            ("approvals", "attest"): H.cmd_approvals_attest,
             ("approvals", "approve"): H.cmd_approvals_approve,
             ("approvals", "deny"): H.cmd_approvals_deny,
             ("approvals", "revoke"): H.cmd_approvals_revoke,
