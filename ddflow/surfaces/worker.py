@@ -29,6 +29,9 @@ from . import worker_protocol as WP
 from .mcp import Server
 from .mcp_upgrade import running_version
 
+#: What `json.dumps` raises for a frame that is not JSON (a set, a cycle, nesting too deep).
+_UNENCODABLE = (TypeError, ValueError, RecursionError)
+
 Handler = Callable[
     [dict[str, Any], dict[str, Any], Callable[[dict[str, Any]], None]], "dict[str, Any] | None"
 ]
@@ -92,11 +95,7 @@ class _Run:
             try:
                 try:
                     line = WP.encode(frame)
-                except (
-                    TypeError,
-                    ValueError,
-                    RecursionError,
-                ) as exc:  # not JSON: say so rather than go silent
+                except _UNENCODABLE as exc:  # not JSON: say so rather than go silent
                     line = WP.encode(
                         WP.error(
                             "unencodable",
