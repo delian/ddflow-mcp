@@ -32,14 +32,23 @@ def test_the_flat_surface_is_every_tool_and_the_family_surface_is_24():
     assert S.size(fam) < 0.6 * S.size(S.flat_tools())
 
 
+def _filled(tool):
+    """Dummy values for what the member requires, so only the routing is under test."""
+    from ddflow.surfaces.tools import family_schema as FS
+
+    return {("action" if n == "op" else n): "x" for n in (FS._requires(tool))}
+
+
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_the_right_name_and_action_reach_the_scenarios_member_on_both_surfaces(scenario):
+    args = _filled(scenario.tool)
+    assert S.resolve("flat", scenario.tool, args) == (scenario.tool, args, "")
     family, action = families.placement(scenario.tool)
-    member, _args, error = S.resolve("flat", scenario.tool, {})
+    call = {**args, "action": action} if action else args
+    if "action" in args and action:  # the member's own action argument is `op` in its family
+        call = {**{k: v for k, v in args.items() if k != "action"}, "action": action, "op": "x"}
+    member, _args, error = S.resolve("families", family, call)
     assert (member, error) == (scenario.tool, "")
-    member, _args, error = S.resolve("families", family, {"action": action} if action else {})
-    # a bare action reaches the member, or is refused by THAT action for lack of its arguments
-    assert member == scenario.tool or error.startswith(f"{family} action={action}: missing")
 
 
 def test_a_member_name_is_not_on_the_family_surface():
@@ -52,12 +61,21 @@ def test_a_value_is_carried_as_a_whole_token_not_a_prefix():
     sc = SCENARIOS[2]  # claim T-2
     assert G.grade(sc, "flat", "ddflow_claim", {"id": "T-2"}).args_ok
     assert not G.grade(sc, "flat", "ddflow_claim", {"id": "T-20"}).args_ok
-    assert G.grade(sc, "flat", "ddflow_claim", {"ids": ["T-2"]}).args_ok
+    assert G.grade(sc, "flat", "ddflow_claim", {"id": ["T-2"]}).args_ok
+    assert not G.grade(sc, "flat", "ddflow_claim", {"ids": ["T-2"]}).valid  # not an argument it has
+    assert not G.grade(sc, "flat", "ddflow_claim", {"id": "t-2x"}).args_ok
+    assert G.grade(
+        SCENARIOS[0],
+        "flat",
+        "ddflow_gate_record",
+        {"id": "T-1", "gate": "critic", "outcome": "passed", "reason": "All 40 tests green"},
+    ).args_ok
+    assert not G.grade(sc, "flat", "ddflow_claim", {"id": "t-2"}).args_ok  # ids are exact
 
 
 def test_a_complete_call_is_correct_and_each_kind_of_miss_is_told_apart():
     sc = SCENARIOS[0]  # gate record on T-1, critic, passed
-    ok = {"id": "T-1", "gate": "critic", "outcome": "passed"}
+    ok = {"id": "T-1", "gate": "critic", "outcome": "passed", "reason": "all 40 tests green"}
     assert G.grade(sc, "flat", "ddflow_gate_record", ok) == (True, True, True, True)
     fam = {"action": "record", **ok}
     assert G.grade(sc, "families", "ddflow_gate", fam) == (True, True, True, True)
@@ -79,10 +97,10 @@ def test_a_complete_call_is_correct_and_each_kind_of_miss_is_told_apart():
 
 def test_tally_counts_each_kind():
     sc = SCENARIOS[0]
-    ok = {"id": "T-1", "gate": "critic", "outcome": "passed"}
+    ok = {"id": "T-1", "gate": "critic", "outcome": "passed", "reason": "all 40 tests green"}
     rows = [
         G.grade(sc, "flat", "ddflow_gate_record", ok),
-        G.grade(sc, "flat", "ddflow_gate_skip", ok),
+        G.grade(sc, "flat", "ddflow_gate_skip", {"id": "T-1", "gate": "critic", "reason": "x"}),
         G.grade(sc, "flat", "ddflow_gate_record", {**ok, "gate": "docs"}),
         G.grade(sc, "flat", "", ""),
     ]

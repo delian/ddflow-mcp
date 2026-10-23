@@ -70,9 +70,13 @@ def retry(rev, tools, sc, surface, name, raw, timeout, first):
     from td_surfaces import resolve
 
     try:
-        _m, _a, error = resolve(surface, name, json.loads(raw))
+        parsed = json.loads(raw)
     except ValueError:
-        error = "arguments were not valid JSON"
+        parsed = None
+    if isinstance(parsed, dict):
+        error = resolve(surface, name, parsed)[2]
+    else:
+        error = "the arguments must be a JSON object"
     after = [
         {
             "role": "assistant",
@@ -90,7 +94,7 @@ def retry(rev, tools, sc, surface, name, raw, timeout, first):
     try:
         name2, raw2, used2 = ask(rev, tools, sc.prompt, timeout, after)
     except Exception:
-        return first, name, raw, 0
+        return first, name, raw, None
     return grade(sc, surface, name2, raw2), name2, raw2, used2
 
 
@@ -114,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     report: dict = {"reviewer": rev.name, "model": rev.model, "family": rev.family, "surfaces": {}}
     for surface in args.surfaces.split(","):
         tools = tools_for(surface)
-        rows, misses, tokens = [], [], []
+        rows, firsts, misses, tokens = [], [], [], []
         for sc in SCENARIOS:
             for _ in range(args.repeat):
                 try:
@@ -124,12 +128,24 @@ def main(argv: list[str] | None = None) -> int:
                     break
                 tokens.append(used)
                 g = grade(sc, surface, name, raw)
-                if args.retry and name and not g.valid:
-                    g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
-                    tokens.append(extra)
-                rows.append(g)
+                firsts.append(g)
                 if not (g.tool_ok and g.args_ok and g.valid):
                     misses.append({"prompt": sc.prompt, "want": sc.tool, "got": name, "args": raw})
+                if args.retry and name and not g.valid:
+                    g, name, raw, extra = retry(rev, tools, sc, surface, name, raw, args.timeout, g)
+                    if extra is not None:
+                        tokens.append(extra)
+                    if not (g.tool_ok and g.args_ok and g.valid):
+                        misses.append(
+                            {
+                                "prompt": sc.prompt,
+                                "want": sc.tool,
+                                "got": name,
+                                "args": raw,
+                                "retry": True,
+                            }
+                        )
+                rows.append(g)
             else:
                 continue
             break
@@ -139,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
                 "tools": len(tools),
                 "prompt_tokens_mean": round(sum(tokens) / max(len(tokens), 1)),
                 **tally(rows),
+                "first_call": tally(firsts),
                 "misses": misses,
             }
     print(json.dumps(report, indent=1))

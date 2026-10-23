@@ -20,12 +20,12 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "Record that the critic gate passed for item T-1; evidence: all 40 tests green.",
         "ddflow_gate_record",
-        ("T-1", "critic", "passed"),
+        ("T-1", "critic", "passed", "40"),
     ),
     Scenario(
         "I found a bug: the parser crashes on empty input. File it against item T-1.",
         "ddflow_bug_found",
-        ("T-1", "empty"),
+        ("T-1", "empty input"),
     ),
     Scenario("Claim item T-2 so I can start working on it.", "ddflow_claim", ("T-2",)),
     Scenario("Where does item T-3 stand in its gate pipeline?", "ddflow_gate_status", ("T-3",)),
