@@ -341,3 +341,13 @@ def test_half_a_node_id_is_refused_not_closed_unverified(repo, given):
     assert out.exit == REFUSED, out
     assert "node id" in out.reason
     assert _open_bugs(repo) == 1
+
+
+def test_a_file_with_an_empty_test_name_is_refused(repo):
+    """`"$FILE::$TEST"` with TEST unset: refused by the existence check, not accepted."""
+    run_cli(repo, "init")
+    _suite(repo)
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_fix.py::")
+    assert out.exit == FAIL, out
+    assert _open_bugs(repo) == 1
