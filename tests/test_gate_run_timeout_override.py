@@ -132,3 +132,86 @@ def test_tabs_between_the_command_words_are_still_the_ci_verb():
 
 def test_the_knob_is_an_int_whatever_the_manifest_spells():
     assert isinstance(Config().gates.max_run_timeout_s, int)
+
+
+def test_a_quoted_option_value_that_mentions_timeout_is_left_alone():
+    gate = GateDef(
+        id="ci", title="ci", command='ddflow ci run --reason "run with --timeout 120"', timeout_s=1
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == 'ddflow ci run --timeout 30 --reason "run with --timeout 120"'
+
+
+def test_a_real_timeout_next_to_a_quoted_one_is_the_one_replaced():
+    gate = GateDef(
+        id="ci",
+        title="ci",
+        command="ddflow ci run --timeout 7200 --reason 'x --timeout 5' -- pytest --timeout=9",
+        timeout_s=1,
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == (
+        "ddflow ci run --timeout 30 --reason 'x --timeout 5' -- pytest --timeout=9"
+    )
+
+
+def test_the_shell_idiom_for_a_single_quote_inside_single_quotes_is_one_word():
+    gate = GateDef(
+        id="ci",
+        title="ci",
+        command="ddflow ci run --reason 'it'\\''s --timeout 5' --timeout 9",
+        timeout_s=1,
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == "ddflow ci run --timeout 30 --reason 'it'\\''s --timeout 5'"
+
+
+def test_a_quoted_number_after_timeout_is_still_the_timeout():
+    for spelling in ("--timeout='5'", "--timeout '5'", '--timeout="5"'):
+        gate = GateDef(id="ci", title="ci", command=f"ddflow ci run {spelling}", timeout_s=1)
+        out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+        assert out.command == "ddflow ci run --timeout 30", spelling
+
+
+def test_ci_run_cannot_take_an_option_looking_value_so_nothing_is_swallowed(repo: Path):
+    """The rewrite has no option-level parsing: it relies on `ddflow ci run` refusing a value that
+    is itself `--timeout=N` (argparse: 'expected one argument'), so no valid command has one."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "ci", "run", "--base", "--timeout=5")
+    assert code == 2 and "expected one argument" in out + err
+
+
+def test_a_signed_timeout_is_replaced_too():
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run --timeout=+5", timeout_s=1)
+    assert _with_run_timeout(Config(), gate, 30, "T1", "ci").command == (
+        "ddflow ci run --timeout 30"
+    )
+
+
+def test_a_backslash_newline_inside_a_quoted_value_keeps_the_value_whole():
+    command = 'ddflow ci run --reason "foo \\\n --timeout 7"'
+    gate = GateDef(id="ci", title="ci", command=command, timeout_s=1)
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == 'ddflow ci run --timeout 30 --reason "foo \\\n --timeout 7"'
+
+
+def test_a_timeout_on_a_continuation_line_and_a_negative_one_are_replaced():
+    cases = {
+        "ddflow ci run \\\n--timeout 30 -- pytest": "ddflow ci run --timeout 60 \\\n -- pytest",
+        "ddflow ci run --timeout=-5 -- pytest": "ddflow ci run --timeout 60 -- pytest",
+        "ddflow ci run --timeout +5": "ddflow ci run --timeout 60",
+        "ddflow ci run --timeout='+5'": "ddflow ci run --timeout 60",
+    }
+    for before, after in cases.items():
+        gate = GateDef(id="ci", title="ci", command=before, timeout_s=1)
+        assert _with_run_timeout(Config(), gate, 60, "T1", "ci").command == after, before
+
+
+def test_an_unclosed_quote_leaves_the_command_unchanged():
+    for command in (
+        'ddflow ci run --reason "msg --timeout 7',
+        "ddflow ci run --reason 'a --timeout 7",
+    ):
+        gate = GateDef(id="ci", title="ci", command=command, timeout_s=1)
+        out = _with_run_timeout(Config(), gate, 60, "T1", "ci")
+        assert out.command == command and out.timeout_s == 60
