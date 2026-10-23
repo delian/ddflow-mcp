@@ -146,3 +146,16 @@ def test_a_path_inside_a_directory_an_item_creates_is_not_warned(proj, tmp_path)
     code, out, err = run_cli(proj, "plan", "check", str(plan))
     assert code == 0, out + err
     assert "newpkg" not in out, out
+
+
+def test_a_wildcard_glob_is_never_warned_and_nothing_hides_under_a_created_file(proj, tmp_path):
+    plan = tmp_path / "plan.toml"
+    plan.write_text(
+        '[A]\nglobs = []\ncreates = ["newpkg/new_a.py", "docs/index.html"]\nacceptance = "done"\n'
+        '[B]\nglobs = ["newpkg/*.py", "docs/index.html/extra.js"]\nneeds = ["A"]\n'
+        'acceptance = "done"\n'
+    )
+    code, out, err = run_cli(proj, "plan", "check", str(plan))
+    assert code == 0, out + err
+    assert "newpkg" not in out, out  # a wildcard is not a literal path: nothing to warn about
+    assert "docs/index.html/extra.js" in out, out  # nothing can exist under a file
