@@ -105,3 +105,40 @@ def test_the_slot_holders_floor_reaches_the_selected_stages(monkeypatch):
     cmd = SELECTED.format(files=files)
     assert "-n 1 " in CI._with_workers(cmd, Config(), {}, "selected")
     assert "-n 8 " in CI._with_workers(cmd, Config(), {}, "selected", holding_suite=True)
+
+
+def test_run_stages_gives_the_selected_pytest_the_holders_floor(monkeypatch, tmp_path):
+    """Through `_run_stages` itself: the hooks stage, then the selected command it was cut for."""
+    from ddflow.services.ci_scope import Plan
+
+    monkeypatch.setattr(
+        WK.S.HostSignals, "sample", lambda self: {"load": 9.0, "memory_free_frac": 0.9}
+    )
+    monkeypatch.setattr(WK.os, "cpu_count", lambda: 192)
+    ran: list[str] = []
+
+    class Fake:
+        def run(self, declared, **_):
+            ran.append(declared.line)
+            return NS(ran=True, code=0, output="", elapsed_s=0, kind="", reason="")
+
+    monkeypatch.setattr(CI, "CommandRunner", Fake)
+    monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
+    files = " ".join(f"tests/test_{i}.py" for i in range(30))
+    for held, want in ((True, "-n 8 "), (False, "-n 1 ")):
+        ran.clear()
+        plan = Plan("selected", "x", command=SELECTED.format(files=files), skip="tests")
+        CI._run_stages(Config(), tmp_path, "pre-commit run", plan, 60, None, {}, True, held)
+        assert len(ran) == 2 and want in ran[1] and "-n auto" not in ran[1], ran
+
+
+def test_the_recorded_count_is_the_one_the_command_runs_with(monkeypatch):
+    _idle(monkeypatch)
+    cfg = Config()
+    cfg.ci.workers = "1000"
+    used: dict = {}
+    cmd = CI._with_workers(
+        "pytest -n {workers} -n auto tests/test_a.py tests/test_b.py", cfg, used, "selected"
+    )
+    assert "-n 1000" not in cmd, cmd
+    assert used["selected"]["n"] == 2, used

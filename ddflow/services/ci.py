@@ -504,7 +504,7 @@ def _with_workers(
     cmd, more = WK.localize_auto(
         cmd, cfg, holding_suite=holding_suite, files=WK.count_test_files(cmd)
     )
-    auto = auto or more
+    auto = more or auto  # what the command ends up with
     if auto:
         used[stage] = {"n": auto.n, **auto.inputs}
     return cmd
