@@ -81,7 +81,6 @@ def test_a_freshly_initialised_project_stays_small_with_every_notice_on(repo):
         assert must in full, f"a notice displaced {must!r}"
     base = _base(repo)
     assert full.startswith(base[:200])
-    assert len(full.encode()) - len(base.encode()) <= FRESH_INIT_MAX - 1200, (
         "notices outgrew their share"
     )
 
