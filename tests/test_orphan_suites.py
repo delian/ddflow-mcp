@@ -77,7 +77,7 @@ def test_an_unreadable_proc_gives_nothing(tmp_path: Path):
     assert OS.orphaned_ci_suites(tmp_path / "nope") == []
 
 
-def test_doctor_notes_name_an_orphaned_suite(monkeypatch, repo):
+def test_host_notes_name_an_orphaned_suite(monkeypatch, repo):
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -88,7 +88,7 @@ def test_doctor_notes_name_an_orphaned_suite(monkeypatch, repo):
     monkeypatch.setattr(OS, "orphaned_ci_suites", lambda *a, **k: [fake])
     from ddflow.services import repo_hygiene as RH
 
-    assert any("orphaned ci suite: pid 4242" in n for n in RH.doctor_notes(repo))
+    assert any("orphaned ci suite: pid 4242" in n for n in RH.host_notes())
 
 
 def test_a_shell_that_only_mentions_the_command_is_not_a_suite(tmp_path: Path):
