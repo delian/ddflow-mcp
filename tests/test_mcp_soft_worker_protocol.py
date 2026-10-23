@@ -13,7 +13,6 @@ import json
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -229,32 +228,27 @@ def test_a_request_before_hello_is_refused():
 
 
 def test_drain_finishes_the_inflight_request_then_says_drained_and_bye():
-    gate = threading.Event()
+    started, release = threading.Event(), threading.Event()
 
     def slow(conn, msg, notify):
-        gate.wait(5)
+        started.set()
+        assert release.wait(10)
         return {"jsonrpc": "2.0", "id": 1, "result": {"done": True}}
 
     from ddflow.surfaces import worker
 
-    class Feed:
-        def __init__(self):
-            self.q = [
-                WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)),
-                WP.encode(WP.request(1, {"id": 1}, CONN)),
-            ]
-
-        def __iter__(self):
-            yield from self.q
-            time.sleep(0.2)  # the request is in flight now
-            yield WP.encode(WP.drain())
-            time.sleep(0.2)
-            assert not gate.is_set()
-            gate.set()  # let the slow call finish; drain must wait for it
-            time.sleep(0.2)
+    def feed():
+        yield WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR))
+        yield WP.encode(WP.request(1, {"id": 1}, CONN))
+        assert started.wait(10)
+        yield WP.encode(WP.drain())
+        # The call is held until a timer lets it go, whatever the worker does with its input:
+        # a drain that did not wait for it would say `drained` first.
+        threading.Timer(0.5, release.set).start()
+        release.wait(10)
 
     out = io.StringIO()
-    worker.run(Path("."), iter(Feed()), out, handler=slow)
+    worker.run(Path("."), feed(), out, handler=slow)
     kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
     assert kinds.index("res") < kinds.index("drained") < kinds.index("bye")
 
@@ -424,3 +418,17 @@ def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
     finally:
         p.stdin.close()
         p.wait(timeout=30)
+
+
+def test_a_clean_drain_exits_zero_even_while_stdin_stays_open(tmp_path):
+    p = _spawn(_git(tmp_path / "r"))
+    try:
+        p.stdin.write(WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)))
+        p.stdin.flush()
+        _read(p)
+        p.stdin.write(WP.encode(WP.drain()))
+        p.stdin.flush()
+        assert _read(p)["t"] == "drained" and _read(p)["t"] == "bye"
+        assert p.wait(timeout=30) == 0  # stdin is still open: the exit is the drain's
+    finally:
+        p.kill()
