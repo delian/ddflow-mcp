@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import ddflow.api._dedupe as DD
+import ddflow.api.item_moves as IM
 
 from ..config import csv_list
 from ..core import flow as F
@@ -62,6 +63,10 @@ class ItemEdit:
     worktree: str | None = None
     #: Keep a refused widening in the first-in-first-out line for its files (`--queue`).
     queue: bool = False
+    #: Move the task under this phase (or task); "" makes it top level. `None` leaves it.
+    parent: str | None = None
+    #: Change a task's kind to another of `WORK_KINDS`, and so its gate pipeline.
+    kind: str | None = None
     #: A commit (or ``<before>..<after>``) already on the base that holds this item's work,
     #: for work merged outside `ddflow merge` (B9eb92adafe). Verified, then recorded as the
     #: item's landed range.
@@ -134,6 +139,10 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
     _adjust_list(it, edit, fields, "needs")
     _adjust_list(it, edit, fields, "tags")
     _adjust_globs(it, edit, fields)
+    moved = IM.plan(cfg, st, it, edit.parent, edit.kind)
+    if isinstance(moved, str):
+        return O.failed("item.updated", f"{it.id}: {moved}", id=it.id)
+    fields.update(moved)
     unchanged = _nothing_to_change(it, edit, fields)
     if unchanged:
         return O.nothing("item.updated", unchanged, id=it.id)

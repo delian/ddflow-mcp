@@ -3723,7 +3723,7 @@
          },
          "globs": {
           "type": "string",
-          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped."
+          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped. Empty: none, and a fix task then takes none from its bug."
          },
          "needs": {
           "type": "string",
@@ -3764,6 +3764,14 @@
          "landed": {
           "type": "string",
           "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
+         },
+         "parent": {
+          "type": "string",
+          "description": "Move the task under this phase (or task); empty makes it top level. Refused for a finished item, a missing parent, or a dependency cycle."
+         },
+         "kind": {
+          "type": "string",
+          "description": "Work kind: task, doc, research or job (its gate pipeline)."
          },
          "worktree": {
           "type": "string",
