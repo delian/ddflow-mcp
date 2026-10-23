@@ -55,3 +55,11 @@ def test_an_only_filter_writes_nothing_it_was_not_asked_to(repo: Path):
     done = ddflow_cli(repo, "pins", "regenerate", "--only", "nosuch")
     assert done.returncode != 0
     assert (repo / ".gitattributes").read_text() == before
+
+
+def test_a_valid_only_still_adds_the_line_for_the_recipes(repo: Path):
+    _installed_then_a_recipe_added(repo)
+    done = ddflow_cli(repo, "pins", "regenerate", "--only", "third")
+    assert done.returncode == 0, done.stderr
+    assert "third.txt merge=pinsregen" in (repo / ".gitattributes").read_text()
+    assert "added 'third.txt merge=pinsregen' to .gitattributes" in done.stdout
