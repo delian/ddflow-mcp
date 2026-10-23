@@ -141,7 +141,7 @@ def _live(queue: Path, stale_s: float, grace_s: float, mine: str = "") -> list[s
                     with contextlib.suppress(OSError):
                         path.unlink()
         except fsio.LockTimeout:
-            if age <= stale_s:
+            if age <= stale_s and path.exists():  # held, and still named (not unlinked meanwhile)
                 live.append(path.name)
         except FileNotFoundError:
             continue  # the owner left between the stat and the lock: no ghost is made

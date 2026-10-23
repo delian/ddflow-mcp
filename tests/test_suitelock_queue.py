@@ -275,3 +275,22 @@ def test_an_expired_parked_ticket_removed_between_the_stat_and_the_lock_leaves_n
     monkeypatch.setattr(SL.fsio, "file_lock", owner_took_it)
     assert SL._live(queue, 120, 120) == []
     assert list(queue.iterdir()) == []
+
+
+def test_a_held_ticket_unlinked_after_the_open_is_not_counted(tmp_path, monkeypatch):
+    from ddflow.infra import fsio
+
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    ticket = queue / "00000000000000000001-held.ticket"
+    with fsio.file_lock(ticket, 0):  # the owner holds it
+        real = SL.fsio.file_lock
+
+        def owner_unlinks_while_holding(path, *a, **kw):
+            try:
+                return real(path, *a, **kw)  # opens the name, then finds it held
+            finally:
+                Path(path).unlink(missing_ok=True)
+
+        monkeypatch.setattr(SL.fsio, "file_lock", owner_unlinks_while_holding)
+        assert SL._live(queue, 120, 120) == []
