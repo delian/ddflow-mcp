@@ -66,3 +66,8 @@ def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
     _file(repo, "Bci-bandit-1", "merge CI check failed: bandit (CI: Static security scan)")
     out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="no test")
     assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason
+
+
+def test_a_non_pytest_check_id_containing_colons_is_not_taken_for_a_test(repo):
+    _file(repo, "Bci-ruff-colons", "merge CI check failed: ruff::format (CI: Lint)")
+    assert api.bug_fixed(repo, "Bci-ruff-colons", lint_exempt="formatted").exit == OK
