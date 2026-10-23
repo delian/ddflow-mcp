@@ -31,19 +31,22 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
     """``entry`` (how a client spawns ddflow) with the tier in its environment; the input is
     not changed."""
     out = dict(entry)
-    out["env"] = {**dict(entry.get("env") or {}), TIER_ENV: tier}
     args = list(entry.get("args") or [])
-    # The image-last invariant (`_launch_entry`'s shape) is checked, not assumed: an entry whose
-    # last argument is an option is not one we generated, and is left alone.
-    if entry.get("command") == "docker" and args[:1] == ["run"] and not args[-1].startswith("-"):
-        # `env` reaches the `docker` client, not the container: forward the tier with `-e`,
-        # replacing any value already forwarded (the last `-e` of a name would win).
-        # The entry is `_launch_entry`'s own: `run`, its options, then the image LAST. What follows
-        # the options is never touched.
-        out["args"] = ["run", "-e", f"{TIER_ENV}={tier}", *_without_tier(args[1:-1]), *args[-1:]]
-        out["env"] = {k: v for k, v in out["env"].items() if k != TIER_ENV}  # inert on the client
-        if not out["env"]:
-            del out["env"]
+    if entry.get("command") == "docker":
+        # `env` would reach the `docker` client, not the container: a `docker run` forwards the tier
+        # with `-e`, replacing any value already forwarded (the last `-e` of a name would win). The
+        # entry is `_launch_entry`'s own: `run`, its options, then the image LAST; what follows the
+        # options is never touched. Any other docker shape is not ours and is left as it is.
+        if args[:1] == ["run"] and len(args) > 1 and not args[-1].startswith("-"):
+            out["args"] = [
+                "run",
+                "-e",
+                f"{TIER_ENV}={tier}",
+                *_without_tier(args[1:-1]),
+                *args[-1:],
+            ]
+        return out
+    out["env"] = {**dict(entry.get("env") or {}), TIER_ENV: tier}
     return out
 
 
@@ -101,7 +104,7 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
         and value[5:].rstrip("%").isdigit()
         and int(value[5:].rstrip("%")) >= AUTO_NO_DEFER_PCT
     )
-    if value not in ("false", "0", "off", "no") and not high:
+    if value not in ("false",) and not high:
         return ""
     return (
         f"ENABLE_TOOL_SEARCH={environ['ENABLE_TOOL_SEARCH']} makes the host send every ddflow schema "
