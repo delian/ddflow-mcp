@@ -31,10 +31,26 @@ def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
     out = dict(entry)
     out["env"] = {**dict(entry.get("env") or {}), TIER_ENV: tier}
     args = list(entry.get("args") or [])
-    if entry.get("command") == "docker" and "run" in args:
-        # `env` reaches the `docker` client, not the container: forward the tier with `-e`.
-        at = args.index("run") + 1
-        out["args"] = [*args[:at], "-e", f"{TIER_ENV}={tier}", *args[at:]]
+    if entry.get("command") == "docker" and args[:1] == ["run"]:
+        # `env` reaches the `docker` client, not the container: forward the tier with `-e`,
+        # replacing any value already forwarded (the last `-e` of a name would win).
+        out["args"] = ["run", "-e", f"{TIER_ENV}={tier}", *_without_tier(args[1:])]
+    return out
+
+
+def _without_tier(args: list[str]) -> list[str]:
+    """``args`` minus any `-e|--env DDFLOW_MCP_TOOLS[=v]` pair or `--env=DDFLOW_MCP_TOOLS=v`."""
+    out: list[str] = []
+    skip = False
+    for i, a in enumerate(args):
+        if skip:
+            skip = False
+        elif a in ("-e", "--env") and i + 1 < len(args) and args[i + 1].split("=")[0] == TIER_ENV:
+            skip = True
+        elif a.startswith(("--env=", "-e=")) and a.split("=", 1)[1].split("=")[0] == TIER_ENV:
+            continue
+        else:
+            out.append(a)
     return out
 
 
