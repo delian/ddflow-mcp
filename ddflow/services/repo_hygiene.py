@@ -127,5 +127,11 @@ def doctor_notes(repo: Path) -> list[str]:
         *bare_notes(repo),
         *stale_primary_notes(repo),
         *TB.stale_notes(Path.cwd()),  # the ddflow running is not the tree's own
-        *OS.notes(),  # a ci suite that outlived its ddflow owner (named, never killed)
     ]
+
+
+def host_notes() -> list[str]:
+    """Notes about this HOST, not the repository: a ci suite that outlived its ddflow owner
+    (named, never killed). Kept apart from `doctor_notes` so a repository check does not depend
+    on what else is running."""
+    return OS.notes()
