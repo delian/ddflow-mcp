@@ -81,6 +81,9 @@ class _Run:
         self.draining = False
         self.said_bye = False
         self.done = threading.Event()
+        self.drain_thread: threading.Thread | None = None
+        self.exit_code = 0
+        self.exit_reason = "eof"
 
     def write(self, frame: dict[str, Any]) -> None:
         with self.wlock:
@@ -110,6 +113,32 @@ class _Run:
                 self.inflight -= 1
                 self.cv.notify_all()
 
+    def start_request(self, frame: dict[str, Any]) -> None:
+        with self.cv:
+            self.inflight += 1
+        try:
+            threading.Thread(
+                target=self.serve,
+                args=(frame["id"], frame["conn"], frame["msg"]),
+                name=f"ddflow-worker-{frame['id']}",
+                daemon=True,
+            ).start()
+        except BaseException as exc:  # no thread: the caller is still owed an answer
+            with self.cv:
+                self.inflight -= 1
+                self.cv.notify_all()
+            self.write(
+                WP.response(
+                    frame["id"],
+                    _internal_error(frame["msg"], exc)
+                    or {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32603, "message": str(exc)},
+                    },
+                )
+            )
+
     def wait_idle(self) -> None:
         with self.cv:
             self.cv.wait_for(lambda: self.inflight == 0)
@@ -125,12 +154,14 @@ class _Run:
             self.bye("drained")
             self.done.set()
 
-        threading.Thread(target=finish, name="ddflow-worker-drain", daemon=True).start()
+        self.drain_thread = threading.Thread(target=finish, name="ddflow-worker-drain", daemon=True)
+        self.drain_thread.start()
 
     def hello(self, frame: dict[str, Any]) -> bool:
         err = WP.negotiate(frame)
         if err is not None:
             self.write(err)
+            self.exit_code, self.exit_reason = 2, "refused"
             return False
         if frame.get("state_key"):
             protocol.state_key(bytes.fromhex(frame["state_key"]))
@@ -150,17 +181,11 @@ class _Run:
             if self.draining:
                 self.write(WP.error("draining", "this worker is draining", id=frame["id"]))
                 return greeted
-            with self.cv:
-                self.inflight += 1
-            threading.Thread(
-                target=self.serve,
-                args=(frame["id"], frame["conn"], frame["msg"]),
-                name=f"ddflow-worker-{frame['id']}",
-                daemon=True,
-            ).start()
+            self.start_request(frame)
         elif kind == "drain":
             self.start_drain()
         elif kind == "bye":
+            self.exit_code, self.exit_reason = 0, "bye"
             return None
         else:
             self.write(WP.error("bad_frame", f"unexpected {kind!r} frame", id=frame.get("id")))
@@ -192,14 +217,19 @@ def run(
             continue
         if frame is None:
             continue
-        greeted = r.frame(frame, greeted)
+        try:
+            greeted = r.frame(frame, greeted)
+        except Exception as exc:  # a bug in the dispatch must not take the connection down
+            print(traceback.format_exc(), file=sys.stderr)
+            r.write(WP.error("internal", f"internal error: {exc}", id=frame.get("id")))
+            continue
         if greeted is None:
-            r.wait_idle()
-            r.bye("refused" if not r.said_bye else "")
-            return 2
+            break
+    if r.drain_thread is not None:
+        r.drain_thread.join()  # its `drained` and `bye` come first
     r.wait_idle()
-    r.bye("eof")
-    return 0
+    r.bye(r.exit_reason)
+    return r.exit_code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -219,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     t.start()
     while t.is_alive() and not done.is_set():
         t.join(0.1)
-    return code[0] if code else 0
+    return code[0] if code else 1  # run() died: that is a crash, not a clean exit
 
 
 if __name__ == "__main__":

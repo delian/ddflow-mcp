@@ -278,8 +278,13 @@ def test_requests_after_drain_are_refused_not_served():
 
 
 def test_concurrent_requests_are_answered_independently():
+    fast_done = threading.Event()
+
     def handler(conn, msg, notify):
-        time.sleep(0.3 if msg["id"] == 1 else 0)
+        if msg["id"] == 1:  # the slow call finishes only after the fast one has answered
+            assert fast_done.wait(10)
+        else:
+            threading.Timer(0.2, fast_done.set).start()  # after its answer is written
         return {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
 
     out = run_worker(
@@ -291,7 +296,63 @@ def test_concurrent_requests_are_answered_independently():
         handler,
     )
     order = [f["id"] for f in out if f["t"] == "res"]
-    assert sorted(order) == [1, 2] and order[0] == 2, "a slow call must not block a fast one"
+    assert order == [2, 1], "a slow call must not block a fast one"
+
+
+def test_a_bare_hello_and_a_note_without_an_id_are_not_frames():
+    for line in ('{"t":"hello"}\n', '{"t":"note","msg":{}}\n', '{"t":"hello","shim_proto":"1"}\n'):
+        with pytest.raises(WP.ProtocolError):
+            WP.decode(line)
+    assert WP.decode('{"t":"note","id":null,"msg":{}}\n')["id"] is None
+
+
+@pytest.mark.parametrize("bad", ["xyz", 123, ["a"], "abc"])
+def test_a_malformed_state_key_is_refused_not_a_crash(bad):
+    err = WP.negotiate({"t": "hello", "shim_proto": WP.PROTO_MAJOR, "state_key": bad})
+    assert err["t"] == "error" and err["code"] == "bad_frame"
+
+
+def test_a_valid_state_key_is_accepted():
+    assert WP.negotiate({"t": "hello", "shim_proto": WP.PROTO_MAJOR, "state_key": "ab12"}) is None
+
+
+def test_a_peer_bye_is_a_clean_goodbye_not_a_refusal():
+    from ddflow.surfaces import worker
+
+    out = io.StringIO()
+    lines = [WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)), WP.encode(WP.bye("done"))]
+    code = worker.run(Path("."), iter(lines), out, handler=echo)
+    last = [json.loads(x) for x in out.getvalue().splitlines()][-1]
+    assert code == 0 and last["t"] == "bye" and last.get("reason") != "refused"
+
+
+def test_eof_right_after_drain_still_puts_drained_before_bye():
+    from ddflow.surfaces import worker
+
+    for _ in range(20):
+        out = io.StringIO()
+        lines = [WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)), WP.encode(WP.drain())]
+        worker.run(Path("."), iter(lines), out, handler=echo)
+        kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
+        assert kinds.index("drained") < kinds.index("bye"), kinds
+
+
+def test_an_internal_failure_while_dispatching_is_an_error_frame_not_a_dead_worker(monkeypatch):
+    from ddflow.surfaces import worker
+
+    real = threading.Thread
+
+    class Failing(real):
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(worker.threading, "Thread", Failing)
+    out = io.StringIO()
+    lines = [WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR)), WP.encode(WP.request(1, {}, CONN))]
+    code = worker.run(Path("."), iter(lines), out, handler=echo)
+    frames = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert any(f["t"] == "res" and f["id"] == 1 and "error" in f["msg"] for f in frames)
+    assert code == 0
 
 
 # ---- the real worker over real pipes -----------------------------------------------------
@@ -346,10 +407,9 @@ def test_the_real_worker_exits_at_eof_with_a_bye(tmp_path):
     p.stdin.flush()
     _read(p)
     p.stdin.close()
-    last = None
-    for line in p.stdout:
-        last = WP.decode(line)
-    assert p.wait(timeout=30) == 0 and last["t"] == "bye"
+    last = _read(p)
+    assert last["t"] == "bye"
+    assert p.wait(timeout=30) == 0
 
 
 def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
@@ -360,7 +420,7 @@ def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
         p.stdin.write(WP.encode(WP.request(1, {"jsonrpc": "2.0", "id": 1, "method": "ping"}, CONN)))
         p.stdin.flush()
         for _ in range(2):
-            WP.decode(p.stdout.readline())  # every line is a valid frame
+            assert _read(p)["t"] in WP.KINDS  # every line is a valid frame
     finally:
         p.stdin.close()
         p.wait(timeout=30)
