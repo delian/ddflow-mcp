@@ -132,3 +132,24 @@ def test_tabs_between_the_command_words_are_still_the_ci_verb():
 
 def test_the_knob_is_an_int_whatever_the_manifest_spells():
     assert isinstance(Config().gates.max_run_timeout_s, int)
+
+
+def test_a_quoted_option_value_that_mentions_timeout_is_left_alone():
+    gate = GateDef(
+        id="ci", title="ci", command='ddflow ci run --reason "run with --timeout 120"', timeout_s=1
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == 'ddflow ci run --timeout 30 --reason "run with --timeout 120"'
+
+
+def test_a_real_timeout_next_to_a_quoted_one_is_the_one_replaced():
+    gate = GateDef(
+        id="ci",
+        title="ci",
+        command="ddflow ci run --timeout 7200 --reason 'x --timeout 5' -- pytest --timeout=9",
+        timeout_s=1,
+    )
+    out = _with_run_timeout(Config(), gate, 30, "T1", "ci")
+    assert out.command == (
+        "ddflow ci run --timeout 30 --reason 'x --timeout 5' -- pytest --timeout=9"
+    )

@@ -698,6 +698,35 @@ def run(
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
+#: Quoted words stay whole; the first bare `--` ends the ci options; a bare `--timeout N` is the
+#: one to replace. (Quotes are scanned, not parsed: a command with an unbalanced quote keeps the
+#: remainder as written.)
+_CI_WORDS = re.compile(
+    r"""(?P<quoted>"(?:[^"\\]|\\.)*"|'[^']*')|(?P<sep>\s--(?=\s|$))|(?P<timeout>\s--timeout(?:=|\s+)\d+)"""
+)
+
+
+def _ci_command_with_timeout(command: str, timeout_s: int) -> str:
+    """``command`` (a `ddflow ci run ...` line) with its `--timeout` replaced by ``timeout_s``,
+    placed right after the verb. Only the ci options are touched: what follows a bare `--` belongs
+    to the test runner, and a quoted option value is left as written."""
+    out, pos = [], 0
+    for m in _CI_WORDS.finditer(command):
+        if m.lastgroup == "sep":
+            break
+        if m.lastgroup == "timeout":
+            out.append(command[pos : m.start()])
+            pos = m.end()
+    else:
+        m = None
+    end = m.start() if m is not None else len(command)
+    out.append(command[pos:end])
+    head = re.sub(
+        r"^(\s*ddflow\s+ci\s+run)(?=\s|$)", rf"\1 --timeout {timeout_s}", "".join(out), count=1
+    )
+    return head + command[end:]
+
+
 def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
     """``gdef`` for one run that may take ``timeout_s`` (None: as declared; else 1..max): its own timeout, and
     the ci budget a ``ddflow ci run`` command carries (``--timeout``), both replaced. A request
@@ -715,15 +744,7 @@ def _with_run_timeout(cfg, gdef, timeout_s: int | None, item: str, gate: str):
         )
     command = gdef.command or ""
     if re.match(r"\s*ddflow\s+ci\s+run(\s|$)", command):
-        # Only the part before a `--`: what follows belongs to the test runner.
-        parts = re.split(r"(\s--(?:\s|$))", command, maxsplit=1)
-        head, sep, tail = parts[0], "".join(parts[1:2]), "".join(parts[2:])
-        head = re.sub(r"\s--timeout(?:=|\s+)\d+", "", head)
-        # Right after the verb, not at the end: after a `--` it would reach the test runner.
-        head = re.sub(
-            r"^(\s*ddflow\s+ci\s+run)(?=\s|$)", rf"\1 --timeout {timeout_s}", head, count=1
-        )
-        command = head + sep + tail
+        command = _ci_command_with_timeout(command, timeout_s)
     return replace(gdef, timeout_s=timeout_s, command=command)
 
 
