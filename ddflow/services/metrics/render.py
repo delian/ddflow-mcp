@@ -44,6 +44,12 @@ def summary(data: dict) -> str:
     ]
     out += [
         f"  {r['gate']:<14} n={r['n']:<5} p50 {dur(r['p50_s'])}  p90 {dur(r['p90_s'])}"
+        + (
+            f"  (queued (lock or slot): n={r['wait_n']} p50 {dur(r['wait_p50_s'])}"
+            f" max {dur(r['wait_max_s'])})"
+            if r.get("wait_n")
+            else ""
+        )
         for r in data["gate_time"]
     ]
     out += ["", f"outcomes by {data['group_by']}"]

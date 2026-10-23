@@ -1,7 +1,7 @@
 """The fold of the ask events: what the approvals-and-questions engine asked and was answered.
 
 `ask.requested` opens an ask (a question or an approval of ``digest``), `ask.answered` closes
-it with an outcome a PERSON gave, `ask.withdrawn` is the asker taking it back and `ask.expired`
+it with an outcome a PERSON gave, `ask.withdrawn` is the asker taking it back and `ask.consumed` is a spent use of an answered approval (a gated command an agent then ran), and `ask.expired`
 is the audit mark a sweep writes for an ask whose time ran out. The fold is pure: whether a
 pending ask has EXPIRED is a question of ``expires_at`` against a clock, so it is answered by
 `services.ask.engine.status`, never by the fold -- replaying a log at any time yields the same
@@ -28,6 +28,10 @@ def asks_of(st: State) -> dict[str, dict[str, Any]]:
     return st.__dict__.setdefault("asks", {})
 
 
+def _int(v: Any) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) else 0
+
+
 def _id(ev: Event) -> str:
     return str(ev.data.get("id") or ev.subject)
 
@@ -46,6 +50,14 @@ def h_requested(st: State, ev: Event) -> None:
         "options": list(d.get("options") or []),
         "expires_at": str(d.get("expires_at", "")),
         "code_hash": str(d.get("code_hash", "")),
+        "verb": str(d.get("verb", "")),
+        "tier": str(d.get("tier", "")),
+        "min_level": _int(d.get("min_level")),
+        "uses": _int(d.get("uses")) or (1 if d.get("verb") else 0),
+        "use_ttl_s": _int(d.get("use_ttl_s")),
+        "canon": str(d.get("canon", "")),
+        "used": 0,
+        "consumed": [],
         "bot_answerable": d.get("bot_answerable") is True,
         "requested_by": ev.agent,
         "requested_at": ev.ts,
@@ -56,6 +68,7 @@ def h_requested(st: State, ev: Event) -> None:
         "answered_digest": "",
         "coded": False,
         "source": "",
+        "level": 0,
         "code_presented": "",
         "role": "",
         "via": "",
@@ -77,11 +90,24 @@ def h_answered(st: State, ev: Event) -> None:
         answered_digest=str(d.get("digest", "")),
         coded=d.get("coded") is True,
         source=str(d.get("source", "")),
+        level=_int(d.get("level")),
         code_presented=str(d.get("code_presented", "")),
         role=str(d.get("role", "")),
         via=str(d.get("via", "")),
         human=d.get("human") is True,
         answered_at=ev.ts,
+    )
+
+
+def h_consumed(st: State, ev: Event) -> None:
+    """A use of an answered approval was spent by ``by``. Uses beyond the ask's own are not
+    counted (a replayed duplicate changes nothing past the cap)."""
+    row = asks_of(st).get(_id(ev))
+    if row is None or row["state"] != ANSWERED or row["uses"] <= 0 or row["used"] >= row["uses"]:
+        return
+    row["used"] += 1
+    row["consumed"].append(
+        {"by": str(ev.data.get("by", "")), "effect": str(ev.data.get("effect", "")), "at": ev.ts}
     )
 
 
@@ -97,6 +123,7 @@ def _closer(state: str):
 ASK_HANDLERS = {
     "ask.requested": h_requested,
     "ask.answered": h_answered,
+    "ask.consumed": h_consumed,
     "ask.withdrawn": _closer(WITHDRAWN),
     "ask.expired": _closer(EXPIRED),
 }

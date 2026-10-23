@@ -7,6 +7,7 @@ the project fail after 30 s with a "wedged agent" message.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -131,9 +132,10 @@ def test_an_unreadable_blob_is_named_not_silently_dropped(repo):
     _git(repo, "commit", "-qm", "adopt", "--no-verify")
     K.session_end(repo, "s1")
     shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
-    with shard.open("a") as f:
-        f.write(shard.read_text().splitlines()[-1] + "\n")
-    blob = repo / ".ddflow" / "blobs" / "x.json"
+    digest = "ab" * 32
+    with shard.open("a") as f:  # the blob is named, so it is this log's to commit
+        f.write(json.dumps({"kind": "x", "evidence": {"k": {"$blob": f"sha256:{digest}"}}}) + "\n")
+    blob = repo / ".ddflow" / "blobs" / digest[:2] / f"{digest}.json"
     blob.parent.mkdir(parents=True, exist_ok=True)
     blob.write_text("{}")
     blob.chmod(0)
@@ -141,7 +143,7 @@ def test_an_unreadable_blob_is_named_not_silently_dropped(repo):
         sha, note = EC.commit_shards(repo, "mine")
     finally:
         blob.chmod(0o644)
-    assert sha and "x.json" in note and "unreadable" in note, (sha, note)
+    assert sha and f"{digest}.json" in note and "unreadable" in note, (sha, note)
 
 
 def test_a_commit_that_lands_while_the_hooks_run_is_not_reverted(repo):

@@ -29,6 +29,7 @@ def test_the_default_set_names_the_guards_that_broke_main():
         "tests/test_uc_surf_loop_transcript.py",
         "tests/test_readme_*.py",
         "tests/golden/**",
+        "tests/test_mcp_parity.py",  # B8f0d8710db: a CLI help change broke it past a selection
     ):
         assert want in got
 
