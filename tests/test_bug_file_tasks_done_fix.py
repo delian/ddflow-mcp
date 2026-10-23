@@ -22,6 +22,13 @@ from ddflow.api import knowledge as K
 from ddflow.infra.log import EventLog
 
 
+def report_on(repo, summary, item, bid):
+    """A report left linked to ``item`` as its fix, as an older ddflow filed it (since
+    B8fb4a2ec4a `bug found` gives a bug of another task its own fix task)."""
+    K.bug_found(repo, summary=summary, item=item, id=bid, no_task=True, agent="a")
+    EventLog(repo, "legacy").append("bug.found", bid, {"fix_task": item})
+
+
 def seed(repo: Path) -> EventLog:
     """Bug Bx with its fix task fix-Bx, and Brep reported against fix-Bx (linked to it)."""
     run_cli(repo, "init")
@@ -29,7 +36,7 @@ def seed(repo: Path) -> EventLog:
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("task.added", "T1", {"parent": "P1", "title": "parser", "globs": ["src/p.py"]})
     K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
-    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Brep", agent="a")
+    report_on(repo, "kill-wait test flakes", "fix-Bx", "Brep")
     assert state(repo).bugs["Brep"].fix_task == "fix-Bx"
     return log
 
@@ -150,18 +157,22 @@ def test_the_cli_names_the_task_a_bug_is_linked_to_and_its_state(repo):
 
 
 def test_the_links_name_an_open_fix_task_too(repo):
-    """roborev 1508 #3: a report against an OPEN fix task links to it, and says open."""
+    """roborev 1508 #3: a bug whose recorded fix is an OPEN task links to it, and says open;
+    one merely reported against another bug's fix task gets its own (B8fb4a2ec4a)."""
     run_cli(repo, "init")
     log = EventLog(repo, "seed")
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("task.added", "fix-Bx",
                {"parent": "P1", "title": "f", "fixes": ["Bx"], "tags": ["bugfix"]})  # fmt: skip
+    log.append("task.added", "B-hand", {"parent": "P1", "title": "h", "tags": ["bugfix"]})
     log.append("bug.found", "Bx", {"summary": "s", "item": "", "fix_task": "fix-Bx"})
-    log.append("bug.found", "Brep", {"summary": "r", "item": "fix-Bx"})  # no link yet
+    log.append("bug.found", "Brep", {"summary": "r", "item": "B-hand"})  # no link yet
+    log.append("bug.found", "Bother", {"summary": "o", "item": "fix-Bx"})
     out = K.bug_file_tasks(repo, dry_run=True, agent="a")
-    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+    assert out.data["links"] == {"Brep": {"task": "B-hand", "state": "open"}}, out.data
+    assert out.data["tasks"] == {"Bother": "fix-Bother"}, out.data
     out = K.bug_file_tasks(repo, every=True, agent="a")
-    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+    assert out.data["links"] == {"Brep": {"task": "B-hand", "state": "open"}}, out.data
 
 
 def test_json_carries_the_links(repo):
