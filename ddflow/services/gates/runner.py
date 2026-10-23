@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -13,6 +15,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from .. import suitelock as SL
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failure_evidence
@@ -83,6 +86,17 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
 
 
+def runs_whole_suite(gdef: GateDef) -> bool:
+    """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
+    command names test files (a narrowed run) or is a `ddflow ci run`, which takes the lock
+    itself (taking it here too would wait on ourselves)."""
+    return (
+        gdef.id == "unit_tests"
+        and "ddflow ci" not in gdef.command
+        and WK.count_test_files(gdef.command) is None
+    )
+
+
 def _waited(gdef: GateDef, p: cmdrunner.CommandRun, out: str) -> float | None:
     """Seconds the run queued: the suite lock a `ci run` reported on its output, plus the
     admission slot the runner itself waited for. The slot leg is forward-looking: no production
@@ -141,6 +155,29 @@ def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
         # command reads as the project's command, not as a local-only one.
         ev["committed_command_digest"] = digest(committed)
     return ev
+
+
+def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
+    """(the run, the command run, its workers, seconds queued for the lock or None) of a gate's
+    command. A gate that starts a whole suite holds the host-wide full-suite lock `ci run`
+    takes (several agents' unit_tests gates ran suites at once: Bf37f016693) and reads its
+    worker count once the slot is held, with the holder's floor. `SuiteBusy` when none frees."""
+    holds = runs_whole_suite(gdef)
+    queued_at = time.monotonic()
+    who = os.environ.get("DDFLOW_AGENT") or f"{gdef.id} in {cwd}"
+    with SL.hold(cfg, who) if holds else nullcontext():
+        lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
+        command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
+        ticking = on_tick is not None and tick_s > 0
+        p = cmdrunner.CommandRunner().run(
+            cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
+            cwd=cwd,
+            env=env,
+            timeout_s=gdef.timeout_s,
+            on_tick=on_tick if ticking else None,
+            tick_s=tick_s if ticking else 0,
+        )
+    return p, command, auto, lock_wait
 
 
 def run_command_gate(
@@ -215,16 +252,16 @@ def run_command_gate(
         # background thread, and the log's parse cache and lock bookkeeping are
         # process-global and unlocked: roborev 827) and, on timeout, kills the whole process
         # group (Bed0f5b6d99).
-        ticking = on_tick is not None and tick_s > 0
-        command, auto = WK.resolve(gdef.command, cfg if cfg is not None else Config.load(cwd))
-        p = cmdrunner.CommandRunner().run(
-            cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
-            cwd=cwd,
-            env=full_env,
-            timeout_s=gdef.timeout_s,
-            on_tick=on_tick if ticking else None,
-            tick_s=tick_s if ticking else 0,
-        )
+        try:
+            p, command, auto, lock_wait = _run_holding_the_suite_lock(
+                gdef, cwd, cfg if cfg is not None else Config.load(cwd), full_env, on_tick, tick_s
+            )
+        except SL.SuiteBusy as busy:
+            return "unavailable", {
+                "reason": str(busy),
+                "command": gdef.command,
+                "waited_s": round(busy.waited_s, 6),
+            }
     if not p.ran:
         return "unavailable", _unavailable_evidence(gdef, p)
     out = p.output
@@ -239,7 +276,10 @@ def run_command_gate(
         **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
         # How much of elapsed_s was queueing for the host suite lock or an admission slot,
         # not running (B1d51fb9da1); absent when the run waited for nothing it can name.
-        **_wait_evidence(gdef, p, out),
+        **(
+            _wait_evidence(gdef, p, out)
+            or ({"waited_s": lock_wait} if lock_wait is not None else {})
+        ),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe
