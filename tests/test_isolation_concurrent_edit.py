@@ -35,8 +35,8 @@ def test_under_that_gate_staged_and_intent_to_add_lines_still_are(monkeypatch):
     assert ISO.snapshot()["status"] == [
         " A new.py",
         "A  README.md",
+        "M  ddflow/y.py",
         "M  docs/a.md",
-        "MM ddflow/y.py",
     ]
 
 
@@ -56,3 +56,18 @@ def test_the_guard_stays_quiet_when_an_edit_appears_during_a_unit_tests_run(monk
     before = ISO.snapshot()
     monkeypatch.setattr(ISO, "_git", _fake_git(" M tests/test_a.py\n"))
     assert ISO._changes(before, ISO.snapshot()) == []
+
+
+def test_an_edit_to_an_already_staged_file_is_not_a_change_under_that_gate(monkeypatch):
+    monkeypatch.setenv("DDFLOW_RUNNING_GATE", "unit_tests")
+    monkeypatch.setattr(ISO, "_git", _fake_git("M  foo.py\n"))
+    before = ISO.snapshot()
+    monkeypatch.setattr(ISO, "_git", _fake_git("MM foo.py\n"))  # the agent edited it again
+    assert ISO._changes(before, ISO.snapshot()) == []
+
+
+def test_accepted_limit_an_unstaged_suite_write_is_not_caught_under_that_gate(monkeypatch):
+    """Documented in `tracked_status`: there it cannot be told from the agent's own edit."""
+    monkeypatch.setenv("DDFLOW_RUNNING_GATE", "unit_tests")
+    monkeypatch.setattr(ISO, "_git", _fake_git(" M README.md\n"))
+    assert ISO.snapshot()["status"] == []
