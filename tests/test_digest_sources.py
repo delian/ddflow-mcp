@@ -69,8 +69,8 @@ def test_site_commands_appear_in_the_answer_of_their_source():
             assert _subsequence(_fixed(cmd[v]), _fixed(s.command)), (s.kind, v)
 
 
-def test_red_main_is_urgent_and_by_kind_indexes_all():
-    assert S.by_kind()["red_main"].severity == "urgent"
+def test_red_main_starts_at_needs_and_by_kind_indexes_all():
+    assert S.by_kind()["red_main"].severity == "needs"
     assert len(S.by_kind()) == len(S.SOURCES)
 
 
