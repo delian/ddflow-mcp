@@ -30,6 +30,7 @@ from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, repla
 from ..infra.paths import launch_parent, launch_python
 from . import harnessreg as HR
 from . import install_info as _INSTALL
+from . import leanagents as LA
 from . import shared_files as SF
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -1083,6 +1084,7 @@ def adopt(
             actions.append(_write_native_rule(repo, key, docs_dir))
         for dst, src in AGENT_COMMANDS.get(key, {}).items():
             actions.append(_write_command(repo, dst, templates / src))
+        actions.extend(_write_agents(repo, key, templates))  # lean role definitions (LS-agents)
 
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
@@ -1131,8 +1133,8 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
 MANAGED_MARK = "<!-- DDFLOW:MANAGED"
 
 
-def _command_region(rel: str) -> Managed:
-    return Managed(f"commands/{Path(rel).stem}")
+def _command_region(rel: str, kind: str = "commands") -> Managed:
+    return Managed(f"{kind}/{Path(rel).stem}")
 
 
 def _split_front_matter(text: str) -> tuple[str, str]:
@@ -1151,10 +1153,10 @@ def _region_body(region: Managed, text: str) -> str | None:
     return None if at is None else text[at[1] : at[2]]
 
 
-def _write_command(repo: Path, rel: str, src: Path) -> str:
+def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> str:
     path = repo / rel
     head, body = _split_front_matter(src.read_text("utf-8"))
-    region = _command_region(rel)
+    region = _command_region(rel, kind)
     desired = head + region.render(body)
     if path.exists() and not path.is_file():
         return Refused(f"SKIPPED {rel}: it exists and is not a file; move it and re-run adopt")
@@ -1179,13 +1181,22 @@ def _write_command(repo: Path, rel: str, src: Path) -> str:
             replace_text(path, updated)
             return f"wrote {rel}{note}"
         if MANAGED_MARK not in existing:
+            ours = "the MCP prompt `implement`" if kind == "commands" else "the template in ddflow"
             return (
                 f"kept {rel}: it is the project's own, not ddflow's. The ddflow version is "
-                f"the MCP prompt `implement`. Delete the file and re-run adopt to take it"
+                f"{ours}. Delete the file and re-run adopt to take it"
             )
     path.parent.mkdir(parents=True, exist_ok=True)
     replace_text(path, desired)
     return f"wrote {rel}"
+
+
+def _write_agents(repo: Path, key: str, templates: Path) -> list[str]:
+    """The lean role definitions for ``key`` (`services.leanagents`), each in its managed region."""
+    return [
+        _write_command(repo, dst, templates / src, "agents")
+        for dst, src in LA.agent_files(key).items()
+    ]
 
 
 def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> str:
