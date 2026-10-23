@@ -15,7 +15,6 @@ ANSWER_SOURCES = E.ANSWER_SOURCES
 APPROVED = E.APPROVED
 DENIED = E.DENIED
 AskRefused = E.AskRefused
-MIN_DIGEST = 8
 
 
 def person(cfg, agent: str) -> Actor:
