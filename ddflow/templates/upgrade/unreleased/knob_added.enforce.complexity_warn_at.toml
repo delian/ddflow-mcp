@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "enforce.complexity_warn_at"
+new = "18"
+why = "The commit hook warns when a staged Python function's complexity rose to this value or more (radon grade D is 21), so the architecture guard's limit is seen at commit time. 0 turns it off."
+impact = "additive"

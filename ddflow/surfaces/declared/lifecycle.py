@@ -283,13 +283,14 @@ COMMANDS: tuple[Command, ...] = (
             "--max-s": "a hard cap for a shell caller; over MCP the call is already bounded by "
             "`timeout` (at most MCP_WAIT_MAX_S) and the client re-asks",
         },
-        description="Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling or asking the operator when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait.",
+        description="Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling or asking the operator when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait. With no item and no lease it returns the first ready item AT ONCE, whatever it is: to wait for a held file or an agent's leases give `lease`.",
         call=lambda repo, a, agent: _api().wait_item(
             repo,
             item=a.get("item", "") or "",
             phase=a.get("phase", "") or "",
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
             globs=a.get("globs") or None,
+            lease=a.get("lease", "") or "",
             timeout_s=_wait_timeout(a),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -322,6 +323,14 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="with --item: the globs you will claim with, so READY means that claim will succeed; "
                 + GLOBS_HELP,
                 action=_Globs,
+            ),
+            Param(
+                "lease",
+                help="Wait for a LEASE instead of an item: an agent id (until it holds nothing) or a path/glob (until no other agent's live lease covers it). A bare wait returns the first ready item at once.",
+                cli_help="wait for a lease instead of an item: an agent id (until it holds nothing) or a "
+                "path/glob (until no other agent's live lease covers it); a bare wait returns the first "
+                "ready item at once",
+                default="",
             ),
             Param(
                 "timeout",
