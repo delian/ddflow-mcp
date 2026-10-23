@@ -158,6 +158,7 @@ def test_the_detector_can_fail():
     assert sites('D = "x/.claude"\n', ids, roots) == []  # a path component, not a root
     assert sites('"""claude"""\ndef f():\n    """.claude/x"""\n', ids, roots) == []
 
-#: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125, B630ffef2d8): it scans the whole
+
+#: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole
 #: code base, so no import closure can know a change breaks it.
 ALWAYS = True
