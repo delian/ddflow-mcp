@@ -1883,10 +1883,10 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
         "nothing was reviewed, which is not a pass"
     )
     kept: list[str] = []
-    if item and gate_names:
-        log, cfg, st = _load(repo, args["agent"])
+    log, cfg, st = _load(repo, args["agent"])
+    it = st.items.get(item) if item else None
+    if it is not None and gate_names:  # an id no item has is never recorded (B8d9e8108f8)
         gates = GD.load_gates(repo, cfg)
-        it = st.items.get(item)
         for g in gate_names:
             rec = it.gates.get(g) if it else None
             if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
