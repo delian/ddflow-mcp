@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core.globs import under_any
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra.fsio import LockTimeout, atomic_write, file_lock, replace_text
@@ -464,7 +465,7 @@ def _is_text(data: bytes) -> bool:
 
 
 def _owns(r: Recipe, path: str) -> bool:
-    return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in r.files)
+    return under_any(path, r.files)
 
 
 def _decided_by_generators(
