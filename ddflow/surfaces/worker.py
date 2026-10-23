@@ -87,6 +87,8 @@ class _Run:
 
     def write(self, frame: dict[str, Any]) -> None:
         with self.wlock:
+            if self.said_bye and frame.get("t") != "bye":
+                return  # `bye` is the last frame on the wire
             try:
                 try:
                     line = WP.encode(frame)

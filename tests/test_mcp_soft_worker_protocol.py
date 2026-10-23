@@ -259,19 +259,28 @@ def test_drain_finishes_the_inflight_request_then_says_drained_and_bye():
 def test_requests_after_drain_are_refused_not_served():
     from ddflow.surfaces import worker
 
-    lines = [
-        WP.encode(f)
-        for f in (
-            WP.hello(shim_proto=WP.PROTO_MAJOR),
-            WP.drain(),
-            WP.request(1, {"method": "x"}, CONN),
-        )
-    ]
+    release = threading.Event()
+    served = []
+
+    def slow(conn, msg, notify):
+        served.append(msg["id"])
+        assert release.wait(10)
+        return {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
+
+    def feed():
+        yield WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR))
+        yield WP.encode(WP.request(1, {"id": 1}, CONN))
+        while not served:
+            time.sleep(0.01)
+        yield WP.encode(WP.drain())  # request 1 is still running: the drain is open
+        yield WP.encode(WP.request(2, {"id": 2}, CONN))
+        threading.Timer(0.3, release.set).start()
+
     out = io.StringIO()
-    worker.run(Path("."), iter(lines), out, handler=echo)
+    worker.run(Path("."), feed(), out, handler=slow)
     frames = [json.loads(x) for x in out.getvalue().splitlines()]
-    assert any(f["t"] == "error" and f["code"] == "draining" and f["id"] == 1 for f in frames)
-    assert not any(f["t"] == "res" for f in frames)
+    assert any(f["t"] == "error" and f["code"] == "draining" and f["id"] == 2 for f in frames)
+    assert served == [1] and not any(f["t"] == "res" and f["id"] == 2 for f in frames)
 
 
 def test_concurrent_requests_are_answered_independently():
@@ -428,7 +437,11 @@ def test_the_real_worker_keeps_stdout_for_frames_only(tmp_path):
         p.stdin.close()
         assert _read(p)["t"] == "bye"  # and then nothing but EOF
         assert p.wait(timeout=30) == 0  # it exits instead of hanging after its bye
-        assert p.stdout.read() == ""
+        rest = []
+        reader = threading.Thread(target=lambda: rest.append(p.stdout.read()), daemon=True)
+        reader.start()
+        reader.join(10)
+        assert rest == [""], "nothing may follow the bye (or the pipe never closed)"
     finally:
         p.stdin.close()
         p.wait(timeout=30)
@@ -494,3 +507,24 @@ def test_main_reports_a_crashed_run_as_exit_1_even_after_a_drain_flag(monkeypatc
     monkeypatch.setattr(worker, "run", dying)
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     assert worker.main(["--repo", "."]) == 1
+
+
+def test_nothing_is_written_after_bye():
+    from ddflow.surfaces import worker
+
+    class Feed:
+        def __iter__(self):
+            yield WP.encode(WP.hello(shim_proto=WP.PROTO_MAJOR))
+            yield WP.encode(WP.drain())
+            time.sleep(0.5)  # drained + bye are out by now
+            yield WP.encode(WP.request(1, {"method": "x"}, CONN))
+
+    out = io.StringIO()
+    worker.run(Path("."), iter(Feed()), out, handler=echo)
+    kinds = [json.loads(x)["t"] for x in out.getvalue().splitlines()]
+    assert kinds[-1] == "bye" and kinds.count("bye") == 1
+
+
+def test_a_hello_of_another_major_with_both_fields_is_refused_as_incompatible():
+    frame = WP.decode('{"t":"hello","shim_proto":2,"worker_proto":2}\n')
+    assert WP.negotiate(frame)["code"] == "incompatible_shim_proto"
