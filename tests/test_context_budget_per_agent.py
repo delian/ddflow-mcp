@@ -43,11 +43,20 @@ def test_the_effective_budget_is_the_min_of_global_and_type():
     assert SC.effective_budget(s, "cursor") == 40000
 
 
-def test_the_table_global_key_is_a_second_spelling_of_the_global_and_the_smaller_wins():
-    s = _session(context_budget_tokens=40000, context_budget={"global": 30000})
-    assert SC.effective_budget(s, "claude") == 30000
-    s = _session(context_budget_tokens=0, context_budget={"global": 30000, "claude": 25000})
-    assert SC.effective_budget(s, "claude") == 25000 and SC.effective_budget(s, "x") == 30000
+def test_the_tables_global_key_is_the_same_value_as_the_global_knob(repo):
+    run_cli(repo, "init")
+    cfgp = repo / ".ddflow" / "config.toml"
+    cfgp.write_text(
+        cfgp.read_text() + "\n[session.context_budget]\nglobal = 30000\nclaude = 25000\n"
+    )
+    got = Config.load(repo).session
+    assert got.context_budget_tokens == 30000 and "global" not in got.context_budget
+    assert SC.effective_budget(got, "claude") == 25000 and SC.effective_budget(got, "x") == 30000
+    # the later layer's spelling wins, whichever knob it uses
+    local = repo / ".ddflow" / "local"
+    local.mkdir(exist_ok=True)
+    (local / "config.toml").write_text("[session]\ncontext_budget_tokens = 12000\n")
+    assert Config.load(repo).session.context_budget_tokens == 12000
 
 
 def test_a_type_at_zero_lifts_nothing_and_leaves_the_global_in_force():
