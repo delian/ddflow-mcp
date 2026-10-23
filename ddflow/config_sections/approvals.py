@@ -33,3 +33,11 @@ class ApprovalsConfig:
         8,
         doc="How many leading characters of a request's digest the person types back to approve or deny it (default 8): `ddflow approvals approve ID --digest XXXXXXXX`. It proves they read which request, so it cannot be answered blind.",
     )
+    accept_harness: bool = knob(
+        True,
+        doc="Accept an approval answered in the agent's own chat (default true; D-RA-Q5): the agent puts `ddflow approvals ask ID` to the person with AskUserQuestion and `ddflow approvals attest ID` reads the answer from the transcript the harness wrote, never from the agent's word. Tier T2 only. It cannot show that a person (not a script holding the session) answered or that the transcript was not edited by the agent's own user; `ddflow doctor` says so.",
+    )
+    transcript_dirs: list[str] = knob(
+        factory=lambda: ["~/.claude/projects"],
+        doc="Where the harness channel looks for session transcripts (`*.jsonl`) that hold the answer to an approval question (default ~/.claude/projects). Only files modified since the request was filed are read.",
+    )
