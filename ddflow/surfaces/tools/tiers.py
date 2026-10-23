@@ -112,7 +112,7 @@ def resolve_tier(repo: Path) -> str:
     cfg = _config(repo)
     #: A config that cannot be read is the default (`auto`); a value this version does not know
     #: is the newer release's, and lists everything.
-    tier = (cfg.mcp.tools if cfg is not None else AUTO).strip().lower()
+    tier = (cfg.mcp.tools if cfg is not None else AUTO).strip().lower() or AUTO
     return tier if tier in (*TIERS, *PROFILES, AUTO) else DEFAULT_TIER
 
 

@@ -78,8 +78,7 @@ def profile_note(profile: str, total: int = 0) -> str:
     wider = {
         "lean": "`families`, `hot+families` or `all`",
         "families": "`hot+families` or `all`",
-        "hot+families": "`all`",
-    }[profile]
+    }.get(profile, "`all`")
     return (
         f"This connection lists the `{profile}` profile ({n} tools"
         f"{f' of {total}' if total else ''}). The rest are NOT in `tools/list` but stay callable: "

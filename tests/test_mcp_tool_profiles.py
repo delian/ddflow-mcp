@@ -206,3 +206,13 @@ def test_an_empty_knob_is_auto_and_auto_has_a_note(repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", " AUTO ")
     _srv, tools = _listed(repo, clientInfo={"name": "Hosty"})
     assert len(tools) == 24  # an upper-case or padded auto still waits for the client's name
+
+
+def test_a_blank_knob_is_the_default_profile_and_a_note_never_raises(repo, monkeypatch):
+    from ddflow.surfaces.tools import tiers
+
+    monkeypatch.setattr(
+        tiers, "_config", lambda _repo: type("C", (), {"mcp": type("M", (), {"tools": " "})()})()
+    )
+    assert tiers.resolve_tier(repo) == "auto"
+    assert "`all`" in P.profile_note("leaner") and "15" not in P.profile_note("hot+families")
