@@ -64,7 +64,9 @@ def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(rep
     st = state(repo)
     assert st.bugs["Bup"].fix_task == "fix-Bup" and st.items["fix-Bup"].fixes == ["Bup"]
     assert st.items["fix-Bup"].state == "open" and st.items["fix-Bup"].parent == "bugs"
-    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "nothing left without a fix task"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, (
+        "nothing left without a fix task"
+    )
 
 
 def test_a_reported_bug_does_not_block_the_fix_tasks_completion(repo):
