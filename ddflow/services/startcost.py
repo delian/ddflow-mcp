@@ -66,14 +66,21 @@ class StartCost:
     @property
     def over(self) -> int:
         """Tokens past the budget, 0 when within it (or no budget is set)."""
-        return max(0, self.tokens - self.budget) if self.budget > 0 else 0
+        return self._over(self.budget)
+
+    def _over(self, budget: int) -> int:
+        return max(0, self.tokens - budget) if budget > 0 else 0
+
+    def _against(self, budget: int) -> str:
+        """`N tokens (budget M)`, and ` -- OVER by K` when past it: one wording for the headline
+        and for each agent type."""
+        cap = f"budget {budget}" if budget > 0 else "no budget"
+        over = self._over(budget)
+        return f"{self.tokens} tokens ({cap})" + (f" -- OVER by {over}" if over else "")
 
     def line(self) -> str:
         """`session start cost: N tokens (budget M)` and what it is made of."""
-        budget = f"budget {self.budget}" if self.budget > 0 else "no budget"
-        head = f"session start cost: {self.tokens} tokens ({budget})"
-        if self.over:
-            head += f" -- OVER by {self.over}"
+        head = f"session start cost: {self._against(self.budget)}"
         made = ", ".join(f"{name} {n}" for name, n in self.parts.items())
         head = f"{head}: {made}" if made else head
         return "\n".join([head, *self._target_lines()])
@@ -82,15 +89,10 @@ class StartCost:
         """One line per configured agent type: the same cost against that type's budget."""
         out = []
         for name, budget in self.targets.items():
-            over = max(0, self.tokens - budget) if budget > 0 else 0
-            cap = f"budget {budget}" if budget > 0 else "no budget"
             odd = (
                 "" if name in {h.id for h in HR.load()} else " [no such agent type: never matches]"
             )
-            out.append(
-                f"  {name}{odd}: {self.tokens} tokens ({cap})"
-                + (f" -- OVER by {over}" if over else "")
-            )
+            out.append(f"  {name}{odd}: {self._against(budget)}")
         return out
 
     def notes(self) -> list[str]:
