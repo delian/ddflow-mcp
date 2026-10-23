@@ -341,6 +341,7 @@ def _bug_fixed(a, c: Ctx) -> int:
         verify_reason=getattr(a, "verify_reason", "") or "",
         mutation=mutation_of(vars(a)),
         landed=getattr(a, "landed", "") or "",
+        lint_exempt=getattr(a, "lint_exempt", "") or "",
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
