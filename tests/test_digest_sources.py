@@ -111,3 +111,8 @@ def test_collectors_resolve_once_the_queue_module_exists():
         assert re.fullmatch(r"collect_[a-z_]+", fn) and mod == "ddflow.services.digest.queue"
         if importlib.util.find_spec(mod) is not None:
             assert callable(getattr(importlib.import_module(mod), fn, None)), s.kind
+
+
+def test_the_site_table_is_not_empty():
+    """An empty `sites.SITES` would make 'every verb is covered' vacuously true."""
+    assert len(sites.SITES) >= 10
