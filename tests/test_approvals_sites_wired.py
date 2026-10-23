@@ -137,7 +137,6 @@ def test_claim_force_by_approval_for_an_agent(proj, monkeypatch):
     assert _state(proj).items["T1"].lease.holder == "bot"
     # a person has --force: the approval route changes nothing for them
     out = CL(proj, "T1", no_worktree=True, agent="", approval="request")
-    assert (
-        out.exit == 3 and "approval" not in out.reason
-    )  # the refusal is the plain one: no route offered
+    assert out.exit == 3
+    assert out.reason == "T1 is in review; --force to take it back anyway."  # plain, no route
     assert len([r for r in asks_of(_state(proj)).values() if r["verb"] == "claim.force"]) == 1
