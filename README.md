@@ -5902,7 +5902,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ea0be716ec3d -->
+<!-- ddflow:begin README/knobs sha=6c7c529f9761 -->
 <details><summary>All 400 knobs across 42 sections</summary>
 
 | Knob | Default | Values |
@@ -6230,7 +6230,7 @@ long default is left to `ddflow config --explain`.
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
-| `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
+| `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
 | `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
 | `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
