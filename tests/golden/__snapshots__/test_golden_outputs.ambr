@@ -1066,10 +1066,10 @@
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
       session.agent_brief_max_chars = 9000   [default]
-          Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME
-          ITEM` renders for a subagent. Over it, the lessons and then the decisions
-          are cut (down to a pointer); the standard sections are only ever left out by
-          `agent_brief_off`. 0 means no ceiling.
+          Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief
+          `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the
+          lessons and then the decisions are cut (down to a pointer); the standard
+          sections are only ever left out by `agent_brief_off`. 0 means no ceiling.
       session.agent_brief_budget_share = 0.1   [default]
           The share of the session start budget (`context_budget_tokens`, or the
           running agent type's entry in `[session.context_budget]`) the launch brief
