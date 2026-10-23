@@ -115,13 +115,11 @@ def _list_changed_line(harness_id: str) -> str:
     row = clients.by_harness(harness_id)
     if row is None:
         return f"{'list_changed':<13} no client row (unknown: treated as hard)"
-    trust = (
-        f"trusted from {row.min_version}"
-        if row.min_version
-        else f"checked {row.checked}, expires unless verified"
-        if row.list_changed == clients.HONOURS and row.source != "verified"
-        else "by name"
-    )
+    how = clients.basis(row)
+    trust = {
+        clients.RANGED: f"trusted from {row.min_version}",
+        clients.EXPIRING: f"checked {row.checked}, expires unless verified",
+    }.get(how, how)
     version = f" {row.verified_version}" if row.verified_version else ""
     return f"{'list_changed':<13} {row.list_changed} ({row.source}{version}, {row.key}; {trust})"
 

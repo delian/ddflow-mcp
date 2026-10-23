@@ -371,9 +371,22 @@ def lookup(client_info: object) -> Entry | None:
     return _BY_NAME.get(_name(client_info))
 
 
+RANGED, EXPIRING, BY_NAME = "ranged", "expiring", "by name"
+
+
+def basis(entry: Entry) -> str:
+    """How `entry` is trusted: `ranged` (only from its `min_version`), `expiring` (an unverified
+    `honours` row, good for MAX_AGE_DAYS after `checked`) or `by name` (a row that does not age).
+    `effective` and `ddflow harness show` both read this, so they cannot disagree."""
+    if entry.min_version:
+        return RANGED
+    return EXPIRING if entry.list_changed == HONOURS and entry.source != "verified" else BY_NAME
+
+
 def effective(entry: Entry, version: object, today: date) -> str:
     """What `entry` says for a client of `version` on `today` (see the module docstring)."""
-    if entry.min_version:
+    kind = basis(entry)
+    if kind == RANGED:
         have, need = version_tuple(version), version_tuple(entry.min_version)
         if not (have and need and have >= need):
             return UNKNOWN
@@ -382,7 +395,7 @@ def effective(entry: Entry, version: object, today: date) -> str:
         if same and _prerelease(version):
             return UNKNOWN  # 2.1.296-beta.1 comes before the verified 2.1.296
         return entry.list_changed
-    if entry.list_changed == HONOURS and entry.source != "verified":
+    if kind == EXPIRING:
         try:
             age = (today - date(*map(int, entry.checked.split("-")))).days
         except (TypeError, ValueError):
