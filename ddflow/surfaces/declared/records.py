@@ -226,7 +226,7 @@ COMMANDS: tuple[Command, ...] = (
         "bug (`all`: one-shot after an upgrade -- other agents' bugs too). With neither it "
         "only PREVIEWS (`dry_run` true in the answer) and files nothing. "
         "`ddflow_bug_found` files one per bug by default.",
-        call=lambda repo, a, agent: file_tasks_call(repo, a, agent),
+        call=file_tasks_call,
         payload=("filed", "linked", "tasks", "links", "dry_run", "preview"),
         params=(
             Param(

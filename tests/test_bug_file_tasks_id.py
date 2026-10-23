@@ -51,7 +51,7 @@ def test_cli_without_an_id_is_a_dry_run_that_says_so(repo):
 
 def test_cli_with_an_id_files_only_that_bugs_task(repo):
     seed(repo)
-    code, out, err = run_cli(repo, "bug", "file-tasks", "B-two")
+    code, _, err = run_cli(repo, "bug", "file-tasks", "B-two")
     assert code == 0, err
     st = state(repo)
     assert "fix-B-two" in st.items and "fix-B-one" not in st.items
