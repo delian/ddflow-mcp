@@ -292,7 +292,7 @@ def test_the_handshake_says_the_import_was_never_finished(repo):
     _imported(repo)
     text = _instructions(repo)
     assert "ddflow_import_verify" in text, text[-1200:]
-    assert "declare no globs" in text, text[-1200:]
+    assert "without globs" in text, text[-1200:]
 
 
 def test_the_handshake_stays_quiet_once_the_import_is_finished(repo):

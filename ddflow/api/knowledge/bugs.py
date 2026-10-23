@@ -64,7 +64,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     A bug is an item in the queue (B-bugs-as-items): unless ``no_task`` (a bug fixed in
     the commit that found it) or ``[bugs].file_task`` is off, the same transaction files
     its fix task -- `_file_fix_task` -- and the reply carries ``fix_task``. ``globs`` are
-    the fix task's files, kept verbatim; absent, the item's that exist in the tree. An OPEN bug-fix task named as ``item`` is
+    the fix task's files, kept verbatim; absent, the item's that exist in the tree. An OPEN bug-fix task named as ``item`` (one fixing no other bug) is
     the fix itself and nothing new is filed."""
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
@@ -170,14 +170,17 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
 _FIX_TITLE_MAX = 120
 
 
-def _fix_task_of(st, cfg, item: str):
-    """The OPEN bug-fix task ``item`` names, or None. A report filed against the task that
-    is fixing it (`bug found --item <fix task>`, the dedupe's `filed_against`) names its
-    fix; one filed against the item it was FOUND in -- a feature, a finished task, a
-    phase -- names where to look, and gets a task of its own."""
+def _fix_task_of(st, cfg, item: str, bug_id: str):
+    """The OPEN bug-fix task ``item`` names as the fix of ``bug_id``, or None. A report filed
+    against the task that is fixing it (`bug found --item <fix task>`, the dedupe's
+    `filed_against`) names its fix; one filed against the item it was FOUND in -- a feature,
+    a finished task, a phase, or the fix task of ANOTHER bug (B8fb4a2ec4a) -- names where to
+    look, and gets a task of its own."""
 
     it = st.items.get(item) if item else None
     if it is None or it.removed or not it.is_work or it.terminal:
+        return None
+    if it.fixes and bug_id not in it.fixes:
         return None
     return it if branch_kind(it, cfg) != FEATURE else None
 
@@ -219,14 +222,14 @@ def _fix_task_id(st, cfg, bug_id: str, item: str) -> str:
     names, else its own fix task (`_own_fix_id`, whether or not it is already in the
     queue). One rule, so the bug event written before the task names the task that then
     gets filed."""
-    named = _fix_task_of(st, cfg, item)
+    named = _fix_task_of(st, cfg, item, bug_id)
     return named.id if named is not None else _own_fix_id(st, cfg, bug_id)
 
 
 def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
     """Whether ``bug_id`` already has its fix in the queue, so `_file_fix_task` would file
     nothing: the open bug-fix task ``item`` names, or its own fix task, not abandoned."""
-    if _fix_task_of(st, cfg, item) is not None:
+    if _fix_task_of(st, cfg, item, bug_id) is not None:
         return True
     have = st.items.get(_own_fix_id(st, cfg, bug_id))
     return have is not None and not have.removed
