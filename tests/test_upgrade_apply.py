@@ -24,6 +24,10 @@ from ddflow.infra.log import EventLog
 from ddflow.services import upgrade_apply as UA
 from ddflow.services import upgrade_plan as UP
 
+#: Read by `ddflow tests --item` (B81cf6e7dfd): the plan is built from the unreleased manifest
+#: fragments, data no import reaches, so a new knob fragment must select these tests.
+GOVERNS = ("ddflow/templates/upgrade/**", "ddflow/services/upgrade_manifest.py")
+
 OLD = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
 DRIVER = "docs/ddflow/drivers/implement-phase.md"
 
@@ -1156,6 +1160,22 @@ def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_in
     newer = UP.build(old, log, cfg, st, running="9.9.9")
 
     assert not [i for i in newer["categories"]["config"] if i["action"] != UP.OPERATOR]
+
+
+def test_a_value_the_log_redacted_still_counts_as_settled() -> None:
+    """B81cf6e7dfd: the log records the `~/.claude/projects` default as `[REDACTED:path]`, so the
+    settled value never equalled the manifest's and the item came back in every plan."""
+    from ddflow.services.upgrade_plan import _unsettled
+
+    item = {"id": "knob_added:a.b", "new": '["~/.claude/projects"]'}
+    redacted = {"knob_added:a.b": ['["[REDACTED:path]"]']}
+    assert _unsettled([item], redacted) == []
+    listed = {"id": "knob_added:a.b", "new": ["~/.claude/projects"]}  # a parsed default
+    assert _unsettled([listed], {"knob_added:a.b": [["[REDACTED:path]"]]}) == []
+    assert _unsettled([{**listed, "new": []}], {"knob_added:a.b": [["[REDACTED:path]"]]}) != []
+    # a value the mark cannot stand in for, or a plain different value, is news again
+    assert _unsettled([{**item, "new": "[]"}], redacted) != []
+    assert _unsettled([{**item, "new": "7"}], {"knob_added:a.b": ["8"]}) != []
 
 
 # -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------

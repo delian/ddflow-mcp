@@ -35,6 +35,7 @@ operator knows). An empty plan means the project is up to date.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -119,11 +120,34 @@ def settled_items(st: State) -> dict[str, list[Any]]:
     return out
 
 
+_MARK = re.compile(r"\[REDACTED(?::[^\]]*)?\]")
+
+
+def _same_value(new: Any, recorded: Any) -> bool:
+    """Is the manifest's ``new`` what the log recorded? The log redacts text (B81cf6e7dfd): a
+    `~/.claude/projects` default is recorded as `[REDACTED:path]`, and which values are masked
+    depends on the machine (hostname, $HOME, patterns), so the plan cannot redact ``new`` the
+    same way. A recorded mark stands for any text, so the rest of the value must still match."""
+    if new == recorded:
+        return True
+    if isinstance(new, list | tuple) and isinstance(recorded, list | tuple):
+        return len(new) == len(recorded) and all(
+            _same_value(n, r) for n, r in zip(new, recorded, strict=True)
+        )
+    if isinstance(new, dict) and isinstance(recorded, dict):
+        return new.keys() == recorded.keys() and all(_same_value(new[k], recorded[k]) for k in new)
+    if not (isinstance(new, str) and isinstance(recorded, str) and _MARK.search(recorded)):
+        return False
+    parts = _MARK.split(recorded)
+    return re.fullmatch(".+?".join(re.escape(p) for p in parts), new, re.S) is not None
+
+
 def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
     return [
         i
         for i in items
-        if i["id"] not in settled or (settled[i["id"]] and i.get("new") not in settled[i["id"]])
+        if i["id"] not in settled
+        or (settled[i["id"]] and not any(_same_value(i.get("new"), v) for v in settled[i["id"]]))
     ]
 
 
