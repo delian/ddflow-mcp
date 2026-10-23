@@ -17,6 +17,7 @@ import os
 import re
 import shlex
 import sys
+import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ from ..core.slug import ascii_slug
 from ..infra import fsio
 from ..infra import worktree as W
 from . import ci_conflict as CC
+from . import ci_marker as CM
 from . import ci_scope as CS
 from . import suitelock as SL
 from . import workers as WK
@@ -87,6 +89,8 @@ class Result:
     failures: dict = field(default_factory=dict)
     #: which tests ran (`ci_scope.Plan.evidence`); empty when the command ran as written
     scope: dict = field(default_factory=dict)
+    #: seconds queued for the host-wide suite lock; None when the run took no lock (B1d51fb9da1)
+    waited_s: float | None = None
 
     @property
     def ok(self) -> bool:
@@ -95,6 +99,11 @@ class Result:
     @property
     def exit(self) -> int:
         return {"passed": 0, "failed": 1}.get(self.status, 2)
+
+    def _wait_data(self) -> dict:
+        if self.waited_s is None:
+            return {}
+        return {"waited_s": self.waited_s, "wait_line": CM.wait_line(self.waited_s)}
 
     def as_data(self) -> dict:
         return {
@@ -105,6 +114,7 @@ class Result:
             "why": self.reason,
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "output_tail": self.output_tail,
+            **self._wait_data(),
             **({"scope": self.scope} if self.scope else {}),
             **self.failures,
             **({"failure_text": failure_text(self.failures)} if self.failures else {}),
@@ -386,18 +396,36 @@ def run(
         used: dict[str, dict] = {}
         full_suite = not command.strip() and _runs_whole_suite(cmd, scope)
         try:
-            with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
-                p, out_prefix = _execute(
-                    cfg, tree, cmd, scope, budget, tick, local=full_suite, used=used
-                )
+            p, out_prefix, waited = _run_locked(
+                cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite
+            )
         except SL.SuiteBusy as busy:
-            return Result("unavailable", command=cmd, sha=sha, reason=str(busy))
+            return Result(
+                "unavailable", command=cmd, sha=sha, reason=str(busy),
+                waited_s=round(busy.waited_s, 6),
+            )  # fmt: skip
         if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+            unfinished.waited_s = waited
             return unfinished
     res = _result(p, out_prefix, cmd, sha, base, scope)
+    res.waited_s = waited
     if scope is None and used:
         res.scope = {"workers": used}
     return res
+
+
+def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite):
+    """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
+    its output prefix and the seconds spent queued for the slot (None without one)."""
+    waited: float | None = None
+    queued_at = time.monotonic()
+    with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+        if full_suite:  # the slot is held: everything before this was queueing
+            waited = round(time.monotonic() - queued_at, 6)
+        p, out_prefix = _execute(
+            cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
+        )
+    return p, out_prefix, waited
 
 
 def _unfinished(p, cmd: str, sha: str, scope) -> Result | None:
@@ -466,9 +494,11 @@ def _worker_log(scope) -> dict[str, dict]:
     return used
 
 
-def _with_workers(cmd: str, cfg: Config, used: dict[str, dict], stage: str) -> str:
+def _with_workers(
+    cmd: str, cfg: Config, used: dict[str, dict], stage: str, holding_suite: bool = False
+) -> str:
     """``cmd`` with ``{workers}`` replaced, the count and its inputs noted under ``stage``."""
-    cmd, auto = WK.resolve(cmd, cfg)
+    cmd, auto = WK.resolve(cmd, cfg, holding_suite=holding_suite)
     if auto:
         used[stage] = {"n": auto.n, **auto.inputs}
     return cmd
@@ -487,7 +517,14 @@ def _holder(repo: Path, ref: str) -> str:
 
 @contextmanager
 def localize_hooks(
-    tree: Path, cfg: Config, cmd: str, used: dict[str, dict], *, source=None, cores=None
+    tree: Path,
+    cfg: Config,
+    cmd: str,
+    used: dict[str, dict],
+    *,
+    source=None,
+    cores=None,
+    holding_suite: bool = False,
 ) -> Iterator[str]:
     """``cmd``, or -- when the pre-commit config of ``tree`` says ``-n auto`` (one pytest worker
     per core) -- ``cmd`` reading a temporary copy that says the count this host can afford now
@@ -496,7 +533,9 @@ def localize_hooks(
     config = tree / PRE_COMMIT_CONFIG
     w = None
     if "pre-commit run" in cmd and config.is_file():
-        text, w = WK.localize_auto(config.read_text(), cfg, source=source, cores=cores)
+        text, w = WK.localize_auto(
+            config.read_text(), cfg, source=source, cores=cores, holding_suite=holding_suite
+        )
     if w is None:
         yield cmd
         return
@@ -506,15 +545,19 @@ def localize_hooks(
 
 
 def _execute(
-    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, local=False, used=None
+    cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, holding_suite=False, used=None
 ):
     """(the run that decided the verdict, the output of the run before it): the command as
     written, or -- for a selected scope -- the hooks without the suite, then the selected
     tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
-    cmd = _with_workers(cmd, cfg, used, "command")
-    with localize_hooks(tree, cfg, cmd, used) if local else nullcontext(cmd) as cmd:
+    cmd = _with_workers(cmd, cfg, used, "command", holding_suite=holding_suite)
+    with (
+        localize_hooks(tree, cfg, cmd, used, holding_suite=True)
+        if holding_suite
+        else nullcontext(cmd) as cmd
+    ):
         return _run_stages(cfg, tree, cmd, scope, budget, tick, used, selected)
 
 

@@ -758,7 +758,8 @@
   "shape": "object",
   "payload": [
    "trees",
-   "stale_branches"
+   "stale_branches",
+   "orphan_blobs"
   ],
   "output_schema": {
    "type": "object",
@@ -768,6 +769,7 @@
     },
     "trees": {},
     "stale_branches": {},
+    "orphan_blobs": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -1494,7 +1496,8 @@
    "linked",
    "tasks",
    "links",
-   "dry_run"
+   "dry_run",
+   "preview"
   ],
   "output_schema": {
    "type": "object",
@@ -1507,6 +1510,7 @@
     "tasks": {},
     "links": {},
     "dry_run": {},
+    "preview": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

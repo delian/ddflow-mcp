@@ -184,10 +184,18 @@
     'ddflow_bug_file_tasks': '''
       {
        "name": "ddflow_bug_file_tasks",
-       "description": "File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one per bug by default).",
+       "description": "File the fix task of ONE open bug that has none (`id`), or of every such bug (`all`: one-shot after an upgrade -- other agents' bugs too). With neither it only PREVIEWS (`dry_run` true in the answer) and files nothing. `ddflow_bug_found` files one per bug by default.",
        "inputSchema": {
         "type": "object",
         "properties": {
+         "id": {
+          "type": "string",
+          "description": "The open bug to file the fix task of."
+         },
+         "all": {
+          "type": "boolean",
+          "description": "File a fix task for EVERY open bug that has none, other agents' too. Without it and without `id`, only a preview."
+         },
          "dry_run": {
           "type": "boolean",
           "description": "List what would be filed; write nothing."
@@ -412,6 +420,10 @@
          "full": {
           "type": "boolean",
           "description": "Whole suite (run)."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "run: seconds this run may take (at most [gates].max_run_timeout_s)."
          },
          "as_agent": {
           "type": "string",
@@ -1129,6 +1141,10 @@
           "type": "string",
           "description": "Path to its full output; a digest is recorded."
          },
+         "approval": {
+          "type": "string",
+          "description": "An operator approval id (Q...) for this exact override; a refusal names it."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -1157,6 +1173,10 @@
          "gate": {
           "type": "string",
           "description": "Gate id, e.g. unit_tests."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "Seconds this run may take (at most [gates].max_run_timeout_s)."
          },
          "as_agent": {
           "type": "string",
@@ -1189,6 +1209,10 @@
          "reason": {
           "type": "string",
           "description": "Why this step does not apply HERE. 'n/a' is not a reason: the next person reads this to decide whether you were right."
+         },
+         "approval": {
+          "type": "string",
+          "description": "An operator approval id (Q...) for this exact override; a refusal names it."
          },
          "as_agent": {
           "type": "string",

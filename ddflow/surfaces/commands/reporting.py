@@ -16,6 +16,7 @@ from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, OK, REFUSED, Ctx
 from ..render import emit_json
+from ..startcost_texts import start_texts
 from ..vocabulary import sources
 from .lifecycle import _next_without_plan
 from .setup import cmd_upgrade
@@ -144,6 +145,10 @@ def _recorded_line(r) -> list[str]:
         extras.append(f"{r['open_bugs']} OPEN bug(s)")
     if r.get("refuted"):
         extras.append(f"{r['refuted']} gate(s) passed on refutation (`ddflow gate list --refuted`)")
+    if r.get("approvals"):
+        extras.append(
+            f"{r['approvals']} approval request(s) waiting for the operator (`ddflow approvals list`)"
+        )
     return ["", "Recorded: " + " · ".join(extras)] if extras else []
 
 
@@ -419,6 +424,7 @@ def cmd_doctor(a, c: Ctx) -> int:
         agent=c.requested_agent,
         parser=parser,
         tools=tools,
+        start_texts=start_texts,
         accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
     )
     if c.json:

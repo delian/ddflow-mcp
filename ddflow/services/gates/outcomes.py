@@ -17,6 +17,7 @@ from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
+from ..metrics.queued import _why_notes
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -30,8 +31,7 @@ from .evidence import (
     worktree_entries,
 )
 from .failed_gate import skipped_after_failure
-from .kinds import DiffPaths, evidence_problems, kind_pipeline, not_applicable
-from .reasons import _unavailable_reasons
+from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
 
 
 @dataclass
@@ -320,7 +320,7 @@ def status(
         rounds=_round_notes(it, rows),
         not_applicable=na,
         local_command=local_command_notes(it, rows),
-        why=_unavailable_reasons(it, rows),
+        why=_why_notes(it, rows),
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
@@ -508,7 +508,7 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             raise ValueError("skipping is disabled ([gates].allow_skip_with_reason)")
         if not reason:
             raise ValueError("a skip must carry --reason; an unexplained skip is invisible")
-    if outcome == "passed" and gdef and gdef.evidence and not evidence:
+    if outcome == "passed" and gdef and gdef.evidence and bare(evidence):
         raise ValueError(
             f"gate {gate!r} requires evidence to pass (it is in gates.evidence_required). "
             f"Attach what you observed: --evidence '<what you ran / what it said>', and/or "

@@ -31,6 +31,7 @@ from .prompts import Template, TemplateError, builtin_dir, render
 #: `tests/test_help.py` asserts each has a shipped file and that the index lists them
 #: all, so adding a topic here without writing it fails loudly rather than 404s later.
 TOPICS: dict[str, str] = {
+    "manual": "the full workflow the MCP charter summarises: reporting, review rules, companion tools",
     "workflow": "the loop: pick work, claim it, satisfy its gates, land it",
     "import": "adopting a project that already has history",
     "gates": "what a gate is, which are agent gates, and proving one can fail",

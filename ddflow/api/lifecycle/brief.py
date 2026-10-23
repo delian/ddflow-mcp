@@ -13,6 +13,7 @@ from ...core import outcome as O
 from ...core import progress as PR
 from ...core import provenance as PV
 from ...core.budget import Budget, approx_tokens
+from ...core.measuring import is_measuring
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import choices as CHO
@@ -27,6 +28,7 @@ from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from ...services import waiting as WG
+from ...services.approvals import view as V
 from ...services.export import select as export_select
 from ...services.guidance import charter as CH
 from ...services.guidance import inject as GI
@@ -192,12 +194,21 @@ def _refuted_line(st) -> str:
     )
 
 
+def _operator_lines(st) -> str:
+    """What waits on or is flagged for the OPERATOR: gates passed on refutation, approval
+    requests (RA-cli)."""
+    pending = V.pending_line(st)
+    return _refuted_line(st) + ("\n" + pending if pending else "")
+
+
 def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     """The upgrade lines that lead a brief, "" when none is due. The notice is first said
     once per version on this machine (D-upgrade-auto-check, D-self-upgrade 2) and then
     repeated by each brief until the project is upgraded: FIRST, so the hook, `ddflow brief`
     and `ddflow_brief` all lead with it whichever is asked first. This ddflow was upgraded
     (or the start report), then a newer release is out (proposed, never installed)."""
+    if is_measuring():  # said once per version: a count must not use it up
+        return ""
     notice = US.take_for_brief(repo, st)
     if not notice:
         notice = UN.line(repo, log, cfg, st, agent=agent)
@@ -209,7 +220,9 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
 def _sweep_finished(repo: Path, cfg, log, st, callers: tuple[Path | None, ...]) -> None:
     """Remove the leftover worktrees of done, abandoned and removed items finished long enough
     ago (B4757c428f4): `merge`, `abandon` and `remove` keep a tree their caller stood in. Best effort:
-    a session start must never fail on housekeeping."""
+    a session start must never fail on housekeeping. Not while `doctor` only counts the brief."""
+    if is_measuring():
+        return
     try:
         CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
@@ -337,7 +350,7 @@ def brief(
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
-    text += _refuted_line(st)
+    text += _operator_lines(st)
     if notice := _upgrade_notices(repo, log, cfg, st, agent):
         text = notice + "\n\n" + text
     if item and item in st.items:

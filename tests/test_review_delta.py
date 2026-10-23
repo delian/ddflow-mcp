@@ -410,7 +410,7 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
         "README.md",
         "ddflow/templates/drivers/implement-phase.md",
         "ddflow/templates/prompts/help/gates.md",
-        "ddflow/templates/prompts/mcp_instructions.md",
+        "ddflow/templates/prompts/help/manual.md",
     ):
         text = (root / rel).read_text()
         assert "delta_default" in text and ("--full" in text or "full=true" in text), rel
@@ -487,11 +487,13 @@ def test_a_clean_delta_does_not_clear_findings_nobody_triaged(repo, tmp_path):
     assert out.data["outcome"] == "passed", out.data
 
 
-def test_force_with_delta_is_refused_not_silently_a_delta(repo, tmp_path):
+def test_force_with_delta_is_a_forced_delta_round(repo, tmp_path):
+    """Ba93aec8448: `--force` is past the budget, not a full round: with `--delta` it is one."""
     _setup(repo, tmp_path)
     _review(repo)
+    _fix(repo)
     out = _review(repo, force=True, reason="why", delta=True)
-    assert out.exit == FAIL and "--force" in out.reason and "--delta" in out.reason
+    assert out.exit == OK and _ev(repo)["review_kind"] == "delta", out.reason
 
 
 def test_an_unreachable_delta_keeps_the_earlier_passed_round_and_notes_the_outage(repo, tmp_path):

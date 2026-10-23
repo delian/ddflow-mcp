@@ -33,6 +33,12 @@ def _instructions(repo: Path) -> str:
     return fn(repo)
 
 
+def _manual(repo: Path) -> str:
+    from ddflow.services import help as H
+
+    return H.render_topic("manual", repo)
+
+
 # -- bootstrap ------------------------------------------------------------------------
 
 
@@ -55,15 +61,16 @@ def test_an_adopted_repository_is_told_the_loop_and_the_pipeline(repo):
     # mistake `render.board` made once, which showed ten columns to a project that had
     # trimmed its pipeline to three.
     for gate in ("research", "rubber_duck", "critic", "standards", "bug_hunt", "dedupe"):
-        assert gate in text, gate
+        assert gate in text, gate  # the charter lists the project's own pipeline
 
 
 def test_the_pipeline_shown_is_the_project_s_own(repo):
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "gates.task_pipeline", "implement,unit_tests,merge")
     text = _instructions(repo)
-    line = next((ln for ln in text.splitlines() if " implement ·" in ln), "")
+    line = next((ln for ln in text.splitlines() if ln.startswith("Gates:")), "")
     assert line, text[:600]
+    assert line.split() == ["Gates:", "implement", "unit_tests", "merge."], line
     assert "rubber_duck" not in line, f"a trimmed pipeline must not show the default: {line}"
 
 
@@ -73,7 +80,7 @@ def test_the_pipeline_shown_is_the_project_s_own(repo):
 def test_the_agent_is_told_what_to_record_and_when(repo):
     """Each recording duty, with the tool that performs it."""
     run_cli(repo, "init")
-    text = _instructions(repo)
+    text = _manual(repo)  # the charter keeps the duties short, the manual in full
     for tool in (
         "ddflow_session_prompt",
         "ddflow_decision_add",
@@ -91,64 +98,41 @@ def test_the_agent_is_told_what_to_record_and_when(repo):
 
 def test_every_companion_is_named_with_the_gates_it_serves(repo):
     run_cli(repo, "init")
-    text = _instructions(repo)
+    text = _manual(repo)
     for name in ("roborev", "codeguide", "context7", "OptMem"):
         assert name in text, f"{name} is not named, so it will not be used"
     assert "ddflow_companions" in text
 
 
 def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
-    """Naming all four is not enough, and neither is reporting which are absent.
+    """The charter says there are companions to wire up and to PROPOSE them; the operator decides.
 
-    The operator's instruction was explicit: the tool must not install anything itself,
-    and the agent must be told to PROPOSE installing them so the operator can decide.
-    A report with no action attached is a report nobody acts on — which is how a gate
-    ends up with nothing behind it while everyone believes it is covered.
+    The state-specific list (install command per companion) is `ddflow_companions`, so the
+    handshake stays a charter; the rules for proposing are in the manual.
     """
+
     run_cli(repo, "init")
     text = _instructions(repo)
-    assert "Not wired up here" in text, text[-800:]
-
-    block = text.split("Not wired up here")[1]
-    assert "propose" in block.lower(), "the agent must be told to raise it, not just know it"
-    assert "If they agree" in block, "and what to do when the operator says yes"
-    assert "without asking" in block, "and that it must not install unilaterally"
-    assert "unavailable" in block, "and what to do when the operator says no"
+    assert "not wired up" in text and "ddflow_companions" in text and "Propose" in text
+    manual = _manual(repo)
+    assert "Propose; never install" in manual
+    assert "unavailable" in manual and "install nothing unasked" in text
 
 
-def test_each_missing_companion_carries_its_install_command(repo):
-    """Inline, so proposing it does not cost a second tool call.
-
-    An instruction that says "find out how to install it and then ask" is one the agent
-    defers; one that already has the command is one it can act on in the same turn.
-    """
-    run_cli(repo, "init")
-    block = _instructions(repo).split("Not wired up here")[1]
-    lines = [ln for ln in block.splitlines() if ln.startswith("- **")]
-    assert len(lines) >= 3, block[:600]
-    for ln in lines:
-        assert "Serves:" in ln and "Install:" in ln, ln
-    # One per line: `trim_blocks` once collapsed all three onto one unreadable line.
-    assert any("roborev" in ln for ln in lines), lines
-    assert not any(ln.count("**") > 2 for ln in lines), (
-        f"two companions rendered onto one line: {lines}"
-    )
-
-
-def test_a_registered_companion_is_not_listed_as_missing(repo):
+def test_the_companion_line_is_only_said_when_one_needs_action(repo):
     from ddflow.services import companions as CO
+    from ddflow.services import prompts as P
+    from ddflow.surfaces.mcp import _instruction_vars
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
     CO.register(repo, comp, "claude")
-    text = _instructions(repo)
-    missing = (
-        text.split("Not wired up here")[1].split("\n")[0] if "Not wired up here" in text else ""
-    )
-    assert "context7" not in missing, f"it IS wired up: {missing!r}"
-
-
-# -- it is a template -----------------------------------------------------------------
+    vars_ = _instruction_vars(repo)
+    # The real decision: a registered companion is not among those that need action.
+    assert "context7" not in [c["id"] for c in vars_["actionable_companions"]]
+    vars_["tool_tier_note"] = ""
+    vars_["actionable_companions"] = []
+    assert "not wired up" not in P.render(P.resolve("mcp_instructions", repo), **vars_)
 
 
 def test_the_whole_instruction_is_an_editable_file(repo):
@@ -232,7 +216,7 @@ def test_the_instructions_arrive_in_the_initialize_response(repo):
         except subprocess.TimeoutExpired:
             proc.kill()
     body = res.get("instructions", "")
-    assert "ddflow_brief" in body and "roborev" in body, body[:400]
+    assert "ddflow_brief" in body and "ddflow_claim" in body, body[:400]
 
 
 def test_the_handshake_does_not_write_to_the_repository(repo):
@@ -244,3 +228,32 @@ def test_the_handshake_does_not_write_to_the_repository(repo):
     before = sorted(p.name for p in repo.iterdir())
     _instructions(repo)
     assert sorted(p.name for p in repo.iterdir()) == before, "the handshake left a mark"
+
+
+def test_gates_with_no_tool_behind_them_are_still_said(repo):
+    """End to end: a fresh project has gates with no companion behind them, and the served
+    instructions say so (the signal the charter must not lose)."""
+    run_cli(repo, "init")
+    text = _instructions(repo)
+    assert "Gates with no tool behind them:" in text, text[-600:]
+    assert "never imply one ran" in text
+
+
+def test_a_registered_companion_is_absent_from_the_served_notice(repo):
+    """End to end on the served text: context7 is registered, so the notice names the others only."""
+    from ddflow.services import companions as CO
+
+    run_cli(repo, "init")
+    comp = next(c for c in CO.load(repo) if c.id == "context7")
+    CO.register(repo, comp, "claude")
+    line = next(ln for ln in _instructions(repo).splitlines() if "not wired up" in ln)
+    assert "context7" not in line and "roborev" in line, line
+
+
+def test_every_default_companion_carries_the_install_command_the_charter_points_at(repo):
+    """The charter names `ddflow_companions` for install commands, so each default one has one."""
+    from ddflow.services import companions as CO
+
+    run_cli(repo, "init")
+    bare = [c.id for c in CO.load(repo) if c.default and not c.install]
+    assert not bare, f"default companions without an install command: {bare}"
