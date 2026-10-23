@@ -59,7 +59,8 @@ def test_a_branch_added_to_a_function_at_the_limit_is_named_before_the_ci_gate(r
     _git(repo, "add", "m.py")
     code, msg = E.check_commit(repo)
     assert code == 0, "advisory only: it must not refuse the commit"
-    assert "m.py:1 near_limit CC 21 -> 22" in msg and "test_architecture_guards" in msg
+    assert "m.py:1 near_limit CC 21 -> 22 (already grade D, getting worse)" in msg
+    assert "will fail" not in msg, "the guard counts functions over 20: this one was counted"
 
 
 @needs_radon
