@@ -94,6 +94,40 @@ def _state(log):
     return fold(log.read_all(), strict=False)
 
 
+def _check_request(kind, subject, text, digest, content, bot_answerable, actor) -> str:
+    """Refuse an ask that could never be answered or is malformed; return the digest to use."""
+    if kind not in (APPROVAL, QUESTION):
+        raise AskRefused(f"an ask is an '{APPROVAL}' or a '{QUESTION}', not '{kind}'")
+    if not subject:
+        raise AskRefused("an ask needs a subject: what is being asked about")
+    if kind == APPROVAL:
+        digest = digest or (digest_of(content) if content else "")
+        if not digest:
+            raise AskRefused("an approval is of something: give its digest or its content")
+    elif not text:
+        raise AskRefused("a question needs its text")
+    if not isinstance(bot_answerable, bool):
+        raise AskRefused("bot_answerable is true or false, not " + repr(bot_answerable))
+    if bot_answerable:
+        why = require(actor, CAP_APPROVE) if actor is not None else "no actor named"
+        if why:
+            raise AskRefused(f"only an approver may mark an ask bot-answerable: {why}")
+    return digest
+
+
+def _command_fields(command: Command, kind: str) -> dict[str, Any]:
+    if kind != APPROVAL or command.uses < 1 or command.min_level < 1 or command.use_ttl_s < 0:
+        raise AskRefused("a command ask is an approval spent 1+ times at level 1+, usable 0+ s")
+    return {
+        "verb": command.verb,
+        "tier": command.tier,
+        "min_level": command.min_level,
+        "uses": command.uses,
+        "use_ttl_s": command.use_ttl_s,
+        "canon": command.canon,
+    }
+
+
 def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-only
     log,
     cfg: Config,
@@ -112,22 +146,7 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     command: Command | None = None,
 ) -> Requested:
     """Put an ask. Anyone may ask; ``bot_answerable`` needs ``actor`` to hold ``approve``."""
-    if kind not in (APPROVAL, QUESTION):
-        raise AskRefused(f"an ask is an '{APPROVAL}' or a '{QUESTION}', not '{kind}'")
-    if not subject:
-        raise AskRefused("an ask needs a subject: what is being asked about")
-    if kind == APPROVAL:
-        digest = digest or (digest_of(content) if content else "")
-        if not digest:
-            raise AskRefused("an approval is of something: give its digest or its content")
-    elif not text:
-        raise AskRefused("a question needs its text")
-    if not isinstance(bot_answerable, bool):
-        raise AskRefused("bot_answerable is true or false, not " + repr(bot_answerable))
-    if bot_answerable:
-        why = require(actor, CAP_APPROVE) if actor is not None else "no actor named"
-        if why:
-            raise AskRefused(f"only an approver may mark an ask bot-answerable: {why}")
+    digest = _check_request(kind, subject, text, digest, content, bot_answerable, actor)
     ttl = cfg.agent.ask_ttl_s if ttl_s is None else ttl_s
     if ttl <= 0:
         raise AskRefused("an ask must expire: ttl_s is above 0 (`agent.ask_ttl_s`)")
@@ -146,16 +165,7 @@ def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-on
     if code:
         data["code_hash"] = token_hash(code)
     if command is not None:
-        if kind != APPROVAL or command.uses < 1 or command.min_level < 1 or command.use_ttl_s < 0:
-            raise AskRefused("a command ask is an approval spent 1+ times at level 1+, usable 0+ s")
-        data.update(
-            verb=command.verb,
-            tier=command.tier,
-            min_level=command.min_level,
-            uses=command.uses,
-            use_ttl_s=command.use_ttl_s,
-            canon=command.canon,
-        )
+        data.update(_command_fields(command, kind))
     log.append("ask.requested", ask_id, data)
     return Requested(ask_id, code)
 

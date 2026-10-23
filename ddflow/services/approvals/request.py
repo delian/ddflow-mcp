@@ -71,9 +71,21 @@ def pending_for(state, canon: Canon, now: float | None = None) -> dict | None:
 
 
 def file(
-    log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
-) -> Filed:
-    """Request an approval for ``canon`` (or return the identical one still waiting)."""
+    log,
+    cfg: Config,
+    state,
+    canon: Canon,
+    *,
+    reason: str = "",
+    now: float | None = None,
+    auto: bool = False,
+) -> Filed | None:
+    """Request an approval for ``canon`` (or return the identical one still waiting).
+
+    ``auto`` marks a filing the REFUSAL SITE makes on the agent's behalf: it honours
+    `[approvals].auto_request` (D-RA-Q12) and returns None when that is off."""
+    if auto and not cfg.approvals.auto_request:
+        return None
     digest = canon.digest()
     if (row := pending_for(state, canon, now)) is not None:
         return Filed(row["id"], False, digest)

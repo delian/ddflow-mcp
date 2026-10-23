@@ -195,3 +195,12 @@ def test_a_command_ask_with_a_negative_use_window_is_refused(log):
 def test_an_argument_named_twice_is_refused_not_collapsed():
     with pytest.raises(ValueError, match="named twice"):
         _canon(args=(("n", "1"), ("n", "2")))
+
+
+def test_an_automatic_filing_honours_the_auto_request_knob(log):
+    cfg = Config()
+    cfg.approvals.auto_request = False
+    assert R.file(log, cfg, _state(log), _canon(), now=T0, auto=True) is None
+    assert R.file(log, cfg, _state(log), _canon(), now=T0).new  # an agent's own request still files
+    cfg.approvals.auto_request = True
+    assert R.file(log, cfg, _state(log), _canon(), now=T0, auto=True).new is False
