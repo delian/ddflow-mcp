@@ -193,6 +193,8 @@ def test_complete_says_the_author_model_came_from_the_flag(repo, monkeypatch):
     body = json.loads(out)
     assert body["author_model"] == "claude-opus", body
     assert body["model_source"] == "flag", body
+    done = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"]
+    assert done[-1].data.get("author_model") == "claude-opus", done[-1].data
 
 
 def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo, monkeypatch):
