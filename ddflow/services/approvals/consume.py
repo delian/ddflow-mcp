@@ -37,9 +37,22 @@ class Decision:
 def route(ask_id: str, canon: Canon, *, new: bool, chat: bool = False) -> str:
     s = canon.site
     state = "requested" if new else "is still waiting"
+    head = f"approval {ask_id} {state} for '{canon.verb}'"
     if s.tier == sites.T3 and chat:
         return (
-        f"approval {ask_id} {state} for '{canon.verb}' ({s.tier}, level L{s.min_level}+): the operator "
+            f"{head} (tier T3, level L{s.min_level}+): the operator opted in to typed chat "
+            "answers on this host (rated L2-typed): they type "
+            f"`approve {ask_id} <first digest characters>` in their own chat and the agent runs "
+            f"`ddflow approvals attest {ask_id}`, then re-runs this command with --approval {ask_id}."
+        )
+    if s.tier == sites.T3:
+        return (
+            f"{head} (tier T3, level L{s.min_level}+): not approvable over chat here (a signed "
+            "approval is not available and typed chat answers are not enabled on this host, or a "
+            "layer forbids them); the operator does this themselves at their own terminal."
+        )
+    return (
+        f"{head} ({s.tier}, level L{s.min_level}+): the operator "
         f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
         f"it over a channel they use); then re-run this command with --approval {ask_id}. It is "
         f"single-use, bound to this exact command and its current state, and expires."
