@@ -91,6 +91,33 @@ def test_an_identical_finding_another_gate_raised_is_auto_linked(repo, tmp_path)
     assert len(_triaged(repo, "critic")) == 2, _triaged(repo, "critic")
 
 
+def test_one_claim_raised_twice_links_once_per_gate(repo, tmp_path):
+    """Two copies of the SAME claim (same digest) in one round are one claim: the round
+    links the digest once, so the untriaged count is not decremented by more findings than
+    it has."""
+    _setup(repo, tmp_path)
+    (repo / "d.py").write_text("x = 1  # FINDA " + "p" * 60 + "\n")  # emits the same a.py claim
+    probe = "ran the suite twice: wait_max_s is set on every path"
+    out = api.review(repo, gate="critic", item="T1")
+    assert out.data["outcome"] == "failed", out.reason
+    api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe=probe)
+    api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe=probe)
+    out = api.review(repo, gate="rubber_duck", item="T1")
+    assert out.data["outcome"] == "failed", out.reason
+    found = _state(repo).gates["rubber_duck"].evidence["chunk_findings"]
+    counts = G.triage_counts(_state(repo), "rubber_duck")
+    assert counts == {  # both copies of the one claim count as refuted
+        "findings": 3,
+        "refuted": 3,
+        "confirmed": 0,
+        "untriaged": 0,
+    }, counts
+    got = _triaged(repo, "rubber_duck")
+    digests = {f["digest"] for f in found}
+    assert len(digests) == 2
+    assert len(got) == 2 and {e.data["digest"] for e in got} == digests, got
+
+
 def test_a_differently_worded_finding_is_not_auto_linked(repo, tmp_path):
     """Auto-linking is keyed by the digest of the EXACT text and follows the digest, not the
     finding's position: the reworded claim stays untriaged while the unchanged one links,
