@@ -16,6 +16,7 @@ from ...config_sections.digest import parse_ladder
 from ...core import clock
 from ...core.health import KINDS as HK
 from ...core.model import ABANDONED, DONE, State
+from ..redact_report import redact_secrets
 from .sources import SEVERITIES, by_kind
 
 #: Facts that need I/O (a worktree's newest change) are read by the caller and passed in; a
@@ -117,8 +118,6 @@ def dependants(st: State, roots: Iterable[str]) -> set[str]:
 
 def clip(text: str, cfg) -> str:
     """A recorded text for display: secrets masked, on one line, cut at `[digest].text_chars`."""
-    from ..redact_report import redact_secrets
-
     clean, _ = redact_secrets(str(text or ""), cfg)
     return " ".join(clean.split())[: cfg.digest.text_chars]
 
