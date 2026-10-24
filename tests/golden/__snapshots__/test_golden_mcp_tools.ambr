@@ -985,6 +985,10 @@
           "type": "string",
           "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
          },
+         "landed_paths": {
+          "type": "string",
+          "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone."
+         },
          "kind": {
           "type": "string",
           "description": "Work kind: task, doc, research or job (its gate pipeline)."
