@@ -39,27 +39,6 @@ def route(ask_id: str, canon: Canon, *, new: bool, chat: bool = False) -> str:
     state = "requested" if new else "is still waiting"
     if s.tier == sites.T3 and chat:
         return (
-            f"approval {ask_id} {state} for '{canon.verb}' (tier T3, level L{s.min_level}+): the "
-            "operator opted in to typed chat answers on this host (rated L2-typed): they type "
-            f"`approve {ask_id} <first digest characters>` in their own chat and the agent runs "
-            f"`ddflow approvals attest {ask_id}`, then re-runs this command with --approval {ask_id}."
-        )
-    if s.tier == sites.T3:
-        return (
-            f"approval {ask_id} {state} for '{canon.verb}' (tier T3, level L{s.min_level}+): not "
-            "approvable over chat here (a signed approval is not available and typed chat answers "
-            "are not enabled on this host, or a layer forbids them); the operator does this "
-            "themselves at their own terminal."
-        )
-    return (
-            f"approval {ask_id} {state} for '{canon.verb}' (tier T3, level L{s.min_level}+): a "
-            "signed approval is not available; if the operator opted in on the host "
-            "([approvals].accept_chat_for_t3, rated L2-typed; a layer's forbid_chat_for_t3 overrides it) they type `approve "
-            f"{ask_id} <first digest characters>` in their own chat and the agent runs `ddflow "
-            f"approvals attest {ask_id}`, then re-runs this command with --approval {ask_id}; "
-            "otherwise the operator does this themselves at their own terminal."
-        )
-    return (
         f"approval {ask_id} {state} for '{canon.verb}' ({s.tier}, level L{s.min_level}+): the operator "
         f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
         f"it over a channel they use); then re-run this command with --approval {ask_id}. It is "
