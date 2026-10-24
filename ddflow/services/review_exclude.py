@@ -110,6 +110,16 @@ def apply(diff, cfg, repo, say, evidence, tags=None, exclude="", include_pinned=
         return diff, evidence, Excluded()
     kept, gone = filter_diff(diff, *patterns(cfg, repo, tags, exclude, include_pinned))
     if gone.files:
+        if not kept.strip():
+            # Exclusion swallowing the WHOLE diff: reviewers would get nothing and the
+            # gate would record UNAVAILABLE, which `complete` reads as "no reviewer ran"
+            # (B-lockfile-only-item-cannot-complete). A change made entirely of excluded
+            # files (a lockfile-only dependency refresh) has no other content the
+            # exclusion could protect, so the full diff goes out and the review is real.
+            say(gone.line() + " -- that is every file of this diff, so the exclusion is "
+                "NOT applied: a review of nothing would be recorded UNAVAILABLE.")
+            evidence = {**(evidence or {}), "whole_diff_excluded": [p for p, _ in gone.files]}
+            return diff, evidence, Excluded()
         say(gone.line())
         evidence = {**(evidence or {}), **gone.evidence()}
     return kept, evidence, gone
