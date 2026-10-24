@@ -215,6 +215,24 @@ def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo,
     assert body["model_source"] == "session", body
 
 
+def test_a_later_session_with_no_model_does_not_resurrect_an_older_declaration(repo, monkeypatch):
+    """The agent's LATEST session speaks last: reaching past a newer empty session would
+    re-attribute the older session's model to an author that never declared it twice."""
+    _queue(repo)
+    for with_model in (True, False):
+        line = (
+            ["session", "start", "--model", "claude-opus"] if with_model else ["session", "start"]
+        )
+        code, out, err = run_cli(repo, "--json", *line, agent="impl")
+        assert code == 0, out + err
+        run_cli(repo, "session", "end", json.loads(out)["session"], agent="impl")
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "complete", "T2")
+    assert code == 3, out + err
+    assert "pass `--model <author model>`" in out + err, out + err
+
+
 def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
     _queue(repo)
     _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
