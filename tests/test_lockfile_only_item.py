@@ -15,11 +15,11 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
+from conftest import run_cli
+
 import ddflow.api.review as api
 from ddflow.config import Config
 from ddflow.services import review_exclude as REX
-
-from conftest import run_cli
 
 
 def _sec(path: str, body: str = "LOCKED") -> str:
@@ -81,8 +81,17 @@ def test_complete_accepts_a_lockfile_only_change(repo, tmp_path):
     _setup_lock_only_change(repo, tmp_path)
     assert api.review(repo, gate="rubber_duck", item="T1").exit == 0
     assert api.review(repo, gate="critic", item="T1").exit == 0
-    for gate in ("research", "rules", "implement", "standards", "ci", "unit_tests",
-                 "bug_hunt", "dedupe", "merge"):
+    for gate in (
+        "research",
+        "rules",
+        "implement",
+        "standards",
+        "ci",
+        "unit_tests",
+        "bug_hunt",
+        "dedupe",
+        "merge",
+    ):
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "e",
             agent="a1",
