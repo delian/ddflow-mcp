@@ -72,10 +72,35 @@ def test_a_tasks_own_bug_on_its_done_task_is_left_for_verify_reopen(repo):
     assert state(repo).bugs["Bx"].fix_task == "fix-Bx"
 
 
-def test_a_report_on_a_running_fix_task_is_still_its_fix(repo):
+def test_a_report_mislinked_to_a_live_fix_task_of_another_bug_is_refiled(repo):
+    """Ba3cf059594: the old `bug found --item <another bug fix task>` linked a report to
+    a LIVE task fixing a DIFFERENT bug; that task will never fix it, so it waits forever
+    unless `file-tasks` refiles it its own."""
     seed(repo)
     out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.data["filed"] == ["Brep"], out.data
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep" and st.items["fix-Brep"].fixes == ["Brep"]
+    assert st.bugs["Bx"].fix_task == "fix-Bx", "the other bug's link is untouched"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "filed once, not every run"
+
+
+def test_a_report_on_a_live_fix_task_filed_to_fix_it_stays(repo):
+    log = seed(repo)
+    log.append("task.added", "T-both", {"parent": "P1", "title": "both", "fixes": ["Bx", "Brep"]})
+    log.append("bug.found", "Brep", {"fix_task": "T-both"})
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 2, out.data
+    assert state(repo).bugs["Brep"].fix_task == "T-both"
+
+
+def test_a_report_on_a_live_hand_filed_fix_task_is_still_its_fix(repo):
+    log = seed(repo)
+    log.append("task.added", "B-hand", {"parent": "P1", "title": "h", "tags": ["bugfix"]})
+    log.append("bug.found", "Brep", {"fix_task": "B-hand"})
+    out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.exit == 2, out.data
+    assert state(repo).bugs["Brep"].fix_task == "B-hand"
 
 
 def test_a_report_whose_own_fix_task_already_finished_is_linked_once(repo):
