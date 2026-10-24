@@ -126,7 +126,8 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
         return O.refused(
             KIND,
             f"{approved.reason}. The chore class is a person's to approve: they run "
-            f"`ddflow chore approve` from their own terminal.",
+            f"`ddflow chore approve` from their own terminal, or an agent runs it and the "
+            f"operator approves the request it files in chat (`--approval ID` then spends it).",
         )
     if not todo:
         return O.nothing(KIND, f"nothing to commit: {', '.join(rels)} match HEAD")
