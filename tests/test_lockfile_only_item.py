@@ -13,12 +13,16 @@ files needs no cross-family reviewer, the way a docs-only change needs none.
 from __future__ import annotations
 
 import stat
+import subprocess
 from pathlib import Path
 
 from conftest import run_cli
 
 import ddflow.api.review as api
 from ddflow.config import Config
+from ddflow.core.model import fold
+from ddflow.infra import worktree as W
+from ddflow.infra.log import EventLog
 from ddflow.services import review_exclude as REX
 
 
@@ -54,13 +58,19 @@ def _setup_lock_only_change(repo: Path, tmp_path: Path, mixed: bool = False) -> 
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "refresh deps", "--globs", "*")
-    (repo / "uv.lock").write_text('name = "ddflow"\nversion = "0.2.9"\nSECRET_ISH\n')
+    # Claim T1 in a real worktree and commit the lock there: the item's ACTUAL diff is
+    # readable on a branch, the way completion and review both judge it (the claimed
+    # worktree pattern of the landed-commit style tests).
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    tree = W.load_path(repo, fold(EventLog(repo).read_all()).items["T1"].worktree)
+    (tree / "uv.lock").write_text('name = "ddflow"\nversion = "0.2.9"\nSECRET_ISH\n')
     if mixed:
-        (repo / "x.py").write_text("x = 1\n")
-    # The change lands in a commit citing T1 (as a plain git merge would): the item's
-    # actual diff is readable, as it is for the landed-commit style the completion judges.
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", "T1: refresh the lock")
+        (tree / "x.py").write_text("x = 1\n")
+    subprocess.run(
+        ["git", "-C", str(tree), "add", "uv.lock"] + (["x.py"] if mixed else []), check=True
+    )
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "change"], check=True)
     return seen
 
 
@@ -116,7 +126,9 @@ def test_complete_still_demands_a_reviewer_when_the_change_is_not_all_excluded(r
     """A mixed change (the lock and one code file) with no review recorded still refuses
     on independence: the exemption covers only a change whose WHOLE diff is excluded."""
     _setup_lock_only_change(repo, tmp_path, mixed=True)
-    (repo / ".ddflow" / "config.toml").write_text("[worktree]\nenabled = false\n")
+    # Drop the fake reviewer: with no review recorded at all the mixed change must still
+    # refuse on independence.
+    (repo / ".ddflow" / "config.toml").write_text("[worktree]\nenabled = true\n")
     for gate in ("rubber_duck", "critic"):
         assert api.review(repo, gate=gate, item="T1").exit == 2
     for gate in _pipeline_gates():
