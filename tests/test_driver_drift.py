@@ -138,3 +138,7 @@ def test_claude_delta_carries_the_goal_wave_contract():
     assert view == text, (
         "the claude docs view was not regenerated from the template (stale stamp or body)"
     )
+    region = AD._driver_region(DELTA)
+    assert region.state((ROOT / DELTA).read_text()) == "current", (
+        "the claude docs view stamp is not current: a stale ddflow= version or body digest"
+    )
