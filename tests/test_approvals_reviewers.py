@@ -91,3 +91,10 @@ def test_a_command_reviewer_is_never_approved_over_chat(proj):
     assert code == 3 and "T3: terminal only" in err
     assert not asks_of(_state(proj))  # no request is filed for it
     assert run_cli(proj, "reviewers", "approve", "prog")[0] == 0  # a person at a terminal can
+
+
+def test_an_agent_is_not_told_which_reviewers_exist(proj):
+    code, _o, err = run_cli(proj, "reviewers", "approve", "nosuch", agent="bot")
+    assert code == 3 and "lan" not in err and "no reviewer named" not in err
+    code, _o, err = run_cli(proj, "reviewers", "approve", "nosuch")  # a person is told
+    assert code == 3 and "lan" in err and "no reviewer named" in err
