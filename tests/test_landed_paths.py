@@ -61,7 +61,8 @@ def test_a_mixed_landing_keeps_the_task_pipeline_until_the_paths_are_recorded(re
     st = _state(repo)
     it = st.items["T1"]
     changed = CO.changed_paths(repo, it)
-    assert changed == ["docs/decision.md", "src/code.py"], changed
+    # The whole commit, which also carries ddflow's own state files from `init`.
+    assert "docs/decision.md" in changed and "src/code.py" in changed, changed
     s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, it))
     assert "unit_tests" in s.pipeline
 
