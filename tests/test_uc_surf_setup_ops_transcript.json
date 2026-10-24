@@ -224,7 +224,7 @@
   ],
   3,
   "",
-  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval Q1b740e0f3f requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve Q1b740e0f3f` from their own terminal (or answers it over a channel they use); then re-run this command with --approval Q1b740e0f3f. It is single-use, bound to this exact command and its current state, and expires.\n"
+  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval <ask> requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve <ask>` from their own terminal (or answers it over a channel they use); then re-run this command with --approval <ask>. It is single-use, bound to this exact command and its current state, and expires.\n"
  ],
  [
   [
