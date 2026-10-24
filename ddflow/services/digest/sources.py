@@ -207,7 +207,7 @@ SOURCES: tuple[Source, ...] = (
         "get main green (find or file the fix task); nothing should merge meanwhile",
         "ddflow ci status",
         ASK,
-        "every merge; impact is the ready queue",
+        "every merge, which is not itemised here (impact is shown as 0)",
     ),
     _s(
         "lease",
