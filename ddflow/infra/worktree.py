@@ -644,8 +644,14 @@ def _stash_failed(r: GitResult, tree: Path) -> bool:
 def _overwritten(r: GitResult) -> bool:
     """Is this git's own refusal to merge over a locally-modified tracked file it would
     overwrite? Unlike ``fatal: stash failed`` (its pre-merge save died on a lock), this is
-    the dirty tree itself refusing the merge, and the branch was never judged."""
-    return "would be overwritten by merge" in (r.err or r.out)
+    the dirty tree itself refusing the merge, and the branch was never judged. Anchored to
+    the refusal LINE, never the bare phrase: a conflict over a file literally NAMED
+    "would be overwritten by merge" prints the phrase inside a CONFLICT line, and git does
+    not start those with ``error: ``."""
+    for line in (r.err or r.out).splitlines():
+        if line.strip().startswith("error: ") and line.strip().endswith("would be overwritten by merge:"):
+            return True
+    return False
 
 
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
