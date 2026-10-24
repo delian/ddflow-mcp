@@ -95,5 +95,7 @@ def reviewers_pending(repo: Path, state: State) -> list[dict[str, Any]]:
     return RT.pending(repo, state)
 
 
-def approve_reviewer(repo: Path, name: str, *, requested_agent: str, note: str) -> str:
-    return RT.approve(repo, name, requested_agent=requested_agent, note=note)
+def approve_reviewer(
+    repo: Path, name: str, *, requested_agent: str, note: str, approval: str = ""
+) -> str:
+    return RT.approve(repo, name, requested_agent=requested_agent, note=note, approval=approval)

@@ -192,17 +192,19 @@
 # ---
 # name: test_help[ddflow approve]
   '''
-  usage: ddflow approve [-h] [--note NOTE] [--reject] [--reason REASON] id gate
+  usage: ddflow approve [-h] [--note NOTE] [--reject] [--reason REASON] [--approval APPROVAL] id gate
   
   positional arguments:
     id
     gate
   
   options:
-    -h, --help       show this help message and exit
-    --note NOTE      what you looked at, for the record
-    --reject         refuse it; --reason required
-    --reason REASON  why it was rejected — a 'no' nobody can act on is a stall
+    -h, --help           show this help message and exit
+    --note NOTE          what you looked at, for the record
+    --reject             refuse it; --reason required
+    --reason REASON      why it was rejected — a 'no' nobody can act on is a stall
+    --approval APPROVAL  an agent: the id of the operator's approval of exactly this acceptance (a
+                         refusal files the request and names it)
   
   '''
 # ---
@@ -522,7 +524,7 @@
 # ---
 # name: test_help[ddflow claim]
   '''
-  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] [--break] id
+  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] [--break] [--approval APPROVAL] id
   
   positional arguments:
     id                    item id, or an open bug id: its fix task is claimed (filed first if it has
@@ -540,6 +542,9 @@
                           the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)
     --queue               keep a refused claim in the first-in-first-out line for its files
     --break               break a contended lease idle for [lease].hold_max_s (its work is kept)
+    --approval APPROVAL   an agent: 'request' files an approval request for taking the item over a
+                          refusal --force would override (the operator answers in chat), then the
+                          approval id
   
   '''
 # ---
@@ -598,7 +603,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -608,6 +613,9 @@
     --sha SHA
     --model MODEL         the AUTHOR's model, for independence check
     --force
+    --approval APPROVAL   an agent: 'request' files an approval request for overriding the unmet
+                          conditions (the operator answers in chat), then the approval id; a failed
+                          review gate is never lifted
     --changelog CHANGELOG
                           'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip /
                           internal to keep it out of the changelog; optional
@@ -819,7 +827,7 @@
 # ---
 # name: test_help[ddflow export]
   '''
-  usage: ddflow export [-h] [--path PATH] [--mode MODE] [--local] [--lock] [--all] [--since SINCE] [--version VERSION] [--phase PHASE] [--item ITEM] [--status STATUS] [--tag TAG] [--session SESSION] [--limit LIMIT] [--max-bytes MAX_BYTES] [--template TEMPLATE] [--diff] [--check] [--update] [--out OUT] [--force] [--yes] [doc] [target]
+  usage: ddflow export [-h] [--path PATH] [--mode MODE] [--local] [--lock] [--approval APPROVAL] [--all] [--since SINCE] [--version VERSION] [--phase PHASE] [--item ITEM] [--status STATUS] [--tag TAG] [--session SESSION] [--limit LIMIT] [--max-bytes MAX_BYTES] [--template TEMPLATE] [--diff] [--check] [--update] [--out OUT] [--force] [--yes] [doc] [target]
   
   positional arguments:
     doc                   the document kind; omit to list the kinds. Or a verb: enable <doc>,
@@ -832,6 +840,8 @@
     --mode MODE           enable: whole, region or append
     --local               enable/disable: this machine only
     --lock                disable: the operator's veto; agents cannot enable it
+    --approval APPROVAL   an agent: the id of the operator's approval for ack, disable --lock or
+                          enabling a locked document (a refusal files the request and names it)
     --all                 act on the selected documents
     --since SINCE         entries at or after this date (YYYY-MM-DD or a timestamp prefix)
     --version VERSION     one release (the changelog kind: X or vX, or unreleased)
@@ -2349,14 +2359,16 @@
 # ---
 # name: test_help[ddflow reviewers approve]
   '''
-  usage: ddflow reviewers approve [-h] [--note NOTE] [name]
+  usage: ddflow reviewers approve [-h] [--note NOTE] [--approval APPROVAL] [name]
   
   positional arguments:
     name
   
   options:
-    -h, --help   show this help message and exit
+    -h, --help           show this help message and exit
     --note NOTE
+    --approval APPROVAL  an agent: the id of the operator's approval of exactly this entry (a
+                         refusal files the request and names it); never for a command reviewer
   
   '''
 # ---

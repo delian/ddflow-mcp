@@ -2616,6 +2616,23 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      mcp.next_hints = 'off'   [default]
+          Whether a state-changing MCP result carries an advisory `next` field: up to
+          3 hints (and 400 bytes) of `{tool, why, args_hint}` naming what usually
+          follows, from the result already computed (a claim points at `gate status`;
+          `gate status` at the first open gate by kind, and at `merge` only once every
+          gate carries an outcome; `merge` at `complete`; `complete` at `next`; `bug
+          found` at its fix task; `next` at claiming the first ready item). `off`
+          (default: whether hints save wrong calls was not measured); `on` is 3; `1`,
+          `2` or `3` cap the count. A hint names a tool the connection's profile lists
+          (a family action on a family profile, dropped when the profile does not list
+          it); `why` is a fixed sentence, never record text. Advisory: the tool it
+          names still checks the world. Read once at server start. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'off', the strictest (no safety dimension; the unchanged result); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       mcp.on_upgrade = 'notify'   [default]
           What a running MCP server does once ddflow was upgraded under it (the
           installed package, or this project's log, is newer than the code the server

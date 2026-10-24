@@ -156,6 +156,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="disable: the operator's veto; agents cannot enable it",
             ),
             Param(
+                "approval",
+                help="An agent: the id of the operator's approval of enabling a locked document (a refusal files the request and names it).",
+                cli_help="an agent: the id of the operator's approval for ack, disable --lock or enabling a locked document (a refusal files the request and names it)",
+                default="",
+            ),
+            Param(
                 "all",
                 type="boolean",
                 help="The selected documents.",
@@ -262,6 +268,7 @@ COMMANDS: tuple[Command, ...] = (
             "check",
             "write",
             "path",
+            "approval",
         ),
         flag_exempt={
             "--update": "MCP writes with write=true plus a repo-relative path",

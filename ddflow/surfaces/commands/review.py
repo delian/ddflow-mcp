@@ -298,7 +298,11 @@ def _reviewers_approve(a, c: Ctx) -> int:
         return OK
     try:
         line = SS.approve_reviewer(
-            c.repo, a.name, requested_agent=c.requested_agent, note=a.note or ""
+            c.repo,
+            a.name,
+            requested_agent=c.requested_agent,
+            note=a.note or "",
+            approval=getattr(a, "approval", "") or "",
         )
     except SS.ReviewerRefused as exc:
         print(str(exc), file=sys.stderr)

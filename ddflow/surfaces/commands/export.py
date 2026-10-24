@@ -111,20 +111,33 @@ def _verb(a, c: Ctx) -> int:
     if verb == "validate":
         return _validate(a, c)
     if verb == "ack":
-        return _plain(A.export_ack(c.repo, agent=c.requested_agent), c)
+        return _plain(A.export_ack(c.repo, agent=c.requested_agent, approval=a.approval or ""), c)
     if not doc:
         print(f"ddflow export {verb} needs a document: ddflow export {verb} <doc>", file=sys.stderr)
         return REFUSED
     if verb == "enable":
         return _plain(
             A.export_enable(
-                c.repo, doc, path=a.path, mode=a.mode, local=a.local, agent=c.requested_agent
+                c.repo,
+                doc,
+                path=a.path,
+                mode=a.mode,
+                local=a.local,
+                agent=c.requested_agent,
+                approval=a.approval or "",
             ),
             c,
         )
     if verb == "disable":
         return _plain(
-            A.export_disable(c.repo, doc, lock=a.lock, local=a.local, agent=c.requested_agent),
+            A.export_disable(
+                c.repo,
+                doc,
+                lock=a.lock,
+                local=a.local,
+                agent=c.requested_agent,
+                approval=a.approval or "",
+            ),
             c,
         )
     return _plain(A.export_eject(c.repo, doc, force=a.force), c)

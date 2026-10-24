@@ -545,6 +545,7 @@ def approve(
     reject: bool = False,
     reason: str = "",
     requested_agent: str = "",
+    approval: str = "",
 ) -> str:
     """A PERSON clears (or refuses) a human gate. Returns the line to print.
 
@@ -561,7 +562,16 @@ def approve(
     if gdef is None:
         raise ValueError(f"no such gate {gate!r}")
     if not gdef.is_human_gate:
-        return GA.approve(log, cfg, item_id, gate, note=note, reject=reject, agent=requested_agent)
+        return GA.approve(
+            log,
+            cfg,
+            item_id,
+            gate,
+            note=note,
+            reject=reject,
+            agent=requested_agent,
+            approval=approval,
+        )
     if reject and not reason:
         raise ValueError("a rejection must carry --reason: 'no' with no reason cannot be acted on")
 

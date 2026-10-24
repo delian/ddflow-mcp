@@ -208,6 +208,10 @@
           "type": "boolean",
           "description": "Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded."
          },
+         "approval": {
+          "type": "string",
+          "description": "An agent's way past a refusal --force would override: 'request' asks the operator, then the approval id they answered."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -254,6 +258,10 @@
          "force": {
           "type": "boolean",
           "description": "Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason."
+         },
+         "approval": {
+          "type": "string",
+          "description": "An agent's way past unmet conditions: 'request' asks the operator, then the approval id they answered."
          },
          "as_agent": {
           "type": "string",
