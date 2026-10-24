@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.profile_mid_budget_tokens"
+new = "32000"
+why = "With [mcp].tools = auto the session's effective start budget narrows the profile at initialize: lean at or under the first limit, no wider than families at or under the second."
+impact = "additive"

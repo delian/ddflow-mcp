@@ -38,13 +38,32 @@ from ..services import leases as L
 from ..services import obligations as OB
 from ..services import prompts as P
 from ..services import review as RV
+from ..services import startcost as SC
 from ..services.leaseclock import localize
 from ..services.macros import MacroError  # noqa: F401  (re-exported for the engine)
+from . import firstcall as FC
 from . import identity
 from ._base import _load, load_scope  # noqa: F401  (load_scope: re-exported for the handshake)
 from .lifecycle import plan_for
 
 TemplateError = P.TemplateError
+
+
+def profile_inputs(repo: Path, client_info: dict[str, Any]) -> tuple[int, tuple[int, int]]:
+    """``(the effective start budget, the profile limits)`` an `auto` connection narrows its profile by
+    (LS-profile-select): the budget of the client's agent type (told from `clientInfo`, then the
+    environment) under `[session.context_budget]`, and `[mcp].profile_*_budget_tokens`. (0, defaults) when
+    the config cannot be read: a handshake must not fail on it."""
+
+    try:
+        cfg = Config.load(repo)
+    except Exception:
+        return 0, (16000, 32000)
+    target = FC.harness_of(client_info or {})
+    return SC.effective_budget(cfg.session, target), (
+        cfg.mcp.profile_lean_budget_tokens,
+        cfg.mcp.profile_mid_budget_tokens,
+    )
 
 
 def prompt_commands(repo: Path) -> dict[str, tuple[str, str, list[str]]]:

@@ -64,14 +64,33 @@ def family_entries(profile: str) -> list[dict]:
     return [e for e in family_listing() if e["name"] in want]
 
 
-def settle(configured: str, client_name: str = "") -> str:
+#: The start-budget limits (tokens) `auto` narrows by: at most the first is `lean`, at most the second no
+#: wider than `families` (`[mcp].profile_lean_budget_tokens`, `profile_mid_budget_tokens`; 0 turns one off).
+DEFAULT_LIMITS = (16000, 32000)
+
+
+def settle(
+    configured: str,
+    client_name: str = "",
+    *,
+    budget: int = 0,
+    limits: tuple[int, int] = DEFAULT_LIMITS,
+) -> str:
     """The profile a connection runs: ``configured`` unless it is ``auto``, which is the client
-    table's entry for ``client_name`` or the lean core."""
+    table's entry for ``client_name`` or the lean core, then NARROWED by the session's effective start
+    ``budget`` (tokens; 0 = none): at most ``limits[0]`` is `lean`, at most ``limits[1]`` is no wider
+    than `families`. A budget never widens a profile and never overrides a configured one."""
     configured = (configured or "").strip().lower() or AUTO
     if configured != AUTO:
         return configured
     named = CLIENT_PROFILES.get((client_name or "").strip().lower(), DEFAULT_PROFILE)
-    return named.strip().lower() if named.strip().lower() in PROFILES else DEFAULT_PROFILE
+    profile = named.strip().lower() if named.strip().lower() in PROFILES else DEFAULT_PROFILE
+    small, mid = limits
+    if budget > 0 and small > 0 and budget <= small:
+        return "lean"
+    if budget > 0 and mid > 0 and budget <= mid and profile == "hot+families":
+        return "families"
+    return profile
 
 
 def profile_note(profile: str, total: int = 0) -> str:
