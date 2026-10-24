@@ -540,15 +540,17 @@ def test_an_unchanged_delta_with_findings_still_untriaged_stays_failed_and_count
 
 def test_a_failed_delta_that_is_not_the_hold_is_never_released(repo, tmp_path):
     """B10ad449deb in reverse: `_held_and_settled` reads the `held_pass` marker, so a delta
-    `failed` for its own findings (outcome failed without the marker) is not flipped to
-    passed by an unchanged delta -- triage alone does not clear `fail` there."""
+    `failed` for its own finding (outcome failed without a clean review to hold) is not
+    flipped to passed by an unchanged delta -- every finding settled, triage alone does not
+    clear `fail` without the hold (the marker is what releases, and it is absent)."""
     _setup(repo, tmp_path)
-    _review(repo)
-    _fix(repo, "y.py", "y = 1  # FINDME-B\n")  # its own finding: failed, NOT held
+    _review(repo)  # finding #1
+    _fix(repo, "y.py", "y = 1  # FINDME-B\n")  # finding #2, the delta's own: failed, NOT held
     held = _review(repo)
     assert held.data["outcome"] == "failed" and "held_pass" not in _ev(repo), held.data
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
     assert api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="p").exit == OK
-    out = _review(repo)  # unchanged since the reviewed head; nothing holds a clean pass
+    out = _review(repo)  # unchanged since the reviewed head; nothing held a clean pass
     assert out.exit == REFUSED and "stays failed" in out.reason, out.reason
     assert _ev(repo)["delta_rounds"] == 1
     st = fold(EventLog(repo).read_all(), strict=False)
