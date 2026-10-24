@@ -220,8 +220,19 @@ def test_the_flag_is_given_with_an_equals_sign_so_it_cannot_swallow_the_prompt()
         )
 
 
-def test_the_help_page_says_the_same_pairing_with_the_measured_numbers():
+def test_the_help_page_pairs_each_command_with_its_own_measured_number():
     page = (
         Path(__file__).resolve().parents[1] / "ddflow/templates/prompts/help/mcp.md"
     ).read_text()
-    assert "--agent ddflow-<role>" in page and "9.8K" in page and "17.2K" in page
+    lines = page.splitlines()
+    role = next(ln for ln in lines if "--agent ddflow-<role>" in ln and "claude " in ln)
+    worker = next(ln for ln in lines if "worker-mcp.json" in ln and "claude " in ln)
+    assert "--mcp-config=.mcp.json" in role and "9.8K" in role and "17.2K" not in role, role
+    assert "25.9K" in worker and "9.8K" not in worker, worker
+    assert "17.2K" in page and "WORSE" in page, "the core-config-with-a-role cost is said"
+
+
+def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
+    text = WM.recipe(REL, tier="all")
+    assert "starts ddflow on the `all` tier" in text
+    assert "the core-tier config below" not in text
