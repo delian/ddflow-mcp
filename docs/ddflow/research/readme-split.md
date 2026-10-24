@@ -24,8 +24,14 @@ Probes run: `ddflow show readme-research / readme-decide / readme-manage / readm
 | 9 | 749-757 | The workflow this project runs (literal) | docs/guide/workflow.md |
 | 77 | 758-834 | The rules, and where each came from | docs/guide/workflow.md |
 | 29 | 835-863 | Why it is built this way | K (benefits) |
-| 59 | 864-954 | Install into any project | K keeps a short install pointer; full text → docs/guide/adoption.md |
-| 700 | 955-1772 | Install subsections: Docker; config.toml/macros.toml; what is committed; publishing and registry; cutting a release; what CI checks; any LLM as a reviewer; companion tools (955 docker, 992 extending-by-text, 1117 committed, 1158 publishing, 1231 release, 1291 CI, 1347 reviewers, 1634 companions) | docs/guide/adoption.md (install+import) and docs/guide/contributing.md (publishing/release/CI/reviewers) |
+| 91 | 864-954 | Install into any project | K keeps a short install pointer; full text → docs/guide/adoption.md |
+| 37 | 955-991 | ### Docker — operators with no Python toolchain | docs/guide/adoption.md |
+| 166 | 992-1157 | ### Extending it by writing text, not code (#### What is committed 1117-1157) | docs/guide/configuration.md |
+| 73 | 1158-1230 | ### Publishing and registry | docs/guide/contributing.md |
+| 60 | 1231-1290 | ### Cutting a release | docs/guide/contributing.md |
+| 56 | 1291-1346 | ### What CI checks | docs/guide/contributing.md |
+| 287 | 1347-1633 | ### Any LLM as a reviewer | docs/guide/contributing.md |
+| 139 | 1634-1772 | ### Companion tools | docs/guide/contributing.md |
 | 26 | 1773-1798 | Pin files regenerate | docs/guide/workflow.md |
 | 37 | 1799-1835 | Finding a test polluter | docs/guide/workflow.md |
 | 110 | 1836-1945 | Wiring it into your agent (incl. one set of rules) | docs/guide/adoption.md |
@@ -53,7 +59,7 @@ Probes run: `ddflow show readme-research / readme-decide / readme-manage / readm
 | 697 | 4018-4714 | Reading the log … upgrading … version stamp … data repairs … upgrade manifest … migrations … applying an upgrade … the compaction that was declined | docs/guide/upgrading.md |
 | 202 | 4715-4916 | Lessons, research and bugs (bugs as queue items, listing, searching) | docs/guide/knowledge.md |
 | 40 | 4917-4956 | Cadences | docs/guide/workflow.md |
-| 42 | 4957-4997 | Scheduled jobs (bug-audit.toml) | docs/guide/workflow.md |
+| 41 | 4957-4997 | Scheduled jobs (bug-audit.toml) | docs/guide/workflow.md |
 | 51 | 4998-5048 | Event triggers (red-gate.toml) | docs/guide/workflow.md |
 | 285 | 5049-5333 | Exporting documents | docs/guide/customisation.md |
 | 49 | 5334-5382 | Keeping AGENTS.md true | docs/guide/adoption.md |
@@ -62,7 +68,7 @@ Probes run: `ddflow show readme-research / readme-decide / readme-manage / readm
 | 48 | 5461-5508 | Agent portability — `README/agents` **generated** (pin `readme-agents` → `ddflow.surfaces.harness_table`) | text → docs/guide/cli-mcp.md; region generated |
 | 225 | 5509-5733 | Keeping the two surfaces honest — `README/tools` **generated** (pin `readme-tool-table` → `ddflow.surfaces.tool_table`) | text → docs/guide/cli-mcp.md; region generated |
 | 127 | 5734-5860 | Command reference (points at `--help`; the full `README/commands` generated table lives under "Standalone"; pin `readme-commands` → `ddflow.surfaces.command_table`) | docs/guide/cli-mcp.md; generated |
-| 484 | 5861-6344 | Configuration — `README/knobs` **generated** (411 lines; pin `readme-knobs` → `ddflow.views.knob_table`) | docs/guide/configuration.md; region generated |
+| 484 | 5861-6344 | Configuration — `README/knobs` **generated** (region 5930-6341; pin `readme-knobs` → `ddflow.views.knob_table`) | docs/guide/configuration.md; region generated |
 | 43 | 6345-6387 | Id schemes | docs/guide/configuration.md |
 | 196 | 6388-6583 | What is automated, and what is not | docs/guide/workflow.md |
 | 113 | 6584-6696 | Customisation reference (editable files, config sections, prompts, commands, MCP tools, env vars) | docs/guide/customisation.md |
@@ -110,7 +116,7 @@ Title line; TOC (generated); the agent brief ("Instruction for an agent reader")
 
 ### 4.2 Referenced-doc map
 
-`docs/guide/workflow.md` — workflow, rules, plan mode, the model, pipelines, approval, cadences, automation matrix, loops, test polluter, pins, jobs. `docs/guide/adoption.md` — install, Docker, wiring into an agent, adopting existing history, AGENTS.md true, companion missing. `docs/guide/contributing.md` — publishing, release, CI, reviewers, companions, testing. `docs/guide/cli-mcp.md` — standalone/MCP/AGENTS.md surfaces, command reference, the README/commands and README/tools regions. `docs/guide/configuration.md` — configuration, knobs (the 411-line README/knobs region), id schemes. `docs/guide/customisation.md` — customisation reference, exporting documents. `docs/guide/knowledge.md` — recall, memory, lessons/research/bugs. `docs/guide/upgrading.md` — reading the log, upgrading, repairs, skew, manifest, migrations, crash recovery/reconstruction. `docs/guide/parallelism.md` — parallelism and coordination, many agents one server. `docs/guide/gitflow.md` — gitflow, PRs, tags, release lines, environment branches.
+`docs/guide/workflow.md` — workflow, rules, plan mode, the model, pipelines, approval, cadences, automation matrix, loops, test polluter, pins, jobs. `docs/guide/adoption.md` — install, Docker, wiring into an agent, adopting existing history, AGENTS.md true, companion missing. `docs/guide/contributing.md` — publishing, release, CI, reviewers, companions, testing. `docs/guide/cli-mcp.md` — standalone/MCP/AGENTS.md surfaces, command reference, the README/commands and README/tools regions. `docs/guide/configuration.md` — configuration, knobs (the generated `README/knobs` region 5930-6341), id schemes. `docs/guide/customisation.md` — customisation reference, exporting documents. `docs/guide/knowledge.md` — recall, memory, lessons/research/bugs. `docs/guide/upgrading.md` — reading the log, upgrading, repairs, skew, manifest, migrations, crash recovery/reconstruction. `docs/guide/parallelism.md` — parallelism and coordination, many agents one server. `docs/guide/gitflow.md` — gitflow, PRs, tags, release lines, environment branches.
 
 (Per D-readme-split; exact workbook G1/G2 choices in §3.)
 
