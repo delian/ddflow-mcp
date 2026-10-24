@@ -124,7 +124,7 @@ Per-agent hook strength, from the `[hooks]` section of each descriptor (shipped 
 | OpenCode, Kilo | `.opencode/plugins/`, `.kilo/plugin/` (JS plugin) | plugin, block by throwing | tool.execute.before/after, session.created, chat.message, compacting | blocking pre-tool, but it is executable code written into the project: needs operator consent and a shown diff (D-agent-parity) |
 | Kimi | `~/.kimi/config.toml` (USER file) | claude style, exit 2 | Claude-style names | blocking, but the file is global; project-level hook file, additionalContext, session id env are unverified in the descriptor |
 | dsh | `.ddflow/harness/dsh.hooks.json` via experimental bridge | claude style | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop | experimental bridge; a bad config path runs NO hooks and the agent starts anyway (silent), per docs/ddflow/research/dsh.md |
-| Grok | none: no descriptor hook entry yet | n/a | n/a | none; git hook and lease only; file as a gap |
+| Grok | none: there is NO Grok descriptor in `ddflow/harnesses/` at all (checked 2026-10-24; GROK_HOME and flags appear only in agent-token-features.md) | n/a | n/a | unknown hook support; git hook and lease only; filed as DX-grok-hook-descriptor |
 
 How to install them when ddflow orchestrates (design, to be decided in SW-decide):
 
