@@ -160,7 +160,26 @@ class SessionConfig:
     )
     agent_brief_max_chars: int = knob(
         9000,
-        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+        doc="Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+    )
+    agent_brief_budget_share: float = knob(
+        0.1,
+        doc="The share of the session start budget (`context_budget_tokens`, or the running agent type's entry in `[session.context_budget]`) the launch brief may use, at `start_bytes_per_token` bytes a token. The brief's cap is that, between `agent_brief_min_chars` and `agent_brief_max_chars`: at the default 40,000-token budget it is the fixed 9,000-character ceiling, for a small window it shrinks. With no start budget the ceiling alone applies.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
+            else "must be a number above 0 and at most 1"
+        ),
+    )
+    agent_brief_min_chars: int = knob(
+        4000,
+        doc="The floor, in UTF-8 bytes (characters, for ASCII text), of the launch brief's derived cap: the identity, item, lease, merge and report text is not worth cutting below it.",
+        check=int_at_least(0),
+    )
+    agent_brief_lean_chars: int = knob(
+        6000,
+        doc="Under this derived cap (UTF-8 bytes) the launch brief is LEAN: the testing, review, gate and filing sections, the project's own text and the lessons are left out (the gates enforce the rules; one line says where the rest is). 0 never goes lean.",
+        check=int_at_least(0),
     )
     agent_brief_off: list[str] = knob(
         factory=list,
