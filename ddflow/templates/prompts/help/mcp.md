@@ -37,8 +37,8 @@ records this machine's launcher), the same server with `DDFLOW_MCP_TOOLS` set fr
     claude --agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json    # 9.8K first turn (implementer)
     claude --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json     # 25.9K, a worker with no role
 
-A role definition paired with the core-tier worker config is WORSE (implementer 17.2K), so pair it with the
-all-tier `.mcp.json`. As is, with no flags, a session starts at 33.6K. Give the flag as `--mcp-config=FILE`: it
+A role definition paired with the core-tier worker config is WORSE (17.2K for the implementer), so pair it with the
+all-tier `.mcp.json`; the core-tier worker config is for a worker with no role. As is, with no flags, a session starts at 33.6K. Give the flag as `--mcp-config=FILE`: it
 is variadic, and a space lets it read the prompt as a config path. `--strict-mcp-config` leaves out every other
 MCP server (the claude.ai connectors cost ~8K deferred, ~150K with tool search off).
 `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.

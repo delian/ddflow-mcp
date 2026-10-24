@@ -229,10 +229,13 @@ def test_the_help_page_pairs_each_command_with_its_own_measured_number():
     worker = next(ln for ln in lines if "worker-mcp.json" in ln and "claude " in ln)
     assert "--mcp-config=.mcp.json" in role and "9.8K" in role and "17.2K" not in role, role
     assert "25.9K" in worker and "9.8K" not in worker, worker
-    assert "17.2K" in page and "WORSE" in page, "the core-config-with-a-role cost is said"
+    worse = next(ln for ln in lines if "WORSE" in ln)
+    assert "17.2K" in worse and "core-tier worker config" in worse, worse
 
 
 def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
     text = WM.recipe(REL, tier="all")
     assert "starts ddflow on the `all` tier" in text
-    assert "the core-tier config below" not in text
+    assert "the core-tier config below" not in text and "measured on the core tier" not in text
+    # the 17.2K belongs to the default core-tier worker config, said as a measurement, not as the tier below
+    assert "measured with the default core-tier one" in text
