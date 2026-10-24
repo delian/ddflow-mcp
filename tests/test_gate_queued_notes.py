@@ -27,12 +27,16 @@ def _gate_imports(module_file: Path, node: ast.Import | ast.ImportFrom) -> list[
             base = PKG.parent
         target = (base / mod.replace(".", "/")) if mod else base
         targets = [target] + [target / name.name for name in node.names]
-    return [
-        str(t)
-        for t in targets
-        if t.name != "services"  # `from ddflow import services` alone names nothing in gates
-        and (t.resolve() == GATES or t.resolve().is_relative_to(GATES))
-    ]
+    svc = (PKG / "services").resolve()
+    gates = GATES.resolve()
+    hits = []
+    for t in targets:
+        r = t.resolve()
+        if r == svc:
+            continue  # `from ddflow import services` names the services package itself, not gates
+        if r == gates or r.is_relative_to(gates):
+            hits.append(str(t))
+    return hits
 
 
 def test_metrics_never_imports_gates():
@@ -53,3 +57,13 @@ def test_the_note_assembly_lives_in_gates():
     from ddflow.services.gates.status_notes import _queued_notes, _why_notes
 
     assert callable(_queued_notes) and callable(_why_notes)
+
+
+def test_a_gates_submodule_named_services_is_not_excused():
+    """Only the `ddflow/services` package itself is excused: an import that reaches a
+    module UNDER gates keeps offending however its last path segment is spelled."""
+    f = PKG / "services" / "metrics" / "x.py"
+    node = ast.parse("import ddflow.services.gates.services").body[0]
+    assert _gate_imports(f, node), "a gates submodule named services is still gates"
+    node = ast.parse("from ddflow import services").body[0]
+    assert not _gate_imports(f, node), "the services package itself is not gates"
