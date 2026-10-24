@@ -17,7 +17,6 @@ from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
-from ..metrics.queued import _why_notes
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -33,6 +32,7 @@ from .evidence import (
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
 from .stale_why import StaleNote, _differing_note
+from .status_notes import _why_notes
 
 
 @dataclass
@@ -62,7 +62,8 @@ class GateStatus:
     local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
     #: gate -> "skipped after a failed run" for a skip that replaced a failure.
     after_failure: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
-    #: gate -> its recorded reason, for an `unavailable` or `partial` outcome (B305db5608b).
+    #: gate -> its recorded reason when `unavailable` or `partial` (B305db5608b), else how
+    #: long its recorded run queued before it ran (`queued Xm of Ym elapsed`).
     why: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
