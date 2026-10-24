@@ -83,8 +83,9 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
 
     That sentence is the whole reason this function exists. Over argv the two collapse
     into one empty string, and the surface had to carry a `clearable` flag to tell them
-    apart — a distinction the type system expresses for free.
+     apart — a distinction the type system expresses for free.
     """
+    log, cfg, st = _load(repo, agent)
     # Planned from a fold taken INSIDE the lock (B518cb79124): `plan_edit`'s coordination
     # checks -- a line move for claimed or forked work, a parent move under a claimed
     # item, a dependency cycle -- must judge the log as it is when the edit appends. A
@@ -99,7 +100,8 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         fields = plan_edit(cfg, st, it, edit)
         if isinstance(fields, O.Outcome):
             if not (
-                (edit.landed is not None or edit.landed_paths is not None) and fields.exit == O.NOTHING
+                (edit.landed is not None or edit.landed_paths is not None)
+                and fields.exit == O.NOTHING
             ):
                 return fields
             fields = {}
