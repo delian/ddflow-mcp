@@ -23,7 +23,7 @@ def _gate_imports(module_file: Path, node: ast.Import | ast.ImportFrom) -> list[
         for _ in range(max(node.level - 1, 0)):
             base = base.parent
         mod = node.module or ""
-        if node.level == 0 and mod.startswith("ddflow."):
+        if node.level == 0 and (mod == "ddflow" or mod.startswith("ddflow.")):
             base = PKG.parent
         target = (base / mod.replace(".", "/")) if mod else base
         targets = [target] + [target / name.name for name in node.names]
@@ -65,5 +65,7 @@ def test_a_gates_submodule_named_services_is_not_excused():
     f = PKG / "services" / "metrics" / "x.py"
     node = ast.parse("import ddflow.services.gates.services").body[0]
     assert _gate_imports(f, node), "a gates submodule named services is still gates"
+    node = ast.parse("import ddflow.services").body[0]
+    assert not _gate_imports(f, node), "the services package itself is not gates"
     node = ast.parse("from ddflow import services").body[0]
     assert not _gate_imports(f, node), "the services package itself is not gates"
