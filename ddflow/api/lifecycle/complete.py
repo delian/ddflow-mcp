@@ -42,6 +42,18 @@ def _session_model(st: State, agent: str) -> str:
     return L.open_session_model(st, agent)
 
 
+def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
+    """(model, source) the completion judges reviewer independence against: the `--model`
+    flag, else the agent's open `session start --model` declaration, else ""/"" --
+    said out loud so the provenance is on the record (only the SOURCE on the durable
+    event, not the id: the session record carries it, and DX-author-family keeps model
+    ids out of the repository artefacts) -- B-complete-requires-model-even-when-recorded."""
+    if model:
+        return model, "flag"
+    found = _session_model(st, agent)
+    return found, "session" if found else ""
+
+
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
     """(force, event fields, refusal): an agent's `--approval` turns an unmet-conditions refusal
     into a recorded override, never over a failed review gate and never for a person."""
@@ -144,14 +156,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
-    # Where the judged model came from is said out loud and recorded (only the source,
-    # not the id: the session record already carries it, and DX-author-family keeps
-    # model ids out of the repository artefacts) -- B-complete-requires-model-even-when-recorded.
-    if model:
-        model_source = "flag"
-    else:
-        model = _session_model(st, log.agent_id)
-        model_source = "session" if model else ""
+    model, model_source = _author_model(st, log.agent_id, model)
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
