@@ -685,6 +685,7 @@ def _link_refuted(log, it, gate: str, findings) -> list[str]:
                 "location": _finding_field(f, "location"),
             },
         )
+        mine = {**mine, digest: refuted[digest]}
         linked.append(digest)
     return linked
 
