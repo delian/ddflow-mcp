@@ -135,11 +135,12 @@ _AUTO = re.compile(r"(?<![\w-])-n\s+auto(?![\w-])")
 
 
 def localize_auto(text: str, cfg: Any, *, source: Any = None, cores: int | None = None,
-                  holding_suite: bool = False) -> tuple[str, Workers | None]:  # fmt: skip
+                  holding_suite: bool = False,
+                  files: int | None = None) -> tuple[str, Workers | None]:  # fmt: skip
     """``text`` (a pre-commit config) with each ``-n auto`` replaced by the computed count.
     ``auto`` is one worker per core, 192 of them on a big host; the committed file keeps it
     for GitHub CI and only the local copy a run reads says what this host can afford."""
     if not _AUTO.search(text):
         return text, None
-    w = compute(cfg, None, source=source, cores=cores, holding_suite=holding_suite)
+    w = compute(cfg, files, source=source, cores=cores, holding_suite=holding_suite)
     return _AUTO.sub(f"-n {w.n}", text), w

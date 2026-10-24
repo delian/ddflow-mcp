@@ -10,6 +10,7 @@ handed.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -158,3 +159,14 @@ def test_every_role_is_told_to_file_ddflow_defects_it_meets():
 
 def test_an_unadopted_project_has_no_drift(repo):
     assert LA.states(repo) == {} and LA.drift_notes(repo) == []
+
+
+def test_doctor_names_a_drifted_definition(repo):
+    run_cli(repo, "adopt", "--agents", "claude")
+    path = repo / FILES["reviewer"]
+    path.write_text(path.read_text().replace("Call `ddflow_brief` first", "Call it whenever", 1))
+    _code, out, _ = run_cli(repo, "doctor", "--json")
+    notes = json.loads(out)["notes"]
+    assert any("lean agent definitions differ" in n and FILES["reviewer"] in n for n in notes), (
+        notes
+    )
