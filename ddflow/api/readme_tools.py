@@ -50,8 +50,11 @@ def summary(description: str) -> str:
     return first.replace("|", "\\|")
 
 
-def render(tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str]) -> str:
-    """The region, markers included: the counts, then one row per tool in help-group order.
+def render(
+    tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str], overview: str = ""
+) -> str:
+    """The region, markers included: the ``overview`` (profiles and families, rendered by the
+    MCP surface that owns them), the counts, then one row per tool in help-group order.
     ``tiers`` maps each tool to the smallest tier that lists it (core | standard | all)."""
     rows = []
     for group, members in grouped_tools(tools):
@@ -63,6 +66,7 @@ def render(tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str]) 
     standard = core + sum(tiers[t] == "standard" for t in tools)
     body = "\n".join(
         [
+            *([overview, ""] if overview else []),
             f"<details><summary>All {len(tools)} MCP tools: {core} in the `core` tier, "
             f"{standard - core} more in `standard`, {len(tools) - standard} more in `all`"
             "</summary>",
