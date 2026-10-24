@@ -202,12 +202,13 @@ def test_the_unreleased_knob_fragment_loads_with_a_json_default():
     assert change.new == "core"
 
 
-def test_the_recipe_pairs_a_role_definition_with_the_all_tier_config():
-    """Measured (lean-start-inherit.md section 2): the implementer definition costs 9.8K with
-    `--strict-mcp-config --mcp-config=.mcp.json`, 17.2K with the core-tier worker config."""
+def test_the_recipe_gives_a_role_definition_the_worker_config_with_the_measured_numbers():
+    """Measured with the role definitions allow-listing both spellings (lean-start-inherit.md section 2)."""
     text = WM.recipe(REL)
-    assert "--agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json" in text
-    assert "no role definition" in text and f"--strict-mcp-config --mcp-config={REL}" in text
+    assert f"--agent ddflow-<role> --strict-mcp-config --mcp-config={REL}" in text
+    assert f"--strict-mcp-config --mcp-config={REL}` starts ddflow" in text
+    for number in ("10.7K", "11.9K", "17.8K", "25.9K"):
+        assert number in text, number
 
 
 def test_the_flag_is_given_with_an_equals_sign_so_it_cannot_swallow_the_prompt():
@@ -226,19 +227,17 @@ def test_the_help_page_pairs_each_command_with_its_own_measured_number():
     ).read_text()
     lines = page.splitlines()
     role = next(ln for ln in lines if "--agent ddflow-<role>" in ln and "claude " in ln)
-    worker = next(ln for ln in lines if "worker-mcp.json" in ln and "claude " in ln)
-    assert "--mcp-config=.mcp.json" in role and "9.8K" in role and "17.2K" not in role, role
-    assert "25.9K" in worker and "9.8K" not in worker, worker
-    worse = next(ln for ln in lines if "WORSE" in ln)
-    assert "17.2K" in worse and "core-tier worker config" in worse, worse
+    worker = next(ln for ln in lines if ln.strip().startswith("claude --strict-mcp-config"))
+    assert f"--mcp-config={REL}" in role and "10.7K to 17.8K" in role, role
+    assert f"--mcp-config={REL}" in worker and "25.9K" in worker and "17.8K" not in worker, worker
 
 
 def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
     text = WM.recipe(REL, tier="all")
     assert "starts ddflow on the `all` tier" in text
-    assert "the core-tier config below" not in text and "measured on the core tier" not in text
-    # the 17.2K belongs to the default core-tier worker config, said as a measurement, not as the tier below
-    assert "CORE-tier worker config (measured: 17.2K" in text and "Do not pair a role" in text
+    assert "measured 10.7K for the researcher" in text and "on the core tier" in text, (
+        "the numbers say so"
+    )
 
 
 def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
@@ -251,5 +250,5 @@ def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
     in_recipe = set(cmd.findall(WM.recipe(REL)))
     in_page = set(cmd.findall(page))
     assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
-    for number in ("9.8K", "17.2K"):
+    for number in ("10.7K", "11.9K", "17.8K", "25.9K"):
         assert number in WM.recipe(REL) and number in page, number
