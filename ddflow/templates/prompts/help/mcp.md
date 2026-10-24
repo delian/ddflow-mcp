@@ -29,14 +29,18 @@ Ask it anything about itself with `ddflow_help`, and ask what the rules are here
 
 ## Lane workers: start them lean
 
-Every ddflow schema a worker loads is first-turn context (84.2K against 54.7K on the `core` tier,
-measured). For Claude Code, `ddflow adopt` also writes `.ddflow/local/worker-mcp.json` (git-ignored: it
+Every ddflow schema a worker loads is first-turn context. For Claude Code, `ddflow adopt` writes the
+lean role definitions (`.claude/agents/ddflow-<role>.md`) and `.ddflow/local/worker-mcp.json` (git-ignored: it
 records this machine's launcher), the same server with `DDFLOW_MCP_TOOLS` set from `[mcp].worker_tools`
-(`core` by default). Start a worker with
+(`core` by default). Two ways to start a worker, measured on haiku (lean-start-inherit.md):
 
-    claude --mcp-config .ddflow/local/worker-mcp.json --strict-mcp-config
+    claude --agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json    # 9.8K first turn (implementer)
+    claude --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json     # 25.9K, a worker with no role
 
-`--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~12K).
+A role definition paired with the core-tier worker config is WORSE (17.2K for the implementer), so pair it with the
+all-tier `.mcp.json`; the core-tier worker config is for a worker with no role. As is, with no flags, a session starts at 33.6K. Give the flag as `--mcp-config=FILE`: it
+is variadic, and a space lets it read the prompt as a config path. `--strict-mcp-config` leaves out every other
+MCP server (the claude.ai connectors cost ~8K deferred, ~150K with tool search off).
 `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
 A tier hides schemas, never tools: every tool stays callable by name.
 
