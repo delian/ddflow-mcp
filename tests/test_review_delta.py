@@ -209,7 +209,9 @@ def test_nothing_changed_since_the_reviewed_head_counts_no_round_and_names_full(
     _review(repo)
     calls = _calls(seen)
     out = _review(repo)
-    assert out.exit == NOTHING and "nothing changed" in out.reason and "--full" in out.reason, out.reason
+    assert out.exit == NOTHING and "nothing changed" in out.reason and "--full" in out.reason, (
+        out.reason
+    )
     assert "stays passed" in out.reason
     assert _calls(seen) == calls
 
@@ -488,7 +490,9 @@ def test_a_clean_delta_does_not_clear_findings_nobody_triaged(repo, tmp_path):
     assert out.data["outcome"] == "passed", out.data
 
 
-def test_an_unchanged_delta_after_settled_triage_passes_the_gate_and_counts_no_round(repo, tmp_path):
+def test_an_unchanged_delta_after_settled_triage_passes_the_gate_and_counts_no_round(
+    repo, tmp_path
+):
     """B10ad449deb: a clean delta is held `failed` over untriaged earlier findings, and
     its NOTE says the next clean delta passes -- but no code changed since the reviewed
     head, so that delta has nothing to review. Now every finding has a verdict: the
