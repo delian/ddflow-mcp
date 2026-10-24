@@ -85,13 +85,15 @@ DECIDED 2026-10-23 by the operator (verbatim words are in the session log and in
 | TE-Q7 | Bounded `--brief` by default for agent shells, terminal unbounded | D-TE-Q7 | TE-bounded-outputs |
 | TE-Q8 | Check the limit reset automatically and RESUME automatically (not wait for the operator); capped by `[spend].auto_resume`, max resumes per day, quiet; reported in the digest | D-TE-Q8 | NEW TE-auto-resume, TE-spend-resume (amended) |
 
-Wave convention for the tasks in the table above: `wave:N` tags follow D-labels and
+Wave convention for the tasks named in the Tasks column above: `wave:N` tags follow D-labels and
 D-wave-semantics (derived, priority-ordered, never hand-edited). The stamp writer is not a
 CLI yet: `ddflow waves` does not exist today — `ddflow waves --stamp` arrives with LB-waves,
 and GR-wave-derived makes the tags derived values. Until then the followable mechanism is
 the roadmap-review restamp script `docs/ddflow/research/scripts/wave_stamp_accurate.py`
 (via `ddflow update --add-tags`/`--remove-tags`; `docs/ddflow/research/queue-review-2026-10-23.md`),
-which stamped every open task on 2026-10-23. The gap is filed as bug B47acb25115.
+which stamped every open task of the queue on 2026-10-23 (14 in-flight items not touched; the
+TE-* follow-ups filed after the review carried none until the next --apply). The gap is filed
+as bug B47acb25115.
 
 Recorded tension (TE-Q8): a money decision the operator delegated; the proposal default was to wait. Bounded by the daily cap and the digest report.
 Honest limit (TE-Q2): window extension is a launch-time or rotation-time decision, a recommendation for the lead; larger windows cost more per call and per cache rewrite; ceiling knob, company floors tighten-only.
