@@ -35,6 +35,7 @@ from . import chore as CO
 from . import gate_accept as GA
 from . import gates as G
 from . import landed as LD
+from . import review_exclude as RX
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
@@ -186,19 +187,28 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
     return out
 
 
-def needs_independent_reviewer(it: Item, cfg: Config, paths: list[str] | None = None) -> bool:
+def needs_independent_reviewer(
+    it: Item, cfg: Config, paths: list[str] | None = None, repo: Path | None = None
+) -> bool:
     """Is a reviewer from another family required of ``it``? Only of a task that writes code:
-    not a promotion, and not a task whose ACTUAL change is documents only (`paths`), which
-    runs the doc pipeline."""
+    not a promotion, not a task whose ACTUAL change is documents only (`paths`), which
+    runs the doc pipeline -- and not a task whose ACTUAL change is entirely excluded from
+    review (`paths` matches [review].exclude_globs / pin files in full): a reviewer could
+    only be sent content the project excluded, so the review gates record UNAVAILABLE
+    naming the files and the independence rule does not demand one
+    (B-lockfile-only-item-cannot-complete)."""
     return (
         cfg.agent.reviewer_family_must_differ
         and it.kind == "task"
         and not it.promote_to
         and not diff_is_docs_only(it, cfg, paths)
+        and (repo is None or paths is None or not RX.excluded_outright(cfg, repo, paths))
     )
 
 
-def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None):
+def _independence(
+    state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None, repo=None
+):
     """(why, blockers): whether a reviewer from another family ran. The project's own
     reviewer gates count, as their definitions declare (B0e1330bf74).
 
@@ -206,9 +216,11 @@ def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excuse
     very check, as the tasks that produced it; demanding an independent reviewer of a merge
     between environment branches blocked every promotion, since its pipeline (rightly) has no
     review gate to satisfy it with. Not for a chore either (D-chore-class): a person
-    approved its file list instead."""
+    approved its file list instead. Not for a change entirely excluded from review either:
+    no reviewer can be sent excluded content, and the review gates record that
+    UNAVAILABLE (B-lockfile-only-item-cannot-complete)."""
     ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
-    needed = needs_independent_reviewer(it, cfg, paths)
+    needed = needs_independent_reviewer(it, cfg, paths, repo)
     if needed and not ok and excused is None:
         return why, [f"reviewer independence not satisfied: {why}"]
     return why, []
@@ -323,7 +335,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         )
 
     v.independence, no_reviewer = _independence(
-        state, cfg, it, model, gdefs, excused, changed_paths(repo, it)
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
     )
     v.blockers += no_reviewer
 

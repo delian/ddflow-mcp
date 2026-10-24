@@ -81,6 +81,20 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
+def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
+    """Would `[review]` exclusion drop EVERY path in ``paths``? True only for a non-empty
+    list: a change made entirely of excluded files (a lockfile-only dependency refresh)
+    has nothing a reviewer is ever sent, so the review gates record UNAVAILABLE naming
+    them and `complete` does not demand an independent reviewer (which would mean sending
+    content the project excluded) -- B-lockfile-only-item-cannot-complete."""
+    if not paths:
+        return False
+    pats, pinned = patterns(cfg, repo)
+    if not pats and not pinned:
+        return False
+    return all(_hit(p, pats, pinned) for p in paths)
+
+
 def filter_diff(
     diff: str, pats: list[str], pinned: list[str] | None = None
 ) -> tuple[str, Excluded]:
@@ -105,23 +119,16 @@ def filter_diff(
 
 def apply(diff, cfg, repo, say, evidence, tags=None, exclude="", include_pinned=False):
     """(diff, evidence, gone): the diff reviewers get, the evidence with what was left out,
-    and the exclusions; one line says so when anything was."""
+    and the exclusions; one line says so when anything was.
+
+    The exclusion is NEVER relaxed to keep a review possible: a diff it empties entirely
+    is still dropped (its content may be a secret the project excluded, not noise), and
+    the caller records the review UNAVAILABLE naming the files (B-lockfile-only-item-
+    cannot-complete)."""
     if not diff.strip():
         return diff, evidence, Excluded()
     kept, gone = filter_diff(diff, *patterns(cfg, repo, tags, exclude, include_pinned))
     if gone.files:
-        if not kept.strip():
-            # Exclusion swallowing the WHOLE diff: reviewers would get nothing and the
-            # gate would record UNAVAILABLE, which `complete` reads as "no reviewer ran"
-            # (B-lockfile-only-item-cannot-complete). A change made entirely of excluded
-            # files (a lockfile-only dependency refresh) has no other content the
-            # exclusion could protect, so the full diff goes out and the review is real.
-            say(
-                gone.line() + " -- that is every file of this diff, so the exclusion is "
-                "NOT applied: a review of nothing would be recorded UNAVAILABLE."
-            )
-            evidence = {**(evidence or {}), "whole_diff_excluded": [p for p, _ in gone.files]}
-            return diff, evidence, Excluded()
         say(gone.line())
         evidence = {**(evidence or {}), **gone.evidence()}
     return kept, evidence, gone
