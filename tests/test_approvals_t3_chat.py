@@ -117,13 +117,17 @@ def test_the_company_layer_forbids_whatever_the_opt_in_says(log, tmp_path):
 
 
 def test_a_forbid_in_a_file_layer_cannot_be_undone_by_a_later_layer(log, tmp_path, repo):
-    cfg = _cfg(tmp_path)
+    cfg = _cfg(tmp_path)  # the merged value: forbid false (the machine layer's), opt-in true
     cfg.root = repo
     committed = repo / ".ddflow" / "config.toml"
+    local = repo / ".ddflow" / "local" / "config.toml"
     committed.parent.mkdir(exist_ok=True)
-    committed.write_text("[approvals]\nforbid_chat_for_t3 = true\n")
-    assert not H.chat_t3(cfg)  # the merged value says false here; the file says true
-    committed.write_text("[approvals]\nforbid_chat_for_t3 = false\n")
+    local.parent.mkdir(parents=True, exist_ok=True)
+    committed.write_text("[approvals]\nforbid_chat_for_t3 = true\n")  # the lower layer forbids
+    local.write_text("[approvals]\naccept_chat_for_t3 = true\nforbid_chat_for_t3 = false\n")
+    assert cfg.approvals.forbid_chat_for_t3 is False and cfg.approvals.accept_chat_for_t3
+    assert not H.chat_t3(cfg)
+    committed.write_text("[approvals]\nforbid_chat_for_t3 = false\n")  # nobody forbids now
     assert H.chat_t3(cfg)
 
 
