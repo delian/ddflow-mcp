@@ -248,6 +248,9 @@ def test_a_new_ddflow_refreshes_the_front_matter_it_wrote_and_keeps_one_the_oper
         "the operator's front matter edit survived"
     )
     assert "front matter edited by hand: kept" in out, out
+    assert _stamp_head(path.read_text()) == _stamp_head(fresh), (
+        "the stamp stays the template's digest"
+    )
 
 
 def test_a_definition_from_before_the_head_stamp_is_refreshed_and_the_old_one_kept_aside(repo):
@@ -266,3 +269,34 @@ def test_a_definition_from_before_the_head_stamp_is_refreshed_and_the_old_one_ke
     aside = path.with_name(path.name + ".local-edits")
     assert aside.is_file() and "tools: Read, " in aside.read_text(), out
     assert f"the previous file is kept in {aside.name}" in out, out
+
+
+def test_the_flat_spellings_the_core_tier_lists_stay_allow_listed():
+    """The other half of naming both: on the flat `core` tier the family names do not exist."""
+    from ddflow.surfaces.tools.tiers import tier_tools
+
+    core = set(tier_tools("core"))
+    need = {
+        "implementer": {
+            "ddflow_gate_status",
+            "ddflow_gate_record",
+            "ddflow_bug_found",
+            "ddflow_recall",
+        },
+        "reviewer": {
+            "ddflow_gate_status",
+            "ddflow_gate_record",
+            "ddflow_bug_found",
+            "ddflow_rule_show",
+        },
+        "researcher": {
+            "ddflow_recall",
+            "ddflow_rule_show",
+            "ddflow_lesson_search",
+            "ddflow_bug_found",
+        },
+    }
+    for role, names in need.items():
+        have = _allowed(role)
+        assert names <= have, (role, sorted(names - have))
+        assert names <= core | {"ddflow_lesson_search"}, (role, sorted(names - core))

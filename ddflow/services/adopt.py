@@ -1201,7 +1201,7 @@ def _update_managed(
     if region.state(existing) == "newer" and stamp is not None:
         why = NewerContent(f"the {region.name} region", stamp.version, stamp.fmt)
         return Refused(f"REFUSED {rel}: {why}")
-    block = region.render(body, extra=_head_stamp(use_head))
+    block = region.render(body, extra=_head_stamp(head))  # what ddflow wrote, not the kept edit
     updated = use_head + region._region().splice(existing[len(have_head) :], block)
     notes = []
     if head_state == "edited":
