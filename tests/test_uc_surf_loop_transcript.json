@@ -1000,7 +1000,7 @@
   ],
   0,
   "T3 completed as <hex> [FORCED over 3 unmet condition(s)]\nProgress: tasks 1/3 (33%) · bugs fixed 0/0 (100%) · phases 0/0 (100%)\nNext: nothing ready\n",
-  ""
+  "author model: claude-opus-5 (from --model)\n"
  ],
  [
   [
@@ -1046,8 +1046,8 @@
    "claude-opus-5"
   ],
   0,
-  "{\n  \"schema\": \"complete@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"independence\": \"no reviewer ran at all\",\n  \"forced\": true,\n  \"coverage_gaps\": [],\n  \"note\": \"\",\n  \"woke\": [],\n  \"bugs_closed\": [],\n  \"progress\": \"Progress: tasks 2/4 (50%) \\u00b7 bugs fixed 0/0 (100%) \\u00b7 phases 0/0 (100%)\\nNext: nothing ready\",\n  \"umbrellas_completed\": [],\n  \"umbrella_refused\": {}\n}\n",
-  ""
+  "{\n  \"schema\": \"complete@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"author_model\": \"claude-opus-5\",\n  \"model_source\": \"flag\",\n  \"independence\": \"no reviewer ran at all\",\n  \"forced\": true,\n  \"coverage_gaps\": [],\n  \"note\": \"\",\n  \"woke\": [],\n  \"bugs_closed\": [],\n  \"progress\": \"Progress: tasks 2/4 (50%) \\u00b7 bugs fixed 0/0 (100%) \\u00b7 phases 0/0 (100%)\\nNext: nothing ready\",\n  \"umbrellas_completed\": [],\n  \"umbrella_refused\": {}\n}\n",
+  "author model: claude-opus-5 (from --model)\n"
  ],
  [
   [
