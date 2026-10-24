@@ -56,7 +56,8 @@ def _setup_lock_only_change(repo: Path, tmp_path: Path, mixed: bool = False) -> 
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
-        f"#!/bin/sh\nin=$(cat)\nprintf '%s\\n' \"$in\" >> '{seen}'\necho 'STATUS: NO FINDINGS'\n"
+        f"#!/bin/sh\nin=$(cat)\nprintf '%s\\n' \"$in\" >> '{seen}'\n"
+        "RESULT='FINDINGS'\necho 'STATUS: NO '$RESULT\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     from helpers import git as _git
@@ -101,11 +102,13 @@ def _pipeline_gates() -> tuple[str, ...]:
 
 
 def test_a_lockfile_only_change_is_unavailable_not_leaked(repo, tmp_path):
-    """The whole change is uv.lock (excluded by default): the review records UNAVAILABLE
-    and the excluded content never reaches the reviewer."""
+    """The whole change is uv.lock (excluded by default): the review records UNAVAILABLE,
+    its reason says what the exclusion left out, and the excluded content never reaches
+    the reviewer."""
     seen = _setup_lock_only_change(repo, tmp_path)
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2
+    assert "excluded file(s)" in out.reason
     sent = seen.read_text() if seen.exists() else ""
     assert "SECRET_ISH" not in sent
 
