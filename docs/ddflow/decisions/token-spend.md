@@ -91,9 +91,9 @@ CLI yet: `ddflow waves` does not exist today — `ddflow waves --stamp` arrives 
 and GR-wave-derived makes the tags derived values. Until then the followable mechanism is
 the roadmap-review restamp script `docs/ddflow/research/scripts/wave_stamp_accurate.py`
 (via `ddflow update --add-tags`/`--remove-tags`; `docs/ddflow/research/queue-review-2026-10-23.md`),
-which stamped every open task of the queue on 2026-10-23 (14 in-flight items not touched; the
-TE-* follow-ups filed after the review carried none until the next --apply). The gap is filed
-as bug B47acb25115.
+which stamped every open task of the queue on 2026-10-23 except the 14 items in flight (not
+touched; the TE-* follow-ups filed after the review carried none until the next --apply).
+The gap is filed as bug B47acb25115.
 
 Recorded tension (TE-Q8): a money decision the operator delegated; the proposal default was to wait. Bounded by the daily cap and the digest report.
 Honest limit (TE-Q2): window extension is a launch-time or rotation-time decision, a recommendation for the lead; larger windows cost more per call and per cache rewrite; ceiling knob, company floors tighten-only.
