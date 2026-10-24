@@ -26,8 +26,16 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import clock
+from ..core.digest import content_digest
 from ..infra import paths
-from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
+from ..infra.fsio import (
+    MANAGED_DIGEST_LEN,
+    Managed,
+    NewerContent,
+    RegionError,
+    atomic_write,
+    replace_text,
+)
 from ..infra.paths import launch_parent, launch_python
 from . import harnessreg as HR
 from . import install_info as _INSTALL
@@ -1155,11 +1163,62 @@ def _region_body(region: Managed, text: str) -> str | None:
     return None if at is None else text[at[1] : at[2]]
 
 
+def _head_stamp(head: str) -> tuple[tuple[str, str], ...]:
+    """The region attribute that remembers which front matter ddflow wrote, so a later adopt can tell
+    a front matter it may refresh from one the operator edited."""
+    return (("head", content_digest(head, length=MANAGED_DIGEST_LEN)),)
+
+
+def _refresh_head(region: Managed, existing: str, head: str) -> tuple[str, str]:
+    """``(the front matter to keep or write, its state)`` for a managed file that exists: `same` as the
+    template's; `refresh`, ddflow's own older one (its digest is the stamp's `head`), replaced quietly;
+    `old`, a file from before the stamp (unknowable, so the old file is saved); `edited`, the operator's,
+    which stays."""
+    have = _split_front_matter(existing)[0]
+    if have == head:
+        return head, "same"
+    stamp = region.stamp(existing)
+    wrote = dict(stamp.extra).get("head") if stamp else None
+    if wrote is None:
+        return head, "old"
+    if wrote == content_digest(have, length=MANAGED_DIGEST_LEN):
+        return head, "refresh"
+    return have, "edited"
+
+
+def _update_managed(
+    path: Path, rel: str, region: Managed, existing: str, head: str, body: str
+) -> str:
+    """The action line for a file that holds this region: current, refused (a newer ddflow wrote
+    it), or rewritten with its body, and its front matter when ddflow's, refreshed."""
+    use_head, head_state = _refresh_head(region, existing, head)
+    have_head = _split_front_matter(existing)[0]
+    if _region_body(region, existing) == body and head_state in ("same", "edited"):
+        return f"{rel} is current" + (
+            " (front matter edited by hand: kept)" * (head_state == "edited")
+        )
+    stamp = region.stamp(existing)
+    if region.state(existing) == "newer" and stamp is not None:
+        why = NewerContent(f"the {region.name} region", stamp.version, stamp.fmt)
+        return Refused(f"REFUSED {rel}: {why}")
+    block = region.render(body, extra=_head_stamp(use_head))
+    updated = use_head + region._region().splice(existing[len(have_head) :], block)
+    notes = []
+    if head_state == "edited":
+        notes.append("front matter edited by hand: kept")
+    if region.state(existing) == "edited" or head_state == "old":
+        aside = local_edits_path(path)  # a hand edit inside the region, or the pre-stamp file
+        atomic_write(aside, path.read_bytes())
+        which = "your edits are" if region.state(existing) == "edited" else "the previous file is"
+        notes.append(f"{which} kept in {aside.name}")
+    replace_text(path, updated)
+    return f"wrote {rel}" + (f" ({'; '.join(notes)})" if notes else "")
+
+
 def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> str:
     path = repo / rel
     head, body = _split_front_matter(src.read_text("utf-8"))
     region = _command_region(rel, kind)
-    desired = head + region.render(body)
     if path.exists() and not path.is_file():
         return Refused(f"SKIPPED {rel}: it exists and is not a file; move it and re-run adopt")
     if path.exists():
@@ -1169,19 +1228,7 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
         except RegionError:
             owned = False  # a broken region is the operator's file: leave it alone
         if owned:
-            if _region_body(region, existing) == body:
-                return f"{rel} is current"
-            try:
-                updated = region.splice(existing, body)
-            except NewerContent as exc:
-                return Refused(f"REFUSED {rel}: {exc}")
-            note = ""
-            if region.state(existing) == "edited":  # a hand edit inside the region: kept
-                aside = local_edits_path(path)
-                atomic_write(aside, path.read_bytes())
-                note = f" (your edits are kept in {aside.name})"
-            replace_text(path, updated)
-            return f"wrote {rel}{note}"
+            return _update_managed(path, rel, region, existing, head, body)
         if MANAGED_MARK not in existing:
             ours = "the MCP prompt `implement`" if kind == "commands" else "the template in ddflow"
             return (
@@ -1189,7 +1236,7 @@ def _write_command(repo: Path, rel: str, src: Path, kind: str = "commands") -> s
                 f"{ours}. Delete the file and re-run adopt to take it"
             )
     path.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(path, desired)
+    replace_text(path, head + region.render(body, extra=_head_stamp(head)))
     return f"wrote {rel}"
 
 
