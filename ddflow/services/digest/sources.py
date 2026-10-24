@@ -123,7 +123,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "pipeline complete except a refused gate; the hook refuses an agent's --force",
         "approve the forced completion",
-        "ddflow complete <id> --force --reason <reason>",
+        "ddflow complete <id> --approval <ask>",
         APPROVAL_ASK,
         "the item and dependants",
         ("complete.force",),
@@ -273,6 +273,8 @@ EXEMPT_SITES: dict[str, str] = {
     "config.reviewer_command": "T3 signed act; nothing pends in State",
     "upgrade.self": "an immediate act by a person; nothing pends in State",
     "skew.override": "an immediate flag on one command; nothing pends in State",
+    "export.lock": "an immediate act by a person; nothing pends in State",
+    "export.unlock": "an immediate act by a person; nothing pends in State",
     "claim.force": "an immediate act by a person; nothing pends in State",
 }
 

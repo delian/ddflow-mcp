@@ -48,7 +48,11 @@ def test_operator_rows_have_a_chat_route_and_lead_rows_do_not_pretend():
 
 def _fixed(command: str) -> list[str]:
     """The tokens of a command that are not placeholders: verb words and options."""
-    return [w for w in command.split() if not w.startswith("<") and w != "..."]
+    return [
+        w
+        for w in command.split()
+        if not w.startswith("<") and w not in ("...", "--approval", "ID", "request|ID")
+    ]
 
 
 def _subsequence(needle: list[str], hay: list[str]) -> bool:
