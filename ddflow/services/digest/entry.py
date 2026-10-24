@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...config_sections.digest import parse_ladder
+from ...config_sections.digest import LADDER_STEPS
 from ...core import clock
 from ...core.health import KINDS as HK
 from ...core.model import State
@@ -75,6 +75,17 @@ class Entry:
             "severity": self.severity,
             "detail": self.detail,
         }
+
+
+def parse_ladder(text: str) -> tuple[float, float]:
+    """``"1h, 24h"`` as the two ages (seconds) after which an entry is `needs` and `urgent`."""
+    parts = [p.strip() for p in str(text).split(",") if p.strip()]
+    if len(parts) != LADDER_STEPS:
+        raise ValueError(f"{text!r}: give two ages, e.g. '1h, 24h'")
+    first, second = (clock.parse_duration(p) for p in parts)
+    if not 0 <= first <= second:
+        raise ValueError(f"{text!r}: the first age must not exceed the second")
+    return first, second
 
 
 def rank(severity: str) -> int:
