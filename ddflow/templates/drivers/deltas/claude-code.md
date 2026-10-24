@@ -11,10 +11,11 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    `ddflow next --json`: fan the ready set out to one task subagent per claimed item —
    mapping the `tier:fast|balanced|deep` hints to model choice — and after the merges land
    (or park, in the PR flow) re-read `next` for the next wave. The loop ends when the
-   mission is done — `next` is empty and nothing is in flight — and mid-mission it stops
-   ONLY where the question or approval flow needs an operator answer: `AskUserQuestion`,
-   an operator approval (`ddflow ... --approval request`), a policy decision, an
-   un-settleable review finding. Waits are never stops: see 2. The wave position goes
+   mission completes or blocks — everything has landed, or `next` is empty and names why
+   nothing can start — and mid-mission it stops ONLY where the question or approval flow
+   needs an operator answer: `AskUserQuestion`, an operator approval
+   (`ddflow ... --approval request`), a policy decision, an un-settleable review finding.
+   Waits are never stops: see 2. The wave position goes
    nowhere extra: ddflow's own committed event log and the leases recompute the true wave
    state on every `ddflow next`, so a compaction or restart resumes the wave, never before
    it. Kill the armed heartbeat before any deliberate stop — `ScheduleWakeup` with
