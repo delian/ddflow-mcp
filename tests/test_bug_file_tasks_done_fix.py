@@ -76,7 +76,7 @@ def test_a_report_mislinked_to_another_bugs_open_fix_task_gets_its_own_task(repo
     """Bb141cbd8d8: the OLD `bug found --item <another bug's fix task>` bound Brep to
     fix-Bx -- OPEN, fixing Bx -- and file-tasks saw a live task and left it there
     forever. It now files `fix-Brep`, once; the task's OWN bug stays with its task."""
-    log = seed(repo)
+    seed(repo)
     dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
     assert dry.data["filed"] == ["Brep"] and dry.data["tasks"] == {"Brep": "fix-Brep"}, dry.data
     out = K.bug_file_tasks(repo, every=True, agent="a")
