@@ -2612,6 +2612,20 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      mcp.profile_lean_budget_tokens = 16000   [default]
+          With `[mcp].tools = auto`, a session whose effective start budget
+          (`[session].context_budget_tokens`, or its agent type's entry in
+          `[session.context_budget]`, the smaller) is at most this many tokens gets
+          the `lean` profile whatever the client table says. 0 turns it off. Keep it
+          at or below `profile_mid_budget_tokens` (the first limit that fits wins).
+          The profile is chosen once at `initialize` and a budget only ever narrows
+          it. A client on the modern `server/discover` handshake sends no
+          `clientInfo`, so it keeps the lean default, as it does for the client table.
+      mcp.profile_mid_budget_tokens = 32000   [default]
+          With `[mcp].tools = auto`, a session whose effective start budget is at most
+          this many tokens (and above `profile_lean_budget_tokens`) gets no profile
+          wider than `families`: a client table entry of `hot+families` is lowered to
+          it. 0 turns it off.
       mcp.output_schemas = 'off'   [default]
           Whether `tools/list` declares an `outputSchema` for every tool whose result
           is a JSON object of declared fields (not `show`, `decision_show` or
