@@ -641,6 +641,13 @@ def _stash_failed(r: GitResult, tree: Path) -> bool:
     return not probe.ok and not probe.unavailable  # "could not run" is not "no merge begun"
 
 
+def _overwritten(r: GitResult) -> bool:
+    """Is this git's own refusal to merge over a locally-modified tracked file it would
+    overwrite? Unlike ``fatal: stash failed`` (its pre-merge save died on a lock), this is
+    the dirty tree itself refusing the merge, and the branch was never judged."""
+    return "would be overwritten by merge" in (r.err or r.out)
+
+
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
     """`git <args>`, retried only while git says ``stash failed`` (it merged nothing then).
     When it never clears, the error names the cause and says nothing was merged."""
@@ -658,6 +665,17 @@ def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
             f"merging, {tries} times (usually another process holding the git `index.lock` of {tree} "
             "or rewriting a tracked file as git read it); nothing was merged. Retry the merge "
             "once that process is done, or commit or move the uncommitted changes.",
+            attempted=False,
+        )
+    if not r.ok and _overwritten(r):
+        # git names the exact files the merge would overwrite; that is a dirty tree, not a
+        # judgement on the branch, so it is refused, never recorded as a failed merge.
+        return GitResult(
+            GIT_REFUSED,
+            r.out,
+            f"{r.err or r.out}\n\nNothing was merged (the item's branch was not judged). "
+            f"Commit or move those uncommitted changes, then re-run the merge.",
+            attempted=False,
         )
     return r
 
