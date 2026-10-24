@@ -83,13 +83,17 @@ def write(repo: Path, entry: Mapping[str, Any], tier: str) -> str:
 
 
 def recipe(rel: str = REL, tier: str = "core") -> str:
-    """How to start a lane worker on that config (Claude Code), and the switch that decides
-    whether the host defers tool schemas at all."""
+    """How to start a worker (Claude Code): with a role definition, or without one, and the switch
+    that decides whether the host defers tool schemas at all."""
     return (
-        f"lane workers: `claude --mcp-config {rel} --strict-mcp-config` starts ddflow on the "
-        f"`{tier}` tier and no other MCP server (the user's connectors cost ~12K more). Claude Code "
-        "defers tool schemas on its own; `ENABLE_TOOL_SEARCH=false` (or a high `auto:N`) sends "
-        "them all up front, and only the `core` tier keeps that small."
+        "lane workers: with a role definition start `claude --agent ddflow-<role> --strict-mcp-config "
+        "--mcp-config=.mcp.json` (measured 9.8K first turn for the implementer). Do not pair a role "
+        "definition with the CORE-tier worker config (measured: 17.2K for the implementer; other tiers "
+        "are not measured with a role). With no role definition "
+        f"`claude --strict-mcp-config --mcp-config={rel}` starts ddflow on the `{tier}` tier and no other "
+        "MCP server (the user's connectors cost ~8K more). Claude Code defers tool schemas on its own; "
+        "`ENABLE_TOOL_SEARCH=false` (or a high `auto:N`) sends them all up front, and only the `core` "
+        "tier keeps that small."
     )
 
 

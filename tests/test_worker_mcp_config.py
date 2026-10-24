@@ -81,7 +81,7 @@ def test_adopt_for_claude_writes_the_worker_config_and_says_how_to_use_it(repo):
     assert code == 0, err
     data = json.loads((repo / REL).read_text())
     assert data["mcpServers"]["ddflow"]["env"]["DDFLOW_MCP_TOOLS"] == "core"
-    assert f"--mcp-config {REL}" in out and "--strict-mcp-config" in out, out
+    assert f"--mcp-config={REL}" in out and "--strict-mcp-config" in out, out
     code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
     assert code == 0 and f"{REL} is current" in out, out
     assert "--strict-mcp-config" not in out, "the hint is said when the file is written"
@@ -144,7 +144,7 @@ def test_a_docker_entry_ending_in_an_option_is_left_alone():
 
 def test_the_recipe_names_the_flags_and_the_deferral_switch():
     text = WM.recipe(REL)
-    for must in ("--mcp-config", "--strict-mcp-config", "ENABLE_TOOL_SEARCH"):
+    for must in ("--mcp-config=", "--strict-mcp-config", "ENABLE_TOOL_SEARCH"):
         assert must in text, must
 
 
@@ -200,3 +200,56 @@ def test_the_unreleased_knob_fragment_loads_with_a_json_default():
         c for _v, _d, changes in manifest.releases for c in changes if c.key == "mcp.worker_tools"
     )
     assert change.new == "core"
+
+
+def test_the_recipe_pairs_a_role_definition_with_the_all_tier_config():
+    """Measured (lean-start-inherit.md section 2): the implementer definition costs 9.8K with
+    `--strict-mcp-config --mcp-config=.mcp.json`, 17.2K with the core-tier worker config."""
+    text = WM.recipe(REL)
+    assert "--agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json" in text
+    assert "no role definition" in text and f"--strict-mcp-config --mcp-config={REL}" in text
+
+
+def test_the_flag_is_given_with_an_equals_sign_so_it_cannot_swallow_the_prompt():
+    for text in (
+        WM.recipe(REL),
+        (Path(__file__).resolve().parents[1] / "ddflow/templates/prompts/help/mcp.md").read_text(),
+    ):
+        assert "--mcp-config " not in text, (
+            "variadic: a space lets it read the prompt as a config path"
+        )
+
+
+def test_the_help_page_pairs_each_command_with_its_own_measured_number():
+    page = (
+        Path(__file__).resolve().parents[1] / "ddflow/templates/prompts/help/mcp.md"
+    ).read_text()
+    lines = page.splitlines()
+    role = next(ln for ln in lines if "--agent ddflow-<role>" in ln and "claude " in ln)
+    worker = next(ln for ln in lines if "worker-mcp.json" in ln and "claude " in ln)
+    assert "--mcp-config=.mcp.json" in role and "9.8K" in role and "17.2K" not in role, role
+    assert "25.9K" in worker and "9.8K" not in worker, worker
+    worse = next(ln for ln in lines if "WORSE" in ln)
+    assert "17.2K" in worse and "core-tier worker config" in worse, worse
+
+
+def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
+    text = WM.recipe(REL, tier="all")
+    assert "starts ddflow on the `all` tier" in text
+    assert "the core-tier config below" not in text and "measured on the core tier" not in text
+    # the 17.2K belongs to the default core-tier worker config, said as a measurement, not as the tier below
+    assert "CORE-tier worker config (measured: 17.2K" in text and "Do not pair a role" in text
+
+
+def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
+    import re
+
+    page = (
+        Path(__file__).resolve().parents[1] / "ddflow/templates/prompts/help/mcp.md"
+    ).read_text()
+    cmd = re.compile(r"claude (?:--agent \S+ )?--strict-mcp-config --mcp-config=\S+?(?=[`\s]|$)")
+    in_recipe = set(cmd.findall(WM.recipe(REL)))
+    in_page = set(cmd.findall(page))
+    assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
+    for number in ("9.8K", "17.2K"):
+        assert number in WM.recipe(REL) and number in page, number
