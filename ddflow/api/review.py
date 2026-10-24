@@ -842,8 +842,15 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
             f"{counts['findings']} finding(s) has a verdict with its probe "
             f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
         )
-        return O.ok("review", id=getattr(it, "id", ""), gate=gate, outcome="passed",
-                    findings=[], how=how, text=text)
+        return O.ok(
+            "review",
+            id=getattr(it, "id", ""),
+            gate=gate,
+            outcome="passed",
+            findings=[],
+            how=how,
+            text=text,
+        )
     rec = it.gates.get(gate) if it is not None else None
     stays = rec.outcome if rec is not None else "unreviewed"
     counts = GD.triage_counts(it, gate) or {} if it is not None else {}
@@ -854,8 +861,16 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
             f" {untriaged} earlier finding(s) still have no triage verdict: `ddflow review "
             "triage` settles each (the next clean delta then passes)."
         )
-    return O.nothing("review", reason, id=getattr(it, "id", ""), gate=gate, outcome="",
-                     findings=[], how=how, text=reason)
+    return O.nothing(
+        "review",
+        reason,
+        id=getattr(it, "id", ""),
+        gate=gate,
+        outcome="",
+        findings=[],
+        how=how,
+        text=reason,
+    )
 
 
 def _rerun_scope(it, gate: str, revs: list, diff: str, value):
