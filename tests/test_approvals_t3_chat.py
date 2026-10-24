@@ -196,3 +196,19 @@ def test_no_tool_lifts_the_forbid(repo):
     assert not on.error
     off = CW.apply_edit(repo, CW.SetPairs([("approvals.forbid_chat_for_t3", CW.Spelled("false"))]))
     assert off.error and "only tightens" in off.error
+
+
+def test_the_refusal_names_the_route_that_works_here(log, cfg, tmp_path):
+    on = C.operator_gate(log, cfg, _canon())
+    assert not on.ok and "they type `approve" in on.message
+    off = C.operator_gate(log, _cfg(tmp_path, forbid=True), _canon(item="other"))
+    assert not off.ok and "not approvable over chat" in off.message and "they type" not in off.message
+
+
+def test_an_unreadable_layer_fails_closed(log, tmp_path, repo):
+    cfg = _cfg(tmp_path)
+    cfg.root = repo
+    bad = repo / ".ddflow" / "config.toml"
+    bad.parent.mkdir(exist_ok=True)
+    bad.write_text("[approvals\nforbid = ")  # not TOML
+    assert not H.chat_t3(cfg)
