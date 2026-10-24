@@ -207,7 +207,7 @@ def test_the_recipe_pairs_a_role_definition_with_the_all_tier_config():
     `--strict-mcp-config --mcp-config=.mcp.json`, 17.2K with the core-tier worker config."""
     text = WM.recipe(REL)
     assert "--agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json" in text
-    assert "no role definition" in text and f"--mcp-config={REL} --strict-mcp-config" in text
+    assert "no role definition" in text and f"--strict-mcp-config --mcp-config={REL}" in text
 
 
 def test_the_flag_is_given_with_an_equals_sign_so_it_cannot_swallow_the_prompt():
@@ -239,3 +239,17 @@ def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
     assert "the core-tier config below" not in text and "measured on the core tier" not in text
     # the 17.2K belongs to the default core-tier worker config, said as a measurement, not as the tier below
     assert "measured with the default core-tier one" in text and "Do not pair a role" in text
+
+
+def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
+    import re
+
+    page = (
+        Path(__file__).resolve().parents[1] / "ddflow/templates/prompts/help/mcp.md"
+    ).read_text()
+    cmd = re.compile(r"claude (?:--agent \S+ )?--strict-mcp-config --mcp-config=\S+?(?=[`\s]|$)")
+    in_recipe = set(cmd.findall(WM.recipe(REL)))
+    in_page = set(cmd.findall(page))
+    assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
+    for number in ("9.8K", "17.2K"):
+        assert number in WM.recipe(REL) and number in page, number
