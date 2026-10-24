@@ -22,16 +22,17 @@ from ddflow.config import Config
 from ddflow.services import review_exclude as REX
 
 
-def test_excluded_outright_is_true_only_for_an_entirely_excluded_change(tmp_path):
+def test_excluded_outright_is_true_only_for_a_generated_only_change(tmp_path):
     cfg = Config()
     assert REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock", "src/a.py"])
     assert not REX.excluded_outright(cfg, Path(tmp_path), [])
+    # a project's OWN privacy exclusion never waives the reviewer: *.pem is not the
+    # shipped generated class, so an all-excluded secrets-only change still demands one
+    cfg.review.exclude_globs = ["*.pem"]
+    assert not REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"])
     cfg.review.exclude_globs = []
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
-    # the SAME inputs as the review that will run: an ad-hoc --exclude is what decides
-    assert REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"], exclude="*.pem")
-    assert not REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"])
 
 
 def _setup_lock_only_change(repo: Path, tmp_path: Path, mixed: bool = False) -> Path:
