@@ -87,8 +87,9 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
     that decides whether the host defers tool schemas at all."""
     return (
         "lane workers: with a role definition start `claude --agent ddflow-<role> --strict-mcp-config "
-        "--mcp-config=.mcp.json` (measured 9.8K first turn for the implementer; the worker config below, "
-        "measured on the core tier, makes a role definition cost more: 17.2K); with no role definition "
+        "--mcp-config=.mcp.json` (measured 9.8K first turn for the implementer). Do not give a role "
+        "definition the worker config: measured with the default core-tier one it cost the implementer "
+        "17.2K. With no role definition "
         f"`claude --mcp-config={rel} --strict-mcp-config` starts ddflow on the `{tier}` tier and no other "
         "MCP server (the user's connectors cost ~8K more). Claude Code defers tool schemas on its own; "
         "`ENABLE_TOOL_SEARCH=false` (or a high `auto:N`) sends them all up front, and only the `core` "
