@@ -25,7 +25,7 @@ that directory with the user's claude.ai connectors and plugins on, prompt "repl
 - ddflow's names cost 1.4K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
   V12) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool search on.
 - Turning tool search off also inlines Claude Code's own built-in tool schemas (V17 39.6K against V10 24.2K), so
-  ddflow's own undeferred cost is read against V17: all tier 13.1K (V13 against V17), a fifth of the 58.4K of
+  ddflow's own undeferred cost is read against V17: all tier 13.1K (V13 against V17), under a quarter of the 58.4K of
   lean-start.md probe L (the charter replaced a 3.1K instruction block and the tool-diet work has landed since;
   the split is UNKNOWN). The core tier does NOT undercut the all tier here: 16.1K (V8 against V17) against 13.1K,
   where lean-start.md measured core 54.7K against all 84.2K (probes K and L). UNKNOWN why a core-tier server weighs as much as the all tier in this run (one
