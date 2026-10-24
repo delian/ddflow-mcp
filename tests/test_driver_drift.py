@@ -123,9 +123,7 @@ def test_claude_delta_carries_the_goal_wave_contract():
     bug names: a wave is a `ddflow next --json` fan-out by tier hint, the loop stops only
     where the operator is required, and the wave position is recomputed from ddflow's own
     event log."""
-    text = (
-        ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md"
-    ).read_text()
+    text = (ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md").read_text()
     assert "ddflow next --json" in text, "the claude delta does not read the wave"
     assert "tier:fast|balanced|deep" in text, "the claude delta does not map tier hints"
     assert "ONLY where the question or approval flow" in text, (
