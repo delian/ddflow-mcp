@@ -858,7 +858,7 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     if untriaged:
         reason += (
             f" {untriaged} earlier finding(s) still have no triage verdict: `ddflow review "
-            "triage` settles each (the next clean delta then passes)."
+            "triage` settles each."
         )
     return O.Outcome(
         kind="review",
@@ -2292,8 +2292,9 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         evidence.update({k: prior[k] for k in keys if k in prior and k not in evidence})
         _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
+    clean_pass = outcome == "passed"
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
-    if outcome == "failed" and held:
+    if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
