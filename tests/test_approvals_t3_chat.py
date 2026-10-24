@@ -67,7 +67,7 @@ def _file(log, cfg):
 def _write(cfg, rows):
     d = Path(cfg.approvals.transcript_dirs[0]) / "slug"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "s1.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    (d / "s1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
 
 
 def _typed(row):
@@ -112,6 +112,22 @@ def test_the_company_layer_forbids_whatever_the_opt_in_says(log, tmp_path):
     row = _file(log, cfg)
     _write(cfg, [_typed(row)])
     assert not H.attest(log, cfg, row["id"])[0]
+
+
+def test_a_forbid_in_a_file_layer_cannot_be_undone_by_a_later_layer(log, tmp_path, repo):
+    cfg = _cfg(tmp_path)
+    cfg.root = repo
+    committed = repo / ".ddflow" / "config.toml"
+    committed.parent.mkdir(exist_ok=True)
+    committed.write_text("[approvals]\nforbid_chat_for_t3 = true\n")
+    assert not H.chat_t3(cfg)  # the merged value says false here; the file says true
+    committed.write_text("[approvals]\nforbid_chat_for_t3 = false\n")
+    assert H.chat_t3(cfg)
+
+
+def test_the_environment_can_forbid(log, tmp_path, monkeypatch):
+    monkeypatch.setenv("DDFLOW_APPROVALS_FORBID_CHAT_FOR_T3", "true")
+    assert not H.chat_t3(_cfg(tmp_path))
 
 
 def test_an_askuserquestion_answer_never_satisfies_a_t3_act(log, cfg):
