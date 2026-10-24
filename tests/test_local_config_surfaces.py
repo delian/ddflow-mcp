@@ -30,6 +30,7 @@ from ddflow.services import review as R
 GOVERNS = (
     "ddflow/templates/prompts/mcp_instructions.md",
     "ddflow/templates/prompts/help/manual.md",
+    "README.md",
     "ddflow/config_sections/**",
 )
 
