@@ -195,6 +195,23 @@ def test_complete_says_the_author_model_came_from_the_flag(repo, monkeypatch):
     assert body["model_source"] == "flag", body
 
 
+def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo, monkeypatch):
+    """The declaration is the record, not its liveness: an agent that ended its session
+    (the driver's close step) still declared this model under its identity."""
+    _queue(repo)
+    code, out, err = run_cli(repo, "--json", "session", "start", "--model", "claude-opus", agent="impl")
+    assert code == 0, out + err
+    sid = json.loads(out)["session"]
+    _ready_to_complete(repo, monkeypatch, "impl")
+    run_cli(repo, "session", "end", sid, agent="impl")
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "session", body
+
+
 def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
     _queue(repo)
     _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
