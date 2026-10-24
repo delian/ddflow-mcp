@@ -338,6 +338,13 @@ class Item:
     #: port applies elsewhere.
     landed_before: str = ""
     landed_after: str = ""
+    #: The item's own paths inside its landed range, recorded with
+    #: `update --landed-paths <globs>` for work that landed inside a MIXED commit
+    #: (B738d7bbeab): `changed_paths` reports only these, so a commit that also changed
+    #: code does not force the full task pipeline on a docs-only item. Each glob was
+    #: verified inside the item's declared globs and inside the range's changed files.
+    landed_paths: list[str] = field(default_factory=list, metadata={"omit_empty": True})
+
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
     fixes: list[str] = field(default_factory=list)
