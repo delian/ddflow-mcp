@@ -36,3 +36,18 @@ def test_the_tools_a_role_needs_to_finish_its_work_are_in_the_core_tier():
         "ddflow_rule_search",
     ):
         assert name in tier_tools("core"), name
+
+
+def test_every_tool_the_base_charter_names_is_served_under_the_default_profile(repo):
+    """The default connection is the lean PROFILE, not the flat core tier: a charter-named tool must be
+    a listed tool or served by a listed family there, or a client could not call what it was told to."""
+    from conftest import run_cli
+
+    from ddflow.surfaces.tools import profiles as PR
+    from ddflow.surfaces.tools.families import placement
+
+    run_cli(repo, "init")
+    named = set(re.findall(r"`(ddflow_[a-z_]+)", _base(repo)))
+    listed = set(PR.advertised_names(PR.DEFAULT_PROFILE))
+    unserved = sorted(n for n in named if placement(n).family not in listed and n not in listed)
+    assert not unserved, f"the default profile lists nothing that serves: {unserved}"
