@@ -82,7 +82,8 @@ V0 session by the Agent tool.
 
 ## 4. What this changes
 
-1. LS-agents' definitions are the right default lever: 10.7K to 17.8K against 34.0K as is, with a FUNCTIONAL
+1. LS-agents' definitions are the right default lever: 10.7K to 17.8K as the main agent (17.2K to 18.2K as an
+   Agent-tool subagent) against 34.0K as is, with a FUNCTIONAL
    allow-list (the first version was not, B07c4286c92).
 2. Start a worker with `--strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json`, adding
    `--agent ddflow-<role>` when a role fits; the recipe and the help page say so.
