@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_brief_min_chars"
+new = "4000"
+why = "The launch brief is sized to the session start budget: a share of it, with a floor, and a lean mode for small windows."
+impact = "additive"

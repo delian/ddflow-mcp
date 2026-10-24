@@ -1013,6 +1013,18 @@
           N tokens (budget M)` and says OVER when it is past;
           tests/test_session_start_budget.py ratchets the same measurement. 0 sets no
           budget (the cost is still shown).
+      session.context_budget = {}   [default]
+          Start budgets per agent type, beside the global `context_budget_tokens`: a
+          table from `global` or an agent type (the harness ids of `ddflow harness
+          list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens,
+          e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target
+          is managed separately. A session's effective budget is the smaller of the
+          global and its type's; `global` here is another spelling of
+          `context_budget_tokens` (set both and the smaller applies, whatever the
+          layer order); a type left out inherits the global; 0 sets no ceiling AT THAT
+          LEVEL (a type at 0 leaves the global in force). `ddflow doctor` reports the
+          cost against each configured type. Layers merge key by key (the local layer
+          wins).
       session.start_notice_reserve_tokens = 100   [default]
           Tokens `ddflow doctor` adds to the session start cost for the one-line
           upgrade or release notice that leads the first session after an upgrade.
@@ -1054,10 +1066,26 @@
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
       session.agent_brief_max_chars = 9000   [default]
-          Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME
-          ITEM` renders for a subagent. Over it, the lessons and then the decisions
-          are cut (down to a pointer); the standard sections are only ever left out by
-          `agent_brief_off`. 0 means no ceiling.
+          Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief
+          `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the
+          lessons and then the decisions are cut (down to a pointer); the standard
+          sections are only ever left out by `agent_brief_off`. 0 means no ceiling.
+      session.agent_brief_budget_share = 0.1   [default]
+          The share of the session start budget (`context_budget_tokens`, or the
+          running agent type's entry in `[session.context_budget]`) the launch brief
+          may use, at `start_bytes_per_token` bytes a token. The brief's cap is that,
+          between `agent_brief_min_chars` and `agent_brief_max_chars`: at the default
+          40,000-token budget it is the fixed 9,000-character ceiling, for a small
+          window it shrinks. With no start budget the ceiling alone applies.
+      session.agent_brief_min_chars = 4000   [default]
+          The floor, in UTF-8 bytes (characters, for ASCII text), of the launch
+          brief's derived cap: the identity, item, lease, merge and report text is not
+          worth cutting below it.
+      session.agent_brief_lean_chars = 6000   [default]
+          Under this derived cap (UTF-8 bytes) the launch brief is LEAN: the testing,
+          review, gate and filing sections, the project's own text and the lessons are
+          left out (the gates enforce the rules; one line says where the rest is). 0
+          never goes lean.
       session.agent_brief_off = []   [default]
           Sections of the launch brief to leave out: identity, item, rules, decisions,
           lessons, start, tests, reviews, gates, finish, forbidden, filing, project,
@@ -2532,22 +2560,29 @@
           unannounced change stops the release); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
-      mcp.tools = 'all'   [default]
-          Which tools `tools/list` advertises: `core` (the ~30 tools of the daily
-          loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons,
-          decisions, sessions, setup, help), `standard` (core plus the commonly used
-          rest) or `all` (default, every tool). A tool outside the tier is NOT
-          removed: it stays callable by name, and `ddflow_help` and the connection
-          instructions name what the tier hides. Read once at server start, so change
-          it and restart the server; `listChanged` stays false. Set it to cut the ~90
-          KB tool list a client without deferred tool search pays in context every
-          session (core is under 40 KB). A newer release's tier in a config file is
-          tolerated (see below). An unrecognised value in a config file is warned
-          about, reported by `doctor` and falls back to 'all', the strictest (no
-          safety dimension; every tool advertised, as without the knob); `config
-          --set`, `ddflow_configure` and the environment refuse it, and so does
-          loading ddflow's own source tree, where the file and the code are one
-          commit.
+      mcp.tools = 'auto'   [default]
+          Which tools `tools/list` advertises. `auto` (default) is `lean`, the 9 hot
+          single tools plus the gate, bug, session, task, view and memory families (15
+          tools, about 30 KB), unless the client table names another profile for the
+          connecting client. `families` is every family (24 tools), `hot+families`
+          adds the 12 most-called direct tools (36). A family is ONE tool with an
+          `action` (`ddflow_gate` with `action=record`); nothing is removed by a
+          profile: every tool, every family action and every old tool name stays
+          callable, and `ddflow_help` names what a profile hides. The flat tiers:
+          `core` (the ~30 tools of the daily loop: brief, next, claim, gates,
+          complete, merge, recall, bugs, lessons, decisions, sessions, setup, help),
+          `standard` (core plus the commonly used rest) or `all` (every tool). A tool
+          outside the tier is NOT removed: it stays callable by name, and
+          `ddflow_help` and the connection instructions name what the tier hides. Read
+          once at server start, so change it and restart the server; `listChanged`
+          stays false. Set it to cut the ~90 KB tool list a client without deferred
+          tool search pays in context every session (core is under 40 KB). A newer
+          release's tier in a config file is tolerated (see below). An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'all', the strictest (no safety dimension; every tool advertised, as
+          without the knob); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
       mcp.worker_tools = 'core'   [default]
           The tool tier of the MCP config `ddflow adopt` writes for lane workers
           (`.ddflow/local/worker-mcp.json`, started with `claude --mcp-config <file>
@@ -2578,6 +2613,23 @@
           and restart the server. An unrecognised value in a config file is warned
           about, reported by `doctor` and falls back to 'off', the strictest (no
           safety dimension; the smaller, unchanged tool list and result); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      mcp.next_hints = 'off'   [default]
+          Whether a state-changing MCP result carries an advisory `next` field: up to
+          3 hints (and 400 bytes) of `{tool, why, args_hint}` naming what usually
+          follows, from the result already computed (a claim points at `gate status`;
+          `gate status` at the first open gate by kind, and at `merge` only once every
+          gate carries an outcome; `merge` at `complete`; `complete` at `next`; `bug
+          found` at its fix task; `next` at claiming the first ready item). `off`
+          (default: whether hints save wrong calls was not measured); `on` is 3; `1`,
+          `2` or `3` cap the count. A hint names a tool the connection's profile lists
+          (a family action on a family profile, dropped when the profile does not list
+          it); `why` is a fixed sentence, never record text. Advisory: the tool it
+          names still checks the world. Read once at server start. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'off', the strictest (no safety dimension; the unchanged result); `config
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
@@ -2663,8 +2715,15 @@
           command names no test file) may run at once on this host, counted across
           every project and agent of the user through a lock in the user's state
           directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE
-          ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are
-          not limited.
+          ('blocked on <holder> since <time>'), never a pass. A selected run queues
+          only above `selected_lock_tests` test files.
+      ci.selected_lock_tests = 20   [default]
+          A SELECTED `ddflow ci run` (tests_scope = selected) that runs more test
+          files than this -- the selection plus the always-run guards -- queues for
+          the host-wide full-suite slot like the whole suite does: a long selection is
+          a full suite's load. Default 20; 0: a selected run never queues. Either way
+          its pytest workers are the computed count (`[ci].workers`, at most
+          `max_workers`, never above the files), not one per core (B1401457afd).
       ci.suite_wait_s = 1800   [default]
           Seconds a full-suite run waits for a free slot (`max_concurrent_suites`)
           before it reports who holds it.

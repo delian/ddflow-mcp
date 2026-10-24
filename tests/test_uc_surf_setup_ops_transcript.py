@@ -108,6 +108,7 @@ def _normalise(text: str, repo: Path) -> str:
     text = text.replace(re.sub(r"[/._]", "-", str(repo.resolve())), "<mangled>")
     text = re.sub(r"(?<=-proj-)[0-9a-f]{6}\b", "<h6>", text)
     text = re.sub(r"\d{4}-\d\d-\d\d[T ][\d:.+Z-]+", "<time>", text)
+    text = re.sub(r"\bQ[0-9a-f]{10}\b", "<ask>", text)  # an approval request id is random
     text = re.sub(r"\b[0-9a-f]{10,12}\b", "<hex>", text)
     text = re.sub(r"\b\d+\.\d+s\b", "<secs>", text)
     return re.sub(rf"(?<![\d.]){re.escape(ddflow.__version__)}(?!\.?\d)", "<VERSION>", text)

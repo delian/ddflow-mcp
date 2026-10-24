@@ -16,11 +16,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..config import Config
+from ..core import limits as L
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 
 DEFAULT_LIMIT = 50
-MAX_LIMIT = 1000
+MAX_LIMIT = L.SESSION_MAX_LIMIT
 _KINDS = ("session.started", "session.ended", "session.prompt", "session.note")
 STATES = ("open", "ended")
 

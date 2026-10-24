@@ -199,6 +199,10 @@ APPROVE = Command(
         Param("note", help="what you looked at, for the record"),
         Param("reject", type="boolean", help="refuse it; --reason required"),
         Param("reason", help="why it was rejected — a 'no' nobody can act on is a stall"),
+        Param(
+            "approval",
+            help="an agent: the id of the operator's approval of exactly this acceptance (a refusal files the request and names it)",
+        ),
     ),
 )
 

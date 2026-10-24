@@ -76,6 +76,7 @@ def export_enable(
     local: bool = False,
     agent: str = "",
     via_mcp: bool = False,
+    approval: str = "",
 ) -> O.Outcome:
     """Select ``doc`` (no file is written). An agent may; the result says who and how to stop."""
 
@@ -83,7 +84,7 @@ def export_enable(
         log, cfg, st = _load(repo, agent)
         r = S.enable(
             repo, log, cfg, st, doc, path=path, mode=mode, local=local,
-            requested_agent=agent, via_mcp=via_mcp,
+            requested_agent=agent, via_mcp=via_mcp, approval=approval,
         )  # fmt: skip
         return O.ok("export.enable", **r, text=r["message"])
 
@@ -98,6 +99,7 @@ def export_disable(
     local: bool = False,
     agent: str = "",
     via_mcp: bool = False,
+    approval: str = "",
 ) -> O.Outcome:
     """Stop selecting ``doc``; ``lock`` (the operator's veto) keeps agents from enabling it."""
 
@@ -105,19 +107,19 @@ def export_disable(
         log, cfg, st = _load(repo, agent)
         r = S.disable(
             repo, log, cfg, st, doc, lock=lock, local=local,
-            requested_agent=agent, via_mcp=via_mcp,
+            requested_agent=agent, via_mcp=via_mcp, approval=approval,
         )  # fmt: skip
         return O.ok("export.disable", **r, text=r["message"])
 
     return _guard("export.disable", run)
 
 
-def export_ack(repo: Path, *, agent: str = "") -> O.Outcome:
+def export_ack(repo: Path, *, agent: str = "", approval: str = "") -> O.Outcome:
     """The operator has seen every document an agent enabled (refused under an agent)."""
 
     def run() -> O.Outcome:
         log, cfg, st = _load(repo, agent)
-        docs = S.acknowledge(log, st, cfg, requested_agent=agent)
+        docs = S.acknowledge(log, st, cfg, requested_agent=agent, approval=approval)
         text = f"acknowledged: {', '.join(docs)}" if docs else "nothing to acknowledge"
         return O.ok("export.ack", documents=docs, text=text)
 
@@ -444,6 +446,7 @@ def _tool_action(repo: Path, a: dict[str, Any], act: str, agent: str) -> O.Outco
             mode=str(a.get("mode") or ""),
             agent=agent,
             via_mcp=True,
+            approval=str(a.get("approval") or ""),
         )
     return O.refused(
         "export", f"unknown action {act!r}: list, enable, disable or validate", results=[]

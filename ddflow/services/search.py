@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import limits as L
 from ..core import participation as PA
 from ..core import textsim
 from ..core.model import State
@@ -86,7 +87,7 @@ _OWNER = {  # the source that holds each kind that also leaves events in the log
 }
 MODES = ("ranked", "exact", "regex")
 DEFAULT_LIMIT = 20
-MAX_LIMIT = 200
+MAX_LIMIT = L.SEARCH_MAX_LIMIT
 SNIPPET = 140
 MAX_SCAN = 2000  # characters of one record that a regex looks at
 LOG_WEIGHT = 0.5
