@@ -12,6 +12,6 @@ Contract (hooks, leases and gates enforce it; this only says what they refuse):
 2. Claim an item before you edit anything.
 3. Missing, ambiguous or needs approval: ask the operator, never guess; install nothing unasked.
 4. A tool or reviewer that could not run is `unavailable`, never `passed`. A bug needs a regression test.
-At the end of the run, of each phase and before your context is compacted, assess ddflow itself and file any defect or missing feature you met (`ddflow_bug_found`), checking first that it is not already filed or already corrected.
+At the end of the run, of each phase and before your context is compacted, assess ddflow itself and file any defect or missing feature you met (`ddflow_bug_found`, or `ddflow_bug` action `found` on the lean profile), checking first that it is not already filed or already corrected.
 A ddflow tool your profile does not list (the lean profile lists families) is not listed: use the CLI (`ddflow <noun> <verb>`) from Bash.
 More: `ddflow_recall "<topic>"`, `ddflow_help` topic `manual`, `ddflow_rule_show id=<id>` (full text of any rule).

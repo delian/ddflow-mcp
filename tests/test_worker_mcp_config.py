@@ -250,5 +250,5 @@ def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
     in_recipe = set(cmd.findall(WM.recipe(REL)))
     in_page = set(cmd.findall(page))
     assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
-    for number in ("10.7K", "17.8K", "25.9K"):
+    for number in ("10.7K", "11.9K", "17.8K", "25.9K"):
         assert number in WM.recipe(REL) and number in page, number
