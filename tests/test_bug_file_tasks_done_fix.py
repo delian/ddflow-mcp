@@ -87,6 +87,19 @@ def test_a_report_mislinked_to_another_bugs_open_fix_task_gets_its_own_task(repo
     assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "filed once, not on every run"
 
 
+def test_a_report_mislinked_to_a_live_fix_task_of_another_bug_is_refiled(repo):
+    """Ba3cf059594: the audit-tail twin of Bb141cbd8d8 -- a log where `bug found --item
+    <another bug fix task>` is REAL (the other task live, fixing another bug) -- gets
+    its own task too, and its own bug's link is untouched."""
+    seed(repo)
+    out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.data["filed"] == ["Brep"], out.data
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep" and st.items["fix-Brep"].fixes == ["Brep"]
+    assert st.bugs["Bx"].fix_task == "fix-Bx", "the other bug's link is untouched"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "refiled once, not on every run"
+
+
 def test_a_bug_bound_to_an_open_task_with_no_fixes_of_its_own_is_left(repo):
     """The refile takes a bug off a task declared to fix ANOTHER bug; a live hand-filed
     task with no `fixes` named as the fix IS the fix (B8fb4a2ec4a) and file-tasks leaves
