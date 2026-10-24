@@ -652,6 +652,53 @@ def _digests(found: list[dict]) -> list[str]:
     return [str(f["digest"]) for f in found if f.get("digest")]
 
 
+def _finding_field(f, key: str) -> str:
+    """``key`` of a finding, however it is carried: a ``Finding`` or its evidence dict."""
+    return f.get(key, "") if isinstance(f, dict) else (getattr(f, key, "") or "")
+
+
+def _link_refuted(log, it, gate: str, findings) -> list[str]:
+    """Auto-link this round's findings byte-identical to one the item already REFUTED on any
+    gate to that triage (bug B74d5c39e6e): one claim is refuted once, and a second gate
+    raising it word-for-word must not ask the author to record the same refutation again.
+
+    Appends the item's refuted triage -- the verdict and its probe -- to ``gate`` for each
+    such digest ``gate`` has no verdict on. Returns the digests linked (none when ``it`` is
+    unreadable, the findings cannot be read, or nothing matches).
+    """
+    if it is None or not isinstance(findings, list):
+        return []
+    refuted = {
+        digest: t
+        for triaged in it.triage.values()
+        for digest, t in triaged.items()
+        if t.get("verdict") == "refuted"
+    }
+    mine = it.triage.get(gate, {})
+    linked: list[str] = []
+    for n, f in enumerate(findings, 1):
+        digest = str(_finding_field(f, "digest") or "")
+        if not digest or digest not in refuted or digest in mine:
+            continue
+        log.append(
+            "review.triaged",
+            it.id,
+            {
+                "gate": gate,
+                "finding": n,
+                "digest": digest,
+                "verdict": "refuted",
+                "probe": refuted[digest].get("probe", ""),
+                "severity": _finding_field(f, "severity"),
+                "title": _finding_field(f, "title"),
+                "location": _finding_field(f, "location"),
+            },
+        )
+        mine = {**mine, digest: refuted[digest]}
+        linked.append(digest)
+    return linked
+
+
 def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
@@ -2216,6 +2263,16 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
                 evidence=ev,
                 gates=gates,
             )
+            found = ev.get("chunk_findings")
+            linked = _link_refuted(
+                log, st.items.get(item), g, found if isinstance(found, list) else []
+            )
+            if linked:
+                say(
+                    f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid}); "
+                    f"auto-linked finding(s) {', '.join(linked)} to the item's refuted triage"
+                )
+                continue
             say(f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid})")
     elif item and out.data.get("outcome") == "unavailable":
         # No review happened (no reviewer, an empty diff): each gate says so, not only the
@@ -2306,6 +2363,9 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     clean_pass = outcome == "passed"
+    linked = _link_refuted(log, it, gate, best.findings)
+    if linked:
+        held = max(0, held - len(linked))
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
@@ -2313,6 +2373,12 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
         reason=reason, evidence=evidence, by=best.model,
     )  # fmt: skip
+    if linked:
+        say(
+            f"→ auto-linked finding(s) {', '.join(linked)} of {item}.{gate} to the item's "
+            f"refuted triage (bug B74d5c39e6e): the claim was already refuted, its probe "
+            "stands on this gate too"
+        )
     say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
     _say_triage_scope(say, results, best)
     return outcome
