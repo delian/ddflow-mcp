@@ -779,15 +779,14 @@ def _held_and_settled(it, gate: str) -> dict[str, int] | None:
     """The gate's triage counts when its `failed` is ONLY the hold of a clean delta over
     untriaged earlier findings (`_hold`), with every finding settled since; None otherwise.
     The hold's promise -- "the next clean delta then passes" -- is kept without new commits
-    only for that shape: nothing changed since the reviewed head means the reviewer already
-    saw everything a pass would ride on (B10ad449deb)."""
+    only for that shape: the `held_pass` marker says the review itself was clean and the
+    gate failed ONLY because earlier findings had no verdict, and nothing changed since the
+    reviewed head means the reviewer already saw everything a pass would ride on
+    (B10ad449deb). A `delta` `failed` for anything else is never released here."""
     if it is None:
         return None
     rec = it.gates.get(gate)
-    if rec is None or rec.outcome != "failed":
-        return None
-    ev = rec.evidence or {}
-    if ev.get("review_kind") != "delta" or ev.get("delta_findings"):
+    if rec is None or rec.outcome != "failed" or not (rec.evidence or {}).get("held_pass"):
         return None
     counts = GD.triage_counts(it, gate) or {}
     if not counts.get("findings") or counts.get("untriaged"):
@@ -2294,6 +2293,8 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
+    if outcome == "failed" and held:
+        evidence["held_pass"] = True
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
         reason=reason, evidence=evidence, by=best.model,
