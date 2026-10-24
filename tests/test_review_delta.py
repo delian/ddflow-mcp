@@ -527,6 +527,7 @@ def test_an_unchanged_delta_with_findings_still_untriaged_stays_failed_and_count
     _fix(repo)
     held = _review(repo)
     assert held.data["outcome"] == "failed", held.data
+    assert _ev(repo)["delta_rounds"] == 1, "the held delta counted its round"
     calls = _calls(seen)
     out = _review(repo)  # unchanged since the reviewed head; the finding is untriaged
     assert out.exit == REFUSED, out.reason
