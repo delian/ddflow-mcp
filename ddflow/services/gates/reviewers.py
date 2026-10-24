@@ -154,7 +154,8 @@ def reviewer_independence(
             f"write a reviewer, so it cannot vouch for one. The operator reviews the "
             f"entry and runs "
             + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
-            + " from their own terminal."
+            + " from their own terminal, or an agent runs it with `--approval request` and the "
+            "operator approves in chat (an HTTP entry; a command reviewer is terminal only)."
         )
     if not fams:
         if anonymous:

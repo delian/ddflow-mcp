@@ -51,8 +51,12 @@ def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _no_ambient_mcp_tool_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     """``DDFLOW_MCP_TOOLS`` is a documented env knob; one exported in a developer's shell
-    must not narrow ``tools/list`` under every test (and `run_cli` subprocesses inherit)."""
-    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
+    must not narrow ``tools/list`` under every test (and `run_cli` subprocesses inherit).
+
+    The default profile is the lean core (15 tools); the suite's many tests of tools that it does
+    not list run on the flat ``all`` list. A test of the default or of a profile deletes or sets
+    the variable itself (tests/test_mcp_tool_profiles.py)."""
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "all")
 
 
 @pytest.fixture(autouse=True)

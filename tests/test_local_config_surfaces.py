@@ -25,6 +25,16 @@ from ddflow.api import review as AR
 from ddflow.api import setup as AS
 from ddflow.services import review as R
 
+#: What this checks, read by `ddflow tests --item`: a change under one of these paths selects this test
+#: even where nothing it imports changed (it reads the charter, the manual and the README as text, and the
+#: config glob covers the local-config knobs it exercises).
+GOVERNS = (
+    "ddflow/templates/prompts/mcp_instructions.md",
+    "ddflow/templates/prompts/help/manual.md",
+    "README.md",
+    "ddflow/config_sections/**",
+)
+
 OK = 0
 
 HUMAN_GATE = (
@@ -223,7 +233,9 @@ def test_the_local_set_of_a_human_flag_is_refused(repo):
 def test_the_handshake_and_readme_say_services_go_local():
     root = Path(__file__).resolve().parents[1]
     instr = (root / "ddflow" / "templates" / "prompts" / "mcp_instructions.md").read_text()
-    assert ".ddflow/local/" in instr and "local=true" in instr
+    manual = (root / "ddflow" / "templates" / "prompts" / "help" / "manual.md").read_text()
+    assert ".ddflow/local/" in instr, "the charter says where services go"
+    assert ".ddflow/local/" in manual and "local=true" in manual, "the manual says how"
     readme = (root / "README.md").read_text()
     assert "What is committed, and what stays on your machine" in readme
     assert "ddflow config --local --set" in readme

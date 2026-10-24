@@ -212,7 +212,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\n"
+  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [
@@ -792,7 +792,7 @@
   ],
   3,
   "",
-  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\n"
+  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [
@@ -801,8 +801,8 @@
    "T1"
   ],
   3,
-  "{\n  \"refusal\": {\n    \"reason\": \"cannot complete T1 \\u2014 3 unmet condition(s):\\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\\n\\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"complete@1\"\n}\n",
-  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\n"
+  "{\n  \"refusal\": {\n    \"reason\": \"cannot complete T1 \\u2014 3 unmet condition(s):\\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\\n\\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"complete@1\"\n}\n",
+  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [
@@ -927,7 +927,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\n"
+  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [
@@ -1056,7 +1056,7 @@
   ],
   3,
   "",
-  "cannot complete T9 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests (current outcome: implement=not run, unit_tests=not run)\n  - gate(s) never run and never skipped: research, rules, implement, rubber_duck, critic, standards, unit_tests, bug_hunt, dedupe. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T9` shows the pipeline. --force overrides, and the override is recorded.\n"
+  "cannot complete T9 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests (current outcome: implement=not run, unit_tests=not run)\n  - gate(s) never run and never skipped: research, rules, implement, rubber_duck, critic, standards, unit_tests, bug_hunt, dedupe. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T9` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [

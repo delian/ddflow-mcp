@@ -53,7 +53,11 @@ class CiConfig:
     )
     max_concurrent_suites: int = knob(
         1,
-        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue, the after-merge check and the `unit_tests` gate when its command names no test file) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. Selected-scope runs are not limited.",
+        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue, the after-merge check and the `unit_tests` gate when its command names no test file) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. A selected run queues only above `selected_lock_tests` test files.",
+    )
+    selected_lock_tests: int = knob(
+        20,
+        doc="A SELECTED `ddflow ci run` (tests_scope = selected) that runs more test files than this -- the selection plus the always-run guards -- queues for the host-wide full-suite slot like the whole suite does: a long selection is a full suite's load. Default 20; 0: a selected run never queues. Either way its pytest workers are the computed count (`[ci].workers`, at most `max_workers`, never above the files), not one per core (B1401457afd).",
     )
     suite_wait_s: int = knob(
         1800,

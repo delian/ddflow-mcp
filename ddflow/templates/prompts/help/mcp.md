@@ -29,15 +29,22 @@ Ask it anything about itself with `ddflow_help`, and ask what the rules are here
 
 ## Lane workers: start them lean
 
-Every ddflow schema a worker loads is first-turn context (84.2K against 54.7K on the `core` tier,
-measured). For Claude Code, `ddflow adopt` also writes `.ddflow/local/worker-mcp.json` (git-ignored: it
+Every ddflow schema a worker loads is first-turn context. For Claude Code, `ddflow adopt` writes the
+lean role definitions (`.claude/agents/ddflow-<role>.md`) and `.ddflow/local/worker-mcp.json` (git-ignored: it
 records this machine's launcher), the same server with `DDFLOW_MCP_TOOLS` set from `[mcp].worker_tools`
-(`core` by default). Start a worker with
+(`core` by default, and that is the file adopt writes). Start a worker with, measured on haiku
+(lean-start-inherit.md):
 
-    claude --mcp-config .ddflow/local/worker-mcp.json --strict-mcp-config
+    claude --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json                       # 25.9K, no role
+    claude --agent ddflow-<role> --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json # 10.7K to 17.8K
 
-`--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~12K).
-`ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
+The second is 10.7K for the researcher, 11.9K for the reviewer and 17.8K for the implementer. As is, with
+no flags, a session starts at 34.0K. The definitions name every tool both ways (the flat names the `core`
+tier lists, the family names the `lean` profile lists, which the project's own `.mcp.json` runs unless
+`[mcp].tools` says otherwise), so they work on either. Give the flag as
+`--mcp-config=FILE`: it is variadic, and a space lets it read the prompt as a config path.
+`--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~8K deferred, ~150K
+with tool search off). `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
 A tier hides schemas, never tools: every tool stays callable by name.
 
 ## What to put in AGENTS.md / CLAUDE.md

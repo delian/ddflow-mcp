@@ -4,6 +4,7 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ._docs import declare, int_at_least, knob
@@ -29,6 +30,23 @@ AGENT_BRIEF_SECTIONS = (
     "project",
     "report",
 )
+
+
+#: A key of `[session.context_budget]`: `global`, or an agent type named as `ddflow harness list` does.
+_BUDGET_KEY = re.compile(r"[a-z][a-z0-9_-]*")
+
+
+def context_budget_problem(value: object) -> str:
+    """Why a ``[session.context_budget]`` table is unusable, or ``""``: keys are `global` or an
+    agent type id (lower case), values whole numbers of tokens, 0 or more."""
+    if not isinstance(value, dict):
+        return "must be a table of token budgets, e.g. { global = 30000, claude = 20000 }"
+    for key, tokens in value.items():
+        if not isinstance(key, str) or not _BUDGET_KEY.fullmatch(key):
+            return f"key {key!r} must be `global` or an agent type id such as claude or codex"
+        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens < 0:
+            return f"{key}: must be a whole number of tokens, 0 or more (0 = no ceiling)"
+    return ""
 
 
 def _check_brief_sections(value) -> str:
@@ -97,6 +115,11 @@ class SessionConfig:
         doc="Ceiling, in tokens, on what ddflow itself costs a session before its first turn: the MCP instructions, `tools/list` for the active `[mcp].tools` profile and the session brief (what the SessionStart hook prints) plus `start_notice_reserve_tokens` for the one-line upgrade notice, which cannot be counted without using it up. `ddflow doctor` prints `session start cost: N tokens (budget M)` and says OVER when it is past; tests/test_session_start_budget.py ratchets the same measurement. 0 sets no budget (the cost is still shown).",
         check=int_at_least(0),
     )
+    context_budget: dict[str, int] = knob(
+        factory=dict,
+        doc="Start budgets per agent type, beside the global `context_budget_tokens`: a table from `global` or an agent type (the harness ids of `ddflow harness list`: claude, codex, copilot, cursor, dsh, ...) to a ceiling in tokens, e.g. { claude = 20000, codex = 30000 }, so each subscription or LLM target is managed separately. A session's effective budget is the smaller of the global and its type's; `global` here is another spelling of `context_budget_tokens` (set both and the smaller applies, whatever the layer order); a type left out inherits the global; 0 sets no ceiling AT THAT LEVEL (a type at 0 leaves the global in force). `ddflow doctor` reports the cost against each configured type. Layers merge key by key (the local layer wins).",
+        check=context_budget_problem,
+    )
     start_notice_reserve_tokens: int = knob(
         100,
         doc="Tokens `ddflow doctor` adds to the session start cost for the one-line upgrade or release notice that leads the first session after an upgrade. Measuring cannot count a pending notice without using it up (it is said once per version), so this reserve stands for it: the budget then holds even in that session. 0 reserves nothing.",
@@ -137,7 +160,26 @@ class SessionConfig:
     )
     agent_brief_max_chars: int = knob(
         9000,
-        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+        doc="Ceiling, in UTF-8 bytes (characters, for ASCII text), on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
+    )
+    agent_brief_budget_share: float = knob(
+        0.1,
+        doc="The share of the session start budget (`context_budget_tokens`, or the running agent type's entry in `[session.context_budget]`) the launch brief may use, at `start_bytes_per_token` bytes a token. The brief's cap is that, between `agent_brief_min_chars` and `agent_brief_max_chars`: at the default 40,000-token budget it is the fixed 9,000-character ceiling, for a small window it shrinks. With no start budget the ceiling alone applies.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
+            else "must be a number above 0 and at most 1"
+        ),
+    )
+    agent_brief_min_chars: int = knob(
+        4000,
+        doc="The floor, in UTF-8 bytes (characters, for ASCII text), of the launch brief's derived cap: the identity, item, lease, merge and report text is not worth cutting below it.",
+        check=int_at_least(0),
+    )
+    agent_brief_lean_chars: int = knob(
+        6000,
+        doc="Under this derived cap (UTF-8 bytes) the launch brief is LEAN: the testing, review, gate and filing sections, the project's own text and the lessons are left out (the gates enforce the rules; one line says where the rest is). 0 never goes lean.",
+        check=int_at_least(0),
     )
     agent_brief_off: list[str] = knob(
         factory=list,
