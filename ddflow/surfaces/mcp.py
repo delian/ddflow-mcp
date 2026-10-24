@@ -918,7 +918,7 @@ class Server:
             )
         if clash:
             return f"bad arguments: {clash}"
-        missing = [n for n, (_t, _d, req) in spec["properties"].items() if req and not args.get(n)]
+        missing = [n for n, (_t, _d, req) in spec["properties"].items() if req and args.get(n) is None]
         if missing:
             return f"missing required argument(s): {', '.join(missing)}"
         # An argument this tool does not have is an ERROR, not something to drop.
