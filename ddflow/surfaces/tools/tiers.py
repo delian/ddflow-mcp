@@ -30,7 +30,10 @@ _LEGACY_CORE = frozenset(
         "brief next claim heartbeat gate_status gate_run gate_record gate_skip gate_verify "
         "complete merge status show recall bug_found bug_fixed bug_invalid lesson_add "
         "decision_add session_start session_end session_note session_prompt identify "
-        "task_add update wait review help pr_sync similar setup"
+        "task_add update wait review help pr_sync similar setup "
+        # the contract's own tools (B7752a21d68): the charter's rule retrieval, the lean role
+        # definitions' release and triage
+        "rule_show rule_search release review_triage"
     ).split()
 )
 
@@ -38,11 +41,11 @@ _LEGACY_CORE = frozenset(
 _LEGACY_STANDARD = frozenset(
     "ddflow_" + n
     for n in (
-        "abandon block unblock release board progress doctor recover configure companions "
+        "abandon block unblock board progress doctor recover configure companions "
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
-        "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_sync rule_show workflow_state verify ci onboard "
+        "remove tests memory_add memory_list history cleanup render list "
+        "rule_add rule_list rule_edit rule_remove rule_sync workflow_state verify ci onboard "
         "dupes link gate_list queue"
     ).split()
 )
