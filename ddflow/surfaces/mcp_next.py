@@ -40,7 +40,7 @@ def limit(value: str) -> int:
     text = (value or "").strip().lower()
     if text == "on":
         return MAX_HINTS
-    return min(int(text), MAX_HINTS) if text.isdigit() else 0
+    return min(int(text), MAX_HINTS) if text.isascii() and text.isdigit() else 0
 
 
 def _hint(tool: str, why: str, **args: str) -> dict[str, Any]:

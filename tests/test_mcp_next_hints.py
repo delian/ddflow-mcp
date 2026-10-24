@@ -161,7 +161,18 @@ def test_why_is_a_fixed_template_never_record_text():
 
 @pytest.mark.parametrize(
     ("value", "want"),
-    [("off", 0), ("on", 3), ("1", 1), ("2", 2), ("3", 3), ("9", 3), ("", 0), ("junk", 0)],
+    [
+        ("off", 0),
+        ("on", 3),
+        ("1", 1),
+        ("2", 2),
+        ("3", 3),
+        ("9", 3),
+        ("", 0),
+        ("junk", 0),
+        ("\u00b2", 0),
+        ("\u0663", 0),
+    ],
 )
 def test_the_knob_value_is_a_max(value, want):
     assert N.limit(value) == want
