@@ -1159,13 +1159,17 @@ def _tree_is_gone(repo: Path, recorded: str) -> bool:
 
 
 def open_session_model(st: State, agent: str) -> str:
-    """The model ``agent`` declared on its most recent OPEN session, or "".
+    """The model ``agent`` declared on its most recent session, OPEN or ENDED, or "".
 
     Only this agent's: another agent's session names another author, and borrowing its
     model would judge reviewer independence against the wrong family. A session names an
-    agent, not an item, so this is the agent's latest open one."""
-    open_ = [s for s in st.sessions.values() if s.agent == agent and s.model and not s.ended_at]
-    return max(open_, key=lambda s: s.started_at).model if open_ else ""
+    agent, not an item. The declaration is the record, not its liveness (the driver's
+    close step ends a session, and a completion afterwards must still see the model);
+    the agent's LATEST session (by started_at) speaks last, and a newer model-less one
+    supersedes older declarations. One definition, shared by `complete`, `gate record`'s
+    author-family vet and what `recover` advises."""
+    own = [s for s in st.sessions.values() if s.agent == agent]
+    return max(own, key=lambda s: s.started_at).model if own else ""
 
 
 #: How many of `complete`'s refusals the recovery advice names before it counts the rest.
