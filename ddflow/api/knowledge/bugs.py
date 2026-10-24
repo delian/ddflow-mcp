@@ -345,22 +345,26 @@ def _live(st, item: str) -> bool:
 
 def _needs_fix_task(st, b, cfg=None) -> bool:
     """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue; a
-    task it was merely reported against -- `bug found --item <open fix task>` links
-    a report to that task, which fixes another bug or is DONE without fixing it
-    (Ba3cf059594, B8dcbf2f8da); or an ABANDONED task, which nothing sends back -- its
-    own `fix-<bug>` included, refiled as `fix-<bug>-2` (`_own_fix_id`, B974e34fa83).
-    Left alone: a task that names ``b`` in its `fixes` -- and a live open hand-filed
-    bug-fix task that fixes nothing yet, still its fix (B8fb4a2ec4a). A done task's OWN
-    bug is left to `verify --reopen`, which sends that task back."""
+    DONE task it was merely reported against -- `bug found --item <open fix task>` links
+    a report to that task, and the task's completion does not fix it (B8dcbf2f8da); an
+    ABANDONED task, which nothing sends back -- its own `fix-<bug>` included, refiled as
+    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83); or a task in any other live state
+    (OPEN, RUNNING, BLOCKED, REVIEW) whose `fixes` name a DIFFERENT bug -- the old
+    `bug found --item <another bug's fix task>` bound a report to it whatever it was
+    filed to fix (Bb141cbd8d8, which `bug found` no longer binds).
+    Left alone: a done task's OWN bug (`verify --reopen` sends that task back), an open
+    task with no `fixes` of its own (a hand-filed bug-fix task named as the fix,
+    `_fix_task_of`, B8fb4a2ec4a), and a task whose `fixes` name this very bug
+    (`--same-fix`)."""
     if not _live(st, b.fix_task):
         return True
-    it = st.items[b.fix_task]
-    if it.state == ABANDONED:
+    state = st.items[b.fix_task].state
+    if state == ABANDONED:
         return True
-    fixed = fixes_of(st, b.fix_task, cfg)
-    if b.id in fixed:
-        return False
-    return it.state == DONE or bool(fixed)
+    if state == DONE:
+        return b.id not in fixes_of(st, b.fix_task, cfg)
+    fix = fixes_of(st, b.fix_task, cfg)
+    return bool(fix) and b.id not in fix
 
 
 def bug_file_tasks(
