@@ -2465,6 +2465,22 @@
           matched globs and the approval). A gate of the item's pipeline that is
           neither listed here nor `merge` (which the merge itself records) is left for
           you to run, and the chore does not complete until it carries an outcome.
+      digest.escalate_after = '1h, 24h'   [default]
+          Two ages, comma separated. An operator-queue entry is a 'nudge' when it
+          appears, 'needs' once it has waited the first age and 'urgent' once it has
+          waited the second; the age counts from when it first became true, never from
+          the last time anyone looked. An entry whose kind starts higher (see the
+          source table) keeps that floor.
+      digest.escalate_after_red_main = '6h'   [default]
+          How long a red main may wait before its queue entry is 'urgent' (it starts
+          at 'needs'). A duration such as 6h or 90m.
+      digest.text_chars = 400   [default]
+          How many characters of a recorded text (an agent's question, a DECIDE task's
+          default line, a failed check) a queue entry quotes before it cuts it. Quoted
+          text has secrets masked first. 0 quotes none.
+      digest.spotcheck_min = 1   [default]
+          How many gates passed on refutation, not yet completed, make one spot-check
+          entry in the operator queue. 0 turns that entry off.
       grants.max_count = 3   [default]
           The most extra rounds ONE operator grant may carry (default 3): `ddflow
           grant add --count N` above it is refused. A grant is the operator's recorded
