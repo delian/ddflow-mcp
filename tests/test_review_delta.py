@@ -557,6 +557,38 @@ def test_a_failed_delta_that_is_not_the_hold_is_never_released(repo, tmp_path):
     assert st.items["T1"].gates["critic"].outcome == "failed"
 
 
+def test_a_held_record_from_before_the_marker_releases_by_shape(repo, tmp_path):
+    """deepseek finding (rubber_duck delta): a record WRITTEN BY AN OLDER ddflow holds a
+    clean delta with the marker never invented yet (`review_kind = delta`, no findings of
+    its own, failed) -- it must release all the same once triaged, since only `_hold`
+    can fail a reviewed delta with no finding."""
+    _setup(repo, tmp_path)
+    _review(repo)  # finding #1
+    _fix(repo)
+    held = _review(repo)
+    assert held.data["outcome"] == "failed", held.data
+    ev = dict(_ev(repo))
+    assert ev["held_pass"] is True and ev["delta_findings"] == 0, ev
+    log = EventLog(repo)
+    log.append(
+        "gate.failed",
+        "T1",
+        {
+            "gate": "critic",
+            "outcome": "failed",
+            # the older version's record: the same evidence, no marker
+            "evidence": {k: v for k, v in ev.items() if k != "held_pass"},
+        },
+    )
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
+    out = _review(repo)  # unchanged: the shape releases without the marker
+    assert out.exit == OK, out.reason
+    assert "passed ON REFUTATION" in out.data["text"], out.data["text"]
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].gates["critic"].outcome == "passed"
+    assert _ev(repo)["delta_rounds"] == 1
+
+
 def test_force_with_delta_is_a_forced_delta_round(repo, tmp_path):
     """Ba93aec8448: `--force` is past the budget, not a full round: with `--delta` it is one."""
     _setup(repo, tmp_path)
