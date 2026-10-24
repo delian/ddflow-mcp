@@ -187,11 +187,17 @@ def test_a_t2_verb_is_unchanged_by_the_opt_in(log, cfg):
 
 
 def test_no_tool_turns_the_opt_in_on(repo):
-    local = CW.apply_edit(repo, CW.SetPairs([("approvals.accept_chat_for_t3", CW.Spelled("true"))]), layer="local")
-    committed = CW.apply_edit(repo, CW.SetPairs([("approvals.accept_chat_for_t3", CW.Spelled("true"))]))
+    local = CW.apply_edit(
+        repo, CW.SetPairs([("approvals.accept_chat_for_t3", CW.Spelled("true"))]), layer="local"
+    )
+    committed = CW.apply_edit(
+        repo, CW.SetPairs([("approvals.accept_chat_for_t3", CW.Spelled("true"))])
+    )
     for res in (local, committed):
         assert res.error and "no tool writes it" in res.error
-    block = CW.apply_edit(repo, CW.AppendText("[approvals]\naccept_chat_for_t3 = true\n"), layer="local")
+    block = CW.apply_edit(
+        repo, CW.AppendText("[approvals]\naccept_chat_for_t3 = true\n"), layer="local"
+    )
     assert block.error and "cannot be enabled remotely" in block.error
 
 
@@ -206,7 +212,9 @@ def test_the_refusal_names_the_route_that_works_here(log, cfg, tmp_path):
     on = C.operator_gate(log, cfg, _canon())
     assert not on.ok and "they type `approve" in on.message
     off = C.operator_gate(log, _cfg(tmp_path, forbid=True), _canon())
-    assert not off.ok and "not approvable over chat" in off.message and "they type" not in off.message
+    assert (
+        not off.ok and "not approvable over chat" in off.message and "they type" not in off.message
+    )
 
 
 def test_an_unreadable_layer_fails_closed(log, tmp_path, repo):

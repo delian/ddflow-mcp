@@ -172,4 +172,8 @@ def operator_gate(
             f"refusing: '{canon.verb}' is the operator's act; file a request with "
             "`ddflow approvals request`, have them approve it, then re-run with --approval ID.",
         )
-    return Decision(False, "refusing: " + route(filed.id, canon, new=filed.new, chat=H.chat_t3(cfg)), ask_id=filed.id)
+    return Decision(
+        False,
+        "refusing: " + route(filed.id, canon, new=filed.new, chat=H.chat_t3(cfg)),
+        ask_id=filed.id,
+    )
