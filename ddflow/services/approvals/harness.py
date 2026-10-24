@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,8 @@ def _forbidden(cfg: Config) -> bool:
     for layer in LAYERS:
         path = layer_path(cfg.root, layer)
         try:
+            if not stat.S_ISREG(os.stat(path).st_mode):
+                continue  # the config loader skips a non-regular file too; opening a FIFO would hang
             data = read_toml(path)
         except FileNotFoundError:
             continue  # no such layer (a missing parent directory is the same absence)

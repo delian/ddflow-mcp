@@ -255,3 +255,14 @@ def test_a_missing_layer_is_simply_absent(log, tmp_path, repo):
     cfg = _cfg(tmp_path)
     cfg.root = repo / "nowhere"
     assert H.chat_t3(cfg)
+
+
+def test_a_fifo_layer_is_skipped_not_opened(log, tmp_path, repo):
+    import os
+
+    cfg = _cfg(tmp_path)
+    cfg.root = repo
+    d = repo / ".ddflow" / "local"
+    d.mkdir(parents=True, exist_ok=True)
+    os.mkfifo(d / "config.toml")  # opening it for reading would block forever
+    assert H.chat_t3(cfg)
