@@ -136,9 +136,14 @@ def standing_notes(cfg: Config, state) -> list[str]:
             "approvals: chat answers (AskUserQuestion, typed) are read from the session transcript, "
             "which the agent's own user can edit; they show a person answered, they do not prove it"
         )
-    notes.append(
-        "approvals: no approval signer pinned -- T3 acts (command reviewers, the approval "
-        "configuration) are rated no stronger than L1 on a single-user host and stay terminal-only"
-        + (" (a command reviewer may also be approved by a typed chat answer, see above)" if H.chat_t3(cfg) else "")
-    )
+    if not H.chat_t3(cfg):
+        notes.append(
+            "approvals: no approval signer pinned -- T3 acts (command reviewers, the approval "
+            "configuration) are rated no stronger than L1 on a single-user host and stay terminal-only"
+        )
+    else:
+        notes.append(
+            "approvals: no approval signer pinned -- the approval configuration stays terminal-only; "
+            "a command reviewer is the one T3 act a typed chat answer may approve (L2-typed)"
+        )
     return notes

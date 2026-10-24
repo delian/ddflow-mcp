@@ -88,7 +88,9 @@ def test_a_typed_answer_approves_a_t3_act_and_is_graded(log, cfg):
     assert consumed[0]["grade"] == "L2-typed"
     warn = AU.findings(_state(log), cfg)
     assert any("TYPED chat" in w and row["id"] in w for w in warn)
-    assert any("solo operator" in w for w in AU.standing_notes(cfg, _state(log)))
+    notes = AU.standing_notes(cfg, _state(log))
+    assert any("solo operator" in w for w in notes)
+    assert not any("stay terminal-only" in n and "command reviewers" in n for n in notes)
 
 
 def test_without_the_opt_in_nothing_is_accepted(log, tmp_path):
