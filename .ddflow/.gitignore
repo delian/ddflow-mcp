@@ -1,3 +1,4 @@
+# ddflow:begin gitignore ddflow=0.2.9 fmt=1 sha=d2f01613d1a0
 # The index and local state are DERIVED from events/ and are rebuildable.
 # They are machine-local on purpose: a committed index resurrects dead agents'
 # leases on every clone, and a committed cache is a merge conflict with no
@@ -19,3 +20,4 @@ local/
 # worktrees and scratch, never committed.
 /worktrees/
 /runs/
+# ddflow:end gitignore
