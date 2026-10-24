@@ -32,7 +32,7 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
-from .stale_why import _differing_note
+from .stale_why import StaleNote, _differing_note
 
 
 @dataclass
@@ -340,18 +340,6 @@ def stale_evidence(
     """
     notes = stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)
     return [n.gate for n in notes if not n.unverified]
-
-
-@dataclass(frozen=True, order=True)
-class StaleNote:
-    """A passed gate whose evidence is not about the tree being completed -- or, with
-    ``unverified``, one whose evidence could not be compared with it at all. The two
-    are kept apart: "could not tell" rendered as "fresh" is a silent pass, and rendered
-    as "stale" is a false alarm."""
-
-    gate: str
-    why: str
-    unverified: bool = False
 
 
 def stale_evidence_detail(
