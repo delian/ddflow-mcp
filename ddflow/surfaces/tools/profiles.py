@@ -1,7 +1,7 @@
 """MCP tool profiles: which tools `tools/list` advertises (MTD-profiles, Ddcde0f5b95).
 
-The default is the ``lean`` core: the 9 hot single tools plus the six families a daily loop
-needs (15 tools). ``families`` (all 15 families, 24 tools) and ``hot+families`` (the 21 most
+The default is the ``lean`` core: the 9 hot single tools plus the seven families a daily loop
+needs, the rules family included (16 tools). ``families`` (all 15 families, 24 tools) and ``hot+families`` (the 21 most
 called direct tools plus the families, 36) are opt-in, chosen by `[mcp].tools` or by the client
 table. A profile hides schemas and never tools: every tool, every family action and every old
 name stays callable, and `listChanged` stays false. The flat tiers (`core`, `standard`, `all`)
@@ -19,7 +19,8 @@ PROFILES = ("lean", "families", "hot+families")
 AUTO = "auto"
 DEFAULT_PROFILE = "lean"
 
-_LEAN_FAMILIES = ("gate", "bug", "session", "task", "view", "memory")
+#: `rule` is here because the charter tells every agent to read any rule in full through it (D-rules-charter).
+_LEAN_FAMILIES = ("gate", "bug", "session", "task", "view", "memory", "rule")
 
 #: The most-called direct tools `hot+families` adds beside the 9 hot singles (research section 2).
 _HOT_EXTRA = (

@@ -1,4 +1,4 @@
-"""MTD-profiles: the lean core (15 tools) is the default `tools/list`; the wide families (24),
+"""MTD-profiles: the lean core (16 tools) is the default `tools/list`; the wide families (24),
 hot+families (36) and the flat tiers are opt-in by `[mcp].tools` or the client table. Routing is
 unchanged: whatever is advertised, every family and every old name stays callable
 (Ddcde0f5b95, D-mcp-tool-families)."""
@@ -43,7 +43,7 @@ def _bytes(tools):
 
 def test_the_profiles_and_their_counts():
     assert P.PROFILES == ("lean", "families", "hot+families")
-    assert len(P.advertised_names("lean")) == 15
+    assert len(P.advertised_names("lean")) == 16
     assert len(P.advertised_names("families")) == 24
     assert len(P.advertised_names("hot+families")) == 36
 
@@ -53,7 +53,7 @@ def test_the_default_is_the_lean_core(repo, monkeypatch):
     srv, tools = _listed(repo)
     assert srv.tier == "lean"
     names = _names(tools)
-    assert len(names) == 15
+    assert len(names) == 16
     assert HOT <= set(names)
     assert {"ddflow_gate", "ddflow_bug", "ddflow_session", "ddflow_task", "ddflow_view"} <= set(
         names
@@ -63,7 +63,7 @@ def test_the_default_is_the_lean_core(repo, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("profile", "count"), [("lean", 15), ("families", 24), ("hot+families", 36)]
+    ("profile", "count"), [("lean", 16), ("families", 24), ("hot+families", 36)]
 )
 def test_each_profile_lists_its_tools_by_env(repo, monkeypatch, profile, count):
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", profile)
@@ -102,10 +102,10 @@ def test_a_client_table_entry_picks_the_profile_for_auto_but_an_explicit_knob_wi
     _srv, tools = _listed(repo, clientInfo={"name": "Hosty", "version": "1"})
     assert len(tools) == 24
     _srv, tools = _listed(repo, clientInfo={"name": "other", "version": "1"})
-    assert len(tools) == 15
+    assert len(tools) == 16
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", "lean")
     _srv, tools = _listed(repo, clientInfo={"name": "hosty", "version": "1"})
-    assert len(tools) == 15
+    assert len(tools) == 16
 
 
 def test_the_shipped_client_table_names_only_known_profiles():
@@ -122,9 +122,9 @@ def test_everything_stays_callable_on_the_lean_profile(repo, monkeypatch):
     run_cli(repo, "init")
     monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
     srv = Server(repo)
-    texts, err = _call(srv, "ddflow_rule", action="list")  # a family lean does not list
+    texts, err = _call(srv, "ddflow_decision", action="list")  # a family lean does not list
     assert not err, texts
-    texts, err = _call(srv, "ddflow_rule_list")  # and its old name
+    texts, err = _call(srv, "ddflow_decision_list")  # and its old name
     assert not err, texts
 
 
@@ -156,7 +156,7 @@ def test_a_directly_listed_tool_on_hot_plus_families_is_not_noted(repo, monkeypa
 
 def test_the_tier_note_names_the_profile_and_how_to_widen_it():
     note = P.profile_note("lean")
-    assert "`lean`" in note and "15" in note and "families" in note and "callable" in note
+    assert "`lean`" in note and "16" in note and "families" in note and "callable" in note
     assert "`families`" in P.profile_note("families") and "24" in P.profile_note("families")
 
 
@@ -170,7 +170,7 @@ def test_listchanged_stays_false(repo):
 def test_a_profile_is_read_whatever_its_case_or_padding(spelled, repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", spelled)
     srv, tools = _listed(repo)
-    assert srv.tier == "lean" and len(tools) == 15
+    assert srv.tier == "lean" and len(tools) == 16
     assert "`lean`" in P.profile_note(P.settle(spelled))
 
 
@@ -215,7 +215,7 @@ def test_a_blank_knob_is_the_default_profile_and_a_note_never_raises(repo, monke
         tiers, "_config", lambda _repo: type("C", (), {"mcp": type("M", (), {"tools": " "})()})()
     )
     assert tiers.resolve_tier(repo) == "auto"
-    assert "`all`" in P.profile_note("leaner") and "15" not in P.profile_note("hot+families")
+    assert "`all`" in P.profile_note("leaner") and "16" not in P.profile_note("hot+families")
 
 
 def test_a_client_table_value_is_normalised_and_a_bad_one_is_the_default(monkeypatch):
