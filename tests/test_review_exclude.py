@@ -104,12 +104,12 @@ def test_pin_files_are_left_out_unless_the_knob_says_otherwise(repo, tmp_path):
 def test_only_excluded_files_changed_records_unavailable_naming_them(repo, tmp_path):
     """The whole diff is excluded: nothing is sent, the review records UNAVAILABLE
     (it must PERSIST an unavailable gate record, the completion-crucial piece of
-    B-lockfile-only-item-cannot-complete), and the excluded content never reaches the
-    reviewer."""
+    B-lockfile-only-item-cannot-complete), and its reason names what was left out."""
     seen = _setup(repo, tmp_path)
     (repo / "x.py").unlink()
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2
+    assert "excluded file(s)" in out.reason
     sent = seen.read_text() if seen.exists() else ""
     assert "GENERATED_MARK" not in sent
     rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
