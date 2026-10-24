@@ -538,6 +538,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.requested", "use_ttl_s"): "a number",
     ("ask.requested", "canon"): "the canonical command record, compared by its digest",
     ("ask.consumed", "by"): "an agent id, the audit trail's who",
+    ("ask.consumed", "grade"): "an approval grade word such as L2-typed",
     ("ask.consumed", "verb"): "a gated-command verb word",
     ("ask.consumed", "effect"): "an event id compared with the effect it stamped",
     ("ask.answered", "outcome"): "the word or choice an answer is compared with",

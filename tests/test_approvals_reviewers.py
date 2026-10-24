@@ -80,7 +80,7 @@ def test_the_approval_is_for_that_entry_only(proj):
     assert not _state(proj).approvals.get("reviewer:lan")
 
 
-def test_a_command_reviewer_is_never_approved_over_chat(proj):
+def test_a_command_reviewer_is_not_approved_over_chat_without_the_opt_in(proj):
     cmd = (
         '[[reviewer]]\nname = "prog"\nkind = "command"\ncommand = "true"\n'
         'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\n'
@@ -88,8 +88,11 @@ def test_a_command_reviewer_is_never_approved_over_chat(proj):
     path = _file(proj)
     path.write_text(path.read_text() + "\n" + cmd)
     code, _o, err = run_cli(proj, "reviewers", "approve", "prog", agent="bot")
-    assert code == 3 and "T3: terminal only" in err
-    assert not asks_of(_state(proj))  # no request is filed for it
+    assert code == 3 and "tier T3" in err and "accept_chat_for_t3" in err
+    (ask,) = asks_of(_state(proj)).values()  # the T3 request is filed, and cannot be answered over chat
+    assert ask["min_level"] == 4
+    code, _o, err = run_cli(proj, "approvals", "attest", ask["id"], agent="bot")
+    assert code == 3 and "never approved over chat" in err
     assert run_cli(proj, "reviewers", "approve", "prog")[0] == 0  # a person at a terminal can
 
 

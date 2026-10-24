@@ -46,6 +46,7 @@ from ..config import (
 from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import install_info as II
+from .approvals import config_guard as AG
 from . import reviewer_trust as RT
 from . import shared_files as SF
 from . import workflow as WF
@@ -756,6 +757,7 @@ def _result_problem(
         return KeyRefused(_range_refusal(new_range))
     return (
         _gate_problem(prev, text)
+        or KeyRefused(AG.problem(_parsed(prev), _parsed(text)))
         or _human_removed(repo, edit, prev, text, layer)
         or (_workflow_refusal(repo, before, text, layer) if guards.workflow else "")
     )

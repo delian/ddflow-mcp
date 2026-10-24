@@ -18,7 +18,7 @@ from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ...core.model import fold
 from ..ask import engine as E
-from . import harness as H  # noqa: F401 -- registers the level verifier of the harness channel
+from . import harness as H  # registers the level verifier of the harness channel
 from . import policy as PO
 from . import request as R
 from . import sites
@@ -37,6 +37,15 @@ class Decision:
 def route(ask_id: str, canon: Canon, *, new: bool) -> str:
     s = canon.site
     state = "requested" if new else "is still waiting"
+    if s.tier == sites.T3:
+        return (
+            f"approval {ask_id} {state} for '{canon.verb}' (tier T3, level L{s.min_level}+): a "
+            "signed approval is not available; if the operator opted in on the host "
+            "([approvals].accept_chat_for_t3, rated L2-typed) they type `approve "
+            f"{ask_id} <first digest characters>` in their own chat and the agent runs `ddflow "
+            f"approvals attest {ask_id}`, then re-runs this command with --approval {ask_id}; "
+            "otherwise the operator does this themselves at their own terminal."
+        )
     return (
         f"approval {ask_id} {state} for '{canon.verb}' ({s.tier}, level L{s.min_level}+): the operator "
         f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
@@ -45,7 +54,9 @@ def route(ask_id: str, canon: Canon, *, new: bool) -> str:
     )
 
 
-def _problem(row: dict[str, Any] | None, canon: Canon, now: float, level: int) -> str:
+def _problem(
+    row: dict[str, Any] | None, canon: Canon, now: float, level: int, cfg: Config | None = None
+) -> str:
     if row is None or not row["verb"]:
         return "no such approval request"
     ask_id = row["id"]
@@ -68,7 +79,7 @@ def _problem(row: dict[str, Any] | None, canon: Canon, now: float, level: int) -
     verdict = E.judge(row, canon.digest())
     if not verdict.ok:
         return verdict.reason
-    if level < row["min_level"]:
+    if level < row["min_level"] and not H.typed_t3(row, cfg or Config(), level):
         return (
             f"{ask_id} was answered at a level that holds up as L{level} but '{canon.verb}' "
             f"needs L{row['min_level']}"
@@ -92,14 +103,18 @@ def spend(
         row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
         # once: the level of a harness answer depends on a file outside the lock
         level = E.verified_level(row, cfg) if row is not None else 0
-        if why := _problem(row, canon, now, level):
+        if why := _problem(row, canon, now, level, cfg):
             return Decision(False, f"refusing: {why}.", ask_id=ask_id)
         assert row is not None
+        grade = H.GRADE_T3_CHAT if H.typed_t3(row, cfg or Config(), level) else ""
         log.append(
             "ask.consumed",
             ask_id,
-            {"id": ask_id, "by": canon.agent, "verb": canon.verb, "digest": row["digest"]},
-        )
+            {
+                "id": ask_id, "by": canon.agent, "verb": canon.verb, "digest": row["digest"],
+                **({"grade": grade} if grade else {}),
+            },
+        )  # fmt: skip
     return Decision(
         True,
         stamp={
@@ -109,6 +124,7 @@ def spend(
             "level": level,
             "digest": row["digest"],
             "proxy": canon.agent,
+            **({"grade": grade} if grade else {}),
         },
         ask_id=ask_id,
     )
