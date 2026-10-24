@@ -44,9 +44,8 @@ def _session_model(st: State, agent: str) -> str:
 
 def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
     """(model, source) judged against for reviewer independence: `--model`, else the model
-    the agent declared at `session start` under its identity. The provenance is said out
-    loud and recorded -- only the SOURCE on the durable event, never the id (the session
-    record carries it) -- B-complete-requires-model-even-when-recorded."""
+    the agent declared at `session start` under its identity -- said out loud and recorded
+    (only the SOURCE on the durable event, never the id) -- B-complete-requires-model-even-when-recorded."""
     if model:
         return model, "flag"
     found = _session_model(st, agent)
