@@ -3,8 +3,12 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** One request to completion. Print `ddflow next` and
-   `ddflow cadence` at the end of each turn.
+1. **Iteration.** One request runs to completion, multi-step inside it. Keep going inside
+   that request: `ddflow next` → claim one item — and hand the work to a sub-agent
+   (opencode v1 config agents in `opencode.json` `$`-agents; zen agents at
+   `~/.config/opencode/agent/*.md`) where the surface runs several. Nothing persists
+   between requests, so across requests the handoff is the printed `ddflow next` +
+   `ddflow cadence` at the turn's end.
 2. **Subagents.** opencode supports agents/modes; each should claim its own item.
 3. **Asking the operator.** Ask and stop.
 4. **File references.** Plain repository-relative paths.

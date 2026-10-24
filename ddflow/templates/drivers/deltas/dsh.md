@@ -4,8 +4,12 @@ The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in
 Only the items below differ. Facts are from `docs/ddflow/research/dsh-probe.md`
 (dsh 0.2.1-rc.2, a developer preview that promises breaking changes).
 
-1. **Iteration is operator-driven.** dsh runs one task to completion; print `ddflow next`
-   and `ddflow cadence` as the handoff. A headless run is one task per process.
+1. **Iteration.** A parent dsh process is the loop: it reads `ddflow next`, fans the
+   ready items out to native `subagent` / `subagent_fork` runs (one claimed item each),
+   waits on them, then re-reads `next` for the next wave. Headless is one task per
+   process, so drive it from a shell `while` that exits when `next` ends 2 with nothing
+   ready; the printed `ddflow next` + `ddflow cadence` output is the handoff where no
+   wrapper runs.
 2. **Subagents.** dsh has native `subagent` and `subagent_fork` tools. Give each one claimed
    item; a subagent shares your MCP connection, so pass `as_agent` on every call.
 3. **Asking the operator.** Ask and stop. Headless has no answerer: an ask is refused and the

@@ -3,8 +3,11 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** One task per request; print `ddflow next` and
-   `ddflow cadence` as the handoff.
+1. **Iteration.** Cline's `task` tool is the fan-out: hand one claimed item to each task.
+   Run tasks until the phase empties, re-reading `ddflow next` after each merge — but
+   nothing persists between requests, so across requests print `ddflow next` and
+   `ddflow cadence` as the handoff. The one-request loop is the operator's; the
+   within-request loop is yours.
 2. **Subagents.** Cline's `task` tool, one claimed item each.
 3. **Asking the operator.** The `question` tool.
 4. **File references.** `@path`.
