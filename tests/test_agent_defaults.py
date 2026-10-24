@@ -203,6 +203,8 @@ def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
     assert code == 0, out + err
     assert "author model: claude-opus (from --model)" in out + err, out + err
 
+
+def test_mcp_complete_defaults_from_the_session_started_over_mcp(repo, monkeypatch):
     _queue(repo)
     srv = Server(repo)
     started = _call(srv, "ddflow_session_start", model="claude-opus", as_agent="impl")
