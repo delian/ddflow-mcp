@@ -223,7 +223,9 @@ def test_the_local_set_of_a_human_flag_is_refused(repo):
 def test_the_handshake_and_readme_say_services_go_local():
     root = Path(__file__).resolve().parents[1]
     instr = (root / "ddflow" / "templates" / "prompts" / "mcp_instructions.md").read_text()
-    assert ".ddflow/local/" in instr and "local=true" in instr
+    manual = (root / "ddflow" / "templates" / "prompts" / "help" / "manual.md").read_text()
+    assert ".ddflow/local/" in instr, "the charter says where services go"
+    assert ".ddflow/local/" in manual and "local=true" in manual, "the manual says how"
     readme = (root / "README.md").read_text()
     assert "What is committed, and what stays on your machine" in readme
     assert "ddflow config --local --set" in readme
