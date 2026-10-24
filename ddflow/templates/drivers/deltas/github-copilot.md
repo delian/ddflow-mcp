@@ -7,8 +7,10 @@ Only the items below differ.
    `.vscode/mcp.json` — that is the `vscode` target, adopt it too. This delta covers the
    **Copilot CLI** (the `copilot` command) and the **cloud coding agent**.
 2. **Iteration.** The CLI runs one request to completion; the cloud agent runs to a PR.
-   Neither has a loop primitive, so print `ddflow next` and `ddflow cadence` at the end of
-   each turn as the handoff.
+   Neither re-invokes itself, so the loop lives in **GitHub Actions**: a workflow step
+   (or the coding agent's own run) calls the ddflow workflow entry, and the wave is one
+   invocation — print `ddflow next` and `ddflow cadence` at the end of each turn as the
+   handoff.
 3. **Subagents.** None with worktree isolation. The cloud coding agent already works in
    its own checkout, so set `worktree.enabled = false` for those runs: the isolation is
    already there, and a worktree inside an ephemeral clone is a directory the merge step

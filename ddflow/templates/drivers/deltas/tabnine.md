@@ -3,8 +3,9 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** One unit per request; print `ddflow next` and
-   `ddflow cadence` as the handoff.
+1. **Iteration.** One request runs to completion: keep going inside it — claim, run
+   the gates, merge — then re-read `ddflow next` for the next claim. Across requests
+   the handoff is the printed `ddflow next` and `ddflow cadence`.
 2. **Subagents.** None with worktree isolation. Use a second editor window or another
    agent in a terminal; ddflow's leases coordinate processes.
 3. **Asking the operator.** Ask in the chat and stop.

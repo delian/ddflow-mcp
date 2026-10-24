@@ -2,8 +2,12 @@
 
 The driver is `templates/drivers/implement-phase.md`. Read and follow it in full.
 
-1. **Iteration.** One task per invocation unless run with an autonomous flag. End each
-   invocation by printing the next `ddflow next` result.
+1. **Iteration.** One task per invocation; run with the autonomous flag (`codex
+   --approval-mode never` / your configured headless mode) so ONE invocation drives its
+   task to completion without operator prompts. End each invocation by printing the
+   next `ddflow next` result and the `ddflow cadence` output — that print is the
+   handoff to the next invocation, in a `while` wrapper (the operator's loop) when the
+   runtime itself has no re-invocation.
 2. **Subagents.** None. Use parallel Codex processes; ddflow's leases make that safe.
 3. **Asking the operator.** Plain text, then stop.
 4. **File references.** Plain paths.
