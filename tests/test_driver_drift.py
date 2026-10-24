@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ddflow.infra.fsio import MANAGED_DIGEST_LEN, content_digest
+
 from ddflow.services import adopt as AD
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,6 +139,7 @@ def test_claude_delta_carries_the_goal_wave_contract():
         "the claude docs view was not regenerated from the template (stale stamp or body)"
     )
     region = AD._driver_region(DELTA)
-    assert region.state((ROOT / DELTA).read_text()) == "current", (
-        "the claude docs view stamp is not current: a stale ddflow= version or body digest"
+    stamp = region.stamp((ROOT / DELTA).read_text())
+    assert stamp is not None and stamp.sha == content_digest(view, MANAGED_DIGEST_LEN), (
+        "the claude docs view stamp does not certify its own body (regenerate the view)"
     )
