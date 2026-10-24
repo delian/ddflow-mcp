@@ -70,6 +70,17 @@ def line(r: dict[str, Any]) -> str:
     )
 
 
+def _typed_t3_uses(r: dict[str, Any]) -> list[str]:
+    """One warning per spend of a tier-3 act on a typed chat answer (D-RA-T3-chat), every time."""
+    return [
+        f"{r['id']} ({r['verb']}): a tier-3 act spent by {c['by']} on a TYPED chat "
+        f"answer from {r['answered_by']} -- grade {H.GRADE_T3_CHAT}, no stronger than L2: "
+        "the transcript is writable by the agent's own user"
+        for c in r["consumed"]
+        if c["grade"] == H.GRADE_T3_CHAT
+    ]
+
+
 def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
     """What an operator should be told, one line each."""
     now = time.time() if now is None else now
@@ -84,13 +95,7 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
                 "(written by hand?); it cannot be spent"
             )
         level = E.verified_level(r, cfg)
-        for c in r["consumed"]:
-            if c["grade"] == H.GRADE_T3_CHAT:  # warned on at EVERY use (D-RA-T3-chat)
-                out.append(
-                    f"{r['id']} ({r['verb']}): a tier-3 act spent by {c['by']} on a TYPED chat "
-                    f"answer from {r['answered_by']} -- grade {H.GRADE_T3_CHAT}, no stronger than L2: "
-                    "the transcript is writable by the agent's own user"
-                )
+        out.extend(_typed_t3_uses(r))
         if r["used"] and level < r["min_level"] and not H.typed_t3(r, cfg, level):
             out.append(
                 f"{r['id']} ({r['verb']}) was spent at level L{level}, below the L{r['min_level']} "
