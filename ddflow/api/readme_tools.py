@@ -67,7 +67,7 @@ def render(
     body = "\n".join(
         [
             *([overview, ""] if overview else []),
-            f"<details><summary>All {len(tools)} MCP tools: {core} in the `core` tier, "
+            f"<details><summary>All {len(tools)} MCP tools by their own name (the flat list): {core} in the `core` tier, "
             f"{standard - core} more in `standard`, {len(tools) - standard} more in `all`"
             "</summary>",
             "",
