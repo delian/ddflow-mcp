@@ -26,7 +26,8 @@ from ddflow.api import setup as AS
 from ddflow.services import review as R
 
 #: What this checks, read by `ddflow tests --item`: a change under one of these paths selects this test
-#: even where nothing it imports changed (it reads the charter and manual templates as text).
+#: even where nothing it imports changed (it reads the charter, the manual and the README as text, and the
+#: config glob covers the local-config knobs it exercises).
 GOVERNS = (
     "ddflow/templates/prompts/mcp_instructions.md",
     "ddflow/templates/prompts/help/manual.md",
