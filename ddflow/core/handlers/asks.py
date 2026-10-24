@@ -116,6 +116,7 @@ def h_consumed(st: State, ev: Event) -> None:
             "effect": str(ev.data.get("effect", "")),
             "verb": str(ev.data.get("verb", "")),
             "digest": str(ev.data.get("digest", "")),
+            "grade": str(ev.data.get("grade", "")),
             "at": ev.ts,
         }
     )
