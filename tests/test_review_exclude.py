@@ -101,16 +101,15 @@ def test_pin_files_are_left_out_unless_the_knob_says_otherwise(repo, tmp_path):
     assert "GENERATED_MARK" not in seen.read_text()
 
 
-def test_only_excluded_files_changed_is_reviewed_anyway_naming_them(repo, tmp_path):
-    """Exclusion that would leave the whole diff out sends the full diff instead: an
-    all-excluded change recorded UNAVAILABLE and the item could not complete
-    (B-lockfile-only-item-cannot-complete)."""
+def test_only_excluded_files_changed_records_unavailable_naming_them(repo, tmp_path):
+    """The whole diff is excluded: nothing is sent and the review records UNAVAILABLE
+    saying how much it left out (B-lockfile-only-item-cannot-complete: the item must
+    still complete once the independence excusal reads the same exclusion)."""
     seen = _setup(repo, tmp_path)
     (repo / "x.py").unlink()
     out = api.review(repo, gate="critic", item="T1")
-    assert out.exit == 0, out.reason
-    assert "GENERATED_MARK" in seen.read_text()
-    assert "excluded from review" in out.data["text"]
+    assert out.exit == 2 and "excluded file(s)" in out.reason
+    assert "GENERATED_MARK" not in seen.read_text()
 
 
 def test_a_rename_out_of_an_excluded_tree_keeps_its_new_side():
