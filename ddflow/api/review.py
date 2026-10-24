@@ -548,6 +548,20 @@ def _name_paths(paths: list[str], cap: int = 5) -> str:
     return ", ".join(paths[:cap]) + (f" and {len(paths) - cap} more" if len(paths) > cap else "")
 
 
+def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
+    """The evidence of a pass recorded from settled triage (D-unify 5): passed ON
+    REFUTATION, flagged, when a finding was refuted; `findings_fixed` when every one was
+    confirmed -- never in `gate list --refuted` (B1396d7bd55). `_settled_pass` keeps
+    either off the round count."""
+    rounds = {"rounds": used, "max_rounds": cap}
+    refuted = counts["refuted"]
+    return (
+        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts["confirmed"], **rounds}}
+        if refuted
+        else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
+    )
+
+
 def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
@@ -573,15 +587,10 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale:
             f'settle goes to the operator (`ddflow review {it.id} --gate {gate} --force --reason "..."` '
             "is theirs to grant)"
         )
-    rounds = {"rounds": used, "max_rounds": cap}
     # D-unify 5 flags a pass on REFUTATION. A gate whose every finding was confirmed (and
     # fixed) is a fix: passed, shown as fixed, never in `gate list --refuted` (B1396d7bd55).
     refuted = counts["refuted"]
-    mark = (
-        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts["confirmed"], **rounds}}
-        if refuted
-        else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
-    )
+    mark = _settle_mark(counts, used, cap)
     GD.record(
         log,
         cfg,
@@ -734,6 +743,9 @@ def _track_rerun_raised(evidence: dict[str, Any], prior: dict[str, Any], best) -
 
 _SETTLED = ("refuted", "confirmed")
 _DELTA_CUT_HOW = "the delta since "  # `diff_source` of a --chunk re-run cut from a delta
+#: a delta's "nothing to review" answer: the reviewed head covers the tip, so no round runs
+#: and none counts; the gate re-evaluates instead (`_unchanged_delta`, B10ad449deb)
+_NOTHING_CHANGED = "nothing changed since the reviewed head"
 #: what a delta record says about its own cut; a `--chunk` re-run of it carries them on
 _DELTA_KEYS = ("delta_from", "delta_raised", "delta_reraised", "delta_findings", "full_coverage")
 
@@ -761,6 +773,89 @@ def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
     recorded reviewer's can be triaged: say whose (critic: another's #1 is not it)."""
     if len(results) > 1 and best.findings:
         say(f"triage addresses {best.reviewer}'s findings: #1..#{len(best.findings)}")
+
+
+def _held_and_settled(it, gate: str) -> dict[str, int] | None:
+    """The gate's triage counts when its `failed` is ONLY the hold of a clean delta over
+    untriaged earlier findings (`_hold`), with every finding settled since; None otherwise.
+    The hold's promise -- "the next clean delta then passes" -- is kept without new commits
+    only for that shape: nothing changed since the reviewed head means the reviewer already
+    saw everything a pass would ride on (B10ad449deb)."""
+    if it is None:
+        return None
+    rec = it.gates.get(gate)
+    if rec is None or rec.outcome != "failed":
+        return None
+    ev = rec.evidence or {}
+    if ev.get("review_kind") != "delta" or ev.get("delta_findings"):
+        return None
+    counts = GD.triage_counts(it, gate) or {}
+    if not counts.get("findings") or counts.get("untriaged"):
+        return None
+    return counts
+
+
+def _why_outcome(log, cfg, it, gate: str, how: str, why: str, sargs: dict[str, Any]) -> O.Outcome:
+    """The refusal `why` of a review that will not run, as its outcome: an unchanged delta
+    re-evaluates the gate (`_unchanged_delta`); every other why is refused, which is exit 3
+    unless `_scope` named it exit 2 (nothing to review)."""
+    if sargs.get("unchanged_delta"):
+        return _unchanged_delta(log, cfg, it, gate, how, why)
+    return O.Outcome(
+        kind="review",
+        data={
+            "id": sargs.get("item", ""),
+            "gate": gate,
+            "outcome": "",
+            "findings": [],
+            "how": how,
+            "text": why,
+        },
+        exit=sargs.get("refusal_exit", O.REFUSED),
+        reason=why,
+    )
+
+
+def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
+    """A delta over a tree unchanged since the reviewed head (B10ad449deb): no reviewer
+    has anything new to see, so no round runs and none counts. The gate re-evaluates
+    instead: a held pass over now-settled findings is released as passed; anything else
+    stays as recorded, and the answer says which."""
+    tag = f"{it.id}.{gate}" if it is not None else gate
+    counts = _held_and_settled(it, gate)
+    if counts is not None:
+        rec = it.gates.get(gate)
+        mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
+        GD.record(
+            log,
+            cfg,
+            it.id,
+            gate,
+            "passed",
+            reason="",
+            evidence={**(rec.evidence or {}), **mark},
+            by=rec.by,
+        )
+        flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
+        text = (
+            f"{why} No round was counted: recorded {tag} = passed {flag}: every one of the "
+            f"{counts['findings']} finding(s) has a verdict with its probe "
+            f"({counts['refuted']} refuted, {counts['confirmed']} confirmed)"
+        )
+        return O.ok("review", id=getattr(it, "id", ""), gate=gate, outcome="passed",
+                    findings=[], how=how, text=text)
+    rec = it.gates.get(gate) if it is not None else None
+    stays = rec.outcome if rec is not None else "unreviewed"
+    counts = GD.triage_counts(it, gate) or {} if it is not None else {}
+    reason = f"{why} No round was counted; {tag} stays {stays}."
+    untriaged = counts.get("untriaged", 0)
+    if untriaged:
+        reason += (
+            f" {untriaged} earlier finding(s) still have no triage verdict: `ddflow review "
+            "triage` settles each (the next clean delta then passes)."
+        )
+    return O.nothing("review", reason, id=getattr(it, "id", ""), gate=gate, outcome="",
+                     findings=[], how=how, text=reason)
 
 
 def _rerun_scope(it, gate: str, revs: list, diff: str, value):
@@ -1357,9 +1452,12 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         why, forced = _budget_on_grants(repo, cfg, st, it, a, used, say)
     if why:
         return kind, done, forced, diff, how, why, None
-    if item:
-        say(_rounds_report(cfg, it, a, why_ok))
     diff, how, why = _pick_diff(repo, cfg, st, it, a, delta)
+    a["unchanged_delta"] = bool(delta and why) and why.startswith(_NOTHING_CHANGED)
+    # Reported only for a round that will really run and count: an unchanged delta is
+    # refused below, and saying "rounds used N+1" for it read as the round it burned.
+    if item and not a["unchanged_delta"]:
+        say(_rounds_report(cfg, it, a, why_ok))
     rerun = None
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
@@ -1680,7 +1778,7 @@ def _delta_scope(repo, it, gate, branch, base: str = "") -> tuple[str, str, str]
         return (
             "",
             "",
-            f"nothing changed since the reviewed head {head[:10]}. `--full` reviews the "
+            f"{_NOTHING_CHANGED} {head[:10]}. `--full` reviews the "
             "whole diff again (a full round).",
         )
     n = _commits_since(repo, it, branch, head, base)
@@ -2394,12 +2492,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     extra_evidence = _cite_grant(extra_evidence, sargs.get("grant", ""))
     extra_evidence = _mark_partial_retry(extra_evidence, sargs)
     if why:
-        return O.Outcome(
-            kind="review",
-            data={"id": item, "gate": gate, "outcome": "", "findings": [], "how": how, "text": why},
-            exit=sargs.get("refusal_exit", O.REFUSED),
-            reason=why,
-        )
+        return _why_outcome(log, cfg, it, gate, how, why, sargs)
     diff, extra_evidence, skipped = REX.apply(
         diff, cfg, repo, say, extra_evidence, it.tags if it else None, exclude, include_pinned
     )
