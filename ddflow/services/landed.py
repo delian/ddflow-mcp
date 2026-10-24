@@ -136,9 +136,8 @@ def check_paths(repo: Path, item, before: str, after: str, paths: list[str]) -> 
     item's work on those paths is no evidence for it)."""
     escaped = [p for p in paths if not _touches(item, [p])]
     if escaped:
-        return (
-            f"the path restriction escapes the declared globs: {', '.join(escaped)}"
-            + (f" (declared: {', '.join(item.globs)})" if item.globs else " (the item declares none)")
+        return f"the path restriction escapes the declared globs: {', '.join(escaped)}" + (
+            f" (declared: {', '.join(item.globs)})" if item.globs else " (the item declares none)"
         )
     changed = CH.changed_paths(repo, before, tip=after, include=("committed",), fork=False)
     if changed is None or not changed:
