@@ -48,7 +48,7 @@ class McpConfig:
 
     profile_lean_budget_tokens: int = knob(
         16000,
-        doc="With `[mcp].tools = auto`, a session whose effective start budget (`[session].context_budget_tokens`, or its agent type's entry in `[session.context_budget]`, the smaller) is at most this many tokens gets the `lean` profile whatever the client table says. 0 turns it off. The profile is chosen once at `initialize` and a budget only ever narrows it.",
+        doc="With `[mcp].tools = auto`, a session whose effective start budget (`[session].context_budget_tokens`, or its agent type's entry in `[session.context_budget]`, the smaller) is at most this many tokens gets the `lean` profile whatever the client table says. 0 turns it off. Keep it at or below `profile_mid_budget_tokens` (the first limit that fits wins). The profile is chosen once at `initialize` and a budget only ever narrows it. A client on the modern `server/discover` handshake sends no `clientInfo`, so it keeps the lean default, as it does for the client table.",
         check=int_at_least(0),
     )
     profile_mid_budget_tokens: int = knob(
