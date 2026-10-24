@@ -40,10 +40,11 @@ from ddflow.services import testselect as T
 ROOT = Path(__file__).resolve().parents[1]
 SCAN = 40  #: the newest merges looked at (`git log -n`: the bound); those with source and tests in them are replayed, about seven seconds each
 WORKERS = 4  #: processes replaying at once
-#: Merges whose co-changed test only the hub cut loses, and nothing a test spells reaches: the
-#: earlier selector held it through ``ddflow.config`` (a hub of 100+ importers), by luck of an
-#: unrelated knob file changing alongside (B81e0e941df). Pinned by sha and path; not a recall
-#: miss to fix, a route the bound gave up on purpose.
+#: Merges whose co-changed test the precise selection loses and that no route a test spells
+#: reaches: the earlier selector held it through ``ddflow.config`` (a hub of 100+ importers), by luck
+#: of an unrelated knob file changing alongside (B81e0e941df); a test that reads a template or a
+#: pin as text; a test cut at the selection budget. Pinned by sha and path with the reason, so a new
+#: loss fails; not a recall miss to fix, a route the bound gave up on purpose.
 UNROUTABLE = {
     "af8410da tests/test_tallies.py": "drives `task add` through the CLI, imports no changed module",
     "d4b8da67 tests/test_local_config_surfaces.py": (
