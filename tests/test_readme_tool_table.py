@@ -101,7 +101,11 @@ def test_the_readme_names_the_profiles_with_their_counts_and_the_default():
     for profile in P.PROFILES:
         n = len(P.advertised_names(profile))
         assert f"`{profile}` ({n} tools)" in block, profile
-    assert "default" in block.split("`lean`")[1].split("\n")[0].lower()
+    lean = next(line for line in block.splitlines() if line.startswith("- `lean` ("))
+    assert lean.split("tools)", 1)[1].startswith(": the default (`[mcp].tools = auto`)"), lean
+    for other in ("families", "hot+families"):
+        line = next(x for x in block.splitlines() if x.startswith(f"- `{other}` ("))
+        assert "default" not in line, line
     assert "`[mcp].tools`" in block
 
 
