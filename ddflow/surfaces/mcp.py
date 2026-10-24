@@ -780,7 +780,10 @@ class Server:
         ci = params.get("clientInfo")
         self.client_info = dict(ci) if isinstance(ci, dict) else {}
         if self._tier_auto:
-            self.tier = _PROFILES.settle(_PROFILES.AUTO, str(self.client_info.get("name", "")))
+            budget, limits = _surf().profile_inputs(self.repo, self.client_info)
+            self.tier = _PROFILES.settle(
+                _PROFILES.AUTO, str(self.client_info.get("name", "")), budget=budget, limits=limits
+            )
         return _ok(
             msg.get("id"),
             protocol.initialize_result(
