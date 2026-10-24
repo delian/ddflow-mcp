@@ -1,9 +1,9 @@
 """Every tool the charter tells an agent to call is in the core tier (fix of B7752a21d68).
 
 The MCP charter names `ddflow_rule_show` and `ddflow_rule_search` as the way to read any rule in full
-(D-rules-charter), On
-a core-tier connection (the default for lane workers) a tool outside the tier is not listed, so a
-client that only calls listed tools could not reach them: the contract promised what the tier hid.
+(D-rules-charter). On a core-tier connection (the default for lane workers) a tool outside the tier is
+not listed, so a client that only calls listed tools could not reach them: the contract promised what
+the tier hid. The default LEAN profile serves the same tools through the `rule` family.
 """
 
 from __future__ import annotations
