@@ -35,6 +35,9 @@ def test_excluded_outright_is_true_only_for_a_generated_only_change(tmp_path):
     # shipped generated class, so an all-excluded secrets-only change still demands one
     cfg.review.exclude_globs = ["*.pem"]
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"])
+    # a canonical lockfile the project excludes itself IS the class (roborev's patch)
+    cfg.review.exclude_globs = ["poetry.lock"]
+    assert REX.excluded_outright(cfg, Path(tmp_path), ["poetry.lock"])
     cfg.review.exclude_globs = []
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
 
