@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from ddflow.surfaces import cli, mcp
+from ddflow.surfaces.tools.families import FAMILIES
 
 README = (Path(__file__).resolve().parents[1] / "README.md").read_text("utf-8")
 
@@ -80,7 +81,8 @@ def test_every_command_the_readme_names_exists():
 def test_every_mcp_tool_the_readme_names_exists():
     named = set(re.findall(r"`(ddflow_[a-z_]+)`", README))
     assert named
-    missing = sorted(t for t in named if t not in mcp.TOOLS)
+    # a family tool (`ddflow_gate action=record`) is an MCP tool a client sees, not a `TOOLS` key
+    missing = sorted(t for t in named if t not in mcp.TOOLS and t not in FAMILIES)
     assert not missing, f"not MCP tools: {missing}"
 
 
