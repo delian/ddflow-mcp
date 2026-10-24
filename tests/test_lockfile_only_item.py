@@ -43,6 +43,8 @@ def _setup_lock_only_change(repo: Path, tmp_path: Path) -> Path:
         "[worktree]\nenabled = false\n"
         f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
         'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n'
+        '[gates]\ntask_pipeline = ["research", "rules", "implement", "rubber_duck",'
+        ' "critic", "standards", "unit_tests", "bug_hunt", "dedupe", "merge"]\n'
     )
     from helpers import git as _git
 
@@ -53,6 +55,19 @@ def _setup_lock_only_change(repo: Path, tmp_path: Path) -> Path:
     return seen
 
 
+def _pipeline_gates() -> tuple[str, ...]:
+    return (
+        "research",
+        "rules",
+        "implement",
+        "standards",
+        "unit_tests",
+        "bug_hunt",
+        "dedupe",
+        "merge",
+    )
+
+
 def test_a_lockfile_only_change_is_unavailable_not_leaked(repo, tmp_path):
     """The whole change is uv.lock (excluded by default): the review runs nothing, says
     why (naming the excluded file), and the excluded content never reaches the reviewer."""
@@ -60,7 +75,8 @@ def test_a_lockfile_only_change_is_unavailable_not_leaked(repo, tmp_path):
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2
     assert "excluded file(s)" in out.reason
-    assert "SECRET_ISH" not in seen.read_text()
+    sent = seen.read_text() if seen.exists() else ""
+    assert "SECRET_ISH" not in sent
 
 
 def test_a_mixed_change_still_excludes_the_lock(repo, tmp_path):
@@ -79,17 +95,7 @@ def test_complete_accepts_a_lockfile_only_change(repo, tmp_path):
     _setup_lock_only_change(repo, tmp_path)
     assert api.review(repo, gate="rubber_duck", item="T1").exit == 2
     assert api.review(repo, gate="critic", item="T1").exit == 2
-    for gate in (
-        "research",
-        "rules",
-        "implement",
-        "standards",
-        "ci",
-        "unit_tests",
-        "bug_hunt",
-        "dedupe",
-        "merge",
-    ):
+    for gate in _pipeline_gates():
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "e",
             agent="a1",
@@ -107,17 +113,7 @@ def test_complete_still_demands_a_reviewer_when_the_change_is_not_all_excluded(r
     (repo / "x.py").write_text("x = 1\n")
     for gate in ("rubber_duck", "critic"):
         assert api.review(repo, gate=gate, item="T1").exit == 2
-    for gate in (
-        "research",
-        "rules",
-        "implement",
-        "standards",
-        "ci",
-        "unit_tests",
-        "bug_hunt",
-        "dedupe",
-        "merge",
-    ):
+    for gate in _pipeline_gates():
         run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "e",
             agent="a1",
