@@ -124,3 +124,12 @@ def test_the_profile_and_family_bullets_do_not_look_like_tool_rows():
     block = TT.render()
     rows = [line for line in block.splitlines() if line.startswith("| ") and "`ddflow_" in line]
     assert len(rows) == len(TOOLS)
+
+
+def test_a_profile_is_a_bullet_not_a_table_row():
+    from ddflow.surfaces.tools import profiles as P
+
+    lines = TT.render().splitlines()
+    for profile in P.PROFILES:
+        mine = [line for line in lines if f"`{profile}` (" in line]
+        assert mine and all(line.startswith("- ") for line in mine), (profile, mine)
