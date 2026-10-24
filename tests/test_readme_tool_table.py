@@ -92,3 +92,57 @@ def test_no_summary_stops_at_an_abbreviation():
     for name, spec in TOOLS.items():
         cell = RT.summary(spec["description"])
         assert not cell.endswith(("e.g.", "i.e.", "etc.", "vs.")), name
+
+
+def test_the_readme_names_the_profiles_with_their_counts_and_the_default():
+    from ddflow.surfaces.tools import profiles as P
+
+    block = TT.render()
+    for profile in P.PROFILES:
+        n = len(P.advertised_names(profile))
+        assert f"`{profile}` ({n} tools)" in block, profile
+    lean = next(line for line in block.splitlines() if line.startswith("- `lean` ("))
+    assert lean.split("tools)", 1)[1].startswith(": the default (`[mcp].tools = auto`)"), lean
+    for other in ("families", "hot+families"):
+        line = next(x for x in block.splitlines() if x.startswith(f"- `{other}` ("))
+        assert "default" not in line, line
+    assert "`[mcp].tools`" in block
+
+
+def test_every_family_lists_every_action_with_the_old_name_it_replaces():
+    from ddflow.surfaces.tools import families as F
+
+    block = TT.render()
+    bullets = [line for line in block.splitlines() if line.startswith("- `ddflow_")]
+    by_family = {re.match(r"- `(ddflow_[a-z_]+)`", b).group(1): b for b in bullets}
+    for name, fam in F.FAMILIES.items():
+        if fam.single:
+            continue
+        line = by_family[name]
+        assert f"({len(fam.members)} actions)" in line
+        for action, old in fam.members.items():
+            assert f"`{action}` (was `{old}`)" in line or (old == name and f"`{action}`" in line)
+
+
+def test_the_profile_and_family_bullets_do_not_look_like_tool_rows():
+    block = TT.render()
+    rows = [line for line in block.splitlines() if line.startswith("| ") and "`ddflow_" in line]
+    assert len(rows) == len(TOOLS)
+
+
+def test_a_profile_is_a_bullet_not_a_table_row():
+    from ddflow.surfaces.tools import profiles as P
+
+    lines = TT.render().splitlines()
+    for profile in P.PROFILES:
+        mine = [line for line in lines if f"`{profile}` (" in line]
+        assert mine and all(line.startswith("- ") for line in mine), (profile, mine)
+
+
+def test_every_alias_of_the_registry_is_listed_with_the_action_that_replaces_it():
+    from ddflow.surfaces.tools import aliases as A
+
+    block = TT.render()
+    for old, alias in A.ALIASES.items():
+        action = alias.new.split("action=", 1)[1]
+        assert f"`{action}` (was `{old}`)" in block, old
