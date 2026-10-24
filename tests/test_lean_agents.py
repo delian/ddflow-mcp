@@ -302,3 +302,6 @@ def test_the_flat_spellings_the_core_tier_lists_stay_allow_listed():
         have = _allowed(role)
         assert names <= have, (role, sorted(names - have))
         assert names <= core, (role, "not listed by the core tier:", sorted(names - core))
+    # a standard-tier tool the researcher is also handed under its flat name (not in `core`, so apart)
+    assert "ddflow_lesson_search" in _allowed("researcher")
+    assert "ddflow_lesson_search" not in core, "if it moves into core, move it into the sets above"
