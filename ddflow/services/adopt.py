@@ -29,6 +29,7 @@ from ..core import clock
 from ..core.digest import content_digest
 from ..infra import paths
 from ..infra.fsio import (
+    FORMAT_LEVEL,
     MANAGED_DIGEST_LEN,
     Managed,
     NewerContent,
@@ -1201,7 +1202,11 @@ def _update_managed(
     if region.state(existing) == "newer" and stamp is not None:
         why = NewerContent(f"the {region.name} region", stamp.version, stamp.fmt)
         return Refused(f"REFUSED {rel}: {why}")
-    block = region.render(body, extra=_head_stamp(head))  # what ddflow wrote, not the kept edit
+    # `head` is what ddflow wrote (not a kept edit); attributes this version does not know are carried over
+    kept = tuple(
+        kv for kv in (stamp.extra if stamp and stamp.fmt == FORMAT_LEVEL else ()) if kv[0] != "head"
+    )
+    block = region.render(body, extra=(*_head_stamp(head), *kept))
     updated = use_head + region._region().splice(existing[len(have_head) :], block)
     notes = []
     if head_state == "edited":

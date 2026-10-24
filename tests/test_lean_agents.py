@@ -305,3 +305,18 @@ def test_the_flat_spellings_the_core_tier_lists_stay_allow_listed():
     # a standard-tier tool the researcher is also handed under its flat name (not in `core`, so apart)
     assert "ddflow_lesson_search" in _allowed("researcher")
     assert "ddflow_lesson_search" not in core, "if it moves into core, move it into the sets above"
+
+
+def test_an_attribute_a_newer_stamp_carries_survives_a_refresh(repo):
+    run_cli(repo, "adopt", "--agents", "claude")
+    path = repo / FILES["reviewer"]
+    text = path.read_text()
+    path.write_text(
+        text.replace(" head=", " flavour=mild head=", 1).replace(
+            "Call `ddflow_brief` first", "Call it whenever", 1
+        )
+    )
+    code, _out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0 and "flavour=mild" in path.read_text(), (
+        "the unknown region attribute was dropped"
+    )
