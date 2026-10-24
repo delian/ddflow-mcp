@@ -148,10 +148,14 @@ def _landed_paths_fields(
         )
     paths = [p for p in paths if p]
     if not paths:
-        # Empty = clear (or a no-op): a recorded restriction can always be taken back.
-        return {"landed_paths": []} if it.landed_paths else {"landed_paths": it.landed_paths}
+        if not it.landed_paths:
+            return O.nothing("item.updated", f"{it.id} has no path restriction to clear", id=it.id)
+        # Empty = clear: a recorded restriction can always be taken back.
+        return {"landed_paths": []}
     if paths == it.landed_paths:
-        return {"landed_paths": it.landed_paths}
+        return O.nothing(
+            "item.updated", f"{it.id} already restricts its landing to those paths", id=it.id
+        )
     bad = LD.check_paths(repo, it, before, after, paths)
     if bad:
         return O.failed(

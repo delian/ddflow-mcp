@@ -21,6 +21,14 @@ from ..core.clock import epoch, iso_at
 from ..core.globs import inside
 from ..infra import worktree as W
 from . import changes as CH
+
+#: `shared_files._inside`: whether one GLOB's matches all sit inside another, judged on a
+#: witness path a wildcard turns into (its owner uses it for `.gitattributes` ordering).
+#: Imported on purpose here, not re-written: check_paths must not answer "restriction sits
+#: inside the declared globs" with `core.globs.inside`, whose path-in-glob view read the
+#: literal pattern `docs/foo/**` as matched by `docs/foo/*` (rubber_duck finding): a wider
+#: restriction would then be accepted. Its negated-class false-negative direction fails
+#: closed (a refusal), which is the safe one for this call site.
 from .shared_files import _inside
 
 

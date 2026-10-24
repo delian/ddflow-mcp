@@ -50,6 +50,23 @@ def _mixed_landing(repo) -> str:
     return _commit(repo, "mixed code+doc commit")
 
 
+def test_a_restriction_whose_range_was_tampered_with_reads_as_unknown(repo):
+    """The defensive branch standards asked for: `changed_paths` says None (never [], never
+    the whole commit) when a recorded restriction stops matching its range -- a state only
+    a hand-edited log can produce, since `check_paths` verified the pair at record time."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "note", "--globs", "src/**")
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "code.py").write_text("x = 1\n")
+    sha = _commit(repo, "code landing")
+    code, out, err = run_cli(repo, "update", "T1", "--landed", sha, agent="a1")
+    assert code == 0, out + err
+    st = _state(repo)
+    it = st.items["T1"]
+    it.landed_paths = ["docs/y.md"]  # the tampering: this restriction was never verified
+    assert CO.changed_paths(repo, it) is None
+
+
 def test_a_mixed_landing_keeps_the_task_pipeline_until_the_paths_are_recorded(repo):
     """The bug: --landed alone records the whole commit, code included."""
     run_cli(repo, "init")
