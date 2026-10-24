@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# ddflow:begin hooks/prompt ddflow=0.2.7 fmt=1 sha=9814452d611c\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks run prompt --harness claude; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks run prompt --harness claude; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/prompt\n"
+            "command": "# ddflow:begin hooks/prompt ddflow=0.2.9 fmt=1 sha=9814452d611c\nif [ -x \"/home/delian/src/ddflow/.venv/bin/python3\" ] && [ -f \"/home/delian/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python3\" -m ddflow hooks run prompt --harness claude; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks run prompt --harness claude; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/prompt\n"
           }
         ]
       }
