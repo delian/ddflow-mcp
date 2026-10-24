@@ -282,21 +282,23 @@ def test_the_flat_spellings_the_core_tier_lists_stay_allow_listed():
             "ddflow_gate_record",
             "ddflow_bug_found",
             "ddflow_recall",
+            "ddflow_session_prompt",
         },
         "reviewer": {
             "ddflow_gate_status",
             "ddflow_gate_record",
             "ddflow_bug_found",
             "ddflow_rule_show",
+            "ddflow_session_note",
         },
         "researcher": {
             "ddflow_recall",
             "ddflow_rule_show",
-            "ddflow_lesson_search",
             "ddflow_bug_found",
+            "ddflow_session_note",
         },
     }
     for role, names in need.items():
         have = _allowed(role)
         assert names <= have, (role, sorted(names - have))
-        assert names <= core | {"ddflow_lesson_search"}, (role, sorted(names - core))
+        assert names <= core, (role, "not listed by the core tier:", sorted(names - core))
