@@ -85,34 +85,40 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     into one empty string, and the surface had to carry a `clearable` flag to tell them
     apart — a distinction the type system expresses for free.
     """
-    log, cfg, st = _load(repo, agent)
-    it = st.items.get(item)
-    if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
-    fields = plan_edit(cfg, st, it, edit)
-    if isinstance(fields, O.Outcome):
-        if not (
-            (edit.landed is not None or edit.landed_paths is not None) and fields.exit == O.NOTHING
-        ):
-            return fields
-        fields = {}
-    if edit.landed is not None or edit.landed_paths is not None:
-        # Checked against the globs this same edit leaves the item with.
-        it2 = replace(it, globs=fields.get("globs", it.globs))
-    if edit.landed is not None:
-        landed = _landed_fields(repo, cfg, it2, edit.landed)
-        if isinstance(landed, O.Outcome):
-            return landed
-        fields.update(landed)
-    if edit.landed_paths is not None:
-        restriction = _landed_paths_fields(repo, cfg, it2, edit.landed_paths, fields)
-        if isinstance(restriction, O.Outcome):
-            return restriction
-        fields.update(restriction)
-    if edit.worktree is not None:
-        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
-    return _record_update(log, cfg, it, fields, queue=edit.queue)
+    # Planned from a fold taken INSIDE the lock (B518cb79124): `plan_edit`'s coordination
+    # checks -- a line move for claimed or forked work, a parent move under a claimed
+    # item, a dependency cycle -- must judge the log as it is when the edit appends. A
+    # concurrent claim or move between the caller's snapshot and the append is refused
+    # here instead of recorded against a state that no longer is.
+    with log.transaction():
+        st = L._fold(log)
+        it = st.items.get(item)
+        if it is None or it.removed:
+            gone = " (it was removed from the queue)" if it is not None else ""
+            return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+        fields = plan_edit(cfg, st, it, edit)
+        if isinstance(fields, O.Outcome):
+            if not (
+                (edit.landed is not None or edit.landed_paths is not None) and fields.exit == O.NOTHING
+            ):
+                return fields
+            fields = {}
+        if edit.landed is not None or edit.landed_paths is not None:
+            # Checked against the globs this same edit leaves the item with.
+            it2 = replace(it, globs=fields.get("globs", it.globs))
+        if edit.landed is not None:
+            landed = _landed_fields(repo, cfg, it2, edit.landed)
+            if isinstance(landed, O.Outcome):
+                return landed
+            fields.update(landed)
+        if edit.landed_paths is not None:
+            restriction = _landed_paths_fields(repo, cfg, it2, edit.landed_paths, fields)
+            if isinstance(restriction, O.Outcome):
+                return restriction
+            fields.update(restriction)
+        if edit.worktree is not None:
+            return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
+        return _record_update(log, cfg, it, fields, queue=edit.queue)
 
 
 def _landed_fields(repo: Path, cfg, it, spec: str) -> dict[str, Any] | O.Outcome:
