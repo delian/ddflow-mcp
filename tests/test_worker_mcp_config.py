@@ -238,7 +238,7 @@ def test_the_recipe_does_not_call_the_configured_tier_core_when_it_is_not():
     assert "starts ddflow on the `all` tier" in text
     assert "the core-tier config below" not in text and "measured on the core tier" not in text
     # the 17.2K belongs to the default core-tier worker config, said as a measurement, not as the tier below
-    assert "measured with the default core-tier one" in text and "Do not pair a role" in text
+    assert "CORE-tier worker config (measured: 17.2K" in text and "Do not pair a role" in text
 
 
 def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
