@@ -209,11 +209,8 @@ def test_nothing_changed_since_the_reviewed_head_counts_no_round_and_names_full(
     _review(repo)
     calls = _calls(seen)
     out = _review(repo)
-    assert out.exit == NOTHING and "nothing changed" in out.reason and "--full" in out.reason, (
-        out.reason
-    )
-    assert "stays passed" in out.reason
-    assert _calls(seen) == calls
+    assert out.exit == REFUSED and "nothing changed" in out.reason and "--full" in out.reason, out.reason
+    assert "No round was counted" in out.reason and _calls(seen) == calls
 
 
 def test_delta_default_false_is_the_old_behaviour(repo, tmp_path):
@@ -527,9 +524,10 @@ def test_an_unchanged_delta_with_findings_still_untriaged_stays_failed_and_count
     assert held.data["outcome"] == "failed", held.data
     calls = _calls(seen)
     out = _review(repo)  # unchanged since the reviewed head; the finding is untriaged
-    assert out.exit == NOTHING, out.reason
+    assert out.exit == REFUSED, out.reason
     assert _calls(seen) == calls
     assert "stays failed" in out.reason and "review triage" in out.reason, out.reason
+    assert "No round was counted" in out.reason
     assert _ev(repo)["delta_rounds"] == 1
 
 
