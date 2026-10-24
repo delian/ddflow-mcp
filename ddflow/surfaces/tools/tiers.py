@@ -30,7 +30,12 @@ _LEGACY_CORE = frozenset(
         "brief next claim heartbeat gate_status gate_run gate_record gate_skip gate_verify "
         "complete merge status show recall bug_found bug_fixed bug_invalid lesson_add "
         "decision_add session_start session_end session_note session_prompt identify "
-        "task_add update wait review help pr_sync similar setup"
+        "task_add update wait review help pr_sync similar setup "
+        # the charter's own tools (B7752a21d68): it tells every agent to read any rule through these.
+        # The flat `core` tier only: the default LEAN profile reaches them through the `rule` family
+        # (profiles.py). release and review_triage stay in `standard`: only the role definitions name
+        # them, and those must name tools per profile (follow-up fix-B07c4286c92).
+        "rule_show rule_search"
     ).split()
 )
 
@@ -42,7 +47,7 @@ _LEGACY_STANDARD = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_sync rule_show workflow_state verify ci onboard "
+        "rule_add rule_list rule_edit rule_remove rule_sync workflow_state verify ci onboard "
         "dupes link gate_list queue"
     ).split()
 )

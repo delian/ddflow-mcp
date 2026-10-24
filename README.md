@@ -5572,8 +5572,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=f222d7b55ec6 -->
-<details><summary>All 123 MCP tools: 32 in the `core` tier, 49 more in `standard`, 42 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=4f340319d134 -->
+<details><summary>All 123 MCP tools: 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5590,8 +5590,8 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
-| Setting up | `ddflow_rule_search` | standard | Search rules by title or content, ranked by relevance, for an area or topic. |
-| Setting up | `ddflow_rule_show` | standard | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
+| Setting up | `ddflow_rule_search` | core | Search rules by title or content, ranked by relevance, for an area or topic. |
+| Setting up | `ddflow_rule_show` | core | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
 | Setting up | `ddflow_rule_sync` | standard | Sync rule files with the log: record hand edits and new files, restore missing ones. |
 | Setting up | `ddflow_setup` | core | Install ddflow into this repository: creates .ddflow/, writes the driver and the AGENTS.md section, and… |
 | The rules this project runs by | `ddflow_flow_choose` | all | Record a workflow choice for this project, attributed to you, with a reason the next agent will read. |

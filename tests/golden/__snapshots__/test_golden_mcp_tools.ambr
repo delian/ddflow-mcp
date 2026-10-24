@@ -658,6 +658,118 @@
        }
       }
     ''',
+    'ddflow_rule': '''
+      {
+       "name": "ddflow_rule",
+       "description": "Project rules. Set `action`; required arguments in brackets: add(id,title), list, search(query), edit(id), remove(id), sync, show(id).",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "description": "Rule id, e.g. r-naming."
+         },
+         "title": {
+          "type": "string",
+          "description": "One-line rule statement."
+         },
+         "content": {
+          "type": "string",
+          "description": "Rule text (may be empty for check_only)."
+         },
+         "tags": {
+          "type": "string",
+          "description": "Comma-separated tags."
+         },
+         "scope": {
+          "type": "string",
+          "description": "project (default) | phase | task | global."
+         },
+         "priority": {
+          "type": "integer",
+          "description": "Priority 0-100 (default 50)."
+         },
+         "globs": {
+          "type": "string",
+          "description": "Comma-separated globs it governs."
+         },
+         "enforcement": {
+          "type": "string",
+          "description": "advisory | warn | block: how hard the rule binds (default advisory)."
+         },
+         "new": {
+          "type": "boolean",
+          "description": "Dedup answer: a different record."
+         },
+         "extends": {
+          "type": "string",
+          "description": "Dedup answer: extends record ID."
+         },
+         "duplicate_of": {
+          "type": "string",
+          "description": "Dedup answer: same as record ID."
+         },
+         "related": {
+          "type": "string",
+          "description": "Dedup answer: related to ID."
+         },
+         "check": {
+          "type": "boolean",
+          "description": "Dry run: list duplicates only."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "Subagent name, this call only."
+         },
+         "tag": {
+          "type": "string",
+          "description": "Filter results by this tag."
+         },
+         "json": {
+          "type": "boolean",
+          "description": ""
+         },
+         "limit": {
+          "type": "integer",
+          "description": "Maximum results to return (default 10)."
+         },
+         "query": {
+          "type": "string",
+          "description": "Search query (keywords or regex)."
+         },
+         "exact": {
+          "type": "boolean",
+          "description": "Exact phrase."
+         },
+         "regex": {
+          "type": "boolean",
+          "description": "Query is a regex."
+         },
+         "reason": {
+          "type": "string",
+          "description": ""
+         },
+         "action": {
+          "type": "string",
+          "enum": [
+           "add",
+           "list",
+           "search",
+           "edit",
+           "remove",
+           "sync",
+           "show"
+          ],
+          "description": "What to do; see the tool description for each action's arguments."
+         }
+        },
+        "additionalProperties": false,
+        "required": [
+         "action"
+        ]
+       }
+      }
+    ''',
     'ddflow_session': '''
       {
        "name": "ddflow_session",
@@ -1156,6 +1268,7 @@
     'ddflow_memory',
     'ddflow_merge',
     'ddflow_next',
+    'ddflow_rule',
     'ddflow_session',
     'ddflow_show',
     'ddflow_task',
