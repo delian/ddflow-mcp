@@ -57,9 +57,9 @@ def _forbidden(cfg: Config) -> bool:
     for layer in LAYERS:
         path = layer_path(cfg.root, layer)
         try:
-            if not path.is_file():
-                continue
             data = read_toml(path)
+        except FileNotFoundError:
+            continue  # no such layer (a missing parent directory is the same absence)
         except (OSError, ValueError):
             return True  # a layer that exists and cannot be read may be the one that forbids: fail closed
         if (data.get("approvals") or {}).get("forbid_chat_for_t3") is True:
