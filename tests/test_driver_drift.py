@@ -115,3 +115,14 @@ def test_refresh_docs_from_a_linked_worktree_writes_there(repo):
 def test_missing_templates_do_not_crash_doctor_or_the_drift_check(repo, tmp_path):
     _adopted(repo)
     assert AD.driver_drift(repo, package_dir=tmp_path / "no-package") == []
+
+
+def test_claude_delta_carries_the_goal_wave_contract():
+    """Bug Bc9e602dd98: the goal-wave rewrite skipped the Claude Code delta, leaving it on
+    the older self-paced /loop story with no wave contract; it must name the contract the
+    other loop deltas carry to fan a wave out and resume it."""
+    text = (
+        ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md"
+    ).read_text()
+    assert "ddflow next --json" in text, "the claude delta does not read the wave"
+    assert "tier:fast|balanced|deep" in text, "the claude delta does not map tier hints"
