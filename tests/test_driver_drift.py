@@ -140,6 +140,6 @@ def test_claude_delta_carries_the_goal_wave_contract():
     )
     region = AD._driver_region(DELTA)
     stamp = region.stamp((ROOT / DELTA).read_text())
-    assert stamp is not None and stamp.sha == content_digest(view, MANAGED_DIGEST_LEN), (
+    assert stamp is not None and stamp.sha == content_digest(view, length=MANAGED_DIGEST_LEN), (
         "the claude docs view stamp does not certify its own body (regenerate the view)"
     )
