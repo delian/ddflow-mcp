@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
@@ -37,6 +38,18 @@ def _what_differs(
 
 def _differing_note(make, gid, cwd, base, dirt, now, label, own) -> list:
     """``[make(gid, why)]`` for a gate whose tree differs, [] when only paths outside ``own``
-    differ (``make`` is `outcomes.StaleNote`)."""
+    differ (``make`` is `StaleNote`)."""
     why = _what_differs(cwd, base, dirt, now, label, own)
     return [make(gid, why)] if why else []
+
+
+@dataclass(frozen=True, order=True)
+class StaleNote:
+    """A passed gate whose evidence is not about the tree being completed -- or, with
+    ``unverified``, one whose evidence could not be compared with it at all. The two
+    are kept apart: "could not tell" rendered as "fresh" is a silent pass, and rendered
+    as "stale" is a false alarm."""
+
+    gate: str
+    why: str
+    unverified: bool = False
