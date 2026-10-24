@@ -44,16 +44,11 @@ def _session_model(st: State, agent: str) -> str:
 
 def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
     """(model, source) judged against for reviewer independence: `--model`, else the model
-    the agent declared at `session start` under its identity -- said out loud and recorded
-    (only the SOURCE on the event, never the id) -- B-complete-requires-model-even-when-recorded."""
+    the agent's LATEST session declared (open or ended -- the record, not its liveness) --
+    said out loud and recorded (only the SOURCE, never the id; the session carries it).
+    B-complete-requires-model-even-when-recorded."""
     if model:
         return model, "flag"
-    found = _session_model(st, agent)
-    if found:
-        return found, "session"
-    # The declaration is the record, not its liveness (the review of this fix); the agent's
-    # LATEST session speaks last -- an ended one still declared it, a newer model-less one
-    # supersedes older declarations rather than re-attribute a stale model.
     own = [s for s in st.sessions.values() if s.agent == agent]
     latest = max(own, key=lambda s: s.started_at).model if own else ""
     return (latest, "session") if latest else ("", "")
