@@ -10,9 +10,11 @@ are `tiers.py`, unchanged.
 
 from __future__ import annotations
 
+from ...config import Config
 from .families import FAMILIES, HOT_SINGLES
 from .family_schema import family_listing
 
+_KNOBS = Config().mcp  # the knob defaults are the one source of the default limits
 PROFILES = ("lean", "families", "hot+families")
 
 #: `[mcp].tools = auto` (the default) is the lean core unless the client table says otherwise.
@@ -66,7 +68,7 @@ def family_entries(profile: str) -> list[dict]:
 
 #: The start-budget limits (tokens) `auto` narrows by: at most the first is `lean`, at most the second no
 #: wider than `families` (`[mcp].profile_lean_budget_tokens`, `profile_mid_budget_tokens`; 0 turns one off).
-DEFAULT_LIMITS = (16000, 32000)
+DEFAULT_LIMITS = (_KNOBS.profile_lean_budget_tokens, _KNOBS.profile_mid_budget_tokens)
 
 
 def settle(

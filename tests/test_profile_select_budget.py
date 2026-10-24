@@ -53,6 +53,17 @@ def test_auto_is_narrowed_by_the_budget_and_never_widened(budget, client, want):
     assert P.settle("auto", client, budget=budget) == want
 
 
+def test_the_default_limits_are_the_knob_defaults_and_the_table_below_follows_them():
+    from ddflow.config import Config
+
+    knobs = Config().mcp
+    assert P.DEFAULT_LIMITS == (knobs.profile_lean_budget_tokens, knobs.profile_mid_budget_tokens)
+    small, mid = P.DEFAULT_LIMITS
+    assert P.settle("auto", "bigclient", budget=small) == "lean"
+    assert P.settle("auto", "bigclient", budget=small + 1) == "families"
+    assert P.settle("auto", "bigclient", budget=mid + 1) == "hot+families"
+
+
 def test_an_explicit_profile_is_never_overridden_by_a_budget():
     assert P.settle("hot+families", "bigclient", budget=4000) == "hot+families"
     assert P.settle("families", "", budget=4000) == "families"

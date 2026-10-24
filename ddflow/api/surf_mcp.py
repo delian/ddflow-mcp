@@ -58,7 +58,8 @@ def profile_inputs(repo: Path, client_info: dict[str, Any]) -> tuple[int, tuple[
     try:
         cfg = Config.load(repo)
     except Exception:
-        return 0, (16000, 32000)
+        d = Config().mcp
+        return 0, (d.profile_lean_budget_tokens, d.profile_mid_budget_tokens)
     target = FC.harness_of(client_info or {})
     return SC.effective_budget(cfg.session, target), (
         cfg.mcp.profile_lean_budget_tokens,
