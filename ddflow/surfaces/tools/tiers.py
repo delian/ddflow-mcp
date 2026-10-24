@@ -31,11 +31,11 @@ _LEGACY_CORE = frozenset(
         "complete merge status show recall bug_found bug_fixed bug_invalid lesson_add "
         "decision_add session_start session_end session_note session_prompt identify "
         "task_add update wait review help pr_sync similar setup "
-        # the contract's own tools (B7752a21d68): the charter's rule retrieval, the lean role
-        # definitions' release and triage. This is the flat `core` tier only: the default LEAN profile
-        # reaches rule through the `rule` family (profiles.py) and lists neither release nor triage
-        # (follow-up: role definitions and the charter must name tools per profile)
-        "rule_show rule_search release review_triage"
+        # the charter's own tools (B7752a21d68): it tells every agent to read any rule through these.
+        # The flat `core` tier only: the default LEAN profile reaches them through the `rule` family
+        # (profiles.py). release and review_triage stay in `standard`: only the role definitions name
+        # them, and those must name tools per profile (follow-up fix-B07c4286c92).
+        "rule_show rule_search"
     ).split()
 )
 
@@ -43,10 +43,10 @@ _LEGACY_CORE = frozenset(
 _LEGACY_STANDARD = frozenset(
     "ddflow_" + n
     for n in (
-        "abandon block unblock board progress doctor recover configure companions "
+        "abandon block unblock release board progress doctor recover configure companions "
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
-        "remove tests memory_add memory_list history cleanup render list "
+        "remove tests review_triage memory_add memory_list history cleanup render list "
         "rule_add rule_list rule_edit rule_remove rule_sync workflow_state verify ci onboard "
         "dupes link gate_list queue"
     ).split()

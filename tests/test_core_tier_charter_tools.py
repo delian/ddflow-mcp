@@ -1,7 +1,7 @@
 """Every tool the charter tells an agent to call is in the core tier (fix of B7752a21d68).
 
 The MCP charter names `ddflow_rule_show` and `ddflow_rule_search` as the way to read any rule in full
-(D-rules-charter), and the lean role definitions name `ddflow_release` and `ddflow_review_triage`. On
+(D-rules-charter), On
 a core-tier connection (the default for lane workers) a tool outside the tier is not listed, so a
 client that only calls listed tools could not reach them: the contract promised what the tier hid.
 """
@@ -28,13 +28,8 @@ def test_every_tool_the_base_charter_names_is_in_the_core_tier(repo):
     assert not missing, f"the charter names tools the core tier does not list: {missing}"
 
 
-def test_the_tools_a_role_needs_to_finish_its_work_are_in_the_core_tier():
-    for name in (
-        "ddflow_release",
-        "ddflow_review_triage",
-        "ddflow_rule_show",
-        "ddflow_rule_search",
-    ):
+def test_the_two_retrieval_tools_are_in_the_core_tier():
+    for name in ("ddflow_rule_show", "ddflow_rule_search"):
         assert name in tier_tools("core"), name
 
 
