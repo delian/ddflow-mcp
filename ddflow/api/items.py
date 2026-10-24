@@ -134,7 +134,9 @@ def _landed_paths_fields(
 ) -> dict[str, Any] | O.Outcome:
     """``landed_paths`` for ``--landed-paths``, verified against the item's landed range --
     the one ``--landed`` records in the same update, or the one already on record -- or the
-    refusal."""
+    refusal. Recordable AGAIN to correct a wrong restriction (re-verified the same way),
+    and cleared with an empty value (roborev: a one-way restriction poisons the
+    pipeline forever)."""
     before = fields.get("landed_before") or it.landed_before
     after = fields.get("landed_after") or it.landed_after
     if not before or not after:
@@ -144,12 +146,12 @@ def _landed_paths_fields(
             "`ddflow update <id> --landed <sha>`, or pass both together",
             id=it.id,
         )
-    if it.landed_paths:
-        return O.refused(
-            "item.updated",
-            f"{it.id} already restricts its landing to its paths",
-            id=it.id,
-        )
+    paths = [p for p in paths if p]
+    if not paths:
+        # Empty = clear (or a no-op): a recorded restriction can always be taken back.
+        return {"landed_paths": []} if it.landed_paths else {"landed_paths": it.landed_paths}
+    if paths == it.landed_paths:
+        return {"landed_paths": it.landed_paths}
     bad = LD.check_paths(repo, it, before, after, paths)
     if bad:
         return O.failed(

@@ -99,6 +99,26 @@ def test_the_paths_can_be_recorded_after_the_landing(repo):
     assert CO.changed_paths(repo, st.items["T1"]) == ["docs/decision.md"]
 
 
+def test_a_wrong_restriction_can_be_corrected_and_cleared(repo):
+    """A mis-recorded restriction is not a one-way door (standards/roborev finding): the
+    operator can re-record a corrected one and clear it again."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "decision doc", "--globs", "docs/**")
+    sha = _mixed_landing(repo)
+    code, out, err = run_cli(
+        repo, "update", "T1", "--landed", sha, "--landed-paths", "docs/*.md", agent="a1"
+    )
+    assert code == 0, out + err
+    code, out, err = run_cli(repo, "update", "T1", "--landed-paths", "docs/**", agent="a1")
+    assert code == 0, out + err
+    st = _state(repo)
+    assert st.items["T1"].landed_paths == ["docs/**"]
+    code, out, err = run_cli(repo, "update", "T1", "--landed-paths", "", agent="a1")
+    assert code == 0, out + err
+    st = _state(repo)
+    assert st.items["T1"].landed_paths == []
+
+
 def test_a_restriction_outside_the_declared_globs_is_refused(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "decision doc", "--globs", "docs/**")
