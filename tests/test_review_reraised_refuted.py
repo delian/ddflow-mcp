@@ -59,7 +59,9 @@ def _state(repo: Path):
 
 def _triaged(repo: Path, gate: str):
     return [
-        e for e in EventLog(repo).read_all() if e.kind == "review.triaged" and e.data["gate"] == gate
+        e
+        for e in EventLog(repo).read_all()
+        if e.kind == "review.triaged" and e.data["gate"] == gate
     ]
 
 
