@@ -5572,7 +5572,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d2d5d4b5a72d -->
+<!-- ddflow:begin README/tools sha=c7d0f40faaba -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (15 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 6 families
@@ -5598,7 +5598,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 123 MCP tools: 32 in the `core` tier, 49 more in `standard`, 42 more in `all`</summary>
+<details><summary>All 123 MCP tools by their own name (the flat list): 32 in the `core` tier, 49 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
