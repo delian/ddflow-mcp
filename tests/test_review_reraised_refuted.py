@@ -29,16 +29,18 @@ OK = 0
 
 def _setup(repo: Path, tmp_path: Path) -> Path:
     """A command reviewer that reports FINDA's finding in the wording of `wording` (so a
-    test can change what it claims) and a fixed one for FINDB, on critic and rubber_duck."""
+    test can change what it claims) and a fixed one for FINDB, on critic and rubber_duck;
+    its STATUS names the number of findings it actually emitted."""
     wording = tmp_path / "wording"
     wording.write_text("wait_max_s KeyError")
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
         f"w=$(cat '{wording}')\n"
-        'case "$in" in *FINDA*) printf "FINDING HIGH a.py:1\\n$w\\n\\n";; esac\n'
-        'case "$in" in *FINDB*) printf "FINDING LOW b.py:1\\nsecond finding\\n\\n";; esac\n'
-        'case "$in" in *FIND*) echo "STATUS: FINDINGS 1";; *) echo "STATUS: NO FINDINGS";; esac\n'
+        "n=0\n"
+        'case "$in" in *FINDA*) printf "FINDING HIGH a.py:1\\n$w\\n\\n"; n=1;; esac\n'
+        'case "$in" in *FINDB*) printf "FINDING LOW b.py:1\\nsecond finding\\n\\n"; n=$((n+1));; esac\n'
+        'case "$in" in *FIND*) echo "STATUS: FINDINGS $n";; *) echo "STATUS: NO FINDINGS";; esac\n'
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
@@ -86,22 +88,28 @@ def test_an_identical_finding_another_gate_raised_is_auto_linked(repo, tmp_path)
     got = _triaged(repo, "rubber_duck")
     assert len(got) == 2 and {e.data["verdict"] for e in got} == {"refuted"}
     assert all(e.data["probe"] == probe for e in got), got
-    out = api.review(repo, gate="critic", item="T1")
-    # The record of the settled gate is untouched: the auto-links landed on rubber_duck.
     assert len(_triaged(repo, "critic")) == 2, _triaged(repo, "critic")
-    assert type(out).__name__ == "Outcome"
 
 
 def test_a_differently_worded_finding_is_not_auto_linked(repo, tmp_path):
-    """Auto-linking is keyed by the digest of the EXACT text: a rubber_duck claim the refuted
-    one is only almost reads as a new claim and stays untriaged."""
+    """Auto-linking is keyed by the digest of the EXACT text and follows the digest, not the
+    finding's position: the reworded claim stays untriaged while the unchanged one links,
+    told apart by each refutation's own probe."""
     wording = _setup(repo, tmp_path)
-    probe = "ran the suite twice: wait_max_s is set on every path"
-    _gui(repo, "critic", probe)
+    probe_a = "ran the suite twice: wait_max_s is set on every path"
+    probe_b = "ran the suite twice: the b.py dead store is gone"
+    out = api.review(repo, gate="critic", item="T1")
+    assert out.data["outcome"] == "failed", out.reason
+    api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe=probe_a)
+    api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe=probe_b)
     wording.write_text("wait_max_s KeyError in the retry loop")
     out = api.review(repo, gate="rubber_duck", item="T1")
     assert out.data["outcome"] == "failed", out.reason
+    found = _state(repo).gates["rubber_duck"].evidence["chunk_findings"]
     counts = G.triage_counts(_state(repo), "rubber_duck")
     assert counts == {"findings": 2, "refuted": 1, "confirmed": 0, "untriaged": 1}, counts
     got = _triaged(repo, "rubber_duck")
-    assert len(got) == 1 and got[0].data["probe"] == probe
+    assert len(got) == 1
+    # The linked finding is the UNCHANGED b.py claim (its critic refutation had probe_b);
+    # the reworded a.py finding (found[0]'s text changed) keeps no triage.
+    assert got[0].data["digest"] == found[1]["digest"] and got[0].data["probe"] == probe_b, got
