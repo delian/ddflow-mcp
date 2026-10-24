@@ -32,16 +32,19 @@ Ask it anything about itself with `ddflow_help`, and ask what the rules are here
 Every ddflow schema a worker loads is first-turn context. For Claude Code, `ddflow adopt` writes the
 lean role definitions (`.claude/agents/ddflow-<role>.md`) and `.ddflow/local/worker-mcp.json` (git-ignored: it
 records this machine's launcher), the same server with `DDFLOW_MCP_TOOLS` set from `[mcp].worker_tools`
-(`core` by default). Two ways to start a worker, measured on haiku (lean-start-inherit.md):
+(`core` by default, and that is the file adopt writes). Start a worker with, measured on haiku
+(lean-start-inherit.md):
 
-    claude --agent ddflow-<role> --strict-mcp-config --mcp-config=.mcp.json    # 9.8K first turn (implementer)
-    claude --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json     # 25.9K, a worker with no role
+    claude --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json                       # 25.9K, no role
+    claude --agent ddflow-<role> --strict-mcp-config --mcp-config=.ddflow/local/worker-mcp.json # 10.7K to 17.8K
 
-A role definition paired with the core-tier worker config is WORSE (17.2K for the implementer), so pair it with the
-all-tier `.mcp.json`; the core-tier worker config is for a worker with no role. As is, with no flags, a session starts at 33.6K. Give the flag as `--mcp-config=FILE`: it
-is variadic, and a space lets it read the prompt as a config path. `--strict-mcp-config` leaves out every other
-MCP server (the claude.ai connectors cost ~8K deferred, ~150K with tool search off).
-`ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
+The second is 10.7K for the researcher, 11.9K for the reviewer and 17.8K for the implementer. As is, with
+no flags, a session starts at 34.0K. The definitions name every tool both ways (the flat names the `core`
+tier lists, the family names the `lean` profile lists, which the project's own `.mcp.json` runs unless
+`[mcp].tools` says otherwise), so they work on either. Give the flag as
+`--mcp-config=FILE`: it is variadic, and a space lets it read the prompt as a config path.
+`--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~8K deferred, ~150K
+with tool search off). `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
 A tier hides schemas, never tools: every tool stays callable by name.
 
 ## What to put in AGENTS.md / CLAUDE.md
