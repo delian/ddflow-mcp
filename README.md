@@ -5572,8 +5572,33 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=4f340319d134 -->
-<details><summary>All 123 MCP tools: 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=039ca3b598b7 -->
+**Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
+
+- `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
+- `families` (24 tools): every family beside the hot singles
+- `hot+families` (36 tools): the 12 most called direct tools as well
+- `core`, `standard` and `all`: the flat tiers, every tool by its own name
+
+**Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
+
+- `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
+- `ddflow_view` (14 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`)
+- `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
+- `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
+- `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
+- `ddflow_task` (11 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`)
+- `ddflow_memory` (10 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`)
+- `ddflow_bug` (4 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`)
+- `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
+- `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
+- `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
+- `ddflow_session` (4 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`)
+- `ddflow_lease` (5 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`)
+- `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
+- `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
+
+<details><summary>All 123 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
