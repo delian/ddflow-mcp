@@ -10,10 +10,11 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    whole mission: a phase, a bug batch or a wave. Each wave is one read of
    `ddflow next --json`: fan the ready set out to one task subagent per claimed item —
    mapping the `tier:fast|balanced|deep` hints to model choice — and after the merges land
-   (or park, in the PR flow) re-read `next` for the next wave. The loop ends when the
-   mission completes or blocks — everything has landed, or `next` is empty and names why
-   nothing can start — and mid-mission it stops ONLY where the question or approval flow
-   needs an operator answer: `AskUserQuestion`, an operator approval
+   (or park, in the PR flow) re-read `next` for the next wave. The loop ends only two
+   ways: the objective COMPLETES (everything landed) or it BLOCKS in a way only the
+   operator can clear. `next` empty while work is in flight is neither — a wait, not an
+   end (see 2). Mid-mission it stops ONLY where the question or approval flow needs an
+   operator answer: `AskUserQuestion`, an operator approval
    (`ddflow ... --approval request`), a policy decision, an un-settleable review finding.
    Waits are never stops: see 2. The wave position goes
    nowhere extra: ddflow's own committed event log and the leases recompute the true wave
