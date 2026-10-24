@@ -232,3 +232,26 @@ def test_a_t2_route_text_is_the_t2_one(log, cfg):
     canon = _canon(verb="gate.skip.failed_review", item="T1", target="critic")
     msg = C.operator_gate(log, cfg, canon).message
     assert "T3" not in msg and "ddflow approvals approve" in msg
+
+
+def test_a_layer_in_an_unsearchable_directory_fails_closed(log, tmp_path, repo):
+    import os
+
+    cfg = _cfg(tmp_path)
+    cfg.root = repo
+    d = repo / ".ddflow" / "local"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "config.toml").write_text("[approvals]\nforbid_chat_for_t3 = true\n")
+    os.chmod(d, 0)
+    try:
+        if os.access(d, os.X_OK):
+            pytest.skip("file permissions do not apply to this user")
+        assert not H.chat_t3(cfg)
+    finally:
+        os.chmod(d, 0o755)
+
+
+def test_a_missing_layer_is_simply_absent(log, tmp_path, repo):
+    cfg = _cfg(tmp_path)
+    cfg.root = repo / "nowhere"
+    assert H.chat_t3(cfg)
