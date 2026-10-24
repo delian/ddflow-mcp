@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "mcp.next_hints"
+new = "\"off\""
+why = "Whether a state-changing MCP result carries an advisory `next` field of up to 3 hints (400 bytes): what usually follows, from the result already computed. Off by default; `on` or 1 to 3 turns it on."
+impact = "additive"

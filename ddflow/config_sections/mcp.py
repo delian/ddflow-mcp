@@ -16,6 +16,8 @@ MCP_TOOL_TIERS = ("core", "standard", "all")
 #: What `[mcp].tools` accepts: the profiles of `surfaces/tools/profiles.py` (`auto` is the lean
 #: core unless the client table names another) and the flat tiers above.
 MCP_TOOL_CHOICES = ("auto", "lean", "families", "hot+families", *MCP_TOOL_TIERS)
+#: `[mcp].next_hints`: how many next-step hints a state-changing result may carry.
+MCP_NEXT_HINTS = ("off", "on", "1", "2", "3")
 #: `[mcp].output_schemas`.
 MCP_OUTPUT_SCHEMAS = ("off", "on")
 #: `[mcp].on_upgrade`.
@@ -49,6 +51,13 @@ class McpConfig:
         doc='Whether `tools/list` declares an `outputSchema` for every tool whose result is a JSON object of declared fields (not `show`, `decision_show` or `recall`, which answer one record or null, nor text), and a call returns that object also as `structuredContent` (not when it failed; MCP 2025-06-18 and later; an older client is served as with `off`). `off` (default): the result is the JSON text in the first content block only, and `tools/list` is as small as before. `on`: each object tool lists `{"type": "object", "properties": {"schema": {"const": "<tool>@<n>"}, <its declared fields>: {}}}` -- additive, nothing required -- and a bare-array tool lists its schema under `_meta["ddflow/outputSchema"]`, since an `outputSchema` must be an object. Costs about 16 KB more `tools/list` and every object result is sent twice (the text block and `structuredContent`). Every object result carries its `schema` tag either way. Read once at server start, so change it and restart the server.',
         choices=MCP_OUTPUT_SCHEMAS,
         strictest=("off", "no safety dimension; the smaller, unchanged tool list and result"),
+    )
+
+    next_hints: str = knob(
+        "off",
+        doc="Whether a state-changing MCP result carries an advisory `next` field: up to 3 hints (and 400 bytes) of `{tool, why, args_hint}` naming what usually follows, from the result already computed (a claim points at `gate status`; `gate status` at the first open gate by kind, and at `merge` only once every gate carries an outcome; `merge` at `complete`; `complete` at `next`; `bug found` at its fix task; `next` at claiming the first ready item). `off` (default: whether hints save wrong calls was not measured); `on` is 3; `1`, `2` or `3` cap the count. A hint names a tool the connection's profile lists (a family action on a family profile, dropped when the profile does not list it); `why` is a fixed sentence, never record text. Advisory: the tool it names still checks the world. Read once at server start.",
+        choices=MCP_NEXT_HINTS,
+        strictest=("off", "no safety dimension; the unchanged result"),
     )
 
     on_upgrade: str = knob(

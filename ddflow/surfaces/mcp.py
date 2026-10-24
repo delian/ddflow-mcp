@@ -49,6 +49,7 @@ from ..infra import harness_identity
 from ..infra import proc as PROC
 from ..infra.log import EventLog
 from ..infra.worktree import repo_root
+from . import mcp_next as _NEXT
 
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
 # this module routes between them. Every name below is re-exported so imports of
@@ -247,6 +248,31 @@ def _bounds() -> dict[str, Any]:
     return BOUNDS
 
 
+def _with_next(full: Any, out: Any, hint: Callable[[dict[str, Any]], list] | None) -> Any:
+    """``full`` plus the advisory ``next`` hints (`mcp_next`), derived from the outcome's own data
+    -- never a second query -- and only on a success that answered with an object."""
+    if hint is None or not isinstance(full, dict) or out.exit != OK or "next" in full:
+        return full  # a body that already has a `next` of its own keeps it
+    hints = hint(out.data)
+    return {**full, "next": hints} if hints else full
+
+
+def _text_with_next(
+    result: dict[str, Any], out: Any, hint: Callable[[dict[str, Any]], list] | None
+) -> dict[str, Any]:
+    """A text result (a document, not an object) carries the hints as a block ``next: [...]``
+    after the document, so its first block stays the document."""
+    if (
+        hint is not None
+        and out.exit == OK
+        and isinstance(out.data, dict)
+        and (hints := hint(out.data))
+    ):
+        text = "next: " + json.dumps(hints, separators=(",", ":"))
+        result["content"].append({"type": "text", "text": text})
+    return result
+
+
 def _outcome_result(
     out: Any,
     payload_key: str | tuple[str, ...] = "",
@@ -256,6 +282,7 @@ def _outcome_result(
     args: dict[str, Any] | None = None,
     command: str = "",
     structured: bool = False,
+    hint: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
@@ -313,7 +340,9 @@ def _outcome_result(
         # a failed call is the unavailable-as-success class with no text to hide behind.
         if not body.strip() and out.reason:
             body = out.reason
-        return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
+        return _text_with_next(
+            _text(body, error=(out.exit == 1), meta={"exit": out.exit}), out, hint
+        )
 
     full = _refusal_body(out, payload_key, out.body(payload_key))
     note = None
@@ -324,6 +353,7 @@ def _outcome_result(
     # The schema tag (D-compat-json-views): an object body names its schema, the same name
     # `--json` gives it (`render.emit_json`); an array or a scalar keeps its exact shape.
     full = _REGISTRY.tag_body(full, command)
+    full = _with_next(full, out, hint)
     # Compact: a model reads every byte of this and indentation is a quarter of it.
     body = json.dumps(full, separators=(",", ":"), default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
@@ -540,6 +570,8 @@ class Server:
             self.agent = harness_identity.own(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
+        #: `[mcp].next_hints`, read ONCE like the tier: 0 (off) or the most hints a result carries.
+        self._next_limit = _NEXT.resolve(self.repo)
         configured = resolve_tier(self.repo)
         #: `auto` waits for the client's name (the client table, `initialize`); until then, lean.
         self._tier_auto = configured == _PROFILES.AUTO
@@ -992,6 +1024,11 @@ class Server:
             command=_REGISTRY.command_name(name),
             structured=self._structured(call.modern)
             and "outputSchema" in _result_declaration(name, spec),
+            hint=(
+                (lambda body: _NEXT.hints(name, args, body, self.tier, limit=self._next_limit))
+                if self._next_limit
+                else None
+            ),
         )
         # The footer goes on LAST, after the reason block, so it never comes between
         # a caller and the answer it asked for — `content[0]` is still the body and

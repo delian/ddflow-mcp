@@ -141,6 +141,9 @@
 "ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = "worktree.stash_retry_pause_s"
 
 [exempt]
+"ddflow/surfaces/mcp_next.py:MAX_HINTS" = "the `next` field contract: at most 3 hints per result (research section 6), a token cap that a knob would only let one agent undo for all; `[mcp].next_hints` already picks 1 to 3"
+"ddflow/surfaces/mcp_next.py:MAX_BYTES" = "the `next` field contract: at most 400 bytes per result, the measured hint cost (research section 6); not a user tunable"
+"ddflow/surfaces/mcp_next.py:MAX_WHY" = "the `next` field contract: a `why` is one fixed clause of at most 80 characters; the templates in mcp_next.py are the content"
 "ddflow/mcpshim/clients.py:MAX_AGE_DAYS" = "how long an unverified `honours` row of the client table is trusted: a fixed window on the data's freshness (no caller can widen it), not a user tunable"
 "ddflow/mcpshim/probe_server.py:DEFAULT_DELAY_S" = "the default of the probe server's own --delay argument (how long delaybump waits before notifying); a test fixture's command-line default, set per run, outside ddflow's config"
 "ddflow/mcpshim/probe_server.py:SETTLE_S" = "a 20 ms pause that lets already-pipelined input reach the probe's log before it replies; a race mitigation inside a test fixture, not a tuning choice"
