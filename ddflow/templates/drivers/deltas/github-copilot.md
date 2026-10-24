@@ -8,7 +8,7 @@ Only the items below differ.
    **Copilot CLI** (the `copilot` command) and the **cloud coding agent**.
 2. **Iteration.** The CLI runs one request to completion; the cloud agent runs to a PR.
    Neither re-invokes itself, so the loop lives in **GitHub Actions**: a workflow step
-   (or the coding agent's own run) calls the ddflow workflow entry, and the wave is one
+   (or the coding agent's own run) calls the ddflow workflow, and the wave is one
    invocation — print `ddflow next` and `ddflow cadence` at the end of each turn as the
    handoff.
 3. **Subagents.** None with worktree isolation. The cloud coding agent already works in
