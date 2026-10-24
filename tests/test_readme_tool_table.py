@@ -137,3 +137,12 @@ def test_a_profile_is_a_bullet_not_a_table_row():
     for profile in P.PROFILES:
         mine = [line for line in lines if f"`{profile}` (" in line]
         assert mine and all(line.startswith("- ") for line in mine), (profile, mine)
+
+
+def test_every_alias_of_the_registry_is_listed_with_the_action_that_replaces_it():
+    from ddflow.surfaces.tools import aliases as A
+
+    block = TT.render()
+    for old, alias in A.ALIASES.items():
+        action = alias.new.split("action=", 1)[1]
+        assert f"`{action}` (was `{old}`)" in block, old
