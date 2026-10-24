@@ -20,9 +20,10 @@ from conftest import run_cli
 
 import ddflow.api.review as api
 from ddflow.config import Config
-from ddflow.core.model import fold
+from ddflow.core.model import Item, fold
 from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
+from ddflow.services import completion as CM
 from ddflow.services import review_exclude as REX
 
 
@@ -40,6 +41,15 @@ def test_excluded_outright_is_true_only_for_a_generated_only_change(tmp_path):
     assert REX.excluded_outright(cfg, Path(tmp_path), ["poetry.lock"])
     cfg.review.exclude_globs = []
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
+
+
+def test_the_generated_waiver_never_outlives_a_real_review(tmp_path):
+    """Once ANY reviewer gate really reviewed, the ordinary family rule governs again:
+    content was sent and judged, so the exclusion waiver turns off."""
+    cfg = Config()
+    it = Item(id="T1", kind="task", title="t", globs=["*"])
+    assert not CM.needs_independent_reviewer(it, cfg, ["uv.lock"], Path(tmp_path))
+    assert CM.needs_independent_reviewer(it, cfg, ["uv.lock"], Path(tmp_path), reviewed=True)
 
 
 def _setup_lock_only_change(repo: Path, tmp_path: Path, mixed: bool = False) -> Path:

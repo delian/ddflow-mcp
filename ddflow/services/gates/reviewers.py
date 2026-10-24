@@ -79,6 +79,19 @@ def reviewer_gates(gates: Mapping[str, GateDef] | None) -> list[str]:
     return [g for g, d in defs.items() if is_reviewer_gate(g, d)]
 
 
+def reviewer_ran(state: State, item_id: str, gates: Mapping[str, GateDef] | None) -> bool:
+    """Did ANY reviewer gate record an actual review (passed/failed/partial)? The
+    generated-class waiver of B-lockfile-only-item-cannot-complete may not excuse
+    independence once a review really ran: content WAS sent and judged, so the ordinary
+    cross-family rule governs it and the reviewer independence check stays on."""
+    recs = state.items[item_id].gates
+    for gate in reviewer_gates(gates):
+        rec = recs.get(gate)
+        if rec is not None and rec.outcome in ("passed", "failed", "partial"):
+            return True
+    return False
+
+
 def reviewer_independence(
     state: State,
     cfg: Config,
