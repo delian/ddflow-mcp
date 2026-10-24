@@ -92,7 +92,9 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
     fields = plan_edit(cfg, st, it, edit)
     if isinstance(fields, O.Outcome):
-        if not ((edit.landed is not None or edit.landed_paths is not None) and fields.exit == O.NOTHING):
+        if not (
+            (edit.landed is not None or edit.landed_paths is not None) and fields.exit == O.NOTHING
+        ):
             return fields
         fields = {}
     if edit.landed is not None or edit.landed_paths is not None:
