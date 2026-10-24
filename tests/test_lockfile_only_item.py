@@ -29,6 +29,9 @@ def test_excluded_outright_is_true_only_for_an_entirely_excluded_change(tmp_path
     assert not REX.excluded_outright(cfg, Path(tmp_path), [])
     cfg.review.exclude_globs = []
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
+    # the SAME inputs as the review that will run: an ad-hoc --exclude is what decides
+    assert REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"], exclude="*.pem")
+    assert not REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"])
 
 
 def _setup_lock_only_change(repo: Path, tmp_path: Path) -> Path:

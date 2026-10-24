@@ -81,15 +81,20 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
-def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
+def excluded_outright(
+    cfg: Any, repo: Path, paths: list[str], tags=None, exclude="", include_pinned=False
+) -> bool:
     """Would `[review]` exclusion drop EVERY path in ``paths``? True only for a non-empty
-    list: a change made entirely of excluded files (a lockfile-only dependency refresh)
-    has nothing a reviewer is ever sent, so the review gates record UNAVAILABLE naming
-    them and `complete` does not demand an independent reviewer (which would mean sending
-    content the project excluded) -- B-lockfile-only-item-cannot-complete."""
+    list, judged with the SAME inputs as the review that governs them (``tags``, an ad-hoc
+    ``exclude``, ``include_pinned`` -- for a plain `ddflow review` run those are the
+    defaults, and `apply` passes the run's own): a change made entirely of excluded files
+    (a lockfile-only dependency refresh) has nothing a reviewer is ever sent, so the
+    review gates record UNAVAILABLE naming them and `complete` does not demand an
+    independent reviewer (which would mean sending content the project excluded) --
+    B-lockfile-only-item-cannot-complete."""
     if not paths:
         return False
-    pats, pinned = patterns(cfg, repo)
+    pats, pinned = patterns(cfg, repo, tags, exclude, include_pinned)
     if not pats and not pinned:
         return False
     return all(_hit(p, pats, pinned) for p in paths)
