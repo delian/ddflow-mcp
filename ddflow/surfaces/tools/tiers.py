@@ -32,7 +32,9 @@ _LEGACY_CORE = frozenset(
         "decision_add session_start session_end session_note session_prompt identify "
         "task_add update wait review help pr_sync similar setup "
         # the contract's own tools (B7752a21d68): the charter's rule retrieval, the lean role
-        # definitions' release and triage
+        # definitions' release and triage. This is the flat `core` tier only: the default LEAN profile
+        # reaches rule through the `rule` family (profiles.py) and lists neither release nor triage
+        # (follow-up: role definitions and the charter must name tools per profile)
         "rule_show rule_search release review_triage"
     ).split()
 )
