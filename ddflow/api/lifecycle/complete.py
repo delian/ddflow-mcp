@@ -53,9 +53,12 @@ def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
     if found:
         return found, "session"
     # The declaration is the record, not its liveness (the review of this fix): a session
-    # ENDED before the completion (the driver's close step) still declared this model.
-    declared = [s for s in st.sessions.values() if s.agent == agent and s.model and s.ended_at]
-    return (max(declared, key=lambda s: s.started_at).model, "session") if declared else ("", "")
+    # ENDED before the completion (the driver's close step) still declared this model. The
+    # AGENT'S LATEST session speaks last, though: a later session with no model supersedes
+    # older declarations -- reaching past it would re-attribute a stale model.
+    own = [s for s in st.sessions.values() if s.agent == agent]
+    latest = max(own, key=lambda s: s.started_at).model if own else ""
+    return (latest, "session") if latest else ("", "")
 
 
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
