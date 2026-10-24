@@ -352,3 +352,44 @@ def test_a_read_only_log_does_not_read_a_snapshot_either(repo, parses):
 def test_the_snapshot_layout_is_the_event_dataclass_itself():
     e = _ev("a", 3)
     assert Event(*L._event_tuple(e)) == e
+
+
+def test_over_the_memory_ceiling_the_snapshot_is_still_written_and_reaps_next_time(repo, parses):
+    """3.1: one shard past `max_cached_events` used to suppress the WHOLE snapshot write.
+    The writer must decouple persisting from holding: the read returns the log either way,
+    the snapshot is still written (streamed, not held), the cache keeps at most the
+    ceiling, and a later cold read is served from that snapshot with zero JSONL parses."""
+    cfg = LogConfig(snapshot_min_events=10, max_cached_events=N + N // 2)
+    log = _log(repo, cfg)
+    _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
+    _put(log, "b", [_ev("b", i) for i in range(1, N + 1)])
+    assert len(log.read_all()) == 2 * N
+    path = _snap(log)
+    assert path.exists(), "past the ceiling the snapshot must still be written"
+    assert L._cached_events() <= cfg.max_cached_events
+    clear_parse_cache()
+    cold = _check(repo, _log(repo, cfg))
+    assert cold.parsed == 0, "a snapshot written past the ceiling did not serve the cold read"
+
+
+def test_over_the_ceiling_the_seeded_read_equals_the_full_read_and_rejects_a_torn_shard(
+    repo, parses
+):
+    """3.2: with the tail+prefix gates wired, past the ceiling read_all(snapshot=True)
+    folds byte-identically to read_all(snapshot=False), and a shard the gate doubts (the
+    snapshot claims MORE bytes than a truncation left) is never served from the snapshot
+    -- the fast path may only reject, never accept."""
+    cfg = LogConfig(snapshot_min_events=10, max_cached_events=N + N // 2)
+    log = _log(repo, cfg)
+    _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
+    _put(log, "b", [_ev("b", i) for i in range(1, N + 1)])
+    log.read_all(snapshot=True)
+    seeded = _log(repo, cfg).read_all(snapshot=True)
+    full = _log(repo, cfg).read_all(snapshot=False)
+    assert seeded == full, "the snapshot-gated read diverged from a parse of the bytes"
+    clear_parse_cache()
+    b = log.dir / "b.jsonl"
+    b.write_bytes(b"".join(b.read_bytes().splitlines(keepends=True)[: N // 2]))
+    clear_parse_cache()
+    got = _check(repo, _log(repo, cfg))
+    assert len(got.read_all()) == N + N // 2, "the snapshot resurrected a torn shard's tail"
