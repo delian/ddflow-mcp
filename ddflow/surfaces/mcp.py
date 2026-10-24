@@ -49,6 +49,7 @@ from ..infra import harness_identity
 from ..infra import proc as PROC
 from ..infra.log import EventLog
 from ..infra.worktree import repo_root
+from ..services import harnessreg as HR
 from . import mcp_next as _NEXT
 
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
@@ -567,7 +568,7 @@ class Server:
         if not agent:
             # A server restarted under the same harness keeps what the agent declared
             # there, or its shell (which still reads the record) and it would split.
-            self.agent = harness_identity.own(self.repo)
+            self.agent = harness_identity.own(self.repo, scope=HR.session_fingerprint(os.environ))
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
         #: `[mcp].next_hints`, read ONCE like the tier: 0 (off) or the most hints a result carries.
@@ -953,7 +954,9 @@ class Server:
         self.agent = want
         # The same agent's shell commands take it too (Bfad021e8d9).
 
-        shell = harness_identity.declare(self.repo, want)
+        shell = harness_identity.declare(
+            self.repo, want, scope=HR.session_fingerprint(os.environ)
+        )
         if want:
             detail = "declared on this connection" + (
                 f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"

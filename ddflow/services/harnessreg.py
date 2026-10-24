@@ -398,3 +398,20 @@ def detect(environ: Mapping[str, str]) -> str:
         if environ.get(var, "").strip()
     }
     return found.pop() if len(found) == 1 else ""
+
+
+def session_fingerprint(environ: Mapping[str, str]) -> str:
+    """One stable token for the harness session ``environ`` was started under: the claiming
+    harness's id and the first session variable that is set. "" when no session variable
+    is set -- sessions cannot be told apart there, so identity records stay untagged."""
+    token = next(
+        (
+            environ.get(var).strip()
+            for var in session_env_vars()
+            if environ.get(var, "").strip()
+        ),
+        "",
+    )
+    if not token:
+        return ""
+    return f"{detect(environ) or '-'}:{token}"
