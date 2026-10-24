@@ -18,7 +18,9 @@ def _not_a_person(kind: str, who: str, what: str) -> O.Outcome:
     return O.refused(
         kind,
         f"{what} is a person's act, and this call is an agent's ({who}). Run "
-        f"`ddflow {kind.replace('.', ' ')} ...` from your own terminal (ssh works).",
+        f"`ddflow {kind.replace('.', ' ')} ...` from your own terminal (ssh works), or answer in "
+        "the chat: the agent puts the request to them with `ddflow approvals ask ID` and "
+        "`ddflow approvals attest ID` records their answer.",
     )
 
 

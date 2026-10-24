@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
+from ...core.digest import content_digest
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
 from ...core.stuck import stuck_edges_to
+from ...services import approval as AP
 from ...services import ci as CI
 from ...services import cleanup as CL
 from ...services import completion as CM
@@ -21,6 +23,8 @@ from ...services import ledger as LG
 from ...services import phase_suite as PS
 from ...services import progress_line as PL
 from ...services import umbrella as UM
+from ...services.approvals import consume as CN
+from ...services.approvals.canon import Canon
 from ...services.export import refresh as RF
 from ...services.gates import failed_review as GO
 from .. import jobs as JB
@@ -38,7 +42,43 @@ def _session_model(st: State, agent: str) -> str:
     return L.open_session_model(st, agent)
 
 
-def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-only
+def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
+    """(force, event fields, refusal): an agent's `--approval` turns an unmet-conditions refusal
+    into a recorded override, never over a failed review gate and never for a person."""
+    if not (approval and not force and not hard and not v.may_complete):
+        return force, {}, None
+    ok, stamp, why = _approved_force(log, cfg, item, v.blockers, approval, agent)
+    if not ok:
+        return force, {}, O.refused("item.completed", why, forced=False, **base)
+    return True, {"approval": stamp}, None
+
+
+def _approved_force(log, cfg, item: str, blockers: list[str], approval: str, agent: str):
+    """(force, stamp, refusal) for an agent spending an operator's approval of overriding exactly
+    ``blockers`` on ``item`` (verb complete.force). Not filed on every refusal: `--approval request`."""
+    if not AP.agent_marker(agent):
+        return False, {}, "--approval is an agent's route; a person uses --force"
+    canon = Canon(
+        verb="complete.force", agent=log.agent_id, item=item,
+        state=content_digest("\n".join(sorted(blockers))),
+    )  # fmt: skip
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
+    return (
+        (True, decision.stamp, "") if decision.ok else (False, {}, "refusing: " + decision.message)
+    )
+
+
+def _ask_hint(agent: str) -> str:
+    """For an agent: how to have the operator override these in chat (it may not use --force)."""
+    if not AP.agent_marker(agent):
+        return ""
+    return (
+        "\nAn agent may not use --force; to ask the operator to override these in chat, re-run "
+        "with `--approval request`, then `--approval <id>` once they have answered."
+    )
+
+
+def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
@@ -51,8 +91,14 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
     mutation: dict[str, str] | None = None,
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
+    approval: str = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
+
+    ``approval`` (RA-consume-sites-3): an agent may not use `--force`, but it may spend an
+    operator's approval of exactly these unmet conditions (`--approval request` files the
+    request, the operator answers it in chat, `--approval ID` completes with the override
+    recorded and the approval's stamp). A failed review gate is never lifted this way either.
 
     The rule-set lives in `services.completion`. This decides only what to DO with the
     verdict, and records the override when one is taken — an unrecorded `--force` is a
@@ -131,6 +177,11 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
         "blockers": v.blockers,
         "bugs_closed": closed,
     }
+    force, stamp, denied = _override_by_approval(
+        log, cfg, item, v, hard, force, approval, agent, base
+    )
+    if denied is not None:
+        return denied
     if hard and force:
         return O.refused(
             "item.completed",
@@ -148,7 +199,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
             + (
                 "--force does not lift the review-gate blocker above."
                 if hard
-                else "--force overrides, and the override is recorded."
+                else "--force overrides, and the override is recorded." + _ask_hint(agent)
             ),
             forced=False,
             **base,
@@ -183,6 +234,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-
             "kind": it.kind,
             "forced": forced,
             "overridden": v.blockers if force else [],
+            **stamp,
             # Optional, like `changelog`: the sub-tasks a settled umbrella completed with.
             **({"umbrella": umbrella} if umbrella else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow

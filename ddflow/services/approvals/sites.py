@@ -47,6 +47,10 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/gates.py:record": 1,
     "ddflow/services/grants.py:_agent_approval": 1,
     "ddflow/api/chore.py:chore_approve": 1,
+    "ddflow/api/lifecycle/claim.py:_claim_by_approval": 1,
+    "ddflow/api/lifecycle/complete.py:_approved_force": 1,
+    "ddflow/api/lifecycle/complete.py:_ask_hint": 1,
+    "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
     "ddflow/services/export/select.py:_is_agent": 1,  # the wrapper
@@ -102,8 +106,8 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the recorded partial outcome (gate_accept digest)",
-        ("ddflow/services/approval.py:grant",),
-        "ddflow approve <id> <gate>",
+        ("ddflow/services/approval.py:grant", "ddflow/services/gate_accept.py:approve"),
+        "ddflow approve <id> <gate> --approval ID",
     ),
     Site(
         "chore.approve",
@@ -128,14 +132,30 @@ SITES: tuple[Site, ...] = (
         "A",
         T2,
         L1,
-        "the export document selection and its content digest",
+        "the agent-enabled documents still unacknowledged",
         (
             "ddflow/services/export/select.py:_is_agent",
-            "ddflow/services/export/select.py:enable",
-            "ddflow/services/export/select.py:disable",
             "ddflow/services/export/select.py:acknowledge",
         ),
-        "ddflow export ack ...",
+        "ddflow export ack --approval ID",
+    ),
+    Site(
+        "export.lock",
+        "A",
+        T2,
+        L1,
+        "the document being vetoed (an agent's disable --lock)",
+        ("ddflow/services/export/select.py:disable",),
+        "ddflow export disable <doc> --lock --approval ID",
+    ),
+    Site(
+        "export.unlock",
+        "A",
+        T2,
+        L1,
+        "the operator's lock on the document an agent enables again",
+        ("ddflow/services/export/select.py:enable",),
+        "ddflow export enable <doc> --approval ID",
     ),
     Site(
         "config.reviewer_command",
@@ -181,22 +201,53 @@ SITES: tuple[Site, ...] = (
         "C",
         T2,
         L1,
-        "the item and the other clone's live lease",
-        (),
-        "ddflow claim <id> --force --reason ...",
-        anchor=("ddflow/services/forbidden.py", "no force flags"),
+        "the item and who holds its lease (or that it is in review)",
+        ("ddflow/api/lifecycle/claim.py:_claim_by_approval",),
+        "ddflow claim <id> --approval request|ID",
     ),
     Site(
         "complete.force",
         "C",
         T2,
         L1,
-        "the item and its unmet completion conditions",
-        (),
-        "ddflow complete <id> --force ...",
-        anchor=("ddflow/services/forbidden.py", "no force flags"),
+        "the item and its unmet completion conditions (never a failed review gate)",
+        (
+            "ddflow/api/lifecycle/complete.py:_approved_force",
+            "ddflow/api/lifecycle/complete.py:_ask_hint",
+        ),
+        "ddflow complete <id> --approval request|ID",
     ),
 )
+
+#: Refusals that name only a terminal because the act is T3 (D-RA-4, D-RA-Q6): no chat route
+#: exists, by decision, and the reason says why. `tests/test_approvals_conformance.py` fails for a
+#: refusal that names a terminal, offers no approval route and is not listed here.
+#: Also T3 and not listed as a refusal text: the approval system's own configuration
+#: (`[approvals]`, `[agent].roles/actors`), signer pins and key rotation (no signer exists yet),
+#: `[hooks].forbidden_commands`, disabling hooks, company-layer floors.
+TERMINAL_ONLY: dict[str, str] = {
+    "ddflow/services/reviewer_trust.py:write": (
+        "T3: a command reviewer runs any program and can print any verdict, so only a person "
+        "adds one; over chat it would let whoever types into the session run code"
+    ),
+}
+
+#: Refusals NOT yet routed, honestly listed with the follow-up that routes them (not T3: the
+#: conformance test requires the reason to name its task, so this table only shrinks).
+NOT_YET_ROUTED: dict[str, str] = {
+    "ddflow/surfaces/declared/export.py:<module>": (
+        "NOT YET ROUTED (follow-up RA-consume-sites-4): `export --force` (override of hand-edit "
+        "protection) and the per-machine `--local` selection are still the operator's terminal acts; "
+        "the lock, the lock lift and the acknowledgement are routed (export.lock/unlock/ack)"
+    ),
+}
+
+#: Strings that mention a terminal without refusing anyone (input prompts, docs).
+NOT_A_REFUSAL: dict[str, str] = {
+    "ddflow/services/export/select.py:brief_line": "an operator-facing brief line: the operator is its reader",
+    "ddflow/surfaces/commands/knowledge.py:_session_text": "refuses to read prose from a tty, not an act",
+    "ddflow/services/help.py:<module>": "help text about the CLI as a surface",
+}
 
 BY_VERB = {s.verb: s for s in SITES}
 

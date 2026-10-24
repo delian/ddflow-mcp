@@ -137,3 +137,15 @@ def test_a_rule_never_approves_a_verb_that_needs_more_than_level_one(proj, monke
 
     canon = Canon(verb="config.reviewer_command", agent="bot", item="T1")
     assert not C.operator_gate(log, cfg, canon).ok
+
+
+def test_a_standing_rule_is_consulted_before_the_request_hint_of_a_no_auto_site(proj, monkeypatch):
+    log = EventLog(proj, "bot")
+    rule = PO.Rule("always_complete", "complete.force", "x", lambda it, target, c: True)
+    monkeypatch.setitem(PO.RULES, "always_complete", rule)
+    cfg = _cfg(policy=["always_complete"])
+    from ddflow.services.approvals.canon import Canon
+
+    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    assert C.operator_gate(log, cfg, canon, auto=False).ok  # not "re-run with --approval request"
+    assert not C.operator_gate(log, Config(), canon, auto=False).ok
