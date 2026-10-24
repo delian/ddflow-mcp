@@ -1453,16 +1453,23 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     if why:
         return kind, done, forced, diff, how, why, None
     diff, how, why = _pick_diff(repo, cfg, st, it, a, delta)
-    a["unchanged_delta"] = bool(delta and why) and why.startswith(_NOTHING_CHANGED)
     # Reported only for a round that will really run and count: an unchanged delta is
     # refused below, and saying "rounds used N+1" for it read as the round it burned.
-    if item and not a["unchanged_delta"]:
+    if item and not _flagged_unchanged_delta(a, why):
         say(_rounds_report(cfg, it, a, why_ok))
     rerun = None
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
+
+
+def _flagged_unchanged_delta(a: dict[str, Any], why: str) -> bool:
+    """Flagged when `why` is the delta's "nothing changed since the reviewed head" answer
+    (`_delta_scope`): the head covers the tip, so no round runs or counts, and
+    `_why_outcome` re-evaluates the gate instead of refusing (B10ad449deb)."""
+    a["unchanged_delta"] = bool(why) and why.startswith(_NOTHING_CHANGED)
+    return bool(a["unchanged_delta"])
 
 
 def _pick_diff(repo, cfg, st, it, a: dict[str, Any], delta: bool) -> tuple[str, str, str]:
