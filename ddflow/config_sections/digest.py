@@ -4,42 +4,31 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
-from ..core import clock
 from ._docs import declare, int_at_least, knob
 
 LADDER_STEPS = 2
+# `config` imports nothing from `core`, so the shape is checked here and the value is read
+# by `services/digest/entry.py` with `core.clock.parse_duration`.
+_DURATION = re.compile(r"(?:\d+(?:\.\d+)?[smhdw])+|\d+(?:\.\d+)?")
 
 
-def parse_ladder(text: str) -> tuple[float, float]:
-    """``"1h, 24h"`` as the two ages (seconds) after which an entry is `needs` and `urgent`."""
-    parts = [p.strip() for p in str(text).split(",") if p.strip()]
-    if len(parts) != LADDER_STEPS:
-        raise ValueError(
-            f"{text!r}: give two ages, e.g. '1h, 24h' (needs after the first, urgent after the second)"
-        )
-    first, second = (clock.parse_duration(p) for p in parts)
-    if not 0 <= first <= second:
-        raise ValueError(f"{text!r}: the first age must not exceed the second")
-    return first, second
+def _is_duration(text: str) -> bool:
+    return _DURATION.fullmatch(text.strip().lower().replace(" ", "")) is not None
 
 
 def _ladder_problem(value: Any) -> str:
-    try:
-        parse_ladder(value)
-    except (ValueError, TypeError) as exc:
-        return str(exc)
+    parts = [p.strip() for p in str(value).split(",") if p.strip()]
+    if len(parts) != LADDER_STEPS or not all(_is_duration(p) for p in parts):
+        return f"{value!r}: give two ages, e.g. '1h, 24h' (needs after the first, urgent after the second)"
     return ""
 
 
 def _age_problem(value: Any) -> str:
-    try:
-        seconds = clock.parse_duration(value)
-    except (ValueError, TypeError) as exc:
-        return str(exc)
-    return "" if seconds >= 0 else f"{value!r} is negative: a wait cannot be less than none"
+    return "" if _is_duration(str(value)) else f"{value!r} is not a duration such as 6h or 90m"
 
 
 @declare("digest")
