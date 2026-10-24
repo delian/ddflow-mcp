@@ -14,6 +14,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -55,7 +57,10 @@ def test_every_ddflow_tool_a_role_names_exists_and_none_is_an_operator_act():
     for role in ROLES:
         names = LA.ddflow_tools(role)
         assert names, role
-        assert set(names) <= set(TOOLS), sorted(set(names) - set(TOOLS))
+        from ddflow.surfaces.tools.families import FAMILIES
+
+        unknown = sorted(set(names) - set(TOOLS) - set(FAMILIES))
+        assert not unknown, unknown
         bad = {n for n in names if n.removeprefix("ddflow_") in NEVER}
         assert not bad, f"{role} is handed an operator tool: {sorted(bad)}"
 
@@ -73,7 +78,7 @@ def test_the_roles_are_narrowed_the_way_their_work_is():
 def test_the_body_is_a_charter_pointer_not_a_manual():
     for role in ROLES:
         body = LA.template_text(role).split("\n---\n", 1)[1]
-        assert len(body.encode()) <= 1000, (role, len(body.encode()))
+        assert len(body.encode()) <= 1200, (role, len(body.encode()))
         for must in ("ddflow_brief", "as_agent", "ask the operator", "unavailable"):
             assert must in body, (role, must)
 
@@ -170,3 +175,94 @@ def test_doctor_names_a_drifted_definition(repo):
     assert any("lean agent definitions differ" in n and FILES["reviewer"] in n for n in notes), (
         notes
     )
+
+
+def _allowed(role):
+    return set(LA.ddflow_tools(role))
+
+
+@pytest.mark.parametrize("profile", ["lean", "families", "hot+families"])
+@pytest.mark.parametrize("role", ROLES)
+def test_a_role_can_reach_what_its_work_needs_under_every_profile(role, profile):
+    """The default connection is the lean PROFILE: it lists family tools (`ddflow_gate`, ...), not the
+    flat names the first definitions allow-listed, so an implementer saw no gate or bug tool (bug
+    B07c4286c92). Every family that serves a tool the role names must be allowed wherever the profile
+    lists it."""
+    from ddflow.surfaces.tools import profiles as PR
+    from ddflow.surfaces.tools.families import placement
+
+    listed = set(PR.advertised_names(profile))
+    needed = {placement(t).family for t in LA.ddflow_tools(role) if t in TOOLS}
+    missing = sorted(f for f in needed if f in listed and f not in _allowed(role))
+    assert not missing, f"{role} on {profile}: listed family tools not allow-listed: {missing}"
+
+
+def test_the_family_names_a_role_allows_exist():
+    from ddflow.surfaces.tools.families import FAMILIES
+
+    for role in ROLES:
+        for name in LA.ddflow_tools(role):
+            assert name in TOOLS or name in FAMILIES, (role, name)
+
+
+def test_a_role_is_told_to_fall_back_to_the_cli_for_a_tool_its_profile_does_not_list():
+    for role in ROLES:
+        body = LA.template_text(role).split("\n---\n", 1)[1]
+        assert "not listed" in body and "`ddflow " in body, role
+
+
+def _stamp_head(text: str) -> str:
+    import re
+
+    return re.search(r"ddflow:begin agents/\S+ .*?head=(\w+)", text).group(1)
+
+
+def test_a_new_ddflow_refreshes_the_front_matter_it_wrote_and_keeps_one_the_operator_edited(repo):
+    """The tools list is front matter, outside the managed region: it must follow the template or a
+    ddflow upgrade never reaches an existing definition (bug B07c4286c92), yet a hand edit of it
+    (a `model:` line) is the operator's and survives."""
+    from ddflow.infra.fsio import Managed
+
+    run_cli(repo, "adopt", "--agents", "claude")
+    path = repo / FILES["reviewer"]
+    fresh = path.read_text()
+    assert _stamp_head(fresh), "the region records the digest of the front matter ddflow wrote"
+    # an older ddflow's file: other tools line, region stamped with that older head
+    from ddflow.core.digest import content_digest
+
+    head, _, _rest = fresh.partition("\n---\n")
+    old_head = head.replace("tools: ", "tools: Read, ", 1) + "\n---\n"
+    region = Managed("agents/ddflow-reviewer")
+    at = region._region().find(fresh)
+    body = fresh[at[1] : at[2]]
+    path.write_text(
+        old_head + region.render(body, extra=(("head", content_digest(old_head, length=12)),))
+    )
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0 and path.read_text() == fresh, "the unedited old front matter was refreshed"
+    # a hand edit of the front matter is kept
+    edited = fresh.replace("tools: ", "model: haiku\ntools: ", 1)
+    path.write_text(edited)
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0 and "model: haiku" in path.read_text(), (
+        "the operator's front matter edit survived"
+    )
+    assert "front matter edited by hand: kept" in out, out
+
+
+def test_a_definition_from_before_the_head_stamp_is_refreshed_and_the_old_one_kept_aside(repo):
+    from ddflow.infra.fsio import Managed
+
+    run_cli(repo, "adopt", "--agents", "claude")
+    path = repo / FILES["implementer"]
+    fresh = path.read_text()
+    head = fresh.partition("\n---\n")[0] + "\n---\n"
+    old_head = head.replace("tools: ", "tools: Read, ", 1)
+    region = Managed("agents/ddflow-implementer")
+    at = region._region().find(fresh)
+    path.write_text(old_head + region.render(fresh[at[1] : at[2]]))  # no head attribute
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0 and path.read_text() == fresh
+    aside = path.with_name(path.name + ".local-edits")
+    assert aside.is_file() and "tools: Read, " in aside.read_text(), out
+    assert f"the previous file is kept in {aside.name}" in out, out
