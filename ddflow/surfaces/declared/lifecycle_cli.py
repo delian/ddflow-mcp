@@ -389,6 +389,8 @@ def claim_text(out, a, ctx) -> str:
 COMPLETE_BODY = (
     "id",
     "sha",
+    "author_model",
+    "model_source",
     "independence",
     "forced",
     "coverage_gaps",
@@ -412,6 +414,10 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
         yield f"bug {bid} closed"
     if out.exit != OK:
         return
+    if out.data.get("author_model") and out.data.get("model_source"):
+        # Say where the judged author model came from (B-complete-requires-model-even-when-recorded).
+        where = "--model" if out.data["model_source"] == "flag" else "the agent's open session"
+        yield f"author model: {out.data['author_model']} (from {where})"
     if out.data.get("export_refresh"):
         yield f"  {out.data['export_refresh']['summary']}"
     for up in out.data.get("umbrellas_completed", []):

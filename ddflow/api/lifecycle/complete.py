@@ -144,7 +144,14 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
-    model = model or _session_model(st, log.agent_id)
+    # Where the judged model came from is said out loud and recorded (only the source,
+    # not the id: the session record already carries it, and DX-author-family keeps
+    # model ids out of the repository artefacts) -- B-complete-requires-model-even-when-recorded.
+    if model:
+        model_source = "flag"
+    else:
+        model = _session_model(st, log.agent_id)
+        model_source = "session" if model else ""
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
@@ -166,6 +173,8 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
+        "author_model": model,
+        "model_source": model_source,
         "independence": v.independence,
         # BOTH surfaces, always. This used to print only in human mode, so an agent over
         # MCP -- which is always JSON -- completed the item and was never told a gate had
@@ -237,6 +246,10 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             **stamp,
             # Optional, like `changelog`: the sub-tasks a settled umbrella completed with.
             **({"umbrella": umbrella} if umbrella else {}),
+            # Optional (B-complete-requires-model-even-when-recorded): where the author
+            # model was judged from -- --model, or the agent's open session. The id
+            # itself is not duplicated here: the session.started event carries it.
+            **({"model_source": model_source} if model_source else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
