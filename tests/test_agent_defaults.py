@@ -205,7 +205,8 @@ def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo,
     assert code == 0, out + err
     sid = json.loads(out)["session"]
     _ready_to_complete(repo, monkeypatch, "impl")
-    run_cli(repo, "session", "end", sid, agent="impl")
+    code, out, err = run_cli(repo, "session", "end", sid, agent="impl")
+    assert code == 0, out + err
 
     code, out, err = run_cli(repo, "--json", "complete", "T2")
     assert code == 0, out + err
