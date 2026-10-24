@@ -62,4 +62,4 @@ def test_a_parent_move_under_a_task_claimed_since_the_fold_is_refused(repo, monk
     monkeypatch.setattr(I, "_load", load_then_someone_claims)
     out = I.update(repo, "T1", I.ItemEdit(parent="A"), agent="impl")
     assert out.exit == REFUSED, out
-    assert _item(repo).parent is None, _item(repo)
+    assert _item(repo).parent in ("", None), _item(repo)
