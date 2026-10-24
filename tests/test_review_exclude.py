@@ -109,7 +109,8 @@ def test_only_excluded_files_changed_records_unavailable_naming_them(repo, tmp_p
     (repo / "x.py").unlink()
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2 and "excluded file(s)" in out.reason
-    assert "GENERATED_MARK" not in seen.read_text()
+    sent = seen.read_text() if seen.exists() else ""
+    assert "GENERATED_MARK" not in sent
 
 
 def test_a_rename_out_of_an_excluded_tree_keeps_its_new_side():
