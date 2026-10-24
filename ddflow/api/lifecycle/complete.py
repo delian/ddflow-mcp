@@ -43,19 +43,17 @@ def _session_model(st: State, agent: str) -> str:
 
 
 def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
-    """(model, source) the completion judges reviewer independence against: the `--model`
-    flag, else the model the agent declared at `session start --model` under its identity,
-    else ""/"" -- said out loud so the provenance is on the record (only the SOURCE on the
-    durable event, not the id: the session record carries it, and DX-author-family keeps
-    model ids out of the repository artefacts) -- B-complete-requires-model-even-when-recorded."""
+    """(model, source) judged against for reviewer independence: `--model`, else the model
+    the agent declared at `session start` under its identity. The provenance is said out
+    loud and recorded -- only the SOURCE on the durable event, never the id (the session
+    record carries it) -- B-complete-requires-model-even-when-recorded."""
     if model:
         return model, "flag"
     found = _session_model(st, agent)
     if found:
         return found, "session"
-    # The declaration is the record, not its liveness (the review of this fix): an agent
-    # that ENDED its session (the driver's close step) before completing still declared
-    # this model under its identity.
+    # The declaration is the record, not its liveness (the review of this fix): a session
+    # ENDED before the completion (the driver's close step) still declared this model.
     declared = [s for s in st.sessions.values() if s.agent == agent and s.model and s.ended_at]
     return (max(declared, key=lambda s: s.started_at).model, "session") if declared else ("", "")
 
