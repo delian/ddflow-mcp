@@ -28,7 +28,7 @@ both spellings and the tables hold the re-measured numbers; the earlier ones are
 | V13 | V12 with `ENABLE_TOOL_SEARCH=false` | 52.7K |
 | V8 | V1 with `ENABLE_TOOL_SEARCH=false` | 55.7K |
 
-- ddflow's names cost 1.4K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
+- ddflow's lean-profile names cost 1.8K deferred (V12 against V10); the claude.ai connectors cost 8.0K deferred (V0 against
   V12) and ~150K undeferred (V7 against V13). `--strict-mcp-config` removes them: 8.0K saved with tool search on.
 - Turning tool search off also inlines Claude Code's own built-in tool schemas (V17 39.6K against V10 24.2K), so
   ddflow's own undeferred cost is read against V17: the lean profile 13.1K (V13 against V17), the core tier 16.1K

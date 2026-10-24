@@ -87,7 +87,8 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
     decides whether the host defers tool schemas at all. Numbers: docs/ddflow/research/lean-start-inherit.md."""
     return (
         f"lane workers: `claude --strict-mcp-config --mcp-config={rel}` starts ddflow on the `{tier}` tier "
-        "and no other MCP server (the user's connectors cost ~8K more): 25.9K first turn with no role. "
+        "and no other MCP server (the user's connectors cost ~8K more): 25.9K first turn with no role, "
+        "measured on the core tier. "
         f"With a role definition add it: `claude --agent ddflow-<role> --strict-mcp-config --mcp-config={rel}` "
         "measured 10.7K for the researcher, 11.9K for the reviewer and 17.8K for the implementer on the "
         "core tier. Claude Code defers tool schemas on its own; `ENABLE_TOOL_SEARCH=false` (or a high "
