@@ -9,6 +9,7 @@ recorded with who approved, by which channel and level, and the digest.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -56,9 +57,9 @@ def _approve(repo, ask_id):
 
 
 def _refusal_id(err: str) -> str:
-    word = err.split("approval ", 1)[1].split(maxsplit=1)[0]
-    assert word.startswith("Q"), err
-    return word
+    found = re.search(r"approval (Q[0-9a-f]+)", err)
+    assert found, err
+    return found.group(1)
 
 
 def _skipped(repo, item="T1") -> dict | None:

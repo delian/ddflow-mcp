@@ -41,7 +41,9 @@ def refusal(why: str) -> str:
     """The one refusal of an approval asked for under an agent identity."""
     return (
         f"refusing: approving is a person's act, and this command runs under an agent "
-        f"identity ({why}). Run it from your own terminal."
+        f"identity ({why}). Run it from your own terminal, or ask the operator over chat: where the "
+        "command takes `--approval`, re-run it with `--approval request` (or the refusal names "
+        "the request id) and the operator answers in chat."
     )
 
 

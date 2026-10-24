@@ -203,8 +203,24 @@ COMMANDS: tuple[Command, ...] = (
                 help="Break a contended, idle lease (work kept).",
                 cli_help="break a contended lease idle for [lease].hold_max_s (its work is kept)",
             ),
+            Param(
+                "approval",
+                help="An agent's way past a refusal --force would override: 'request' asks the operator, then the approval id they answered.",
+                cli_help="an agent: 'request' files an approval request for taking the item over a refusal --force would override (the operator answers in chat), then the approval id",
+                default="",
+            ),
         ),
-        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "break", "force"),
+        tool_order=(
+            "id",
+            "globs",
+            "note",
+            "no_worktree",
+            "resources",
+            "queue",
+            "break",
+            "force",
+            "approval",
+        ),
     ),
     Command(
         path=("heartbeat",),
@@ -365,6 +381,10 @@ COMMANDS: tuple[Command, ...] = (
             Param("note", help="what you looked at, for the record"),
             Param("reject", type="boolean", help="refuse it; --reason required"),
             Param("reason", help="why it was rejected — a 'no' nobody can act on is a stall"),
+            Param(
+                "approval",
+                help="an agent: the id of the operator's approval of exactly this acceptance (a refusal files the request and names it)",
+            ),
         ),
     ),
     Command(
@@ -701,6 +721,7 @@ COMMANDS: tuple[Command, ...] = (
             called_from=called_from,
             shell_cwd=shell_cwd,
             agent=agent,
+            approval=a.get("approval", "") or "",
         ),
         payload=(
             "id",
@@ -741,6 +762,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
+                "approval",
+                help="An agent's way past unmet conditions: 'request' asks the operator, then the approval id they answered.",
+                cli_help="an agent: 'request' files an approval request for overriding the unmet conditions (the operator answers in chat), then the approval id; a failed review gate is never lifted",
+                default="",
+            ),
+            Param(
                 "changelog",
                 help="Optional 'Added|Changed|Deprecated|Removed|Fixed|Security: text', or skip.",
                 cli_help="'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip / internal to keep it out of the changelog; optional",
@@ -755,7 +782,16 @@ COMMANDS: tuple[Command, ...] = (
             ),
             *MUTATION_PARAMS,
         ),
-        tool_order=("id", "sha", "model", "changelog", "regression_test", *MUTATION_ORDER, "force"),
+        tool_order=(
+            "id",
+            "sha",
+            "model",
+            "changelog",
+            "regression_test",
+            *MUTATION_ORDER,
+            "force",
+            "approval",
+        ),
     ),
     Command(
         path=("abandon",),

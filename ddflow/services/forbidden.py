@@ -67,7 +67,8 @@ _FLAG_INSTEAD = (
 #: needs no config edit: the operator runs the exact line, which the hook does not guard.
 _OPERATOR_FORCE = (
     "report the exact command line to them; they run it from their own terminal (the hook "
-    "guards agents' Bash only)"
+    "guards agents' Bash only). For `complete` and `claim` there is a chat route that needs no "
+    "--force: re-run with `--approval request`, the operator answers in chat, then `--approval <id>`"
 )
 
 

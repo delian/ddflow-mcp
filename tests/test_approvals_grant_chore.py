@@ -8,6 +8,7 @@ recorded as the approver's with the stamp (`proxy`) naming the ask. Nothing else
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -42,9 +43,9 @@ def _state(repo):
 
 
 def _ask_id(err: str) -> str:
-    word = err.split("approval ", 1)[1].split(maxsplit=1)[0]
-    assert word.startswith("Q"), err
-    return word
+    found = re.search(r"approval (Q[0-9a-f]+)", err)
+    assert found, err
+    return found.group(1)
 
 
 def _approve(repo, ask_id):
