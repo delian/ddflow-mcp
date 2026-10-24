@@ -199,7 +199,9 @@ def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo,
     """The declaration is the record, not its liveness: an agent that ended its session
     (the driver's close step) still declared this model under its identity."""
     _queue(repo)
-    code, out, err = run_cli(repo, "--json", "session", "start", "--model", "claude-opus", agent="impl")
+    code, out, err = run_cli(
+        repo, "--json", "session", "start", "--model", "claude-opus", agent="impl"
+    )
     assert code == 0, out + err
     sid = json.loads(out)["session"]
     _ready_to_complete(repo, monkeypatch, "impl")
