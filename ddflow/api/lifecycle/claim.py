@@ -33,7 +33,7 @@ from .._base import _load
 from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_choice import _bug_default, _tree_choice, _widened
-from .claim_line import _join_line, _leave_line
+from .claim_line import _blocking_items, _join_line, _leave_line, _prior_lease, _with_notes
 from .planning import alternatives_offer
 
 
@@ -569,13 +569,6 @@ def _refused_early(
     return _with_notes(early, notes)
 
 
-def _with_notes(out: O.Outcome, notes: list) -> O.Outcome:
-    """What claim guards want said about a claim that went ahead, on its answer."""
-    if notes:
-        out.data["claim_notes"] = [n.as_dict() for n in notes]
-    return out
-
-
 def _early_refusal(
     repo: Path, cfg, events, st, item: str, want, me: str, *, force: bool, held_before: bool
 ) -> tuple[O.Outcome | None, list]:
@@ -585,22 +578,3 @@ def _early_refusal(
     return GD.run(
         GD.ClaimContext(repo, cfg, events, st, item, want, me, force=force, held_before=held_before)
     )
-
-
-def _prior_lease(st, cfg, item: str, me: str):
-    """(the item's lease as folded, whether it is a LIVE one of ``me``'s). A holder
-    re-claiming its own live lease only renews it."""
-    it = st.items.get(item)
-    prior = it.lease if it is not None else None
-    live = bool(prior and prior.holder == me and prior.live(time.time(), cfg.lease.grace_s))
-    return prior, live
-
-
-def _blocking_items(st, cfg, item: str, want, me: str) -> list[str]:
-    """The held items a refused claim of ``item`` is waiting behind: what `waiters` names."""
-    it = st.items.get(item)
-    if it is None:
-        return [item]
-    now = time.time()
-    clash = L.glob_clash(st, cfg, it, me, list(want if want is not None else it.globs), now)
-    return [clash[0]] if clash else [item]
