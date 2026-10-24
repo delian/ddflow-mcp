@@ -49,7 +49,9 @@ def test_metrics_never_imports_gates():
             if not isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
             for hit in _gate_imports(f, node):
-                offenders.append(f"{f.relative_to(PKG)}:{node.lineno} ({hit.removesuffix('.py').rstrip('/')})")
+                offenders.append(
+                    f"{f.relative_to(PKG)}:{node.lineno} ({hit.removesuffix('.py').rstrip('/')})"
+                )
     assert not offenders, f"metrics never imports gates: {offenders}"
 
 
