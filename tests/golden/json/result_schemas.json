@@ -240,6 +240,8 @@
   "payload": [
    "id",
    "sha",
+   "author_model",
+   "model_source",
    "independence",
    "forced",
    "coverage_gaps",
@@ -260,6 +262,8 @@
     },
     "id": {},
     "sha": {},
+    "author_model": {},
+    "model_source": {},
     "independence": {},
     "forced": {},
     "coverage_gaps": {},
