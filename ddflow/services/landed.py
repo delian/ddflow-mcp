@@ -21,6 +21,7 @@ from ..core.clock import epoch, iso_at
 from ..core.globs import inside
 from ..infra import worktree as W
 from . import changes as CH
+from .shared_files import _inside
 
 
 def _touches(item, paths: list[str] | None) -> bool:
@@ -134,7 +135,7 @@ def check_paths(repo: Path, item, before: str, after: str, paths: list[str]) -> 
     globs (a restriction it never declared could hide code the commit carried), and the
     range changing something inside the restriction (a landing that holds none of the
     item's work on those paths is no evidence for it)."""
-    escaped = [p for p in paths if not _touches(item, [p])]
+    escaped = [p for p in paths if not any(_inside(p, g) for g in item.globs)]
     if escaped:
         return f"the path restriction escapes the declared globs: {', '.join(escaped)}" + (
             f" (declared: {', '.join(item.globs)})" if item.globs else " (the item declares none)"

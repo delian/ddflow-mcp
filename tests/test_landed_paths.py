@@ -115,7 +115,24 @@ def test_a_restriction_without_a_landing_is_refused(repo):
     run_cli(repo, "task", "add", "T1", "--title", "decision doc", "--globs", "docs/**")
     code, out, err = run_cli(repo, "update", "T1", "--landed-paths", "docs/**", agent="a1")
     assert code != 0
-    assert "landed" in out + err
+    # NOT the argparse "unrecognized arguments" text: the unfixed code satisfies that too,
+    # so the assertion names the actual validation (review finding, gate rubber_duck).
+    assert "needs a landing" in out + err
+
+
+def test_a_restriction_wider_than_the_declared_globs_is_refused(repo):
+    """A wider restriction must not be accepted just because its pattern STRING sits inside
+    a declared glob: `docs/foo/**` names files `docs/foo/*` does not (review finding)."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "note", "--globs", "docs/foo/*")
+    (repo / "docs" / "foo").mkdir(parents=True)
+    (repo / "docs" / "foo" / "note.md").write_text("n\n")
+    sha = _commit(repo, "landing")
+    code, out, err = run_cli(
+        repo, "update", "T1", "--landed", sha, "--landed-paths", "docs/foo/**", agent="a1"
+    )
+    assert code != 0
+    assert "escapes the declared globs" in out + err
 
 
 def test_a_restriction_the_range_does_not_touch_is_refused(repo):
