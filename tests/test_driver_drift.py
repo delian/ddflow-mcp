@@ -128,5 +128,7 @@ def test_claude_delta_carries_the_goal_wave_contract():
     ).read_text()
     assert "ddflow next --json" in text, "the claude delta does not read the wave"
     assert "tier:fast|balanced|deep" in text, "the claude delta does not map tier hints"
-    assert "Stop ONLY" in text, "the claude delta does not gate stops on the operator"
+    assert "ONLY where the question or approval flow" in text, (
+        "the claude delta does not gate stops on the operator"
+    )
     assert "event log" in text, "the claude delta does not recover the wave position"
