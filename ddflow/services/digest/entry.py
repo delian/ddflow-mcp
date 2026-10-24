@@ -15,7 +15,7 @@ from typing import Any
 from ...config_sections.digest import parse_ladder
 from ...core import clock
 from ...core.health import KINDS as HK
-from ...core.model import ABANDONED, DONE, State
+from ...core.model import State
 from ..redact_report import redact_secrets
 from .sources import SEVERITIES, by_kind
 
@@ -108,7 +108,7 @@ def dependants(st: State, roots: Iterable[str]) -> set[str]:
     while grew:
         grew = False
         for it in st.items.values():
-            if it.id in found or it.id in wanted or it.removed or it.state in (DONE, ABANDONED):
+            if it.id in found or it.id in wanted or it.removed or it.terminal:
                 continue
             if any(n in wanted or n in found for n in it.needs):
                 found.add(it.id)

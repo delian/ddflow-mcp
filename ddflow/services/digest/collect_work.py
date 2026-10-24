@@ -11,7 +11,7 @@ import re
 
 from ...core import clock
 from ...core import progress as PR
-from ...core.model import ABANDONED, DONE, OPEN, State
+from ...core.model import DONE, OPEN, State
 from ..gates import outcomes as GO
 from . import entry as N
 
@@ -29,7 +29,7 @@ def _live(st: State):
 
 
 def _is_open(it) -> bool:
-    return it.state not in (DONE, ABANDONED)
+    return not it.terminal
 
 
 def collect_decide(st, cfg, now, facts):
