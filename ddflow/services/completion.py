@@ -509,15 +509,16 @@ def changed_paths(repo: Path, it) -> list[str] | None:
     """The paths the item changed: what landed (`landed_before..landed_after`), or before
     it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\". A landing restricted to the item's own
     paths (`update --landed-paths`, B738d7bbeab) reports only the range's changed files
-    inside those, never the whole commit's."""
+    inside those, never the whole commit's (an empty restriction fails closed)."""
 
     if it.landed_before and it.landed_after:
         paths = CH.changed_paths(
             repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
         )
         if it.landed_paths and paths is not None:
-            restricted = [p for p in paths if any(inside(p, g) for g in it.landed_paths)]
-            return sorted(restricted) or paths
+            # Never the whole commit's: an empty restriction fails closed (empty is not
+            # docs-only), which is exactly a range that stopped holding the item's work.
+            return sorted(p for p in paths if any(inside(p, g) for g in it.landed_paths))
         return paths
     base = it.base or W.default_branch(repo)
     found, may_cite = _unlanded_paths(repo, it, base)
