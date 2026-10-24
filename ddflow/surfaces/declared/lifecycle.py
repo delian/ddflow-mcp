@@ -726,6 +726,8 @@ COMMANDS: tuple[Command, ...] = (
         payload=(
             "id",
             "sha",
+            "author_model",
+            "model_source",
             "independence",
             "forced",
             "coverage_gaps",
