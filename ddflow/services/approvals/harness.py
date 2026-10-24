@@ -56,9 +56,9 @@ def _forbidden(cfg: Config) -> bool:
         return False
     for layer in LAYERS:
         path = layer_path(cfg.root, layer)
-        if not path.is_file():
-            continue
         try:
+            if not path.is_file():
+                continue
             data = read_toml(path)
         except (OSError, ValueError):
             return True  # a layer that exists and cannot be read may be the one that forbids: fail closed
