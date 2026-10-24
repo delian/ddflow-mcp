@@ -55,10 +55,13 @@ def _forbidden(cfg: Config) -> bool:
     if cfg.root is None:
         return False
     for layer in LAYERS:
+        path = layer_path(cfg.root, layer)
+        if not path.is_file():
+            continue
         try:
-            data = read_toml(layer_path(cfg.root, layer))
+            data = read_toml(path)
         except (OSError, ValueError):
-            continue  # an unreadable layer is read as silent; the merged config load already warned
+            return True  # a layer that exists and cannot be read may be the one that forbids: fail closed
         if (data.get("approvals") or {}).get("forbid_chat_for_t3") is True:
             return True
     return False

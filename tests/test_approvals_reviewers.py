@@ -88,7 +88,7 @@ def test_a_command_reviewer_is_not_approved_over_chat_without_the_opt_in(proj):
     path = _file(proj)
     path.write_text(path.read_text() + "\n" + cmd)
     code, _o, err = run_cli(proj, "reviewers", "approve", "prog", agent="bot")
-    assert code == 3 and "tier T3" in err and "accept_chat_for_t3" in err
+    assert code == 3 and "tier T3" in err and "not approvable over chat" in err
     (ask,) = asks_of(_state(proj)).values()  # the T3 request is filed, and cannot be answered over chat
     assert ask["min_level"] == 4
     code, _o, err = run_cli(proj, "approvals", "attest", ask["id"], agent="bot")
