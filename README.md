@@ -5572,8 +5572,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=ea749069cd44 -->
-<details><summary>All 123 MCP tools: 36 in the `core` tier, 45 more in `standard`, 42 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=4f340319d134 -->
+<details><summary>All 123 MCP tools: 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5624,7 +5624,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_job_list` | all | Long-running jobs and their LIVE status: running, exited (with the exit code its log recorded), gone… |
 | Doing the work | `ddflow_job_run` | all | Launch a LONG-RUNNING command for an item (a training run, a data generation, a model server) detached into… |
 | Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and for everything that may not, the reason. |
-| Doing the work | `ddflow_release` | core | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
+| Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Doing the work | `ddflow_sync` | standard | Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with… |
@@ -5637,7 +5637,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Gates and review | `ddflow_gate_verify` | core | Break what a gate guards and require it to NOTICE: applies each mutation registered on the gate, runs it… |
 | Gates and review | `ddflow_pins` | all | BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its… |
 | Gates and review | `ddflow_review` | core | Run the configured cross-family reviewer over an item's diff and record the result: the critic gate… |
-| Gates and review | `ddflow_review_triage` | core | Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that… |
+| Gates and review | `ddflow_review_triage` | standard | Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that… |
 | Gates and review | `ddflow_reviewers_detect` | all | Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp… |
 | Gates and review | `ddflow_reviewers_list` | standard | Show the configured reviewers, their families and which gates they serve. |
 | Gates and review | `ddflow_tests` | standard | AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly… |
