@@ -233,6 +233,21 @@ def test_a_later_session_with_no_model_does_not_resurrect_an_older_declaration(r
     assert "pass `--model <author model>`" in out + err, out + err
 
 
+def test_the_latest_session_speaks_last_even_over_an_older_open_one(repo, monkeypatch):
+    """The critic's case: an older session with a model stays OPEN while a newer session
+    declared no model -- the newest declaration, empty or not, is what the agent says now."""
+    _queue(repo)
+    code, out, err = run_cli(repo, "session", "start", "--model", "claude-opus", agent="impl")
+    assert code == 0, out + err
+    code, out, err = run_cli(repo, "--json", "session", "start", agent="impl")
+    assert code == 0, out + err
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "complete", "T2")
+    assert code == 3, out + err
+    assert "pass `--model <author model>`" in out + err, out + err
+
+
 def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
     _queue(repo)
     _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
