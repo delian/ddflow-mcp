@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..config_sections.review import GENERATED_EXCLUDE_DEFAULTS
 from ..core import globs, unidiff
 from . import pins
 
@@ -81,23 +82,26 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
-def excluded_outright(
-    cfg: Any, repo: Path, paths: list[str], tags=None, exclude="", include_pinned=False
-) -> bool:
-    """Would `[review]` exclusion drop EVERY path in ``paths``? True only for a non-empty
-    list, judged with the SAME inputs as the review that governs them (``tags``, an ad-hoc
-    ``exclude``, ``include_pinned`` -- for a plain `ddflow review` run those are the
-    defaults, and `apply` passes the run's own): a change made entirely of excluded files
-    (a lockfile-only dependency refresh) has nothing a reviewer is ever sent, so the
-    review gates record UNAVAILABLE naming them and `complete` does not demand an
-    independent reviewer (which would mean sending content the project excluded) --
-    B-lockfile-only-item-cannot-complete."""
+def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
+    """Does ``paths`` (non-empty) hold content a reviewer is NEVER sent, and is THAT
+    exclusion the GENERATED class? True only when every path matches the shipped
+    generated patterns (`GENERATED_EXCLUDE_DEFAULTS` -- lockfiles, golden snapshots,
+    transcripts: the default `[review].exclude_globs`) AND the exclusion as configured
+    still drops each of them. A project's OWN pattern (a privacy exclusion like `*.pem`)
+    that also swallows the whole diff is deliberately NOT the class: hiding content from
+    reviewers never waives the reviewer-independence rule. True is the lockfile-only
+    dependency refresh whose reviews record UNAVAILABLE and whose completion needs no
+    cross-family reviewer (B-lockfile-only-item-cannot-complete)."""
     if not paths:
         return False
-    pats, pinned = patterns(cfg, repo, tags, exclude, include_pinned)
-    if not pats and not pinned:
+    generated = all(
+        any(globs.match(p, g, bare_any_depth=True) for g in GENERATED_EXCLUDE_DEFAULTS)
+        for p in paths
+    )
+    if not generated:
         return False
-    return all(_hit(p, pats, pinned) for p in paths)
+    pats, pinned = patterns(cfg, repo)
+    return bool(pats or pinned) and all(_hit(p, pats, pinned) for p in paths)
 
 
 def filter_diff(
