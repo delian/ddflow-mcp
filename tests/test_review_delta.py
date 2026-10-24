@@ -209,7 +209,9 @@ def test_nothing_changed_since_the_reviewed_head_counts_no_round_and_names_full(
     _review(repo)
     calls = _calls(seen)
     out = _review(repo)
-    assert out.exit == REFUSED and "nothing changed" in out.reason and "--full" in out.reason, out.reason
+    assert out.exit == REFUSED and "nothing changed" in out.reason and "--full" in out.reason, (
+        out.reason
+    )
     assert "No round was counted" in out.reason and _calls(seen) == calls
 
 
