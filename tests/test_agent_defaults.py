@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
 from helpers import rpc_call as _call
 
+from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server
 
 
@@ -166,7 +167,42 @@ def test_complete_explicit_model_wins_over_the_session(repo, monkeypatch):
     assert code == 0, out + err
 
 
-def test_mcp_complete_defaults_from_the_session_started_over_mcp(repo, monkeypatch):
+def test_complete_says_the_author_model_came_from_the_session(repo, monkeypatch):
+    """The read-from-session default alone is invisible later: the completion must say
+    WHERE the author model came from (B-complete-requires-model-even-when-recorded)."""
+    _queue(repo)
+    code, out, err = run_cli(repo, "session", "start", "--model", "claude-opus", agent="impl")
+    assert code == 0, out + err
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "session", body
+    done = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"]
+    assert done[-1].data.get("model_source") == "session", done[-1].data
+
+
+def test_complete_says_the_author_model_came_from_the_flag(repo, monkeypatch):
+    _queue(repo)
+    _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2", "--model", "claude-opus")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "flag", body
+
+
+def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
+    _queue(repo)
+    _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
+
+    code, out, err = run_cli(repo, "complete", "T2", "--model", "claude-opus")
+    assert code == 0, out + err
+    assert "author model: claude-opus (from --model)" in out + err, out + err
+
     _queue(repo)
     srv = Server(repo)
     started = _call(srv, "ddflow_session_start", model="claude-opus", as_agent="impl")
