@@ -73,10 +73,10 @@ def test_dupes_item_scores_only_pairs_that_contain_it():
         settled=lambda a, b: asked.append((a, b)) or False,
     )
     assert asked, "the shared vocabulary must make the sweep score pairs"
-    assert all("R149" in pair for pair in asked), (
+    assert all(a == "R149" or b == "R149" for a, b in asked), (
         f"{len(asked)} pair(s) scored, and not all contain the asked record"
     )
-    assert all("R149" in (r["a"], r["b"]) for r in rows), rows[:3]
+    assert all(r["a"] == "R149" or r["b"] == "R149" for r in rows), rows[:3]
 
 
 def test_dupes_item_on_a_3000_record_queue_stays_bounded():
