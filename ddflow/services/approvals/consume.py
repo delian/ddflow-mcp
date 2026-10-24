@@ -41,7 +41,7 @@ def route(ask_id: str, canon: Canon, *, new: bool) -> str:
         return (
             f"approval {ask_id} {state} for '{canon.verb}' (tier T3, level L{s.min_level}+): a "
             "signed approval is not available; if the operator opted in on the host "
-            "([approvals].accept_chat_for_t3, rated L2-typed) they type `approve "
+            "([approvals].accept_chat_for_t3, rated L2-typed; a layer's forbid_chat_for_t3 overrides it) they type `approve "
             f"{ask_id} <first digest characters>` in their own chat and the agent runs `ddflow "
             f"approvals attest {ask_id}`, then re-runs this command with --approval {ask_id}; "
             "otherwise the operator does this themselves at their own terminal."

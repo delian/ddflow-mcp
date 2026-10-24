@@ -18,12 +18,14 @@ file. Accepted for tier T2 only -- except a TYPED answer to a T3 act when the op
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...config_sections._layers import LAYERS, layer_path, read_toml
 from ...core import clock
 from ...core.model import fold
 from ..actors import resolve_actor
@@ -40,6 +42,26 @@ TYPED_PROOF = "typed:"
 #: The grade a tier-3 act approved by a typed chat answer carries in the audit trail.
 GRADE_T3_CHAT = "L2-typed"
 KNOB_T3 = "approvals.accept_chat_for_t3"
+_TRUE = ("1", "true", "yes", "on")
+
+
+def _forbidden(cfg: Config) -> bool:
+    """`forbid_chat_for_t3` true in ANY layer (the merged value, each file layer read raw, the
+    environment): a later layer saying false must not undo a tightening below it."""
+    if cfg.approvals.forbid_chat_for_t3:
+        return True
+    if os.environ.get("DDFLOW_APPROVALS_FORBID_CHAT_FOR_T3", "").strip().lower() in _TRUE:
+        return True
+    if cfg.root is None:
+        return False
+    for layer in LAYERS:
+        try:
+            data = read_toml(layer_path(cfg.root, layer))
+        except (OSError, ValueError):
+            continue  # an unreadable layer is read as silent; the merged config load already warned
+        if (data.get("approvals") or {}).get("forbid_chat_for_t3") is True:
+            return True
+    return False
 
 
 def chat_t3(cfg: Config) -> bool:
@@ -49,7 +71,7 @@ def chat_t3(cfg: Config) -> bool:
     return bool(
         cfg.approvals.accept_chat_for_t3
         and cfg.sources.get(KNOB_T3) == "local"
-        and not cfg.approvals.forbid_chat_for_t3
+        and not _forbidden(cfg)
     )
 
 
