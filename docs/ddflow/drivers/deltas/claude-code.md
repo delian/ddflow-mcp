@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.9 fmt=1 sha=9779dc86c4b4 -->
+<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.9 fmt=1 sha=d6ced5893e82 -->
 # Delta: Claude Code
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -8,22 +8,24 @@ canonical driver here, don't — fix the canonical driver instead; every harness
 1. **Iteration is a wave loop; the operator is the exception, not the driver.** `/implement
    [phase or task id]` — written to `.claude/commands/` by `ddflow adopt` — runs `/loop`
    (self-paced) on the `implement` workflow command, and ONE such session goal carries the
-   whole mission: a phase, a bug batch or a wave, and keeps driving until nothing
-   actionable is left. Each wave is one read of `ddflow next --json`: fan the ready set
-   out to one task subagent per claimed item — mapping the `tier:fast|balanced|deep`
-   hints to model choice — and after the merges land (or park, in the PR flow) re-read
-   `next` for the next wave. The wave position goes nowhere extra: ddflow's own committed
-   event log and the leases recompute the true wave state on every `ddflow next`, so a
-   compaction or restart resumes the wave, never before it. Stop ONLY where the question
-   tool says so: `AskUserQuestion`, an operator approval (`ddflow ... --approval request`),
-   a policy decision, an un-settleable review finding. Waits are never stops: see 2. Kill
-   the armed heartbeat before any deliberate stop — `ScheduleWakeup` with `stop: true` —
-   or the stop is undone. `/mcp__ddflow__implement` is the same command without `/loop`: it
-   drives as far as one turn allows, with no wake-up to carry it on — a one-shot invocation
-   falls back to ONE task, then prints `ddflow next` and `ddflow cadence` as the handoff.
-   The continuation, each turn: a backgrounded command that *finishes* (e.g. `sleep 600`),
-   then `ScheduleWakeup` re-passing the same `/loop` prompt. A timer alone is not a
-   continuation mechanism; a completing background task re-invokes reliably.
+   whole mission: a phase, a bug batch or a wave. Each wave is one read of
+   `ddflow next --json`: fan the ready set out to one task subagent per claimed item —
+   mapping the `tier:fast|balanced|deep` hints to model choice — and after the merges land
+   (or park, in the PR flow) re-read `next` for the next wave. The loop ends when the
+   mission is done — `next` is empty and nothing is in flight — and mid-mission it stops
+   ONLY where the question or approval flow needs an operator answer: `AskUserQuestion`,
+   an operator approval (`ddflow ... --approval request`), a policy decision, an
+   un-settleable review finding. Waits are never stops: see 2. The wave position goes
+   nowhere extra: ddflow's own committed event log and the leases recompute the true wave
+   state on every `ddflow next`, so a compaction or restart resumes the wave, never before
+   it. Kill the armed heartbeat before any deliberate stop — `ScheduleWakeup` with
+   `stop: true` — or the stop is undone. `/mcp__ddflow__implement` is the same command
+   without `/loop`: it drives as far as one turn allows, with no wake-up to carry it on —
+   a one-shot invocation falls back to ONE task, then prints `ddflow next` and
+   `ddflow cadence` as the handoff. The continuation, each turn: a backgrounded command
+   that *finishes* (e.g. `sleep 600`), then `ScheduleWakeup` re-passing the same `/loop`
+   prompt. A timer alone is not a continuation mechanism; a completing background task
+   re-invokes reliably.
 2. **Blocked behind another agent.** When `claim` is refused because another agent
    holds the item or overlapping files, or `next` has nothing ready while work is in
    flight, do not poll and do not ask the operator to tell you when to retry. Run
