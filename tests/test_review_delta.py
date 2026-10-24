@@ -570,6 +570,7 @@ def test_a_held_record_from_before_the_marker_releases_by_shape(repo, tmp_path):
     assert held.data["outcome"] == "failed", held.data
     ev = dict(_ev(repo))
     assert ev["held_pass"] is True and ev["delta_findings"] == 0, ev
+    assert _ev(repo)["delta_rounds"] == 1, "the held delta counted its round"
     log = EventLog(repo)
     log.append(
         "gate.failed",
