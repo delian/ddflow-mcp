@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import json
 import re
+import shlex
 import shutil
 import sys
 from dataclasses import dataclass
@@ -254,6 +255,13 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
     )  # fmt: skip
 
 
+def _findings_summary(text: str) -> str:
+    """The `--reason` the printed gate-record line carries for a findings verdict: the
+    review's first line, or the named placeholder the operator fills in (gate record
+    refuses a failed outcome with no reason)."""
+    return next((ln.strip() for ln in text.splitlines() if ln.strip()), "") or "<findings summary>"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="roborev_branch", description=__doc__.split("\n")[0])
     ap.add_argument("--base", default="")
@@ -279,9 +287,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         verdict = "passed" if r.outcome == "clean" else "failed"
         if r.outcome in ("clean", "findings"):
+            reason = ""
+            if r.outcome == "findings":
+                reason = f" --reason {shlex.quote(_findings_summary(r.text))}"
             print(
                 f"record: ddflow gate record <id> standards --outcome {verdict} "
-                f"--reviewed-sha {r.sha} --model {r.reviewer}"
+                f"--reviewed-sha {r.sha} --model {r.reviewer}{reason}"
             )
     if r.pending_rerun:
         print(f"standards-pending-rerun: job {r.job}")
