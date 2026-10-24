@@ -5572,10 +5572,10 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=7ad1219f2aae -->
+<!-- ddflow:begin README/tools sha=d2d5d4b5a72d -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
-- `lean` (15 tools): the default (`[mcp].tools = auto`): the 9 hot singles and six families
+- `lean` (15 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 6 families
 - `families` (24 tools): every family beside the hot singles
 - `hot+families` (36 tools): the 12 most called direct tools as well
 - `core`, `standard` and `all`: the flat tiers, every tool by its own name

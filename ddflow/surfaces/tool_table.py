@@ -24,13 +24,19 @@ def tier_of(tool: str) -> str:
 
 def overview() -> str:
     """The profiles and the families, from the live tables (`tools/profiles.py`, `families.py`)."""
+    notes = {
+        "lean": (
+            f": the default (`[mcp].tools = auto`): the {len(F.HOT_SINGLES)} hot singles and "
+            f"{len(P.family_tools('lean'))} families"
+        ),
+        "families": ": every family beside the hot singles",
+        "hot+families": (
+            f": the {len(P.direct_tools('hot+families')) - len(F.HOT_SINGLES)} most called "
+            "direct tools as well"
+        ),
+    }
     profiles = [
-        f"- `{p}` ({len(P.advertised_names(p))} tools){note}"
-        for p, note in (
-            ("lean", ": the default (`[mcp].tools = auto`): the 9 hot singles and six families"),
-            ("families", ": every family beside the hot singles"),
-            ("hot+families", ": the 12 most called direct tools as well"),
-        )
+        f"- `{p}` ({len(P.advertised_names(p))} tools){notes.get(p, '')}" for p in P.PROFILES
     ]
     families = []
     for name, fam in F.FAMILIES.items():
