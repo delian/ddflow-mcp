@@ -649,7 +649,9 @@ def _overwritten(r: GitResult) -> bool:
     "would be overwritten by merge" prints the phrase inside a CONFLICT line, and git does
     not start those with ``error: ``."""
     for line in (r.err or r.out).splitlines():
-        if line.strip().startswith("error: ") and line.strip().endswith("would be overwritten by merge:"):
+        if line.strip().startswith("error: ") and line.strip().endswith(
+            "would be overwritten by merge:"
+        ):
             return True
     return False
 
