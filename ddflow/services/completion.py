@@ -39,6 +39,7 @@ from . import review_exclude as RX
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
+from .gates import reviewers as GR
 from .gates.evidence import commit_tree_entries, worktree_entries
 from .gates.evidence import tree_being_completed as _tree_being_completed
 from .gates.reviewed_paths import ignorable
@@ -188,21 +189,31 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
 
 
 def needs_independent_reviewer(
-    it: Item, cfg: Config, paths: list[str] | None = None, repo: Path | None = None
+    it: Item,
+    cfg: Config,
+    paths: list[str] | None = None,
+    repo: Path | None = None,
+    reviewed: bool = False,
 ) -> bool:
     """Is a reviewer from another family required of ``it``? Only of a task that writes code:
     not a promotion, not a task whose ACTUAL change is documents only (`paths`), which
-    runs the doc pipeline -- and not a task whose ACTUAL change is entirely excluded from
-    review (`paths` matches [review].exclude_globs / pin files in full): a reviewer could
-    only be sent content the project excluded, so the review gates record UNAVAILABLE
-    naming the files and the independence rule does not demand one
-    (B-lockfile-only-item-cannot-complete)."""
+    runs the doc pipeline -- and not a task whose ACTUAL change is entirely the generated
+    class (`paths` matches the shipped generated excludes, a canonical lockfile or a pin
+    file), which the review gates record UNAVAILABLE: a reviewer could only be sent
+    content the project generated, and none ran (`reviewed` is False). Once ANY reviewer
+    gate really reviewed (``reviewed``), the ordinary family rule governs it again --
+    content was sent and judged (B-lockfile-only-item-cannot-complete)."""
     return (
         cfg.agent.reviewer_family_must_differ
         and it.kind == "task"
         and not it.promote_to
         and not diff_is_docs_only(it, cfg, paths)
-        and (repo is None or paths is None or not RX.excluded_outright(cfg, repo, paths))
+        and not (
+            not reviewed
+            and repo is not None
+            and paths is not None
+            and RX.excluded_outright(cfg, repo, paths)
+        )
     )
 
 
@@ -216,11 +227,12 @@ def _independence(
     very check, as the tasks that produced it; demanding an independent reviewer of a merge
     between environment branches blocked every promotion, since its pipeline (rightly) has no
     review gate to satisfy it with. Not for a chore either (D-chore-class): a person
-    approved its file list instead. Not for a change entirely excluded from review either:
-    no reviewer can be sent excluded content, and the review gates record that
-    UNAVAILABLE (B-lockfile-only-item-cannot-complete)."""
+    approved its file list instead. Not for a change made entirely of the GENERATED
+    exclusion class either (B-lockfile-only-item-cannot-complete): no reviewer can be
+    sent generated content, the review gates record that UNAVAILABLE, and -- while none
+    actually reviewed -- no cross-family reviewer is demanded."""
     ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
-    needed = needs_independent_reviewer(it, cfg, paths, repo)
+    needed = needs_independent_reviewer(it, cfg, paths, repo, GR.reviewer_ran(state, it.id, gdefs))
     if needed and not ok and excused is None:
         return why, [f"reviewer independence not satisfied: {why}"]
     return why, []
