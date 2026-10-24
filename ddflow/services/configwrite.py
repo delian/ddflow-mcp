@@ -46,10 +46,10 @@ from ..config import (
 from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import install_info as II
-from .approvals import config_guard as AG
 from . import reviewer_trust as RT
 from . import shared_files as SF
 from . import workflow as WF
+from .approvals import config_guard as AG
 from .gates import GateDef, load_gates, pipelined
 from .review import Reviewer
 
