@@ -131,7 +131,9 @@ def test_claude_delta_carries_the_goal_wave_contract():
     assert "ONLY where the question or approval flow" in text, (
         "the claude delta does not gate stops on the operator"
     )
-    assert "event log" in text, "the claude delta does not recover the wave position"
+    assert "committed event log" in text, (
+        "the claude delta does not recover the wave position from ddflow's log"
+    )
     view = AD._region_body(AD._driver_region(DELTA), (ROOT / DELTA).read_text())
     assert view == text, (
         "the claude docs view was not regenerated from the template (stale stamp or body)"
