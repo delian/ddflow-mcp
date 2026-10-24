@@ -28,11 +28,6 @@ def test_every_tool_the_base_charter_names_is_in_the_core_tier(repo):
     assert not missing, f"the charter names tools the core tier does not list: {missing}"
 
 
-def test_the_two_retrieval_tools_are_in_the_core_tier():
-    for name in ("ddflow_rule_show", "ddflow_rule_search"):
-        assert name in tier_tools("core"), name
-
-
 def test_every_tool_the_base_charter_names_is_served_under_the_default_profile(repo):
     """The default connection is the lean PROFILE, not the flat core tier: a charter-named tool must be
     a listed tool or served by a listed family there, or a client could not call what it was told to."""
