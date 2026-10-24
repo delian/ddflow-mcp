@@ -2128,7 +2128,9 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
                 gates=gates,
             )
             found = ev.get("chunk_findings")
-            linked = _link_refuted(log, st.items.get(item), g, found if isinstance(found, list) else [])
+            linked = _link_refuted(
+                log, st.items.get(item), g, found if isinstance(found, list) else []
+            )
             if linked:
                 say(
                     f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid}); "
