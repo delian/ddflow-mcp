@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 #: The tool tiers `[mcp].tools` accepts. Kept here, not imported from the MCP surface, so
 #: config validation does not depend on the surface above it; `tests/test_mcp_tool_tiers.py`
@@ -44,6 +44,17 @@ class McpConfig:
             "core",
             "no safety dimension; fewer schemas advertised, every tool still callable",
         ),
+    )
+
+    profile_lean_budget_tokens: int = knob(
+        16000,
+        doc="With `[mcp].tools = auto`, a session whose effective start budget (`[session].context_budget_tokens`, or its agent type's entry in `[session.context_budget]`, the smaller) is at most this many tokens gets the `lean` profile whatever the client table says. 0 turns it off. Keep it at or below `profile_mid_budget_tokens` (the first limit that fits wins). The profile is chosen once at `initialize` and a budget only ever narrows it. A client on the modern `server/discover` handshake sends no `clientInfo`, so it keeps the lean default, as it does for the client table.",
+        check=int_at_least(0),
+    )
+    profile_mid_budget_tokens: int = knob(
+        32000,
+        doc="With `[mcp].tools = auto`, a session whose effective start budget is at most this many tokens (and above `profile_lean_budget_tokens`) gets no profile wider than `families`: a client table entry of `hot+families` is lowered to it. 0 turns it off.",
+        check=int_at_least(0),
     )
 
     output_schemas: str = knob(
