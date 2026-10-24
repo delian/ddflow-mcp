@@ -45,13 +45,11 @@ def _session_model(st: State, agent: str) -> str:
 def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
     """(model, source) judged against for reviewer independence: `--model`, else the model
     the agent's LATEST session declared (open or ended -- the record, not its liveness) --
-    said out loud and recorded (only the SOURCE, never the id; the session carries it).
-    B-complete-requires-model-even-when-recorded."""
+    said out loud and recorded. B-complete-requires-model-even-when-recorded."""
     if model:
         return model, "flag"
-    own = [s for s in st.sessions.values() if s.agent == agent]
-    latest = max(own, key=lambda s: s.started_at).model if own else ""
-    return (latest, "session") if latest else ("", "")
+    found = _session_model(st, agent)
+    return (found, "session") if found else ("", "")
 
 
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
@@ -251,10 +249,10 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             **stamp,
             # Optional, like `changelog`: the sub-tasks a settled umbrella completed with.
             **({"umbrella": umbrella} if umbrella else {}),
-            # Optional (B-complete-requires-model-even-when-recorded): where the author
-            # model was judged from -- --model, or the agent's open session. The id
-            # itself is not duplicated here: the session.started event carries it.
-            **({"model_source": model_source} if model_source else {}),
+            # Optional (B-complete-requires-model-even-when-recorded): the author model
+            # this judged against, and where it came from. The flag path has no session
+            # record to carry the id, so the event names both for any known source.
+            **({"author_model": model, "model_source": model_source} if model else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
