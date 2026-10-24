@@ -861,15 +861,18 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
             f" {untriaged} earlier finding(s) still have no triage verdict: `ddflow review "
             "triage` settles each (the next clean delta then passes)."
         )
-    return O.nothing(
-        "review",
-        reason,
-        id=getattr(it, "id", ""),
-        gate=gate,
-        outcome="",
-        findings=[],
-        how=how,
-        text=reason,
+    return O.Outcome(
+        kind="review",
+        data={
+            "id": getattr(it, "id", ""),
+            "gate": gate,
+            "outcome": "",
+            "findings": [],
+            "how": how,
+            "text": reason,
+        },
+        exit=O.REFUSED,
+        reason=reason,
     )
 
 
