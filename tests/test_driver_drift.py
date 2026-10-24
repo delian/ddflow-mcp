@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 from ddflow.infra.fsio import MANAGED_DIGEST_LEN, content_digest
-
 from ddflow.services import adopt as AD
 
 ROOT = Path(__file__).resolve().parents[1]
