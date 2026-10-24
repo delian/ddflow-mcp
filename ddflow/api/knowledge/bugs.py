@@ -348,9 +348,10 @@ def _needs_fix_task(st, b, cfg=None) -> bool:
     DONE task it was merely reported against -- `bug found --item <open fix task>` links
     a report to that task, and the task's completion does not fix it (B8dcbf2f8da); an
     ABANDONED task, which nothing sends back -- its own `fix-<bug>` included, refiled as
-    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83); or an OPEN task whose `fixes` name a
-    DIFFERENT bug -- the old `bug found --item <another bug's fix task>` bound a report
-    to it whatever it was filed to fix (Bb141cbd8d8, which `bug found` no longer binds).
+    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83); or a task in any other live state
+    (OPEN, RUNNING, BLOCKED, REVIEW) whose `fixes` name a DIFFERENT bug -- the old
+    `bug found --item <another bug's fix task>` bound a report to it whatever it was
+    filed to fix (Bb141cbd8d8, which `bug found` no longer binds).
     Left alone: a done task's OWN bug (`verify --reopen` sends that task back), an open
     task with no `fixes` of its own (a hand-filed bug-fix task named as the fix,
     `_fix_task_of`, B8fb4a2ec4a), and a task whose `fixes` name this very bug
