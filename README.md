@@ -5572,10 +5572,10 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=c7d0f40faaba -->
+<!-- ddflow:begin README/tools sha=039ca3b598b7 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
-- `lean` (15 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 6 families
+- `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
 - `families` (24 tools): every family beside the hot singles
 - `hot+families` (36 tools): the 12 most called direct tools as well
 - `core`, `standard` and `all`: the flat tiers, every tool by its own name
@@ -5598,7 +5598,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 123 MCP tools by their own name (the flat list): 32 in the `core` tier, 49 more in `standard`, 42 more in `all`</summary>
+<details><summary>All 123 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5615,8 +5615,8 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
-| Setting up | `ddflow_rule_search` | standard | Search rules by title or content, ranked by relevance, for an area or topic. |
-| Setting up | `ddflow_rule_show` | standard | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
+| Setting up | `ddflow_rule_search` | core | Search rules by title or content, ranked by relevance, for an area or topic. |
+| Setting up | `ddflow_rule_show` | core | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
 | Setting up | `ddflow_rule_sync` | standard | Sync rule files with the log: record hand edits and new files, restore missing ones. |
 | Setting up | `ddflow_setup` | core | Install ddflow into this repository: creates .ddflow/, writes the driver and the AGENTS.md section, and… |
 | The rules this project runs by | `ddflow_flow_choose` | all | Record a workflow choice for this project, attributed to you, with a reason the next agent will read. |
