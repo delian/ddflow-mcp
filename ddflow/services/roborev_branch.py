@@ -287,13 +287,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         verdict = "passed" if r.outcome == "clean" else "failed"
         if r.outcome in ("clean", "findings"):
-            reason = ""
             if r.outcome == "findings":
-                reason = f" --reason {shlex.quote(_findings_summary(r.text))}"
-            print(
-                f"record: ddflow gate record <id> standards --outcome {verdict} "
-                f"--reviewed-sha {r.sha} --model {r.reviewer}{reason}"
-            )
+                # `--reason=<value>`, not `--reason <value>`: a value that starts with a
+                # dash must stay attached, or the parser reads it as another flag.
+                print(
+                    f"record: ddflow gate record <id> standards --outcome failed "
+                    f"--reviewed-sha {r.sha} --model {r.reviewer} "
+                    f"--reason={shlex.quote(_findings_summary(r.text))}"
+                )
+            else:
+                print(
+                    f"record: ddflow gate record <id> standards --outcome {verdict} "
+                    f"--reviewed-sha {r.sha} --model {r.reviewer}"
+                )
     if r.pending_rerun:
         print(f"standards-pending-rerun: job {r.job}")
     if r.text:
