@@ -2857,7 +2857,9 @@ author's family. Now a `--model` in the author's family on `rubber_duck`/`critic
 (exit 3, naming `--reviewer-model`); `--reviewer-model <m>` (MCP `reviewer_model`) is the
 explicit spelling for a reviewer that really is of that family. The author is the model the
 agent declared at `session start --model`; with none declared there is nothing to compare
-and the record stands. `standards` is covered too, since it counts toward independence.
+and the record stands (`complete` says which it used: the `--model` flag or the agent's
+open session — `author_model`/`model_source` in the result, `model_source` on the
+`item.completed` event). `standards` is covered too, since it counts toward independence.
 
 Which gates are reviewer gates comes from their definitions: `rubber_duck`, `critic` and
 `standards`, plus every gate declaring `reviewer = "different_family"` — the built-in
