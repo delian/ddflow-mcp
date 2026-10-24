@@ -222,7 +222,8 @@ def answer(  # noqa: PLR0913 -- one keyword per facet of an answer; all keyword-
     if actor.source not in ANSWER_SOURCES:
         raise AskRefused(
             f"refusing: answering is a person's act, and {actor.id} acts as an agent "
-            f"({actor.source}). An agent can ask and read; run `ddflow` from your own terminal."
+            f"({actor.source}). An agent can ask and read; the operator answers from their own "
+            "terminal or in chat (`ddflow approvals ask ID`, then `ddflow approvals attest ID`)."
         )
     with log.transaction():  # checked under the log's lock: two answers must not both land
         row = get(_state(log), ask_id)

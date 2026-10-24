@@ -28,7 +28,7 @@ def test_the_bisect_default_glob_is_the_apis():
 def test_each_tool_offers_what_it_always_did_in_the_order_it_served_it():
     assert list(TOOLS["ddflow_export"]["properties"]) == [
         "action", "mode", "doc", "all", "since", "version", "phase", "item", "status",
-        "limit", "tag", "session", "max_bytes", "diff", "check", "write", "path",
+        "limit", "tag", "session", "max_bytes", "diff", "check", "write", "path", "approval",
     ]  # fmt: skip
     assert list(TOOLS["ddflow_bisect"]["properties"]) == ["victim", "cmd", "candidates", "timeout"]
     assert list(TOOLS["ddflow_ci"]["properties"]) == [

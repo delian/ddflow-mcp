@@ -313,6 +313,7 @@ def claim_via_bug(repo, a: dict, agent: str, called_from=None):
         agent=agent,
         queue=bool(a.get("queue")),
         break_lease=bool(a.get("break")),
+        approval=a.get("approval", "") or "",
     )
     if bug and out.exit == OK:
         out.data["bug"] = bug

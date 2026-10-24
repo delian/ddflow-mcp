@@ -19,11 +19,15 @@ protection of D-export. Nothing here prints; ``api.export`` wraps these into Out
 from __future__ import annotations
 
 import getpass
+import json
 from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core.digest import content_digest
 from ...core.model import State
+from ..approvals import consume as CN
+from ..approvals.canon import Canon
 from ..configwrite import SetPairs, apply_edit
 from ..identity import is_agent
 from . import ops
@@ -63,7 +67,32 @@ def _write_selection(
     return pairs
 
 
-def enable(
+def _approval_route(log, cfg: Config, verb: str, doc: str, state: str, approval: str) -> str:
+    """ "" when an operator's approval of ``verb`` on ``doc`` (as it is now, ``state``) is spent;
+    else the text that names the route (the request filed, how it is answered in chat)."""
+    canon = Canon(verb=verb, agent=log.agent_id, item=doc, state=content_digest(state))
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
+    return "" if decision.ok else decision.message
+
+
+def _unlock_by_approval(log, cfg: Config, doc: str, lock, why_agent: str, approval: str) -> str:
+    """An agent's enable of a locked document: refused unless it spends the operator's approval
+    (then it counts as the operator's own enable, so ""); anything else passes through."""
+    if not (lock and why_agent):
+        return why_agent
+    state = json.dumps(lock, sort_keys=True)
+    route = _approval_route(log, cfg, "export.unlock", doc, state, approval)
+    if route:
+        raise ExportError(
+            f"{doc} is locked by the operator ({lock.get('by') or '?'}, "
+            f"{str(lock.get('at', ''))[:19]}): an agent cannot enable it without the "
+            f"operator's approval. {route}",
+            EXIT_REFUSED,
+        )
+    return ""
+
+
+def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-only
     repo: Path,
     log: Any,
     cfg: Config,
@@ -75,6 +104,7 @@ def enable(
     local: bool = False,
     requested_agent: str = "",
     via_mcp: bool = False,
+    approval: str = "",
 ) -> dict[str, Any]:
     """Select ``doc``. Returns what happened; raises ``ExportError`` (exit 3) when refused.
 
@@ -85,18 +115,13 @@ def enable(
     R.get(doc)  # unknown kind: refused, listing the kinds
     why_agent = _is_agent(requested_agent, via_mcp)
     lock = _locked(st, doc)
-    if lock and why_agent:
-        raise ExportError(
-            f"{doc} is locked by the operator ({lock.get('by') or '?'}, {str(lock.get('at', ''))[:19]}): "
-            f"an agent cannot enable it. Only the operator, at a terminal, enables it again "
-            f"with `ddflow export enable {doc}`",
-            EXIT_REFUSED,
-        )
     spec = ops.spec_for(cfg, doc, path=path, mode=mode, writing=True)  # mode/kind checks
     try:
         W.safe_target(repo, spec.path)
     except ExportError as exc:
         raise ExportError(str(exc), EXIT_REFUSED) from exc
+    # after the checks above: an approval must not be spent on a command that was never valid
+    why_agent = _unlock_by_approval(log, cfg, doc, lock, why_agent, approval)
     current = ops.spec_for(cfg, doc, writing=True)
     selected = list(ops.selection(cfg))
     unchanged = (
@@ -167,17 +192,21 @@ def disable(
     local: bool = False,
     requested_agent: str = "",
     via_mcp: bool = False,
+    approval: str = "",
 ) -> dict[str, Any]:
     """Stop selecting ``doc`` (the file, if any, stays). ``lock`` is the operator's veto."""
 
     R.get(doc)
     why_agent = _is_agent(requested_agent, via_mcp)
     if lock and why_agent:
-        raise ExportError(
-            f"locking a document is the operator's veto, and this call is an agent's "
-            f"({why_agent}). Run `ddflow export disable {doc} --lock` from your own terminal",
-            EXIT_REFUSED,
-        )
+        route = _approval_route(log, cfg, "export.lock", doc, doc, approval)
+        if route:
+            raise ExportError(
+                f"locking a document is the operator's veto, and this call is an agent's "
+                f"({why_agent}). {route}",
+                EXIT_REFUSED,
+            )
+        why_agent = ""  # the operator's approval stands for the operator's own veto
     selected = list(ops.selection(cfg))
     was = doc in selected
     if was:
@@ -234,19 +263,26 @@ def unacknowledged(st: State, cfg: Config) -> list[dict[str, Any]]:
 
 
 def acknowledge(
-    log: Any, st: State, cfg: Config, *, requested_agent: str = "", via_mcp: bool = False
+    log: Any,
+    st: State,
+    cfg: Config,
+    *,
+    requested_agent: str = "",
+    via_mcp: bool = False,
+    approval: str = "",
 ) -> list[str]:
     """Record that a person has seen every agent-enabled document. Returns their names.
 
     Refused under an agent identity: an agent that could acknowledge its own enable would
     remove the one line that tells the operator."""
-    if why := _is_agent(requested_agent, via_mcp):
-        raise ExportError(
-            f"acknowledging is the operator's: this call is an agent's ({why}). Run "
-            "`ddflow export ack` from your own terminal",
-            EXIT_REFUSED,
-        )
     docs = [r["doc"] for r in unacknowledged(st, cfg)]
+    if why := _is_agent(requested_agent, via_mcp):
+        route = _approval_route(log, cfg, "export.ack", "export", ",".join(docs), approval)
+        if route:
+            raise ExportError(
+                f"acknowledging is the operator's: this call is an agent's ({why}). {route}",
+                EXIT_REFUSED,
+            )
     if docs:
         try:
             user = getpass.getuser()
