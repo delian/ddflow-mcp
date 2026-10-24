@@ -54,7 +54,8 @@ def test_a_parent_move_under_a_task_claimed_since_the_fold_is_refused(repo, monk
     real_load = I._load
 
     def load_then_someone_claims(r, agent):
-        snap = real_load(r, agent)  # A holds nothing: a task moved under it may turn it into an umbrella
+        # A holds nothing: a task moved under it may turn it into an umbrella.
+        snap = real_load(r, agent)
         assert run_cli(repo, "claim", "A", "--no-worktree", agent="intruder")[0] == OK
         return snap
 
