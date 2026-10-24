@@ -775,18 +775,31 @@ def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
         say(f"triage addresses {best.reviewer}'s findings: #1..#{len(best.findings)}")
 
 
+def _hold_shape(ev: dict[str, Any]) -> bool:
+    """Is ``ev`` the record of a clean delta an untriaged earlier finding held (``_hold``)?
+    New records carry the `held_pass` marker; one written before it existed has the same
+    shape without it: a delta REVIEWED with no finding of its own can end `failed` only
+    through `_hold`, so `_held_and_settled` releases both (flag first, since the marker
+    says the review was clean; with neither, the shape is false)."""
+    if ev.get("held_pass") is True:
+        return True
+    return (
+        ev.get("review_kind") == "delta"
+        and ev.get("status") == "REVIEWED"
+        and not ev.get("delta_findings")
+    )
+
+
 def _held_and_settled(it, gate: str) -> dict[str, int] | None:
     """The gate's triage counts when its `failed` is ONLY the hold of a clean delta over
     untriaged earlier findings (`_hold`), with every finding settled since; None otherwise.
     The hold's promise -- "the next clean delta then passes" -- is kept without new commits
-    only for that shape: the `held_pass` marker says the review itself was clean and the
-    gate failed ONLY because earlier findings had no verdict, and nothing changed since the
-    reviewed head means the reviewer already saw everything a pass would ride on
-    (B10ad449deb). A `delta` `failed` for anything else is never released here."""
+    only for that shape: nothing changed since the reviewed head means the reviewer already
+    saw everything a pass would ride on (B10ad449deb)."""
     if it is None:
         return None
     rec = it.gates.get(gate)
-    if rec is None or rec.outcome != "failed" or not (rec.evidence or {}).get("held_pass"):
+    if rec is None or rec.outcome != "failed" or not _hold_shape(dict(rec.evidence or {})):
         return None
     counts = GD.triage_counts(it, gate) or {}
     if not counts.get("findings") or counts.get("untriaged"):
