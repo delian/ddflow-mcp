@@ -6,8 +6,9 @@ Only the items below differ.
 1. **Check availability first.** Cody Free and Pro were discontinued on 2025-07-23;
    **Cody Enterprise remains supported**. If you are not on Enterprise, this delta does
    not apply to you.
-2. **Iteration is operator-driven.** One unit per request; print `ddflow next` and
-   `ddflow cadence` as the handoff.
+2. **Iteration.** One request runs to completion: keep going inside it — claim, run
+   the gates, merge — then re-read `ddflow next`. Across requests the handoff is the
+   printed `ddflow next` and `ddflow cadence` output.
 3. **Subagents.** None with worktree isolation. Use a second editor window or another
    agent in a terminal; the lease keeps them apart.
 4. **Asking the operator.** Ask in the chat and stop.

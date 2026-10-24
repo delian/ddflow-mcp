@@ -6,8 +6,9 @@ Only the items below differ.
 1. **Two products.** **Qodo Command** (the CLI) reads a project-root `mcp.json`, which is
    what ddflow writes. The **Qodo Gen** IDE plugin keeps per-user MCP config in the IDE,
    and organisations have an `org_mcp.json` — neither is a repo file.
-2. **Iteration is operator-driven.** One unit per invocation; print `ddflow next` and
-   `ddflow cadence` as the handoff.
+2. **Iteration.** One invocation runs to completion: keep going inside it — claim,
+   run the gates, merge — then re-read `ddflow next` for the next claim. Across
+   invocations the handoff is the printed `ddflow next` and `ddflow cadence`.
 3. **Subagents.** Qodo agents are declared in `.toml` files that list `available_tools`;
    reference the `ddflow` server there so an agent can actually call it.
 4. **Asking the operator.** Ask and stop.
