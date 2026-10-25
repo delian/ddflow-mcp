@@ -378,10 +378,12 @@ class Store:
         fingerprint = log.mark()
         stored = self._load_shard_digests() if self._incremental_enabled() else None
         marks = self._verified_shard_marks(stored, log) if stored is not None else None
-        events = log.read_all()
-        state = fold(events, strict=False)
         if marks is None:
             marks = self._verified_shard_marks({}, log) or {}
+        # The marks BEFORE the read, like the fingerprint above: marked afterwards, a
+        # byte the projection never folded could be claimed consumed the same way.
+        events = log.read_all()
+        state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
         # fixed `index.rebuilding*` an older, lock-less ddflow used -- go only once they
         # are older than any rebuild should take. Age, not the lock, decides: the lock is
@@ -401,7 +403,7 @@ class Store:
         if marks is not None:
             try:
                 return self._reconcile(state, events, fingerprint, marks)
-            except (sqlite3.DatabaseError, OSError, RuntimeError):
+            except Exception:
                 pass  # any doubt is a rebuild: reconcile aborted, recreate below
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
@@ -476,6 +478,8 @@ class Store:
         try:
             offsets = dict(json.loads(rows[META_MARK]))
             digests = json.loads(rows[META_SHARD_DIGESTS])
+            if set(offsets) != set(digests):
+                return None
             stored: dict[str, tuple[int, str]] = {}
             for name, spec in digests.items():
                 size_s, slash, hexed = str(spec).partition("/")
@@ -483,7 +487,7 @@ class Store:
                     return None
                 stored[name] = (int(size_s), hexed)
             return stored or None
-        except (ValueError, KeyError):
+        except (TypeError, ValueError, KeyError, AttributeError):
             return None
 
     def _verified_shard_marks(
@@ -554,8 +558,8 @@ class Store:
         """The meta both writers leave behind -- the figures `stale()` compares its next
         cheap read against, and the verification marks the next rebuild must re-earn before
         it may reconcile. `marks` holds what was verified (or, on a full build, digested
-        fresh) with the shards as they were AFTER the read, so they may only exceed the
-        fingerprint, the safe direction."""
+        fresh) with the shards as they were when they were marked, at or before the read,
+        so they may only exceed the fingerprint, the safe direction."""
         con.execute("insert or replace into meta values('events', ?)", (str(n_events),))
         # Written from the SAME cheap read `stale()` will use -- not recomputed
         # from `events`, which cannot produce a byte count at all -- and captured
@@ -573,7 +577,7 @@ class Store:
         )
         con.execute(
             "insert or replace into meta values(?, ?)",
-            (META_MARK, json.dumps(sorted(marks.items()))),
+            (META_MARK, json.dumps({name: pair[0] for name, pair in sorted(marks.items())})),
         )
         con.execute(
             "insert or replace into meta values(?, ?)",
@@ -1308,10 +1312,15 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
         for key in set(have) - set(want):
             con.execute(t.where(key), key)
             if fts and t.fts is not None and t.key_len == 1:
-                # A 1-keyed table's key IS its FTS id; prompts' (key_len 2) is not, and
-                # prompts only grow, so a stale FTS row there cannot be left behind.
+                # A 1-keyed table's key IS its FTS id; prompts' (key_len 2) is not,
+                # and prompts only ever grow, so a stale FTS row there cannot be left
+                # behind -- no gone prompt has a key-deletable FTS row.
                 con.execute(f"delete from {t.fts} where id = ?", (key[0],))  # nosec B608
             gone.append(key)
+        if t.name == "prompts" and gone:
+            # A gone prompt disobeys "prompts only ever grow" -- its stale FTS/trigram
+            # row cannot be deleted by base key -- and doubt is a rebuild, not a residue.
+            raise RuntimeError(f"incremental {t.name}: a projected prompt row is gone")
         if con.execute(f"select count(*) from {t.name}").fetchone()[0] != len(rows):  # nosec B608
             raise RuntimeError(f"incremental {t.name}: reconciled rows disagree")
         if not trig or not t.fts:
