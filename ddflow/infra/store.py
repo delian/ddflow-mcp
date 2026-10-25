@@ -394,7 +394,9 @@ class Store:
             else:
                 # First build, or an index written before the marks existed: verify the
                 # shards afresh -- nothing was consumed yet, so there is no prefix to doubt.
-                marks = self._verified_shard_marks({}, log) or {}
+                # A `None` here is doubt all the same: it stays a rebuild, not an empty
+                # licence (`or {}` would turn an unreadable shard into marks-verified).
+                marks = self._verified_shard_marks({}, log)
         # The marks BEFORE the read, like the fingerprint above: marked afterwards, a
         # byte the projection never folded could be claimed consumed the same way.
         events = log.read_all()
