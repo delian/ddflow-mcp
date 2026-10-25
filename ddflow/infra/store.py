@@ -33,7 +33,7 @@ import sqlite3
 import sys
 import time
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -89,6 +89,12 @@ def code_fingerprint() -> str:
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
 MIN_TERM_CHARS = textsim.MIN_WORD_CHARS
+
+#: The incremental projector's verification marks (snap-perf 3.3): `mark` records the
+#: per-shard consumed byte offsets, `shard_digests` the sha256 of each consumed prefix --
+#: the store-side copy of the marks `_read_delta` keys the log's own honest reads on.
+META_MARK = "mark"
+META_SHARD_DIGESTS = "shard_digests"
 
 #: How long a rebuild waits for another one to finish. A rebuild runs at ~12k events/s,
 #: so this is minutes of headroom, not an expected wait.
@@ -336,14 +342,29 @@ class Store:
             return self._rebuild_locked(log)
 
     def _rebuild_locked(self, log: EventLog) -> State:
-        """Drop everything and re-derive from the log. The ONLY write path. The caller
+        """Bring the projection current with the log. The ONLY write path. The caller
         holds `lock_path`.
 
-        There is deliberately no incremental update. An incremental projector is a
-        second implementation of `fold` that can disagree with it, and a cache that
-        disagrees with its source silently is worse than no cache. Rebuild measured
-        at ~12k events/second, which for any realistic backlog is far below the cost
-        of the git operations surrounding it.
+        The recorded doctrine used to be "no incremental update, ever": an incremental
+        projector is a second implementation of `fold` that can disagree with it. The
+        log side found the sandbox where an incremental is safe -- append-only shards,
+        prefix hashes, the staleness watermark -- and this is that sandbox, reproduced
+        here (snap-perf 3.3, replacing the "never incremental" doctrine with **never
+        *unverified* incremental**):
+
+        * the index records what it consumed (per-shard byte offsets and their sha256,
+          `META_MARK` / `META_SHARD_DIGESTS`), keyed on the same marks `stale()` and
+          `_read_delta` key their honesty on;
+        * before a rebuild may reconcile instead of recreate, every consumed prefix is
+          re-hashed and must match -- a torn, rewritten or truncated shard is a rebuild;
+        * the reconcile writes only the rows the appended deltas changed (the SAME
+          projector resolves what a row IS -- one implementation, not two), and any
+          doubt of any kind is a full rebuild, never a wrong row.
+
+        The knob (`_incremental_enabled`) turns the shortcut off; the criterion that
+        must hold before a rebuild is allowed to be skipped -- the same rows, the same
+        meta, and drop-db parity -- is pinned by
+        ``tests/test_store.py::test_dropping_the_db_changes_nothing``.
         """
         # The fingerprint FIRST, then the events it describes. Taken afterwards it
         # describes a log NEWER than the projection: an append landing between the two
@@ -355,8 +376,12 @@ class Store:
         # THEORETICAL by the cross-family critic 2026-09-24; probe in
         # `tests/test_critic_findings.py`.)
         fingerprint = log.mark()
+        stored = self._load_shard_digests() if self._incremental_enabled() else None
+        marks = self._verified_shard_marks(stored, log) if stored is not None else None
         events = log.read_all()
         state = fold(events, strict=False)
+        if marks is None:
+            marks = self._verified_shard_marks({}, log) or {}
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
         # fixed `index.rebuilding*` an older, lock-less ddflow used -- go only once they
         # are older than any rebuild should take. Age, not the lock, decides: the lock is
@@ -373,18 +398,25 @@ class Store:
                 with contextlib.suppress(OSError):
                     if time.time() - old.stat().st_mtime > REBUILD_TEMP_MAX_AGE_S:
                         old.unlink()
+        if marks is not None:
+            try:
+                return self._reconcile(state, events, fingerprint, marks)
+            except (sqlite3.DatabaseError, OSError, RuntimeError):
+                pass  # any doubt is a rebuild: reconcile aborted, recreate below
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
         tmp = self.path.with_name(
             f"{self.path.name}-rebuilding.{os.getpid()}.{secrets.token_hex(4)}"
         )
         try:
-            return self._build_into(tmp, state, events, fingerprint)
+            return self._build_into(tmp, state, events, fingerprint, marks)
         finally:
             for suf in ("", "-wal", "-shm"):
                 tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
 
-    def _build_into(self, tmp: Path, state: State, events: list, fingerprint) -> State:
+    def _build_into(
+        self, tmp: Path, state: State, events: list, fingerprint, marks: dict[str, tuple[int, str]]
+    ) -> State:
         """Write the projection into `tmp` and publish it over the index."""
         con = sqlite3.connect(tmp, isolation_level=None)
         con.row_factory = sqlite3.Row
@@ -392,107 +424,11 @@ class Store:
         try:
             self.init(con)
             con.execute("BEGIN IMMEDIATE")
-            for it in state.items.values():
-                if it.removed:
-                    continue
-                con.execute(
-                    "insert or replace into items values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        it.id,
-                        it.kind,
-                        it.title,
-                        it.parent,
-                        it.state,
-                        json.dumps(it.needs),
-                        json.dumps(it.globs),
-                        json.dumps(it.tags),
-                        it.priority,
-                        it.body,
-                        it.worktree,
-                        it.branch,
-                        it.merged_sha,
-                        it.blocked_reason,
-                        it.lease.holder if it.lease else "",
-                        (it.lease.renewed_at + it.lease.ttl_s) if it.lease else 0.0,
-                        json.dumps({g: asdict(r) for g, r in it.gates.items()}),
-                        it.created_at,
-                        it.completed_at,
-                    ),
-                )
-                if self.fts:
-                    con.execute(
-                        "insert into items_fts values(?,?,?,?)",
-                        (it.id, it.title, it.body, " ".join(it.tags)),
-                    )
-            # A contested lesson (B230e852e10) is not advice until `resolve` settles it.
-            for ls in (x for x in state.lessons.values() if not x.contested):
-                con.execute(
-                    "insert or replace into lessons values(?,?,?,?,?,?,?,?,?)",
-                    (
-                        ls.id,
-                        ls.title,
-                        ls.rule,
-                        ls.why,
-                        ls.how,
-                        json.dumps(ls.seen_in),
-                        json.dumps(ls.tags),
-                        ls.at,
-                        ls.superseded_by,
-                    ),
-                )
-                if self.fts:
-                    con.execute(
-                        "insert into lessons_fts values(?,?,?,?,?,?)",
-                        (ls.id, ls.title, ls.rule, ls.why, ls.how, " ".join(ls.tags)),
-                    )
-            for rn in state.research.values():
-                con.execute(
-                    "insert or replace into research values(?,?,?,?,?,?,?,?)",
-                    (
-                        rn.id,
-                        rn.question,
-                        rn.claim,
-                        rn.verdict,
-                        rn.probe,
-                        json.dumps(rn.sources),
-                        rn.at,
-                        rn.item,
-                    ),
-                )
-                if self.fts:
-                    con.execute(
-                        "insert into research_fts values(?,?,?,?,?)",
-                        (rn.id, rn.question, rn.claim, rn.probe, rn.verdict),
-                    )
-            _insert_decisions(con, state, self.fts)
-            _insert_memories(con, state, self.fts)
-            _insert_bugs(con, state, self.fts)
-            _insert_sessions(con, state, self.fts)
-            _insert_records(con, state, self.fts)
+            _write_rows(con, _project(state), self.fts)
             if self.trigram:
                 _fill_trigram(con)
             _insert_similar(con, similar_records(state))
-            for name, runs in state.cadences.items():
-                for r in runs:
-                    con.execute(
-                        "insert into cadences values(?,?,?,?)",
-                        (name, r["at"], r["by"], r["result"]),
-                    )
-            con.execute("insert or replace into meta values('events', ?)", (str(len(events)),))
-            # Written from the SAME cheap read `stale()` will use -- not recomputed
-            # from `events`, which cannot produce a byte count at all -- and captured
-            # BEFORE the events were read, so it can only under-report the log.
-            shards, high, size = fingerprint.count, fingerprint.lamport, fingerprint.bytes
-            for k, v in (("shards", shards), ("bytes", size)):
-                con.execute("insert or replace into meta values(?, ?)", (k, str(v)))
-            con.execute(
-                "insert or replace into meta values('lamport', ?)",
-                (str(high),),
-            )
-            con.execute(
-                "insert or replace into meta values('built_at', ?), ('fts', ?), ('trigram', ?)",
-                (str(time.time()), "1" if self.fts else "0", "1" if self.trigram else "0"),
-            )
+            self._write_meta(con, len(events), fingerprint, marks)
             con.execute("COMMIT")
         finally:
             con.close()
@@ -505,6 +441,152 @@ class Store:
         tmp.replace(self.path)
         self._collect_stale_indexes()
         return state
+
+    def _incremental_enabled(self) -> bool:
+        """The knob (r-everything-configurable): may the rebuild reconcile the index with
+        the appended deltas instead of recreating it? Off via `DDFLOW_STORE_INCREMENTAL=0`
+        for one process, or a `[store].incremental = false` config section when one exists;
+        on by default. The verification the shortcut is keyed on is not a knob: no doubt
+        is ever skipped, with or without it."""
+        raw = os.environ.get("DDFLOW_STORE_INCREMENTAL")
+        if raw is not None:
+            return raw.strip().lower() not in ("0", "false", "off", "no")
+        sec = getattr(self.cfg, "store", None)
+        if sec is not None:
+            return bool(getattr(sec, "incremental", True))
+        return True
+
+    def _load_shard_digests(self) -> dict[str, tuple[int, str]] | None:
+        """The per-shard `(consumed bytes, sha256)` of the projection the EXISTING index
+        holds, or `None` when there is none (no index, or one written before the marks
+        existed). Any incoherence -- rows missing, offsets disagreeing with the digests --
+        is `None`: the caller falls back to a full build, which re-records them."""
+        if not self.path.exists():
+            return None
+        try:
+            with closing(self.connect()) as con:
+                rows = {
+                    r["k"]: r["v"]
+                    for r in con.execute(
+                        "select k, v from meta where k in (?, ?)", (META_MARK, META_SHARD_DIGESTS)
+                    )
+                }
+        except sqlite3.DatabaseError:
+            return None
+        try:
+            offsets = dict(json.loads(rows[META_MARK]))
+            digests = json.loads(rows[META_SHARD_DIGESTS])
+            stored: dict[str, tuple[int, str]] = {}
+            for name, spec in digests.items():
+                size_s, slash, hexed = str(spec).partition("/")
+                if not slash or not size_s.isdigit() or offsets.get(name) != int(size_s):
+                    return None
+                stored[name] = (int(size_s), hexed)
+            return stored or None
+        except (ValueError, KeyError):
+            return None
+
+    def _verified_shard_marks(
+        self, stored: dict[str, tuple[int, str]], log: EventLog
+    ) -> dict[str, tuple[int, str]] | None:
+        """Verify every consumed prefix is still the exact bytes the projection was built
+        from, and return the marks the NEXT projection is about to consume: per shard, its
+        byte length and the sha256 of those bytes, extended from `stored`. `None` on any
+        doubt -- a shard that shrank, one rewritten in place, one vanished, one added --
+        and a `None` is a full rebuild. The store-side copy of what `_read_delta` checks
+        before reusing a parse; here it licenses reconciling instead of recreating."""
+        out: dict[str, tuple[int, str]] = {}
+        for p in log.shards():
+            try:
+                data = p.read_bytes()
+            except FileNotFoundError:
+                return None
+            if p.name in stored:
+                size, want = stored[p.name]
+                if len(data) < size:
+                    return None
+                h = D.hasher(data[:size])
+                if h.hexdigest() != want:
+                    return None
+                h.update(data[size:])
+                out[p.name] = (len(data), h.hexdigest())
+            else:
+                # A new shard: nothing of it is consumed yet, so nothing to verify.
+                out[p.name] = (len(data), D.hasher(data).hexdigest())
+        if set(stored) - set(out):
+            return None  # a shard the projection consumed is gone
+        return out
+
+    def _reconcile(
+        self, state: State, events: list, fingerprint, marks: dict[str, tuple[int, str]]
+    ) -> State:
+        """Bring the EXISTING index current for the appended deltas, in one transaction:
+        the one projector (`_project`) resolves what every row is -- never a second
+        implementation of `fold` -- and only the rows the tail changed are written. A
+        count that disagrees after the writes aborts the transaction, which the caller
+        answers with a full rebuild."""
+        con = self.connect()
+        try:
+            try:
+                con.execute("BEGIN IMMEDIATE")
+                _reconcile_tables(con, _project(state), self.fts, self.trigram)
+                records = similar_records(state)
+                if [r["digest"] for r in con.execute(
+                    "select digest from similar_docs order by ord"
+                )] != [
+                    textsim.digest(r["title"], r["body"]) for r in records
+                ]:
+                    _insert_similar(con, records, clear=True)
+                self._write_meta(con, len(events), fingerprint, marks)
+                con.execute("COMMIT")
+            except BaseException:
+                con.execute("ROLLBACK")
+                raise
+        finally:
+            con.close()
+        return state
+
+    def _write_meta(
+        self,
+        con,
+        n_events: int,
+        fingerprint,
+        marks: dict[str, tuple[int, str]],
+    ) -> None:
+        """The meta both writers leave behind -- the figures `stale()` compares its next
+        cheap read against, and the verification marks the next rebuild must re-earn before
+        it may reconcile. `marks` holds what was verified (or, on a full build, digested
+        fresh) with the shards as they were AFTER the read, so they may only exceed the
+        fingerprint, the safe direction."""
+        con.execute("insert or replace into meta values('events', ?)", (str(n_events),))
+        # Written from the SAME cheap read `stale()` will use -- not recomputed
+        # from `events`, which cannot produce a byte count at all -- and captured
+        # BEFORE the events were read, so it can only under-report the log.
+        shards, high, size = fingerprint.count, fingerprint.lamport, fingerprint.bytes
+        for k, v in (("shards", shards), ("bytes", size)):
+            con.execute("insert or replace into meta values(?, ?)", (k, str(v)))
+        con.execute(
+            "insert or replace into meta values('lamport', ?)",
+            (str(high),),
+        )
+        con.execute(
+            "insert or replace into meta values('built_at', ?), ('fts', ?), ('trigram', ?)",
+            (str(time.time()), "1" if self.fts else "0", "1" if self.trigram else "0"),
+        )
+        con.execute(
+            "insert or replace into meta values(?, ?)",
+            (META_MARK, json.dumps(sorted(marks.items()))),
+        )
+        con.execute(
+            "insert or replace into meta values(?, ?)",
+            (
+                META_SHARD_DIGESTS,
+                json.dumps(
+                    {name: f"{size}/{hexed}" for name, (size, hexed) in sorted(marks.items())},
+                    sort_keys=True,
+                ),
+            ),
+        )
 
     def _collect_stale_indexes(self) -> list[Path]:
         """Delete the indexes of OTHER code untouched for `STALE_INDEX_DAYS`. Best effort,
@@ -727,10 +809,9 @@ def _row_key(table: str, row: dict[str, Any], n: int) -> str:
 def _fill_trigram(con) -> None:
     """Copy each table's ranked text from its porter FTS5 table into the trigram one."""
     for table, cols in _SEARCH_COLS.items():
-        text = " || ' ' || ".join(f"coalesce({c}, '')" for c in cols)
         con.execute(
             # bandit B608: names come from the fixed `_SEARCH_COLS`.
-            f"insert into {table}_tri(id, text) select id, {text} from {table}_fts"  # nosec B608
+            f"insert into {table}_tri(id, text) select id, {_TRI_EXPR[table]} from {table}_fts"  # nosec B608
         )
 
 
@@ -825,10 +906,293 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
     return row.get("id", ""), ""
 
 
-def _insert_records(con, state, fts: bool) -> None:
-    """The ACTIVE records of the declared kinds that are recalled, in the ``records`` table:
-    a retired, superseded or merged one no longer changes what an agent should do. A kind
-    keeps the text its descriptor names (`Declared.text`); the id is ``<kind>:<id>``."""
+@dataclass(frozen=True)
+class _Row:
+    """One projected row: its primary key, its values (the insert's arguments) and its
+    FTS5 row when its table has one. The full writer inserts every row; the reconciler
+    differs them -- residues ONE shape, so the two never disagree."""
+
+    key: tuple
+    values: tuple
+    fts: tuple | None = None
+
+
+@dataclass(frozen=True)
+class _Table:
+    """One projected table: its insert statements and how its rows are keyed. `key_len`
+    leading columns are the primary key (0 for `cadences`, whose identity is the whole
+    row; 2 for the `(session, seq)` of `prompts`), and a 1-keyed table's key IS its FTS
+    id, which is what an FTS/trigram delete needs (prompts' is not, so its old FTS rows
+    cannot stay behind by deletion -- and they never need to: prompts only ever grow)."""
+
+    name: str
+    cols: tuple[str, ...]
+    key_len: int
+    fts: str | None
+    fts_w: int
+
+    @property
+    def insert(self) -> str:
+        return f"insert or replace into {self.name} values({','.join('?' * len(self.cols))})"
+
+    @property
+    def fts_insert(self) -> str:
+        return f"insert or replace into {self.fts} values({','.join('?' * self.fts_w)})"
+
+    def where(self, key: tuple) -> str:
+        cols = self.cols[: self.key_len or len(self.cols)]
+        return f"delete from {self.name} where {' and '.join(c + ' = ?' for c in cols)}"
+
+
+#: Every projected table, in ITS insert order (`SCHEMA`'s column order, byte-faithful).
+_TABLES = {
+    "items": _Table(
+        "items",
+        (
+            "id", "kind", "title", "parent", "state", "needs", "globs", "tags",
+            "priority", "body", "worktree", "branch", "merged_sha", "blocked_reason",
+            "lease_holder", "lease_expires", "gates", "created_at", "completed_at",
+        ),
+        1,
+        "items_fts",
+        4,
+    ),
+    "lessons": _Table(
+        "lessons",
+        ("id", "title", "rule", "why", "how", "seen_in", "tags", "at", "superseded_by"),
+        1,
+        "lessons_fts",
+        6,
+    ),
+    "research": _Table(
+        "research",
+        ("id", "question", "claim", "verdict", "probe", "sources", "at", "item"),
+        1,
+        "research_fts",
+        5,
+    ),
+    "decisions": _Table(
+        "decisions",
+        (
+            "id", "title", "context", "decision", "consequences", "alternatives",
+            "globs", "tags", "status", "decided_by", "superseded_by", "at", "item",
+        ),
+        1,
+        "decisions_fts",
+        6,
+    ),
+    "memories": _Table(
+        "memories",
+        ("id", "text", "tags", "at", "origin_at", "by", "source"),
+        1,
+        "memories_fts",
+        3,
+    ),
+    "bugs": _Table(
+        "bugs",
+        (
+            "id", "item", "summary", "found_at", "fixed_at", "regression_test",
+            "lesson", "invalid_at", "invalid_reason", "evidence",
+        ),
+        1,
+        "bugs_fts",
+        3,
+    ),
+    "prompts": _Table(
+        "prompts",
+        ("session", "seq", "at", "item", "text", "role"),
+        2,
+        "prompts_fts",
+        2,
+    ),
+    "records": _Table(
+        "records",
+        ("id", "kind", "rid", "title", "body", "status", "at"),
+        1,
+        "records_fts",
+        3,
+    ),
+    "cadences": _Table("cadences", ("name", "at", "by", "result"), 0, None, 0),
+}
+
+
+def _rows_items(rows: dict[str, list["_Row"]], state: State) -> None:
+    for it in state.items.values():
+        if it.removed:
+            continue
+        rows["items"].append(
+            _Row(
+                (it.id,),
+                (
+                    it.id,
+                    it.kind,
+                    it.title,
+                    it.parent,
+                    it.state,
+                    json.dumps(it.needs),
+                    json.dumps(it.globs),
+                    json.dumps(it.tags),
+                    it.priority,
+                    it.body,
+                    it.worktree,
+                    it.branch,
+                    it.merged_sha,
+                    it.blocked_reason,
+                    it.lease.holder if it.lease else "",
+                    (it.lease.renewed_at + it.lease.ttl_s) if it.lease else 0.0,
+                    json.dumps({g: asdict(r) for g, r in it.gates.items()}),
+                    it.created_at,
+                    it.completed_at,
+                ),
+                (it.id, it.title, it.body, " ".join(it.tags)),
+            )
+        )
+
+
+def _rows_lessons(rows: dict[str, list["_Row"]], state: State) -> None:
+    # A contested lesson (B230e852e10) is not advice until `resolve` settles it.
+    for ls in (x for x in state.lessons.values() if not x.contested):
+        rows["lessons"].append(
+            _Row(
+                (ls.id,),
+                (
+                    ls.id,
+                    ls.title,
+                    ls.rule,
+                    ls.why,
+                    ls.how,
+                    json.dumps(ls.seen_in),
+                    json.dumps(ls.tags),
+                    ls.at,
+                    ls.superseded_by,
+                ),
+                (ls.id, ls.title, ls.rule, ls.why, ls.how, " ".join(ls.tags)),
+            )
+        )
+
+
+def _rows_research(rows: dict[str, list["_Row"]], state: State) -> None:
+    for rn in state.research.values():
+        rows["research"].append(
+            _Row(
+                (rn.id,),
+                (
+                    rn.id,
+                    rn.question,
+                    rn.claim,
+                    rn.verdict,
+                    rn.probe,
+                    json.dumps(rn.sources),
+                    rn.at,
+                    rn.item,
+                ),
+                (rn.id, rn.question, rn.claim, rn.probe, rn.verdict),
+            )
+        )
+
+
+def _rows_decisions(rows: dict[str, list["_Row"]], state: State) -> None:
+    for dc in state.decisions.values():
+        rows["decisions"].append(
+            _Row(
+                (dc.id,),
+                (
+                    dc.id,
+                    dc.title,
+                    dc.context,
+                    dc.decision,
+                    dc.consequences,
+                    dc.alternatives,
+                    json.dumps(dc.globs),
+                    json.dumps(dc.tags),
+                    dc.status,
+                    dc.decided_by,
+                    dc.superseded_by,
+                    dc.at,
+                    dc.item,
+                ),
+                (dc.id, dc.title, dc.context, dc.decision, dc.consequences, dc.alternatives),
+            )
+        )
+
+
+def _rows_memories(rows: dict[str, list["_Row"]], state: State) -> None:
+    # LIVE memories only: a forgotten one stays in the log and in `memory list --all`,
+    # but recall exists to change what an agent does next.
+    for m in state.memories.values():
+        if not m.live:
+            continue
+        rows["memories"].append(
+            _Row(
+                (m.id,),
+                (
+                    m.id,
+                    m.text,
+                    json.dumps(m.tags),
+                    m.at,
+                    m.origin_at,
+                    m.by,
+                    m.source,
+                ),
+                (m.id, m.text, " ".join(m.tags)),
+            )
+        )
+
+
+def _rows_bugs(rows: dict[str, list["_Row"]], state: State) -> None:
+    for bg in state.bugs.values():
+        rows["bugs"].append(
+            _Row(
+                (bg.id,),
+                (
+                    bg.id,
+                    bg.item,
+                    bg.summary,
+                    bg.found_at,
+                    bg.fixed_at,
+                    bg.regression_test,
+                    bg.lesson,
+                    bg.invalid_at,
+                    bg.invalid_reason,
+                    bg.evidence,
+                ),
+                (bg.id, bg.summary, bg.lesson),
+            )
+        )
+
+
+def _rows_prompts(rows: dict[str, list["_Row"]], state: State) -> None:
+    """Prompts, notes AND the session's summary, one table, distinguished by `role`;
+    notes are shifted by 10,000 so a note and a prompt with the same `seq` do not
+    collide on the primary key (the FTS id's letter maps back)."""
+    for sess in state.sessions.values():
+        entries = [(pr, "prompt") for pr in sess.prompts] + [(nt, "note") for nt in sess.notes]
+        if sess.summary:  # what `session end --summary` said the session did (B194)
+            entries.append(({"at": sess.ended_at, "text": sess.summary, "seq": 0}, "summary"))
+        for n, (entry, role) in enumerate(entries):
+            seq = int(entry.get("seq", n))
+            rows["prompts"].append(
+                _Row(
+                    (sess.id, seq + _ROLE_OFFSET[role]),
+                    (
+                        sess.id,
+                        seq + _ROLE_OFFSET[role],
+                        # `origin_at` when the note records something that happened before
+                        # it was written down -- so `recall` dates it by when it was TRUE.
+                        entry.get("origin_at") or entry.get("at", ""),
+                        entry.get("item", ""),
+                        entry.get("text", ""),
+                        role,
+                    ),
+                    (f"{sess.id}#{role[0]}{seq}", entry.get("text", "")),
+                )
+            )
+
+
+def _rows_records(rows: dict[str, list["_Row"]], state: State) -> None:
+    """The ACTIVE records of the declared kinds that are recalled, in the ``records``
+    table: a retired, superseded or merged one no longer changes what an agent should
+    do. The id is ``<kind>:<id>``."""
     for rec in state.defs.values():
         if not rec.live:
             continue
@@ -838,27 +1202,103 @@ def _insert_records(con, state, fts: bool) -> None:
             key = f"{d.name}:{rec.id}"
             title = str(rec.fields.get(d.title, ""))
             body = d.text({k: v for k, v in rec.fields.items() if k != d.title})
-            con.execute(
-                "insert or replace into records values(?,?,?,?,?,?,?)",
-                (key, d.name, rec.id, title, body, rec.status, rec.updated_at or rec.at),
+            rows["records"].append(
+                _Row(
+                    (key,),
+                    (key, d.name, rec.id, title, body, rec.status, rec.updated_at or rec.at),
+                    (key, title, body),
+                )
             )
-            if fts:
-                con.execute("insert into records_fts values(?,?,?)", (key, title, body))
 
 
-def _insert_memories(con, state, fts: bool) -> None:
-    """LIVE memories only. A forgotten one stays in the log and in `memory list --all`,
-    but recall exists to change what an agent does next, and a fact the project has
-    stopped believing must not be offered as one."""
-    for m in state.memories.values():
-        if not m.live:
+def _rows_cadences(rows: dict[str, list["_Row"]], state: State) -> None:
+    for name, runs in state.cadences.items():
+        for r in runs:
+            rows["cadences"].append(
+                _Row((), (name, r["at"], r["by"], r["result"]), None)
+            )
+
+
+def _project(state: State) -> dict[str, list["_Row"]]:
+    """Every table's rows as they are resolved THE one time: `_write_rows` inserts them
+    whole, `_reconcile_tables` inserts only what differs. ONE projector means an
+    incremental never disagrees with a rebuild -- it is the rebuild, minus the rows
+    that were already there."""
+    rows: dict[str, list["_Row"]] = {name: [] for name in _TABLES}
+    _rows_items(rows, state)
+    _rows_lessons(rows, state)
+    _rows_research(rows, state)
+    _rows_decisions(rows, state)
+    _rows_memories(rows, state)
+    _rows_bugs(rows, state)
+    _rows_prompts(rows, state)
+    _rows_records(rows, state)
+    _rows_cadences(rows, state)
+    return rows
+
+
+def _write_rows(con, proj: dict[str, list["_Row"]], fts: bool) -> None:
+    """The full writer: every projected row, base and FTS, into a fresh index."""
+    for name, rows in proj.items():
+        t = _TABLES[name]
+        for r in rows:
+            con.execute(t.insert, r.values)
+            if fts and r.fts is not None:
+                con.execute(t.fts_insert, r.fts)
+
+
+#: The ranked text of a trigram row, per table: the SAME columns `_SEARCH_COLS` ranks on,
+#: joined -- `_fill_trigram` copies them all, a reconcile only the changed ids.
+_TRI_EXPR = {
+    t: " || ' ' || ".join(f"coalesce({c}, '')" for c in cols) for t, cols in _SEARCH_COLS.items()
+}
+
+
+def _reconcile_tables(con, proj: dict[str, list["_Row"]], fts: bool, trig: bool) -> None:
+    """The incremental writer: read the index's rows once, write only what differs.
+    Raises `RuntimeError` on a count that disagrees -- the caller answers with a full
+    rebuild, never with a wrong row."""
+    for name, rows in proj.items():
+        t = _TABLES[name]
+        cols = ", ".join(t.cols)  # nosec B608: fixed at import
+        want = {r.key: r for r in rows} if t.key_len else {r.values: r for r in rows}
+        have = {
+            (tuple(r)[: t.key_len] if t.key_len else tuple(r)): tuple(r)
+            for r in con.execute(f"select {cols} from {t.name}")  # nosec B608
+        }
+        touched: list[_Row] = []
+        gone: list[tuple] = []
+        for key, r in want.items():
+            if have.get(key) != r.values:
+                con.execute(t.insert, r.values)
+                if fts and r.fts is not None:
+                    con.execute(t.fts_insert, r.fts)
+                touched.append(r)
+        for key in set(have) - set(want):
+            con.execute(t.where(key), key)
+            if fts and t.fts is not None and t.key_len == 1:
+                # A 1-keyed table's key IS its FTS id; prompts' (key_len 2) is not, and
+                # prompts only grow, so a stale FTS row there cannot be left behind.
+                con.execute(f"delete from {t.fts} where id = ?", (key[0],))
+            gone.append(key)
+        if con.execute(f"select count(*) from {t.name}").fetchone()[0] != len(rows):
+            raise RuntimeError(f"incremental {t.name}: reconciled rows disagree")
+        if not trig or not t.fts:
             continue
-        con.execute(
-            "insert or replace into memories values(?,?,?,?,?,?,?)",
-            (m.id, m.text, json.dumps(m.tags), m.at, m.origin_at, m.by, m.source),
-        )
-        if fts:
-            con.execute("insert into memories_fts values(?,?,?)", (m.id, m.text, " ".join(m.tags)))
+        if gone and t.key_len == 1:
+            phs = ",".join("?" * len(gone))
+            con.execute(
+                f"delete from {t.name}_tri where id in ({phs})", [k[0] for k in gone]
+            )
+        ids = [r.fts[0] for r in touched if r.fts is not None]
+        if ids:
+            phs = ",".join("?" * len(ids))
+            con.execute(
+                "insert or replace into "
+                f"{t.name}_tri(id, text) select id, {_TRI_EXPR[t.name]} "
+                 f"from {t.fts} where id in ({phs})",  # nosec B608
+                 ids,
+            )
 
 
 #: Where each role's rows sit in a session's `seq` space, so a prompt, a note and the
@@ -866,71 +1306,6 @@ def _insert_memories(con, state, fts: bool) -> None:
 _ROLE_OFFSET = {"prompt": 0, "note": 10_000, "summary": 20_000}
 _LETTER_OFFSET = {role[0]: off for role, off in _ROLE_OFFSET.items()}
 assert len(_LETTER_OFFSET) == len(_ROLE_OFFSET), "two roles share an FTS id letter"
-
-
-def _insert_sessions(con, state, fts: bool) -> None:
-    """Prompts, notes AND the session's summary, in one table, distinguished by `role`.
-
-    A note is what the agent recorded about the work — a dead end, a surprise, why it
-    changed approach — and it was folded, replayed and then never indexed, so `recall`
-    could not find the one record of why something was abandoned. Notes are shifted by
-    10,000 so a note and a prompt with the same `seq` do not collide on the primary key.
-    """
-    for sess in state.sessions.values():
-        entries = [(pr, "prompt") for pr in sess.prompts] + [(nt, "note") for nt in sess.notes]
-        if sess.summary:  # what `session end --summary` said the session did (B194)
-            entries.append(({"at": sess.ended_at, "text": sess.summary, "seq": 0}, "summary"))
-        for n, (entry, role) in enumerate(entries):
-            seq = int(entry.get("seq", n))
-            con.execute(
-                "insert or replace into prompts values(?,?,?,?,?,?)",
-                (
-                    sess.id,
-                    seq + _ROLE_OFFSET[role],
-                    # `origin_at` when the note records something that happened before
-                    # it was written down -- an imported journal entry or memory --
-                    # so `recall` dates it by when it was TRUE, not by when the import
-                    # ran and stamped every one of them with today.
-                    entry.get("origin_at") or entry.get("at", ""),
-                    entry.get("item", ""),
-                    entry.get("text", ""),
-                    role,
-                ),
-            )
-            if fts:
-                con.execute(
-                    "insert into prompts_fts values(?,?)",
-                    (f"{sess.id}#{role[0]}{seq}", entry.get("text", "")),
-                )
-
-
-def _insert_decisions(con, state, fts: bool) -> None:
-    """Decisions + their search index. Split out of `rebuild` because the per-table
-    inserts are independent and reading six of them in one function obscured that."""
-    for dc in state.decisions.values():
-        con.execute(
-            "insert or replace into decisions values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                dc.id,
-                dc.title,
-                dc.context,
-                dc.decision,
-                dc.consequences,
-                dc.alternatives,
-                json.dumps(dc.globs),
-                json.dumps(dc.tags),
-                dc.status,
-                dc.decided_by,
-                dc.superseded_by,
-                dc.at,
-                dc.item,
-            ),
-        )
-        if fts:
-            con.execute(
-                "insert into decisions_fts values(?,?,?,?,?,?)",
-                (dc.id, dc.title, dc.context, dc.decision, dc.consequences, dc.alternatives),
-            )
 
 
 def similar_records(state: State) -> list[dict[str, str]]:
@@ -991,10 +1366,13 @@ def similar_records(state: State) -> list[dict[str, str]]:
     return out
 
 
-def _insert_similar(con, records: list[dict[str, str]]) -> None:
+def _insert_similar(con, records: list[dict[str, str]], clear: bool = False) -> None:
     """The similarity engine's index (``services.similar``): one row per record, and
-    per term its postings -- record ordinals and TF-IDF weights, packed. A term's
-    document frequency is its postings' length, so the IDF is stored with them."""
+    per term its postings -- record ordinals and TF-IDF weights, packed. With `clear`
+    (a reconcile over changed records) the rows it replaces are deleted first."""
+    if clear:
+        con.execute("delete from similar_docs")
+        con.execute("delete from similar_terms")
     con.executemany(
         "insert into similar_docs values(?,?,?,?,?)",
         [
