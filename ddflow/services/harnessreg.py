@@ -402,16 +402,27 @@ def detect(environ: Mapping[str, str]) -> str:
 
 def session_fingerprint(environ: Mapping[str, str]) -> str:
     """One stable token for the harness session ``environ`` was started under: the claiming
-    harness's id and the first session variable that is set. "" when no session variable
-    is set -- sessions cannot be told apart there, so identity records stay untagged."""
-    token = next(
-        (
-            environ.get(var).strip()
-            for var in session_env_vars()
-            if environ.get(var, "").strip()
-        ),
-        "",
-    )
-    if not token:
-        return ""
-    return f"{detect(environ) or '-'}:{token}"
+    harness's id and its session variable's value, from ONE descriptor snapshot (the claim
+    and the value cannot drift apart). With no session variable set, "" -- sessions cannot
+    be told apart there, so identity records stay untagged."""
+    claiming = ""  # the ONE harness whose session variable is set
+    token = ""
+    for h in load():
+        for var in h.env.session_id if h.env else ():
+            if environ.get(var, "").strip():
+                if claiming and claiming != h.id:
+                    return ""  # two harnesses claim the session: attribution never guesses
+                claiming = h.id
+                token = environ[var].strip()
+    if not claiming:
+        token = next(
+            (
+                environ.get(var).strip()
+                for var in LEGACY_SESSION_ENV
+                if environ.get(var, "").strip()
+            ),
+            "",
+        )
+        if not token:
+            return ""
+    return f"{claiming or '-'}:{token}"
