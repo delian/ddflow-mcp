@@ -705,36 +705,51 @@ def _owner_alive(tree: Path) -> bool | None:
         return None
 
 
+def _under_sys_tmp(path: Path) -> bool:
+    """Is ``path`` in the directory a ci scratch tree is MADE in (the system temp dir)?
+    The one place a markerless ``ddflow-ci.*`` tree is known to be ci's: anywhere else the
+    name is just a name, and its tree is someone's (not ci's) to remove."""
+    try:
+        return path.parent.resolve() == Path(tempfile.gettempdir()).resolve()
+    except OSError:
+        return False
+
+
 def _scratch_row(tree: Path, alive: bool | None) -> tuple[str, str]:
     """(action, the sentence) for a worktree a ci run's scratch helper made, kept or
     pruned by ``apply``: only an owner seen to be GONE is a leftover; a live owner's, and
-    one whose owner cannot be checked, stay and are only named (B43593d1f3c). A tree made
-    before owners were recorded is the leftover the sweep exists for, not a live run."""
+    one whose owner cannot be checked, stay and are only named. A markerless tree is the
+    pre-recording leftover the sweep exists for ONLY in the temp dir, where a ci scratch
+    tree is made; elsewhere a markerless ``ddflow-ci.*`` is a name, not a claim to it."""
     if alive:
         return "", "a live ci run's scratch tree — its owner process is still running"
     tail = " — prune it and its git registration"
     if alive is False:
         return "prune_scratch", f"a ci run's scratch tree whose owner process is gone{tail}"
     if not Path(f"{tree}{CI.OWNER_SUFFIX}").exists():
-        suffix = " (no owner marker: from before owners were recorded)"
-        return "prune_scratch", f"a ci run's scratch tree{suffix}{tail}"
+        if _under_sys_tmp(tree):
+            return "prune_scratch", (
+                f"a ci run's scratch tree (no owner marker: from before owners were recorded)"
+                f"{tail}"
+            )
+        return "", (
+            "LEFT ALONE — named like a ci scratch tree but made before owners were "
+            "recorded outside the temp dir: its worktree is not ci's to remove"
+        )
     return "", "a ci run's scratch tree whose owner process cannot be checked — LEFT ALONE"
 
 
 def scratch_leftovers(root: Path) -> list[TreeState]:
-    """The registered worktrees that are NOT the queue's: a ci run's detached scratch under
-    the temp directory (`ddflow-ci.`), which `our_trees` never sees because it is on no
-    ddflow branch AND under no ddflow tree root. A run killed mid-flight (no exit cleanup,
-    SIGKILL runs no handler) left the tree and its registration; these stay registered
-    until named here and pruned. Nothing outside the system temp directory is ever one of
-    them, so a real checkout an operator happens to have named `ddflow-ci.something` else-
-    where is left to `our_trees`' judgement."""
+    """The registered worktrees that are NOT the queue's: a ci run's detached scratch
+    elsewhere (`ddflow-ci.`), which `our_trees` never sees because it is on no ddflow
+    branch AND under no ddflow tree root. A run killed mid-flight (no exit cleanup, SIGKILL
+    runs no handler) left the tree and its registration; these stay registered until
+    named here and pruned by ``apply``."""
     out: list[TreeState] = []
-    sys_tmp = Path(tempfile.gettempdir()).resolve()
     for entry in W.list_worktrees(root):
         path = entry.get("worktree", "")
         full = Path(path)
-        if not path or not full.name.startswith(CI.SCRATCH_PREFIX) or full.parent.resolve() != sys_tmp:
+        if not path or not full.name.startswith(CI.SCRATCH_PREFIX):
             continue
         t = TreeState(name=full.name, path=path, branch=entry.get("branch", ""), kind="scratch")
         t.action, t.done = _scratch_row(full, _owner_alive(full))
