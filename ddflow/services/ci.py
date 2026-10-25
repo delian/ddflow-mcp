@@ -251,7 +251,9 @@ def tool_missing(command: str) -> str:
 
 def owner_line() -> str:
     """This process's owner-marker line: ``pid start-ticks``. Keyed by pid AND start time
-    (like the harness identity), so a reused pid never reads as the owner that died."""
+    (like the harness identity), so a reused pid never reads as the owner that died. On a
+    host with no /proc the line is the bare pid; `cleanup` treats a missing start-ticks as
+    unknown (LEFT ALONE, never pruned), so the fallback trades liveness for never guessing."""
     pid = os.getpid()
     try:
         fields = Path(f"/proc/{pid}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
