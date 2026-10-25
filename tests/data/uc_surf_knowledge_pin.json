@@ -60,8 +60,8 @@
   "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
  ],
  "--json lesson search probe": [
-  2,
-  "[]\n",
+  0,
+  "[\n  {\n    \"id\": \"L-one\",\n    \"title\": \"Probe before you claim\",\n    \"rule\": \"always probe first\",\n    \"why\": \"\",\n    \"how\": \"\",\n    \"seen_in\": \"[]\",\n    \"tags\": \"[]\",\n    \"at\": \"<ts>\",\n    \"superseded_by\": \"\"\n  },\n  {\n    \"id\": \"L-two\",\n    \"title\": \"Probe before you claim again\",\n    \"rule\": \"always probe first\",\n    \"why\": \"\",\n    \"how\": \"\",\n    \"seen_in\": \"[]\",\n    \"tags\": \"[]\",\n    \"at\": \"<ts>\",\n    \"superseded_by\": \"\"\n  }\n]\n",
   ""
  ],
  "--json lesson search zzzznothingqqqq": [
@@ -100,8 +100,8 @@
   ""
  ],
  "--json similar always probe first": [
-  2,
-  "[]\n",
+  0,
+  "[\n  {\n    \"id\": \"L-one\",\n    \"kind\": \"lesson\",\n    \"title\": \"Probe before you claim\",\n    \"state\": \"active\",\n    \"score\": 0.880313363,\n    \"shared\": [\n      \"alway\",\n      \"first\",\n      \"probe\"\n    ],\n    \"flags\": []\n  },\n  {\n    \"id\": \"L-two\",\n    \"kind\": \"lesson\",\n    \"title\": \"Probe before you claim again\",\n    \"state\": \"active\",\n    \"score\": 0.880313363,\n    \"shared\": [\n      \"alway\",\n      \"first\",\n      \"probe\"\n    ],\n    \"flags\": []\n  }\n]\n",
   ""
  ],
  "--json similar always probe first --kind nosuchkind": [
@@ -175,8 +175,8 @@
   "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
  ],
  "lesson search probe": [
-  2,
-  "no matching lessons\n",
+  0,
+  "- Probe before you claim\n    always probe first\n- Probe before you claim again\n    always probe first\n",
   ""
  ],
  "lesson search zzzznothingqqqq": [
@@ -215,8 +215,8 @@
   ""
  ],
  "similar always probe first": [
-  2,
-  "Nothing in bug, task, phase, lesson, decision, research, memory, rule scores 0.35 or more against that text.\n",
+  0,
+  "L-one  lesson  0.88  active\n    Probe before you claim\n    shares: alway, first, probe\nL-two  lesson  0.88  active\n    Probe before you claim again\n    shares: alway, first, probe\n",
   ""
  ],
  "similar always probe first --kind nosuchkind": [
