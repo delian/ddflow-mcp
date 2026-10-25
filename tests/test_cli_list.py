@@ -31,6 +31,17 @@ def test_list_is_a_command_and_matches_task_list(repo):
     assert json.loads(out) == json.loads(out2)
 
 
+def test_bare_list_lists_tasks_not_a_usage_error(repo):
+    """B3581842213: `ddflow list` alone must not die with 'required arguments: kind';
+
+    it lists tasks, exactly what `ddflow list task` shows."""
+    _seed(repo)
+    code, out, err = run_cli(repo, "list")
+    assert code == 0, (out, err)
+    code2, out2, _ = run_cli(repo, "list", "task")
+    assert code2 == 0 and out == out2
+
+
 def test_list_rows_carry_needs_and_globs(repo):
     _seed(repo)
     code, out, err = run_cli(repo, "list", "task", "--json")
