@@ -117,6 +117,18 @@ def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
     assert _gate(repo, "unit_tests").outcome == "unavailable"
 
 
+def test_a_dirty_primary_is_not_the_merged_tree(repo):
+    """`HEAD^{tree}` sees only the committed tree: a merged item at the merged tree with
+    an uncommitted edit is not at the merged tree either. The reviewers pinned this tail
+    of the hole, and it is the same wrong-tree admission (B430dae3a68 holefix)."""
+    _merged(repo)
+    (repo / "t.txt").write_text("dirty\n")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
+
+
 def test_a_landed_item_kept_worktree_is_exempt_only_where_the_checkout_stands_at_it(repo):
     """The second site of the same hole (`_implement_without_commits`): a landed item whose
     worktree a merge kept was judged "it IS the base" from the ancestry alone. With the
