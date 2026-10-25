@@ -26,6 +26,14 @@ def test_a_declared_prompt_injection_of_a_silent_handler_is_reported_non_deliver
         assert "declared, not delivering" in H.harness_show(repo, hid).data["message"]
 
 
+def test_claude_s_declared_prompt_is_reported_non_delivering_too(repo):
+    # claude.toml declares inject=['session_start', 'prompt']: the prompt half is exactly the
+    # door that emits nothing, and its show line must say so (bug B1878cc0da3).
+    claude = HR.get("claude")
+    assert H.event_level(claude, "prompt") == H.DECLARED
+    assert "declared, not delivering" in H.harness_show(repo, "claude").data["message"]
+
+
 def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
     assert H.event_level(HR.get("claude"), "session_start") == H.NATIVE
     assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
@@ -37,3 +45,13 @@ def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monk
         assert firstcall.hook_delivers(repo, hid) is False
         note = firstcall.preamble(repo, hid, "ddflow_status", {"name": hid})
         assert note and "ddflow session start" in note
+
+
+def test_a_harness_whose_native_hook_injects_the_start_gets_no_preamble(repo, monkeypatch):
+    from ddflow.services import hookwriters as HW
+
+    monkeypatch.setenv("DDFLOW_SESSION_FIRST_CALL", "true")
+    HW.apply(repo, HR.get("claude"), "install")
+    assert firstcall.hook_delivers(repo, "claude") is True
+    note = firstcall.preamble(repo, "claude", "ddflow_status", {"name": "claude-code"})
+    assert not note
