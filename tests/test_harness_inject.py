@@ -99,6 +99,13 @@ def test_pre_tool_level_derives_from_the_deny_dialect(repo):
     assert H.event_level(injected_gem, "pre_tool") == H.DECLARED
     injected_claude = replace(gem, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt", "pre_tool")))
     assert H.event_level(injected_claude, "pre_tool") == H.NATIVE
+    # The session_start claim reads the SAME field: a copy whose emitter turns non-claude
+    # must not be judged by the registry's descriptor; its pre_tool flips to WIRED and its
+    # injected session_start drops to DECLARED from this copy alone.
+    copied = replace(claude_dialect, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt")))
+    inverted = replace(copied, hooks=replace(copied.hooks, emitter="gemini"))
+    assert H.event_level(inverted, "session_start") == H.NATIVE
+    assert H.event_level(inverted, "pre_tool") == H.WIRED
 
 
 def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monkeypatch):
