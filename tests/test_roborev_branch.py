@@ -317,9 +317,7 @@ def test_a_failed_record_line_carries_a_reason_the_gate_record_accepts(
     assert args.reason, "a failed outcome must carry --reason or gate record refuses it"
 
 
-def test_a_dash_led_first_finding_line_is_still_the_reason_value(
-    tmp_path, monkeypatch, capsys
-):
+def test_a_dash_led_first_finding_line_is_still_the_reason_value(tmp_path, monkeypatch, capsys):
     """The review round on B0724593ecf: a space-separated `--reason --bug` would be read
     as another flag; the attached --reason=<value> form keeps it the value."""
     repo, _log = _setup(tmp_path, monkeypatch)
@@ -337,9 +335,7 @@ def test_a_dash_led_first_finding_line_is_still_the_reason_value(
     record_line = next(
         ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("record: ddflow ")
     )
-    args = cli.build_parser().parse_args(
-        shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:]
-    )
+    args = cli.build_parser().parse_args(shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:])
     assert args.outcome == "failed"
     assert args.reason == "-- dangerously over-broad glob"
 
