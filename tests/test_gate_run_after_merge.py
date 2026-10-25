@@ -88,3 +88,52 @@ def test_a_forced_gate_run_after_merge_takes_the_fresh_measurement(repo):
     text = out + err
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed"
+
+
+def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
+    """B430dae3a68 holefix: `merged_sha` being in the base's history says the merge was
+    landed, not that the primary is checked out AT it. A later commit moves the primary
+    past the merge; the gate must not measure that tree as T1's merged one and record
+    its pass for T1."""
+    _merged(repo)
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "later work on main")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
+
+
+def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
+    """A revert keeps `merged_sha` in main's history while the checked-out tree no longer
+    holds T1's work. The ancestry check alone passes; only the tree comparison may admit
+    the primary as the merged tree (B430dae3a68 holefix)."""
+    _merged(repo)
+    _git(repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
+
+
+def test_a_landed_item_kept_worktree_is_exempt_only_where_the_checkout_stands_at_it(repo):
+    """The second site of the same hole (`_implement_without_commits`): a landed item whose
+    worktree a merge kept was judged "it IS the base" from the ancestry alone. With the
+    checkout moved off its merged work, `implement` must measure the branch, not take
+    `merged_sha`'s ancestry as the checkout's."""
+    run_cli(repo, "init")
+    run_cli(repo, "config", "worktree.remove_on_merge", "false")
+    run_cli(repo, "task", "add", "T1", "--title", "t")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "t.txt").write_text("x\n")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "-qm", "work")
+    assert run_cli(repo, "merge", "T1")[0] == 0
+    _git(tree, "checkout", "--detach", "HEAD~1")
+    code, out, err = run_cli(
+        repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "x"
+    )
+    assert code == 3 and "no commit ahead" in out + err, (code, out, err)
