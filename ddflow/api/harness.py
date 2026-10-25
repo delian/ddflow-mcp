@@ -24,7 +24,10 @@ from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
-from .setup import INJECT_DELIVERS
+
+#: The Hooks.block modes whose firing can refuse a call (or put its warning before the
+#: model): only these make a pre_tool door act even when ddflow declares no injection at it.
+REFUSING = HR.BLOCK_MODES - {"none"}
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -37,10 +40,11 @@ NONE = "none"
 NV = "nv"
 
 #: Best first; `list` reports the best rung any event reaches. An event the descriptor
-#: declares in `[hooks].inject` whose handler emits nothing sits on `DECLARED`: the native
-#: door exists, the model sees nothing through it (setup.INJECT_DELIVERS). An event that is
-#: WIRED in the descriptor but NOT declared in `inject` never puts ddflow's output before
-#: the model either, so it reports `WIRED` rather than claim a delivering hook.
+#: declares in `[hooks].inject` sits on `DECLARED` unless its handler CAN put something
+#: through the door: session_start's brief always, pre_tool's refusal when the descriptor
+#: arms a blocking mode. An event WIRED but NOT declared in `inject` never puts ddflow's
+#: output before the model either, so it reports `WIRED` -- except a wired armed pre_tool,
+#: whose firing can still refuse the call in a way the agent sees.
 LADDER = (NATIVE, DECLARED, WIRED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
@@ -49,9 +53,11 @@ def event_level(h: Harness, event: str) -> str:
     hk = h.hooks
     if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
         if event in hk.inject:
-            return DECLARED if event not in INJECT_DELIVERS else NATIVE
-        if event == "pre_tool":
-            return NATIVE  # wired, and its firing can refuse the call for armed emitters
+            if event == "session_start" or (event == "pre_tool" and hk.block in REFUSING):
+                return NATIVE
+            return DECLARED  # the descriptor declares the door, the handler emits nothing
+        if event == "pre_tool" and hk.block in REFUSING:
+            return NATIVE  # wired; an armed firing can still refuse the call the agent sees
         return WIRED  # a wired native door ddflow declares no injection at; nothing is shown
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
