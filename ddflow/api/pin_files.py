@@ -9,14 +9,18 @@ from ..core import outcome as O
 from ..core.events import SkewRefused
 from ..infra import git as G
 from ..infra.fsio import LockTimeout
+from ..services import approval as AP
 from ..services import leasekeep as LK
 from ..services import pins as PN
 from ..services import pins_merge as PM
 from ..services import pins_written as PW
+from ..services.approvals import class_states as APCS
+from ..services.approvals import consume as CN
+from ..services.approvals.canon import Canon
 from ._base import _load
 
 
-def pins_regenerate(
+def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the door's flags
     repo: Path,
     *,
     only: str = "",
@@ -27,6 +31,7 @@ def pins_regenerate(
     target: str = "",
     start: Path | None = None,
     agent: str = "",
+    approval: str = "",
     on_progress=None,
 ) -> O.Outcome:
     """Re-record the stale pin files; with ``check`` list them (exit 1 when any)."""
@@ -65,12 +70,42 @@ def pins_regenerate(
         _record_written(primary, repo, before, watched)
         return O.ok("pins", note=note)
     tick = _lease_tick(primary, agent)
+    stamp: dict[str, object] = {}
+    if approval and verb == "regenerate" and not check and not after_merge:
+        bad = _regenerate_approval(
+            primary, agent=agent, before=before, only=only, approval=approval
+        )
+        if isinstance(bad, O.Outcome):
+            return bad
+        stamp = bad
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
         _record_written(primary, repo, before, watched)
     if rep.problem:
         return O.failed("pins", rep.problem)
-    return _regenerate_outcome(rep, check, attr_actions)
+    out = _regenerate_outcome(rep, check, attr_actions)
+    if stamp and out.exit == O.OK and not check:
+        out.data["approval"] = stamp
+    return out
+
+
+def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approval: str):
+    """The pins-are-stale class route (verb pins.regenerate): consume an operator approval of
+    re-recording ``before`` with ``only`` (``approval`` = request or id), else a person."""
+    log, cfg = _load(primary, agent)
+    if not AP.agent_marker(agent):
+        return O.refused("pins", "--approval is an agent's route; a person re-records directly")
+    canon = Canon(
+        verb="pins.regenerate",
+        agent=log.agent_id,
+        item=only,
+        args={"only": only},
+        state=APCS.pins_state(before),
+    )
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
+    if not decision.ok:
+        return O.refused("pins", "refusing: " + decision.message)
+    return decision.stamp
 
 
 def _follow_the_recipes(repo: Path, cfg, only: str = "") -> list[str]:

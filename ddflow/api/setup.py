@@ -33,6 +33,7 @@ from ..infra import git as G
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..infra.log import EventLog, running_version
+from ..services import approval as AP
 from ..services import backups as BK
 from ..services import claudehooks as CH
 from ..services import compaction as CP
@@ -57,6 +58,9 @@ from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
 from ..services import upgrade_status as UST
 from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
+from ..services.approvals import class_states as APCS
+from ..services.approvals import consume as CN
+from ..services.approvals.canon import Canon
 from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
@@ -370,17 +374,52 @@ def _said(added: list[str]) -> str:
     )
 
 
-def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") -> O.Outcome:
+def configure(
+    repo: Path, edit: ConfigEdit | None = None, *, agent: str = "", approval: str = ""
+) -> O.Outcome:
     """Read every knob with its source, or change one.
 
-    An append is validated against the MERGED text — see the module docstring for why
-    validating what is already on disk checks nothing.
+    An agent may drive a change through an operator's approval (verb config.set): with
+    `--approval request` it files the request the operator answers anywhere, with
+    `--approval ID` it applies the change and records the approval. A person configures
+    directly and is unchanged. An append is validated against the MERGED text — see the
+    module docstring for why validating what is already on disk checks nothing.
     """
 
     edit = edit or ConfigEdit()
-    _log, cfg, _st = _load(repo, agent)
+    log, cfg, _st = _load(repo, agent)
     target = str(CW.config_file(repo, local=edit.local))
     layer = "local" if edit.local else "file"
+
+    stamp: dict[str, Any] = {}
+    if edit.set and approval:
+        if not AP.agent_marker(agent):
+            return O.refused(
+                "config",
+                "--approval is an agent's route; a person configures it directly",
+                key=edit.set,
+                value=edit.value,
+                rows=[],
+                text="",
+            )
+        canon = Canon(
+            verb="config.set",
+            agent=log.agent_id,
+            item=edit.set,
+            target=edit.value,
+            state=APCS.config_set_state(edit.set, edit.value, layer),
+        )
+        decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
+        if not decision.ok:
+            return O.refused(
+                "config",
+                "refusing: " + decision.message,
+                key=edit.set,
+                value=edit.value,
+                rows=[],
+                text="",
+            )
+        stamp = decision.stamp
 
     if edit.set:
         # What a person typed: `5` and `true` are the literals they spell (`Spelled`).
@@ -406,6 +445,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             + shadow["shadow_note"]
             + _said(res.attributes_added),
             **shadow,
+            **({"approval": stamp} if stamp else {}),
         )
 
     if edit.append_toml:
