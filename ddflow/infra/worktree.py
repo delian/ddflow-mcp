@@ -23,7 +23,7 @@ import contextlib
 import os
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -67,6 +67,7 @@ def scratch_tree(
     prefix: str = "ddflow-scratch-",
     under: Path | None = None,
     quiet: bool = False,
+    claim: Callable[[Path], Path | None] | None = None,
 ) -> Iterator[Scratch]:
     """A throwaway worktree of ``ref`` in ``root``'s repository: one place that makes it,
     removes it however the body ends and prunes the registry.
@@ -77,9 +78,15 @@ def scratch_tree(
     caller words its own failure from ``add``. Nothing is left behind: the tree is removed
     (forced), its directory deleted and the registry pruned, in that order, whatever the
     body did.
+
+    ``claim`` runs with the tree's path once it exists but BEFORE `git worktree add`
+    registers it (ci passes one that writes its sibling owner marker, so a sweep between
+    the add and the claim can never see the tree unclaimed). The path it returns (the
+    marker ci writes) is unlinked on exit, so a claim without a registration does not leak.
     """
     root = Path(root)
     tmp = fsio.unused_dir(prefix, under)  # `worktree add` wants to create it
+    claimed: Path | None = claim(tmp) if claim is not None else None
     args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
     add = git(root, *args, str(tmp), ref)
     try:
@@ -89,6 +96,9 @@ def scratch_tree(
             git(root, "worktree", "remove", "--force", str(tmp))
         # Delete the directory BEFORE pruning: prune only drops registrations whose tree is
         # already gone, so after a failed `remove` it would keep the very entry we clean up.
+        if claimed is not None:
+            with contextlib.suppress(OSError):
+                claimed.unlink()
         shutil.rmtree(tmp, ignore_errors=True)
         git(root, "worktree", "prune")
 
