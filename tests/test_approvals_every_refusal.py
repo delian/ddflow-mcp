@@ -71,7 +71,7 @@ def test_the_config_edit_class_has_a_request_route_an_agent_can_drive(repo):
     assert code == 3 and "config.set" in err, err  # auto-filed by the door, still to answer
     code, out, _err = run_cli(repo, "--json", "config")
     values = {r["key"]: r["value"] for r in json.loads(out)["rows"]}
-    assert values.get("ci.pins_precheck", True) is True, "filing the request must not apply it"
+    assert values["ci.pins_precheck"] is True, "filing the request must not apply it"
     ask_id = _ask_id(err)
     row = asks_of(fold(EventLog(repo, "probe").read_all(), strict=False))[ask_id]
     assert row["verb"] == "config.set" and row["digest"]
