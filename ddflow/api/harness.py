@@ -9,7 +9,7 @@ answers three questions an operator otherwise answers by reading TOML and settin
 * ``doctor`` -- drift between the descriptor and the repo: an unregistered MCP server, a
   missing hook with the command that installs it, a slash-command file that is gone.
 
-The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > declared, not delivering > plugin > MCP first call > MCP instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is reported as ``nv``, never as an absence (see ``harnessreg``).
+The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > declared, not delivering > wired, not injected > plugin > MCP first call > MCP instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is reported as ``nv``, never as an absence (see ``harnessreg``).
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from .setup import INJECT_DELIVERS
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
+WIRED = "wired, not injected"
 PLUGIN = "plugin"
 FIRST_CALL = "mcp first call"
 MCP_TEXT = "mcp instructions"
@@ -37,17 +38,21 @@ NV = "nv"
 
 #: Best first; `list` reports the best rung any event reaches. An event the descriptor
 #: declares in `[hooks].inject` whose handler emits nothing sits on `DECLARED`: the native
-#: door exists, the model sees nothing through it (setup.INJECT_DELIVERS).
-LADDER = (NATIVE, DECLARED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
+#: door exists, the model sees nothing through it (setup.INJECT_DELIVERS). An event that is
+#: WIRED in the descriptor but NOT declared in `inject` never puts ddflow's output before
+#: the model either, so it reports `WIRED` rather than claim a delivering hook.
+LADDER = (NATIVE, DECLARED, WIRED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
 def event_level(h: Harness, event: str) -> str:
     """The rung of the fallback ladder that delivers ``event`` to this agent."""
     hk = h.hooks
     if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
-        if event in hk.inject and event not in INJECT_DELIVERS:
-            return DECLARED  # the door is declared, ddflow's handler emits nothing through it
-        return NATIVE
+        if event in hk.inject:
+            return DECLARED if event not in INJECT_DELIVERS else NATIVE
+        if event == "pre_tool":
+            return NATIVE  # wired, and its firing can refuse the call for armed emitters
+        return WIRED  # a wired native door ddflow declares no injection at; nothing is shown
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
     if hk is None and h.plugin is None:
