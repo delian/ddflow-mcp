@@ -341,7 +341,10 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
     if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
         return False
-    return not W.dirty(W.Worktree(item=it.id, path=here, branch="", base=""))
+    if not W.dirty(W.Worktree(item=it.id, path=here, branch="", base="")):
+        if W.git(here, "diff", "--quiet").ok:
+            return True
+    return False
 
 
 def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
