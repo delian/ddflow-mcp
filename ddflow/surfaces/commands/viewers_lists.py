@@ -280,7 +280,7 @@ LIST_COMMAND = Command(
     path=("list",),
     summary="list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query TEXT` is `ddflow search`",
     params=(
-        Param("kind", positional=True, choices=(*_LISTS, *_OTHER_VIEWERS), help="what to list"),
+        Param("kind", positional=True, choices=(*_LISTS, *_OTHER_VIEWERS), help="what to list", default="task", nargs="?"),
         Param("query", default=None, help="the text to look for (kind search)"),
         *_union_params(),
     ),
