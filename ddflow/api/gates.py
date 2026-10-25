@@ -351,7 +351,7 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
         line and (line[0].islower() or line[0] in "Ss") for line in marked.out.splitlines()
     ):
         return False
-    if not W.dirty(W.Worktree(item=it.id, path=here, branch="", base="")):
+    if not W.dirty(W.Worktree(item=it.id, path=here, branch="", base=""), untracked=False):
         if W.git(here, "diff", "--quiet").ok:
             return True
     return False
