@@ -810,6 +810,26 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
+def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) -> bool:
+    """Free one leftover scratch tree whose owner is gone (B43593d1f3c): the owner marker
+    re-read under the log's lock (the owner could have re-started since the survey), the
+    directory removed BEFORE the prune, which only drops a registration whose tree is
+    already gone."""
+    with log.transaction():
+        if _owner_alive(Path(t.path)) is True:
+            t.action, t.done = "", "kept: its owner process is alive since the survey"
+            done.append(f"kept {t.name}: its owner process is alive since the survey")
+            return False
+        shutil.rmtree(t.path, ignore_errors=True)
+        try:
+            Path(f"{t.path}{CI.OWNER_SUFFIX}").unlink(missing_ok=True)
+        except OSError:
+            pass
+        W.git(root, "worktree", "prune")
+    done.append(f"pruned leftover ci scratch tree {t.name}")
+    return True
+
+
 def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
     """Carry out one planned ``remove``; the lines for the report (and ``t`` updated when kept).
 
@@ -892,26 +912,8 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
             done.append(f"kept {t.name}: {kind} since the survey")
         return bool(kind)
 
-    def pruned_scratch(t: TreeState) -> bool:
-        """Free one leftover scratch tree whose owner is gone: the marker re-read under the
-        log's lock (the owner could have re-started), then the directory removed BEFORE the
-        prune, which only drops a registration whose tree is already gone."""
-        with log.transaction():
-            if _owner_alive(Path(t.path)) is True:
-                t.action, t.done = "", "kept: its owner process is alive since the survey"
-                done.append(f"kept {t.name}: its owner process is alive since the survey")
-                return False
-            shutil.rmtree(t.path, ignore_errors=True)
-            try:
-                Path(f"{t.path}{CI.OWNER_SUFFIX}").unlink(missing_ok=True)
-            except OSError:
-                pass
-            W.git(root, "worktree", "prune")
-        done.append(f"pruned leftover ci scratch tree {t.name}")
-        return True
-
     for t in plan.trees:
-        if t.action == "prune_scratch" and pruned_scratch(t):
+        if t.action == "prune_scratch" and _pruned_scratch(log, root, t, done):
             continue
         if t.action == "merge":
             with unless_claimed() as guard:
