@@ -72,20 +72,12 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     tick = _lease_tick(primary, agent)
     stamp: dict[str, object] = {}
     if approval and verb == "regenerate" and not check and not after_merge:
-        log, cfg = _load(primary, agent)[:2], Config.load(primary)
-        if not AP.agent_marker(agent):
-            return O.refused("pins", "--approval is an agent's route; a person re-records directly")
-        canon = Canon(
-            verb="pins.regenerate",
-            agent=log.agent_id,
-            item=only,
-            args={"only": only},
-            state=APCS.pins_state(before),
+        bad = _regenerate_approval(
+            primary, agent=agent, before=before, only=only, approval=approval
         )
-        decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
-        if not decision.ok:
-            return O.refused("pins", "refusing: " + decision.message)
-        stamp = decision.stamp
+        if isinstance(bad, O.Outcome):
+            return bad
+        stamp = bad
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
         _record_written(primary, repo, before, watched)
@@ -95,6 +87,25 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     if stamp and out.exit == O.OK and not check:
         out.data["approval"] = stamp
     return out
+
+
+def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approval: str):
+    """The pins-are-stale class route (verb pins.regenerate): consume an operator approval of
+    re-recording ``before`` with ``only`` (``approval`` = request or id), else a person."""
+    log, cfg = _load(primary, agent)
+    if not AP.agent_marker(agent):
+        return O.refused("pins", "--approval is an agent's route; a person re-records directly")
+    canon = Canon(
+        verb="pins.regenerate",
+        agent=log.agent_id,
+        item=only,
+        args={"only": only},
+        state=APCS.pins_state(before),
+    )
+    decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
+    if not decision.ok:
+        return O.refused("pins", "refusing: " + decision.message)
+    return decision.stamp
 
 
 def _follow_the_recipes(repo: Path, cfg, only: str = "") -> list[str]:
