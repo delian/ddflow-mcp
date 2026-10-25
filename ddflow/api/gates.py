@@ -376,6 +376,10 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
             return here.path, ""
         if it.lease is not None:  # claimed --no-worktree, and asked from the primary
             return None, ""
+    if it.merged_sha and it.kind != "phase":
+        # off the `_at_merged_tree` branch, no honest task tree stands for a merged
+        # item: recording None over a moved/dirty fall-through is the honest no-tree.
+        return None, ""
     return repo, ""
 
 
