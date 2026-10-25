@@ -89,14 +89,14 @@ def test_dropping_the_db_changes_nothing(log, cfg, store):
     the original falsifier to the path the incremental projector owns.
     """
     sid = _seed(log, cfg)
-    before = store.rebuild(log)
     hits_before = store.search("lessons", "alpha", 3)
+    store.rebuild(log)
     _grow(log, cfg, sid)
-    store.rebuild(log)  # the deltas land on the incremental projector
+    incremental = store.rebuild(log)  # the deltas land on the incremental projector
     after_deltas = _dump(store)
     store.path.unlink()
     after = store.rebuild(log)
-    assert set(before.items) == set(after.items)
+    assert set(incremental.items) == set(after.items)
     assert store.search("lessons", "alpha", 3) == hits_before
     assert _dump(store) == after_deltas
 
