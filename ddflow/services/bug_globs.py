@@ -10,7 +10,9 @@ from posixpath import basename
 from ..config import Config
 from ..core import globspec as GS
 from ..core.model import State
+from ..infra import git as GIT
 from .completion import fixes_of
+from .testselect import RANK_DECLARED, _by_name, _data_readers, _Picks, governed, is_test_file
 
 
 def bug_globs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
@@ -58,6 +60,60 @@ def inherit_globs(source_globs: list[str], text: str, *, tool_bug: bool = False)
     return [g for g in source_globs if any(_names(p, g) for p in named)]
 
 
+def _named_files(named: list[str], paths: list[str]) -> list[str]:
+    """The listed paths ``named`` tokens denote: a pattern kept whole, a path named whole
+    (an exact path before one the listing order foists on it: `aaa/ddflow/.../claim.py`
+    before `ddflow/.../claim.py` must not stand in for the named path -- a rubber_duck
+    finding), or a bare name a path's basename matches (the text says `claim.py` for
+    `ddflow/api/lifecycle/claim.py`). One tell per token, in order."""
+    out: list[str] = []
+    for t in sorted(set(named)):  # a token repeated names one file; occurrences are not files
+        stripped = t.removeprefix("./")
+        if any(c in stripped for c in "*?["):
+            out.append(stripped)  # a glob the text names as such: kept, existing_globs judges it
+            continue
+        if "/" not in stripped:
+            for p in paths:  # an exact path first: not a listing-come-first same-name sibling
+                if p == stripped:
+                    out.append(p)
+                    break
+            else:
+                for p in paths:
+                    if fnmatch(basename(p), stripped):
+                        out.append(p)
+                        break
+        else:
+            for p in paths:  # an exact path first: not a listing-come-first same-name sibling
+                if p == stripped:
+                    out.append(p)
+                    break
+            else:
+                for p in paths:
+                    if fnmatch(p, stripped):
+                        out.append(p)
+                        break
+    return out
+
+
+def found_scope(root: Path, text: str) -> tuple[list[str], list[str]] | None:
+    """``(kept, dropped)``: the bug's OWN found scope -- the files its text names that exist
+    in the tree, plus the tests pinning them (by-name, GOVERNS and data readers, the cheap
+    half of `testselect`: the import graph is too slow for every `bug found`) -- the default
+    globs of a fix task for a bug naming few files (B45b80286d2). None when the tree cannot
+    be listed: the caller falls back to the inherited globs."""
+    listed = GIT.files(root, "all")
+    if listed is None:
+        return None
+    files = _named_files(_PATHISH.findall(text), listed)  # a named test file is the scope too
+    kept, dropped = existing_globs(root, files)
+    tests = [p for p in listed if is_test_file(p) and (root / p).is_file()]
+    pick = _Picks()
+    _by_name(kept, tests, pick)
+    pick.many(_data_readers(root, kept, tests), RANK_DECLARED)
+    pick.many(governed(root, kept, tests), RANK_DECLARED)
+    return kept + [t for t in sorted(pick.by) if t not in kept], dropped
+
+
 def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
     """``(kept, dropped)``: the globs that name something in the tree at ``root`` (a path
     that exists, or a pattern that matches one), and those that name nothing.
@@ -77,11 +133,27 @@ def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
 
 
 def fix_task_globs(
-    root: Path, globs: str, source_globs: list[str], text: str, *, tool_bug: bool = False
+    root: Path,
+    globs: str,
+    source_globs: list[str],
+    text: str,
+    *,
+    tool_bug: bool = False,
+    named_scope_at: int = 0,
 ) -> tuple[list[str], list[str]]:
     """``(kept, dropped)`` for a fix task: the reporter's ``globs`` verbatim (an explicit
-    scope may name a file the fix creates), else the ones inherited from the source item,
-    cut to those that exist in the tree (only a guess can be wrong about the tree)."""
+    scope may name a file the fix creates), else -- a bug naming at most ``named_scope_at``
+    files -- the bug's own found scope (`found_scope`, B45b80286d2: two narrow sibling bugs
+    no longer inherit one wide item glob and exclude each other), else the ones inherited
+    from the source item, cut to those that exist in the tree (only a guess can be wrong
+    about the tree)."""
     if globs:
         return GS.parse(globs), []
+    named = sorted(
+        set(_PATHISH.findall(text))
+    )  # one file named twice is one file (a review finding)
+    if not tool_bug and named and 0 < len(named) <= named_scope_at:
+        found = found_scope(root, text)
+        if found is not None and found[0]:
+            return found  # the bug's own files (an empty find: fall back and inherit)
     return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
