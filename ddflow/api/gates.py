@@ -316,6 +316,28 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     return LK.keeper(log, cfg, it)
 
 
+def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
+    """Does the checkout at `here` stand AT the tree `it` merged in as?
+
+    `git merge-base --is-ancestor <merged_sha> <base>` proves the merge is in the base's
+    history, not WHERE the checked-out tree stands: a revert, a later merge onto the
+    base, or a moved checkout keeps the ancestry while the checked-out tree is a
+    different one, and a gate run there measures the wrong tree and records its outcome
+    for `it`. Both must hold: the ancestry, AND the checked-out HEAD's tree equalling
+    the merged sha's tree -- a cheap tree-sha comparison in the object db, no checkout
+    and no diff (the B430dae3a68 reviewer holefix).
+    """
+
+    if not it.merged_sha:
+        return False
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    if not W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
+        return False
+    head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
+    merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
+    return bool(head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip())
+
+
 def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
     """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
 
@@ -328,21 +350,15 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
     result), for an item never claimed, and with worktrees off -- the switch for a lone
     agent that works in the primary -- and for a task whose merge removed its worktree
     (B430dae3a68): its work IS committed at the base's HEAD, so the primary is the
-    honest post-merge home and a worktree gate genuinely re-runs there.
+    honest post-merge home and a worktree gate genuinely re-runs there. The primary
+    counts as that home only while it still STANDS at the merged tree (`_at_merged_tree`):
+    `merged_sha` in the base's history does not make a reverted, moved-on or checked-out
+    elsewhere primary the merged tree (the B430dae3a68 holefix).
     """
 
     if it.worktree:
         return W.load_path(repo, it.worktree), ""
-    if (
-        it.merged_sha
-        and W.git(
-            repo,
-            "merge-base",
-            "--is-ancestor",
-            it.merged_sha,
-            cfg.worktree.base_ref or W.default_branch(repo),
-        ).ok
-    ):
+    if _at_merged_tree(repo, cfg, it, repo):
         return repo, ""
     if it.kind != "phase" and cfg.worktree.enabled:
         here, held = callers_tree(repo, cfg, st, it, called_from)
@@ -979,8 +995,8 @@ def _implement_without_commits(
     if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
-    if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
-        return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
+    if _at_merged_tree(repo, cfg, it, wt):
+        return ""  # landed (B998bcca9ce): the checkout STANDS at the merged tree, i.e. it IS the base
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
     if not r.ok:
         return (
