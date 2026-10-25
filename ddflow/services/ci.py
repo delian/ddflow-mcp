@@ -301,6 +301,9 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
     def free_then_die(signum: int, _frame) -> None:
         try:
             _remove_scratch(repo, tree)
+            marker.unlink(missing_ok=True)  # the process dies here: no `finally` follows
+        except OSError:
+            pass
         finally:
             signal.signal(signum, signal.SIG_DFL)
             os.kill(os.getpid(), signum)
