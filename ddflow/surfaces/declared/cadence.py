@@ -54,6 +54,7 @@ COMMANDS: tuple[Command, ...] = (
                 verb=a["document"],
                 target=a.get("target") or "",
                 agent=agent,
+                approval=a.get("approval") or "",
             )
             if a["document"] in ("regenerate", "merge-driver")
             else _api().pins(
@@ -103,6 +104,12 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="regenerate: the post-merge hook entry.",
                 cli_help="regenerate: what the post-merge hook runs",
+            ),
+            Param(
+                "approval",
+                default="",
+                cli_only=True,
+                cli_help="regenerate: an agent's route (`request` files an operator approval to answer anywhere, an approval id re-records the pins and records the approval); a person re-records directly",
             ),
             Param(
                 "tests",
