@@ -66,11 +66,7 @@ def _link_pools(
     work = [d for kind, ds in pools_by_kind.items() if kind != "phase" for d in ds]
     used, fallback = dict(pools_by_kind), {}
     for kind in dict.fromkeys(kinds):
-        if (
-            not used.get(kind)
-            and kind == "phase"
-            and len(work) >= max(min_samples, 1)
-        ):
+        if not used.get(kind) and kind == "phase" and len(work) >= max(min_samples, 1):
             used[kind] = work
             fallback[kind] = "work"
     pools = [used.get(k) or [] for k in kinds]
