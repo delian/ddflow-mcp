@@ -43,7 +43,10 @@ def _state(records: list[dict[str, str]]) -> SimpleNamespace:
     ``pairs._settled`` read."""
 
     return SimpleNamespace(
-        items={r["id"]: Item(id=r["id"], kind="task", title=r["title"], body=r["body"]) for r in records},
+        items={
+            r["id"]: Item(id=r["id"], kind="task", title=r["title"], body=r["body"])
+            for r in records
+        },
         bugs={},
         lessons={},
         decisions={},
