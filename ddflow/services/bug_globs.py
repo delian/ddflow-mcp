@@ -138,6 +138,6 @@ def fix_task_globs(
     named = _PATHISH.findall(text)
     if not tool_bug and named and 0 < len(named) <= named_scope_at:
         found = found_scope(root, text)
-        if found is not None:
-            return found
+        if found is not None and found[0]:
+            return found  # the bug's own files (an empty find: fall back and inherit)
     return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
