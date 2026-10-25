@@ -1555,7 +1555,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
