@@ -114,5 +114,5 @@ def test_pairs_from_hands_the_item_down_to_one_query():
         rows = P.pairs_from(_state(records), Config.load(), kinds=["task"], item="R42")
     finally:
         P.sim.Index.query = orig
-    assert len(queries) == 1, f"{len(queries)} index queries for one item"
+    assert queries == ["R42"], f"the sweep queried {queries}, not just the asked record"
     assert rows and all(r["a"] == "R42" or r["b"] == "R42" for r in rows)
