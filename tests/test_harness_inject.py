@@ -95,21 +95,29 @@ def test_pre_tool_level_derives_from_the_deny_dialect(repo):
     assert H.event_level(claude_dialect, "pre_tool") == H.NATIVE
     assert "pre_tool" not in gem.hooks.inject
     assert H.event_level(gem, "pre_tool") == H.WIRED
-    injected_gem = replace(gem, hooks=replace(gem.hooks, inject=("session_start", "prompt", "pre_tool")))
+    injected_gem = replace(
+        gem, hooks=replace(gem.hooks, inject=("session_start", "prompt", "pre_tool"))
+    )
     assert H.event_level(injected_gem, "pre_tool") == H.DECLARED
-    injected_claude = replace(gem, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt", "pre_tool")))
+    injected_claude = replace(
+        gem, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt", "pre_tool"))
+    )
     assert H.event_level(injected_claude, "pre_tool") == H.NATIVE
     # The session_start claim reads the SAME copy: a copy whose emitter flips to a
     # non-claude dialect is judged by the copy alone -- its inject still renders (NATIVE)
     # while its pre_tool loses the deny reply (WIRED).
-    copied = replace(claude_dialect, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt")))
+    copied = replace(
+        claude_dialect, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt"))
+    )
     inverted = replace(copied, hooks=replace(copied.hooks, emitter="gemini"))
     assert H.event_level(inverted, "session_start") == H.NATIVE
     assert H.event_level(inverted, "pre_tool") == H.WIRED
     # A copy whose id the registry does not know covers the removed plan_for -> None path:
     # the pre-fix round-trip read the registry (plan_for(h.id) -> None) and died in emit;
     # the Plan is now built from THIS hook section, so the copy is judged, not crashed.
-    orphan = replace(gem, id="no-such-harness", hooks=replace(gem.hooks, inject=("session_start", "prompt")))
+    orphan = replace(
+        gem, id="no-such-harness", hooks=replace(gem.hooks, inject=("session_start", "prompt"))
+    )
     assert H.event_level(orphan, "session_start") == H.NATIVE
     assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
 
