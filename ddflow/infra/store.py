@@ -1330,11 +1330,11 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
             if have.get(key) != r.values:
                 con.execute(t.insert, r.values)
                 if fts and r.fts is not None:
-                    if t.key_len == 1:
-                        # FTS5 replaced on rowid, which a text id never equals -- a
-                        # plain insert-or-replace would append a duplicate row for the
-                        # same id. Delete by the id first; the row just written replaces.
-                        con.execute(f"delete from {t.fts} where id = ?", (r.fts[0],))  # nosec B608
+                    # FTS5 replaces on rowid, which a text id never equals -- a plain
+                    # insert-or-replace would append a duplicate row for the same id.
+                    # Delete by the id first (the arity is irrelevant: the id column IS
+                    # r.fts[0]); the row just written replaces.
+                    con.execute(f"delete from {t.fts} where id = ?", (r.fts[0],))  # nosec B608
                     con.execute(t.fts_insert, r.fts)
                 touched.append(r)
         for key in set(have) - set(want):
