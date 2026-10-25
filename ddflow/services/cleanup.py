@@ -876,6 +876,7 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
         t.action, t.done = "", "prune FAILED — still present or still registered; named as such"
         done.append(f"FAILED to prune leftover ci scratch tree {t.name}")
         return False
+    t.action, t.done = "", "pruned: gone, and its git registration is gone"
     done.append(f"pruned leftover ci scratch tree {t.name}")
     return True
 
