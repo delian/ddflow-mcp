@@ -114,8 +114,9 @@ def test_rebuild_records_its_shard_verification_marks(log, cfg, store):
         meta = dict(con.execute("select k, v from meta"))
     mark = json.loads(meta["mark"])
     digests = json.loads(meta["shard_digests"])
-    assert set(mark) == set(digests)
-    for p in sorted(store.root.glob(".ddflow/events/*.jsonl")):
+    shards = sorted(store.root.glob(".ddflow/events/*.jsonl"))
+    assert set(mark) == set(digests) == {p.name for p in shards}
+    for p in shards:
         data = p.read_bytes()
         size_s, slash, hexed = str(digests[p.name]).partition("/")
         assert slash and int(size_s) == len(data) == mark[p.name]
@@ -167,6 +168,7 @@ def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
         raise AssertionError("_reconcile called while the knob disables it")
 
     monkeypatch.setattr(Store, "_reconcile", _boom)
+    _grow(log, cfg, sid)
     store.rebuild(log)
     assert not calls
     kept = _dump(store)
