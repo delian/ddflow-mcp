@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import contextlib
 import shutil
-import tempfile
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -46,6 +45,7 @@ from ..core import clock as CK
 from ..core.flow import GITFLOW
 from ..core.globs import under_any
 from ..core.model import DONE, Item, State, fold
+from ..infra import fsio
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import ci as CI
@@ -719,7 +719,7 @@ def _under_sys_tmp(path: Path) -> bool:
     The one place a markerless ``ddflow-ci.*`` tree is known to be ci's: anywhere else the
     name is just a name, and its tree is someone's (not ci's) to remove."""
     try:
-        return path.parent.resolve() == Path(tempfile.gettempdir()).resolve()
+        return path.parent.resolve() == fsio.temp_root().resolve()
     except OSError:
         return False
 
