@@ -25,7 +25,7 @@ from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
-from ..services.hookio import DENY_EMITTERS, emit, plan_for
+from ..services.hookio import DENY_EMITTERS, Plan, emit
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -55,11 +55,12 @@ def event_level(h: Harness, event: str) -> str:
         can_deny = hk.emitter in DENY_EMITTERS
         if event in hk.inject:
             if event == "session_start":
-                # Both claims read ONE field: the harness's own hook section. plan_for reads
-                # the registry's descriptor by id, so pin the plan to this hk (a copy with
-                # a changed emitter must be judged by it, like can_deny above). A _silent
-                # dialect renders the neutral reply ("{empty}") and the door is DECLARED.
-                out = emit(replace(plan_for(h.id), emitter=hk.emitter), "session_start", "probe").strip()
+                # BOTH claims read ONE source -- this hk, never the registry: a copied
+                # harness whose inject, events or emitter were changed must be judged by
+                # the copy. A _silent dialect renders the neutral reply ("{empty}") and
+                # the door is DECLARED.
+                probe = Plan(h.id, hk.normalizer, hk.emitter, hk.inject, dict(hk.events))
+                out = emit(probe, "session_start", "probe").strip()
                 return NATIVE if out and out != "{}" else DECLARED
             if event == "pre_tool" and can_deny:
                 return NATIVE
