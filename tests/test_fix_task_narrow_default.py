@@ -76,7 +76,11 @@ def test_the_knob_set_to_zero_disables_the_found_scope(repo, monkeypatch):
 
 def test_a_bug_named_file_outside_the_item_globs_is_still_the_bugs_own_scope(repo):
     """The item working on claim.py no longer swallows a narrow merge.py bug (its own file)."""
-    _seed(repo, ["ddflow/services/claim.py", "ddflow/services/merge.py", "tests/test_merge.py"])
+    _seed(
+        repo,
+        ["ddflow/services/claim.py", "ddflow/services/merge.py", "tests/test_merge.py"],
+        wide=["ddflow/services/claim.py"],
+    )
     globs = _fix(repo, summary="merge.py timed out under claim.py", id="Bx")
     assert globs == [
         "ddflow/services/claim.py",

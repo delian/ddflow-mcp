@@ -73,10 +73,15 @@ def _named_files(named: list[str], paths: list[str]) -> list[str]:
             out.append(stripped)  # a glob the text names as such: kept, existing_globs judges it
             continue
         if "/" not in stripped:
-            for p in paths:  # the basename tell: any path whose name is the token
-                if fnmatch(basename(p), stripped):
+            for p in paths:  # an exact path first: not a listing-come-first same-name sibling
+                if p == stripped:
                     out.append(p)
                     break
+            else:
+                for p in paths:
+                    if fnmatch(basename(p), stripped):
+                        out.append(p)
+                        break
         else:
             for p in paths:  # an exact path first: not a listing-come-first same-name sibling
                 if p == stripped:
