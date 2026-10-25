@@ -373,6 +373,8 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
         if held:
             return None, held
         if here is not None:
+            if it.merged_sha and not _at_merged_tree(repo, cfg, it, here.path):
+                return None, ""
             return here.path, ""
         if it.lease is not None:  # claimed --no-worktree, and asked from the primary
             return None, ""
