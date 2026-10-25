@@ -323,9 +323,11 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     history, not WHERE the checked-out tree stands: a revert, a later merge onto the
     base, or a moved checkout keeps the ancestry while the checked-out tree is a
     different one, and a gate run there measures the wrong tree and records its outcome
-    for `it`. Both must hold: the ancestry, AND the checked-out HEAD's tree equalling
-    the merged sha's tree -- a cheap tree-sha comparison in the object db, no checkout
-    and no diff (the B430dae3a68 reviewer holefix).
+    for `it`. All must hold: the ancestry, the checked-out HEAD's tree equalling the
+    merged sha's tree -- a cheap tree-sha comparison in the object db, no checkout and
+    no diff -- and the working tree carrying no uncommitted changes (`HEAD^{tree}` sees
+    only the committed tree, so a dirty primary at the merged HEAD is not the merged
+    tree either) (the B430dae3a68 reviewer holefix, both rounds).
     """
 
     if not it.merged_sha:
@@ -335,7 +337,9 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
         return False
     head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
     merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
-    return bool(head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip())
+    if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
+        return False
+    return not W.dirty(W.Worktree(item=it.id, path=here, branch="", base=""))
 
 
 def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
