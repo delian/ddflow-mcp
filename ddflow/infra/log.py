@@ -515,6 +515,61 @@ def _gated_read(path: Path, upto: int) -> tuple[bytes, Any]:
         return fh.read(), h
 
 
+def _license_cached(path: Path, cached: _Parsed, size: int) -> tuple[bytes, Any] | None:
+    """`(tail, hasher holding [0:consumed])` when `cached`'s claim still describes the
+    bytes -- the ONLY licence for re-using a parse is the content hash (3.2): a shorter
+    file rejects before any read, anything else is re-checked by the digest. `None`
+    means the parse must start from 0 (`_gated_read` of the whole file)."""
+    if cached.consumed > size:
+        return None
+    chunk, h = _gated_read(path, cached.consumed)
+    if h.hexdigest() != cached.digest:
+        return None
+    return chunk, h
+
+
+def _license(path: Path, cached: _Parsed | None, size: int) -> tuple[bytes, Any, int, int]:
+    """`(chunk, hasher, start, skipped)` licensing everything short of a whole-file
+    parse: a fresh shard (no claim) yields the whole file; a cached claim that still
+    matches its digest yields only the bytes after its `consumed` mark, with the hasher
+    already holding the prefix (3.2)."""
+    if cached is None:
+        chunk, _ = _gated_read(path, 0)
+        return chunk, None, 0, 0
+    licensed = _license_cached(path, cached, size)
+    if licensed is None:
+        chunk, _ = _gated_read(path, 0)
+        return chunk, None, 0, 0
+    chunk, hasher = licensed
+    return chunk, hasher, cached.consumed, cached.skipped
+
+
+def _snapshot_frame(name: Any, value: Any) -> tuple | None:
+    """The per-shard entry `(consumed, digest, skipped, tuples)` of a decoded snapshot
+    frame, or `None` when the frame is not one (a malformed frame is a doubt, and a
+    doubted snapshot degrades to a slower correct read)."""
+    if not (isinstance(name, str) and isinstance(value, tuple) and len(value) == 4):
+        return None
+    consumed, digest, skipped, tuples = value
+    if isinstance(consumed, int) and isinstance(digest, str) and isinstance(skipped, int):
+        return value if isinstance(tuples, list) else None
+    return None
+
+
+def _snapshot_objects(payload: bytes) -> list[tuple]:
+    """The decoded `(name, value)` pairs of a snapshot payload: the streamed layout is
+    one marshalled frame per pair, and the pre-3.1 one-object dict layout is its items --
+    either way the caller sees pairs, and a frame that is neither yields nothing."""
+    bio = io.BytesIO(payload)
+    first = marshal.load(bio)  # nosec B302
+    if isinstance(first, dict):
+        return list(first.items())
+    objects = [first]
+    while bio.tell() < len(payload):
+        objects.append(marshal.load(bio))  # nosec B302
+    return objects
+
+
 @functools.lru_cache(maxsize=1)
 def _parser_stamp() -> str:
     """A fingerprint of the code that turns a line into an Event.
@@ -1618,25 +1673,7 @@ class EventLog:
                     base, hasher, chunk = seeded
                     start, skipped = base.consumed, base.skipped
             if base is None:
-                # The ONLY thing that licenses re-using a parse: those exact bytes are
-                # still there. Not the inode, not the size, not the mtime -- all three
-                # are proxies, and the inode proxy was wrong about the case it was
-                # written for. `upto` is read once: its content hash grants reuse, and a
-                # shard shorter than the claim is rejected before any read at all.
-                upto = cached.consumed if cached is not None and cached.consumed <= size else 0
-                chunk, primed = _gated_read(path, upto)
-                if cached is not None and primed.hexdigest() == cached.digest:
-                    start, skipped = cached.consumed, cached.skipped
-                    base = cached
-                    # Kept so the digest STORED below continues this one rather than
-                    # making a second pass over the same prefix. `hexdigest()` does not
-                    # finalise a hashlib object, so it can still be updated with the
-                    # appended bytes.
-                    hasher = primed
-                elif upto:
-                    # The claim frees nothing from the parse: the whole file is read
-                    # anyway, so the same digest is what the stored entry must show.
-                    chunk, _ = _gated_read(path, 0)
+                chunk, hasher, start, skipped = _license(path, cached, size)
         except FileNotFoundError:
             # Vanished between the stat and the open: the same benign race again.
             return None
@@ -1650,15 +1687,12 @@ class EventLog:
         # eight agents would hold eight times the promised bound.
         held = _cached_events() - len(cached.events if cached is not None else ())
         parsed: _Parsed | None = None
-        if (
+        kept = (
             self.log_cfg.reuse_parsed
             and held + prior + len(fresh) <= self.log_cfg.max_cached_events
-        ):
-            if hasher is None:
-                digest = _digest(chunk[:cut])
-            else:
-                hasher.update(whole)
-                digest = hasher.hexdigest()
+        )
+        digest, hasher = self._continue_digest(hasher, chunk, cut, whole)
+        if kept:
             if base is not None:
                 base.events.extend(fresh)
                 base.consumed, base.digest, base.skipped = start + cut, digest, skipped
@@ -1673,20 +1707,23 @@ class EventLog:
             # entry behind either -- an entry left behind would be served forever.
             _PARSE_CACHE.pop(path, None)
             events = (base.events + fresh) if base is not None else fresh
-            # 3.1: not HELD does not mean not PERSISTED. The same (consumed, digest,
-            # skipped) the held branch stores -- persisting and holding are different
-            # decisions, and `_maybe_write_snapshot` streams an unheld shard's parse.
-            if self.log_cfg.reuse_parsed:
-                if hasher is None:
-                    digest = _digest(chunk[:cut])
-                else:
-                    hasher.update(whole)
-                    digest = hasher.hexdigest()
-                stamp = (start + cut, digest, skipped)
-            else:
-                stamp = None
+            # 3.1: not HELD does not mean not PERSISTED; the (consumed, digest, skipped)
+            # is exactly what the held branch stores. Persisting and holding are
+            # different decisions, and `_maybe_write_snapshot` streams an unheld shard.
+            stamp = (start + cut, digest, skipped) if self.log_cfg.reuse_parsed else None
         torn, torn_skipped = _parse_lines(fragment)
         return _Delta(parsed, events, torn, skipped + torn_skipped, stamp)
+
+    @staticmethod
+    def _continue_digest(hasher, chunk: bytes, cut: int, whole: bytes) -> tuple[str, Any]:
+        """The digest a stored `(consumed, digest)` carries for this read: the hasher
+        already streaming over the prefix continues over the appended tail, and a fresh
+        parse hashes the chunk it parsed. `hexdigest()` does not finalise a hashlib
+        object, so it can still be updated afterwards."""
+        if hasher is None:
+            return _digest(chunk[:cut]), None
+        hasher.update(whole)
+        return hasher.hexdigest(), hasher
 
     # -- on-disk snapshot (B166) ----------------------------------------------------
     def _snapshot_path(self) -> Path:
@@ -1769,35 +1806,12 @@ class EventLog:
             # Only reached after the file's own sha256, size, ddflow version and parser
             # fingerprint matched (above): local machine state, never merged or fetched.
             self._touch_snapshot()
-            bio = io.BytesIO(payload)
-            body = marshal.load(bio)  # nosec B302
             order = None
-            while True:
-                if isinstance(body, dict):
-                    # One object: the pre-3.1 layout unmarshals the whole body at once.
-                    take: Iterable[tuple] = body.items()
-                    order = body.pop("\0order", None)
-                elif isinstance(body, tuple) and len(body) == 2:
-                    # The streamed layout: one (shard name, entry) frame per value.
-                    take = [body]
-                else:
-                    take = []
-                for name, value in take:
-                    if name == "\0order" and isinstance(value, tuple) and len(value) == 2:
-                        order = value
-                    elif (
-                        isinstance(name, str)
-                        and isinstance(value, tuple)
-                        and len(value) == 4
-                        and isinstance(value[0], int)
-                        and isinstance(value[1], str)
-                        and isinstance(value[2], int)
-                        and isinstance(value[3], list)
-                    ):
-                        entries[name] = value
-                if isinstance(body, dict) or bio.tell() >= len(payload):
-                    break
-                body = marshal.load(bio)  # nosec B302
+            for name, value in _snapshot_objects(payload):
+                if name == "\0order" and isinstance(value, tuple) and len(value) == 2:
+                    order = value
+                elif (frame := _snapshot_frame(name, value)) is not None:
+                    entries[name] = frame
             if order is not None:
                 names, idxs = order  # a malformed order poisons the whole snapshot
                 _SNAP_ORDER[self.dir] = (list(names), list(idxs))
@@ -1853,16 +1867,7 @@ class EventLog:
         covered = _SNAP_COVERED.get(self.dir, 0)
         if total < self.log_cfg.snapshot_min_events or total - covered < max(1000, covered // 10):
             return
-        order = None
-        if merged is not None and {p: n for p, (_, n) in merged.marks.items()} == {
-            p: len(d.whole) for p, d in deltas
-        }:
-            # The sorted, de-duplicated order is derived data too, and sorting 100k events
-            # is as costly as unmarshalling them: save it as indices into the shards'
-            # concatenated events so a cold read can skip the sort.
-            names = [(p.name, len(d.whole)) for p, d in deltas]
-            where = {id(e): i for i, e in enumerate(e for _, d in deltas for e in d.whole)}
-            order = (names, [where[id(e)] for e in merged.uniq])
+        order = self._saved_order(deltas, merged)
         try:
             target = self._snapshot_path()
             fsio.ensure_ignored_dir(target.parent)
@@ -1870,22 +1875,7 @@ class EventLog:
             bytes_out = 0
             with fsio.atomic_file(target, fsync=False) as fh:
                 fh.write(b" " * (_SNAPSHOT_SLOT - 1) + b"\n")
-                for p, d in deltas:
-                    if d.parsed is None and d.stamp is None:
-                        continue
-                    consumed, digest, skipped = (
-                        (d.parsed.consumed, d.parsed.digest, d.parsed.skipped)
-                        if d.parsed is not None
-                        else d.stamp
-                    )
-                    frame = marshal.dumps(
-                        (p.name, (consumed, digest, skipped, [_event_tuple(e) for e in d.whole]))
-                    )
-                    fh.write(frame)
-                    sized.update(frame)
-                    bytes_out += len(frame)
-                if order is not None:
-                    frame = marshal.dumps(("\0order", order))
+                for frame in self._frames(deltas, order):
                     fh.write(frame)
                     sized.update(frame)
                     bytes_out += len(frame)
@@ -1906,6 +1896,44 @@ class EventLog:
             self._collect_stale_snapshots(target)
         except (OSError, ValueError):
             pass
+
+    @staticmethod
+    def _saved_order(
+        deltas: list[tuple[Path, _Delta]], merged: _Merged | None
+    ) -> tuple | None:
+        """The saved merged order `(names, indices)`, when the merged marks describe
+        exactly these shards (the sorted, de-duplicated order is derived data too, and
+        sorting 100k events is as costly as unmarshalling them: save it as indices into
+        the shards' concatenated events so a cold read can skip the sort). `None` when
+        it does not fit: an ill-fitting order is dropped, never believed."""
+        if merged is None or {p: n for p, (_, n) in merged.marks.items()} != {
+            p: len(d.whole) for p, d in deltas
+        }:
+            return None
+        names = [(p.name, len(d.whole)) for p, d in deltas]
+        where = {id(e): i for i, e in enumerate(e for _, d in deltas for e in d.whole)}
+        return names, [where[id(e)] for e in merged.uniq]
+
+    @staticmethod
+    def _frames(
+        deltas: list[tuple[Path, _Delta]], order: tuple | None
+    ) -> Iterator[bytes]:
+        """One marshalled `(shard name, entry)` frame per shard whose parse may be
+        persisted -- held (`d.parsed`) or not (`d.stamp`, 3.1) -- streamed a shard at a
+        time so writing never holds a second copy of the log, then the saved order."""
+        for p, d in deltas:
+            if d.parsed is None and d.stamp is None:
+                continue
+            consumed, digest, skipped = (
+                (d.parsed.consumed, d.parsed.digest, d.parsed.skipped)
+                if d.parsed is not None
+                else d.stamp
+            )
+            yield marshal.dumps(
+                (p.name, (consumed, digest, skipped, [_event_tuple(e) for e in d.whole]))
+            )
+        if order is not None:
+            yield marshal.dumps(("\0order", order))
 
     def read_all(self, *, snapshot: bool = True) -> list[Event]:
         """Every event, Lamport-sorted and de-duplicated.
