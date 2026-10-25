@@ -345,7 +345,8 @@ def merge_tree(
             )
             return
         tree = s.path
-        with _remove_on_signals(repo, tree, _claim_owner(tree)):
+        marker = _claim_owner(tree)  # claimed FIRST: a sweep in between sees a live owner
+        with _remove_on_signals(repo, tree, marker):
             if (
                 base
                 and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok

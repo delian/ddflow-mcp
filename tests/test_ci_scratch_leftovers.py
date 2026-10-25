@@ -15,7 +15,11 @@ when the run is KILLED, and nothing else cleaned it up: the 2026-10-24 restart p
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 from conftest import run_cli
@@ -24,6 +28,7 @@ from helpers import git_quiet as _git
 
 from ddflow import api
 from ddflow.infra import worktree as W
+from ddflow.services import cleanup as CU
 from ddflow.services import ci as CI
 
 
@@ -112,3 +117,84 @@ def test_a_live_ci_scratch_tree_is_named_and_kept(repo):
     row = _row(out, tree)
     assert tree.exists(), f"a live ci run's scratch tree was removed: {out.data['performed']}"
     assert row["action"] == "", row
+
+
+def test_an_owner_this_proc_cannot_see_is_unknown_not_dead(repo, monkeypatch):
+    """A /proc that cannot SERVE this pid (hidepid, another uid) proves nothing: the tree
+    is LEFT ALONE, never pruned as its dead owner's."""
+
+    real = CU.Path
+
+    class Hidden(real):
+        def read_text(self, *args, **kw):
+            if str(self) == f"/proc/{os.getpid()}/stat":
+                raise PermissionError(13, "Permission denied")
+            return super().read_text(*args, **kw)
+
+    monkeypatch.setattr(CU, "Path", Hidden)
+    run_cli(repo, "init")
+    _commit(repo, {"f.txt": "f\n"}, "base")
+    tree = _leaf_scratch(repo)
+    _owner_marker(tree).write_text(CI.owner_line() + "\n")
+
+    out = api.cleanup(repo, apply=True, agent="sweeper")
+
+    row = _row(out, tree)
+    assert tree.exists(), f"an owner /proc cannot name was pruned: {out.data['performed']}"
+    assert row["action"] == "", row
+    assert "cannot be checked" in row["done"], row
+
+
+def test_a_markerless_scratchname_tree_is_pruned_only_in_the_temp_dir(repo):
+    """The original 83-entry leftover — a ddflow-ci.* tree with NO owner marker — is pruned
+    where a ci scratch tree is made (the temp dir), and the same name anywhere else is
+    LEFT ALONE: it is a name there, not a claim to it."""
+    run_cli(repo, "init")
+    _commit(repo, {"f.txt": "f\n"}, "base")
+    in_tmp = Path(tempfile.gettempdir()) / f"ddflow-ci.markerless-{os.getpid()}"
+    far = repo.parent / "elsewhere" / "ddflow-ci.markerless-far"
+    _git(repo, "worktree", "add", "-q", "--detach", str(in_tmp), "HEAD")
+    _git(repo, "worktree", "add", "-q", "--detach", str(far), "HEAD")
+
+    out = api.cleanup(repo, apply=True, agent="sweeper")
+
+    assert not in_tmp.exists(), f"the markerless temp-dir leftover survived: {out.data['performed']}"
+    row = _row(out, far)
+    assert far.exists(), f"a markerless tree outside the temp dir was removed: {row}"
+    assert row["action"] == "", row
+    assert "LEFT ALONE" in row["done"], row
+
+
+def test_a_sigterm_ends_a_merge_tree_with_no_scratch_or_registration(repo):
+    """A SIGTERM holds no ``finally``: the run's OWN handler must free tree and
+    registration, and does — the killed-run cleanup no exit path can do."""
+    run_cli(repo, "init")
+    _commit(repo, {"f.txt": "f\n"}, "base")
+    code = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from ddflow.services import ci as CI\n"
+        "with CI.merge_tree(Path(sys.argv[1]), 'HEAD', '') as (tree, why):\n"
+        "    assert tree is not None, why\n"
+        "    print(tree, flush=True)\n"
+        "    time.sleep(120)\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(Path(CI.__file__).resolve().parents[2])}
+    child = subprocess.Popen(
+        [sys.executable, "-c", code, str(repo)], env=env, text=True, stdout=subprocess.PIPE
+    )
+    tree = Path(child.stdout.readline().strip())
+    assert child.poll() is None and tree.name.startswith(CI.SCRATCH_PREFIX)
+    marker = _owner_marker(tree)
+    assert marker.exists(), "a SIGTERM before the claim raced the test"
+
+    child.send_signal(signal.SIGTERM)
+    child.wait(timeout=30)
+
+    assert child.returncode == -signal.SIGTERM, f"the handler did not re-raise the signal"
+    assert not tree.exists(), "the SIGTERMed run left its scratch tree"
+    registered = next(
+        (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == tree.resolve()),
+        None,
+    )
+    assert registered is None, "git worktree list still registers the SIGTERMed run's tree"
