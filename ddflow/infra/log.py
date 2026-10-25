@@ -528,20 +528,24 @@ def _license_cached(path: Path, cached: _Parsed, size: int) -> tuple[bytes, Any]
     return chunk, h
 
 
-def _license(path: Path, cached: _Parsed | None, size: int) -> tuple[bytes, Any, int, int]:
-    """`(chunk, hasher, start, skipped)` licensing everything short of a whole-file
+def _license(
+    path: Path, cached: _Parsed | None, size: int
+) -> tuple[bytes, Any, int, int, _Parsed | None]:
+    """`(chunk, hasher, start, skipped, base)` licensing everything short of a whole-file
     parse: a fresh shard (no claim) yields the whole file; a cached claim that still
     matches its digest yields only the bytes after its `consumed` mark, with the hasher
-    already holding the prefix (3.2)."""
+    already holding the prefix, and that cached parse as the base the freshly parsed tail
+    extends (3.2). An unlicensed claim yields the whole file with NO base: the bytes win
+    every argument, and a parse that starts from 0 must own its events outright."""
     if cached is None:
         chunk, _ = _gated_read(path, 0)
-        return chunk, None, 0, 0
+        return chunk, None, 0, 0, None
     licensed = _license_cached(path, cached, size)
     if licensed is None:
         chunk, _ = _gated_read(path, 0)
-        return chunk, None, 0, 0
+        return chunk, None, 0, 0, None
     chunk, hasher = licensed
-    return chunk, hasher, cached.consumed, cached.skipped
+    return chunk, hasher, cached.consumed, cached.skipped, cached
 
 
 def _snapshot_frame(name: Any, value: Any) -> tuple | None:
@@ -1673,7 +1677,7 @@ class EventLog:
                     base, hasher, chunk = seeded
                     start, skipped = base.consumed, base.skipped
             if base is None:
-                chunk, hasher, start, skipped = _license(path, cached, size)
+                chunk, hasher, start, skipped, base = _license(path, cached, size)
         except FileNotFoundError:
             # Vanished between the stat and the open: the same benign race again.
             return None
