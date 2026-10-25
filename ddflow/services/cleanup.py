@@ -842,11 +842,14 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
-def _registered(tree: Path) -> bool:
-    """Is ``tree`` still a registration in git's worktree list? The one prune asks:
-    removing the directory is not the same as removing the registration, and a prune that
-    refuses ONE registered path (a lock) says success either way."""
-    return any(Path(e.get("worktree", "")).resolve() == Path(tree).resolve() for e in W.list_worktrees(W.repo_root(tree)))
+def _registered(root: Path, tree: Path) -> bool:
+    """Is ``tree`` still a registration in git's worktree list of ``root``? The one prune
+    asks: removing the directory is not the same as removing the registration, and a prune
+    that refuses ONE registered path (a lock) says success either way."""
+    return any(
+        Path(e.get("worktree", "")).resolve() == Path(tree).resolve()
+        for e in W.list_worktrees(root)
+    )
 
 
 def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) -> bool:
@@ -867,7 +870,7 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
         except OSError:
             pass
         W.git(root, "worktree", "prune")
-    if Path(t.path).exists() or _registered(Path(t.path)):
+    if Path(t.path).exists() or _registered(root, Path(t.path)):
         done.append(f"FAILED to prune leftover ci scratch tree {t.name}")
         return False
     done.append(f"pruned leftover ci scratch tree {t.name}")
