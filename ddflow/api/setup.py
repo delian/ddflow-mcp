@@ -1037,6 +1037,12 @@ def _on_nothing(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result="no handler")
 
 
+#: The canonical events whose handler can put something through the injection door the
+#: model sees: session_start's brief, pre_tool's refusal. Any other event a descriptor
+#: declares in `[hooks].inject` is "declared, not delivering": the prompt handler, say,
+#: only records the turn and emits no context.
+INJECT_DELIVERS = frozenset({"session_start", "pre_tool"})
+
 #: One handler per canonical event (`harnessreg.CANONICAL_EVENTS`).
 _HOOK_HANDLERS = {
     "session_start": _on_session_start,

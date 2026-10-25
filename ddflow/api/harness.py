@@ -9,9 +9,7 @@ answers three questions an operator otherwise answers by reading TOML and settin
 * ``doctor`` -- drift between the descriptor and the repo: an unregistered MCP server, a
   missing hook with the command that installs it, a slash-command file that is gone.
 
-The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > plugin > MCP first call > MCP
-instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is
-reported as ``nv``, never as an absence (see ``harnessreg``).
+The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > declared, not delivering > plugin > MCP first call > MCP instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is reported as ``nv``, never as an absence (see ``harnessreg``).
 """
 
 from __future__ import annotations
@@ -26,8 +24,10 @@ from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
+from .setup import INJECT_DELIVERS
 
 NATIVE = "native hook"
+DECLARED = "declared, not delivering"
 PLUGIN = "plugin"
 FIRST_CALL = "mcp first call"
 MCP_TEXT = "mcp instructions"
@@ -35,14 +35,18 @@ TEXT = "instruction text"
 NONE = "none"
 NV = "nv"
 
-#: Best first; `list` reports the best rung any event reaches.
-LADDER = (NATIVE, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
+#: Best first; `list` reports the best rung any event reaches. An event the descriptor
+#: declares in `[hooks].inject` whose handler emits nothing sits on `DECLARED`: the native
+#: door exists, the model sees nothing through it (setup.INJECT_DELIVERS).
+LADDER = (NATIVE, DECLARED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
 def event_level(h: Harness, event: str) -> str:
     """The rung of the fallback ladder that delivers ``event`` to this agent."""
     hk = h.hooks
     if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
+        if event in hk.inject and event not in INJECT_DELIVERS:
+            return DECLARED  # the door is declared, ddflow's handler emits nothing through it
         return NATIVE
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
