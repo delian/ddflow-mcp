@@ -181,7 +181,7 @@ def test_forecast_counts_a_completed_phase_by_its_filed_to_done_span():
     log = Log()
     log.task("X", "x.py")
     add_phase(log, "P10", T0 + 10 * H)
-    st, cfg, now = frozen(log)
+    st, _cfg, now = frozen(log)
     pools = FC.durations_by_kind(F.collect(log.events, st, now))
     assert pools["phase"] == pytest.approx([1000 + 10 * H])  # never claimed: no cycle
 
