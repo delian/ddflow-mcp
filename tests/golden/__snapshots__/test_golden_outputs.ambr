@@ -1313,8 +1313,10 @@
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
           `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
-          (never the found item's own phase, which it would hold open), carrying that
-          item's globs unless `--globs` says otherwise, and linked to the bug.
+          (never the found item's own phase, which it would hold open), carrying the
+          bug's own found scope (the files its summary names plus the tests pinning
+          them) unless `--globs` says otherwise -- and the item's inherited globs when
+          the bug names more than `named_scope_at` files -- and linked to the bug.
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
@@ -1333,6 +1335,16 @@
           (regression_verified=exempt-lint) instead of a `--regression-test`. A bug
           whose check id contains a pytest node (`::`), or matches none of these,
           still needs its regression test. Default: ruff, (CI: Lint), format.
+      bugs.named_scope_at = 20   [default]
+          How many files a bug's text may name (a `path/name.ext` token in its
+          summary) before the fix task's default globs fall back to the inherited item
+          globs. Up to this many named files, the task carries the bug's OWN found
+          scope instead -- the named files that exist in the tree plus the tests
+          pinning them (by-name, GOVERNS and data readers) -- so two narrow sibling
+          bug fixes no longer both inherit one project-wide item glob (ddflow/**,
+          tests/**) and exclude each other (B45b80286d2). More than this -- a bug
+          describing a whole sweep of files -- keeps the inherited globs (the current
+          wide default). 0 disables the found scope: the inherited globs always apply.
       bugs.repro_capture = 'full'   [default]
           How much of a reproduction bundle `bug found` stores with the bug (default
           `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
