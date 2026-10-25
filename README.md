@@ -5474,7 +5474,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=a7756cc6cc85 -->
+<!-- ddflow:begin README/agents sha=a0b1db3268d0 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -5488,16 +5488,16 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | opencode | `opencode` | `opencode.json` | plugin | plugin |
 | Z Code (GLM) | `glm` | `.zcode/config.json` | not verified | nv |
 | Qwen Code | `qwen` | `.qwen/settings.json` | claude | native hook |
-| Google Antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | native hook |
+| Google Antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | declared, not delivering |
 | Devin | `devin` | `.devin/mcp_config.json` | claude | native hook |
 | Qodo | `qodo` | `mcp.json` | not verified | nv |
 | Tabnine | `tabnine` | `.tabnine/agent/settings.json` | gemini | native hook |
 | Aider | `aider` | none | none | instruction text |
-| Cline | `cline` | none | cline | native hook |
-| Windsurf | `windsurf` | none | cascade | native hook |
+| Cline | `cline` | none | cline | declared, not delivering |
+| Windsurf | `windsurf` | none | cascade | wired, not injected |
 | Replit Agent | `replit` | none | not verified | nv |
 | OpenHands | `openhands` | none | claude | native hook |
-| Goose | `goose` | none | claude | native hook |
+| Goose | `goose` | none | claude | wired, not injected |
 | Sourcegraph Cody | `cody` | none | not verified | nv |
 | dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
 
