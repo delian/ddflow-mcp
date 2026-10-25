@@ -149,3 +149,32 @@ def test_a_landed_item_kept_worktree_is_exempt_only_where_the_checkout_stands_at
         repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "x"
     )
     assert code == 3 and "no commit ahead" in out + err, (code, out, err)
+
+
+def test_a_kept_worktree_off_the_merged_tree_is_not_the_item_tree(repo):
+    """The kept-worktree tail of the hole: `item_tree` answered a merged item's recorded
+    worktree path without asking `_at_merged_tree`, so a KEPT (remove_on_merge=false) tree
+    moved off the merged work was still measured and recorded for the merged item. Only a
+    checkout standing AT the merged tree counts (B430dae3a68 holefix, review round 3)."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
+    run_cli(repo, "config", "worktree.remove_on_merge", "false")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "cfg")
+    run_cli(repo, "task", "add", "T1", "--title", "t")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "t.txt").write_text("x\n")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "-qm", "work")
+    assert run_cli(repo, "merge", "T1")[0] == 0
+    _git(tree, "checkout", "--detach", "HEAD~1")
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "later work on main")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
