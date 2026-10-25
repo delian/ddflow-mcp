@@ -126,9 +126,7 @@ def atomic_write(
 
 
 @contextlib.contextmanager
-def atomic_file(
-    path: Path | str, *, mode: int | None = None, fsync: bool = True
-) -> Iterator[Any]:
+def atomic_file(path: Path | str, *, mode: int | None = None, fsync: bool = True) -> Iterator[Any]:
     """A seekable binary file that becomes `path` when the block ends without exception:
     `atomic_write` for content no caller should hold whole at once.
 

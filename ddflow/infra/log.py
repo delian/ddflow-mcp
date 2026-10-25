@@ -453,6 +453,12 @@ _MAX_INCREMENTAL = 64
 #: never materialised (3.2).
 _READ_CHUNK = 1 << 20
 
+#: Arity of one snapshot entry frame: (consumed, digest, skipped, event tuples).
+_SNAPSHOT_ARITY = 4
+
+#: Arity of the saved order frame: (shard names, indices into their events).
+_ORDER_ARITY = 2
+
 #: Leading bytes a streamed snapshot reserves for its header: the header's size and
 #: sha256 settle only after the payload has streamed, so it occupies a fixed slot it
 #: must fit inside. A header that does not fit aborts the write (it is best effort).
@@ -552,7 +558,7 @@ def _snapshot_frame(name: Any, value: Any) -> tuple | None:
     """The per-shard entry `(consumed, digest, skipped, tuples)` of a decoded snapshot
     frame, or `None` when the frame is not one (a malformed frame is a doubt, and a
     doubted snapshot degrades to a slower correct read)."""
-    if not (isinstance(name, str) and isinstance(value, tuple) and len(value) == 4):
+    if not (isinstance(name, str) and isinstance(value, tuple) and len(value) == _SNAPSHOT_ARITY):
         return None
     consumed, digest, skipped, tuples = value
     if isinstance(consumed, int) and isinstance(digest, str) and isinstance(skipped, int):
@@ -1812,7 +1818,7 @@ class EventLog:
             self._touch_snapshot()
             order = None
             for name, value in _snapshot_objects(payload):
-                if name == "\0order" and isinstance(value, tuple) and len(value) == 2:
+                if name == "\0order" and isinstance(value, tuple) and len(value) == _ORDER_ARITY:
                     order = value
                 elif (frame := _snapshot_frame(name, value)) is not None:
                     entries[name] = frame
@@ -1902,9 +1908,7 @@ class EventLog:
             pass
 
     @staticmethod
-    def _saved_order(
-        deltas: list[tuple[Path, _Delta]], merged: _Merged | None
-    ) -> tuple | None:
+    def _saved_order(deltas: list[tuple[Path, _Delta]], merged: _Merged | None) -> tuple | None:
         """The saved merged order `(names, indices)`, when the merged marks describe
         exactly these shards (the sorted, de-duplicated order is derived data too, and
         sorting 100k events is as costly as unmarshalling them: save it as indices into
@@ -1919,9 +1923,7 @@ class EventLog:
         return names, [where[id(e)] for e in merged.uniq]
 
     @staticmethod
-    def _frames(
-        deltas: list[tuple[Path, _Delta]], order: tuple | None
-    ) -> Iterator[bytes]:
+    def _frames(deltas: list[tuple[Path, _Delta]], order: tuple | None) -> Iterator[bytes]:
         """One marshalled `(shard name, entry)` frame per shard whose parse may be
         persisted -- held (`d.parsed`) or not (`d.stamp`, 3.1) -- streamed a shard at a
         time so writing never holds a second copy of the log, then the saved order."""
