@@ -860,9 +860,14 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
     half-removal reported as such -- a prune that could not free the directory or its
     registration said it pruned is a leftover the next survey would find again."""
     with log.transaction():
-        if _owner_alive(Path(t.path)) is True:
+        verified = _owner_alive(Path(t.path))
+        if verified is True:
             t.action, t.done = "", "kept: its owner process is alive since the survey"
             done.append(f"kept {t.name}: its owner process is alive since the survey")
+            return False
+        if verified is None and CI.owner_marker(Path(t.path)).exists():
+            t.action, t.done = "", "kept: its owner process cannot be checked since the survey"
+            done.append(f"kept {t.name}: its owner could not be checked since the survey")
             return False
         # The directory BEFORE the prune: a prune only drops a registration whose tree is
         # already gone, so a half-freed directory would keep its entry to find again.
