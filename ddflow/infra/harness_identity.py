@@ -15,6 +15,14 @@ reused pid never inherits it. A CLI run that names no identity (`--agent`,
 restarted under the same harness starts with that harness's own record (`own`), so it
 and the shell stay one agent.
 
+Several agents share one harness tree, each in its own SESSION: the coordinator's
+shells and a subagent's descend from the same harness process, so the pid key alone
+hands the record to both (B015c4932be). A record written with a `scope` therefore
+carries the declaring process's harness-session fingerprint on a marker line, and a
+caller takes it only with the SAME fingerprint. A caller with no scope matches only an
+untagged record -- one written before this change, or where no session was known -- so
+an upgrade never splits an agent's declaration from its shell.
+
 Records live in the repository's common `.git` directory: per repository, never
 committed. Linux only (it reads /proc); elsewhere nothing is recorded and nothing is
 found, and `declare` says so.
@@ -44,6 +52,9 @@ LAUNCHERS = frozenset({"uv", "uvx", "pipx", "npx", "env"})
 #: and climbing past it would hand the name to every command typed there.
 SHELLS = frozenset({"sh", "dash", "bash", "zsh"})
 
+#: A record's second line starts with this: the declaring process's session fingerprint.
+_SCOPE = "session:"
+
 _MAX_DEPTH = 64
 
 
@@ -69,6 +80,28 @@ def _dir(repo: Path | str) -> Path | None:
     worktree."""
     common = common_dir(repo, ask_git=False)
     return common / DIR if common else None
+
+
+def scope_marker(scope: str) -> str:
+    """The marker line a record carries for `scope`, distinguishing it from the name line
+    (an agent name is always `is_valid`, so it never starts with `session:`)."""
+    return _SCOPE + scope
+
+
+def _read(f: Path) -> tuple[str, set[str]]:
+    """(name, scope tags) of a record file. The name is the FIRST line; any later line
+    starting with the scope prefix is a session tag, not part of the name."""
+    lines = f.read_text(errors="replace").splitlines()
+    name = lines[0].strip() if lines else ""
+    tags = {ln[len(_SCOPE) :] for ln in lines[1:] if ln.startswith(_SCOPE)}
+    return name, tags
+
+
+def _matches(name: str, tags: set[str], scope: str) -> bool:
+    """A record is taken by a caller of `scope` when it carries the SAME fingerprint, or
+    carries none (a pre-scope record applies to everyone); a caller of no scope takes
+    only an untagged one."""
+    return is_valid(name) and (not tags or bool(scope) and scope in tags)
 
 
 def _gone(key: str) -> bool:
@@ -120,11 +153,14 @@ def _harness(pid: int) -> list[str]:
     return keys
 
 
-def declare(repo: Path | str, agent: str) -> str:
+def declare(repo: Path | str, agent: str, scope: str = "") -> str:
     """Record `agent` for this process's harness; "" withdraws it. Never raises.
 
-    Returns "" when it did, else why not -- which `ddflow_identify` reports, because a
-    declaration the shell will not see is the original split, silently back."""
+    `scope` is the declaring session's fingerprint; the record then applies to that
+    session alone (`declared` with the same scope). Without one, the record is untagged
+    and matches everyone, as before. Returns "" when it did, else why not -- which
+    `ddflow_identify` reports, because a declaration the shell will not see is the
+    original split, silently back."""
     if agent and not is_valid(agent):
         return (
             f"not recorded for shell commands: {agent!r} is not a usable agent name, "
@@ -143,7 +179,8 @@ def declare(repo: Path | str, agent: str) -> str:
             f = d / key
             if agent:
                 d.mkdir(exist_ok=True)
-                replace_text(f, agent + "\n", fsync=False)
+                tag = scope_marker(scope) + "\n" if scope else ""
+                replace_text(f, agent + "\n" + tag, fsync=False)
             else:
                 f.unlink(missing_ok=True)
     except OSError as exc:
@@ -151,7 +188,7 @@ def declare(repo: Path | str, agent: str) -> str:
     return ""
 
 
-def own(repo: Path | str) -> str:
+def own(repo: Path | str, scope: str = "") -> str:
     """The record of THIS process's own harness (see `_harness`), or "": for a server
     restarting under it. Never an outer harness's: a nested agent CLI started from
     another agent's shell must not inherit that agent's name."""
@@ -160,16 +197,17 @@ def own(repo: Path | str) -> str:
         return ""
     for key in _harness(os.getppid()):
         try:
-            name = (d / key).read_text().strip()
+            name, tags = _read(d / key)
         except OSError:
             continue
-        if is_valid(name):
+        if _matches(name, tags, scope):
             return name
     return ""
 
 
-def declared(repo: Path | str) -> str:
-    """The identity a harness above this process declared for `repo`, or ""."""
+def declared(repo: Path | str, scope: str = "") -> str:
+    """The identity a harness above this process declared for `repo` and `scope` (its
+    session's fingerprint), or ""."""
     d = _dir(repo)
     if d is None or not d.is_dir():
         return ""
@@ -180,10 +218,11 @@ def declared(repo: Path | str) -> str:
             return ""
         _comm, ppid, start = st
         try:
-            name = (d / f"{pid}-{start}").read_text().strip()
+            name, tags = _read(d / f"{pid}-{start}")
         except OSError:
-            name = ""
-        if is_valid(name):
+            pid = ppid
+            continue
+        if _matches(name, tags, scope):
             return name
         pid = ppid
     return ""
@@ -206,7 +245,7 @@ def liveness(repo: Path | str, agent: str) -> tuple[bool | None, list[int]]:
         return None, []
     for f in entries:
         try:
-            name = f.read_text(errors="replace").strip()
+            name, _tags = _read(f)
         except OSError:
             continue
         if name != agent:
