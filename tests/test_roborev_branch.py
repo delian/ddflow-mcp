@@ -3,10 +3,13 @@ bounded, configurable wait, and says why when it gives nothing."""
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
 from ddflow.services import roborev_branch as RB
+from ddflow.surfaces import cli
 
 FAKE = r"""#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
@@ -291,6 +294,51 @@ def test_findings_print_a_failed_record_line_and_an_unknown_agent_none(
     monkeypatch.setenv("FAKE_AGENT", "")
     RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
     assert "standards --outcome" not in capsys.readouterr().out
+
+
+def test_a_failed_record_line_carries_a_reason_the_gate_record_accepts(
+    tmp_path, monkeypatch, capsys
+):
+    """B0724593ecf: the line printed for a findings verdict omitted --reason, which
+    `ddflow gate record` refuses on a failed outcome, so the copied line could never
+    record the gate."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_VERDICT", "a bug")
+    assert RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"]) == 1
+    record_line = next(
+        ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("record: ddflow ")
+    )
+    args = cli.build_parser().parse_args(
+        shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:]  # drop "record:", "ddflow"
+    )
+    assert args.outcome == "failed"
+    assert args.reason, "a failed outcome must carry --reason or gate record refuses it"
+
+
+def test_a_dash_led_first_finding_line_is_still_the_reason_value(tmp_path, monkeypatch, capsys):
+    """The review round on B0724593ecf: a space-separated `--reason --bug` would be read
+    as another flag; the attached --reason=<value> form keeps it the value."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    exe = tmp_path / "bin" / "roborev"
+    exe.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        '  review) echo "Enqueued job 7 for range" ;;\n'
+        "  wait) exit 1 ;;\n"
+        '  show) echo "  -- dangerously over-broad glob" ;;\n'
+        '  list) echo \'[{"id": 7, "status": "done", "git_ref": "x..abcdef0", "agent": "kilo"}]\' ;;\n'
+        "esac\n"
+    )
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    assert RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"]) == 1
+    record_line = next(
+        ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("record: ddflow ")
+    )
+    args = cli.build_parser().parse_args(shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:])
+    assert args.outcome == "failed"
+    assert args.reason == "-- dangerously over-broad glob"
 
 
 def test_the_printed_label_is_the_one_the_family_check_judges_by(tmp_path, monkeypatch):

@@ -61,7 +61,11 @@ class Excluded:
         )
 
     def empty_note(self) -> str:
-        return f" after leaving out {len(self.files)} excluded file(s)" if self.files else ""
+        if not self.files:
+            return ""
+        names = ", ".join(p for p, _n in self.files[:NAMED])
+        more = f" and {len(self.files) - NAMED} more" if len(self.files) > NAMED else ""
+        return f" after leaving out {len(self.files)} excluded file(s): {names}{more}"
 
     def evidence(self) -> dict[str, Any]:
         return {
