@@ -376,19 +376,25 @@ class Store:
         # THEORETICAL by the cross-family critic 2026-09-24; probe in
         # `tests/test_critic_findings.py`.)
         fingerprint = log.mark()
-        stored = self._load_shard_digests() if self._incremental_enabled() else None
-        verified = self._verified_shard_marks(stored, log) if stored is not None else None
-        if stored is not None and verified is None:
-            # The stored prefixes no longer re-hash: mismatch is a REBUILD. `None` is
-            # the revoked licence -- the recreated index below gets freshly digested
-            # marks -- never a reconcile keyed on what just failed to verify.
+        if not self._incremental_enabled():
+            # The knob is off: a rebuild recreates the index from nothing. `_build_into`
+            # digests the marks for the fresh index below; the reconcile shortcut is not
+            # taken at all, with or without stored marks.
             marks = None
-        elif verified is not None:
-            marks = verified
         else:
-            # First build, or an index written before the marks existed: verify the
-            # shards afresh -- nothing was consumed yet, so there is no prefix to doubt.
-            marks = self._verified_shard_marks({}, log) or {}
+            stored = self._load_shard_digests()
+            verified = self._verified_shard_marks(stored, log) if stored is not None else None
+            if stored is not None and verified is None:
+                # The stored prefixes no longer re-hash: mismatch is a REBUILD. `None` is
+                # the revoked licence -- the recreated index below gets freshly digested
+                # marks -- never a reconcile keyed on what just failed to verify.
+                marks = None
+            elif verified is not None:
+                marks = verified
+            else:
+                # First build, or an index written before the marks existed: verify the
+                # shards afresh -- nothing was consumed yet, so there is no prefix to doubt.
+                marks = self._verified_shard_marks({}, log) or {}
         # The marks BEFORE the read, like the fingerprint above: marked afterwards, a
         # byte the projection never folded could be claimed consumed the same way.
         events = log.read_all()
