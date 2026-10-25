@@ -44,21 +44,28 @@ def test_a_wired_event_the_descriptor_never_declared_is_reported_wired_not_injec
 def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
     assert H.event_level(HR.get("claude"), "session_start") == H.NATIVE
     assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
-    # A wired pre_tool can refuse the armed call: it stays a native hook even without inject.
-    assert H.event_level(HR.get("gemini"), "pre_tool") == H.NATIVE
+    # claude's PreToolUse dialect is one ddflow can deny in: a wired pre_tool there is a
+    # native hook even without inject; gemini's emitter has no deny reply, so its wired
+    # pre_tool fires but shows the model nothing.
+    assert H.event_level(HR.get("claude"), "pre_tool") == H.NATIVE
+    assert H.event_level(HR.get("gemini"), "pre_tool") == H.WIRED
 
 
-def test_pre_tool_level_derives_from_the_descriptor_s_block_mode(repo):
-    # NATIVE only claims what the descriptor arms: an exit2 emitter's pre_tool fires a
-    # refusal the agent sees, a block="none" wiring fires nothing at all.
+def test_pre_tool_level_derives_from_the_deny_dialect(repo):
+    # NATIVE only claims what the enforcement really does: the hookio deny reply exists for
+    # the claude and codex emitter dialects (DENY_EMITTERS); every other emitter's firing
+    # records 'not enforceable' and reaches the model not at all, whatever block mode says.
     gem = HR.get("gemini")
-    disarmed = replace(gem, hooks=replace(gem.hooks, block="none"))
-    assert disarmed.hooks.block == "none" and "pre_tool" not in disarmed.hooks.inject
-    assert H.event_level(disarmed, "pre_tool") == H.WIRED
-    injected_disarmed = replace(disarmed, hooks=replace(disarmed.hooks, inject=("session_start", "prompt", "pre_tool")))
-    assert H.event_level(injected_disarmed, "pre_tool") == H.DECLARED
-    injected_armed = replace(gem, hooks=replace(gem.hooks, inject=("session_start", "prompt", "pre_tool")))
-    assert H.event_level(injected_armed, "pre_tool") == H.NATIVE
+    claude_dialect = replace(gem, hooks=replace(gem.hooks, emitter="claude"))
+    assert claude_dialect.hooks.emitter == "claude"
+    assert "pre_tool" not in claude_dialect.hooks.inject
+    assert H.event_level(claude_dialect, "pre_tool") == H.NATIVE
+    assert "pre_tool" not in gem.hooks.inject
+    assert H.event_level(gem, "pre_tool") == H.WIRED
+    injected_gem = replace(gem, hooks=replace(gem.hooks, inject=("session_start", "prompt", "pre_tool")))
+    assert H.event_level(injected_gem, "pre_tool") == H.DECLARED
+    injected_claude = replace(gem, hooks=replace(claude_dialect.hooks, inject=("session_start", "prompt", "pre_tool")))
+    assert H.event_level(injected_claude, "pre_tool") == H.NATIVE
 
 
 def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monkeypatch):
