@@ -1363,7 +1363,11 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
         if ids:
             phs = ",".join("?" * len(ids))
             con.execute(
-                "insert or replace into "
+                f"delete from {t.name}_tri where id in ({phs})",  # nosec B608
+                ids,
+            )
+            con.execute(
+                "insert into "
                 f"{t.name}_tri(id, text) select id, {_TRI_EXPR[t.name]} "
                 f"from {t.fts} where id in ({phs})",  # nosec B608
                 ids,
