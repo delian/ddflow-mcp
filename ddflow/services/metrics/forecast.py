@@ -6,7 +6,9 @@ chain's time is drawn by bootstrap from those observed durations (``[metrics]
 forecast_runs`` draws, seeded by ``forecast_seed`` so the same log gives the same range)
 and reported at two percentiles. A link already in flight has its elapsed time taken off
 its draw. It is an ESTIMATE of the floor, with unlimited agents and no rework; under
-``min_samples`` observed durations of a kind there is no range at all.
+``min_samples`` observed durations of a kind there is no range at all -- except a kind
+with none of its own (a phase is never claimed, so a queue with no completed phase
+falls back to the durations of completed work items and says so).
 """
 
 from __future__ import annotations
@@ -34,10 +36,22 @@ def draw_totals(
 
 
 def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
+    """One observed duration per completed item of each kind: claim to completion, and a
+    phase's filed to completed (a phase is never claimed, so it has no cycle to observe,
+    B153d9ac8ae)."""
     out: dict[str, list[float]] = {}
     for span in facts.spans.values():
-        if span.cycle_s is not None:
-            out.setdefault(span.kind, []).append(span.cycle_s)
+        cycle = span.cycle_s
+        if (
+            cycle is None
+            and span.kind == "phase"
+            and span.added_at is not None
+            and span.completed_at is not None
+            and span.completed_at >= span.added_at
+        ):
+            cycle = span.completed_at - span.added_at
+        if cycle is not None:
+            out.setdefault(span.kind, []).append(cycle)
     return out
 
 
@@ -78,6 +92,7 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
         "high_pct": int(m.forecast_high_pct),
         "low_s": None,
         "high_s": None,
+        "fallback": {},
         "note": "an estimate of the floor: the longest unfinished chain, unlimited agents, no rework",
     }
     if phase and phase not in state.items:
@@ -88,14 +103,27 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
     pools_by_kind = durations_by_kind(facts)
     kinds = [state.items[i].kind for i in chain]
     samples = {k: len(pools_by_kind.get(k, [])) for k in dict.fromkeys(kinds)}
-    base = {**base, "chain": chain, "samples": samples}
+    # A phase never produces an observed duration of its own before one HAS completed,
+    # yet is still the link a phase dependency waits on: draw it from completed WORK
+    # items instead of refusing the whole chain (B153d9ac8ae).
+    work_pool = [d for k, ds in pools_by_kind.items() if k != "phase" for d in ds]
+    drawn = {k: pools_by_kind.get(k, []) for k in dict.fromkeys(kinds)}
+    fallback: dict[str, str] = {}
+    for kind in drawn:
+        if drawn[kind] or kind != "phase" or len(work_pool) < int(m.min_samples):
+            continue
+        drawn[kind] = work_pool
+        samples[kind] = len(work_pool)
+        fallback[kind] = "work"
+        base["note"] += f" ({kind}: no completed phase observed, drawn from work durations)"
+    base = {**base, "chain": chain, "samples": samples, "fallback": fallback}
     short = {k: n for k, n in samples.items() if n < int(m.min_samples)}
     if short:
         need = ", ".join(f"{k}: {n}" for k, n in short.items())
         reason = f"not enough data: completed items per kind ({need}), need {m.min_samples}"
         return {**base, "reason": reason}
     totals = draw_totals(
-        [pools_by_kind[k] for k in kinds],
+        [drawn[k] for k in kinds],
         _elapsed(facts, chain, now),
         int(m.forecast_runs),
         int(m.forecast_seed),
