@@ -384,7 +384,12 @@ def test_over_the_ceiling_the_seeded_read_equals_the_full_read_and_rejects_a_tor
     _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
     _put(log, "b", [_ev("b", i) for i in range(1, N + 1)])
     log.read_all(snapshot=True)
-    seeded = _log(repo, cfg).read_all(snapshot=True)
+    clear_parse_cache()
+    seeded_reader = _log(repo, cfg)
+    before = len(_PARSES)
+    seeded = seeded_reader.read_all(snapshot=True)
+    seeded_reader.parsed = len(_PARSES) - before
+    assert seeded_reader.parsed == 0, "the cold read was not served from the snapshot"
     full = _log(repo, cfg).read_all(snapshot=False)
     assert seeded == full, "the snapshot-gated read diverged from a parse of the bytes"
     clear_parse_cache()
