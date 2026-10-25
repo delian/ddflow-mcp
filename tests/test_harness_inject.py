@@ -5,6 +5,7 @@ the first-call preamble (bug B1878cc0da3)."""
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -45,6 +46,19 @@ def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
     assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
     # A wired pre_tool can refuse the armed call: it stays a native hook even without inject.
     assert H.event_level(HR.get("gemini"), "pre_tool") == H.NATIVE
+
+
+def test_pre_tool_level_derives_from_the_descriptor_s_block_mode(repo):
+    # NATIVE only claims what the descriptor arms: an exit2 emitter's pre_tool fires a
+    # refusal the agent sees, a block="none" wiring fires nothing at all.
+    gem = HR.get("gemini")
+    disarmed = replace(gem, hooks=replace(gem.hooks, block="none"))
+    assert disarmed.hooks.block == "none" and "pre_tool" not in disarmed.hooks.inject
+    assert H.event_level(disarmed, "pre_tool") == H.WIRED
+    injected_disarmed = replace(disarmed, hooks=replace(disarmed.hooks, inject=("session_start", "prompt", "pre_tool")))
+    assert H.event_level(injected_disarmed, "pre_tool") == H.DECLARED
+    injected_armed = replace(gem, hooks=replace(gem.hooks, inject=("session_start", "prompt", "pre_tool")))
+    assert H.event_level(injected_armed, "pre_tool") == H.NATIVE
 
 
 def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monkeypatch):
