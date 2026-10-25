@@ -326,11 +326,24 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
     any uncommitted edit there would be credited to the item. None is recorded, not
     guessed. The primary stays the answer for a phase (its gates test the merged
     result), for an item never claimed, and with worktrees off -- the switch for a lone
-    agent that works in the primary.
+    agent that works in the primary -- and for a task whose merge removed its worktree
+    (B430dae3a68): its work IS committed at the base's HEAD, so the primary is the
+    honest post-merge home and a worktree gate genuinely re-runs there.
     """
 
     if it.worktree:
         return W.load_path(repo, it.worktree), ""
+    if (
+        it.merged_sha
+        and W.git(
+            repo,
+            "merge-base",
+            "--is-ancestor",
+            it.merged_sha,
+            cfg.worktree.base_ref or W.default_branch(repo),
+        ).ok
+    ):
+        return repo, ""
     if it.kind != "phase" and cfg.worktree.enabled:
         here, held = callers_tree(repo, cfg, st, it, called_from)
         if held:
