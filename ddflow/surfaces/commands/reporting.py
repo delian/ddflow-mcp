@@ -14,6 +14,7 @@ import time
 from ...api import reporting as A
 from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
+from ...views.progress import status_tasks_note
 from ..context import FAIL, OK, REFUSED, Ctx
 from ..render import emit_json
 from ..startcost_texts import start_texts
@@ -194,6 +195,8 @@ def cmd_status(a, c: Ctx) -> int:
         "",
         f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
         f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
+        "",
+        status_tasks_note(),
         "",
         *_queue_lines(r),
         *_recorded_line(r),
