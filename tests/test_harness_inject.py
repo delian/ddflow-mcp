@@ -34,9 +34,17 @@ def test_claude_s_declared_prompt_is_reported_non_delivering_too(repo):
     assert "declared, not delivering" in H.harness_show(repo, "claude").data["message"]
 
 
+def test_a_wired_event_the_descriptor_never_declared_is_reported_wired_not_injected(repo):
+    # cline wires agent_start (its session_start) but declares inject=['prompt'] only: the
+    # wired door never puts ddflow's output before the model, and show must say so.
+    assert H.event_level(HR.get("cline"), "session_start") == H.WIRED
+
+
 def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
     assert H.event_level(HR.get("claude"), "session_start") == H.NATIVE
     assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
+    # A wired pre_tool can refuse the armed call: it stays a native hook even without inject.
+    assert H.event_level(HR.get("gemini"), "pre_tool") == H.NATIVE
 
 
 def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monkeypatch):
