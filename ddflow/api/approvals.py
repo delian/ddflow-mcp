@@ -59,9 +59,9 @@ def approvals_list(repo: Path, *, all_rows: bool = False, agent: str = "") -> O.
 
 
 def _pending_status(row: dict[str, Any], now: float) -> str:
-    return f"expires {row['expires_at']}" + (
-        "" if V.status(row, now) == "pending" else _status(row, now)
-    )
+    if V.status(row, now) == "pending":
+        return f"expires {row['expires_at']}"
+    return f"{_status(row, now)} (expires {row['expires_at']})"
 
 
 def approvals_pending(repo: Path, *, agent: str = "") -> O.Outcome:

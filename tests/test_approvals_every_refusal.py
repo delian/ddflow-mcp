@@ -86,6 +86,9 @@ def test_the_config_edit_class_has_a_request_route_an_agent_can_drive(repo):
     assert code == 0, err
     data = json.loads(out)
     assert data["approval"]["ask"] == ask_id and data["key"] == "ci.pins_precheck"
+    code, out, _err = run_cli(repo, "--json", "config")
+    values = {r["key"]: r["value"] for r in json.loads(out)["rows"]}
+    assert values["ci.pins_precheck"] is False, "the answer applied the change"
     events = EventLog(repo, "probe").read_all()
     consumed = [e for e in events if e.kind == "ask.consumed" and e.data["id"] == ask_id]
     assert consumed, "the approval was not recorded as consumed"
