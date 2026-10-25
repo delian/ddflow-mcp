@@ -105,21 +105,20 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
 
 
 def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
-    """Does ``paths`` (non-empty) hold content a reviewer is NEVER sent, and is THAT
-    exclusion the GENERATED class? True only when every path matches the shipped
-    generated patterns (`GENERATED_EXCLUDE_DEFAULTS` -- lockfiles, golden snapshots,
-    transcripts: the default `[review].exclude_globs`), a canonical dependency-lock
-    artifact (`LOCKFILES`), or a file `pins.toml` owns (regenerated, never read), AND the
-    exclusion as configured still drops each of them. A project's OWN pattern (a privacy
-    exclusion like `*.pem`) that also swallows the whole diff is deliberately NOT the
-    class: hiding content from reviewers never waives the reviewer-independence rule.
-    True is the lockfile-only dependency refresh whose reviews record UNAVAILABLE and
-    whose completion needs no cross-family reviewer (B-lockfile-only-item-cannot-
-    complete)."""
+    """Is every path of ``paths`` (non-empty) the GENERATED class? -- the shipped
+    generated patterns (`GENERATED_EXCLUDE_DEFAULTS`: lockfiles, golden snapshots,
+    transcripts), a canonical dependency-lock artifact (`LOCKFILES`), or a file
+    `pins.toml` owns (regenerated, never read). A project's OWN exclusion pattern (a
+    privacy exclusion like `*.pem`) that swallows the whole diff is deliberately NOT the
+    class: hiding content from reviewers never waives the reviewer-independence rule. The
+    REVIEW RUN's own behavior (tag-scoped or ad-hoc exclusions the config does not carry)
+    is left to the reviewer-independence rule and the recorded gate outcomes -- this
+    predicate is only the class membership the completion waiver reads, guarded by
+    `reviewer_ran` (B-lockfile-only-item-cannot-complete)."""
     if not paths:
         return False
-    pats, pinned = patterns(cfg, repo)
-    generated = all(
+    _pats, pinned = patterns(cfg, repo)
+    return all(
         any(
             globs.match(p, g, bare_any_depth=True)
             for g in (*GENERATED_EXCLUDE_DEFAULTS, *LOCKFILES)
@@ -127,9 +126,6 @@ def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
         or _hit(p, [], pinned)
         for p in paths
     )
-    if not generated:
-        return False
-    return bool(pats or pinned) and all(_hit(p, pats, pinned) for p in paths)
 
 
 def filter_diff(

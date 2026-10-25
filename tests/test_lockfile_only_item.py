@@ -37,10 +37,11 @@ def test_excluded_outright_is_true_only_for_a_generated_only_change(tmp_path):
     cfg.review.exclude_globs = ["*.pem"]
     assert not REX.excluded_outright(cfg, Path(tmp_path), ["server.pem"])
     # a canonical lockfile the project excludes itself IS the class (roborev's patch)
-    cfg.review.exclude_globs = ["poetry.lock"]
     assert REX.excluded_outright(cfg, Path(tmp_path), ["poetry.lock"])
+    # the class membership does not depend on the exclude_globs config at all: the run's
+    # global/tag exclusions stay the run's business (reviewer finding D-critic round 2)
     cfg.review.exclude_globs = []
-    assert not REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
+    assert REX.excluded_outright(cfg, Path(tmp_path), ["uv.lock"])
 
 
 def test_the_generated_waiver_never_outlives_a_real_review(tmp_path):
@@ -103,12 +104,12 @@ def _pipeline_gates() -> tuple[str, ...]:
 
 def test_a_lockfile_only_change_is_unavailable_not_leaked(repo, tmp_path):
     """The whole change is uv.lock (excluded by default): the review records UNAVAILABLE,
-    its reason says what the exclusion left out, and the excluded content never reaches
-    the reviewer."""
+    its reason names the excluded file, and the excluded content never reaches the
+    reviewer."""
     seen = _setup_lock_only_change(repo, tmp_path)
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2
-    assert "excluded file(s)" in out.reason
+    assert "uv.lock" in out.reason
     sent = seen.read_text() if seen.exists() else ""
     assert "SECRET_ISH" not in sent
 
@@ -123,11 +124,14 @@ def test_a_mixed_change_still_excludes_the_lock(repo, tmp_path):
 
 
 def test_complete_accepts_a_lockfile_only_change(repo, tmp_path):
-    """End to end: reviews are UNAVAILABLE (named), no cross-family reviewer is demanded,
-    and the lockfile-only item completes with no --force."""
-    _setup_lock_only_change(repo, tmp_path)
+    """End to end: both review gates are UNAVAILABLE and neither leaks the excluded
+    content, no cross-family reviewer is demanded, and the lockfile-only item completes
+    with no --force."""
+    seen = _setup_lock_only_change(repo, tmp_path)
     assert api.review(repo, gate="rubber_duck", item="T1").exit == 2
     assert api.review(repo, gate="critic", item="T1").exit == 2
+    sent = seen.read_text() if seen.exists() else ""
+    assert "SECRET_ISH" not in sent
     for gate in _pipeline_gates():
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "e",
