@@ -3,7 +3,7 @@
 `ddflow status` headlines ``D/T tasks complete across N phase(s)`` counting every task
 record, abandoned tasks and fix tasks included. The ``Progress:`` block a completion
 prints counts live work items only (fix tasks and abandoned tasks out), which is why
-the two pairs differ. This module renders the one note that names both definitions;
+the two pairs can differ. This module renders the one note that names both definitions;
 the API (``api.reporting.overview.status``) and the block itself
 (``services.progress_line``) keep their own tallies and do not import it.
 """

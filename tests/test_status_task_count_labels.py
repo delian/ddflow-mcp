@@ -44,12 +44,23 @@ def _project(repo, abandon: bool = False):
         assert run_cli(repo, "abandon", "T3", "--reason", "not needed")[0] == 0
 
 
+def _project_without_bug(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "p")
+    for t in ("T1", "T2", "T3"):
+        assert (
+            run_cli(repo, "task", "add", t, "--title", t, "--phase", "P1", "--globs", f"{t}.py")[0]
+            == 0
+        )
+    assert run_cli(repo, "complete", "T1", "--force")[0] == 0
+
+
 def test_status_headline_says_what_it_counts(repo):
     _project(repo, abandon=True)
     code, out, err = run_cli(repo, "status")
     assert code == 0, err
-    # The headline pair must carry its definition, and the one that names the pair the
-    # completion Progress: block prints must be distinguishable from this one.
+    # The headline pair must carry its definition: the abandoned T3 and the auto-filed
+    # fix task stay in this count, and the contracts they name either definition with.
     assert "1/4 tasks complete across" in out
     assert "abandoned tasks and fix tasks included" in out
     assert "counts live work items only" in out
@@ -69,3 +80,21 @@ def test_progress_block_and_status_headline_count_different_sets_reconcilably(re
     assert "tasks 2/2 (100%)" in complete_out
     assert "abandoned tasks and fix tasks included" in status_out
     assert "counts live work items only" in status_out
+
+
+def test_note_says_the_pairs_can_differ_not_that_they_do(repo):
+    """With no abandoned or fix records at all the two pairs agree; the note calls the
+    difference a possibility, not a fact."""
+    _project_without_bug(repo)
+    code, out, _ = run_cli(repo, "status")
+    assert code == 0
+    assert "1/3 tasks complete across" in out
+    code, complete_out, err = run_cli(repo, "complete", "T2", "--force")
+    assert code == 0, err
+    assert "tasks 2/3 (66%)" in complete_out
+    # With T1 and T2 done the two surfaces agree (2/3); the note stays, phrased as a
+    # possibility.
+    code, status_after, _ = run_cli(repo, "status")
+    assert "2/3 tasks complete across" in status_after
+    assert "so the two totals can differ" in status_after
+    assert "so the two totals differ" not in status_after
