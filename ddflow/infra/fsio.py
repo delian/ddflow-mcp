@@ -125,6 +125,42 @@ def atomic_write(
             tmp.unlink()
 
 
+@contextlib.contextmanager
+def atomic_file(
+    path: Path | str, *, mode: int | None = None, fsync: bool = True
+) -> Iterator[Any]:
+    """A seekable binary file that becomes `path` when the block ends without exception:
+    `atomic_write` for content no caller should hold whole at once.
+
+    The yielded handle is this call's own temporary file in `path`'s directory, so the
+    writer may seek back over what it wrote (a header whose size and digest only settle
+    after the payload has streamed). Any exception removes the temporary file and leaves
+    `path` untouched, and publishing is one rename -- a reader sees the old file or the
+    new one, never half of either. `mode` and `fsync` mean what they mean in
+    `atomic_write`.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    want = mode
+    if want is None:
+        with contextlib.suppress(FileNotFoundError):
+            want = stat.S_IMODE(path.stat().st_mode)
+    fd, tmp = _temp_beside(path, 0o666 if want is None else 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            yield fh
+            fh.flush()
+            if fsync:
+                os.fsync(fh.fileno())
+        if want is not None:
+            os.chmod(tmp, want)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
+        raise
+
+
 def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
     """`Path(path).write_text(text, "utf-8")` that no reader ever sees half-written.
 
