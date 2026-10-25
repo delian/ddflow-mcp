@@ -531,11 +531,9 @@ class Store:
                 con.execute("BEGIN IMMEDIATE")
                 _reconcile_tables(con, _project(state), self.fts, self.trigram)
                 records = similar_records(state)
-                if [r["digest"] for r in con.execute(
-                    "select digest from similar_docs order by ord"
-                )] != [
-                    textsim.digest(r["title"], r["body"]) for r in records
-                ]:
+                if [
+                    r["digest"] for r in con.execute("select digest from similar_docs order by ord")
+                ] != [textsim.digest(r["title"], r["body"]) for r in records]:
                     _insert_similar(con, records, clear=True)
                 self._write_meta(con, len(events), fingerprint, marks)
                 con.execute("COMMIT")
@@ -808,7 +806,7 @@ def _row_key(table: str, row: dict[str, Any], n: int) -> str:
 
 def _fill_trigram(con) -> None:
     """Copy each table's ranked text from its porter FTS5 table into the trigram one."""
-    for table, cols in _SEARCH_COLS.items():
+    for table, _cols in _SEARCH_COLS.items():
         con.execute(
             # bandit B608: names come from the fixed `_SEARCH_COLS`.
             f"insert into {table}_tri(id, text) select id, {_TRI_EXPR[table]} from {table}_fts"  # nosec B608
@@ -941,7 +939,7 @@ class _Table:
 
     def where(self, key: tuple) -> str:
         cols = self.cols[: self.key_len or len(self.cols)]
-        return f"delete from {self.name} where {' and '.join(c + ' = ?' for c in cols)}"
+        return f"delete from {self.name} where {' and '.join(c + ' = ?' for c in cols)}"  # nosec B608
 
 
 #: Every projected table, in ITS insert order (`SCHEMA`'s column order, byte-faithful).
@@ -949,9 +947,25 @@ _TABLES = {
     "items": _Table(
         "items",
         (
-            "id", "kind", "title", "parent", "state", "needs", "globs", "tags",
-            "priority", "body", "worktree", "branch", "merged_sha", "blocked_reason",
-            "lease_holder", "lease_expires", "gates", "created_at", "completed_at",
+            "id",
+            "kind",
+            "title",
+            "parent",
+            "state",
+            "needs",
+            "globs",
+            "tags",
+            "priority",
+            "body",
+            "worktree",
+            "branch",
+            "merged_sha",
+            "blocked_reason",
+            "lease_holder",
+            "lease_expires",
+            "gates",
+            "created_at",
+            "completed_at",
         ),
         1,
         "items_fts",
@@ -974,8 +988,19 @@ _TABLES = {
     "decisions": _Table(
         "decisions",
         (
-            "id", "title", "context", "decision", "consequences", "alternatives",
-            "globs", "tags", "status", "decided_by", "superseded_by", "at", "item",
+            "id",
+            "title",
+            "context",
+            "decision",
+            "consequences",
+            "alternatives",
+            "globs",
+            "tags",
+            "status",
+            "decided_by",
+            "superseded_by",
+            "at",
+            "item",
         ),
         1,
         "decisions_fts",
@@ -991,8 +1016,16 @@ _TABLES = {
     "bugs": _Table(
         "bugs",
         (
-            "id", "item", "summary", "found_at", "fixed_at", "regression_test",
-            "lesson", "invalid_at", "invalid_reason", "evidence",
+            "id",
+            "item",
+            "summary",
+            "found_at",
+            "fixed_at",
+            "regression_test",
+            "lesson",
+            "invalid_at",
+            "invalid_reason",
+            "evidence",
         ),
         1,
         "bugs_fts",
@@ -1016,7 +1049,7 @@ _TABLES = {
 }
 
 
-def _rows_items(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_items(rows: dict[str, list[_Row]], state: State) -> None:
     for it in state.items.values():
         if it.removed:
             continue
@@ -1049,7 +1082,7 @@ def _rows_items(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_lessons(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_lessons(rows: dict[str, list[_Row]], state: State) -> None:
     # A contested lesson (B230e852e10) is not advice until `resolve` settles it.
     for ls in (x for x in state.lessons.values() if not x.contested):
         rows["lessons"].append(
@@ -1071,7 +1104,7 @@ def _rows_lessons(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_research(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_research(rows: dict[str, list[_Row]], state: State) -> None:
     for rn in state.research.values():
         rows["research"].append(
             _Row(
@@ -1091,7 +1124,7 @@ def _rows_research(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_decisions(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_decisions(rows: dict[str, list[_Row]], state: State) -> None:
     for dc in state.decisions.values():
         rows["decisions"].append(
             _Row(
@@ -1116,7 +1149,7 @@ def _rows_decisions(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_memories(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_memories(rows: dict[str, list[_Row]], state: State) -> None:
     # LIVE memories only: a forgotten one stays in the log and in `memory list --all`,
     # but recall exists to change what an agent does next.
     for m in state.memories.values():
@@ -1139,7 +1172,7 @@ def _rows_memories(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_bugs(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_bugs(rows: dict[str, list[_Row]], state: State) -> None:
     for bg in state.bugs.values():
         rows["bugs"].append(
             _Row(
@@ -1161,7 +1194,7 @@ def _rows_bugs(rows: dict[str, list["_Row"]], state: State) -> None:
         )
 
 
-def _rows_prompts(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_prompts(rows: dict[str, list[_Row]], state: State) -> None:
     """Prompts, notes AND the session's summary, one table, distinguished by `role`;
     notes are shifted by 10,000 so a note and a prompt with the same `seq` do not
     collide on the primary key (the FTS id's letter maps back)."""
@@ -1189,7 +1222,7 @@ def _rows_prompts(rows: dict[str, list["_Row"]], state: State) -> None:
             )
 
 
-def _rows_records(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_records(rows: dict[str, list[_Row]], state: State) -> None:
     """The ACTIVE records of the declared kinds that are recalled, in the ``records``
     table: a retired, superseded or merged one no longer changes what an agent should
     do. The id is ``<kind>:<id>``."""
@@ -1211,20 +1244,18 @@ def _rows_records(rows: dict[str, list["_Row"]], state: State) -> None:
             )
 
 
-def _rows_cadences(rows: dict[str, list["_Row"]], state: State) -> None:
+def _rows_cadences(rows: dict[str, list[_Row]], state: State) -> None:
     for name, runs in state.cadences.items():
         for r in runs:
-            rows["cadences"].append(
-                _Row((), (name, r["at"], r["by"], r["result"]), None)
-            )
+            rows["cadences"].append(_Row((), (name, r["at"], r["by"], r["result"]), None))
 
 
-def _project(state: State) -> dict[str, list["_Row"]]:
+def _project(state: State) -> dict[str, list[_Row]]:
     """Every table's rows as they are resolved THE one time: `_write_rows` inserts them
     whole, `_reconcile_tables` inserts only what differs. ONE projector means an
     incremental never disagrees with a rebuild -- it is the rebuild, minus the rows
     that were already there."""
-    rows: dict[str, list["_Row"]] = {name: [] for name in _TABLES}
+    rows: dict[str, list[_Row]] = {name: [] for name in _TABLES}
     _rows_items(rows, state)
     _rows_lessons(rows, state)
     _rows_research(rows, state)
@@ -1237,7 +1268,7 @@ def _project(state: State) -> dict[str, list["_Row"]]:
     return rows
 
 
-def _write_rows(con, proj: dict[str, list["_Row"]], fts: bool) -> None:
+def _write_rows(con, proj: dict[str, list[_Row]], fts: bool) -> None:
     """The full writer: every projected row, base and FTS, into a fresh index."""
     for name, rows in proj.items():
         t = _TABLES[name]
@@ -1254,7 +1285,7 @@ _TRI_EXPR = {
 }
 
 
-def _reconcile_tables(con, proj: dict[str, list["_Row"]], fts: bool, trig: bool) -> None:
+def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -> None:
     """The incremental writer: read the index's rows once, write only what differs.
     Raises `RuntimeError` on a count that disagrees -- the caller answers with a full
     rebuild, never with a wrong row."""
@@ -1279,16 +1310,17 @@ def _reconcile_tables(con, proj: dict[str, list["_Row"]], fts: bool, trig: bool)
             if fts and t.fts is not None and t.key_len == 1:
                 # A 1-keyed table's key IS its FTS id; prompts' (key_len 2) is not, and
                 # prompts only grow, so a stale FTS row there cannot be left behind.
-                con.execute(f"delete from {t.fts} where id = ?", (key[0],))
+                con.execute(f"delete from {t.fts} where id = ?", (key[0],))  # nosec B608
             gone.append(key)
-        if con.execute(f"select count(*) from {t.name}").fetchone()[0] != len(rows):
+        if con.execute(f"select count(*) from {t.name}").fetchone()[0] != len(rows):  # nosec B608
             raise RuntimeError(f"incremental {t.name}: reconciled rows disagree")
         if not trig or not t.fts:
             continue
         if gone and t.key_len == 1:
             phs = ",".join("?" * len(gone))
             con.execute(
-                f"delete from {t.name}_tri where id in ({phs})", [k[0] for k in gone]
+                f"delete from {t.name}_tri where id in ({phs})",
+                [k[0] for k in gone],  # nosec B608
             )
         ids = [r.fts[0] for r in touched if r.fts is not None]
         if ids:
@@ -1296,8 +1328,8 @@ def _reconcile_tables(con, proj: dict[str, list["_Row"]], fts: bool, trig: bool)
             con.execute(
                 "insert or replace into "
                 f"{t.name}_tri(id, text) select id, {_TRI_EXPR[t.name]} "
-                 f"from {t.fts} where id in ({phs})",  # nosec B608
-                 ids,
+                f"from {t.fts} where id in ({phs})",  # nosec B608
+                ids,
             )
 
 
