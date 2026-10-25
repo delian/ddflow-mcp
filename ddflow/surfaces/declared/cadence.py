@@ -108,7 +108,6 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "approval",
                 default="",
-                cli_only=True,
                 cli_help="regenerate: an agent's route (`request` files an operator approval to answer anywhere, an approval id re-records the pins and records the approval); a person re-records directly",
             ),
             Param(
