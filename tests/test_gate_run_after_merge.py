@@ -129,6 +129,47 @@ def test_a_dirty_primary_is_not_the_merged_tree(repo):
     assert _gate(repo, "unit_tests").outcome == "unavailable"
 
 
+def test_a_hidden_marked_primary_is_not_the_merged_tree(repo):
+    """A tracked file the index marks `assume-unchanged` (or `skip-worktree`) and then
+    modifies is INVISIBLE to `git status` and `git diff --quiet` while its content
+    differs, so no checkout whose index carries a mark can be PROVEN to stand at the
+    merged tree and none is admitted (B430dae3a68 reviewer findings #1/#3)."""
+    _merged(repo)
+    _git(repo, "update-index", "--assume-unchanged", "t.txt")
+    (repo / "t.txt").write_text("hidden edit under the mark\n")
+    _git(repo, "update-index", "--skip-worktree", "t.txt")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "unavailable"
+
+
+def test_a_merged_phase_off_the_merged_tree_is_implement_judged(repo):
+    """The reviewers' fourth round: the merged-phase implement exemption skipped the
+    merged-tree test, so a phase whose checkout moved off its merged work recorded
+    `implement` passed where a task is refused. The exemption holds only where the
+    checkout stands at the merged tree (the landed case, judged for every kind);
+    off it the branch is measured, and an empty range is refused (finding #2)."""
+    run_cli(repo, "init")
+    run_cli(repo, "config", "worktree.remove_on_merge", "false")
+    run_cli(repo, "phase", "add", "P1", "--title", "p")
+    code, out, err = run_cli(repo, "--json", "claim", "P1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "p.txt").write_text("x\n")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "-qm", "work")
+    assert run_cli(repo, "merge", "P1")[0] == 0
+    _git(tree, "checkout", "--detach", "HEAD~1")
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "later work on main")
+    code, out, err = run_cli(
+        repo, "gate", "record", "P1", "implement", "--outcome", "passed", "--evidence", "x"
+    )
+    assert code == 3 and "no commit ahead" in out + err, (code, out, err)
+
+
 def test_a_landed_item_kept_worktree_is_exempt_only_where_the_checkout_stands_at_it(repo):
     """The second site of the same hole (`_implement_without_commits`): a landed item whose
     worktree a merge kept was judged "it IS the base" from the ancestry alone. With the
