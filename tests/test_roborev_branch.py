@@ -325,6 +325,7 @@ def test_a_dash_led_first_finding_line_is_still_the_reason_value(tmp_path, monke
     exe.write_text(
         "#!/bin/sh\n"
         'case "$1" in\n'
+        '  review) echo "Enqueued job 7 for range" ;;\n'
         "  wait) exit 1 ;;\n"
         '  show) echo "  -- dangerously over-broad glob" ;;\n'
         '  list) echo \'[{"id": 7, "status": "done", "git_ref": "x..abcdef0", "agent": "kilo"}]\' ;;\n'
