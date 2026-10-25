@@ -24,7 +24,7 @@ from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
-from ..services.hookio import DENY_EMITTERS
+from ..services.hookio import DENY_EMITTERS, emit, plan_for
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -53,7 +53,13 @@ def event_level(h: Harness, event: str) -> str:
     if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
         can_deny = hk.emitter in DENY_EMITTERS
         if event in hk.inject:
-            if event == "session_start" or (event == "pre_tool" and can_deny):
+            if event == "session_start":
+                # Computed from the emitter, the same way the registry guard test checks it:
+                # a _silent dialect renders the neutral reply ("" or "{}"), and a declared
+                # door nothing travels through is DECLARED, exactly like the prompt door.
+                out = emit(plan_for(h.id), "session_start", "probe").strip()
+                return NATIVE if out and out != "{}" else DECLARED
+            if event == "pre_tool" and can_deny:
                 return NATIVE
             return DECLARED  # the descriptor declares the door, the handler emits nothing
         if event == "pre_tool" and can_deny:
