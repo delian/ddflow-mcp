@@ -1,6 +1,9 @@
-"""DX-gate-run-after-merge: `merge` removes the worktree, so a command gate run on a merged
-item had no tree. It used to record UNAVAILABLE over the pre-merge outcome with a reason
-about "no worktree"; now it keeps a recorded outcome and names the merge in the reason."""
+"""DX-gate-run-after-merge, B430dae3a68: `merge` removes the worktree, so a command gate run
+on a merged item used to have no tree and could only record UNAVAILABLE ("gates are run
+before `ddflow merge`"), stranding the item: complete refused forever on a required gate
+that no agent word could honestly fill post-merge. The merged work is committed at the
+base's HEAD, so the primary IS the item's post-merge tree: `item_tree` answers the
+primary for a merged item, and gates genuinely re-run and record there."""
 
 from __future__ import annotations
 
@@ -51,30 +54,37 @@ def _gate(repo: Path, name: str):
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates.get(name)
 
 
-def test_a_gate_run_after_merge_keeps_the_pre_merge_pass(repo):
-    _merged(repo, passed_before=True)
-    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
-    text = out + err
-    assert code == 2, text  # nothing ran: the exit says so
-    assert "merged" in text and "recorded" in text and "passed" in text, text
-    assert _gate(repo, "unit_tests").outcome == "passed"
-
-
-def test_a_gate_run_after_merge_with_no_pass_says_why(repo):
+def test_a_gate_run_after_merge_runs_on_the_merged_tree(repo):
+    """B430dae3a68: a merged item with NO unit_tests outcome is not stranded: the gate
+    genuinely re-runs on the merged tree (the primary, at the base's HEAD) and records
+    its pass, so `complete` has an honest post-merge route."""
     _merged(repo)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code == 2, text
-    assert "merged" in text and "before `ddflow merge T1`" in text, text
-    assert "claimed without a worktree" not in text
+    assert code == 0, text
     rec = _gate(repo, "unit_tests")
-    assert rec.outcome == "unavailable" and "merged" in (rec.reason or ""), rec
+    assert rec.outcome == "passed", rec
+    assert "unavailable" not in text
 
 
-def test_a_forced_gate_run_after_merge_does_not_answer_with_the_stale_pass(repo):
+def test_a_gate_run_after_merge_reruns_an_existing_pre_merge_pass(repo):
+    """The merged tree is the outcome home, so a re-run measures it freshly instead of
+    parrot-backing the pre-merge pass."""
     _merged(repo, passed_before=True)
-    _, out, err = run_cli(
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed"
+
+
+def test_a_forced_gate_run_after_merge_takes_the_fresh_measurement(repo):
+    """--force asks for a fresh measurement; on the merged tree there now IS one to take,
+    so the pre-merge pass is superseded by a fresh run rather than replaced by
+    unavailable."""
+    _merged(repo, passed_before=True)
+    code, out, err = run_cli(
         repo, "gate", "run", "T1", "unit_tests", "--force", "--reason", "fresh please"
     )
-    assert "REPLACED" in out + err and "stands" not in out + err, out + err
-    assert _gate(repo, "unit_tests").outcome == "unavailable"
+    text = out + err
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed"
