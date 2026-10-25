@@ -694,15 +694,22 @@ def _owner_alive(tree: Path) -> bool | None:
         return None
     if not pid_s.isdigit() or not start.isdigit():
         return None
+    proc = Path(f"/proc/{pid_s}")
     try:
-        raw = Path(f"/proc/{pid_s}/stat").read_text("utf-8", "replace")
-        return raw.rsplit(")", 1)[1].split()[19] == start
+        raw = Path(f"{proc}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
     except OSError:
-        # A process that is THERE but unreadable (hidepid, no /proc) may be live; a pid
-        # whose directory is gone has exited. Only the latter is "definitely gone".
-        return None if Path(f"/proc/{pid_s}").exists() else False
+        # The pid's directory gone AND /proc serving = the process DEFINITELY exited; a
+        # /proc that hides it (hidepid) or is absent serves nothing about it: unknown.
+        if not proc.exists() and proc.parent.exists():
+            return False
+        return None
     except IndexError:
         return None
+    if not raw:
+        return None
+    if raw[0] == "Z":  # a zombie has exited: it was read but never reaped, not alive
+        return False
+    return raw[19] == start
 
 
 def _under_sys_tmp(path: Path) -> bool:
@@ -835,11 +842,18 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
+def _registered(tree: Path) -> bool:
+    """Is ``tree`` still a registration in git's worktree list? The one prune asks:
+    removing the directory is not the same as removing the registration, and a prune that
+    refuses ONE registered path (a lock) says success either way."""
+    return any(Path(e.get("worktree", "")).resolve() == Path(tree).resolve() for e in W.list_worktrees(W.repo_root(tree)))
+
+
 def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) -> bool:
     """Free one leftover scratch tree whose owner is gone (B43593d1f3c): the owner marker
     re-read under the log's lock (the owner could have re-started since the survey), and a
-    half-removal reported as such -- a prune that could not free the directory said it
-    pruned is a leftover the next survey would find again."""
+    half-removal reported as such -- a prune that could not free the directory or its
+    registration said it pruned is a leftover the next survey would find again."""
     with log.transaction():
         if _owner_alive(Path(t.path)) is True:
             t.action, t.done = "", "kept: its owner process is alive since the survey"
@@ -853,9 +867,11 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
         except OSError:
             pass
         W.git(root, "worktree", "prune")
-    gone = not Path(t.path).exists()
-    done.append(f"{'pruned' if gone else 'FAILED to prune'} leftover ci scratch tree {t.name}")
-    return gone
+    if Path(t.path).exists() or _registered(Path(t.path)):
+        done.append(f"FAILED to prune leftover ci scratch tree {t.name}")
+        return False
+    done.append(f"pruned leftover ci scratch tree {t.name}")
+    return True
 
 
 def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
