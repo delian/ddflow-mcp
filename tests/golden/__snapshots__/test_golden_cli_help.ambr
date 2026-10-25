@@ -111,6 +111,15 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals pending]
+  '''
+  usage: ddflow approvals pending [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow approvals request]
   '''
   usage: ddflow approvals request [-h] [--item ITEM] [--target TARGET] [--reason REASON] verb
@@ -164,12 +173,14 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
   
   positional arguments:
-    {list,log,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
+      pending             the requests still waiting for a person, each with its digest and its
+                          answer form
       log                 the audit timeline of approvals (who asked, who answered, which channel
                           and level, what was spent) and what looks wrong
       show                one request as ddflow rendered it for the person, with its digest and
@@ -638,7 +649,7 @@
 # ---
 # name: test_help[ddflow config]
   '''
-  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [value ...]
+  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
   
   positional arguments:
     value                 the value, when --set is used; or `KEY VALUE` with no --set (ddflow config
@@ -653,6 +664,9 @@
                           append this TOML to .ddflow/config.toml (validated first)
     --local               write --set/--append-toml to the git-ignored .ddflow/local/config.toml:
                           this machine's endpoints, hosts, key variables and sizing, never committed
+    --approval APPROVAL   with --set KEY VALUE: an agent's route (`request` files an operator
+                          approval to answer anywhere, an approval id applies and records it); a
+                          person configures directly
   
   '''
 # ---
@@ -1555,7 +1569,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] {task,phase,bug,research,lesson,session,search}
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1803,7 +1817,7 @@
 # ---
 # name: test_help[ddflow pins]
   '''
-  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target ...]
+  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--approval APPROVAL] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target ...]
   
   positional arguments:
     document              the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale
@@ -1818,6 +1832,9 @@
     --install             regenerate: install the git merge driver and post-merge hook for the pin
                           files
     --after-merge         regenerate: what the post-merge hook runs
+    --approval APPROVAL   regenerate: an agent's route (`request` files an operator approval to
+                          answer anywhere, an approval id re-records the pins and records the
+                          approval); a person re-records directly
     --tests TESTS         comma-separated test dirs (default: tests,test)
     --min-needle MIN_NEEDLE
                           shortest literal that counts as a pin (default 12)
@@ -3295,6 +3312,7 @@
     'ddflow approvals deny',
     'ddflow approvals list',
     'ddflow approvals log',
+    'ddflow approvals pending',
     'ddflow approvals request',
     'ddflow approvals revoke',
     'ddflow approvals show',

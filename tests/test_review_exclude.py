@@ -110,6 +110,7 @@ def test_only_excluded_files_changed_records_unavailable_naming_them(repo, tmp_p
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == 2
     assert "excluded file(s)" in out.reason
+    assert "tests/golden/snap.json" in out.reason
     sent = seen.read_text() if seen.exists() else ""
     assert "GENERATED_MARK" not in sent
     rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
