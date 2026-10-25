@@ -23,7 +23,7 @@ import contextlib
 import os
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -67,6 +67,7 @@ def scratch_tree(
     prefix: str = "ddflow-scratch-",
     under: Path | None = None,
     quiet: bool = False,
+    claim: Callable[[Path], None] | None = None,
 ) -> Iterator[Scratch]:
     """A throwaway worktree of ``ref`` in ``root``'s repository: one place that makes it,
     removes it however the body ends and prunes the registry.
@@ -77,9 +78,15 @@ def scratch_tree(
     caller words its own failure from ``add``. Nothing is left behind: the tree is removed
     (forced), its directory deleted and the registry pruned, in that order, whatever the
     body did.
+
+    ``claim`` runs with the tree's path once it exists but BEFORE `git worktree add`
+    registers it (ci passes one that writes its sibling owner marker, so a sweep between
+    the add and the claim can never see the tree unclaimed).
     """
     root = Path(root)
     tmp = fsio.unused_dir(prefix, under)  # `worktree add` wants to create it
+    if claim is not None:
+        claim(tmp)
     args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
     add = git(root, *args, str(tmp), ref)
     try:

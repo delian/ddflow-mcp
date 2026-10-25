@@ -688,7 +688,7 @@ def _owner_alive(tree: Path) -> bool | None:
     None (unknown: no marker, so the tree predates owner recording, most likely a SIGKILLed
     run; or a pid THIS host cannot read)."""
     try:
-        text = Path(f"{tree}{CI.OWNER_SUFFIX}").read_text().strip()
+        text = CI.owner_marker(tree).read_text().strip()
         pid_s, _, start = text.partition(" ")
     except OSError:
         return None
@@ -737,7 +737,7 @@ def _scratch_row(tree: Path, alive: bool | None) -> tuple[str, str]:
     tail = " — prune it and its git registration"
     if alive is False:
         return "prune_scratch", f"a ci run's scratch tree whose owner process is gone{tail}"
-    if not Path(f"{tree}{CI.OWNER_SUFFIX}").exists():
+    if not CI.owner_marker(tree).exists():
         if _under_sys_tmp(tree):
             return "prune_scratch", (
                 f"a ci run's scratch tree (no owner marker: from before owners were recorded)"
@@ -870,7 +870,7 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
         # already gone, so a half-freed directory would keep its entry to find again.
         shutil.rmtree(t.path, ignore_errors=True)
         try:
-            Path(f"{t.path}{CI.OWNER_SUFFIX}").unlink(missing_ok=True)
+            CI.owner_marker(Path(t.path)).unlink(missing_ok=True)
         except OSError:
             pass
         W.git(root, "worktree", "prune")
