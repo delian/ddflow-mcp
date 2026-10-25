@@ -337,7 +337,9 @@ def merge_tree(
 
     Removed on exit. A base already contained in `ref` needs no merge; a base that
     conflicts with `ref` is reported as the failure it is."""
-    with W.scratch_tree(repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True) as s:
+    with W.scratch_tree(
+        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner
+    ) as s:
         if s.path is None:
             yield (
                 None,
@@ -345,7 +347,7 @@ def merge_tree(
             )
             return
         tree = s.path
-        marker = _claim_owner(tree)  # claimed FIRST: a sweep in between sees a live owner
+        marker = owner_marker(tree)  # written by `claim`, BEFORE the add registered the tree
         with _remove_on_signals(repo, tree, marker):
             if (
                 base
