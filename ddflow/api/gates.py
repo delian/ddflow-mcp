@@ -1008,6 +1008,8 @@ def _implement_without_commits(
     be measured is refused, not passed."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
+    if it.kind == "phase":
+        return ""  # its gates test the merged result, judged when the phase completes, not per checkout
     if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
