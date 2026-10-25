@@ -377,8 +377,17 @@ class Store:
         # `tests/test_critic_findings.py`.)
         fingerprint = log.mark()
         stored = self._load_shard_digests() if self._incremental_enabled() else None
-        marks = self._verified_shard_marks(stored, log) if stored is not None else None
-        if marks is None:
+        verified = self._verified_shard_marks(stored, log) if stored is not None else None
+        if stored is not None and verified is None:
+            # The stored prefixes no longer re-hash: mismatch is a REBUILD. `None` is
+            # the revoked licence -- the recreated index below gets freshly digested
+            # marks -- never a reconcile keyed on what just failed to verify.
+            marks = None
+        elif verified is not None:
+            marks = verified
+        else:
+            # First build, or an index written before the marks existed: verify the
+            # shards afresh -- nothing was consumed yet, so there is no prefix to doubt.
             marks = self._verified_shard_marks({}, log) or {}
         # The marks BEFORE the read, like the fingerprint above: marked afterwards, a
         # byte the projection never folded could be claimed consumed the same way.
@@ -411,7 +420,13 @@ class Store:
             f"{self.path.name}-rebuilding.{os.getpid()}.{secrets.token_hex(4)}"
         )
         try:
-            return self._build_into(tmp, state, events, fingerprint, marks)
+            return self._build_into(
+                tmp,
+                state,
+                events,
+                fingerprint,
+                marks if marks is not None else self._verified_shard_marks({}, log) or {},
+            )
         finally:
             for suf in ("", "-wal", "-shm"):
                 tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
@@ -503,7 +518,7 @@ class Store:
         for p in log.shards():
             try:
                 data = p.read_bytes()
-            except FileNotFoundError:
+            except OSError:
                 return None
             if p.name in stored:
                 size, want = stored[p.name]
@@ -1307,6 +1322,11 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
             if have.get(key) != r.values:
                 con.execute(t.insert, r.values)
                 if fts and r.fts is not None:
+                    if t.key_len == 1:
+                        # FTS5 replaced on rowid, which a text id never equals -- a
+                        # plain insert-or-replace would append a duplicate row for the
+                        # same id. Delete by the id first; the row just written replaces.
+                        con.execute(f"delete from {t.fts} where id = ?", (r.fts[0],))  # nosec B608
                     con.execute(t.fts_insert, r.fts)
                 touched.append(r)
         for key in set(have) - set(want):

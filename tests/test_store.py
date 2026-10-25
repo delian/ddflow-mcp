@@ -15,6 +15,8 @@ sides of that contract:
   must leave the same rows and the same meta as deleting the database first.
 """
 
+import hashlib
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -104,13 +106,19 @@ def test_dropping_the_db_changes_nothing(log, cfg, store):
 def test_rebuild_records_its_shard_verification_marks(log, cfg, store):
     """A built (or reconciled) index must record the per-shard consumed offsets and
     their digests -- the marks the incremental replay is not allowed to act
-    without (the 'never unverified incremental' doctrine)."""
+    without (the 'never unverified incremental' doctrine). A bogus mark, or one
+    that does not digest the consumed bytes, is not a mark."""
     _seed(log, cfg)
     store.rebuild(log)
     with sqlite3.connect(store.path) as con:
         meta = dict(con.execute("select k, v from meta"))
-    assert meta.get("mark")
-    assert meta.get("shard_digests")
+    mark = json.loads(meta["mark"])
+    digests = json.loads(meta["shard_digests"])
+    for p in sorted(store.root.glob(".ddflow/events/*.jsonl")):
+        data = p.read_bytes()
+        assert mark[p.name] == len(data)
+        size_s, slash, hexed = str(digests[p.name]).partition("/")
+        assert slash and size_s.isdigit() and hexed == hashlib.sha256(data).hexdigest()
 
 
 def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store):
@@ -130,12 +138,21 @@ def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store):
 
 def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
     """The knob: with the incremental projector off, a rebuild is the old full
-    path, and the result is the same rows anyway."""
+    path, and the result is the same rows anyway. A store that ignored the knob
+    would take `_reconcile`; pin that it is not CALLED when disabled."""
     monkeypatch.setenv("DDFLOW_STORE_INCREMENTAL", "0")
+    called = []
+
+    def _boom(self, *a, **k):
+        called.append(True)
+        raise AssertionError("_reconcile called while the knob disables it")
+
+    monkeypatch.setattr(Store, "_reconcile", _boom)
     sid = _seed(log, cfg)
     store.rebuild(log)
     _grow(log, cfg, sid)
     store.rebuild(log)
+    assert not called
     kept = _dump(store)
     store.path.unlink()
     store.rebuild(log)
