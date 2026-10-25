@@ -114,11 +114,12 @@ def test_rebuild_records_its_shard_verification_marks(log, cfg, store):
         meta = dict(con.execute("select k, v from meta"))
     mark = json.loads(meta["mark"])
     digests = json.loads(meta["shard_digests"])
+    assert set(mark) == set(digests)
     for p in sorted(store.root.glob(".ddflow/events/*.jsonl")):
         data = p.read_bytes()
-        assert mark[p.name] == len(data)
         size_s, slash, hexed = str(digests[p.name]).partition("/")
-        assert slash and size_s.isdigit() and hexed == hashlib.sha256(data).hexdigest()
+        assert slash and int(size_s) == len(data) == mark[p.name]
+        assert hexed == hashlib.sha256(data).hexdigest()
 
 
 def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store):
@@ -137,22 +138,37 @@ def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store):
 
 
 def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
-    """The knob: with the incremental projector off, a rebuild is the old full
-    path, and the result is the same rows anyway. A store that ignored the knob
-    would take `_reconcile`; pin that it is not CALLED when disabled."""
+    """The knob, in BOTH directions. ON (its default) reconciles the appended
+    deltas in place; OFF a rebuild is the old full path, and the result is the
+    same rows anyway. A store that ignored the knob in either direction cannot
+    pass: not one that still reconciles while disabled, and not one that never
+    reconciles while enabled."""
+    original = Store._reconcile
+    calls = []
+
+    def _spy(self, *a, **k):
+        calls.append(True)
+        return original(self, *a, **k)
+
+    monkeypatch.delenv("DDFLOW_STORE_INCREMENTAL", raising=False)
+    monkeypatch.setattr(Store, "_reconcile", _spy)
+    sid = _seed(log, cfg)
+    store.rebuild(log)
+    calls.clear()
+    _grow(log, cfg, sid)
+    store.rebuild(log)
+    assert calls, "the appended deltas did not go through _reconcile while enabled"
+
     monkeypatch.setenv("DDFLOW_STORE_INCREMENTAL", "0")
-    called = []
+    calls.clear()
 
     def _boom(self, *a, **k):
-        called.append(True)
+        calls.append(True)
         raise AssertionError("_reconcile called while the knob disables it")
 
     monkeypatch.setattr(Store, "_reconcile", _boom)
-    sid = _seed(log, cfg)
     store.rebuild(log)
-    _grow(log, cfg, sid)
-    store.rebuild(log)
-    assert not called
+    assert not calls
     kept = _dump(store)
     store.path.unlink()
     store.rebuild(log)
