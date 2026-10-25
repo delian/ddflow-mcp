@@ -56,8 +56,8 @@ def test_a_wired_start_the_hook_does_not_inject_falls_back_the_ladder(repo):
 
 def test_every_shipped_injected_session_start_uses_a_delivering_emitter(repo):
     # NATIVE for an injected session_start is true only when the emitter really renders the
-    # brief for that agent's dialect; a _silent or _antigravity-shaped emitter would claim
-    # a delivery nothing travels through.
+    # brief for that agent's dialect; a _silent or _antigravity-shaped emitter renders the
+    # neutral reply ("" or "{}") and would claim a delivery nothing travels through.
     from ddflow.services import hookio
 
     guard = [
@@ -70,7 +70,8 @@ def test_every_shipped_injected_session_start_uses_a_delivering_emitter(repo):
     assert guard, "no shipped descriptor declares session_start in inject"
     for hid in guard:
         plan = hookio.plan_for(hid)
-        assert plan is not None and hookio.emit(plan, "session_start", "probe").strip()
+        out = hookio.emit(plan, "session_start", "probe").strip()
+        assert plan is not None and out and out != "{}"
 
 
 def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):
