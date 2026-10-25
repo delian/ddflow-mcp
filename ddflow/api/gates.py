@@ -327,7 +327,11 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     merged sha's tree -- a cheap tree-sha comparison in the object db, no checkout and
     no diff -- and the working tree carrying no uncommitted changes (`HEAD^{tree}` sees
     only the committed tree, so a dirty primary at the merged HEAD is not the merged
-    tree either) (the B430dae3a68 reviewer holefix, both rounds).
+    tree either) (the B430dae3a68 reviewer holefix, both rounds). An index entry the
+    user marked `assume-unchanged` or `skip-worktree` lies to BOTH clean checks: under
+    the mark `git status` and `git diff --quiet` keep seeing the committed content while
+    the working file differs, so no checkout whose index carries a mark can be PROVEN
+    to stand at the merged tree, and none is admitted (the reviewers' fourth round).
     """
 
     if not it.merged_sha:
@@ -340,6 +344,11 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
     merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
     if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
+        return False
+    marked = W.git(here, "ls-files", "-v")
+    if marked.ok and any(
+        line and (line[0].islower() or line[0] in "Ss") for line in marked.out.splitlines()
+    ):
         return False
     if not W.dirty(W.Worktree(item=it.id, path=here, branch="", base="")):
         if W.git(here, "diff", "--quiet").ok:
@@ -1008,11 +1017,11 @@ def _implement_without_commits(
     ahead of its base, else "" (a landed item is never judged: B998bcca9ce; bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
     worktree of its own, or whose tree was removed, is not judged; a tree whose range cannot
-    be measured is refused, not passed."""
+    be measured is refused, not passed. A merged phase is exempt by the same test as any
+    other kind: only where its checkout STANDS at the merged tree (the landed case), a
+    moved, reverted or dirty phase checkout is judged (B430dae3a68 reviewer finding #2)."""
     if gate != "implement" or result != "passed" or not it.worktree or wt is None:
         return ""
-    if it.kind == "phase" and it.merged_sha:
-        return ""  # a merged phase's gates test the merged result, not this checkout
     if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
