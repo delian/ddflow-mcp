@@ -34,6 +34,8 @@ the report) decides, having been told what is actually in each tree.
 from __future__ import annotations
 
 import contextlib
+import shutil
+import tempfile
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -46,6 +48,7 @@ from ..core.globs import under_any
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog
+from . import ci as CI
 from . import leases as L
 from .leaseclock import localize
 from .pins import pin_files
@@ -678,6 +681,91 @@ def unclaimed_trees(repo: Path, cfg: Config, state: State) -> list[str]:
     ]
 
 
+def _owner_alive(tree: Path) -> bool | None:
+    """Whether the owner of ci scratch tree ``tree`` is what its marker says: True (a
+    process ``pid`` that started at the marker's start-ticks lives), False (it has
+    DEFINITELY exited: the pid is gone, or re-started -- a reused pid is not the owner),
+    None (unknown: no marker, so the tree predates owner recording, most likely a SIGKILLed
+    run; or a pid THIS host cannot read)."""
+    try:
+        text = CI.owner_marker(tree).read_text().strip()
+        pid_s, _, start = text.partition(" ")
+    except OSError:
+        return None
+    if not pid_s.isdigit() or not start.isdigit():
+        return None
+    proc = Path(f"/proc/{pid_s}")
+    try:
+        raw = Path(f"{proc}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
+        if not raw:
+            return None
+        if raw[0] == "Z":  # a zombie has exited: it was read but never reaped, not alive
+            return False
+        return raw[19] == start
+    except PermissionError:
+        # EACCES/EPERM: a /proc that hides this pid (hidepid=, another UID) serves NOTHING
+        # about whether it lives: unknown, never a prune.
+        return None
+    except FileNotFoundError:
+        # No /proc/<pid> while /proc itself serves: the pid is gone -- DEFINITELY exited.
+        # (The ci run and this sweep share a uid, so a live owner's pid is never ENOENT.)
+        return False if Path("/proc").exists() else None
+    except (OSError, IndexError):
+        return None
+
+
+def _under_sys_tmp(path: Path) -> bool:
+    """Is ``path`` in the directory a ci scratch tree is MADE in (the system temp dir)?
+    The one place a markerless ``ddflow-ci.*`` tree is known to be ci's: anywhere else the
+    name is just a name, and its tree is someone's (not ci's) to remove."""
+    try:
+        return path.parent.resolve() == Path(tempfile.gettempdir()).resolve()
+    except OSError:
+        return False
+
+
+def _scratch_row(tree: Path, alive: bool | None) -> tuple[str, str]:
+    """(action, the sentence) for a worktree a ci run's scratch helper made, kept or
+    pruned by ``apply``: only an owner seen to be GONE is a leftover; a live owner's, and
+    one whose owner cannot be checked, stay and are only named. A markerless tree is the
+    pre-recording leftover the sweep exists for ONLY in the temp dir, where a ci scratch
+    tree is made; elsewhere a markerless ``ddflow-ci.*`` is a name, not a claim to it."""
+    if alive:
+        return "", "a live ci run's scratch tree — its owner process is still running"
+    tail = " — prune it and its git registration"
+    if alive is False:
+        return "prune_scratch", f"a ci run's scratch tree whose owner process is gone{tail}"
+    if not CI.owner_marker(tree).exists():
+        if _under_sys_tmp(tree):
+            return "prune_scratch", (
+                f"a ci run's scratch tree (no owner marker: from before owners were recorded)"
+                f"{tail}"
+            )
+        return "", (
+            "LEFT ALONE — named like a ci scratch tree but made before owners were "
+            "recorded outside the temp dir: its worktree is not ci's to remove"
+        )
+    return "", "a ci run's scratch tree whose owner process cannot be checked — LEFT ALONE"
+
+
+def scratch_leftovers(root: Path) -> list[TreeState]:
+    """The registered worktrees that are NOT the queue's: a ci run's detached scratch
+    elsewhere (`ddflow-ci.`), which `our_trees` never sees because it is on no ddflow
+    branch AND under no ddflow tree root. A run killed mid-flight (no exit cleanup, SIGKILL
+    runs no handler) left the tree and its registration; these stay registered until
+    named here and pruned by ``apply``."""
+    out: list[TreeState] = []
+    for entry in W.list_worktrees(root):
+        path = entry.get("worktree", "")
+        full = Path(path)
+        if not path or not full.name.startswith(CI.SCRATCH_PREFIX):
+            continue
+        t = TreeState(name=full.name, path=path, branch=entry.get("branch", ""), kind="scratch")
+        t.action, t.done = _scratch_row(full, _owner_alive(full))
+        out.append(t)
+    return out
+
+
 def _stale_branch(
     root: Path, branch: str, base: str, guard: _Protected, own: dict[str, str], by_branch: dict
 ) -> TreeState:
@@ -743,6 +831,8 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             _classify(t, item, unknown, base, path, pins)
         plan.trees.append(t)
 
+    plan.trees.extend(scratch_leftovers(root))
+
     for branch in W.branches(root):
         if not _ours(branch, prefixes):
             continue
@@ -752,6 +842,48 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             continue
         plan.stale_branches.append(_stale_branch(root, branch, base, guard, own, by_branch))
     return plan
+
+
+def _registered(root: Path, tree: Path) -> bool:
+    """Is ``tree`` still a registration in git's worktree list of ``root``? The one prune
+    asks: removing the directory is not the same as removing the registration, and a prune
+    that refuses ONE registered path (a lock) says success either way."""
+    return any(
+        Path(e.get("worktree", "")).resolve() == Path(tree).resolve()
+        for e in W.list_worktrees(root)
+    )
+
+
+def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) -> bool:
+    """Free one leftover scratch tree whose owner is gone (B43593d1f3c): the owner marker
+    re-read under the log's lock (the owner could have re-started since the survey), and a
+    half-removal reported as such -- a prune that could not free the directory or its
+    registration said it pruned is a leftover the next survey would find again."""
+    with log.transaction():
+        verified = _owner_alive(Path(t.path))
+        if verified is True:
+            t.action, t.done = "", "kept: its owner process is alive since the survey"
+            done.append(f"kept {t.name}: its owner process is alive since the survey")
+            return False
+        if verified is None and CI.owner_marker(Path(t.path)).exists():
+            t.action, t.done = "", "kept: its owner process cannot be checked since the survey"
+            done.append(f"kept {t.name}: its owner could not be checked since the survey")
+            return False
+        # The directory BEFORE the prune: a prune only drops a registration whose tree is
+        # already gone, so a half-freed directory would keep its entry to find again.
+        shutil.rmtree(t.path, ignore_errors=True)
+        try:
+            CI.owner_marker(Path(t.path)).unlink(missing_ok=True)
+        except OSError:
+            pass
+        W.git(root, "worktree", "prune")
+    if Path(t.path).exists() or _registered(root, Path(t.path)):
+        t.action, t.done = "", "prune FAILED — still present or still registered; named as such"
+        done.append(f"FAILED to prune leftover ci scratch tree {t.name}")
+        return False
+    t.action, t.done = "", "pruned: gone, and its git registration is gone"
+    done.append(f"pruned leftover ci scratch tree {t.name}")
+    return True
 
 
 def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
@@ -837,6 +969,8 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
         return bool(kind)
 
     for t in plan.trees:
+        if t.action == "prune_scratch" and _pruned_scratch(log, root, t, done):
+            continue
         if t.action == "merge":
             with unless_claimed() as guard:
                 if kept(t, guard):
