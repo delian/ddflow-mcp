@@ -23,7 +23,7 @@ class BugsConfig:
     #: bug fixed in the commit that found it.
     file_task: bool = knob(
         True,
-        doc="Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase` (never the found item's own phase, which it would hold open), carrying that item's globs unless `--globs` says otherwise, and linked to the bug. `bugs_first` offers it before features and a feature on the same files waits behind it, so bugs do not pile up under new work. `complete <fix task>` refuses while the bug is open and `--regression-test` closes it; `bug found --no-task` files no task (a bug fixed in the same commit); `bug file-tasks <id>` files the task of one open bug that has none (`--all`: every such bug; with neither it only previews). When the item named is itself an OPEN bug-fix task that fixes no other bug, that task is the fix and nothing new is filed. `false`: bugs are flat records, as before.",
+        doc="Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase` (never the found item's own phase, which it would hold open), carrying the bug's own found scope (the files its summary names plus the tests pinning them) unless `--globs` says otherwise -- and the item's inherited globs when the bug names more than `named_scope_at` files -- and linked to the bug. `bugs_first` offers it before features and a feature on the same files waits behind it, so bugs do not pile up under new work. `complete <fix task>` refuses while the bug is open and `--regression-test` closes it; `bug found --no-task` files no task (a bug fixed in the same commit); `bug file-tasks <id>` files the task of one open bug that has none (`--all`: every such bug; with neither it only previews). When the item named is itself an OPEN bug-fix task that fixes no other bug, that task is the fix and nothing new is filed. `false`: bugs are flat records, as before.",
     )
     #: The standing phase every fix task goes under, whatever item the bug names. Created on
     #: first use.
@@ -36,6 +36,12 @@ class BugsConfig:
     lint_checks: list[str] = knob(
         factory=lambda: ["ruff", "(CI: Lint)", "format"],
         doc="Substrings (case-insensitive) that make a CI-filed bug a LINT bug, whose check has no test to write: `ddflow bug fixed <Bci-...> --lint-exempt REASON` closes such a bug with the reason recorded (regression_verified=exempt-lint) instead of a `--regression-test`. A bug whose check id contains a pytest node (`::`), or matches none of these, still needs its regression test. Default: ruff, (CI: Lint), format.",
+    )
+
+    named_scope_at: int = knob(
+        20,
+        doc="How many files a bug's text may name (a `path/name.ext` token in its summary) before the fix task's default globs fall back to the inherited item globs. Up to this many named files, the task carries the bug's OWN found scope instead -- the named files that exist in the tree plus the tests pinning them (by-name, GOVERNS and data readers) -- so two narrow sibling bug fixes no longer both inherit one project-wide item glob (ddflow/**, tests/**) and exclude each other (B45b80286d2). More than this -- a bug describing a whole sweep of files -- keeps the inherited globs (the current wide default). 0 disables the found scope: the inherited globs always apply.",
+        check=lambda v: "" if isinstance(v, int) and v >= 0 else "must be a non-negative integer",
     )
 
     #: What `bug found` collects about the machine and the tree it was found in
