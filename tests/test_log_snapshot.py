@@ -200,13 +200,14 @@ def test_verify_never_uses_the_snapshot(repo):
     # Poison the snapshot with VALID checksums: an event whose body no longer matches its id.
     path = _snap(log)
     head, _, payload = path.read_bytes().partition(b"\n")
-    body = marshal.loads(payload)
+    body = dict(L._snapshot_objects(payload))
     name = "a.jsonl"
-    tuples = body[name][3]
+    consumed, digest, skipped, tuples = body[name]
     forged = list(tuples[3])
     forged[2] = {"title": "forged", "kind": "task"}
     tuples[3] = tuple(forged)
-    payload = marshal.dumps(body)
+    body[name] = (consumed, digest, skipped, tuples)
+    payload = b"".join(marshal.dumps(pair) for pair in body.items())
     meta = json.loads(head)
     meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
     path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
@@ -288,7 +289,7 @@ def test_a_bad_saved_order_is_rejected_even_with_valid_checksums(repo, tamper):
     log = _build(repo)
     path = _snap(log)
     head, _, payload = path.read_bytes().partition(b"\n")
-    body = marshal.loads(payload)
+    body = dict(L._snapshot_objects(payload))
     names, order = body["\0order"]
     order = list(order)
     if tamper == "repeat":
@@ -304,7 +305,7 @@ def test_a_bad_saved_order_is_rejected_even_with_valid_checksums(repo, tamper):
     elif tamper == "stale_shard":
         names = [(n, c + 1) for n, c in names]
     body["\0order"] = (names, order)
-    payload = marshal.dumps(body)
+    payload = b"".join(marshal.dumps(pair) for pair in body.items())
     meta = json.loads(head)
     meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
     path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
@@ -333,9 +334,9 @@ def test_a_valid_saved_order_is_adopted_so_the_cold_read_does_not_sort(repo, mon
     clear_parse_cache()
     path = _snap(_log(repo))
     head, _, payload = path.read_bytes().partition(b"\n")
-    body = marshal.loads(payload)
+    body = dict(L._snapshot_objects(payload))
     body["\0order"] = (body["\0order"][0], [])
-    payload = marshal.dumps(body)
+    payload = b"".join(marshal.dumps(pair) for pair in body.items())
     meta = json.loads(head)
     meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
     path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
