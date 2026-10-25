@@ -37,6 +37,7 @@ from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
+from ..services import harnessreg as HR
 from . import projectkinds as PK
 from .render import emit_json
 
@@ -92,7 +93,9 @@ class Ctx:
             # rides in `requested_agent`: the api calls re-resolve from that, and
             # leaving it out would split them again.
 
-            harness = self.requested_agent = harness_identity.declared(self.repo)
+            harness = self.requested_agent = harness_identity.declared(
+                self.repo, scope=HR.session_fingerprint(os.environ)
+            )
         who = ID.resolve(self.repo, self.cfg, self.requested_agent)
         # The layer that actually won, not a guess from comparing values. With nothing set
         # anywhere the derived name differs from `cfg.agent.id` ("") so the old code fired
