@@ -106,6 +106,12 @@ def test_pre_tool_level_derives_from_the_deny_dialect(repo):
     inverted = replace(copied, hooks=replace(copied.hooks, emitter="gemini"))
     assert H.event_level(inverted, "session_start") == H.NATIVE
     assert H.event_level(inverted, "pre_tool") == H.WIRED
+    # A copy whose id the registry does not know covers the removed plan_for -> None path:
+    # the pre-fix round-trip read the registry (plan_for(h.id) -> None) and died in emit;
+    # the Plan is now built from THIS hook section, so the copy is judged, not crashed.
+    orphan = replace(gem, id="no-such-harness", hooks=replace(gem.hooks, inject=("session_start", "prompt")))
+    assert H.event_level(orphan, "session_start") == H.NATIVE
+    assert H.event_level(HR.get("gemini"), "session_start") == H.NATIVE
 
 
 def test_a_prompt_only_injecting_harness_gets_the_first_call_preamble(repo, monkeypatch):
