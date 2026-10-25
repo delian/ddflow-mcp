@@ -873,6 +873,7 @@ def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) ->
             pass
         W.git(root, "worktree", "prune")
     if Path(t.path).exists() or _registered(root, Path(t.path)):
+        t.action, t.done = "", "prune FAILED — still present or still registered; named as such"
         done.append(f"FAILED to prune leftover ci scratch tree {t.name}")
         return False
     done.append(f"pruned leftover ci scratch tree {t.name}")
