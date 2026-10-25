@@ -55,6 +55,26 @@ def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
     return out
 
 
+def _link_pools(
+    pools_by_kind: dict[str, list[float]], kinds: Sequence[str], min_samples: int
+) -> tuple[list[list[float]], dict[str, str], dict[str, int]]:
+    """Per link, in chain order: its observed durations to draw from; for a kind with none
+    of its own (a phase before any phase has completed) the completed WORK durations,
+    and which links that fallback covers. ``samples`` counts what each link really drew."""
+    draw, fallback, samples = [], {}, {}
+    work = [d for kind, ds in pools_by_kind.items() if kind != "phase" for d in ds]
+    for kind in dict.fromkeys(kinds):
+        own = pools_by_kind.get(kind, [])
+        if not own and kind == "phase" and len(work) >= max(min_samples, 1):
+            draw.append(work)
+            samples[kind] = len(work)
+            fallback[kind] = "work"
+        else:
+            draw.append(own)
+            samples[kind] = len(own)
+    return draw, fallback, samples
+
+
 def _empty_reason(state: State, phase: str, cfg: Config | None = None) -> str:
     """Why a phase has no critical path: a named cycle among open work, or no work."""
     cycles = chain_cycles(state, phase, cfg=cfg)
@@ -102,28 +122,18 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
         return {**base, "reason": _empty_reason(state, phase, cfg)}
     pools_by_kind = durations_by_kind(facts)
     kinds = [state.items[i].kind for i in chain]
-    samples = {k: len(pools_by_kind.get(k, [])) for k in dict.fromkeys(kinds)}
-    # A phase never produces an observed duration of its own before one HAS completed,
-    # yet is still the link a phase dependency waits on: draw it from completed WORK
-    # items instead of refusing the whole chain (B153d9ac8ae).
-    work_pool = [d for k, ds in pools_by_kind.items() if k != "phase" for d in ds]
-    drawn = {k: pools_by_kind.get(k, []) for k in dict.fromkeys(kinds)}
-    fallback: dict[str, str] = {}
-    for kind in drawn:
-        if drawn[kind] or kind != "phase" or len(work_pool) < int(m.min_samples):
-            continue
-        drawn[kind] = work_pool
-        samples[kind] = len(work_pool)
-        fallback[kind] = "work"
-        base["note"] += f" ({kind}: no completed phase observed, drawn from work durations)"
-    base = {**base, "chain": chain, "samples": samples, "fallback": fallback}
+    pools, fallback, samples = _link_pools(pools_by_kind, kinds, int(m.min_samples))
+    base = {**base, "chain": chain, "samples": samples}
+    if fallback:
+        base["fallback"] = fallback
+        base["note"] += " (no completed phase observed: the phase link draws work durations)"
     short = {k: n for k, n in samples.items() if n < int(m.min_samples)}
     if short:
         need = ", ".join(f"{k}: {n}" for k, n in short.items())
         reason = f"not enough data: completed items per kind ({need}), need {m.min_samples}"
         return {**base, "reason": reason}
     totals = draw_totals(
-        [drawn[k] for k in kinds],
+        pools,
         _elapsed(facts, chain, now),
         int(m.forecast_runs),
         int(m.forecast_seed),
