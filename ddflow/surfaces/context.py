@@ -24,6 +24,7 @@ from typing import Any
 from ..api import identity as ID
 from ..api import surf_context as surf
 from ..api._base import folded
+from ..api.harness import HR
 from ..config import Config, csv_list
 from ..core.ids import auto_id
 from ..core.outcome import (  # noqa: F401  (the commands import these from here)
@@ -37,7 +38,6 @@ from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
-from ..services import harnessreg as HR
 from . import projectkinds as PK
 from .render import emit_json
 

@@ -9,9 +9,7 @@ answers three questions an operator otherwise answers by reading TOML and settin
 * ``doctor`` -- drift between the descriptor and the repo: an unregistered MCP server, a
   missing hook with the command that installs it, a slash-command file that is gone.
 
-The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > plugin > MCP first call > MCP
-instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is
-reported as ``nv``, never as an absence (see ``harnessreg``).
+The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > declared, not delivering > wired, not injected > plugin > MCP first call > MCP instructions > instruction text. A fact the descriptor leaves out is NOT VERIFIED and is reported as ``nv``, never as an absence (see ``harnessreg``).
 """
 
 from __future__ import annotations
@@ -26,8 +24,11 @@ from ..services import claudehooks as CH
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
+from ..services.hookio import DENY_EMITTERS, Plan, emit
 
 NATIVE = "native hook"
+DECLARED = "declared, not delivering"
+WIRED = "wired, not injected"
 PLUGIN = "plugin"
 FIRST_CALL = "mcp first call"
 MCP_TEXT = "mcp instructions"
@@ -35,15 +36,40 @@ TEXT = "instruction text"
 NONE = "none"
 NV = "nv"
 
-#: Best first; `list` reports the best rung any event reaches.
-LADDER = (NATIVE, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
+#: Best first; `list` reports the best rung any event reaches. An event the descriptor
+#: declares in `[hooks].inject` sits on `DECLARED` unless its handler CAN put something
+#: through the door: session_start's brief always, pre_tool's refusal for the dialects
+#: ddflow can actually deny in (hookio.DENY_EMITTERS). An event WIRED but NOT declared in
+#: `inject` never puts ddflow's output before the model either, so it reports `WIRED` --
+#: except a wired pre_tool of a deny dialect, whose firing can still refuse the call in a
+#: way the agent sees; and a wired session_start is judged by the same rule firstcall's
+#: preamble is, falling back the ladder instead of claiming the view shows nothing.
+LADDER = (NATIVE, DECLARED, WIRED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
 def event_level(h: Harness, event: str) -> str:
     """The rung of the fallback ladder that delivers ``event`` to this agent."""
     hk = h.hooks
     if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
-        return NATIVE
+        can_deny = hk.emitter in DENY_EMITTERS
+        if event in hk.inject:
+            if event == "session_start":
+                # BOTH claims read ONE source -- this hk, never the registry: a copied
+                # harness whose inject, events or emitter were changed must be judged by
+                # the copy. A _silent dialect renders the neutral reply ("{empty}") and
+                # the door is DECLARED.
+                probe = Plan(h.id, hk.normalizer, hk.emitter, hk.inject, dict(hk.events))
+                out = emit(probe, "session_start", "probe").strip()
+                return NATIVE if out and out != "{}" else DECLARED
+            if event == "pre_tool" and can_deny:
+                return NATIVE
+            return DECLARED  # the descriptor declares the door, the handler emits nothing
+        if event == "pre_tool" and can_deny:
+            return NATIVE  # wired; a refusal here is a reply the agent shows the model
+        if event != "session_start":
+            return WIRED  # a wired native door ddflow declares no injection at
+        # A wired start the hook does not inject is delivered the fallback way instead
+        # (firstcall.preamble rides the first call), exactly as hook_delivers reports it.
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
     if hk is None and h.plugin is None:

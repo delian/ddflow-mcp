@@ -44,12 +44,12 @@ from ddflow.core import agentname as AN
 from ddflow.core import measuring
 from ddflow.core.outcome import EXIT_NAMES, NOTHING, OK, REFUSED, declared_exit, exit_for
 
+from ..api.harness import HR
 from ..config import Config
 from ..infra import harness_identity
 from ..infra import proc as PROC
 from ..infra.log import EventLog
 from ..infra.worktree import repo_root
-from ..services import harnessreg as HR
 from . import mcp_next as _NEXT
 
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
@@ -919,7 +919,9 @@ class Server:
             )
         if clash:
             return f"bad arguments: {clash}"
-        missing = [n for n, (_t, _d, req) in spec["properties"].items() if req and not args.get(n)]
+        missing = [
+            n for n, (_t, _d, req) in spec["properties"].items() if req and args.get(n) is None
+        ]
         if missing:
             return f"missing required argument(s): {', '.join(missing)}"
         # An argument this tool does not have is an ERROR, not something to drop.
