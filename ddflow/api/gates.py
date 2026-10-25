@@ -357,11 +357,15 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
     honest post-merge home and a worktree gate genuinely re-runs there. The primary
     counts as that home only while it still STANDS at the merged tree (`_at_merged_tree`):
     `merged_sha` in the base's history does not make a reverted, moved-on or checked-out
-    elsewhere primary the merged tree (the B430dae3a68 holefix).
+    elsewhere primary the merged tree (the B430dae3a68 holefix). A KEPT worktree a merge
+    left in place (remove_on_merge=false) counts by the same test: moved or dirtied off
+    the merged work, it is not the item's tree either (the reviewers' third round).
     """
 
     if it.worktree:
-        return W.load_path(repo, it.worktree), ""
+        tree = W.load_path(repo, it.worktree)
+        if not it.merged_sha or _at_merged_tree(repo, cfg, it, tree):
+            return tree, ""
     if _at_merged_tree(repo, cfg, it, repo):
         return repo, ""
     if it.kind != "phase" and cfg.worktree.enabled:
