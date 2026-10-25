@@ -61,23 +61,32 @@ def inherit_globs(source_globs: list[str], text: str, *, tool_bug: bool = False)
 
 
 def _named_files(named: list[str], paths: list[str]) -> list[str]:
-    """The listed paths ``named`` tokens denote: a pattern kept whole, a path named whole,
-    a pattern a path matches, or a bare name a path's basename matches (the text says
-    `claim.py` for `ddflow/api/lifecycle/claim.py`). One tell per token, in order."""
+    """The listed paths ``named`` tokens denote: a pattern kept whole, a path named whole
+    (an exact path before one the listing order foists on it: `aaa/ddflow/.../claim.py`
+    before `ddflow/.../claim.py` must not stand in for the named path -- a rubber_duck
+    finding), or a bare name a path's basename matches (the text says `claim.py` for
+    `ddflow/api/lifecycle/claim.py`). One tell per token, in order."""
     out: list[str] = []
-    for t in named:
+    for t in sorted(set(named)):  # a token repeated names one file; occurrences are not files
         stripped = t.removeprefix("./")
         if any(c in stripped for c in "*?["):
             out.append(stripped)  # a glob the text names as such: kept, existing_globs judges it
             continue
-        for p in paths:
-            if "/" not in stripped:
+        if "/" not in stripped:
+            for p in paths:  # the basename tell: any path whose name is the token
                 if fnmatch(basename(p), stripped):
                     out.append(p)
                     break
-            elif p == stripped or fnmatch(p, stripped) or (p.endswith("/" + stripped)):
-                out.append(p)
-                break
+        else:
+            for p in paths:  # an exact path first: not a listing-come-first same-name sibling
+                if p == stripped:
+                    out.append(p)
+                    break
+            else:
+                for p in paths:
+                    if fnmatch(p, stripped):
+                        out.append(p)
+                        break
     return out
 
 
@@ -135,7 +144,9 @@ def fix_task_globs(
     about the tree)."""
     if globs:
         return GS.parse(globs), []
-    named = _PATHISH.findall(text)
+    named = sorted(
+        set(_PATHISH.findall(text))
+    )  # one file named twice is one file (a review finding)
     if not tool_bug and named and 0 < len(named) <= named_scope_at:
         found = found_scope(root, text)
         if found is not None and found[0]:

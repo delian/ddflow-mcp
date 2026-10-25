@@ -64,14 +64,14 @@ def test_a_bug_naming_many_files_keeps_the_inherited_globs(repo):
 
 def test_a_bug_naming_only_files_that_do_not_exist_falls_back_to_the_inherited_globs(repo):
     """found_scope finds nothing, so the inherited default (the item's) stays (roborev 3600)."""
-    _seed(repo, ["tests/test_claim.py"])
+    _seed(repo, ["ddflow/services/keep.py", "tests/test_claim.py"])
     assert _fix(repo, summary="merge.py timed out", id="Bf") == ["ddflow/**", "tests/**"]
 
 
 def test_the_knob_set_to_zero_disables_the_found_scope(repo, monkeypatch):
     _seed(repo, ["ddflow/services/merge.py", "tests/test_merge.py"])
     monkeypatch.setenv("DDFLOW_BUGS_NAMED_SCOPE_AT", "0")
-    assert _fix(repo, summary="merge.py timed out", id="Bz") == ["ddflow/**"]
+    assert _fix(repo, summary="merge.py timed out", id="Bz") == ["ddflow/**", "tests/**"]
 
 
 def test_a_bug_named_file_outside_the_item_globs_is_still_the_bugs_own_scope(repo):
@@ -79,8 +79,8 @@ def test_a_bug_named_file_outside_the_item_globs_is_still_the_bugs_own_scope(rep
     _seed(repo, ["ddflow/services/claim.py", "ddflow/services/merge.py", "tests/test_merge.py"])
     globs = _fix(repo, summary="merge.py timed out under claim.py", id="Bx")
     assert globs == [
-        "ddflow/services/merge.py",
         "ddflow/services/claim.py",
+        "ddflow/services/merge.py",
         "tests/test_merge.py",
     ]
 
