@@ -90,7 +90,7 @@ def found_scope(root: Path, text: str) -> tuple[list[str], list[str]] | None:
     listed = GIT.files(root, "all")
     if listed is None:
         return None
-    files = [p for p in _named_files(_PATHISH.findall(text), listed) if not is_test_file(p)]
+    files = _named_files(_PATHISH.findall(text), listed)  # a named test file is the scope too
     kept, dropped = existing_globs(root, files)
     tests = [p for p in listed if is_test_file(p) and (root / p).is_file()]
     pick = _Picks()

@@ -73,6 +73,11 @@ def test_a_bug_named_file_outside_the_item_globs_is_still_the_bugs_own_scope(rep
     ]
 
 
+def test_a_bug_naming_a_test_file_keeps_that_test_file(repo):
+    _seed(repo, ["tests/test_merge.py"])
+    assert _fix(repo, summary="test_merge.py is flaky", id="Tt") == ["tests/test_merge.py"]
+
+
 def test_explicit_globs_still_win_over_the_found_scope(repo):
     _seed(repo, ["ddflow/services/merge.py", "tests/test_merge.py"])
     out = K.bug_found(
