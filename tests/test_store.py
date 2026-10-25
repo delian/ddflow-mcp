@@ -75,12 +75,9 @@ def _dump(store):
     """Every row a reader can see, plus the comparable meta: the falsifier's oracle."""
     with sqlite3.connect(store.path) as con:
         rows = {
-            t: [tuple(r) for r in con.execute(f"select * from {t}").fetchall()]
-            for t in BASE_TABLES
+            t: [tuple(r) for r in con.execute(f"select * from {t}").fetchall()] for t in BASE_TABLES
         }
-        meta = {
-            k: v for k, v in con.execute("select k, v from meta") if k not in _SKIP_META
-        }
+        meta = {k: v for k, v in con.execute("select k, v from meta") if k not in _SKIP_META}
     return rows, meta
 
 
