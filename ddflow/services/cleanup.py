@@ -697,11 +697,15 @@ def _owner_alive(tree: Path) -> bool | None:
     proc = Path(f"/proc/{pid_s}")
     try:
         raw = Path(f"{proc}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
+    except PermissionError:
+        # EACCES/EPERM: a /proc that hides this pid (hidepid=, another UID) serves NOTHING
+        # about whether it lives: unknown, never a prune.
+        return None
+    except FileNotFoundError:
+        # No /proc/<pid> while /proc itself serves: the pid is gone -- DEFINITELY exited.
+        # (The ci run and this sweep share a uid, so a live owner's pid is never ENOENT.)
+        return False if Path("/proc").exists() else None
     except OSError:
-        # The pid's directory gone AND /proc serving = the process DEFINITELY exited; a
-        # /proc that hides it (hidepid) or is absent serves nothing about it: unknown.
-        if not proc.exists() and proc.parent.exists():
-            return False
         return None
     except IndexError:
         return None
