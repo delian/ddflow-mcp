@@ -1101,7 +1101,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 404 knobs.
+cadences, and the rest of the 405 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5293,7 +5293,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 404): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 405): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5862,7 +5862,7 @@ declared once and persists — see
 
 ## Configuration
 
-404 knobs across 42 sections, every one documented in place and listed, with its default
+405 knobs across 42 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5929,8 +5929,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=cd9f7d4d13c9 -->
-<details><summary>All 404 knobs across 42 sections</summary>
+<!-- ddflow:begin README/knobs sha=7eef2b566736 -->
+<details><summary>All 405 knobs across 42 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6085,6 +6085,7 @@ long default is left to `ddflow config --explain`.
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | `["ruff", "(CI: Lint)", "format"]` |  |
+| `bugs.named_scope_at` | `20` |  |
 | `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
 | `bugs.repro_max_bytes` | `65536` |  |
 | `bugs.repro_tail_bytes` | `4096` |  |
