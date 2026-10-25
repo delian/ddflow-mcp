@@ -58,21 +58,24 @@ def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
 def _link_pools(
     pools_by_kind: dict[str, list[float]], kinds: Sequence[str], min_samples: int
 ) -> tuple[list[list[float]], dict[str, str], dict[str, int]]:
-    """Per link, in chain order: its observed durations to draw from; for a kind with none
-    of its own (a phase before any phase has completed) the completed WORK durations,
-    and which links that fallback covers. ``samples`` counts what each link really drew."""
-    draw, fallback, samples = [], {}, {}
+    """One pool PER LINK, in chain order, so pools stay aligned with the chain's elapsed
+    times. Each link of a kind draws that kind's observed durations; a kind with none of
+    its own (a phase before any phase has completed) draws the completed WORK durations
+    instead, and ``fallback`` names every kind that happens for. ``samples`` (per
+    distinct kind) counts what its links really drew."""
     work = [d for kind, ds in pools_by_kind.items() if kind != "phase" for d in ds]
+    used, fallback = dict(pools_by_kind), {}
     for kind in dict.fromkeys(kinds):
-        own = pools_by_kind.get(kind, [])
-        if not own and kind == "phase" and len(work) >= max(min_samples, 1):
-            draw.append(work)
-            samples[kind] = len(work)
+        if (
+            not used.get(kind)
+            and kind == "phase"
+            and len(work) >= max(min_samples, 1)
+        ):
+            used[kind] = work
             fallback[kind] = "work"
-        else:
-            draw.append(own)
-            samples[kind] = len(own)
-    return draw, fallback, samples
+    pools = [used.get(k) or [] for k in kinds]
+    samples = {k: len(used.get(k, [])) for k in dict.fromkeys(kinds)}
+    return pools, fallback, samples
 
 
 def _empty_reason(state: State, phase: str, cfg: Config | None = None) -> str:

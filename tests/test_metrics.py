@@ -192,7 +192,19 @@ def test_forecast_per_phase_eta_uses_completed_phases():
         add_phase(log, f"P{n:02d}", T0 + n * H)
     a = run(log, view="forecast").metrics
     assert a["chain"] == ["OPENP", "X"] and a["samples"]["phase"] == 12
-    assert a["available"] and a["low_s"] is not None and "work" not in a["fallback"]
+    assert a["available"] and a["low_s"] is not None and "phase" not in a["fallback"]
+
+
+def test_forecast_aligns_one_pool_per_link_when_chain_kinds_repeat():
+    log = twelve()
+    add_phase(log, "OPENP", None)
+    log.add("phase.added", "OPENQ", "lead", T0 - 1000, title="phase OPENQ", body="", needs=["OPENP"])
+    log.task("X", "x.py", needs="OPENQ")
+    for n in range(1, 13):
+        add_phase(log, f"P{n:02d}", T0 + n * H)
+    a = run(log, view="forecast").metrics
+    assert a["chain"] == ["OPENP", "OPENQ", "X"]  # pool per link: 3 pools, 3 elapsed slots
+    assert a["available"] and a["samples"] == {"phase": 12, "task": 12}
 
 
 def test_forecast_falls_back_to_work_durations_for_a_kind_never_completed():
