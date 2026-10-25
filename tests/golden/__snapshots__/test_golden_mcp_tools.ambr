@@ -1193,6 +1193,10 @@
           "type": "boolean",
           "description": "regenerate: the post-merge hook entry."
          },
+         "approval": {
+          "type": "string",
+          "description": ""
+         },
          "tests": {
           "type": "string",
           "description": "Comma-separated test dirs (default: tests,test)."
