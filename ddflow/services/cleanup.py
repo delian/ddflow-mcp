@@ -697,6 +697,11 @@ def _owner_alive(tree: Path) -> bool | None:
     proc = Path(f"/proc/{pid_s}")
     try:
         raw = Path(f"{proc}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
+        if not raw:
+            return None
+        if raw[0] == "Z":  # a zombie has exited: it was read but never reaped, not alive
+            return False
+        return raw[19] == start
     except PermissionError:
         # EACCES/EPERM: a /proc that hides this pid (hidepid=, another UID) serves NOTHING
         # about whether it lives: unknown, never a prune.
@@ -705,15 +710,8 @@ def _owner_alive(tree: Path) -> bool | None:
         # No /proc/<pid> while /proc itself serves: the pid is gone -- DEFINITELY exited.
         # (The ci run and this sweep share a uid, so a live owner's pid is never ENOENT.)
         return False if Path("/proc").exists() else None
-    except OSError:
+    except (OSError, IndexError):
         return None
-    except IndexError:
-        return None
-    if not raw:
-        return None
-    if raw[0] == "Z":  # a zombie has exited: it was read but never reaped, not alive
-        return False
-    return raw[19] == start
 
 
 def _under_sys_tmp(path: Path) -> bool:
