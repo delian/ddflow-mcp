@@ -1319,8 +1319,8 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
         if gone and t.key_len == 1:
             phs = ",".join("?" * len(gone))
             con.execute(
-                f"delete from {t.name}_tri where id in ({phs})",
-                [k[0] for k in gone],  # nosec B608
+                f"delete from {t.name}_tri where id in ({phs})",  # nosec B608
+                [k[0] for k in gone],
             )
         ids = [r.fts[0] for r in touched if r.fts is not None]
         if ids:
