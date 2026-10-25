@@ -56,10 +56,7 @@ def test_the_generated_waiver_never_outlives_a_real_review(tmp_path):
 def _setup_lock_only_change(repo: Path, tmp_path: Path, mixed: bool = False) -> Path:
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"
-    cli.write_text(
-        f"#!/bin/sh\nin=$(cat)\nprintf '%s\\n' \"$in\" >> '{seen}'\n"
-        "RESULT='FINDINGS'\necho 'STATUS: NO '$RESULT\n"
-    )
+    cli.write_text(f"#!/bin/sh\nin=$(cat)\nprintf '%s\\n' \"$in\" >> '{seen}'\n")
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     from helpers import git as _git
 
