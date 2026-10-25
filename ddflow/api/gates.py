@@ -335,6 +335,8 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     base = cfg.worktree.base_ref or W.default_branch(repo)
     if not W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
         return False
+    if not W.git(here, "merge-base", "--is-ancestor", "HEAD", base).ok:
+        return False
     head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
     merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
     if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
