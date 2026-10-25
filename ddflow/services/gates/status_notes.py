@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..gates.reasons import _unavailable_reasons
+from .reasons import _unavailable_reasons
 
 
 def _queued_notes(it, rows) -> dict[str, str]:
