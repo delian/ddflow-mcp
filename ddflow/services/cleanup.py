@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import contextlib
 import shutil
+import tempfile
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -681,10 +682,11 @@ def unclaimed_trees(repo: Path, cfg: Config, state: State) -> list[str]:
 
 
 def _owner_alive(tree: Path) -> bool | None:
-    """Is the owner of ci scratch tree ``tree`` still running? True (a process ``pid`` that
-    started at the marker's start-ticks lives), False (it has DEFINITELY exited: gone, or
-    re-started -- a reused pid is not the owner), None (no marker, or one that cannot be
-    checked: the tree predates owner recording, most likely a SIGKILLed run)."""
+    """Whether the owner of ci scratch tree ``tree`` is what its marker says: True (a
+    process ``pid`` that started at the marker's start-ticks lives), False (it has
+    DEFINITELY exited: the pid is gone, or re-started -- a reused pid is not the owner),
+    None (unknown: no marker, so the tree predates owner recording, most likely a SIGKILLed
+    run; or a pid THIS host cannot read)."""
     try:
         text = Path(f"{tree}{CI.OWNER_SUFFIX}").read_text().strip()
         pid_s, _, start = text.partition(" ")
@@ -696,38 +698,46 @@ def _owner_alive(tree: Path) -> bool | None:
         raw = Path(f"/proc/{pid_s}/stat").read_text("utf-8", "replace")
         return raw.rsplit(")", 1)[1].split()[19] == start
     except OSError:
-        return False
+        # A process that is THERE but unreadable (hidepid, no /proc) may be live; a pid
+        # whose directory is gone has exited. Only the latter is "definitely gone".
+        return None if Path(f"/proc/{pid_s}").exists() else False
     except IndexError:
         return None
 
 
-def _scratch_row(name: str, alive: bool | None) -> tuple[str, str]:
-    """(action, the sentence) for a worktree a ci run's scratch helper made: pruned by
-    ``apply`` once its owner is gone; a live owner's is left alone and only named. An
-    owner that cannot be told (no marker: the tree predates owner recording, most likely a
-    SIGKILLed run) is the leftover the sweep exists for, not a live run (B43593d1f3c)."""
+def _scratch_row(tree: Path, alive: bool | None) -> tuple[str, str]:
+    """(action, the sentence) for a worktree a ci run's scratch helper made, kept or
+    pruned by ``apply``: only an owner seen to be GONE is a leftover; a live owner's, and
+    one whose owner cannot be checked, stay and are only named (B43593d1f3c). A tree made
+    before owners were recorded is the leftover the sweep exists for, not a live run."""
     if alive:
         return "", "a live ci run's scratch tree — its owner process is still running"
-    return "prune_scratch", (
-        "a ci run's scratch tree whose owner process is gone"
-        + ("" if alive is False else " (no owner marker: from before owners were recorded)")
-        + " — prune it and its git registration"
-    )
+    tail = " — prune it and its git registration"
+    if alive is False:
+        return "prune_scratch", f"a ci run's scratch tree whose owner process is gone{tail}"
+    if not Path(f"{tree}{CI.OWNER_SUFFIX}").exists():
+        suffix = " (no owner marker: from before owners were recorded)"
+        return "prune_scratch", f"a ci run's scratch tree{suffix}{tail}"
+    return "", "a ci run's scratch tree whose owner process cannot be checked — LEFT ALONE"
 
 
 def scratch_leftovers(root: Path) -> list[TreeState]:
     """The registered worktrees that are NOT the queue's: a ci run's detached scratch under
     the temp directory (`ddflow-ci.`), which `our_trees` never sees because it is on no
-    ddflow branch. A run killed mid-flight (no exit cleanup, SIGKILL runs no handler) left
-    the tree and its registration; these stay registered until named here and pruned."""
+    ddflow branch AND under no ddflow tree root. A run killed mid-flight (no exit cleanup,
+    SIGKILL runs no handler) left the tree and its registration; these stay registered
+    until named here and pruned. Nothing outside the system temp directory is ever one of
+    them, so a real checkout an operator happens to have named `ddflow-ci.something` else-
+    where is left to `our_trees`' judgement."""
     out: list[TreeState] = []
+    sys_tmp = Path(tempfile.gettempdir()).resolve()
     for entry in W.list_worktrees(root):
         path = entry.get("worktree", "")
-        name = Path(path).name
-        if not path or not name.startswith(CI.SCRATCH_PREFIX):
+        full = Path(path)
+        if not path or not full.name.startswith(CI.SCRATCH_PREFIX) or full.parent.resolve() != sys_tmp:
             continue
-        t = TreeState(name=name, path=path, branch=entry.get("branch", ""), kind="scratch")
-        t.action, t.done = _scratch_row(name, _owner_alive(Path(path)))
+        t = TreeState(name=full.name, path=path, branch=entry.get("branch", ""), kind="scratch")
+        t.action, t.done = _scratch_row(full, _owner_alive(full))
         out.append(t)
     return out
 
@@ -812,22 +822,25 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
 
 def _pruned_scratch(log: EventLog, root: Path, t: TreeState, done: list[str]) -> bool:
     """Free one leftover scratch tree whose owner is gone (B43593d1f3c): the owner marker
-    re-read under the log's lock (the owner could have re-started since the survey), the
-    directory removed BEFORE the prune, which only drops a registration whose tree is
-    already gone."""
+    re-read under the log's lock (the owner could have re-started since the survey), and a
+    half-removal reported as such -- a prune that could not free the directory said it
+    pruned is a leftover the next survey would find again."""
     with log.transaction():
         if _owner_alive(Path(t.path)) is True:
             t.action, t.done = "", "kept: its owner process is alive since the survey"
             done.append(f"kept {t.name}: its owner process is alive since the survey")
             return False
+        # The directory BEFORE the prune: a prune only drops a registration whose tree is
+        # already gone, so a half-freed directory would keep its entry to find again.
         shutil.rmtree(t.path, ignore_errors=True)
         try:
             Path(f"{t.path}{CI.OWNER_SUFFIX}").unlink(missing_ok=True)
         except OSError:
             pass
         W.git(root, "worktree", "prune")
-    done.append(f"pruned leftover ci scratch tree {t.name}")
-    return True
+    gone = not Path(t.path).exists()
+    done.append(f"{'pruned' if gone else 'FAILED to prune'} leftover ci scratch tree {t.name}")
+    return gone
 
 
 def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: str) -> list[str]:
