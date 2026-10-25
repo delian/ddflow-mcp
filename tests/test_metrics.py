@@ -161,6 +161,58 @@ def test_forecast_under_min_samples_gives_no_range():
     assert ans.metrics["low_s"] is None and "not enough data" in ans.reason
 
 
+def add_phase(log: Log, pid: str, done: float | None) -> None:
+    """A phase filed at T0-1000 and (when ``done`` is not None) completed: never claimed,
+    because a phase holds tasks, not a lease."""
+    log.add("phase.added", pid, "lead", T0 - 1000, title=f"phase {pid}", body=f"run {pid}")
+    if done is not None:
+        log.complete("a1", pid, done)
+
+
+def phase_chain(log: Log) -> Log:
+    """An open phase followed by a task that waits on it: the phase is INSIDE the chain,
+    as the boundary the task's dependency waits on."""
+    add_phase(log, "OPENP", None)
+    log.task("X", "x.py", needs="OPENP")
+    return log
+
+
+def test_forecast_counts_a_completed_phase_by_its_filed_to_done_span():
+    log = Log()
+    log.task("X", "x.py")
+    add_phase(log, "P10", T0 + 10 * H)
+    st, _cfg, now = frozen(log)
+    pools = FC.durations_by_kind(F.collect(log.events, st, now))
+    assert pools["phase"] == pytest.approx([1000 + 10 * H])  # never claimed: no cycle
+
+
+def test_forecast_per_phase_eta_uses_completed_phases():
+    log = phase_chain(twelve())
+    for n in range(1, 13):
+        add_phase(log, f"P{n:02d}", T0 + n * H)
+    a = run(log, view="forecast").metrics
+    assert a["chain"] == ["OPENP", "X"] and a["samples"]["phase"] == 12
+    assert a["available"] and a["low_s"] is not None and "phase" not in a["fallback"]
+
+
+def test_forecast_aligns_one_pool_per_link_when_chain_kinds_repeat():
+    log = twelve()
+    add_phase(log, "OPENP", None)
+    log.add("phase.added", "OPENQ", "lead", T0 - 1000, title="phase OPENQ", body="", needs=["OPENP"])
+    log.task("X", "x.py", needs="OPENQ")
+    for n in range(1, 13):
+        add_phase(log, f"P{n:02d}", T0 + n * H)
+    a = run(log, view="forecast").metrics
+    assert a["chain"] == ["OPENP", "OPENQ", "X"]  # pool per link: 3 pools, 3 elapsed slots
+    assert a["available"] and a["samples"] == {"phase": 12, "task": 12}
+
+
+def test_forecast_falls_back_to_work_durations_for_a_kind_never_completed():
+    a = run(phase_chain(twelve()), view="forecast").metrics
+    assert a["available"] and a["low_s"] is not None  # the phase link draws work durations
+    assert a["fallback"]["phase"] == "work" and a["samples"]["phase"] == a["samples"]["task"]
+
+
 def test_forecast_subtracts_what_a_link_in_flight_has_already_run():
     log = chain_log(1)
     cold = run(log, view="forecast").metrics
