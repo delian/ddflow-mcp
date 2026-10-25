@@ -36,9 +36,41 @@ def test_claude_s_declared_prompt_is_reported_non_delivering_too(repo):
 
 
 def test_a_wired_event_the_descriptor_never_declared_is_reported_wired_not_injected(repo):
-    # cline wires agent_start (its session_start) but declares inject=['prompt'] only: the
-    # wired door never puts ddflow's output before the model, and show must say so.
-    assert H.event_level(HR.get("cline"), "session_start") == H.WIRED
+    # cline wires agent_end (its stop) but declares inject=['prompt'] only: the wired door
+    # never puts ddflow's output before the model, and show must say so.
+    assert H.event_level(HR.get("cline"), "stop") == H.WIRED
+    assert "wired, not injected" in H.harness_show(repo, "cline").data["message"]
+
+
+def test_a_wired_start_the_hook_does_not_inject_falls_back_the_ladder(repo):
+    # A session start a wired hook does not inject is delivered the fallback way, and the
+    # first-call preamble agrees with it (firstcall.hook_delivers): the ladder's next rung
+    # for these plugin-bearing harnesses, not 'nothing is shown'.
+    from ddflow.api import firstcall
+
+    cline = HR.get("cline")
+    assert "session_start" in cline.hooks.events and "session_start" not in cline.hooks.inject
+    assert firstcall.hook_delivers(repo, "cline") is False
+    assert H.event_level(cline, "session_start") == H.PLUGIN
+
+
+def test_every_shipped_injected_session_start_uses_a_delivering_emitter(repo):
+    # NATIVE for an injected session_start is true only when the emitter really renders the
+    # brief for that agent's dialect; a _silent or _antigravity-shaped emitter would claim
+    # a delivery nothing travels through.
+    from ddflow.services import hookio
+
+    guard = [
+        h.id
+        for h in HR.load()
+        if h.hooks is not None
+        and h.hooks.style in HR.COMMAND_HOOK_STYLES
+        and "session_start" in h.hooks.inject
+    ]
+    assert guard, "no shipped descriptor declares session_start in inject"
+    for hid in guard:
+        plan = hookio.plan_for(hid)
+        assert plan is not None and hookio.emit(plan, "session_start", "probe").strip()
 
 
 def test_an_inject_event_whose_handler_emits_stays_reported_delivering(repo):

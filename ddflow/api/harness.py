@@ -42,7 +42,8 @@ NV = "nv"
 #: ddflow can actually deny in (hookio.DENY_EMITTERS). An event WIRED but NOT declared in
 #: `inject` never puts ddflow's output before the model either, so it reports `WIRED` --
 #: except a wired pre_tool of a deny dialect, whose firing can still refuse the call in a
-#: way the agent sees.
+#: way the agent sees; and a wired session_start is judged by the same rule firstcall's
+#: preamble is, falling back the ladder instead of claiming the view shows nothing.
 LADDER = (NATIVE, DECLARED, WIRED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
@@ -57,7 +58,10 @@ def event_level(h: Harness, event: str) -> str:
             return DECLARED  # the descriptor declares the door, the handler emits nothing
         if event == "pre_tool" and can_deny:
             return NATIVE  # wired; a refusal here is a reply the agent shows the model
-        return WIRED  # a wired native door ddflow declares no injection at; nothing is shown
+        if event != "session_start":
+            return WIRED  # a wired native door ddflow declares no injection at
+        # A wired start the hook does not inject is delivered the fallback way instead
+        # (firstcall.preamble rides the first call), exactly as hook_delivers reports it.
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
     if hk is None and h.plugin is None:
