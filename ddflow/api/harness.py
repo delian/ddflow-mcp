@@ -14,6 +14,7 @@ The ladder (docs/ddflow/RESEARCH.md R-hx) is: native hook > declared, not delive
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -54,10 +55,11 @@ def event_level(h: Harness, event: str) -> str:
         can_deny = hk.emitter in DENY_EMITTERS
         if event in hk.inject:
             if event == "session_start":
-                # Computed from the emitter, the same way the registry guard test checks it:
-                # a _silent dialect renders the neutral reply ("" or "{}"), and a declared
-                # door nothing travels through is DECLARED, exactly like the prompt door.
-                out = emit(plan_for(h.id), "session_start", "probe").strip()
+                # Both claims read ONE field: the harness's own hook section. plan_for reads
+                # the registry's descriptor by id, so pin the plan to this hk (a copy with
+                # a changed emitter must be judged by it, like can_deny above). A _silent
+                # dialect renders the neutral reply ("{empty}") and the door is DECLARED.
+                out = emit(replace(plan_for(h.id), emitter=hk.emitter), "session_start", "probe").strip()
                 return NATIVE if out and out != "{}" else DECLARED
             if event == "pre_tool" and can_deny:
                 return NATIVE
