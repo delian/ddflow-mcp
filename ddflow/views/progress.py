@@ -20,5 +20,5 @@ def status_tasks_note() -> str:
     return (
         "Task counts: this headline counts every task record (abandoned tasks and fix "
         "tasks included); the `Progress:` block after a completion counts live work "
-        "items only, so the two totals differ"
+        "items only, so the two totals can differ"
     )
