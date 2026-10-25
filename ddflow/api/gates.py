@@ -331,7 +331,8 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     user marked `assume-unchanged` or `skip-worktree` lies to BOTH clean checks: under
     the mark `git status` and `git diff --quiet` keep seeing the committed content while
     the working file differs, so no checkout whose index carries a mark can be PROVEN
-    to stand at the merged tree, and none is admitted (the reviewers' fourth round).
+    to stand at the merged tree; a checkout whose mark scan itself fails is not provable
+    either, and neither is admitted (the reviewers' fourth and fifth rounds).
     """
 
     if not it.merged_sha:
@@ -346,7 +347,7 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
         return False
     marked = W.git(here, "ls-files", "-v")
-    if marked.ok and any(
+    if not marked.ok or any(
         line and (line[0].islower() or line[0] in "Ss") for line in marked.out.splitlines()
     ):
         return False
