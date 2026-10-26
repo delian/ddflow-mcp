@@ -28,8 +28,8 @@ from helpers import git_quiet as _git
 
 from ddflow import api
 from ddflow.infra import worktree as W
-from ddflow.services import cleanup as CU
 from ddflow.services import ci as CI
+from ddflow.services import cleanup as CU
 
 
 def _owner_marker(tree: Path) -> Path:
@@ -197,7 +197,7 @@ def test_a_sigterm_ends_a_merge_tree_with_no_scratch_or_registration(repo):
     child.send_signal(signal.SIGTERM)
     child.wait(timeout=30)
 
-    assert child.returncode == -signal.SIGTERM, f"the handler did not re-raise the signal"
+    assert child.returncode == -signal.SIGTERM, "the handler did not re-raise the signal"
     assert not tree.exists(), "the SIGTERMed run left its scratch tree"
     registered = next(
         (
