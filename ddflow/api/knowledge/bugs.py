@@ -498,6 +498,36 @@ def severity_rank(severity: str) -> int:
     return SEVERITY_RANK.get((severity or "").strip().lower(), len(SEVERITY_RANK))
 
 
+def _whole_bug_set(repo: Path, filters: dict) -> tuple[list[dict], dict]:
+    """Every matched bug row, past the engine's cap: `(rows, dict)` -- rows is the whole
+    set, dict is the first page's base data (`total` from there is the whole match
+    count). The read surfaces echo `agent` under the flag's own name `owner`
+    (`api/viewers._filters`); the engine kwarg is `agent`, so the MCP path's `owner` in
+    `filters` must map back, or the re-fetch happens with a kwarg `view_list` does not
+    take."""
+    from ..viewers import view_list
+
+    filters = {
+        ("agent" if k == "owner" and "agent" not in filters else k): v
+        for k, v in dict(filters).items()
+    }
+    fresh = view_list(repo, "bug", **filters, limit=0, offset=0)
+    full = list(fresh.data["rows"])
+    # The engine normalizes `limit=0` to its cap before the rows come back (a
+    # successful page's limit is never 0), so one call tops out at the cap while `total`
+    # keeps the whole match count: page the rest at the stride the engine advertised, so
+    # an offset at or past the cap is not an unreachable empty page `next` refuses to
+    # move off.
+    stride = fresh.data["limit"]
+    while len(full) < fresh.data["total"]:
+        more = view_list(repo, "bug", **filters, limit=stride, offset=len(full))
+        chunk = list(more.data["rows"])
+        if not chunk:
+            break  # said the cap, gave less: what it gave stands
+        full.extend(chunk)
+    return full, dict(fresh.data)
+
+
 def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
     """The bug facets the shared list engine defers to the domain (`services/viewers.py`
     renders the row's id/state/title/owner/updated and the newest-first page): severity,
@@ -531,32 +561,7 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         # matched set, in the order asked. A refused or "nothing" call keeps its
         # refusal; the re-cut is asked again with arguments the earlier call already
         # validated, so it is refused again only as the earlier call was.
-        from ..viewers import view_list
-
-        # The read surfaces echo `agent` under the flag's own name `owner`
-        # (`api/viewers._filters`); the engine kwarg is `agent`. The re-fetch replays the
-        # caller's filter dict, so the MCP path's `owner` must map back, or one of the two
-        # surfaces refetches with a kwarg `view_list` does not take.
-        refetch_filters = {
-            ("agent" if k == "owner" and "agent" not in data["filters"] else k): v
-            for k, v in dict(data["filters"]).items()
-        }
-        fresh = view_list(repo, "bug", **refetch_filters, limit=0, offset=0)
-        full = list(fresh.data["rows"])
-        # The engine normalizes `limit=0` to its cap before the rows come back (a
-        # successful page's limit is never 0), so one call tops out at the cap while
-        # `total` keeps the whole match count: page the rest at the stride the engine
-        # advertised, so an offset at or past the cap is not an unreachable empty
-        # page `next` refuses to move off.
-        stride = fresh.data["limit"]
-        while len(full) < fresh.data["total"]:
-            more = view_list(
-                repo, "bug", **refetch_filters, limit=stride, offset=len(full)
-            )
-            chunk = list(more.data["rows"])
-            if not chunk:
-                break  # said the cap, gave less: what it gave stands
-            full.extend(chunk)
+        full, basis = _whole_bug_set(repo, dict(data["filters"]))
         for r in full:
             _row_edges(r, st)
         full.sort(key=lambda r: r["id"])
@@ -566,8 +571,8 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         # arrive on a caller page: the page is everything, not `rows[off:off]`, and
         # the caller's page size stays the advertised limit.
         page = full[off:] if not lim else full[off : off + lim]
-        base = dict(fresh.data)
-        # `fresh` was asked at offset 0 (the whole set); the page the caller asked for
+        base = dict(basis)
+        # The whole set was asked at offset 0; the page the caller asked for
         # starts where the caller told the engine to start, and its advertised limit is
         # the caller's page size, not the whole-set fetch's.
         base["offset"] = off
@@ -576,7 +581,7 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         base["shown"] = len(base["rows"])
         base["truncated"] = base["total"] > off + base["shown"]
         base["next"] = off + base["shown"] if base["truncated"] else None
-        return O.ok(fresh.kind, **base)
+        return O.ok("bug", **base)
     if out.exit == 0:
         for r in data.get("rows") or []:
             _row_edges(r, st)
