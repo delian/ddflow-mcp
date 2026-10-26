@@ -102,8 +102,8 @@ def test_bug_list_sort_severity_orders_severity_first(repo):
 
 
 def test_bug_list_sort_severity_edges_in_text(repo):
-    """The fix-task edge and its dependency edges are on the `bug list` line, not only
-    in the JSON rows."""
+    """The fix-task edge and its dependency edges are on the generic `list bug` line,
+    not only in the JSON rows (the modified `cmd_list`, not the `bug list` alias)."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "dep one")
     run_cli(repo, "task", "add", "fix-B1", "--title", "fix carrier", "--needs", "T1")
@@ -121,7 +121,7 @@ def test_bug_list_sort_severity_edges_in_text(repo):
         "fix-B1",
     )
     assert code == 0, (out, err)
-    code, out, _ = run_cli(repo, "bug", "list", "--all")
+    code, out, _ = run_cli(repo, "list", "bug", "--all")
     assert code == 0 and "fix fix-B1" in out and "needs: T1" in out and "high" in out
 
 
