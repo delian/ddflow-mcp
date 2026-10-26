@@ -323,9 +323,13 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
     history, not WHERE the checked-out tree stands: a revert, a later merge onto the
     base, or a moved checkout keeps the ancestry while the checked-out tree is a
     different one, and a gate run there measures the wrong tree and records its outcome
-    for `it`. All must hold: the ancestry, the checked-out HEAD's tree equalling the
-    merged sha's tree -- a cheap tree-sha comparison in the object db, no checkout and
-    no diff -- and the working tree carrying no uncommitted changes (`HEAD^{tree}` sees
+    for `it`. All must hold: the ancestry, the checked-out HEAD's tree being the merged
+    sha's tree where a cheap tree-sha comparison decides it -- `merge` records the sha at
+    the branch-line commit and advances the base with its OWN bookkeeping commit (the
+    event log), so a just-merged base sits one commit past the recorded sha with the
+    merged content untouched: a checkout whose non-.ddflow content IS the merged tree's
+    stands at it, measured with one pathspec-restricted diff -- and the working tree
+    carrying no uncommitted changes (`HEAD^{tree}` sees
     only the committed tree, so a dirty primary at the merged HEAD is not the merged
     tree either) (the B430dae3a68 reviewer holefix, both rounds). An index entry the
     user marked `assume-unchanged` or `skip-worktree` lies to BOTH clean checks: under
@@ -344,8 +348,20 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
         return False
     head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
     merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
-    if not (head_tree.ok and merged_tree.ok and head_tree.out.strip() == merged_tree.out.strip()):
+    if not (head_tree.ok and merged_tree.ok):
         return False
+    if head_tree.out.strip() != merged_tree.out.strip():
+        # `merge` records `merged_sha` at the branch-line commit and then advances the base
+        # with its OWN bookkeeping commit (the event log), so a just-merged base sits one
+        # commit past the recorded sha with the merged content untouched. That is still
+        # the merged tree; content that moved on the base (a later commit, a revert,
+        # another item's merge) is not -- the tree comparison admits only a base whose
+        # non-.ddflow content IS the merged tree's.
+        moved = W.git(
+            repo, "diff", "--name-only", it.merged_sha, "HEAD", "--", ".", ":(exclude).ddflow"
+        )
+        if not moved.ok or moved.out.strip():
+            return False
     marked = W.git(here, "ls-files", "-v")
     if not marked.ok or any(
         line and (line[0].islower() or line[0] in "Ss") for line in marked.out.splitlines()
@@ -1021,13 +1037,18 @@ def _implement_without_commits(
     be measured is refused, not passed. A merged phase is exempt by the same test as any
     other kind: only where its checkout STANDS at the merged tree (the landed case), a
     moved, reverted or dirty phase checkout is judged (B430dae3a68 reviewer finding #2)."""
-    if gate != "implement" or result != "passed" or not it.worktree or wt is None:
+    if gate != "implement" or result != "passed" or not it.worktree:
         return ""
     if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
-    if _at_merged_tree(repo, cfg, it, wt):
-        return ""  # landed (B998bcca9ce): the checkout STANDS at the merged tree, i.e. it IS the base
+    tree = W.load_path(repo, it.worktree)
+    if tree is None or _at_merged_tree(repo, cfg, it, tree):
+        return ""  # landed (B998bcca9ce): the checkout is gone or STANDS at the merged tree,
+        # i.e. it IS the base
+    # Off the merged tree, the implement claim is about the item's branch itself: measure
+    # IT (not the caller's tree, not the primary a merge left standing at the merged one).
+    wt = tree
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
     if not r.ok:
         return (
