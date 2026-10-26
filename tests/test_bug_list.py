@@ -193,21 +193,29 @@ def test_bug_sort_limit_zero_pages_the_whole_set(repo):
 def test_mcp_bug_sort_serves_the_owner_filter(repo):
     """Kind=bug has no `owner` filter on either surface: the engine refuses `agent` on
     bugs (a bug row's owner is "", and the kinds that DO echo `owner` are the
-    task/phase/lesson/session reads in tests/test_view_mcp.py). So a severity-sorted
-    refetch replays the filters a bug read DOES echo -- `state` (the open default) here
-    -- and an `owner` asked on a bug read is the engine's own refusal (exit 3), not an
-    echoed filter key."""
-    from ddflow.api.viewers import view_read as _vr
-    from ddflow.surfaces.mcp import _finish_list_read
+    task/phase/lesson/session reads in tests/test_view_mcp.py). A real MCP
+    `ddflow_list(kind=bug, sort=severity, owner=X)` reaches the engine through the tool's
+    own argument mapping, so the owner is never silently dropped -- it is the engine's
+    refusal (exit 3) -- and a severity-sorted refetch replays the filters a bug read
+    DOES echo (`state`, the open default, here)."""
+    from ddflow.surfaces.mcp import Server, _finish_list_read
 
     _seed_mix(repo)
-    asked = _vr(repo, "bug", owner="alice", limit=50, offset=0)
-    assert asked.exit == 3
-    assert "no agent to filter by" in asked.reason
-    assert "owner" not in asked.data["filters"]
-    served = _finish_list_read(repo, asked, {"kind": "bug", "sort": "severity", "owner": "alice"})
-    assert served.exit == 3
-    assert "no agent to filter by" in served.reason
+    asked = Server(repo, agent="agent-test").handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_list",
+                "arguments": {"kind": "bug", "sort": "severity", "owner": "alice"},
+            },
+        }
+    )["result"]
+    assert asked["_meta"]["exit"] == 3
+    assert "no agent to filter by" in asked["content"][0]["text"]
+    from ddflow.api.viewers import view_read as _vr
+
     result = _vr(repo, "bug", limit=50, offset=0)
     assert result.data["filters"] == {"state": "open"}
     done = _finish_list_read(repo, result, {"kind": "bug", "sort": "severity"})
