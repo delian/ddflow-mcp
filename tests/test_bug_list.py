@@ -113,6 +113,20 @@ def test_finish_bug_list_refuses_sort_for_kinds_that_do_not_take_it(repo):
         KB.finish_bug_list(repo, out, sort="severity")
 
 
+def test_mcp_list_serves_the_non_bug_sort_refusal(repo):
+    """Over MCP the same request is an outcome REFUSED with a reason and a list-shaped
+    body (exit 3, the CLI's refusal), not a Value/TypeError the dispatcher would
+    answer as a malformed call."""
+    from ddflow.surfaces.mcp import _finish_list_read
+    from ddflow.api.viewers import view_list as _vl
+
+    _seed_mix(repo)
+    refused = _finish_list_read(
+        repo, _vl(repo, "task", limit=50, offset=0), {"kind": "task", "sort": "severity"}
+    )
+    assert refused.exit == 3 and "kind=bug only" in refused.reason
+
+
 def test_mcp_list_tool_declares_the_sort_argument(repo):
     """Over MCP the knob is the `sort` property `ddflow_list` accepts: the same
     `_properties` call serves the schema and the argument check, and the shaping in

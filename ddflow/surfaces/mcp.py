@@ -164,7 +164,21 @@ def _schema(spec: dict[str, Any]) -> dict[str, Any]:
 
 def _finish_list_read(repo: Path, result: Any, args: dict[str, Any]) -> Any:
     """`ddflow_list` serve: the tenant the tool's own api does not shape. The import of
-    `api.knowledge` is lazy, so the import of TOOLS stays api-free (tools/_common)."""
+    `api.knowledge` is lazy, so the import of TOOLS stays api-free (tools/_common).
+
+    A `sort` asked for a non-bug kind is the refusal the CLI parser gives the same
+    request (an outcome declaring exit 3, a result to act on -- never a silent
+    accept or a ValueError the `_call_api` table would read as a malformed call)."""
+    from ..api.viewers import empty_list
+    from ..core import outcome as _O
+
+    kind = str(args.get("kind") or "task")
+    if str(args.get("sort") or "") and kind != "bug":
+        return _O.refused(
+            "view.list",
+            f"sort takes 'severity' for kind=bug only, not {kind!r}",
+            **empty_list(kind),
+        )
     from ..api.knowledge import bugs as _KB
 
     return _KB.finish_bug_list(repo, result, sort=str(args.get("sort") or ""))
