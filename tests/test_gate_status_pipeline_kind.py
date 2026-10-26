@@ -70,6 +70,7 @@ def test_research_docs_only_status_steps_equal_the_gates_complete_requires(repo)
     code, out, err = run_cli(repo, "gate", "status", "R1", agent="a1")
     assert code == 0, out + err
     code, out, err = run_cli(repo, "complete", "R1", "--model", "claude-sonnet-5-5", agent="a1")
+    assert code == 0, out + err
     for stray in ("research", "rubber_duck", "critic", "ci", "unit_tests", "bug_hunt"):
         assert stray not in err, (stray, err)
     assert "unit_tests" not in (out + err), out + err
@@ -102,6 +103,12 @@ def test_research_code_diff_status_steps_equal_the_gates_complete_requires(repo)
     cfg, s, cited = _dwelling(repo)
     assert s.pipeline == list(cfg.gates.task_pipeline), s.pipeline
     assert cited == list(cfg.gates.task_pipeline), cited
+
+    # The CLI observation, observed directly: complete cites exactly the task pipeline gates
+    # the status pipeline names, so the two lists the commands act on stay ONE list.
+    code, out, err = run_cli(repo, "complete", "R1", "--model", "claude-sonnet-5-5", agent="a1")
+    reported = "never run and never skipped: " + ", ".join(list(cfg.gates.task_pipeline)) + "."
+    assert code != 0 and reported in err, (code, err)
 
 
 def test_research_unreadable_diff_keeps_one_pipeline_on_both_sides(repo):
