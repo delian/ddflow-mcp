@@ -1157,6 +1157,10 @@
           "type": "string",
           "description": "search: comma-separated search sources (default all)."
          },
+         "sort": {
+          "type": "string",
+          "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). Default: newest change first."
+         },
          "tail": {
           "type": "integer",
           "description": "Last N entries, oldest first (overrides limit)."
