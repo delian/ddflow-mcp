@@ -55,8 +55,10 @@ def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
     monkeypatch.setattr(
         CI,
         "_execute",
-        lambda cfg=None, tree=None, cmd=None, scope=None, budget=None, tick=None,
-        holding_suite=False, used=None: (NS(kind="", ran=True), ""),
+        lambda cfg=None, tree=None, cmd=None, scope=None, budget=None, tick=None, holding_suite=False, used=None: (
+            NS(kind="", ran=True),
+            "",
+        ),
     )
     CI._run_locked(Config(), None, "HEAD", None, "", None, 7200, None, {}, True, 7200.0)
     assert seen == {"wait_s": 7200.0}, seen
