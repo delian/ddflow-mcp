@@ -1199,7 +1199,7 @@
          },
          "approval": {
           "type": "string",
-          "description": ""
+          "description": "regenerate: an agent's route: 'request' files an operator approval, an approval id re-records the pins."
          },
          "tests": {
           "type": "string",
