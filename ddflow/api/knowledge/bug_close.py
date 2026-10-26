@@ -164,6 +164,11 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         mutation=mutation,
         landing=landing,
     )
+    if verified == "needs-fix-task":
+        # A gap the caller could close -- by filing a fix task, or naming a landing --
+        # is not recorded on a bug left open: the close is REFUSED naming how to give
+        # the check its pre-fix source (Bb49d834e90).
+        return O.refused("bug.fixed", _needs_fix_task_refusal(item, verify_ev), id=item)
     if verified in ("passed-on-prefix", "failed-on-fix"):
         return O.refused(
             "bug.fixed",
@@ -224,6 +229,39 @@ def _landing_for(
             f"{'; '.join(loose)} could not be checked and would close the bug unverified."
         )
     return landing, ""
+
+
+def _missing_fix_source(rec) -> dict[str, str]:
+    """Why an open bug's pre-fix source does not exist, and how to give it one (Bb49d834e90).
+
+    `_fixing_item` is None once it has neither a queued fix task nor a found item with a
+    worktree or a landing pair, so nothing names what the fix removed. `bug fixed`
+    REFUSES the close (never the silent could-not-run gap below) and names what is
+    missing and what would make the check runnable.
+    """
+    named = (
+        f"its fix task ({rec.fix_task}) is not in the queue"
+        if rec.fix_task
+        else "it has no fix task, and the item that found it offers no worktree"
+    )
+    return {
+        "reason": f"no pre-fix source to compare the test against: {named}",
+        "remedy": (
+            f"file a fix task (`ddflow bug file-tasks {rec.id}`), claim it, and put the "
+            "test and the fix inside its globs; or close with `--landed <sha>` when the "
+            "fix already reached the base"
+        ),
+    }
+
+
+def _needs_fix_task_refusal(item: str, verify_ev: dict[str, Any]) -> str:
+    """The `bug fixed` refusal for a bug whose pre-fix source does not exist (and no
+    ``--landed`` named one): what is missing, and how the caller gives the check its
+    source -- never a close with a silent, caller-fixable gap (Bb49d834e90)."""
+    return (
+        f"cannot close {item}: the test cannot be shown to fail without the fix -- "
+        f"{verify_ev.get('reason', '')}. To fix it: {verify_ev.get('remedy', '')}"
+    )
 
 
 def _record_fixed(
@@ -462,21 +500,35 @@ def _drop_fix_task_unchecked(
     return t.id, ""
 
 
+def _has_landing_pair(item: Any) -> bool:
+    """Whether ``item`` landed through ddflow's own merge: it records both the target
+    before the landing and the landing itself, the pair a pre-fix check runs between."""
+    return bool(item is not None and item.landed_before and item.landed_after)
+
+
 def _fixing_item(st, bug_id: str) -> Any:
     """The item whose source is the fix: the bug's fix task, else -- for `bug found
     --item X --no-task`, fixed in the commit that found it -- X while it works in a
-    worktree (B3eeb47ca9b). Only then: a landed X (merged here, or through a pull
-    request, which records only `merged_sha`) may have been merely where an older bug
-    was seen, and its base already holds the fix."""
+    worktree, or X landed through ddflow's own merge (a landed_before/landed_after
+    pair) named as the pre-fix source (Bb49d834e90). Only then: a landed X recorded
+    through a pull request, which keeps only `merged_sha` and no before/after pair,
+    may have been merely where an older bug was seen."""
     rec = st.bugs.get(bug_id)
     if rec is None:
         return None
-    if rec.fix_task:
-        return st.items.get(rec.fix_task)
+    fix_task = st.items.get(rec.fix_task) if rec.fix_task else None
+    if fix_task is not None:
+        return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
-    if found_on is None or not found_on.worktree:
-        return None
-    return None if (found_on.landed_after or found_on.merged_sha) else found_on
+    if _has_landing_pair(found_on):
+        return found_on
+    if (
+        found_on is not None
+        and found_on.worktree
+        and not (found_on.landed_after or found_on.merged_sha)
+    ):
+        return found_on
+    return None
 
 
 def _verify_regression(
@@ -499,7 +551,9 @@ def _verify_regression(
     source, `landed_after` the fixed one), never the base by name, which then holds the
     fix (B0d5253d31f). An unlanded one needs its WORKTREE, the only thing that then names
     a pre-fix source: an unclaimed fix task is "could-not-run", recorded, never
-    "verified".
+    "verified". A bug with NO source at all -- no fix task, no found item with a worktree
+    or a landing pair -- is "needs-fix-task": `bug_fixed` REFUSES the close and the
+    reason names how to give the check its source (Bb49d834e90).
     """
     if not verify_regression:
         return "overridden", {"reason": reason.strip()}
@@ -521,7 +575,7 @@ def _verify_regression(
             mutation=mutation,
         )
         return _regression_status(status, ev, G)
-    if fx is not None and fx.landed_before and fx.landed_after:
+    if _has_landing_pair(fx):
         # Merged already: the landing's own before and after, never the base by NAME,
         # which now holds the fix -- the driver merges first and completes after
         # (B0d5253d31f). `tree` is unused: the fixed tree is a checkout of `after`.
@@ -535,6 +589,8 @@ def _verify_regression(
             mutation=mutation,
         )
         return _regression_status(status, ev, G)
+    if fx is None:
+        return "needs-fix-task", _missing_fix_source(st.bugs[bug_id])
     tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
     if tree is None:
         return "could-not-run", {
