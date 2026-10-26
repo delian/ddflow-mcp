@@ -512,9 +512,16 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
     surface does not declare is refused, never silently dropped."""
 
     data = out.data
+    sort = (sort or "").strip().lower()
+    if sort and data.get("record_kind") != "bug":
+        # The same refusal the CLI parser gives every other kind (--sort is a bug-only
+        # selector there): MCP declares one schema for the whole ddflow_list tool, so the
+        # runtime check is the one place both surfaces can share.
+        raise ValueError(
+            f"sort takes 'severity' for kind=bug only, not {data.get('record_kind')!r}"
+        )
     if data.get("record_kind") != "bug":
         return out
-    sort = (sort or "").strip().lower()
     if sort not in ("", "severity"):
         raise ValueError(f"sort takes 'severity' (default: newest change first), got {sort!r}")
     _log, _cfg, st = _load(repo)
@@ -534,8 +541,10 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         off, lim = data["offset"], data["limit"]
         base = dict(fresh.data)
         # `fresh` was asked at offset 0 (the whole set); the page the caller asked for
-        # starts where the caller told the engine to start.
+        # starts where the caller told the engine to start, and its advertised limit is
+        # the caller's page size, not the whole-set fetch's.
         base["offset"] = off
+        base["limit"] = lim
         base["rows"] = full[off : off + lim]
         base["shown"] = len(base["rows"])
         base["truncated"] = base["total"] > off + base["shown"]

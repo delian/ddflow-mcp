@@ -81,11 +81,15 @@ def test_bug_rows_carry_severity_fix_task_and_dependency_edges(repo):
 
 def test_finish_bug_list_orders_by_severity_then_id(repo):
     """`sort="severity"` orders the whole matched set critical..low with a stable id
-    tiebreak (a severity unknown or unset ranks last); rows carry the edge fields."""
+    tiebreak (a severity unknown or unset ranks last); rows carry the edge fields. The
+    expected order is asserted literally -- the declared critical..high..medium..low
+    wording, not via the `severity_rank` helper under test."""
     _seed_mix(repo)
     out = api_view_list(repo, "bug", limit=0, offset=0)
     assert out.ok
     out = KB.finish_bug_list(repo, out, sort="severity")
+    sevs = [r["severity"] for r in out.data["rows"]]
+    assert sevs == ["critical", "high", "high", "medium", ""]
     keys = [(KB.severity_rank(r["severity"]), r["id"]) for r in out.data["rows"]]
     assert keys == sorted(keys)
     for r in out.data["rows"]:
@@ -99,6 +103,16 @@ def test_finish_bug_list_refuses_other_sort_words(repo):
         out = KB.finish_bug_list(repo, out, sort="urgent")
 
 
+def test_finish_bug_list_refuses_sort_for_kinds_that_do_not_take_it(repo):
+    """The MCP parity of the CLI's `--sort` is a bug-only selector: a `sort` asked for
+    any other kind is refused here, since the one shared `ddflow_list` schema cannot
+    say it per kind (the CLI refuses it in the parser)."""
+    _seed_mix(repo)
+    out = api_view_list(repo, "task", limit=50, offset=0)
+    with pytest.raises(ValueError, match="kind=bug only"):
+        KB.finish_bug_list(repo, out, sort="severity")
+
+
 def test_mcp_list_tool_declares_the_sort_argument(repo):
     """Over MCP the knob is the `sort` property `ddflow_list` accepts: the same
     `_properties` call serves the schema and the argument check, and the shaping in
@@ -110,7 +124,8 @@ def test_mcp_list_tool_declares_the_sort_argument(repo):
 
 def test_bug_sort_orders_the_page_it_repaginates(repo):
     """Severity order is stable to paging: --limit cuts AFTER the severity order, so a
-    page of 1 shows the critical bug, not the newest."""
+    page of 1 shows the critical bug, not the newest. The expectation names the bug
+    literally: the critical bug rows first, whatever rank bookkeeping the helper uses."""
     _seed_mix(repo)
     code, out, err = run_cli(
         repo, "list", "bug", "--all", "--limit", "1", "--sort", "severity", "--json"
@@ -118,4 +133,8 @@ def test_bug_sort_orders_the_page_it_repaginates(repo):
     assert code == 0, (out, err)
     body = json.loads(out)
     assert len(body["rows"]) == 1
-    assert KB.severity_rank(body["rows"][0]["severity"]) == 0
+    assert body["rows"][0]["severity"] == "critical"
+    assert body["rows"][0]["title"] == "boom crit"
+    # The re-cut page keeps the caller's page size as its advertised limit, not the
+    # whole-matched-set refetch's (limit=0 → the cap).
+    assert body["limit"] == 1
