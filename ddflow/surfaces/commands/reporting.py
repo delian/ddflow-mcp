@@ -147,8 +147,14 @@ def _recorded_line(r) -> list[str]:
     if r.get("refuted"):
         extras.append(f"{r['refuted']} gate(s) passed on refutation (`ddflow gate list --refuted`)")
     if r.get("approvals"):
+        # each request's digest and answer form: what a remote operator answers with
+        named = ", ".join(
+            f"{a['id']} ({a['verb']}, digest {a['digest'][:12]}, answer `{a['answer']}`)"
+            for a in r.get("approvals_pending", ())
+        )
         extras.append(
-            f"{r['approvals']} approval request(s) waiting for the operator (`ddflow approvals list`)"
+            f"{r['approvals']} approval request(s) waiting for the operator"
+            f" (`ddflow approvals pending`){': ' + named if named else ''}"
         )
     return ["", "Recorded: " + " · ".join(extras)] if extras else []
 

@@ -70,7 +70,7 @@ def test_the_config_edit_class_has_a_request_route_an_agent_can_drive(repo):
     )
     assert code == 3 and "config.set" in err, err  # auto-filed by the door, still to answer
     code, out, _err = run_cli(repo, "--json", "config")
-    values = {r["key"]: r["value"] for r in json.loads(out)["rows"]}
+    values = {r["key"]: r["value"] for r in json.loads(out)}
     assert values["ci.pins_precheck"] is True, "filing the request must not apply it"
     ask_id = _ask_id(err)
     row = asks_of(fold(EventLog(repo, "probe").read_all(), strict=False))[ask_id]
@@ -90,7 +90,7 @@ def test_the_config_edit_class_has_a_request_route_an_agent_can_drive(repo):
     data = json.loads(out)
     assert data["approval"]["ask"] == ask_id and data["key"] == "ci.pins_precheck"
     code, out, _err = run_cli(repo, "--json", "config")
-    values = {r["key"]: r["value"] for r in json.loads(out)["rows"]}
+    values = {r["key"]: r["value"] for r in json.loads(out)}
     assert values["ci.pins_precheck"] is False, "the answer applied the change"
     events = EventLog(repo, "probe").read_all()
     consumed = [e for e in events if e.kind == "ask.consumed" and e.data["id"] == ask_id]
