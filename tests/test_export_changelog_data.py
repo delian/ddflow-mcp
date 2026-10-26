@@ -124,6 +124,10 @@ def test_bug_fixed_takes_the_changelog_too(repo):
         "B1",
         "--regression-test",
         "tests/test_x.py::test_x",
+        # The pre-fix check needs a fix task; this test is about the changelog, not it.
+        "--skip-regression-verify",
+        "--verify-reason",
+        "fixture: no fix task",
         "--changelog",
         "Security: closed a hole",
     )
