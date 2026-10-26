@@ -205,6 +205,9 @@ def test_mcp_bug_sort_serves_the_owner_filter(repo):
     assert asked.exit == 3
     assert "no agent to filter by" in asked.reason
     assert "owner" not in asked.data["filters"]
+    served = _finish_list_read(repo, asked, {"kind": "bug", "sort": "severity", "owner": "alice"})
+    assert served.exit == 3
+    assert "no agent to filter by" in served.reason
     result = _vr(repo, "bug", limit=50, offset=0)
     assert result.data["filters"] == {"state": "open"}
     done = _finish_list_read(repo, result, {"kind": "bug", "sort": "severity"})
