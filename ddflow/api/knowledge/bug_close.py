@@ -522,8 +522,10 @@ def _fixing_item(st, bug_id: str) -> Any:
     found_on = st.items.get(rec.item) if rec.item else None
     if _has_landing_pair(found_on):
         return found_on
-    if found_on is not None and found_on.worktree and not (
-        found_on.landed_after or found_on.merged_sha
+    if (
+        found_on is not None
+        and found_on.worktree
+        and not (found_on.landed_after or found_on.merged_sha)
     ):
         return found_on
     return None
