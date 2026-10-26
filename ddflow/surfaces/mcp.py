@@ -137,6 +137,18 @@ def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
     takes. One function, so the schema a client sees and the argument check the
     dispatcher applies can never disagree about it."""
     props = dict(spec["properties"])
+    if spec is TOOLS.get("ddflow_list"):
+        # The list tool's page-order argument. Declared here, beside the `_call_api`
+        # shaping that consumes it (knowledge.bugs.finish_bug_list), not beside the
+        # tool's other properties in `surfaces/tools/operations.py`: the tool's api
+        # passes the declared filters only, so its declaration cannot take one — the schema
+        # must name what the check may accept, and the same function serves both.
+        props["sort"] = (
+            "string",
+            "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs "
+            "without one last). Default: newest change first.",
+            False,
+        )
     if not spec.get("identify"):
         props[AS_AGENT] = _AS_AGENT_SPEC
     return props
@@ -989,6 +1001,12 @@ class Server:
                 self.repo, name, self._progress(call.params) if name in OFFLOADED else None
             ):
                 result = self._invoke(spec, args, agent, call.per_call, call.params)
+                if name == "ddflow_list":
+                    from ..api.knowledge import bugs as _KB
+
+                    result = _KB.finish_bug_list(
+                        self.repo, result, sort=str(args.get("sort") or "")
+                    )
         except Exception as exc:
             # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
             # class declaring exit 3 -- is a result to act on, not a failed call;
