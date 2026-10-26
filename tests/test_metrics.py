@@ -198,7 +198,9 @@ def test_forecast_per_phase_eta_uses_completed_phases():
 def test_forecast_aligns_one_pool_per_link_when_chain_kinds_repeat():
     log = twelve()
     add_phase(log, "OPENP", None)
-    log.add("phase.added", "OPENQ", "lead", T0 - 1000, title="phase OPENQ", body="", needs=["OPENP"])
+    log.add(
+        "phase.added", "OPENQ", "lead", T0 - 1000, title="phase OPENQ", body="", needs=["OPENP"]
+    )
     log.task("X", "x.py", needs="OPENQ")
     for n in range(1, 13):
         add_phase(log, f"P{n:02d}", T0 + n * H)

@@ -738,8 +738,7 @@ def _scratch_row(tree: Path, alive: bool | None) -> tuple[str, str]:
     if not CI.owner_marker(tree).exists():
         if _under_sys_tmp(tree):
             return "prune_scratch", (
-                f"a ci run's scratch tree (no owner marker: from before owners were recorded)"
-                f"{tail}"
+                f"a ci run's scratch tree (no owner marker: from before owners were recorded){tail}"
             )
         return "", (
             "LEFT ALONE — named like a ci scratch tree but made before owners were "
