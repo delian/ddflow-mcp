@@ -1,8 +1,9 @@
 """Ba5d5d63f12: `gate run ... ci --timeout N` replaced the ci command's budget but not the
 host suite-lock wait (`[ci].suite_wait_s`, 1800 s), so a queued run still gave up UNAVAILABLE
-at the knob while the per-run override had authorised a much longer run. The override now
-raises the lock-wait floor to the longer of the two, and a give-up at that longer wait still
-parks the ticket, so a retry keeps its queue place."""
+at the knob although the per-run override had authorised a much longer run. With an override
+the override is the run's wait limit, replacing the knob in either direction: a longer one
+extends the queue wait, a shorter one bounds it. The give-up still parks the ticket, so a
+retry keeps its queue place."""
 
 from __future__ import annotations
 
