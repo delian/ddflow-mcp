@@ -47,29 +47,40 @@ NV = "nv"
 LADDER = (NATIVE, DECLARED, WIRED, PLUGIN, FIRST_CALL, MCP_TEXT, TEXT, NONE)
 
 
+def _hook_door_rung(h: Harness, event: str) -> str | None:
+    """What a registered hook door reports for ``event``; ``None`` when the door decides
+    nothing and the caller walks on (no hook, or the hook's events do not own ``event``)."""
+    hk = h.hooks
+    if hk is None or not (hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events):
+        return None
+    can_deny = hk.emitter in DENY_EMITTERS
+    if event in hk.inject:
+        if event == "session_start":
+            # BOTH claims read ONE source -- this hk, never the registry: a copied harness
+            # whose inject, events or emitter were changed must be judged by the copy. A
+            # _silent dialect renders the neutral reply ("{empty}") and the door is
+            # DECLARED.
+            probe = Plan(h.id, hk.normalizer, hk.emitter, hk.inject, dict(hk.events))
+            out = emit(probe, "session_start", "probe").strip()
+            return NATIVE if out and out != "{}" else DECLARED
+        if event == "pre_tool" and can_deny:
+            return NATIVE
+        return DECLARED  # the descriptor declares the door, the handler emits nothing
+    if event == "pre_tool" and can_deny:
+        return NATIVE  # wired; a refusal here is a reply the agent shows the model
+    if event != "session_start":
+        return WIRED  # a wired native door ddflow declares no injection at
+    # A wired start the hook does not inject is delivered the fallback way instead
+    # (firstcall.preamble rides the first call), exactly as hook_delivers reports it.
+    return None
+
+
 def event_level(h: Harness, event: str) -> str:
     """The rung of the fallback ladder that delivers ``event`` to this agent."""
+    rung = _hook_door_rung(h, event)
+    if rung is not None:
+        return rung
     hk = h.hooks
-    if hk is not None and hk.style in HR.COMMAND_HOOK_STYLES and event in hk.events:
-        can_deny = hk.emitter in DENY_EMITTERS
-        if event in hk.inject:
-            if event == "session_start":
-                # BOTH claims read ONE source -- this hk, never the registry: a copied
-                # harness whose inject, events or emitter were changed must be judged by
-                # the copy. A _silent dialect renders the neutral reply ("{empty}") and
-                # the door is DECLARED.
-                probe = Plan(h.id, hk.normalizer, hk.emitter, hk.inject, dict(hk.events))
-                out = emit(probe, "session_start", "probe").strip()
-                return NATIVE if out and out != "{}" else DECLARED
-            if event == "pre_tool" and can_deny:
-                return NATIVE
-            return DECLARED  # the descriptor declares the door, the handler emits nothing
-        if event == "pre_tool" and can_deny:
-            return NATIVE  # wired; a refusal here is a reply the agent shows the model
-        if event != "session_start":
-            return WIRED  # a wired native door ddflow declares no injection at
-        # A wired start the hook does not inject is delivered the fallback way instead
-        # (firstcall.preamble rides the first call), exactly as hook_delivers reports it.
     if h.plugin is not None and not h.plugin.none:
         return PLUGIN
     if hk is None and h.plugin is None:

@@ -35,7 +35,7 @@ def _research_change(repo, *, globs: str, path: str) -> None:
     _research(repo, globs=globs)
     code, out, err = run_cli(repo, "claim", "R1", agent="a1")
     assert code == 0, out + err
-    tree = next(l.split("worktree:", 1)[1].strip() for l in out.splitlines() if "worktree:" in l)
+    tree = next(ln.split("worktree:", 1)[1].strip() for ln in out.splitlines() if "worktree:" in ln)
     target = __import__("pathlib").Path(tree) / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("change\n")
@@ -107,7 +107,7 @@ def test_research_code_diff_status_steps_equal_the_gates_complete_requires(repo)
 
     # The CLI observation, observed directly: complete cites exactly the task pipeline gates
     # the status pipeline names, so the two lists the commands act on stay ONE list.
-    code, out, err = run_cli(repo, "complete", "R1", "--model", "claude-sonnet-5-5", agent="a1")
+    code, _out, err = run_cli(repo, "complete", "R1", "--model", "claude-sonnet-5-5", agent="a1")
     reported = "never run and never skipped: " + ", ".join(list(cfg.gates.task_pipeline)) + "."
     assert code != 0 and reported in err, (code, err)
 
