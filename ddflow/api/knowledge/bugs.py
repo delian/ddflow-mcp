@@ -21,6 +21,9 @@ from .._base import _load
 
 BUG_SCOPES = ("project", "ddflow")
 BUG_SEVERITIES = ("low", "medium", "high", "critical")
+#: Where each declared severity ranks (0 first); anything else -- "" for a bug filed
+#: without one -- ranks after every declared severity (`severity_rank`).
+SEVERITY_RANK = {sev: i for i, sev in enumerate(reversed(BUG_SEVERITIES))}
 #: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
 #: The offer to prepare a report names it, so it is only made when this is set
 #: (tests/test_bug_scope.py pins it to the parser).
@@ -487,6 +490,72 @@ def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
     if severity and severity not in BUG_SEVERITIES:
         return f"unknown severity {severity!r}: one of {', '.join(BUG_SEVERITIES)}"
     return GS.problem(GS.parse(globs))
+
+
+def severity_rank(severity: str) -> int:
+    """0 first: `critical`. A severity that is not one of `BUG_SEVERITIES` -- an empty
+    one included -- ranks after every declared severity."""
+    return SEVERITY_RANK.get((severity or "").strip().lower(), len(SEVERITY_RANK))
+
+
+def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
+    """The bug facets the shared list engine defers to the domain (`services/viewers.py`
+    renders the row's id/state/title/owner/updated and the newest-first page): severity,
+    the fix-task edge and that task's dependency edges. One function, so the CLI
+    (`viewers_lists.cmd_list`) and the MCP `ddflow_list` shaping (`surfaces/mcp.py`) can
+    never drift on which fields a bug row carries.
+
+    ``sort`` is "" (the engine's own order, newest change first) or "severity": stable
+    severity order -- `severity_rank`, id ascending as the tiebreak -- with the page
+    re-cut from the whole matched set (the engine's `MAX_LIMIT`), so the order decides
+    the page, not the page the order. Any other word raises `ValueError`: an order the
+    surface does not declare is refused, never silently dropped."""
+
+    data = out.data
+    if data.get("record_kind") != "bug":
+        return out
+    sort = (sort or "").strip().lower()
+    if sort not in ("", "severity"):
+        raise ValueError(f"sort takes 'severity' (default: newest change first), got {sort!r}")
+    _log, _cfg, st = _load(repo)
+    if sort == "severity" and out.exit == 0:
+        # The page the engine already cut was newest-first: re-cut it from the whole
+        # matched set, in the order asked. A refused or "nothing" call keeps its
+        # refusal; the re-cut is asked again with arguments the earlier call already
+        # validated, so it is refused again only as the earlier call was.
+        from ..viewers import view_list
+
+        fresh = view_list(repo, "bug", **dict(data["filters"]), limit=0, offset=0)
+        full = [r for r in fresh.data["rows"]]
+        for r in full:
+            _row_edges(r, st)
+        full.sort(key=lambda r: r["id"])
+        full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
+        off, lim = data["offset"], data["limit"]
+        base = dict(fresh.data)
+        # `fresh` was asked at offset 0 (the whole set); the page the caller asked for
+        # starts where the caller told the engine to start.
+        base["offset"] = off
+        base["rows"] = full[off : off + lim]
+        base["shown"] = len(base["rows"])
+        base["truncated"] = base["total"] > off + base["shown"]
+        base["next"] = off + base["shown"] if base["truncated"] else None
+        return O.ok(fresh.kind, **base)
+    if out.exit == 0:
+        for r in data.get("rows") or []:
+            _row_edges(r, st)
+    return out
+
+
+def _row_edges(row: dict, st) -> None:
+    """Attach the knowledge-level bug facets to an engine row in place: severity, the
+    fix-task edge and that task's dependency edges. A row the fold knows no bug for
+    keeps the fields empty (the two surfaces must see the same keys)."""
+    b = st.bugs.get(row.get("id") or "")
+    row["severity"] = b.severity if b is not None else ""
+    row["fix_task"] = b.fix_task if b is not None else ""
+    fix = st.items.get(row["fix_task"]) if row["fix_task"] else None
+    row["needs"] = list(fix.needs) if fix is not None else []
 
 
 def _unknown_bug(kind: str, bid: str, st) -> O.Outcome:
