@@ -498,7 +498,16 @@ def run(
         full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
         try:
             p, out_prefix, waited = _run_locked(
-                cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite,
+                cfg,
+                repo,
+                ref,
+                tree,
+                cmd,
+                scope,
+                budget,
+                tick,
+                used,
+                full_suite,
                 _lock_wait(timeout_s),
             )
         except SL.SuiteBusy as busy:
