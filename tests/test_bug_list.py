@@ -190,7 +190,7 @@ def test_bug_sort_limit_zero_pages_the_whole_set(repo):
     assert body["next"] is None
 
 
-def test_mcp_bug_sort_serves_the_owner_filter(repo):
+def test_mcp_bug_sort_refuses_the_owner_filter(repo):
     """Kind=bug has no `owner` filter on either surface: the engine refuses `agent` on
     bugs (a bug row's owner is "", and the kinds that DO echo `owner` are the
     task/phase/lesson/session reads in tests/test_view_mcp.py). A real MCP
