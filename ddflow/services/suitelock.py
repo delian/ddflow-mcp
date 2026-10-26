@@ -224,8 +224,9 @@ def hold(
     changes (default: stderr).
 
     ``wait_s`` (new, default None) overrides the wait limit `[ci].suite_wait_s` for this
-    hold only: a `ddflow ci run --timeout N` passes the longer of the two, so the per-run
-    override covers the queue wait, not only the run behind it (Ba5d5d63f12)."""
+    hold only: a `ddflow ci run --timeout N` passes N, so the per-run override bounds the
+    queue wait too, in either direction (a queued run used to give up at the knob whatever
+    the override said, Ba5d5d63f12)."""
     directory = Path(directory) if directory else state_dir()
     limit = max(1, int(cfg.ci.max_concurrent_suites))
     wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
