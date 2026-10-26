@@ -64,3 +64,18 @@ def test_a_removed_linked_fix_task_does_not_hide_the_configured_one() -> None:
     st.items = {gone.id: gone, other.id: other, live.id: live}
     st.bugs = {"B1": Bug(id="B1", fix_task="fix-B1")}
     assert CM.fix_task_for(st, "B1", cfg) is live
+
+
+def test_the_configured_fix_task_wins_over_an_older_item_that_also_fixes_the_bug() -> None:
+    from ddflow.config import Config
+    from ddflow.core.model import Bug, Item, State
+    from ddflow.services import completion as CM
+
+    cfg = Config()
+    cfg.ids.fix_task = "bugfix-{parent}"
+    old = Item(id="T-old", kind="task", fixes=["B1"])
+    live = Item(id="bugfix-B1", kind="task")
+    st = State()
+    st.items = {old.id: old, live.id: live}
+    st.bugs = {"B1": Bug(id="B1")}
+    assert CM.fix_task_for(st, "B1", cfg) is live
