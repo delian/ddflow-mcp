@@ -110,7 +110,9 @@ def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
     holds T1's work. The ancestry check alone passes; only the tree comparison may admit
     the primary as the merged tree (B430dae3a68 holefix)."""
     _merged(repo)
-    _git(repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    # `merge` leaves its own event-log commit on top: revert the MERGE commit beneath it
+    merge_commit = _git(repo, "log", "--merges", "-1", "--format=%H").strip()
+    _git(repo, "revert", "--no-edit", "-m", "1", merge_commit)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
     assert code != 0, text

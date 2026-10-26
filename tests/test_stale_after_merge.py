@@ -19,6 +19,9 @@ from conftest import pass_pipeline, run_cli
 from helpers import git as _git
 from helpers import landing
 
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+
 OK = 0
 NOTE = "passed on a different tree"
 
@@ -329,8 +332,12 @@ def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(
     assert tree.exists()  # kept, as configured
 
 
-def test_work_committed_in_a_kept_tree_after_the_merge_is_still_reported_stale(repo):
-    """The other side of Bb47a48b173: only untracked scratch is forgiven, not new work."""
+def test_work_committed_in_a_kept_tree_after_the_merge_is_never_credited_to_the_gates(repo):
+    """The other side of Bb47a48b173: only untracked scratch is forgiven, not new work.
+
+    A kept tree moved off the merged work is not the item's tree (B430dae3a68 holefix), so
+    a gate recorded after the merge is stored UNMEASURED rather than fingerprinted at the
+    unlanded commit: the new work is never what a later pass vouches for."""
     assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
     tree = _claimed(repo)
     (tree / "a.py").write_text("a = 1\n")
@@ -344,4 +351,6 @@ def test_work_committed_in_a_kept_tree_after_the_merge_is_still_reported_stale(r
     pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
     assert code == OK, out + err
-    assert NOTE in out + err, out + err
+    gates = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates
+    assert gates["implement"].evidence.get("unmeasured") == ["tree_sha"], gates["implement"]
+    assert "tree_sha" not in gates["implement"].evidence
