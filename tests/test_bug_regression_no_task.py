@@ -98,6 +98,21 @@ def test_a_no_task_bugs_item_that_landed_through_a_pr_has_no_pair_so_a_fix_task_
     assert status == "needs-fix-task", (status, ev)
 
 
+def test_a_bugs_missing_fix_task_still_falls_back_to_its_found_item(repo):
+    """A bug whose fix_task names an id not in the queue keeps the found item as its
+    pre-fix source when that item works in a worktree (the fix task string names nothing)."""
+    from ddflow.api._base import _load
+    from ddflow.api.knowledge import bug_close as BC
+
+    _found_in_task(repo)
+    _log, cfg, st = _load(repo, "")
+    st.bugs["B1"].fix_task = "fix-gone"
+    status, ev = BC._verify_regression(
+        repo, cfg, st, "B1", ["tests/test_f.py::test_f"], verify_regression=True, reason=""
+    )
+    assert status == "verified", (status, ev)
+
+
 def test_a_no_task_bugs_item_landed_with_a_pair_is_verified_against_it(repo):
     """Bb49d834e90: the found item merged through ddflow -- its landed_before/landed_after
     pair IS the pre-fix source and the fixed tree, so the regression test really runs."""
@@ -115,6 +130,9 @@ def test_a_no_task_bugs_item_landed_with_a_pair_is_verified_against_it(repo):
     st.items["T1"].merged_sha = fix_sha
     st.items["T1"].landed_before = base_sha
     st.items["T1"].landed_after = fix_sha
+    # The pair alone must be decisive: the items WORKTREE is gone once it merged, so a
+    # state whose worktree records nothing still verifies through landed_before/after.
+    st.items["T1"].worktree = ""
     status, ev = BC._verify_regression(
         repo, cfg, st, "B1", ["tests/test_f.py::test_f"], verify_regression=True, reason=""
     )
