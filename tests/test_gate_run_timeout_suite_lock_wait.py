@@ -70,14 +70,27 @@ def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkey
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
     cfg.ci.suite_wait_s = 1.2
+    now = [0.0]
+
+    def monotonic() -> float:  # the determinism of the poll loop comes with a fake clock:
+        return now[0]  # no wall wait to race a loaded host in (the raise provokes no timer)
+
+    def sleep(s: float) -> None:
+        now[0] += s if s >= SL.QUEUE_POLL_S else s
+
+    monkeypatch.setattr(time, "monotonic", monotonic)
+    monkeypatch.setattr(time, "sleep", sleep)
     with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
-        started = time.monotonic()
         with pytest.raises(SL.SuiteBusy) as busy:
             with SL.hold(cfg, "second", tmp_path, wait_s=0.6, say=lambda _t: None):
                 raise AssertionError("the holder never freed the slot")
-    waited = time.monotonic() - started
-    assert 0.6 <= waited < 1.1, f"gave up after {waited:.2f}s, not at the override of 0.6s"
-    assert busy.value.waited_s < 1.1
+    assert busy.value.waited_s >= 0.6
+    assert busy.value.waited_s < 1.1, (
+        f"gave up after {busy.value.waited_s:.2f}s, at the knob (1.2s), not the override (0.6s)"
+    )
+
+
+def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypatch):
 
 
 def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypatch):
