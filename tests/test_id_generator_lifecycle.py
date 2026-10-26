@@ -60,6 +60,7 @@ def test_a_removed_linked_fix_task_does_not_hide_the_configured_one() -> None:
     live = Item(id="bugfix-B1", kind="task")
     cfg.ids.fix_task = "bugfix-{parent}"
     st = State()
-    st.items = {gone.id: gone, live.id: live}
+    other = Item(id="T-other", kind="task")
+    st.items = {gone.id: gone, other.id: other, live.id: live}
     st.bugs = {"B1": Bug(id="B1", fix_task="fix-B1")}
     assert CM.fix_task_for(st, "B1", cfg) is live
