@@ -30,6 +30,7 @@ from typing import Any
 from ..core import clock
 from ..core import outcome as O
 from ..core import progress as PR
+from ..core.bookkeeping import STATE_EXCLUDE
 from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..infra import worktree as W
@@ -357,9 +358,9 @@ def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
         # the merged tree; content that moved on the base (a later commit, a revert,
         # another item's merge) is not -- the tree comparison admits only a base whose
         # non-.ddflow content IS the merged tree's.
-        moved = W.git(
-            repo, "diff", "--name-only", it.merged_sha, "HEAD", "--", ".", ":(exclude).ddflow"
-        )
+        # HEAD of the checkout ASKED ABOUT (`here`), not the primary's: a kept worktree moved
+        # off the merged work must not be admitted by the primary standing at it.
+        moved = W.git(here, "diff", "--name-only", it.merged_sha, "HEAD", "--", ".", *STATE_EXCLUDE)
         if not moved.ok or moved.out.strip():
             return False
     marked = W.git(here, "ls-files", "-v")
