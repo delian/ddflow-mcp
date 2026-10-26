@@ -123,7 +123,7 @@ def test_bug_rows_carry_the_regression_test_and_lesson_columns(repo):
     that hardcoded `[]`/`""` for every bug (roborev on d2c05c21)."""
     run_cli(repo, "init")
     _lesson(repo, "L1", "what the fix taught")
-    _ok(repo, "bug", "found", "--id", "B1", "--summary", "a bug", "--no-task")
+    _ok(repo, "bug", "found", "--id", "B1", "--summary", "a bug")
     # `bug fixed` validates that the named test exists in a worktree of the repo, so the
     # test file has to be real before the bug can be closed.
     (repo / "tests").mkdir(exist_ok=True)
