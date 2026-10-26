@@ -65,6 +65,21 @@ def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
     assert seen == {"wait_s": 7200.0}, seen
 
 
+def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkeypatch):
+    """The DOWN direction of the override runs end to end, not only in `_lock_wait` alone."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    cfg = Config()
+    cfg.ci.suite_wait_s = 1.2
+    with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
+        started = time.monotonic()
+        with pytest.raises(SL.SuiteBusy) as busy:
+            with SL.hold(cfg, "second", tmp_path, wait_s=0.6, say=lambda _t: None):
+                raise AssertionError("the holder never freed the slot")
+    waited = time.monotonic() - started
+    assert 0.6 <= waited < 1.1, f"gave up after {waited:.2f}s, not at the override of 0.6s"
+    assert busy.value.waited_s < 1.1
+
+
 def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypatch):
     """The longer wait changed when the run gives up, not what the give-up does with its place."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
