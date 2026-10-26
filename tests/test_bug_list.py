@@ -138,3 +138,17 @@ def test_bug_sort_orders_the_page_it_repaginates(repo):
     # The re-cut page keeps the caller's page size as its advertised limit, not the
     # whole-matched-set refetch's (limit=0 → the cap).
     assert body["limit"] == 1
+
+
+def test_bug_sort_limit_zero_pages_the_whole_set(repo):
+    """The "all rows" limit is the engine's whole set (the engine normalizes 0 to its
+    cap before the rows come back), not an empty page: `--limit 0 --sort severity`
+    returns every matched bug in severity order, last page, no `next`."""
+    _seed_mix(repo)
+    code, out, err = run_cli(
+        repo, "list", "bug", "--all", "--limit", "0", "--sort", "severity", "--json"
+    )
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert [r["severity"] for r in body["rows"]] == ["critical", "high", "high", "medium", ""]
+    assert body["next"] is None
