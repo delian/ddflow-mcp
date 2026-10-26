@@ -507,9 +507,10 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
 
     ``sort`` is "" (the engine's own order, newest change first) or "severity": stable
     severity order -- `severity_rank`, id ascending as the tiebreak -- with the page
-    re-cut from the whole matched set (the engine's `MAX_LIMIT`), so the order decides
-    the page, not the page the order. Any other word raises `ValueError`: an order the
-    surface does not declare is refused, never silently dropped."""
+    re-cut from the whole matched set, fetched at the engine's cap in cap-sized pages,
+    so the order decides the page, not the page the order. Any other word raises
+    `ValueError`: an order the surface does not declare is refused, never silently
+    dropped."""
 
     data = out.data
     sort = (sort or "").strip().lower()
@@ -533,16 +534,29 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         from ..viewers import view_list
 
         fresh = view_list(repo, "bug", **dict(data["filters"]), limit=0, offset=0)
-        full = [r for r in fresh.data["rows"]]
+        full = list(fresh.data["rows"])
+        # The engine normalizes `limit=0` to its cap before the rows come back (a
+        # successful page's limit is never 0), so one call tops out at the cap while
+        # `total` keeps the whole match count: page the rest at the stride the engine
+        # advertised, so an offset at or past the cap is not an unreachable empty
+        # page `next` refuses to move off.
+        stride = fresh.data["limit"]
+        while len(full) < fresh.data["total"]:
+            more = view_list(
+                repo, "bug", **dict(data["filters"]), limit=stride, offset=len(full)
+            )
+            chunk = list(more.data["rows"])
+            if not chunk:
+                break  # said the cap, gave less: what it gave stands
+            full.extend(chunk)
         for r in full:
             _row_edges(r, st)
         full.sort(key=lambda r: r["id"])
         full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
         off, lim = data["offset"], data["limit"]
-        # The engine normalizes `limit=0` to its cap before the rows come back (a
-        # successful page's limit is never 0); the `not lim` arm keeps the whole-set
-        # meaning of 0 honest if a 0 ever did arrive: the page is everything, not
-        # `rows[off:off]`, and the caller's page size stays the advertised limit.
+        # The `not lim` arm keeps the whole-set meaning of 0 honest if a 0 ever did
+        # arrive on a caller page: the page is everything, not `rows[off:off]`, and
+        # the caller's page size stays the advertised limit.
         page = full[off:] if not lim else full[off : off + lim]
         base = dict(fresh.data)
         # `fresh` was asked at offset 0 (the whole set); the page the caller asked for

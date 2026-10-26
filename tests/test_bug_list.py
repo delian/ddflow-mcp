@@ -136,6 +136,29 @@ def test_mcp_list_tool_declares_the_sort_argument(repo):
     assert "sort" in _properties(TOOLS["ddflow_list"])
 
 
+def test_mcp_serves_bug_sort(repo):
+    """An MCP `ddflow_list` for kind=bug with `sort="severity"` goes through
+    `finish_bug_list` like the CLI read does: the served rows come back in severity
+    order and carry the same facets (severity, fix_task, needs) the CLI advertises."""
+    from ddflow.api.viewers import view_list as _vl
+    from ddflow.surfaces.mcp import _finish_list_read
+
+    _seed_mix(repo)
+    done = _finish_list_read(
+        repo, _vl(repo, "bug", limit=50, offset=0), {"kind": "bug", "sort": "severity"}
+    )
+    assert done.exit == 0
+    assert [r["severity"] for r in done.data["rows"]] == [
+        "critical",
+        "high",
+        "high",
+        "medium",
+        "",
+    ]
+    for r in done.data["rows"]:
+        assert set(("severity", "fix_task", "needs")) <= set(r)
+
+
 def test_bug_sort_orders_the_page_it_repaginates(repo):
     """Severity order is stable to paging: --limit cuts AFTER the severity order, so a
     page of 1 shows the critical bug, not the newest. The expectation names the bug
@@ -166,3 +189,23 @@ def test_bug_sort_limit_zero_pages_the_whole_set(repo):
     body = json.loads(out)
     assert [r["severity"] for r in body["rows"]] == ["critical", "high", "high", "medium", ""]
     assert body["next"] is None
+
+
+def test_bug_sort_pages_rows_past_the_engine_cap(repo, monkeypatch):
+    """The whole-set refetch the engine caps (`limit=0` -> `MAX_LIMIT`) must page the
+    matched set, or a page asked AT the cap is an empty, non-advancing one: its rows
+    never move `next` past the cap and everything beyond it stays unreachable. With the
+    cap pinned at 3 and 5 matched bugs, the page at offset 3 carries the two rows the
+    cap hid, in severity order, and ends the walk (`next=None`), while the first page
+    keeps the caller's page size."""
+    from ddflow.services import viewers as V
+
+    monkeypatch.setattr(V, "MAX_LIMIT", 3)
+    _seed_mix(repo)
+    first = KB.finish_bug_list(repo, api_view_list(repo, "bug", limit=3, offset=0), sort="severity")
+    assert first.data["total"] == 5
+    assert len(first.data["rows"]) == 3  # the caller's page size, cut after the order
+    tail = KB.finish_bug_list(repo, api_view_list(repo, "bug", limit=3, offset=3), sort="severity")
+    assert [r["severity"] for r in tail.data["rows"]] == ["medium", ""]
+    assert first.data["next"] == 3
+    assert tail.data["next"] is None
