@@ -539,13 +539,18 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         full.sort(key=lambda r: r["id"])
         full.sort(key=lambda r: severity_rank(r.get("severity") or ""))
         off, lim = data["offset"], data["limit"]
+        # The engine normalizes `limit=0` to its cap before the rows come back (a
+        # successful page's limit is never 0); the `not lim` arm keeps the whole-set
+        # meaning of 0 honest if a 0 ever did arrive: the page is everything, not
+        # `rows[off:off]`, and the caller's page size stays the advertised limit.
+        page = full[off:] if not lim else full[off : off + lim]
         base = dict(fresh.data)
         # `fresh` was asked at offset 0 (the whole set); the page the caller asked for
         # starts where the caller told the engine to start, and its advertised limit is
         # the caller's page size, not the whole-set fetch's.
         base["offset"] = off
         base["limit"] = lim
-        base["rows"] = full[off : off + lim]
+        base["rows"] = page
         base["shown"] = len(base["rows"])
         base["truncated"] = base["total"] > off + base["shown"]
         base["next"] = off + base["shown"] if base["truncated"] else None
