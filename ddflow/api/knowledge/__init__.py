@@ -36,6 +36,8 @@ from .bugs import (  # noqa: F401
     BUG_SEVERITIES,
     bug_file_tasks,
     bug_found,
+    finish_bug_list,
+    severity_rank,
     upstream_offer,
 )
 from .lessons import LessonDraft, lesson_add, lesson_search, lessons_verify  # noqa: F401

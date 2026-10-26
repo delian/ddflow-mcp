@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import importlib
 import re
 import textwrap
 import threading
@@ -359,13 +360,13 @@ def _sandbox_class() -> type:
     """Jinja's sandbox with the ceilings above, built on first use: jinja2 is a heavy import
     and the MCP engine (and `scripts/bump.sh`, which has no jinja2) imports this module
     without rendering."""
-    from jinja2.sandbox import SandboxedEnvironment
+    SandboxedEnvironment = importlib.import_module("jinja2.sandbox").SandboxedEnvironment
 
     return type("_Sandbox", (_Limits, SandboxedEnvironment), {})
 
 
 def _environment() -> Any:
-    import jinja2
+    jinja2 = importlib.import_module("jinja2")
 
     # bandit B701: Markdown, never HTML; escaping would corrupt the output. The sandbox is
     # the point: a template may come from a cloned repository.
@@ -463,7 +464,7 @@ def render(
         ) from None
     ctx["schema_version"] = schema_version
     ctx[DOC_KEY] = doc
-    import jinja2
+    jinja2 = importlib.import_module("jinja2")
 
     try:
         env = _environment()
