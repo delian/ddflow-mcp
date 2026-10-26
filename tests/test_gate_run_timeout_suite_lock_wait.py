@@ -76,7 +76,7 @@ def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkey
         return now[0]  # no wall wait to race a loaded host in (the raise provokes no timer)
 
     def sleep(s: float) -> None:
-        now[0] += s if s >= SL.QUEUE_POLL_S else s
+        now[0] += s
 
     monkeypatch.setattr(time, "monotonic", monotonic)
     monkeypatch.setattr(time, "sleep", sleep)
