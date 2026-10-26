@@ -137,21 +137,24 @@ def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
     takes. One function, so the schema a client sees and the argument check the
     dispatcher applies can never disagree about it."""
     props = dict(spec["properties"])
-    if spec is TOOLS.get("ddflow_list"):
-        # The list tool's page-order argument. Declared here, beside the `_call_api`
-        # shaping that consumes it (knowledge.bugs.finish_bug_list), not beside the
-        # tool's other properties in `surfaces/tools/operations.py`: the tool's api
-        # passes the declared filters only, so its declaration cannot take one — the schema
-        # must name what the check may accept, and the same function serves both.
-        props["sort"] = (
-            "string",
-            "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs "
-            "without one last). Default: newest change first.",
-            False,
-        )
     if not spec.get("identify"):
         props[AS_AGENT] = _AS_AGENT_SPEC
     return props
+
+
+#: ddflow_list's bug-only page-order argument. Declared here, beside the `_call_api`
+#: shaping that consumes it (`knowledge.bugs.finish_bug_list`), on the tool's own
+#: `properties` so the CLI→MCP parity ratchet sees the flag the schema and the argument
+#: check carry (`test_every_cli_flag_is_reachable_from_its_mcp_tool`). The tool's api
+#: (`surfaces/tools/operations.py`) keeps passing only the filters it names, so the
+#: declaration lives here rather than there.
+_SORT_PROPERTY = (
+    "string",
+    "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs "
+    "without one last). Default: newest change first.",
+    False,
+)
+TOOLS["ddflow_list"]["properties"]["sort"] = _SORT_PROPERTY
 
 
 def _schema(spec: dict[str, Any]) -> dict[str, Any]:
