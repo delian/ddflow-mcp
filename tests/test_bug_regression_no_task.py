@@ -2,10 +2,17 @@
 had its regression test recorded `could-not-run` on every close, even from inside X's
 worktree: the verification looked for the pre-fix source only through the bug's fix task,
 and such a bug has none. X's worktree is that source while X works in it.
+
+Bb49d834e90: the leftover case -- a bug with no fix task whose found item offers NO
+worktree -- still closed `could-not-run`, a gap the caller could close by filing a fix
+task or naming a landing. Now the source is the found item's landing pair
+(landed_before/landed_after) when it has one, and a close with nothing verifiable is
+REFUSED, not recorded as a silent gap.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -14,6 +21,7 @@ from conftest import run_cli
 from test_bug_regression_verified import ALWAYS_PASSES, FAILS_FIRST, _commit, _worktree
 
 from ddflow import api
+from ddflow.infra.log import EventLog
 
 OK, REFUSED = 0, 3
 
@@ -59,7 +67,9 @@ def test_a_no_task_bugs_test_that_passes_before_the_fix_is_refused(repo):
     assert "pre-fix tree" in out.reason
 
 
-def test_a_no_task_bug_whose_item_has_no_worktree_is_still_could_not_run(repo):
+def test_a_bug_with_no_fix_task_and_no_worktree_is_refused_demanding_a_fix_task(repo):
+    """Bb49d834e90: nothing names a pre-fix source, so the close must not proceed with a
+    recorded gap -- it refuses, naming how to give it one."""
     run_cli(repo, "init")
     (repo / "tests").mkdir()
     (repo / "tests" / "test_x.py").write_text(ALWAYS_PASSES)
@@ -67,13 +77,15 @@ def test_a_no_task_bug_whose_item_has_no_worktree_is_still_could_not_run(repo):
     run_cli(repo, "task", "add", "T2", "--title", "elsewhere", "--globs", "x.py")
     run_cli(repo, "bug", "found", "--id", "B2", "--item", "T2", "--no-task", "--summary", "s")
     out = api.bug_fixed(repo, "B2", regression_test="tests/test_x.py::test_always")
-    assert out.exit == OK, out.reason
-    assert out.data["regression_verified"] == "could-not-run", out.data
+    assert out.exit == REFUSED, out
+    assert "fix task" in out.reason, out.reason
+    assert not [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"], "bug closed"
 
 
-def test_a_no_task_bugs_item_that_landed_through_a_pr_is_not_its_pre_fix_source(repo):
-    """A pull-request merge records only `merged_sha`: the item's base then holds the fix,
-    and its worktree must not be taken as the pre-fix source (roborev on f6065500)."""
+def test_a_no_task_bugs_item_that_landed_through_a_pr_has_no_pair_so_a_fix_task_is_demanded(repo):
+    """A pull-request merge records only `merged_sha`: there is no local landed_before/
+    landed_after pair, so the close is refused naming a fix task (not a gap recorded on a
+    bug the caller could fix) (roborev on f6065500, extended by Bb49d834e90s refusal)."""
     from ddflow.api._base import _load
     from ddflow.api.knowledge import bug_close as BC
 
@@ -83,4 +95,28 @@ def test_a_no_task_bugs_item_that_landed_through_a_pr_is_not_its_pre_fix_source(
     status, ev = BC._verify_regression(
         repo, cfg, st, "B1", ["tests/test_f.py::test_f"], verify_regression=True, reason=""
     )
-    assert status == "could-not-run", (status, ev)
+    assert status == "needs-fix-task", (status, ev)
+
+
+def test_a_no_task_bugs_item_landed_with_a_pair_is_verified_against_it(repo):
+    """Bb49d834e90: the found item merged through ddflow -- its landed_before/landed_after
+    pair IS the pre-fix source and the fixed tree, so the regression test really runs."""
+    from ddflow.api._base import _load
+    from ddflow.api.knowledge import bug_close as BC
+
+    wt = _found_in_task(repo)
+    fix_sha = subprocess.run(
+        ["git", "-C", str(wt), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    base_sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    _log, cfg, st = _load(repo, "")
+    st.items["T1"].merged_sha = fix_sha
+    st.items["T1"].landed_before = base_sha
+    st.items["T1"].landed_after = fix_sha
+    status, ev = BC._verify_regression(
+        repo, cfg, st, "B1", ["tests/test_f.py::test_f"], verify_regression=True, reason=""
+    )
+    assert status == "verified", (status, ev)
+    assert ev["prefix_outcome"] == "failed" and ev["fix_outcome"] == "passed", ev
