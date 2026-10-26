@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from conftest import run_cli
 
 from ddflow.api.knowledge import bugs as KB
@@ -93,7 +92,7 @@ def test_finish_bug_list_orders_by_severity_then_id(repo):
     keys = [(KB.severity_rank(r["severity"]), r["id"]) for r in out.data["rows"]]
     assert keys == sorted(keys)
     for r in out.data["rows"]:
-        assert set(("severity", "fix_task", "needs")) <= set(r)
+        assert {"severity", "fix_task", "needs"} <= set(r)
 
 
 def test_finish_bug_list_refuses_other_sort_words(repo):
@@ -117,8 +116,8 @@ def test_mcp_list_serves_the_non_bug_sort_refusal(repo):
     """Over MCP the same request is an outcome REFUSED with a reason and a list-shaped
     body (exit 3, the CLI's refusal), not a Value/TypeError the dispatcher would
     answer as a malformed call."""
-    from ddflow.surfaces.mcp import _finish_list_read
     from ddflow.api.viewers import view_list as _vl
+    from ddflow.surfaces.mcp import _finish_list_read
 
     _seed_mix(repo)
     refused = _finish_list_read(
@@ -156,7 +155,7 @@ def test_mcp_serves_bug_sort(repo):
         "",
     ]
     for r in done.data["rows"]:
-        assert set(("severity", "fix_task", "needs")) <= set(r)
+        assert {"severity", "fix_task", "needs"} <= set(r)
 
 
 def test_bug_sort_orders_the_page_it_repaginates(repo):
@@ -203,9 +202,7 @@ def test_mcp_bug_sort_serves_the_owner_filter(repo):
     owner = json.loads(run_cli(repo, "list", "bug", "--all", "--json")[1])["rows"][0]["owner"]
     result = _vr(repo, "bug", owner=owner, limit=50, offset=0)
     assert "owner" in result.data["filters"]  # the MCP echo, not the engine's key
-    done = _finish_list_read(
-        repo, result, {"kind": "bug", "sort": "severity", "owner": owner}
-    )
+    done = _finish_list_read(repo, result, {"kind": "bug", "sort": "severity", "owner": owner})
     assert done.exit == 0
     assert [r["severity"] for r in done.data["rows"]] == [
         "critical",
