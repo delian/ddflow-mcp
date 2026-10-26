@@ -452,9 +452,9 @@ def run(
     tick: tuple[Callable[[], None], float] | None = None,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and raises
-    the host suite-lock wait floor to the same length (a queued run waits that long for
-    the slot before it gives up UNAVAILABLE, Ba5d5d63f12).
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
+    queued phase of the host suite lock besides (the per-run override covers the queue wait,
+    not only the run behind it, Ba5d5d63f12).
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
@@ -517,13 +517,14 @@ def run(
 
 
 def _lock_wait(cfg: Config, timeout_s: int) -> float | None:
-    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone), or --
-    when ``timeout_s`` is a positive per-run override -- the longer of the knob and it. The
-    override used to bound the command only, so a queued run gave up at the knob although the
-    caller had authorised a much longer run (Ba5d5d63f12)."""
+    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone), or
+    ``timeout_s`` when it is a positive per-run override: the override is this run's budget
+    and so bounds the queued phase too. A queued run used to give up at the knob although the
+    caller had authorised a much longer run, and a shorter run had no say about its queue
+    wait either (Ba5d5d63f12)."""
     if timeout_s <= 0:
         return None
-    return max(float(cfg.ci.suite_wait_s), float(timeout_s))
+    return float(timeout_s)
 
 
 def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite, lock_wait=None):

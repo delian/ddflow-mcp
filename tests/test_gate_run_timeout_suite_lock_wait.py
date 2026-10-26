@@ -6,6 +6,7 @@ parks the ticket, so a retry keeps its queue place."""
 
 from __future__ import annotations
 
+import contextlib
 import time
 from types import SimpleNamespace as NS
 
@@ -32,17 +33,18 @@ def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
     assert busy.value.position == 1  # it queued behind the holder, it did not give up at once
 
 
-def test_the_per_run_budget_raises_the_lock_wait_floor():
+def test_a_budget_override_bounds_the_lock_wait_in_both_directions():
     cfg = Config()
     cfg.ci.suite_wait_s = 1800
-    assert CI._lock_wait(cfg, 7200) == 7200.0  # the override extends the knob
-    assert CI._lock_wait(cfg, 100) == 1800.0  # the configured patience is the floor, never lower
+    assert CI._lock_wait(cfg, 7200) == 7200.0  # a longer override extends the knob
+    assert CI._lock_wait(cfg, 100) == 100.0  # a shorter override bounds the queued phase too
     assert CI._lock_wait(cfg, 0) is None  # no override: the knob alone decides
 
 
 def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
     seen: dict[str, float | None] = {}
 
+    @contextlib.contextmanager
     def fake_hold(cfg, holder, directory=None, *, say=None, wait_s=None):
         seen["wait_s"] = wait_s
         yield
