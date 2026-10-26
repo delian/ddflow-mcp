@@ -35,11 +35,9 @@ def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
 
 
 def test_a_budget_override_bounds_the_lock_wait_in_both_directions():
-    cfg = Config()
-    cfg.ci.suite_wait_s = 1800
-    assert CI._lock_wait(cfg, 7200) == 7200.0  # a longer override extends the knob
-    assert CI._lock_wait(cfg, 100) == 100.0  # a shorter override bounds the queued phase too
-    assert CI._lock_wait(cfg, 0) is None  # no override: the knob alone decides
+    assert CI._lock_wait(7200) == 7200.0  # a longer override extends the knob
+    assert CI._lock_wait(100) == 100.0  # a shorter override bounds the queued phase too
+    assert CI._lock_wait(0) is None  # no override: the knob alone decides
 
 
 def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):

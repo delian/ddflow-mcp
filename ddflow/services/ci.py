@@ -499,7 +499,7 @@ def run(
         try:
             p, out_prefix, waited = _run_locked(
                 cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite,
-                _lock_wait(cfg, timeout_s),
+                _lock_wait(timeout_s),
             )
         except SL.SuiteBusy as busy:
             return Result(
@@ -516,13 +516,12 @@ def run(
     return res
 
 
-def _lock_wait(cfg: Config, timeout_s: int) -> float | None:
-    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone), or
-    ``timeout_s`` when it is a positive per-run override: the override caps the queued wait
-    (this value) and is the budget of the run behind it — two bounds, neither reduced by the
-    other. A queued run used to give up at the knob although the caller had authorised a
-    much longer run, and a shorter run had no say about its queue wait either
-    (Ba5d5d63f12)."""
+def _lock_wait(timeout_s: int) -> float | None:
+    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone, what
+    `SL.hold` falls back to), or ``timeout_s`` when it is a positive per-run override: the
+    override caps the queued wait (this value) and is the budget of the run behind it.
+    A queued run used to give up at the knob although the caller had authorised a much
+    longer run, and a shorter run had no say about its queue wait either (Ba5d5d63f12)."""
     if timeout_s <= 0:
         return None
     return float(timeout_s)
