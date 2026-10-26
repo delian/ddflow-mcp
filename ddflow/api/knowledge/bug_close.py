@@ -11,6 +11,7 @@ from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, OPEN, fold
 from ...infra import worktree as W
+from ...services import completion as CM
 from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
@@ -506,7 +507,7 @@ def _has_landing_pair(item: Any) -> bool:
     return bool(item is not None and item.landed_before and item.landed_after)
 
 
-def _fixing_item(st, bug_id: str) -> Any:
+def _fixing_item(st, cfg, bug_id: str) -> Any:
     """The item whose source is the fix: the bug's fix task, else -- for `bug found
     --item X --no-task`, fixed in the commit that found it -- X while it works in a
     worktree, or X landed through ddflow's own merge (a landed_before/landed_after
@@ -516,7 +517,7 @@ def _fixing_item(st, bug_id: str) -> Any:
     rec = st.bugs.get(bug_id)
     if rec is None:
         return None
-    fix_task = st.items.get(rec.fix_task) if rec.fix_task else None
+    fix_task = CM.fix_task_for(st, bug_id, cfg)
     if fix_task is not None:
         return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
@@ -561,7 +562,7 @@ def _verify_regression(
     if not module_tests:
         return "not-applicable", {}
 
-    fx = _fixing_item(st, bug_id)
+    fx = _fixing_item(st, cfg, bug_id)
     if landing is not None:
         # The caller named the commit that holds the fix: its first parent is the pre-fix
         # source, whatever the fix task did or did not do (B256be593f0).
