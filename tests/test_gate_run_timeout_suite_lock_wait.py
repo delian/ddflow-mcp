@@ -91,9 +91,6 @@ def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkey
 
 
 def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypatch):
-
-
-def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypatch):
     """The longer wait changed when the run gives up, not what the give-up does with its place."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
