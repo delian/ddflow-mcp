@@ -159,6 +159,14 @@ def _schema(spec: dict[str, Any]) -> dict[str, Any]:
     return _REGISTRY.properties_schema(_properties(spec), deprecated=spec.get("deprecated"))
 
 
+def _finish_list_read(repo: Path, result: Any, args: dict[str, Any]) -> Any:
+    """`ddflow_list` serve: the tenant the tool's own api does not shape. The import of
+    `api.knowledge` is lazy, so the import of TOOLS stays api-free (tools/_common)."""
+    from ..api.knowledge import bugs as _KB
+
+    return _KB.finish_bug_list(repo, result, sort=str(args.get("sort") or ""))
+
+
 #: The first protocol revision with `outputSchema` and `structuredContent`.
 _STRUCTURED_SINCE = "2025-06-18"
 
@@ -1002,11 +1010,7 @@ class Server:
             ):
                 result = self._invoke(spec, args, agent, call.per_call, call.params)
                 if name == "ddflow_list":
-                    from ..api.knowledge import bugs as _KB
-
-                    result = _KB.finish_bug_list(
-                        self.repo, result, sort=str(args.get("sort") or "")
-                    )
+                    result = _finish_list_read(self.repo, result, args)
         except Exception as exc:
             # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
             # class declaring exit 3 -- is a result to act on, not a failed call;
