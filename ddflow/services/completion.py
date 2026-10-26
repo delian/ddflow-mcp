@@ -111,7 +111,7 @@ def fix_task_for(state: State, bug_id: str, cfg: Config | None = None) -> Item |
     carries no link on the bug), else None."""
     rec = state.bugs.get(bug_id)
     named = state.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
-    if named is not None:
+    if named is not None and not named.removed:
         return named
     return next(
         (i for i in state.items.values() if not i.removed and bug_id in fixes_of(state, i.id, cfg)),
