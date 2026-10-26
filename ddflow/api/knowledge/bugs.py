@@ -533,7 +533,15 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         # validated, so it is refused again only as the earlier call was.
         from ..viewers import view_list
 
-        fresh = view_list(repo, "bug", **dict(data["filters"]), limit=0, offset=0)
+        # The read surfaces echo `agent` under the flag's own name `owner`
+        # (`api/viewers._filters`); the engine kwarg is `agent`. The re-fetch replays the
+        # caller's filter dict, so the MCP path's `owner` must map back, or one of the two
+        # surfaces refetches with a kwarg `view_list` does not take.
+        refetch_filters = {
+            ("agent" if k == "owner" and "agent" not in data["filters"] else k): v
+            for k, v in dict(data["filters"]).items()
+        }
+        fresh = view_list(repo, "bug", **refetch_filters, limit=0, offset=0)
         full = list(fresh.data["rows"])
         # The engine normalizes `limit=0` to its cap before the rows come back (a
         # successful page's limit is never 0), so one call tops out at the cap while
@@ -543,7 +551,7 @@ def finish_bug_list(repo: Path, out: O.Outcome, sort: str = "") -> O.Outcome:
         stride = fresh.data["limit"]
         while len(full) < fresh.data["total"]:
             more = view_list(
-                repo, "bug", **dict(data["filters"]), limit=stride, offset=len(full)
+                repo, "bug", **refetch_filters, limit=stride, offset=len(full)
             )
             chunk = list(more.data["rows"])
             if not chunk:
