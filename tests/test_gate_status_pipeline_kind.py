@@ -66,14 +66,15 @@ def test_research_docs_only_status_steps_equal_the_gates_complete_requires(repo)
     assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
     assert cited == list(cfg.gates.doc_pipeline), cited
 
-    # The exact gates the bug says complete demanded are required of nothing here.
+    # The exact gates the bug says complete demanded are required of nothing here:
+    # the refusal names the DOC pipeline gates the status pipeline names, and them alone.
     code, out, err = run_cli(repo, "gate", "status", "R1", agent="a1")
     assert code == 0, out + err
     code, out, err = run_cli(repo, "complete", "R1", "--model", "claude-sonnet-5-5", agent="a1")
-    assert code == 0, out + err
+    reported = "never run and never skipped: " + ", ".join(list(cfg.gates.doc_pipeline)) + "."
+    assert code != 0 and reported in err, (code, err)
     for stray in ("research", "rubber_duck", "critic", "ci", "unit_tests", "bug_hunt"):
-        assert stray not in err, (stray, err)
-    assert "unit_tests" not in (out + err), out + err
+        assert stray not in (out + err), (stray, out + err)
 
 
 def test_research_docs_only_after_merge_status_and_complete_agree(repo):
