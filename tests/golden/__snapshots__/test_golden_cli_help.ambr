@@ -399,17 +399,20 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
-    -h, --help       show this help message and exit
-    --state STATE    only rows in this state
-    --phase PHASE    only rows under this phase id
-    --since SINCE    only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
-    --offset OFFSET  skip this many rows (paging)
-    --all            include fixed and invalid bugs
-    --item ITEM      only bugs filed in or against this queue item id
+    -h, --help         show this help message and exit
+    --state STATE      only rows in this state
+    --phase PHASE      only rows under this phase id
+    --since SINCE      only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
+                       most)
+    --offset OFFSET    skip this many rows (paging)
+    --all              include fixed and invalid bugs
+    --item ITEM        only bugs filed in or against this queue item id
+    --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
+                       newest change first
   
   '''
 # ---
@@ -1569,7 +1572,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1588,6 +1591,8 @@
     --offset OFFSET       skip this many rows (paging)
     --all                 accepted for every list kind; this kind lists all its rows already
     --item ITEM           only bugs filed in or against this queue item id
+    --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
+                          newest change first
   
   '''
 # ---

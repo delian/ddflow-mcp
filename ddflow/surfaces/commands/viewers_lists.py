@@ -14,6 +14,7 @@ from typing import Any
 
 from ...api import phase_progress, view_list
 from ...api import surf_reporting as R
+from ...api.knowledge import bugs as KB
 from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
@@ -76,6 +77,15 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
         out.append(
             Param("item", default=None, help="only bugs filed in or against this queue item id")
         )
+        out.append(
+            Param(
+                "sort",
+                default=None,
+                choices=("severity",),
+                help="order the rows by severity (critical first, id as the tiebreak); "
+                "default: newest change first",
+            )
+        )
     return tuple(out)
 
 
@@ -88,11 +98,21 @@ def _line(kind: str, r: dict[str, Any]) -> str:
     if tail:
         parts.append("  [" + " ".join(tail) + "]")
     if kind == "bug":
-        # The two facts worth a column: the lesson the close recorded, and how many
-        # regression tests guard it. The names themselves are one `ddflow show <id>` away.
+        # The facts worth extra marks: the bug's domain facets are the engine's deferred
+        # knowledge half (severity, the fix task, that task's dependency edges); the
+        # lesson the close recorded, and how many regression tests guard it (the names
+        # themselves are one `ddflow show <id>` away).
         marks = []
+        if r.get("severity"):
+            marks.append(r["severity"])
         if r.get("lesson"):
             marks.append(f"lesson {r['lesson']}")
+        fix = r.get("fix_task") or ""
+        if fix:
+            marks.append(f"fix {fix}")
+        deps = r.get("needs") or []
+        if deps:
+            marks.append(f"needs: {', '.join(deps)}")
         tests = r.get("regression_tests") or []
         if tests:
             marks.append(f"{len(tests)} test" + ("s" if len(tests) != 1 else ""))
@@ -154,6 +174,11 @@ def cmd_list(a, c: Ctx) -> int:
     kind = a.list_kind
     query, defaulted = _query(a, kind)
     out = view_list(c.repo, kind, **query)
+    if kind == "bug":
+        # The bug's domain facets (severity, its fix task, that task's dependency
+        # edges) and the `--sort` order are the engine's deferred knowledge half,
+        # attached before the rows are rendered.
+        out = KB.finish_bug_list(c.repo, out, sort=getattr(a, "sort", None) or "")
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
         for r in out.data["rows"]:
