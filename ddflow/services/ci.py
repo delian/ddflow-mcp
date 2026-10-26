@@ -508,7 +508,7 @@ def run(
                 tick,
                 used,
                 full_suite,
-                _lock_wait(timeout_s),
+                lock_wait=_lock_wait(timeout_s),
             )
         except SL.SuiteBusy as busy:
             return Result(
@@ -536,7 +536,9 @@ def _lock_wait(timeout_s: int) -> float | None:
     return float(timeout_s)
 
 
-def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite, lock_wait=None):
+def _run_locked(
+    cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None
+):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
     its output prefix and the seconds spent queued for the slot (None without one). ``lock_wait``
     replaces the wait limit for this hold (see `_lock_wait`)."""
