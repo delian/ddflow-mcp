@@ -518,10 +518,11 @@ def run(
 
 def _lock_wait(cfg: Config, timeout_s: int) -> float | None:
     """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone), or
-    ``timeout_s`` when it is a positive per-run override: the override is this run's budget
-    and so bounds the queued phase too. A queued run used to give up at the knob although the
-    caller had authorised a much longer run, and a shorter run had no say about its queue
-    wait either (Ba5d5d63f12)."""
+    ``timeout_s`` when it is a positive per-run override: the override caps the queued wait
+    (this value) and is the budget of the run behind it — two bounds, neither reduced by the
+    other. A queued run used to give up at the knob although the caller had authorised a
+    much longer run, and a shorter run had no say about its queue wait either
+    (Ba5d5d63f12)."""
     if timeout_s <= 0:
         return None
     return float(timeout_s)
