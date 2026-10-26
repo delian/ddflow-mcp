@@ -191,6 +191,31 @@ def test_bug_sort_limit_zero_pages_the_whole_set(repo):
     assert body["next"] is None
 
 
+def test_mcp_bug_sort_serves_the_owner_filter(repo):
+    """The MCP read echoes the engine's `agent` filter as `owner`
+    (`api/viewers._filters`), so a severity-sorted refetch must map it back to the
+    engine kwarg: `ddflow_list(kind=bug, sort=severity, owner=X)` returns X's bugs in
+    severity order, not a TypeError from the filter replay."""
+    from ddflow.api.viewers import view_read as _vr
+    from ddflow.surfaces.mcp import _finish_list_read
+
+    _seed_mix(repo)
+    owner = json.loads(run_cli(repo, "list", "bug", "--all", "--json")[1])["rows"][0]["owner"]
+    result = _vr(repo, "bug", owner=owner, limit=50, offset=0)
+    assert "owner" in result.data["filters"]  # the MCP echo, not the engine's key
+    done = _finish_list_read(
+        repo, result, {"kind": "bug", "sort": "severity", "owner": owner}
+    )
+    assert done.exit == 0
+    assert [r["severity"] for r in done.data["rows"]] == [
+        "critical",
+        "high",
+        "high",
+        "medium",
+        "",
+    ]
+
+
 def test_bug_sort_pages_rows_past_the_engine_cap(repo, monkeypatch):
     """The whole-set refetch the engine caps (`limit=0` -> `MAX_LIMIT`) must page the
     matched set, or a page asked AT the cap is an empty, non-advancing one: its rows
