@@ -274,7 +274,7 @@ def _claim_owner(tree: Path) -> Path:
     (a read-only temp dir) costs `cleanup` the liveness check, never the run itself."""
     marker = owner_marker(tree)
     try:
-        marker.write_text(owner_line() + "\n")
+        fsio.atomic_write(marker, owner_line() + "\n")
     except OSError:
         pass
     return marker
