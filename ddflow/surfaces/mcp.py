@@ -956,9 +956,7 @@ class Server:
         self.agent = want
         # The same agent's shell commands take it too (Bfad021e8d9).
 
-        shell = harness_identity.declare(
-            self.repo, want, scope=HR.session_fingerprint(os.environ)
-        )
+        shell = harness_identity.declare(self.repo, want, scope=HR.session_fingerprint(os.environ))
         if want:
             detail = "declared on this connection" + (
                 f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"
