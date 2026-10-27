@@ -536,9 +536,7 @@ def _lock_wait(timeout_s: int) -> float | None:
     return float(timeout_s)
 
 
-def _run_locked(
-    cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None
-):
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
     its output prefix and the seconds spent queued for the slot (None without one). ``holder``
     is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
