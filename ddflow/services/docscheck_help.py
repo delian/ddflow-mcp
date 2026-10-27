@@ -53,12 +53,15 @@ def in_process(verbs: list[str]) -> P.Captured:
 
             _parser = build_parser()
         out, err = io.StringIO(), io.StringIO()
-        code = 0
+        code: int | None = 0
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 _parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
-            code = exc.code if isinstance(exc.code, int) else 0
+            #: a non-int code (argparse never raises one -- ``--help`` is 0, ``error()``
+            #: 2 -- so this branch is a guard, not a path): None reads "did not finish",
+            #: never a success folded into 0 (standards roborev job 3705).
+            code = exc.code if isinstance(exc.code, int) else None
     return P.Captured(code, out.getvalue(), err.getvalue())
 
 
@@ -71,7 +74,7 @@ def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     specific executable and is run as before."""
     if len(argv) < 2 or argv[-1] != "--help":
         return None
-    if argv[0] == "ddflow":
+    if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
         return argv[1:-1]
     if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
         return argv[3:-1]
