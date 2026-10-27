@@ -63,7 +63,6 @@ from ..core import autoorder as AO
 from ..core.defaults import DEFAULT_PRIORITY
 from ..core.globs import overlap as globs_overlap
 from ..core.graph import closure
-from ..core.records import WORK_KINDS
 
 #: An id-shaped token in a body: what a mention of `RH-prune-needs` or `B-gap-plan-lint`
 #: looks like. Every candidate is filtered against the snapshot's own ids, so a plain
@@ -186,9 +185,7 @@ def overlaps(
                 f"{ida} and {idb} both touch {hits[0]}: one of them should need the other, "
                 f"or their globs should be narrowed"
             )
-            proposal = (
-                f"{edge[0]} needs {edge[1]}" if edge else f"no proposed edge ({why})"
-            )
+            proposal = f"{edge[0]} needs {edge[1]}" if edge else f"no proposed edge ({why})"
             fix: dict[str, Any] | None = None
             if edge and why == "forced":
                 fix = {"needs_add": [edge[0], edge[1]]}
@@ -307,7 +304,9 @@ def duplicates(
             f"{iid} reads like {hit}, also open: one may BE the other's work",
         )
         for iid in sorted(scope)
-        for hit in sorted(set(similar(str(items[iid].get("title", "")), str(items[iid].get("body", "")))))
+        for hit in sorted(
+            set(similar(str(items[iid].get("title", "")), str(items[iid].get("body", ""))))
+        )
         if hit in scope and hit != iid
     ]
 
@@ -328,9 +327,11 @@ def lint(
     """
     scope = list(scope)
     if band is None:
-        band = lambda _iid, _tags: ""
+        def band(_iid, _tags):
+            return ""
     if band_priority is None:
-        band_priority = lambda _iid, _tags: DEFAULT_PRIORITY
+        def band_priority(_iid, _tags):
+            return DEFAULT_PRIORITY
     report = Report(
         findings=[
             *overlaps(items, scope, band),

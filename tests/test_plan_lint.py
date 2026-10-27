@@ -55,8 +55,11 @@ def _band_prio(iid: str, tags) -> int:  # noqa: ARG001
 def lint(items, scope=None, similar=None):
     snap = _b(items)
     return PL.lint(
-        snap, scope=scope or [i for i, it in snap.items() if not it["terminal"]],
-        band=_band, band_priority=_band_prio, similar=similar,
+        snap,
+        scope=scope or [i for i, it in snap.items() if not it["terminal"]],
+        band=_band,
+        band_priority=_band_prio,
+        similar=similar,
     )
 
 
@@ -90,7 +93,10 @@ def test_an_overlapping_fix_waits_for_nothing_that_is_a_feature():
 def test_a_feature_pair_ordered_by_priority_is_reported_not_applied():
     """Priority numbers order two FEATURES' proposal, but no fix: the operator orders
     with --priority -- a number nobody typed as a dependency is not one."""
-    items = {"hi": _it(globs=["docs/a.md"], priority=60), "lo": _it(globs=["docs/a.md"], priority=40)}
+    items = {
+        "hi": _it(globs=["docs/a.md"], priority=60),
+        "lo": _it(globs=["docs/a.md"], priority=40),
+    }
 
     (f,) = _of(lint(items), "overlap")
 
@@ -235,7 +241,10 @@ def test_an_ordering_edge_satisfies_a_stale_body_mention_is_no_stale_read():
 
 
 def test_the_add_time_hunt_reports_duplicates_when_provided():
-    items = {"a": _it(globs=["src/a.py"], title="ship it"), "b": _it(globs=["src/b.py"], title="ship it")}
+    items = {
+        "a": _it(globs=["src/a.py"], title="ship it"),
+        "b": _it(globs=["src/b.py"], title="ship it"),
+    }
 
     dup = lint(items, similar=lambda title, body: ["b"] if "ship it" in title else [])
 
