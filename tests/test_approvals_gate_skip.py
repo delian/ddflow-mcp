@@ -154,9 +154,9 @@ def test_skipping_a_gate_that_is_not_a_failed_review_says_it_was_not_gated(proj)
     assert code == 0, (out, err)
     assert "T3.rubber_duck = skipped" in out, out
     assert "not gated" in out + err, out + err
-    assert (
-        "no approval request was filed" in out + err
-    ), out + err  # not the operator's override: nothing was asked of anyone
+    assert "no approval request was filed" in out + err, (
+        out + err
+    )  # not the operator's override: nothing was asked of anyone
 
 
 def test_the_request_can_also_be_filed_by_hand(proj):
