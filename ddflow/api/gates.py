@@ -1262,6 +1262,47 @@ def _evidence_fields(
     return ev, None
 
 
+def _failed_review_unanswered(it, gdef, gate: str, confirmed_only: bool) -> str:
+    """Why ``gate``'s FAILED review outcome is still unanswered, or "" -- the empty
+    string for a gate with no reviewer too, so "a failed review stands" is ONE
+    expression everywhere (roborev job 3680: the refusal below and the not-gated note
+    above each computed `gdef is not None and gdef.reviewer and why` by hand).
+    ``confirmed_only`` mirrors `unresolved_review_failure`'s: the refusal varies it,
+    the note reads what a hard skip sees (always the False flavor past its guard)."""
+    if gdef is None or not gdef.reviewer:
+        return ""
+    return GO.unresolved_review_failure(it, gate, confirmed_only=confirmed_only)
+
+
+def _not_gated_skip_note(warning, approval_stamp, it, gdef, gate, hard_skip) -> str:
+    """B97106be46a: a skip must say WHICH case it is. A refused one already names the
+    approval request; one recorded on the strength of a consumed approval carries its
+    ask id in the evidence (`approval_stamp`). Any OTHER skip needs neither, for ANY
+    caller -- the first critic round flagged the old guard (a reviewer on the gate AND
+    an agent marker on the caller), which left a person's skip and a skip of a gate
+    with no reviewer silent again. So the not-gated note fires on every non-stamped
+    skip and names the one sub-case that differs: over review findings still
+    unanswered the skip IS the operator's own override (an agent over one is refused
+    before it gets here). The guard keys off `hard_skip`, the flag `record` itself
+    uses to treat the call as a skip: `skip=False, outcome="skipped"` records
+    `result` as 'skipped' all the same, and must say which case it is too
+    (second critic round)."""
+    if not hard_skip or approval_stamp:
+        return warning
+    failed = bool(_failed_review_unanswered(it, gdef, gate, confirmed_only=False))
+    clause = (
+        f"{gate} is a failed review with findings still unanswered, so this skip is "
+        "the operator's own override"
+        if failed
+        else "a gate skip needs the operator's approval only over a FAILED review "
+        f"with findings still unanswered; {gate} is not one, so this skip was "
+        "recorded directly"
+    )
+    return " ".join(
+        filter(None, [warning, f"not gated: {clause}, and no approval request was filed"])
+    )
+
+
 def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
     """The question `_agent_skip_refusal` asks the approvals engine when an agent sets aside a
     failed review: ``how`` is (skip?, the outcome word being hand-recorded)."""
@@ -1295,7 +1336,7 @@ def _agent_skip_refusal(
             return O.refused("gate.record", why, id=item, gate=gate, outcome=""), {}
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
         return None, {}
-    why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
+    why = _failed_review_unanswered(it, gdef, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
         return None, {}
@@ -1354,13 +1395,15 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         gate,
         item,
         agent,
-        skip or outcome == "skipped",
+        hard_skip := skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
     if refused is not None:
         return refused
+    # B97106be46a: a refused skip already says which case it is (the refusal names the
+    # request id); a skip that was NOT refused must say so too. See `_not_gated_skip_note`.
 
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
@@ -1378,6 +1421,14 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     # out of `cmd_gate`: the api computed `ahead` and threw it away, and
     # `test_recording_a_gate_out_of_order_says_so` caught it on the full suite.
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
+    warning = _not_gated_skip_note(
+        warning,
+        approval_stamp,
+        it,
+        gdef,
+        gate,
+        hard_skip,
+    )
 
     result = "skipped" if skip else outcome
     ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)
