@@ -143,21 +143,21 @@ class _InProcessHelp:
         from contextlib import redirect_stderr, redirect_stdout
 
         try:
-            # The build is part of the replay: one that cannot import (or exits) is "could
-            # not run", never a raise out of a walk, and `parser()` re-runs the version
-            # check on EVERY call, so a chain replayed from version A is never answered for
-            # version B (a rebuild starts the memo empty under the new version).
-            parser = self.parser()
-            memo = self._built[2]  # the running version's own memo, bound AFTER its check
-            key = tuple(argv[1:])
-            if key in memo:
-                return memo[key]
+            with _RENDER_LOCK:  # build-to-cache is ONE critical section, like any render is:
+                #: the version check, the memo the next steps read and the render happen
+                #: while no other replay can rebuild beside them (a rebuild between the
+                #: check and the read would leak a former version's help into the new
+                #: memo -- other replays of one process share this registry).
+                parser = self.parser()
+                memo = self._built[2]  # the running version's own memo, bound AFTER its check
+                key = tuple(argv[1:])
+                if key in memo:
+                    return memo[key]
 
-            out, err = io.StringIO(), io.StringIO()
-            renderer = threading.get_ident()  # the one thread whose stdio writes ARE the render
-            with _RENDER_LOCK:
+                out, err = io.StringIO(), io.StringIO()
+                renderer = threading.get_ident()  # the one thread whose stdio writes ARE the render
                 try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
-                    #: the redirects swap the process-global stdio, which no lock can make
+                    #: the redirects swap the process-global sys.stdio, which no lock can make
                     #: thread-local; the swaps below route per thread instead, so the render
                     #: captures ONLY the rendering thread's writes, and any OTHER thread's
                     #: print goes to the real stream it meant -- never swallowed into the
@@ -209,9 +209,11 @@ class _RoutedTo:
     flags in the finding set) nor dropped from its terminal: the redirect cannot be made
     thread-local, but a capture can be made this-thread-of-it."""
 
-    __slots__ = ("_sink", "_real", "_owner")
+    __slots__ = ("_sink", "_real", "_owner", "isatty", "fileno")
 
     def __init__(self, real, sink, owner: int) -> None:
+        self.isatty = real.isatty  # stream introspection still answers as the REAL stream
+        self.fileno = real.fileno
         self._real, self._sink, self._owner = real, sink, owner
 
     def write(self, text: str) -> int:

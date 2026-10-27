@@ -177,8 +177,8 @@ def test_a_render_never_serves_a_mix_of_a_foreign_threads_print():
     letgo = threading.Event()
 
     def foreign_write():
-        letgo.wait()  # prints while the routed stream IS sys.stdout
-        print("--phantom-flag-never-declared")
+        if letgo.wait(10):  # times out and ends ITSELF if the release below can never run
+            print("--phantom-flag-never-declared")
 
     thread = threading.Thread(target=foreign_write)
     thread.start()
