@@ -73,7 +73,12 @@ def test_a_word_that_is_no_verb_stops_the_chain_like_the_spawn_of_it():
         pytest.skip(f"ddflow cannot run here: {spawned.error}")
     idx = H.HelpIndex(H.command_runner(_ROOT, 60), ["ddflow"])
     by_tree = idx.resolve(["ddflow", "bogus-verb-chain", "--nonesuch"])
-    by_spawn = H.HelpIndex(lambda argv: _spawn(tuple(argv[1:-1])), ["ddflow"]).resolve(
+
+    def spawn_only(argv: list[str]) -> P.Captured:
+        return _spawn(tuple(argv[1:-1]))
+
+    spawn_only.in_process_of = set()  # a SPAWNING walk: nothing answered in-process
+    by_spawn = H.HelpIndex(spawn_only, ["ddflow"]).resolve(
         ["ddflow", "bogus-verb-chain", "--nonesuch"]
     )
 

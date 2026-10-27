@@ -89,7 +89,18 @@ def flag_of(token: str) -> str | None:
 
 
 def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser] | None:
-    """The subparser choice table of ``parser`` (None: it has none)."""
+    """The subparser choice table of ``parser`` (None: it has none).
+
+    The walk descends argparse's private ``_actions`` (its ``_SubParsersAction`` and that
+    action's ``choices``) and relies on ``parse_args`` answering ``--help`` with a
+    ``SystemExit`` — stdlib internals on the pinned argparse. A future argparse that
+    renamed them would yield a partial walk, which the speed test's chain budget
+    (`MIN_CHAINS`), not silent behavior, is what catches.
+    """
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices
+    return None
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             return action.choices
