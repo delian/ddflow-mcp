@@ -11,6 +11,7 @@ round it never delivered.
 
 from __future__ import annotations
 
+import shlex
 import stat
 import sys
 from pathlib import Path
@@ -32,7 +33,7 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
-        f"printf 'call\\n' >> '{seen}'\n"
+        f"printf 'call\\n' >> {shlex.quote(str(seen))}\n"
         "case \"$in\" in *FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )

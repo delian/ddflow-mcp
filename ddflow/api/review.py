@@ -1288,15 +1288,21 @@ def _full_rounds(it, gate: str) -> int:
     must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
     count: a refused round, an errored one, an interrupted one that recorded nothing
     and a `--chunk` re-run are not. A run whose record names a verdict it did not
-    reach (`status` is UNAVAILABLE/ERROR) charged a round it never delivered
-    (Bfdcb5c177c); one with no `status` at all predates that evidence and STILL
-    counts, or a re-record would silently hand the budget back.
+    reach (`status` UNAVAILABLE/ERROR) charged a round it never delivered; a dead
+    run's record says `unavailable`, so a full-shaped run recorded unavailable
+    charges nothing (Bfdcb5c177c). One whose record carries NO `status` at all and
+    some outcome is a declared round (a full record of the era before `status`
+    evidence carried into a re-claim or hand record): it still counts, or a
+    re-record would silently hand the budget back.
     """
     return sum(
         1
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "full"
-        and r.evidence.get("status") in (None, "REVIEWED", "PARTIAL")
+        and (
+            r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+            or (r.evidence.get("status") is None and r.outcome != "unavailable")
+        )
         and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
