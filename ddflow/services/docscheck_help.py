@@ -35,8 +35,10 @@ _GAP = re.compile(r"\s{2,}")
 #: the whole surface, and one parser answers every chain of one walk.
 _parser = None
 
-#: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping runs could
-#: capture each other's output: every run takes the lock, and overlap serializes.
+#: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
+#: runs could capture each other's output: every run takes the lock, and that overlap
+#: serializes. What it does NOT cover is a concurrent thread writing to the real
+#: stdout/stderr; the docs check is single-threaded, so none does during a walk.
 _capture_lock = threading.Lock()
 
 
