@@ -173,7 +173,9 @@ def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
     _grow(log, cfg, sid)
     store.rebuild(log)
     assert calls, "the appended deltas did not go through _reconcile while enabled"
-    assert not built, "the enabled rebuild re-wrote the index; its result did not come from _reconcile"
+    assert not built, (
+        "the enabled rebuild re-wrote the index; its result did not come from _reconcile"
+    )
 
     monkeypatch.setenv("DDFLOW_STORE_INCREMENTAL", "0")
     calls.clear()
@@ -226,9 +228,7 @@ def test_prompt_note_and_summary_seqs_are_disjoint_and_invertible():
     assert len(taken) == len(set(taken))
 
 
-def test_a_disabled_knob_still_records_marks_that_digest_the_shards(
-    log, cfg, store, monkeypatch
-):
+def test_a_disabled_knob_still_records_marks_that_digest_the_shards(log, cfg, store, monkeypatch):
     """The knob off is not a licence to skip the marks: a knob-off rebuild still
     records per-shard consumed bytes and their digests in the index it publishes,
     taken before the events are read -- the pin extends to the non-incremental
