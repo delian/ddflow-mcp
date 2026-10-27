@@ -6,10 +6,16 @@ against the help of the deepest verb it names. The walk descends while ``<chain>
 --help`` exits 0: an invalid verb exits non-zero (argparse: 2), so the first word that is
 not a verb ends the chain and the rest are positionals. Each chain is run once. A tool that
 cannot run (missing, timing out) is a note and its mentions are unchecked, never passed.
+
+ddflow's own help comes from `in_process`: the argparse registry this process already
+built (Bc621160a82), so the check never spawns `ddflow <verb> --help` once per verb —
+only a non-ddflow tool keeps spawning.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -23,10 +29,44 @@ FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
+#: This process's own argparse root, built once, on first use: the CLI import drags in
+#: the whole surface, and one parser answers every chain of one walk.
+_parser = None
+
+
+def in_process(verbs: list[str]) -> P.Captured:
+    """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
+
+    The very ``parse_args`` the spawned CLI makes, so the answer is its ``--help`` and its
+    flags are exactly the spawned text's (Bc621160a82; the equivalence is pinned by
+    tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
+    global _parser
+    if _parser is None:
+        from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
+
+        _parser = build_parser()
+    out, err = io.StringIO(), io.StringIO()
+    code = 0
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            _parser.parse_args([*verbs, "--help"])
+    except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
+        code = exc.code if isinstance(exc.code, int) else 0
+    return P.Captured(code, out.getvalue(), err.getvalue())
+
 
 def command_runner(root, timeout_s: int) -> Runner:
-    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell."""
-    return lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))
+    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
+
+    `ddflow [<verb>...] --help` goes to `in_process` instead of a spawn: it is this
+    ddflow's own help; every other tool runs (Bc621160a82)."""
+
+    def run(argv: list[str]) -> P.Captured:
+        if argv[:1] == ["ddflow"] and argv[-1:] == ["--help"]:
+            return in_process(argv[1:-1])
+        return P.capture(argv, timeout=timeout_s, cwd=Path(root))
+
+    return run
 
 
 def help_flags(text: str) -> set[str]:

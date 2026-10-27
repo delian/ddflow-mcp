@@ -17,7 +17,9 @@ from .docscheck_types import Report
 def check_configured(repo, cfg: Config, *, run_commands: bool = True, **options: Any) -> Report:
     """``check_docs`` with ``[docs].extract``, ``.count``, ``.cli_command`` and
     ``.command_timeout_s`` applied. ``run_commands=False`` spawns nothing: help is not walked
-    and counts are noted as not recomputed. ``options`` pass through to ``check_docs``."""
+    and counts are noted as not recomputed. ddflow's own help never spawns either way — it
+    is walked from this process's parser (Bc621160a82). ``options`` pass through to
+    ``check_docs``."""
     docs = cfg.docs
     return check_docs(
         repo,
