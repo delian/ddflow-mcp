@@ -1264,7 +1264,7 @@ def _evidence_fields(
 
 def _not_gated_skip_note(warning, skip, approval_stamp, gdef, gate, agent) -> str:
     """B97106be46a: a skip must say WHICH case it is. A refused one already names the
-    approval request; one that was not refused is "skip (not gated)", and the message
+    approval request; one that was not refused is the NOT gated case, and the message
     says so instead of printing nothing about the approval dimension. An agent's skip
     is the operator's override only over a FAILED review with findings still
     unanswered (`_agent_skip_refusal`); not when `approval_stamp` is set -- then an
