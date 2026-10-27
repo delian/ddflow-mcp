@@ -55,15 +55,31 @@ def in_process(verbs: list[str]) -> P.Captured:
     return P.Captured(code, out.getvalue(), err.getvalue())
 
 
+def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
+    """The verbs to replay when ``argv`` spells `ddflow [<verb>...] --help` naming THIS
+    ddflow; None when it names another tool (then the spawn is the walk). This process IS
+    ddflow, so its own registry is the authority no matter how the command was typed:
+    the bare name, a path to the binary (`/venv/bin/ddflow`) or `python -m ddflow`."""
+    if len(argv) < 2 or argv[-1] != "--help":
+        return None
+    if argv[0] == "ddflow" or argv[0].rsplit("/", 1)[-1] == "ddflow":
+        return argv[1:-1]
+    if argv[1:3] == ["-m", "ddflow"]:
+        return argv[3:-1]
+    return None
+
+
 def command_runner(root, timeout_s: int) -> Runner:
     """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
 
-    `ddflow [<verb>...] --help` goes to `in_process` instead of a spawn: it is this
-    ddflow's own help; every other tool runs (Bc621160a82)."""
+    Every spelling of `ddflow [<verb>...] --help` goes to `in_process` instead of a spawn
+    (Bc621160a82): it is this ddflow's own help, and nothing runs, so no ``timeout_s``
+    applies; any argv naming another tool still runs in ``root`` under ``timeout_s``."""
 
     def run(argv: list[str]) -> P.Captured:
-        if argv[:1] == ["ddflow"] and argv[-1:] == ["--help"]:
-            return in_process(argv[1:-1])
+        verbs = _ddflow_help_verbs(argv)
+        if verbs is not None:
+            return in_process(verbs)
         return P.capture(argv, timeout=timeout_s, cwd=Path(root))
 
     return run
