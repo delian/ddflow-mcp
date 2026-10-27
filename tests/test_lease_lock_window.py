@@ -308,4 +308,5 @@ def test_a_second_thread_is_waited_out_of_the_lock_not_let_past(repo):
             assert not entered.is_set(), "a second thread entered while the lock was held"
     finally:
         t.join(35.0)
+    assert not t.is_alive(), "the rival still runs after the holder left and the join timed out"
     assert entered.is_set(), "the rival never got in even after the holder left"
