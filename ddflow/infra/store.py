@@ -559,7 +559,12 @@ class Store:
                 # The identity as well as the digested text: an id that changed under
                 # content the digest cannot see (a rename kept title and body) must still
                 # touch the rows, or a stale id survives a change that "sameness" missed.
-                if [tuple(r) for r in con.execute("select kind, item, id, digest from similar_docs order by ord")] != [
+                if [
+                    tuple(r)
+                    for r in con.execute(
+                        "select kind, item, id, digest from similar_docs order by ord"
+                    )
+                ] != [
                     (r["kind"], r["item"], r["id"], textsim.digest(r["title"], r["body"]))
                     for r in records
                 ]:
