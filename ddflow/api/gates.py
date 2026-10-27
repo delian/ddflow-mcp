@@ -1262,6 +1262,18 @@ def _evidence_fields(
     return ev, None
 
 
+def _failed_review_unanswered(it, gdef, gate: str, confirmed_only: bool) -> str:
+    """Why ``gate``'s FAILED review outcome is still unanswered, or "" -- the empty
+    string for a gate with no reviewer too, so "a failed review stands" is ONE
+    expression everywhere (roborev job 3680: the refusal below and the not-gated note
+    above each computed `gdef is not None and gdef.reviewer and why` by hand).
+    ``confirmed_only`` mirrors `unresolved_review_failure`'s: the refusal varies it,
+    the note reads what a hard skip sees (always the False flavor past its guard)."""
+    if gdef is None or not gdef.reviewer:
+        return ""
+    return GO.unresolved_review_failure(it, gate, confirmed_only=confirmed_only)
+
+
 def _not_gated_skip_note(warning, approval_stamp, it, gdef, gate, hard_skip) -> str:
     """B97106be46a: a skip must say WHICH case it is. A refused one already names the
     approval request; one recorded on the strength of a consumed approval carries its
@@ -1277,11 +1289,7 @@ def _not_gated_skip_note(warning, approval_stamp, it, gdef, gate, hard_skip) -> 
     (second critic round)."""
     if not hard_skip or approval_stamp:
         return warning
-    # `confirmed_only` stays its False default: past the guard `hard_skip` is truthy,
-    # so the not-gated note always reads the review the way a hard skip does. (A
-    # mirrored `confirmed_only=not hard_skip`, like `_agent_skip_refusal` carries,
-    # would be constant here -- roborev job 3679.)
-    failed = bool(gdef is not None and gdef.reviewer and GO.unresolved_review_failure(it, gate))
+    failed = bool(_failed_review_unanswered(it, gdef, gate, confirmed_only=False))
     clause = (
         f"{gate} is a failed review with findings still unanswered, so this skip is "
         "the operator's own override"
@@ -1328,7 +1336,7 @@ def _agent_skip_refusal(
             return O.refused("gate.record", why, id=item, gate=gate, outcome=""), {}
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
         return None, {}
-    why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
+    why = _failed_review_unanswered(it, gdef, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
         return None, {}
