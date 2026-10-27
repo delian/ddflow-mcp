@@ -275,16 +275,25 @@ def test_a_second_thread_is_waited_out_of_the_lock_not_let_past(repo):
     two of eight both saw 'unused' (Bf7f6540615's probe measured 2 successes, 1 right).
     A different thread is a different writer and must PARK on the flock exactly like
     another process: while one thread holds the transaction, a second must not reach
-    its read inside one. Held a whole second, deterministically: waiting on the
-    re-entrancy check is prompted by the holder's own event, so a path that let the
-    rival through cannot hide in a scheduling nicety.
+    its read inside one.
+
+    The handshake is what makes the failure deterministic, in both directions:
+    `entering` fires the instant the rival is at the `transaction()` call (so a rival
+    that never reached it cannot be mistaken for one correctly parked), and the hold
+    outlasts the rival's whole run to that point by a second -- the check runs in the
+    GIL slice the rival is already holding, so a let-through cannot hide in scheduling,
+    while a park does not depend on one. `entered` must be set once the holder leaves:
+    a rival that could not get in at all (or a guard that deadlocks it) is as wrong as
+    one let past.
     """
     a_holds = threading.Event()
+    entering = threading.Event()
     entered = threading.Event()
 
     def rival() -> None:
         log = EventLog(repo, "r")
         a_holds.wait()  # parked until the holder is ALREADY inside its transaction
+        entering.set()
         with log.transaction():
             entered.set()
 
@@ -294,7 +303,9 @@ def test_a_second_thread_is_waited_out_of_the_lock_not_let_past(repo):
         log = EventLog(repo, "h")
         with log.transaction():
             a_holds.set()
+            assert entering.wait(5.0), "the rival never reached the entry"
             time.sleep(1.0)
             assert not entered.is_set(), "a second thread entered while the lock was held"
     finally:
         t.join(35.0)
+    assert entered.is_set(), "the rival never got in even after the holder left"
