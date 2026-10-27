@@ -158,7 +158,7 @@ def test_the_tool_table_does_not_pull_in_the_api():
 
 
 def test_an_mcp_timeout_beyond_a_double_is_capped_not_raised():
-    assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_MAX_S
+    assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_SILENT_MAX_S
     assert MC._wait_timeout({"timeout": 12}) == 12.0
     assert MC._wait_timeout({}) == MC.MCP_WAIT_DEFAULT_S
 

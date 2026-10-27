@@ -419,7 +419,9 @@ def test_mcp_caps_the_wait_and_honours_zero():
 
     assert M._wait_timeout({}) == M.MCP_WAIT_DEFAULT_S
     assert M._wait_timeout({"timeout": 0}) == 0
-    assert M._wait_timeout({"timeout": 10**6}) == M.MCP_WAIT_MAX_S
+    # From a bare call with no progress token the wait can send no frame at all until
+    # its answer, so the cap is the silent one, below the client idle cutoff (Bfc43dae5b9).
+    assert M._wait_timeout({"timeout": 10**6}) == M.MCP_WAIT_SILENT_MAX_S
 
 
 def test_mcp_wait_returns_what_the_holder_side_reports(proj):
