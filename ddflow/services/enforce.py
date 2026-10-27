@@ -1550,8 +1550,8 @@ def _uncovered_message(
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
         widen = ", ".join(uncovered)
         lines += [
-            "These paths belong to another item YOU hold, bound to a tree of its own: commit",
-            "them there, or widen THIS item's claim "
+            f"These paths belong to another item YOU hold, bound to a tree of its own: "
+            f"commit them there, or widen THIS item's claim "
             f"(`ddflow update <ID> --add-globs '{widen}'`).",
             "",
         ]
