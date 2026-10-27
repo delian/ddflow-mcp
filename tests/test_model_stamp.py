@@ -8,15 +8,14 @@ leaked script word could not be attributed to a served model or a context fill. 
 
 * `served_model` -- the served model id the harness reports under a model env name;
 * `harness`      -- the claiming harness id, detected from its session variables;
-* `ctx_tokens`   -- the current context fill in tokens the harness reports.
+* `ctx_tokens`   -- the current context fill in tokens over ddflow's own reporting
+  channel; no verified harness env name for a fill exists yet;
 
 Every test here feeds hand-built environments; nothing guesses, so what is absent reads
 as the literal `"unknown"` (bug Bb54029aee9: absent = unknown, never guessed).
 """
 
 from __future__ import annotations
-
-import pytest
 
 from ddflow.services import model_stamp as MS
 
@@ -57,6 +56,18 @@ def test_unlisted_model_env_is_not_guessed() -> None:
     """A variable that is not a declared reporting channel is never read."""
     env = reported({"SOME_HARNESS_MODEL": "something"})
     assert MS.served_model(env) == MS.UNKNOWN
+
+
+def test_two_different_model_reports_refuse_to_guess() -> None:
+    """Two channels carrying two ids refuse to choose between themselves."""
+    env = reported({"COPILOT_MODEL": "gpt-5.4", "DEVIN_MODEL": "devin-x"})
+    assert MS.served_model(env) == MS.UNKNOWN
+
+
+def test_same_model_reported_twice_is_the_report() -> None:
+    """Two channels carrying the SAME id agree: that id is the report."""
+    env = reported({"COPILOT_MODEL": "gpt-5.4", "DEVIN_MODEL": "gpt-5.4"})
+    assert MS.served_model(env) == "gpt-5.4"
 
 
 def test_ctx_tokens_read_and_validated() -> None:

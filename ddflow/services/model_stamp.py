@@ -5,11 +5,14 @@ Reviewed and gated records written by agents (``review.triaged`` probe text,
 the agent id, so drift (leaked script words, fabricated references) could not be
 attributed to a SERVED MODEL or a CONTEXT FILL. This module computes the three fields
 the design asks each agent-authored event to carry next to ``agent``
-(docs/ddflow/research/hallucination-drift.md, HAL-model-facts):
+(docs/ddflow/research/hallucination-drift.md, HAL-model-facts — the writer WIRING of
+these fields into the event kinds is the follow-up whose globs cover the writers; this
+module is the stamping half):
 
 * ``served_model`` -- the served model id the harness reports under a model env name;
 * ``harness``      -- the claiming harness id, detected from its session variables;
-* ``ctx_tokens``   -- the current context fill in tokens the harness reports.
+* ``ctx_tokens``   -- the current context fill in tokens over ddflow's own reporting
+  channel; no harness env name for a context fill is verified yet, so none is read.
 
 **Absent = "unknown", never guessed** (the bug's rule): only the declared channel names
 below are read; an env variable that is not a declared channel is ignored; an agent id
@@ -80,9 +83,8 @@ def served_model(environ: Mapping[str, str] | None = None) -> str:
 def ctx_tokens(environ: Mapping[str, str] | None = None) -> str:
     """The reported context fill in tokens, or ``UNKNOWN``. Only a decimal count is a
     report, kept as-is; anything else means the harness did not report one."""
-    value = (os.environ.get(DDFLOW_CTX_TOKENS) or "").strip()
-    if environ is not None:
-        value = (environ.get(DDFLOW_CTX_TOKENS) or "").strip()
+    environ = os.environ if environ is None else environ
+    value = (environ.get(DDFLOW_CTX_TOKENS) or "").strip()
     if not value:
         return UNKNOWN
     return value if value.isdigit() else UNKNOWN
