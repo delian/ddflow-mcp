@@ -61,7 +61,7 @@ def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
             "",
         ),
     )
-    CI._run_locked(Config(), None, "HEAD", None, CI.DEFAULT_COMMAND, None, 7200, None, {}, lock_wait=7200.0)
+    CI._run_locked(Config(), CI._holder(None, "HEAD"), None, "", None, 7200, None, {}, True, lock_wait=7200.0)
     assert seen == {"wait_s": 7200.0}, seen
 
 
