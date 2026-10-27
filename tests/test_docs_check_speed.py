@@ -104,3 +104,53 @@ def test_help_flags_of_the_root_text_still_guide_the_findings():
     text = H.command_runner(_ROOT, 60)(["ddflow", "--help"]).stdout
     flags = H.help_flags(text)
     assert {"--help", "--json", "--repo", "--agent"} <= flags
+
+
+def test_the_in_process_knob_accepts_a_single_string():
+    #: a str is an `Iterable[str]` of its CHARS; named as itself it is one command, not six
+    run = H.command_runner(_ROOT, 60, in_process_commands="ddflow")
+    assert run.in_process_of == {"ddflow"}
+    by_tree = run(["ddflow", "--help"])
+    assert by_tree.ran and by_tree.returncode == 0 and "--repo" in by_tree.stdout
+
+
+def test_the_first_chain_of_a_fresh_process_is_cached_too():
+    was = H._HERE._built
+    H._HERE._built = None  # a fresh process: the versioned memo does not exist yet
+    try:
+        first = H._HERE.help(["ddflow", "--help"])  # builds the memo; must land IN it
+        memo = H._HERE._built[2]
+        assert ("--help",) in memo and memo[("--help",)] is first
+        assert H._HERE.help(["ddflow", "--help"]) is first  # replayed, not re-parsed
+    finally:
+        H._HERE._built = was
+
+
+def test_one_in_process_command_cannot_blanket_the_others(monkeypatch):
+    real = H._InProcessHelp.chains
+
+    def chains(self, cmd):
+        if cmd != "ddflow":
+            raise RuntimeError("no registry here")
+        yield from real(self, cmd)
+
+    monkeypatch.setattr(H._InProcessHelp, "chains", chains)
+    run = H.command_runner(_ROOT, 60, in_process_commands=["ddflow", "ddflowx"])
+    idx = H.HelpIndex(run, ["ddflow", "ddflowx"])
+    #: the broken command notes ITSELF; ddflow's walk still filled the eager cache
+    assert idx.unavailable == {"ddflowx": "could not walk: no registry here"}
+    assert idx._cache
+
+
+def test_a_verb_chain_that_exits_nonzero_is_noted_chain_by_chain(monkeypatch):
+    real = H._InProcessHelp.help
+
+    def help_(self, argv):
+        if argv == ["ddflow", "workflow", "state", "--help"]:
+            return P.Captured(2, "", "usage: ddflow workflow state ...\n")
+        return real(self, argv)
+
+    monkeypatch.setattr(H._InProcessHelp, "help", help_)
+    idx = H.HelpIndex(H.command_runner(_ROOT, 60), ["ddflow"])
+    assert idx._cache[("ddflow", "workflow", "state")] is None
+    assert "ddflow workflow state" in idx.unavailable  # the chain's own key, however deep

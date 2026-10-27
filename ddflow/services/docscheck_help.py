@@ -49,7 +49,11 @@ def command_runner(
     other argv is spawned, bounded by ``timeout_s``. The timeout knob never applies to the
     in-process walk: it has no I/O to time out.
     """
-    known = IN_PROCESS_COMMANDS if in_process_commands is None else tuple(in_process_commands)
+    if in_process_commands is None:
+        known = IN_PROCESS_COMMANDS
+    else:
+        # A single string names one command (a str IS an Iterable[str], but of its chars).
+        known = (in_process_commands,) if isinstance(in_process_commands, str) else tuple(in_process_commands)
     spawn = lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))  # noqa: E731
 
     def run(argv: list[str]) -> P.Captured:
@@ -101,10 +105,6 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
         if isinstance(action, argparse._SubParsersAction):
             return action.choices
     return None
-    for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            return action.choices
-    return None
 
 
 class _InProcessHelp:
@@ -141,20 +141,25 @@ class _InProcessHelp:
         import io
         from contextlib import redirect_stderr, redirect_stdout
 
-        memo = self._built[2] if self._built is not None else {}
+        parser = self.parser()  # build (or rebuild, per version) BEFORE taking its memo
+        memo = self._built[2]  # the memo the build left; a fresh one starts every detail in it empty
         key = tuple(argv[1:])
         if key in memo:
             return memo[key]
 
         try:
             out, err = io.StringIO(), io.StringIO()
-            # The redirects swap the process-global sys.stdout/stderr while argparse
-            # renders; renders of several chains never overlap (one lock), so a render can
-            # neither take another thread's print nor take this process's own stdout.
+            # The redirects swap the process-global sys.stdout/stderr for the length of the
+            # render; argparse offers no per-call file a replay could hand it. The lock
+            # serializes RENDERS alone: it cannot fence another thread's write to the
+            # redirected standard streams, which the module cannot know about. So a render is
+            # safe where no other thread of the process prints to stdio -- the docs check's
+            # workers are subprocesses whose output goes to pipes, never this process's stdio
+            # -- and it never starts one of its own while a render holds the streams.
             with _RENDER_LOCK:
                 try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
                     with redirect_stdout(out), redirect_stderr(err):
-                        self.parser().parse_args(argv[1:])
+                        parser.parse_args(argv[1:])
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1
                 else:
@@ -234,26 +239,29 @@ class HelpIndex:
         the whole ddflow walk is one bounded batch instead of one render per mentioned verb.
         The walk `ddflow docs check` pays for a check of ddflow itself (DX-docs-check-speed)."""
         in_tree = [c for c in sorted(self.commands) if c in self._in_process()]
-        try:
-            chains = [chain for cmd in in_tree for chain in _HERE.chains(cmd)]
-        except Exception as exc:  # a registry that cannot build is "could not run", not a crash
-            self.unavailable[" ".join(in_tree)] = f"could not walk: {exc}"
-            return 0
-        if not chains:
-            return 0
-        for chain in chains:
-            key = tuple(chain)
-            capped = _HERE.help([*chain, "--help"])
-            if capped.ran and capped.returncode == 0:
-                self._cache[key] = help_flags(capped.stdout or capped.stderr)
-            else:
-                self._cache[key] = None
-                if not capped.ran:
+        walked = 0
+        for cmd in in_tree:
+            #: one command's tree is built (or failed) alone: a broken command notes itself
+            #: and stops only ITS OWN walk, never the eager cache of the others.
+            try:
+                chains = list(_HERE.chains(cmd))
+            except Exception as exc:  # a registry that cannot build is "could not run", not a crash
+                self.unavailable[cmd] = f"could not walk: {exc}"
+                continue
+            for chain in chains:
+                walked += 1
+                key = tuple(chain)
+                capped = _HERE.help([*chain, "--help"])
+                if capped.ran and capped.returncode == 0:
+                    self._cache[key] = help_flags(capped.stdout or capped.stderr)
+                elif not capped.ran:
+                    self._cache[key] = None
                     self.unavailable[" ".join(key)] = f"could not run: {capped.error}"
                     self._broken.add(key)
-                elif len(key) == 1:
-                    self.unavailable[key[0]] = f"`--help` exited {capped.returncode}"
-        return len(chains)
+                else:  # ran, non-zero: the chain's failure is noted for ITS key, however deep
+                    self._cache[key] = None
+                    self.unavailable[" ".join(key)] = f"`--help` exited {capped.returncode}"
+        return walked
 
     def resolve(self, words: list[str]) -> tuple[list[str], set[str]] | None:
         """For ``<cmd> <word>...``: the verb chain and its flags; None when ``cmd`` is not
