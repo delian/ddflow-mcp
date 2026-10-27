@@ -171,8 +171,8 @@ def test_dry_run_session_start_never_runs_the_brief_sweep(repo, monkeypatch):
 
 
 def test_json_run_still_exits_zero_and_reports_skips(repo):
-    """The --json reply reads result/dry_run with .get: the skip paths (unknown event,
-    unknown harness) leave them out, and indexing would raise. A hook must always exit 0."""
+    """The --json reply reads result/dry_run with .get (the skip paths carry both: skipped
+    with the requested dry_run), so a missing key can never raise. A hook must always exit 0."""
     run_cli(repo, "init")
     code, out, err = _run(
         repo, "hooks", "run", "bogus", "--harness", "claude", "--json", stdin="{}"
