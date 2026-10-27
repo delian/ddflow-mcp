@@ -6,12 +6,22 @@ against the help of the deepest verb it names. The walk descends while ``<chain>
 --help`` exits 0: an invalid verb exits non-zero (argparse: 2), so the first word that is
 not a verb ends the chain and the rest are positionals. Each chain is run once. A tool that
 cannot run (missing, timing out) is a note and its mentions are unchecked, never passed.
+
+ddflow's own help is NOT walked by spawning ``ddflow <verb> --help``: the declared command
+registry (``ddflow.surfaces.cli.build_parser``) already knows every verb and flag, and each
+spawn pays the import (~1.5 s), which turned `ddflow docs check` on this repository into a
+~4 minute wait (DX-docs-check-speed). The in-process walk renders the same argparse tree's
+``format_help`` per chain instead — the exact text the spawned process would print — so only
+a tool that is NOT ddflow is spawned, bounded by ``timeout_s``, and the walk of ddflow's own
+tree is cached per ddflow version (``WALK_WORKERS`` and ``command_runner``'s knobs make the
+concurrency and the per-call timeout explicit).
 """
 
 from __future__ import annotations
 
+import argparse
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 from ..infra import proc as P
@@ -19,14 +29,39 @@ from ..infra import proc as P
 #: Runs an argv and returns how it ended; injected so the check spawns nothing by default.
 Runner = Callable[[list[str]], P.Captured]
 
+#: The commands whose ``<verb> --help`` is walked from THIS process's argparse registry
+#: instead of a spawn. ddflow's registry is its help: spawning it again pays an import per
+#: verb; any other tool (ddflow-mcp, a project's own CLI) has no registry here and spawns.
+IN_PROCESS_COMMANDS: tuple[str, ...] = ("ddflow",)
+
+#: The concurrency knob of the eager walk (`HelpIndex.walk_all`): how many help texts may be
+#: prepared at once. Every number a knob (D-universal-principles).
+WALK_WORKERS = 8
+
 FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
 
-def command_runner(root, timeout_s: int) -> Runner:
-    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell."""
-    return lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))
+def command_runner(
+    root, timeout_s: int, *, in_process_commands: Iterable[str] | None = None
+) -> Runner:
+    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
+
+    A ``<command> <chain...> --help`` whose command is named in ``in_process_commands`` is
+    answered from the argparse registry of this process (see the module docstring); every
+    other argv is spawned, bounded by ``timeout_s``. The timeout knob never applies to the
+    in-process walk: it has no I/O to time out.
+    """
+    known = IN_PROCESS_COMMANDS if in_process_commands is None else tuple(in_process_commands)
+    spawn = lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))  # noqa: E731
+
+    def run(argv: list[str]) -> P.Captured:
+        if known and len(argv) > 1 and argv[0] in known and argv[-1] == "--help":
+            return _HERE.help(argv)
+        return spawn(argv)
+
+    return run
 
 
 def help_flags(text: str) -> set[str]:
@@ -53,16 +88,139 @@ def flag_of(token: str) -> str | None:
     return m.group(0) if m and not token[m.end() :][:1].isalnum() else None
 
 
+def _subcommands(parser: argparse.ArgumentParser) -> argparse.ArgumentParser | None:
+    """The subparser choice table of ``parser`` (None: it has none)."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices
+    return None
+
+
+class _InProcessHelp:
+    """`ddflow <chain...> --help` answered from THIS process's argparse registry.
+
+    ``build_parser()`` IS the help every spawned ``ddflow --help`` prints — the stdout of the
+    spawn is exactly ``parser.format_help()`` — so a chain is walked by descending the parser
+    choices by word: a word that is no subcommand is where a spawn would exit 2 and the chain
+    stops there, exactly like it. The tree is built once and cached per ddflow version: a
+    render built for version X is never reused for version Y (per tool version, per
+    DX-docs-check-speed).
+    """
+
+    #: ``(version, root parser)`` of the last build; a module-level memo, because every
+    #: runner of one process asks for the same registry.
+    _built: tuple[str, argparse.ArgumentParser] | None = None
+
+    def parser(self) -> argparse.ArgumentParser:
+        """The root parser this process declares, built once (per ddflow version: a render
+        built for version X is never reused for version Y)."""
+        from ddflow import __version__
+        from ddflow.surfaces.cli import build_parser  # deferred: only the walk needs it
+
+        if self._built is None or self._built[0] != __version__:
+            self._built = (__version__, build_parser())
+        return self._built[1]
+
+    def help(self, argv: list[str]) -> P.Captured:
+        """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
+        ``parse_args`` with ``--help`` run against the registry, its stdout/stderr and its
+        exit replayed. `argparse` answers a help request wherever it meets it (`ddflow
+        config set --help` prints the config help, exit 0, though ``set`` is no
+        subcommand), and invalid words error with exit 2 — no flag-counting of our own."""
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        try:
+            out, err = io.StringIO(), io.StringIO()
+            try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
+                with redirect_stdout(out), redirect_stderr(err):
+                    self.parser().parse_args(argv[1:])
+            except SystemExit as exc:
+                code = exc.code if isinstance(exc.code, int) else 1
+            else:
+                code = 0
+        except Exception as exc:  # a registry that cannot build is "could not run"
+            return P.Captured(error=exc)
+        if code:
+            return P.Captured(code, out.getvalue(), err.getvalue())
+        return P.Captured(0, out.getvalue() or err.getvalue(), "")
+
+    def chains(self, cmd: str) -> Iterator[list[str]]:
+        """Every verb chain of ``cmd``'s tree, root first, deepest last."""
+        tree = self.parser()
+        stack: list[list[str]] = [[cmd]]
+        while stack:
+            chain = stack.pop()
+            yield chain
+            choices = _subcommands(_require_walk(tree, chain))
+            if choices is None:
+                continue
+            for name in sorted(choices):
+                stack.append([*chain, name])
+
+
+#: The in-process walker every runner here shares: one registry per process, whatever
+#: builds the runner (the CLI, the MCP tool, a test).
+_HERE = _InProcessHelp()
+
+
+def _require_walk(root: argparse.ArgumentParser, chain: list[str]) -> argparse.ArgumentParser:
+    """The parser ``chain`` names, descended from ``root`` (called with chains from the
+    same walk, so every word IS a choice)."""
+    parser = root
+    for word in chain[1:]:
+        choices = _subcommands(parser)
+        assert choices is not None and word in choices
+        parser = choices[word]
+    return parser
+
+
 class HelpIndex:
     """The flags each verb chain of the configured commands accepts, from their ``--help``."""
 
-    def __init__(self, run: Runner, commands: list[str]) -> None:
+    def __init__(self, run: Runner, commands: list[str], *, workers: int = WALK_WORKERS) -> None:
         self._run = run
         self.commands = set(commands)
+        #: The concurrency knob: how many help texts `walk_all` prepares at once.
+        self.workers = max(1, workers)
         self._cache: dict[tuple[str, ...], set[str] | None] = {}
         #: Why a command could not be walked, one note each (command or verb chain -> reason).
         self.unavailable: dict[str, str] = {}
         self._broken: set[tuple[str, ...]] = set()  #: chains whose help could not run
+
+    def walk_all(self) -> int:
+        """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
+        and return how many chains were walked; a tool a custom runner walks its own way is
+        still resolved lazily, chain by a document's mention. At most ``workers`` help texts
+        are prepared at once, so the whole ddflow walk is one bounded batch instead of one
+        render per mentioned verb — the walk `ddflow docs check` pays for a check of ddflow
+        itself (DX-docs-check-speed)."""
+        in_tree = [c for c in sorted(self.commands) if c in IN_PROCESS_COMMANDS]
+        try:
+            chains = [chain for cmd in in_tree for chain in _HERE.chains(cmd)]
+        except Exception as exc:  # a registry that cannot build is "could not run", not a crash
+            self.unavailable[" ".join(in_tree)] = f"could not walk: {exc}"
+            return 0
+        if not chains:
+            return 0
+        from concurrent.futures import ThreadPoolExecutor
+
+        def ask(chain: list[str]) -> tuple[tuple[str, ...], P.Captured]:
+            return tuple(chain), _HERE.help([*chain, "--help"])
+
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            done = list(pool.map(ask, chains))
+        for key, capped in done:
+            if capped.ran and capped.returncode == 0:
+                self._cache[key] = help_flags(capped.stdout or capped.stderr)
+            else:
+                self._cache[key] = None
+                if not capped.ran:
+                    self.unavailable[" ".join(key)] = f"could not run: {capped.error}"
+                    self._broken.add(key)
+                elif len(key) == 1:
+                    self.unavailable[key[0]] = f"`--help` exited {capped.returncode}"
+        return len(chains)
 
     def resolve(self, words: list[str]) -> tuple[list[str], set[str]] | None:
         """For ``<cmd> <word>...``: the verb chain and its flags; None when ``cmd`` is not
