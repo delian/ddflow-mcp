@@ -217,14 +217,18 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     return "\n\n".join(x for x in (notice, release) if x)
 
 
-def _sweep_finished(repo: Path, cfg, log, st, callers: tuple[Path | None, ...]) -> None:
+def _sweep_finished(
+    repo: Path, cfg, log, st, callers: tuple[Path | None, ...], *, dry_run: bool = False
+) -> None:
     """Remove the leftover worktrees of done, abandoned and removed items finished long enough
     ago (B4757c428f4): `merge`, `abandon` and `remove` keep a tree their caller stood in. Best effort:
-    a session start must never fail on housekeeping. Not while `doctor` only counts the brief."""
+    a session start must never fail on housekeeping. Not while `doctor` only counts the brief.
+    `dry_run` skips it entirely: a hook probe must not reach this write path."""
     if is_measuring():
         return
     try:
-        CL.sweep_finished(repo, cfg, log, st, callers=callers)
+        if not dry_run:
+            CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
         pass
 
@@ -252,8 +256,7 @@ def brief(
     log, cfg, loaded = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
-    if not dry_run:
-        _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd))
+    _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd), dry_run=dry_run)
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")
