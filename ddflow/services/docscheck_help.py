@@ -10,11 +10,10 @@ cannot run (missing, timing out) is a note and its mentions are unchecked, never
 ddflow's own help is NOT walked by spawning ``ddflow <verb> --help``: the declared command
 registry (``ddflow.surfaces.cli.build_parser``) already knows every verb and flag, and each
 spawn pays the import (~1.5 s), which turned `ddflow docs check` on this repository into a
-~4 minute wait (DX-docs-check-speed). The in-process walk renders the same argparse tree's
-``format_help`` per chain instead — the exact text the spawned process would print — so only
-a tool that is NOT ddflow is spawned, bounded by ``timeout_s``, and the walk of ddflow's own
-tree is cached per ddflow version (``WALK_WORKERS`` and ``command_runner``'s knobs make the
-concurrency and the per-call timeout explicit).
+~4 minute wait (DX-docs-check-speed). The in-process walk replays the same argparse tree's
+``parse_args … --help`` per chain instead -- the exact text and exit the spawned process
+would produce -- so only a tool that is NOT ddflow is spawned, bounded by ``timeout_s`` (the
+per-call timeout knob), and the walk of ddflow's own tree is cached per ddflow version.
 """
 
 from __future__ import annotations
@@ -34,10 +33,6 @@ Runner = Callable[[list[str]], P.Captured]
 #: instead of a spawn. ddflow's registry is its help: spawning it again pays an import per
 #: verb; any other tool (ddflow-mcp, a project's own CLI) has no registry here and spawns.
 IN_PROCESS_COMMANDS: tuple[str, ...] = ("ddflow",)
-
-#: The concurrency knob of the eager walk (`HelpIndex.walk_all`): how many help texts may be
-#: prepared at once. Every number a knob (D-universal-principles).
-WALK_WORKERS = 8
 
 FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
@@ -93,7 +88,7 @@ def flag_of(token: str) -> str | None:
     return m.group(0) if m and not token[m.end() :][:1].isalnum() else None
 
 
-def _subcommands(parser: argparse.ArgumentParser) -> argparse.ArgumentParser | None:
+def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser] | None:
     """The subparser choice table of ``parser`` (None: it has none)."""
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
@@ -191,11 +186,9 @@ def _require_walk(root: argparse.ArgumentParser, chain: list[str]) -> argparse.A
 class HelpIndex:
     """The flags each verb chain of the configured commands accepts, from their ``--help``."""
 
-    def __init__(self, run: Runner, commands: list[str], *, workers: int = WALK_WORKERS) -> None:
+    def __init__(self, run: Runner, commands: list[str]) -> None:
         self._run = run
         self.commands = set(commands)
-        #: The concurrency knob: how many help texts `walk_all` prepares at once.
-        self.workers = max(1, workers)
         self._cache: dict[tuple[str, ...], set[str] | None] = {}
         #: Why a command could not be walked, one note each (command or verb chain -> reason).
         self.unavailable: dict[str, str] = {}
@@ -215,11 +208,11 @@ class HelpIndex:
     def walk_all(self) -> int:
         """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
         and return how many chains were walked; a tool a custom runner walks its own way is
-        still resolved lazily, chain by a document's mention. At most ``workers`` help texts
-        are prepared at once (the renders serialize one at a time: each holds the redirected
-        process stdio), so the whole ddflow walk is one bounded batch instead of one render
-        per mentioned verb — the walk `ddflow docs check` pays for a check of ddflow itself
-        (DX-docs-check-speed)."""
+        still resolved lazily, chain by a document's mention. The renders run one at a time —
+        inherently serial, because each parse_args replay holds the redirected process stdio
+        while it runs and a render has no I/O a second thread would overlap profitably — so
+        the whole ddflow walk is one bounded batch instead of one render per mentioned verb.
+        The walk `ddflow docs check` pays for a check of ddflow itself (DX-docs-check-speed)."""
         in_tree = [c for c in sorted(self.commands) if c in self._in_process()]
         try:
             chains = [chain for cmd in in_tree for chain in _HERE.chains(cmd)]
@@ -228,14 +221,9 @@ class HelpIndex:
             return 0
         if not chains:
             return 0
-        from concurrent.futures import ThreadPoolExecutor
-
-        def ask(chain: list[str]) -> tuple[tuple[str, ...], P.Captured]:
-            return tuple(chain), _HERE.help([*chain, "--help"])
-
-        with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            done = list(pool.map(ask, chains))
-        for key, capped in done:
+        for chain in chains:
+            key = tuple(chain)
+            capped = _HERE.help([*chain, "--help"])
             if capped.ran and capped.returncode == 0:
                 self._cache[key] = help_flags(capped.stdout or capped.stderr)
             else:
