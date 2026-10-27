@@ -39,9 +39,10 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
+    q = shlex.quote(str(cli)).replace("\\", "\\\\").replace('"', '\\"')
     (repo / ".ddflow" / "config.toml").write_text(
         "[worktree]\nenabled = false\n"
-        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = {shlex.quote(str(cli))}\n'
+        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{q}"\n'
         'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n'
     )
     _git(repo, "add", "-A")
