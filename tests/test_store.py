@@ -149,21 +149,21 @@ def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
     same rows anyway. A store that ignored the knob in either direction cannot
     pass: not one that still reconciles while disabled, and not one that never
     reconciles while enabled."""
-    original = Store._reconcile
+    original_reconcile = Store._reconcile
     calls = []
 
     def _spy(self, *a, **k):
         calls.append(True)
-        return original(self, *a, **k)
+        return original_reconcile(self, *a, **k)
 
     monkeypatch.delenv("DDFLOW_STORE_INCREMENTAL", raising=False)
     monkeypatch.setattr(Store, "_reconcile", _spy)
     built: list[bool] = []
-    original = Store._build_into
+    original_build = Store._build_into
 
     def _spy_build(self, tmp, state, events, fingerprint, marks):
         built.append(True)
-        return original(self, tmp, state, events, fingerprint, marks)
+        return original_build(self, tmp, state, events, fingerprint, marks)
 
     monkeypatch.setattr(Store, "_build_into", _spy_build)
     sid = _seed(log, cfg)
@@ -218,12 +218,16 @@ def test_prompt_note_and_summary_seqs_are_disjoint_and_invertible():
     """A prompt, a note and a summary can never collide on the `prompts` primary
     key however many entries one session holds: each role's seq space is disjoint
     and its letter maps it back, so two FTS rows can never sit under one base row
-    (the shifted-10,000 scheme a 20,001st entry overflowed)."""
+    (the shifted-10,000 scheme a 20,001st entry overflowed). The boundaries that
+    scheme spilled across are sampled exactly -- a prompt at 10,000 (the old
+    note band) and at 20,000 (the old summary slot) -- so a regression to any
+    fixed offset above 999 fails the disjointness check."""
+    boundary = list(range(1000)) + [9_999, 10_000, 10_001, 19_999, 20_000, 20_001]
     for role in ("prompt", "note", "summary"):
-        for seq in range(1000):
+        for seq in boundary:
             assert _seq_role(role, _role_seq(role, seq)) == seq
-    taken = [_role_seq("prompt", s) for s in range(1000)]
-    taken += [_role_seq("note", s) for s in range(1000)]
+    taken = [_role_seq("prompt", s) for s in boundary]
+    taken += [_role_seq("note", s) for s in boundary]
     taken += [_role_seq("summary", 0)]
     assert len(taken) == len(set(taken))
 
@@ -232,13 +236,20 @@ def test_a_disabled_knob_still_records_marks_that_digest_the_shards(log, cfg, st
     """The knob off is not a licence to skip the marks: a knob-off rebuild still
     records per-shard consumed bytes and their digests in the index it publishes,
     taken before the events are read -- the pin extends to the non-incremental
-    path the marks licence."""
+    path the marks licence. The same falsifier as the enabled pin: the mark IS
+    the current shard length and its digest, not some prefix of it -- a `0/`
+    mark for a consumed shard fails the equality."""
     monkeypatch.setenv("DDFLOW_STORE_INCREMENTAL", "0")
     _seed(log, cfg)
     store.rebuild(log)
     with sqlite3.connect(store.path) as con:
-        digests = json.loads(dict(con.execute("select k, v from meta"))["shard_digests"])
-    for p in sorted(store.root.glob(".ddflow/events/*.jsonl")):
+        meta = dict(con.execute("select k, v from meta"))
+    mark = json.loads(meta["mark"])
+    digests = json.loads(meta["shard_digests"])
+    shards = sorted(store.root.glob(".ddflow/events/*.jsonl"))
+    assert set(mark) == set(digests) == {p.name for p in shards}
+    for p in shards:
+        data = p.read_bytes()
         size_s, slash, hexed = str(digests[p.name]).partition("/")
-        assert slash and int(size_s) <= len(p.read_bytes())
-        assert hexed == hashlib.sha256(p.read_bytes()[: int(size_s)]).hexdigest()
+        assert slash and int(size_s) == len(data) == mark[p.name]
+        assert hexed == hashlib.sha256(data).hexdigest()

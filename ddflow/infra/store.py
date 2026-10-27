@@ -376,11 +376,13 @@ class Store:
         # THEORETICAL by the cross-family critic 2026-09-24; probe in
         # `tests/test_critic_findings.py`.)
         fingerprint = log.mark()
+        reconciling = True  # revoked the moment any path above doubts the licence
         if not self._incremental_enabled():
             # The knob is off: a rebuild recreates the index from nothing. `_build_into`
             # digests the marks for the fresh index below; the reconcile shortcut is not
             # taken at all, with or without stored marks.
             marks = None
+            reconciling = False
         else:
             stored = self._load_shard_digests()
             verified = self._verified_shard_marks(stored, log) if stored is not None else None
@@ -389,6 +391,7 @@ class Store:
                 # the revoked licence -- the recreated index below gets freshly digested
                 # marks -- never a reconcile keyed on what just failed to verify.
                 marks = None
+                reconciling = False
             elif verified is not None:
                 marks = verified
             else:
@@ -421,7 +424,7 @@ class Store:
                 with contextlib.suppress(OSError):
                     if time.time() - old.stat().st_mtime > REBUILD_TEMP_MAX_AGE_S:
                         old.unlink()
-        if marks is not None:
+        if reconciling and marks is not None:
             try:
                 return self._reconcile(state, events, fingerprint, marks)
             except Exception:
