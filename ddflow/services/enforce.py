@@ -1479,15 +1479,20 @@ def _lapsed_mine(
     not taken over. Invisible above, so the message said "(no live lease)" and "claim
     the work" to the holder committing in its own tree, and the lapse was misread as
     an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
-    Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
-    globs, and reviving them over someone's live paths is the very race the STOP
-    text warns against."""
+
+    Per path, not per lease (DX-lapsed-lease-merge-deadlock): a lease whose globs overlap
+    another agent's live lease is withheld ONLY for staged paths that other lease covers
+    -- accepting the rest cannot take a held path, while the wholesale overlap test
+    withheld the lease everywhere a heartbeat would revive its other globs over someone's
+    live paths (the race the STOP text warns against), stranding a lapsed item unable to
+    commit its merge of main with no remedy that works."""
+    live_over_staged = {g for p in uncovered for g in others if path_in_glob(p, g)}
     return [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, grace_s).items()
         if _counts_as_mine(repo, lease, me, here, bound)
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
-        and not any(globs_overlap(g, o) for g in lease.globs for o in others)
+        and not any(globs_overlap(g, o) for g in lease.globs for o in live_over_staged)
     ]
 
 
