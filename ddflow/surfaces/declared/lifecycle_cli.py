@@ -375,7 +375,7 @@ def claim_text(out, a, ctx) -> str:
     if not d["globs"]:
         msg += (
             f"\n  The commit hook refuses files no glob covers; to cover yours: "
-            f"ddflow --agent {ctx.log.agent_id} update {item} --globs <comma,separated>"
+            f"ddflow --agent {ctx.log.agent_id} update {item} --add-globs <comma,separated>"
         )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
