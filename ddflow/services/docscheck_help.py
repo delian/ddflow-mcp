@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import io
 import re
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -59,24 +60,16 @@ def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     """The verbs to replay when ``argv`` spells `ddflow [<verb>...] --help` naming THIS
     ddflow; None when it names another tool (then the spawn is the walk). This process IS
     ddflow, so the registry it built is the authority when the command is spelled by name
-    (`ddflow`) or run as this interpreter's module (`python -m ddflow`); a spelling with a
-    slash names a specific binary and is run as before."""
+    (`ddflow`) or run as this very interpreter's module ``sys.executable -m ddflow``; any
+    other spelling -- a different interpreter or a path to some binary -- names a
+    specific executable and is run as before."""
     if len(argv) < 2 or argv[-1] != "--help":
         return None
     if argv[0] == "ddflow":
         return argv[1:-1]
-    if argv[1:3] == ["-m", "ddflow"] and _is_a_python(argv[0]):
+    if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
         return argv[3:-1]
     return None
-
-
-def _is_a_python(program: str) -> bool:
-    """``program`` is `python`, `python3`, `python3.12` (`python.exe` on Windows)."""
-    name = program.rsplit("/", 1)[-1].lower()
-    body = name.removeprefix("python")
-    body = body.removesuffix(".exe")
-    body = body.replace(".", "")
-    return body == "" or body.isdigit()
 
 
 def command_runner(root, timeout_s: int) -> Runner:

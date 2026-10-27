@@ -104,8 +104,9 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
     rep = D.check_docs(
         tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
     )
-    assert not any("ddflow" in c for c in spawned_calls)  # ddflow's walk went in process
-    assert [c for c in spawned_calls if c[0] == "nix"]  # the non-ddflow tool still spawns
+    assert [c for c in spawned_calls if c[0].endswith("/ddflow")] == []  # path-spelt ddflow ran
+    assert [c for c in spawned_calls if c[0] == "ddflow"] == []  # bare ddflow never spawned
+    assert all(c[0] != "ddflow" and "/ddflow" not in c[0] for c in spawned_calls)
     assert not rep.findings, rep.findings
     assert [n.kind for n in rep.notes] == ["help"]  # the spawn for `nix`, still taken
 
@@ -117,3 +118,5 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
         tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
     )
     assert rep.clean, rep.findings  # ddflow's --reason resolved by THIS ddflow's help
+    #: `--reason` of the ddflow mention and `--alpha` of `nix run`: the walk judged both.
+    assert rep.checked["verb_flags"] == 2
