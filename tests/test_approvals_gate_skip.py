@@ -88,6 +88,9 @@ def test_the_whole_scenario_with_an_approval(proj):
     stamp = _skipped(proj)["approval"]
     assert stamp["ask"] == ask_id and stamp["proxy"] == "bot" and stamp["level"] == 1
     assert stamp["approved_by"] and stamp["via"] == "cli"
+    # B97106be46a: an approved skip is NOT the not-gated case (the ask id is in the
+    # evidence), so the not-gated note stays gone -- guarded (roborev job 3681).
+    assert "not gated" not in out + err, (out, err)
     # spent: a second use is refused in test_approvals_consume (the gate is skipped now, so a
     # second skip is no longer the operator's override at all)
     assert asks_of(_state(proj))[ask_id]["used"] == 1
