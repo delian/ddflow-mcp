@@ -140,6 +140,9 @@ def test_a_person_at_a_terminal_is_unchanged(proj):
     code, out, err = run_cli(proj, *SKIP)
     assert code == 0, (out, err)
     assert "approval" not in (_skipped(proj) or {})
+    # B97106be46a: the person's skip of a still-failed review gate says WHICH case it is
+    # too -- here, the operator's own override; no agent can reach this text (refused first).
+    assert "the operator's own override" in out + err, (out, err)
 
 
 def test_skipping_a_gate_that_is_not_a_failed_review_says_it_was_not_gated(proj):
@@ -157,6 +160,25 @@ def test_skipping_a_gate_that_is_not_a_failed_review_says_it_was_not_gated(proj)
     assert "no approval request was filed" in out + err, (
         out + err
     )  # not the operator's override: nothing was asked of anyone
+
+
+def test_the_not_gated_note_does_not_need_a_reviewer_gate_or_an_agent_marker(proj):
+    """B97106be46a (first critic round): the reporter ran a plain `ddflow gate skip`, and the
+    first guard printed the note only for a reviewer gate with an agent marker -- a person's
+    skip, and a skip of a gate with no reviewer at all, were silent again. Every non-refused,
+    non-stamped skip must say which case it is, whoever is skipping whichever gate."""
+    code, _o, err = run_cli(proj, "task", "add", "T4", "--globs", "w.py")
+    assert code == 0, err
+    # research carries no reviewer: the note cannot require one.
+    code, out, err = run_cli(proj, "gate", "skip", "T4", "research", "--reason", "read")
+    assert code == 0, (out, err)
+    assert "not gated" in out + err, (out, err)
+    assert "no approval request was filed" in out + err, (out, err)
+    # a person (no --agent, no env markers): the note cannot require one either.
+    code, out, err = run_cli(proj, "gate", "skip", "T4", "rubber_duck", "--reason", "docs")
+    assert code == 0, (out, err)
+    assert "not gated" in out + err, (out, err)
+    assert "no approval request was filed" in out + err, (out, err)
 
 
 def test_the_request_can_also_be_filed_by_hand(proj):

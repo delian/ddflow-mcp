@@ -1262,26 +1262,34 @@ def _evidence_fields(
     return ev, None
 
 
-def _not_gated_skip_note(warning, skip, approval_stamp, gdef, gate, agent) -> str:
+def _not_gated_skip_note(warning, skip, approval_stamp, it, gdef, gate, agent, hard_skip) -> str:
     """B97106be46a: a skip must say WHICH case it is. A refused one already names the
-    approval request; one that was not refused is the NOT gated case, and the message
-    says so instead of printing nothing about the approval dimension. An agent's skip
-    is the operator's override only over a FAILED review with findings still
-    unanswered (`_agent_skip_refusal`); not when `approval_stamp` is set -- then an
-    approval WAS the question and its ask id is in the evidence."""
-    if skip and not approval_stamp and gdef is not None and gdef.reviewer and agent_marker(agent):
-        return " ".join(
-            filter(
-                None,
-                [
-                    warning,
-                    "not gated: a gate skip needs the operator's approval only over a FAILED "
-                    f"review with findings still unanswered; {gate} is not one, so this skip "
-                    "was recorded directly and no approval request was filed",
-                ],
-            )
-        )
-    return warning
+    approval request; one recorded on the strength of a consumed approval carries its
+    ask id in the evidence (`approval_stamp`). Any OTHER skip needs neither, for ANY
+    caller -- the first critic round flagged the old guard (a reviewer on the gate AND
+    an agent marker on the caller), which left a person's skip and a skip of a gate
+    with no reviewer silent again. So the not-gated note fires on every non-stamped
+    skip and names the one sub-case that differs: over review findings still
+    unanswered the skip IS the operator's own override (an agent over one is refused
+    before it gets here)."""
+    if not skip or approval_stamp:
+        return warning
+    failed = bool(
+        gdef is not None
+        and gdef.reviewer
+        and GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
+    )
+    clause = (
+        f"{gate} is a failed review with findings still unanswered, so this skip is "
+        "the operator's own override"
+        if failed
+        else "a gate skip needs the operator's approval only over a FAILED review "
+        f"with findings still unanswered; {gate} is not one, so this skip was "
+        "recorded directly"
+    )
+    return " ".join(
+        filter(None, [warning, f"not gated: {clause}, and no approval request was filed"])
+    )
 
 
 def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
@@ -1402,7 +1410,16 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     # out of `cmd_gate`: the api computed `ahead` and threw it away, and
     # `test_recording_a_gate_out_of_order_says_so` caught it on the full suite.
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
-    warning = _not_gated_skip_note(warning, skip, approval_stamp, gdef, gate, agent)
+    warning = _not_gated_skip_note(
+        warning,
+        skip,
+        approval_stamp,
+        it,
+        gdef,
+        gate,
+        agent,
+        skip or outcome == "skipped",
+    )
 
     result = "skipped" if skip else outcome
     ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)
