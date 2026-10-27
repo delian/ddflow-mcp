@@ -38,11 +38,9 @@ def check(
 ) -> dict[str, Any]:
     """The record the caller stores for ``cmd`` executed at ``sha`` up to ``runs`` times.
 
-    ``runs`` below 1 runs it once; a run cut off (timeout, could not start, no such
-    program) never yields an exit code, so a verdict can never cite it. All runs happen
-    in ONE scratch checkout of ``sha``, so the command sees the recorded commit, not the
-    filer's uncommitted edits; no ``sha`` (git could not name one) is ``unavailable``,
-    never a run somewhere else."""
+    ``runs`` below 1 runs it once; all runs happen in ONE scratch checkout of ``sha``,
+    so the command sees the recorded commit, not the filer's uncommitted edits; no
+    ``sha`` (git could not name one) is ``unavailable``, never a run somewhere else."""
     count = max(1, int(runs))
     try:
         words = shlex.split(cmd or "")
@@ -53,17 +51,27 @@ def check(
     clean = str(sha or "").strip()
     if not clean:
         return {"unavailable": "the tree sha the repro would run at is not recorded"}
+    return _run_at(repo, clean, words, count, float(timeout_s), int(tail_bytes))
+
+
+def _run_at(
+    repo: Path, sha: str, words: list[str], count: int, timeout_s: float, tail_bytes: int
+) -> dict[str, Any]:
+    """Run ``words`` up to ``count`` times in one scratch checkout of ``sha`` (empty tail:
+    no output kept). A run cut off (timeout, could not start, no such program) never
+    yields an exit code, so a verdict can never cite it; the joined output's tail is the
+    record's single ``output``."""
     load_start = _first_load()
-    with W.scratch_tree(repo, clean, detach=True, prefix="ddflow-repro-", quiet=True) as s:
+    with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
         if s.path is None:
             return {
-                "unavailable": f"no scratch checkout of {clean[:12]}: {s.error}",
+                "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
                 "load": load_start,
             }
         codes: list[int] = []
         out: list[str] = []
         for _ in range(count):
-            shot = P.capture(words, timeout=float(timeout_s), cwd=s.path)
+            shot = P.capture(words, timeout=timeout_s, cwd=s.path)
             if shot.error is not None or shot.returncode is None:
                 continue
             codes.append(int(shot.returncode))
@@ -75,16 +83,16 @@ def check(
         record.update({"unavailable": "no run reached an exit code to read", "load": load_start})
         return record
     failed = [c for c in codes if c != 0]
-    keep = max(0, int(tail_bytes))
-    text = "\n".join(out)
     record = {
         "executed": True,
-        "at": clean,
+        "at": sha,
         "reproduced": "yes" if failed else "no",
         "runs": len(codes),
         "failures": len(failed),
         "load": load_start,
     }
+    text = "\n".join(out)
+    keep = max(0, int(tail_bytes))
     if text and keep:
         record["output"] = text[-keep:]
         if len(text) > keep:
