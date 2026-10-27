@@ -1301,7 +1301,7 @@ def _full_rounds(it, gate: str) -> int:
         if r.evidence.get("review_kind") == "full"
         and (
             r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-            or (r.evidence.get("status") is None and r.outcome != "unavailable")
+            or (r.evidence.get("status") is None and r.outcome not in (None, "unavailable"))
         )
         and not _kept_copy(r)
         and not _settled_pass(r)
