@@ -462,7 +462,14 @@ def cmd_hooks(a, c: Ctx) -> int:
         if c.json:
             # The MCP twin's declared payload for `run` (`_HARNESS_PAYLOAD["run"]`), so the
             # two surfaces stay parity-shaped; non-json prints stdout, shaped for the agent.
-            c.out("", {"stdout": out.data["stdout"], "note": out.data["note"], "result": out.data["result"], "dry_run": bool(out.data["dry_run"])})
+            # `.get` everywhere: `_run_hook` error paths report skipped WITHOUT the extra
+            # keys, and a KeyError here would break the exit-0 contract.
+            c.out("", {
+                "stdout": out.data["stdout"],
+                "note": out.data["note"],
+                "result": out.data.get("result"),
+                "dry_run": bool(out.data.get("dry_run")),
+            })
         elif out.data["stdout"]:
             print(out.data["stdout"])
         if out.data["note"] and not c.json:
