@@ -202,8 +202,13 @@ COMMANDS: tuple[Command, ...] = (
         render=_lint_text,
         cli=_SHOWN,
         params=(
-            Param("since", help="Only live work filed on or after this ISO date (default: the whole open queue)."),
-            Param("phase", help="Only live work under this phase id (default: the whole open queue)."),
+            Param(
+                "since",
+                help="Only live work filed on or after this ISO date (default: the whole open queue).",
+            ),
+            Param(
+                "phase", help="Only live work under this phase id (default: the whole open queue)."
+            ),
             Param(
                 "fix",
                 type="boolean",

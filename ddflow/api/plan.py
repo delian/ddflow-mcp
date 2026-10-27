@@ -31,7 +31,8 @@ from ..services import planlint as PL
 from ..services import priority as PRI
 from ._base import _load
 from ._globwarn import missing_globs
-from .items import ItemEdit, update as item_update
+from .items import ItemEdit
+from .items import update as item_update
 
 
 def _created(glob: str, created: set[str]) -> bool:
@@ -407,7 +408,8 @@ def _snapshot(st: State, since: str = "", phase: str = "") -> tuple[dict[str, An
     scope = [
         iid
         for iid, it in live.items()
-        if it.kind in WORK_KINDS and not it.terminal
+        if it.kind in WORK_KINDS
+        and not it.terminal
         and (not phase or any(p == phase for p in _above(live, by_parent, iid)))
         and (not since or (it.created_at and it.created_at[:10] >= since[:10]))
     ]
@@ -452,10 +454,16 @@ def _apply_fixes(repo: Path, agent: str, report: PL.Report) -> dict[str, Any]:
             later, earlier = f.fix["needs_add"]
             out = item_update(repo, later, ItemEdit(add_needs=[earlier]), agent=agent)
         elif "needs_remove" in f.fix:
-            out = item_update(repo, f.ids[0], ItemEdit(remove_needs=f.fix["needs_remove"]), agent=agent)
+            out = item_update(
+                repo, f.ids[0], ItemEdit(remove_needs=f.fix["needs_remove"]), agent=agent
+            )
         else:  # {"priority": n}
-            out = item_update(repo, f.ids[0], ItemEdit(priority=int(f.fix["priority"])), agent=agent)
-        (applied if out.exit == O.OK else skipped).append(what if out.exit == O.OK else f"{what}: {out.reason}")
+            out = item_update(
+                repo, f.ids[0], ItemEdit(priority=int(f.fix["priority"])), agent=agent
+            )
+        (applied if out.exit == O.OK else skipped).append(
+            what if out.exit == O.OK else f"{what}: {out.reason}"
+        )
     return {"applied": applied, "skipped": skipped}
 
 
