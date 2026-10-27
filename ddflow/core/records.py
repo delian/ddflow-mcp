@@ -519,6 +519,12 @@ class Item:
         return losers
 
 
+#: How many `bug.found` sightings make an open bug read CONFIRMED again even while every
+#: repro run so far exited 0 (DX-bug-repro-verify, "until a second sighting or a
+#: confirming run"): the filing was the first, so the second one confirms.
+SIGHTINGS_THAT_CONFIRM = 2
+
+
 @dataclass
 class Bug:
     id: str

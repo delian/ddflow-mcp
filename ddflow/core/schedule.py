@@ -36,6 +36,7 @@ from .flowparams import params
 from .globs import inside as path_in_glob
 from .globs import overlap as globs_overlap  # used by `waves`; re-exported for callers
 from .graph import closure, find_cycles, longest_chains
+from .records import SIGHTINGS_THAT_CONFIRM
 
 #: An item of a PLAN, as `waves` sees it: whatever type the caller's `edges`/`globs_of` read.
 T = TypeVar("T")
@@ -725,13 +726,13 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     unconfirmed = {
         x
         for b in state.bugs.values()
-        if b.open and b.reproduced == "no" and b.sightings < 2
+        if b.open and b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM
         for x in (b.item, b.fix_task)
         if x
     }
     ids.difference_update(unconfirmed)
     for b in state.bugs.values():
-        if b.open and (b.reproduced != "no" or b.sightings >= 2):
+        if b.open and (b.reproduced != "no" or b.sightings >= SIGHTINGS_THAT_CONFIRM):
             ids.update(x for x in (b.item, b.fix_task) if x)
     return ids
 

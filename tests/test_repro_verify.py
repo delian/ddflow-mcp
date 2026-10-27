@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from conftest import run_cli
-from helpers import git, git_quiet, state_as_reader as state
+from helpers import git, git_quiet
+from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
 from ddflow.config import Config
@@ -60,7 +60,7 @@ def _run(repo: Path, bug) -> dict:
 
 
 def test_a_run_that_fails_is_the_sighting_that_reproduces(proj):
-    bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
+    _bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
     run = _run(proj, bug)
     assert run["executed"] is True
     assert run["at"] == git(proj, "rev-parse", "HEAD")
@@ -69,7 +69,7 @@ def test_a_run_that_fails_is_the_sighting_that_reproduces(proj):
 
 
 def test_a_run_that_succeeded_is_never_read_as_reproduced(proj):
-    bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
+    _bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
     run = _run(proj, bug)
     assert run["executed"] is True and run["reproduced"] == "no" and run["failures"] == 0
     assert bug.reproduced == "no" and bug.repro_runs == 1 and bug.repro_failures == 0
@@ -81,7 +81,7 @@ def test_how_many_runs_is_a_knob_and_partial_failures_are_the_rate(proj):
     flip = python(
         "import sys; f='seen' if __import__('os').path.exists('seen') else 0; open('seen','w').write('x'); sys.exit(1 if f else 0)"
     )
-    bid, bug = _file(proj, repro_cmd=flip)
+    _bid, bug = _file(proj, repro_cmd=flip)
     run = _run(proj, bug)
     assert run["runs"] == 3 and run["failures"] == 2 and run["reproduced"] == "yes"
     assert bug.repro_runs == 3 and bug.repro_failures == 2 and bug.reproduced == "yes"
@@ -92,7 +92,7 @@ def test_the_run_sees_the_recorded_sha_not_the_filers_dirty_tree(proj):
     git_quiet(proj, "add", "marker.txt")
     git_quiet(proj, "commit", "-qm", "marker")
     (proj / "marker.txt").write_text("uncommitted\n")  # dirty: a run THERE would say so
-    bid, bug = _file(
+    _bid, bug = _file(
         proj, repro_cmd=python("import sys; print(open('marker.txt').read()); sys.exit(0)")
     )
     run = _run(proj, bug)
@@ -113,7 +113,7 @@ def test_a_second_sighting_whose_run_fails_overrides_the_earlier_no(proj):
 
 
 def test_an_open_bug_whose_repro_did_not_fail_is_unconfirmed_in_lists(proj):
-    bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
+    bid, _bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
     code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
     assert code == 0
     rows = {r["id"]: r for r in json.loads(out)["rows"]}
@@ -132,8 +132,8 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
 def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
     # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
     # the sighting is lost; through the shell the variable is set and the run answers.
-    line = f"X=set {python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")}"
-    bid, bug = _file(proj, repro_cmd=line)
+    line = 'X=set ' + python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")
+    _bid, bug = _file(proj, repro_cmd=line)
     run = _run(proj, bug)
     assert run["executed"] is True and run["reproduced"] == "no"
     assert bug.reproduced == "no"  # the 0 the passthrough env made: recorded, not lost
@@ -155,7 +155,7 @@ def test_a_second_sighting_opens_the_bug_again_even_though_its_run_passed(proj):
 def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
     _config(proj, "[bugs]\nrepro_tail_bytes = 3\n")
     # 'é' is two UTF-8 bytes: a CHARACTER cut at 3 would store 'ééé', six bytes.
-    bid, bug = _file(proj, repro_cmd=python("import sys; sys.stdout.write('é'*5); sys.exit(0)"))
+    _bid, bug = _file(proj, repro_cmd=python("import sys; sys.stdout.write('é'*5); sys.exit(0)"))
     run = _run(proj, bug)
     assert run.get("output_truncated") is True
     assert len(run["output"].encode("utf-8")) <= 3

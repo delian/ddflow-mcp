@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core import outcome as O
+from ...core.records import SIGHTINGS_THAT_CONFIRM
 from .._base import _load
 from ..viewers import view_list
 
@@ -118,7 +119,7 @@ def _row_edges(row: dict, st) -> None:
     # An open bug whose repro command ran and did NOT fail is unconfirmed until a
     # confirming sighting (DX-bug-repro-verify): a run that failed, or a second sighting
     # -- so far the filing alone ran clean -- reads "open" again.
-    if b is not None and b.open and b.reproduced == "no" and b.sightings < 2:
+    if b is not None and b.open and b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM:
         row["state"] = "unconfirmed"
         row["reproduced"] = "no"
     elif b is not None:
