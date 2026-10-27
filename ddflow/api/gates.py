@@ -1384,7 +1384,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         gate,
         item,
         agent,
-        skip or outcome == "skipped",
+        hard_skip := skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
@@ -1418,7 +1418,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         gdef,
         gate,
         agent,
-        skip or outcome == "skipped",
+        hard_skip,
     )
 
     result = "skipped" if skip else outcome
