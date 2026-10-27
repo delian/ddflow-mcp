@@ -144,10 +144,11 @@ class _InProcessHelp:
 
         try:
             with _RENDER_LOCK:  # build-to-cache is ONE critical section, like any render is:
-                #: the version check, the memo the next steps read and the render happen
-                #: while no other replay can rebuild beside them (a rebuild between the
-                #: check and the read would leak a former version's help into the new
-                #: memo -- other replays of one process share this registry).
+                #: the version check, the memo the next steps read, the render and the memo
+                #: write happen while no other replay can rebuild beside them (a rebuild
+                #: between the check and the read would leak a former version's help into
+                #: the new memo -- other replays of one process share this registry, and
+                #: an interleaved second render would replay a chain twice).
                 parser = self.parser()
                 memo = self._built[2]  # the running version's own memo, bound AFTER its check
                 key = tuple(argv[1:])
@@ -167,23 +168,28 @@ class _InProcessHelp:
                     ):
                         parser.parse_args(argv[1:])
                 except SystemExit as exc:
-                    code = exc.code if isinstance(exc.code, int) else 1
+                    #: `sys.exit()` with NO code is exit 0, exactly as the spawn of it is.
+                    code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
                 else:
                     code = 0
-        except SystemExit as exc:  # the build itself exited (argparse ends exits): could not run
+                capped = (
+                    P.Captured(code, out.getvalue(), err.getvalue())
+                    if code
+                    else P.Captured(0, out.getvalue() or err.getvalue(), "")
+                )
+                memo[key] = capped  # inside the lock: one replay of the chain per version
+                return capped
+        except SystemExit as exc:  # the build itself exited (argparse-ends-exits too): could not run
             return P.Captured(error=RuntimeError(f"registry build exited: {exc.code}"))
         except Exception as exc:  # a registry that cannot build is "could not run"
             return P.Captured(error=exc)
-        capped = (
-            P.Captured(code, out.getvalue(), err.getvalue())
-            if code
-            else P.Captured(0, out.getvalue() or err.getvalue(), "")
-        )
-        memo[key] = capped
-        return capped
 
     def chains(self, cmd: str) -> Iterator[list[str]]:
-        """Every verb chain of ``cmd``'s tree, root first, deepest last."""
+        """Every verb chain of ``cmd``'s tree, root first, deepest last; a ``cmd`` this
+        process holds NO registry for (anything but the parser's own prog) is not silently
+        walked as it and noted by ``walk_all`` instead of serving another command's help."""
+        if cmd != self.parser().prog:
+            raise RuntimeError(f"{cmd} has no registry in this process")
         tree = self.parser()
         stack: list[list[str]] = [[cmd]]
         while stack:
@@ -277,6 +283,9 @@ class HelpIndex:
             #: and stops only ITS OWN walk, never the eager cache of the others.
             try:
                 chains = list(_HERE.chains(cmd))
+            except SystemExit as exc:  # a registry that exits while building: not a crash either
+                self.unavailable[cmd] = f"could not walk: exited {exc.code}"
+                continue
             except Exception as exc:  # a registry that cannot build is "could not run", not a crash
                 self.unavailable[cmd] = f"could not walk: {exc}"
                 continue
