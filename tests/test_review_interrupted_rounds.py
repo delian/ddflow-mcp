@@ -41,7 +41,7 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
         "[worktree]\nenabled = false\n"
-        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
+        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = \'{cli}\'\n'
         'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n'
     )
     _git(repo, "add", "-A")
