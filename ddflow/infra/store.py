@@ -402,7 +402,7 @@ class Store:
             # a first build under doubt -- still needs the marks the fresh index will
             # claim. Taken BEFORE the read, like the fingerprint: marked afterwards, a
             # byte the projection never folded could be claimed consumed the same way.
-            marks = self._verified_shard_marks({}, log) or {}
+            marks = self._verified_shard_marks({}, log)
         events = log.read_all()
         state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
