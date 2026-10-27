@@ -1110,7 +1110,9 @@ _HOOK_HANDLERS = {
 }
 
 
-def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, dry_run: bool = False) -> O.Outcome:
+def _run_hook(
+    repo: Path, event: str, harness: str, agent: str, stdin: str, *, dry_run: bool = False
+) -> O.Outcome:
     """`ddflow hooks run <event> --harness <id>`: normalize the agent's JSON, run the event's
     handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
     agents, the very turn it observes. Every problem becomes a `note` for stderr.
@@ -1140,7 +1142,9 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, d
                 note=f"no command-hook descriptor for harness {harness!r}",
                 dry_run=dry_run,
             )
-        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan, dry_run=dry_run)
+        res = handler(
+            repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan, dry_run=dry_run
+        )
         out = HI.emit(plan, event, res.context)
         if res.deny:
             denied = HI.emit_deny(plan, event, res.deny)
@@ -1160,9 +1164,7 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, d
             note=f"{type(exc).__name__}: {exc}",
             dry_run=dry_run,
         )
-    return O.ok(
-        "hooks", message=out, stdout=out, result=res.result, note=res.note, dry_run=dry_run
-    )
+    return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note, dry_run=dry_run)
 
 
 def _hooks_status(repo: Path, cfg) -> O.Outcome:

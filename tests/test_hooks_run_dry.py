@@ -181,9 +181,13 @@ def test_json_run_still_exits_zero_and_reports_skips(repo):
     reply = json.loads(out)
     assert "unknown event 'bogus'" in reply["note"]
     assert "dry_run" in reply
-    assert code == _run(
-        repo, "hooks", "run", "bogus", "--harness", "claude", "--json", "--dry-run", stdin="{}"
-    )[0] == 0
+    assert (
+        code
+        == _run(
+            repo, "hooks", "run", "bogus", "--harness", "claude", "--json", "--dry-run", stdin="{}"
+        )[0]
+        == 0
+    )
 
 
 def test_the_api_route_the_mcp_twin_takes_also_writes_nothing_on_dry_run(repo):
