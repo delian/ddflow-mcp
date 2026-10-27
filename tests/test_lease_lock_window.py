@@ -264,6 +264,7 @@ def test_renew_release_and_expire_all_go_through_one_body():
 
 # -- Bf7f6540615: threads of one process are separate writers ---------------------------------
 
+
 def test_a_second_thread_is_a_second_writer_not_a_reentrant_caller(repo):
     """The re-entrancy guard must cover re-entry on the SAME thread, not this process.
 
