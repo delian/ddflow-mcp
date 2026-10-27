@@ -1,4 +1,5 @@
-"""The `plan` command group: the declared `plan check` (B-gap-plan-lint).
+"""The `plan` command group: the declared `plan check` (B-gap-plan-lint) and `plan lint`
+(the whole open queue: DX-queue-lint).
 
 No `handlers` map: the command declares a `render`, so `cliexec.handler` makes its CLI
 function and nothing here has to write one (the same route `viewers_lists` uses).
@@ -18,6 +19,8 @@ def register(s: argparse._SubParsersAction) -> None:
     add_commands(
         s,
         declared.COMMANDS,
-        groups={"plan": "check, file (proposed) and confirm a plan"},
+        groups={
+            "plan": "check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue"
+        },
         executor=cliexec.handler,
     )

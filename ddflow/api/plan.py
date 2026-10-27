@@ -21,15 +21,17 @@ import ddflow.api._dedupe as DD
 
 from ..config import Config
 from ..core import outcome as O
-from ..core.records import Item, State
+from ..core.records import WORK_KINDS, Item, State
 from ..infra import git as G
 from ..services import items as IT
 from ..services import leases as L
 from ..services import plan_apply as PA
 from ..services import plancheck as PC
+from ..services import planlint as PL
 from ..services import priority as PRI
 from ._base import _load
 from ._globwarn import missing_globs
+from .items import ItemEdit, update as item_update
 
 
 def _created(glob: str, created: set[str]) -> bool:
@@ -375,3 +377,133 @@ def plan_confirm(
     if not waiting:
         return O.nothing("plan.confirm", f"plan {plan_id} was confirmed meanwhile", plan=plan_id)
     return O.ok("plan.confirm", plan=plan_id, released=waiting)
+
+
+def _snapshot(st: State, since: str = "", phase: str = "") -> tuple[dict[str, Any], list[str]]:
+    """(`snap`, `scope`): every live item as the lint's plain view, and the ids to lint.
+
+    Everything live is in the snapshot -- settled items carry reachability THROUGH them --
+    and only live WORK_KINDS that are not settled are linted, narrowed by ``phase`` (the
+    item's ancestor chain contains it) and ``since`` (filed on or after; an item without a
+    date cannot be told to be since anything, so it stays out rather than silently claims).
+    """
+    live = st.live_by_id()
+    snap = {
+        iid: {
+            "id": iid,
+            "kind": it.kind,
+            "state": it.state,
+            "title": it.title,
+            "body": it.body,
+            "needs": [str(n) for n in it.needs],
+            "globs": [str(g) for g in it.globs],
+            "tags": [str(t) for t in it.tags],
+            "priority": int(it.priority),
+            "terminal": it.terminal,
+        }
+        for iid, it in live.items()
+    }
+    by_parent = {iid: it.parent for iid, it in live.items()}
+    scope = [
+        iid
+        for iid, it in live.items()
+        if it.kind in WORK_KINDS and not it.terminal
+        and (not phase or any(p == phase for p in _above(live, by_parent, iid)))
+        and (not since or (it.created_at and it.created_at[:10] >= since[:10]))
+    ]
+    return snap, scope
+
+
+def _above(live: dict[str, Item], by_parent: dict[str, str], iid: str) -> list[str]:
+    """``iid``'s ancestor chain (each parent once; cycles quit early: a broken parent ring
+    must not loop the lint that diagnoses bad graphs)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    while True:
+        up = by_parent.get(iid, "")
+        if not up or up in seen:
+            return out
+        seen.add(up)
+        out.append(up)
+        iid = up
+        if up not in live:
+            return out
+
+
+def _count_lint(report: PL.Report) -> str:
+    from collections import Counter
+
+    kinds = Counter(f.kind for f in report.findings)
+    label = ", ".join(f"{k}: {n}" for k, n in sorted(kinds.items()))
+    return f"{len(report.findings)} finding(s) in {report.items} live item(s): {label}"
+
+
+def _apply_fixes(repo: Path, agent: str, report: PL.Report) -> dict[str, Any]:
+    """Run the high-confidence fixes (`Finding.fix`); each outcome in `applied` or
+    `skipped`, so a refused edit says so rather than silently not happening."""
+    applied: list[str] = []
+    skipped: list[str] = []
+    # Findings are sorted (kind, ids): a stable order for the events and the report.
+    for f in report.findings:
+        if not f.fix:
+            continue
+        what = f"{f.kind} {' '.join(f.ids)}"
+        if "needs_add" in f.fix:
+            later, earlier = f.fix["needs_add"]
+            out = item_update(repo, later, ItemEdit(add_needs=[earlier]), agent=agent)
+        elif "needs_remove" in f.fix:
+            out = item_update(repo, f.ids[0], ItemEdit(remove_needs=f.fix["needs_remove"]), agent=agent)
+        else:  # {"priority": n}
+            out = item_update(repo, f.ids[0], ItemEdit(priority=int(f.fix["priority"])), agent=agent)
+        (applied if out.exit == O.OK else skipped).append(what if out.exit == O.OK else f"{what}: {out.reason}")
+    return {"applied": applied, "skipped": skipped}
+
+
+#: Scope items up to this many get the add-time duplicate hunt. One hunt call costs ~1s
+#: on this queue (index open + ensure per record), so a whole-queue run would buy 25+
+#: minutes of dedupe for 1.7k items; beyond the cap the duplicates check is SKIPPED and
+#: the outcome says so -- a --phase/--since run buys it back.
+_DUPE_HUNT_MAX = 300
+
+
+def plan_lint(
+    repo: Path,
+    *,
+    since: str = "",
+    phase: str = "",
+    fix: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """Lint the whole open queue: `plan check`'s mechanical checks, read FROM the queue.
+
+    Findings are a FAILURE (exit 1) with the findings as data -- they are the point. A
+    queue with nothing live to lint is nothing to do (exit 2). ``--fix`` applies only the
+    high-confidence findings (`planlint`'s docstring: rule-forced ordering edges,
+    stale-needs removals, priority bands) and reports each applied/refused edit.
+    """
+    log, cfg, st = _load(repo, agent)
+    snap, scope = _snapshot(st, since=since, phase=phase)
+    if not scope:
+        where = f" under {phase}" if phase else f" since {since}" if since else ""
+        return O.nothing("plan.lint", f"no live work{where} to lint")
+    band = lambda iid, tags: PRI.kind_of(cfg, iid, tags)  # noqa: E731
+    band_priority = lambda iid, tags: PRI.band(cfg, iid, tags)  # noqa: E731
+    hunt = _hunt(repo, log, cfg, st, set())
+    similar = hunt if len(scope) <= _DUPE_HUNT_MAX else None
+    note = (
+        ""
+        if similar is not None
+        else f"duplicates not checked: {len(scope)} scoped item(s) would each pay ~1s for "
+        f"the add-time hunt; rerun --phase <id> or --since DATE to buy it back "
+        f"(duplicates: 0 when skipped)"
+    )
+    report = PL.lint(snap, scope=scope, band=band, band_priority=band_priority, similar=similar)
+    data: dict[str, Any] = {
+        "clean": report.clean,
+        **report.as_dict(),
+        "note": note,
+        "fixed": _apply_fixes(repo, agent, report) if fix else {},
+    }
+    if report.findings:
+        return O.failed("plan.lint", _count_lint(report), **data)
+    return O.ok("plan.lint", **data)
