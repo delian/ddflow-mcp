@@ -113,33 +113,38 @@ class _InProcessHelp:
     ``build_parser()`` IS the help every spawned ``ddflow --help`` prints — the stdout of the
     spawn is exactly ``parser.format_help()`` — so a chain is walked by descending the parser
     choices by word: a word that is no subcommand is where a spawn would exit 2 and the chain
-    stops there, exactly like it. The tree is built once and cached per ddflow version: a
-    render built for version X is never reused for version Y (per tool version, per
-    DX-docs-check-speed).
+    stops there, exactly like it. The tree build and every chain's replayed help are cached
+    per ddflow version, in this process: a render made for version X is never reused for
+    version Y (per tool version, per DX-docs-check-speed).
     """
 
-    #: ``(version, root parser)`` of the last build; a module-level memo, because every
-    #: runner of one process asks for the same registry.
-    _built: tuple[str, argparse.ArgumentParser] | None = None
+    #: ``(version, root parser, replayed helps)`` of the last build; a module-level memo,
+    #: because every runner of one process asks for the same registry.
+    _built: tuple[str, argparse.ArgumentParser, dict[tuple[str, ...], P.Captured]] | None = None
 
     def parser(self) -> argparse.ArgumentParser:
-        """The root parser this process declares, built once (per ddflow version: a render
-        built for version X is never reused for version Y)."""
+        """The root parser this process declares, built once per ddflow version."""
         from ddflow import __version__
         from ddflow.surfaces.cli import build_parser  # deferred: only the walk needs it
 
         if self._built is None or self._built[0] != __version__:
-            self._built = (__version__, build_parser())
+            self._built = (__version__, build_parser(), {})
         return self._built[1]
 
     def help(self, argv: list[str]) -> P.Captured:
         """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
         ``parse_args`` with ``--help`` run against the registry, its stdout/stderr and its
-        exit replayed. `argparse` answers a help request wherever it meets it (`ddflow
-        config set --help` prints the config help, exit 0, though ``set`` is no
-        subcommand), and invalid words error with exit 2 — no flag-counting of our own."""
+        exit replayed — replayed once per chain then cached (per version, per process).
+        `argparse` answers a help request wherever it meets it (`ddflow config set --help`
+        prints the config help, exit 0, though ``set`` is no subcommand), and invalid words
+        error with exit 2 — no flag-counting of our own."""
         import io
         from contextlib import redirect_stderr, redirect_stdout
+
+        memo = self._built[2] if self._built is not None else {}
+        key = tuple(argv[1:])
+        if key in memo:
+            return memo[key]
 
         try:
             out, err = io.StringIO(), io.StringIO()
@@ -156,9 +161,13 @@ class _InProcessHelp:
                     code = 0
         except Exception as exc:  # a registry that cannot build is "could not run"
             return P.Captured(error=exc)
-        if code:
-            return P.Captured(code, out.getvalue(), err.getvalue())
-        return P.Captured(0, out.getvalue() or err.getvalue(), "")
+        capped = (
+            P.Captured(code, out.getvalue(), err.getvalue())
+            if code
+            else P.Captured(0, out.getvalue() or err.getvalue(), "")
+        )
+        memo[key] = capped
+        return capped
 
     def chains(self, cmd: str) -> Iterator[list[str]]:
         """Every verb chain of ``cmd``'s tree, root first, deepest last."""
