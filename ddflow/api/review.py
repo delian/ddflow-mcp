@@ -1286,12 +1286,15 @@ def _full_rounds(it, gate: str) -> int:
     Counted from the gate's HISTORY, not its current record: a later delta, a manual
     `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
     must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
-    count: a refused round, an errored one, a delta and a `--chunk` re-run are not.
+    AND whose record reached a reviewer with a verdict count: a refused round, an
+    errored one, an interrupted one that recorded nothing (`status` is not
+    REVIEWED/PARTIAL), a delta and a `--chunk` re-run are not (Bfdcb5c177c).
     """
     return sum(
         1
         for r in _review_runs(it, gate)
         if r.evidence.get("review_kind") == "full"
+        and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
         and not _kept_copy(r)
         and not _settled_pass(r)
         and not r.evidence.get("fix_round")
