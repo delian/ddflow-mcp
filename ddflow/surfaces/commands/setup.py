@@ -464,12 +464,15 @@ def cmd_hooks(a, c: Ctx) -> int:
             # two surfaces stay parity-shaped; non-json prints stdout, shaped for the agent.
             # `.get` everywhere: every `_run_hook` path carries result/dry_run, and the
             # defensive reads keep the exit-0 contract even if one ever does not.
-            c.out("", {
-                "stdout": out.data["stdout"],
-                "note": out.data["note"],
-                "result": out.data.get("result"),
-                "dry_run": bool(out.data.get("dry_run")),
-            })
+            c.out(
+                "",
+                {
+                    "stdout": out.data["stdout"],
+                    "note": out.data["note"],
+                    "result": out.data.get("result"),
+                    "dry_run": bool(out.data.get("dry_run")),
+                },
+            )
         elif out.data["stdout"]:
             print(out.data["stdout"])
         if out.data["note"] and not c.json:
