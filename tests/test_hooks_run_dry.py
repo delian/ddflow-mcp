@@ -132,6 +132,22 @@ def test_dry_run_session_start_never_runs_the_brief_sweep(repo, monkeypatch):
     assert _shards(repo) == before
 
 
+def test_json_run_still_exits_zero_and_reports_skips(repo):
+    """The --json reply reads result/dry_run with .get: the skip paths (unknown event,
+    unknown harness) leave them out, and indexing would raise. A hook must always exit 0."""
+    run_cli(repo, "init")
+    code, out, err = _run(
+        repo, "hooks", "run", "bogus", "--harness", "claude", "--json", stdin="{}"
+    )
+    assert code == 0, err
+    reply = json.loads(out)
+    assert "unknown event 'bogus'" in reply["note"]
+    assert "dry_run" in reply
+    assert code == _run(
+        repo, "hooks", "run", "bogus", "--harness", "claude", "--json", "--dry-run", stdin="{}"
+    )[0] == 0
+
+
 def test_the_api_route_the_mcp_twin_takes_also_writes_nothing_on_dry_run(repo):
     """Over MCP the same work is `ddflow_hooks` reaching `api.hooks(action="run", ...)`;
     its `dry_run` argument must behave exactly as the CLI flag."""
