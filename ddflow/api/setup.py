@@ -675,11 +675,15 @@ SESSION_START_FOOTER = (
 )
 
 
-def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
+def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = False) -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
     A hook that fails at session start blocks nothing useful and teaches the operator to
     remove it. Every failure becomes one line of text saying what to run instead.
+
+    `dry_run` probes the reply without the syncing sections whose observation writes
+    `external.observed` events: the brief, drift warning and companion lines are what a
+    hook --dry-run must still show, and the committed log must stay untouched.
     """
 
     parts = [SESSION_START_HEADER]
@@ -693,35 +697,36 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
             parts += [f"**{drift}**", ""]
     except Exception as exc:
         parts += [f"_(worktree drift check failed: {exc})_", ""]
-    try:
-        # Work waiting on a sibling repository becomes ready the moment its dependency
-        # is observed done, and session start is when an agent decides what to take.
+    if not dry_run:
+        try:
+            # Work waiting on a sibling repository becomes ready the moment its dependency
+            # is observed done, and session start is when an agent decides what to take.
 
-        ext = external_sync(repo, agent=agent)
-        changed = [o for o in ext.data.get("observed", []) if o["changed"]]
-        if changed:
-            parts += [
-                "Observed in sibling repositories: "
-                + ", ".join(f"{o['dep']} is {o['state']}" for o in changed),
-                "",
-            ]
-        if ext.exit == O.FAIL:
-            parts += [f"_(external dependencies not observed: {ext.reason})_", ""]
-    except Exception as exc:
-        parts += [f"_(external sync failed: {exc})_", ""]
-    try:
-        due = cadence(repo, agent=agent)
-        if due.exit == O.FAIL:
-            parts += [f"_(cadence check failed: {due.reason})_", ""]
-        elif due.exit == O.OK and due.data.get("due"):
-            parts += [
-                "Periodic passes DUE: "
-                + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
-                + ". Record each with `ddflow cadence --ran <name>` when done.",
-                "",
-            ]
-    except Exception as exc:
-        parts += [f"_(cadence check failed: {exc})_", ""]
+            ext = external_sync(repo, agent=agent)
+            changed = [o for o in ext.data.get("observed", []) if o["changed"]]
+            if changed:
+                parts += [
+                    "Observed in sibling repositories: "
+                    + ", ".join(f"{o['dep']} is {o['state']}" for o in changed),
+                    "",
+                ]
+            if ext.exit == O.FAIL:
+                parts += [f"_(external dependencies not observed: {ext.reason})_", ""]
+        except Exception as exc:
+            parts += [f"_(external sync failed: {exc})_", ""]
+        try:
+            due = cadence(repo, agent=agent)
+            if due.exit == O.FAIL:
+                parts += [f"_(cadence check failed: {due.reason})_", ""]
+            elif due.exit == O.OK and due.data.get("due"):
+                parts += [
+                    "Periodic passes DUE: "
+                    + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
+                    + ". Record each with `ddflow cadence --ran <name>` when done.",
+                    "",
+                ]
+        except Exception as exc:
+            parts += [f"_(cadence check failed: {exc})_", ""]
     try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
@@ -1012,7 +1017,7 @@ def _on_session_start(repo: Path, agent: str, p, plan, *, dry_run: bool = False)
         # This agent's SessionStart hook cannot show the model anything, so building the
         # brief (an external sync, a cadence check, the log fold) would be wasted work.
         return _HookResult(result="not injectable")
-    out = _session_start(repo, agent, _synth_stdin(p))
+    out = _session_start(repo, agent, _synth_stdin(p), dry_run=dry_run)
     return _HookResult(context=out.data["message"], result="injected")
 
 

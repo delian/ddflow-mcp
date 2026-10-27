@@ -95,6 +95,20 @@ def test_without_dry_run_the_same_probe_records(repo):
     assert _shards(repo) == after_record
 
 
+def test_dry_run_session_start_still_prints_the_brief_and_writes_no_event(repo):
+    """session_start is the handler whose real run SYNCS ([schedule] repos observations
+    append external.observed on a change), so its dry run must skip the syncing sections
+    (the committed log stays untouched) while still printing the brief."""
+    run_cli(repo, "init")
+    before = _shards(repo)
+    code, out, err = _run(
+        repo, "hooks", "run", "session_start", "--harness", "claude", "--dry-run", stdin="{}"
+    )
+    assert code == 0, err
+    assert out.startswith("# ddflow session start")
+    assert _shards(repo) == before
+
+
 def test_the_api_route_the_mcp_twin_takes_also_writes_nothing_on_dry_run(repo):
     """Over MCP the same work is `ddflow_hooks` reaching `api.hooks(action="run", ...)`;
     its `dry_run` argument must behave exactly as the CLI flag."""
