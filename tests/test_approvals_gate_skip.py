@@ -142,6 +142,23 @@ def test_a_person_at_a_terminal_is_unchanged(proj):
     assert "approval" not in (_skipped(proj) or {})
 
 
+def test_skipping_a_gate_that_is_not_a_failed_review_says_it_was_not_gated(proj):
+    """B97106be46a: a skip that is NOT the operator's failed-review override proceeds, and the
+    output says so -- 'skip (not gated)' -- instead of printing nothing about the approval
+    dimension. The gate has no runs at all, so there is no request id either way."""
+    code, _o, err = run_cli(proj, "task", "add", "T3", "--globs", "v.py")
+    assert code == 0, err
+    code, out, err = run_cli(
+        proj, "gate", "skip", "T3", "rubber_duck", "--reason", "docs only", agent="bot"
+    )
+    assert code == 0, (out, err)
+    assert "T3.rubber_duck = skipped" in out, out
+    assert "not gated" in out + err, out + err
+    assert (
+        "no approval request was filed" in out + err
+    ), out + err  # not the operator's override: nothing was asked of anyone
+
+
 def test_the_request_can_also_be_filed_by_hand(proj):
     code, out, err = run_cli(proj, "--json", "approvals", "request", "gate.skip.failed_review",
                              "--item", "T1", "--target", "critic", agent="bot")  # fmt: skip
