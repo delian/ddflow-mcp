@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli  # noqa: E402
+from conftest import run_cli
 
-from ddflow.api import setup as A  # noqa: E402
+from ddflow.api import setup as A
 
 #: Claude's dialect; the same payload drives the counterfactual (recording) probes.
 PROMPT = {
