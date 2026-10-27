@@ -109,6 +109,37 @@ def test_dry_run_session_start_still_prints_the_brief_and_writes_no_event(repo):
     assert _shards(repo) == before
 
 
+def _git_repo(path: Path) -> Path:
+    path.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True)
+    for k, v in (("user.email", "t@example.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        subprocess.run(["git", "-C", str(path), "config", k, v], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    return path
+
+
+def test_dry_run_session_start_does_not_record_external_observations(repo):
+    """Non-vacuous: with a live external need CONFIGURED, a real session start's sync
+    records external.observed; --dry-run must still write nothing (test_external_deps.py
+    is the pair's model)."""
+    trainer = _git_repo(repo.parent / "trainer")
+    run_cli(trainer, "init")
+    run_cli(trainer, "task", "add", "132.D", "--title", "train-record type", "--globs", "t.py")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[schedule]\nrepos = ["trainer=../trainer"]\n')
+    run_cli(repo, "task", "add", "GEN.1", "--needs", "trainer:132.D", "--globs", "g.py")
+    assert run_cli(repo, "--json", "external", "sync")[0] == 0
+    before = _shards(repo)
+    code, out, err = _run(
+        repo, "hooks", "run", "session_start", "--harness", "claude", "--dry-run", stdin="{}"
+    )
+    assert code == 0, err
+    assert out.startswith("# ddflow session start")
+    assert _shards(repo) == before
+    # The drain: the dry probe was AFTER the initial observation, which a real session
+    # start on an unconfigured pair would have written inside the dry run instead.
+
+
 def test_dry_run_session_start_never_runs_the_brief_sweep(repo, monkeypatch):
     """The brief's sweep housekeeping is a WRITE (worktree.removed events, leftover trees
     removed), so a dry run must not reach it; a spy pins that the dry brief build skips it."""
