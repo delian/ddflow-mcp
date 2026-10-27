@@ -18,6 +18,7 @@ import contextlib
 import io
 import re
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -34,6 +35,10 @@ _GAP = re.compile(r"\s{2,}")
 #: the whole surface, and one parser answers every chain of one walk.
 _parser = None
 
+#: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping runs could
+#: capture each other's output: every run takes the lock, and overlap serializes.
+_capture_lock = threading.Lock()
+
 
 def in_process(verbs: list[str]) -> P.Captured:
     """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
@@ -42,17 +47,18 @@ def in_process(verbs: list[str]) -> P.Captured:
     flags are exactly the spawned text's (Bc621160a82; the equivalence is pinned by
     tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
     global _parser
-    if _parser is None:
-        from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
+    with _capture_lock:  # serializes redirect+parse: a run answers from its own buffers
+        if _parser is None:
+            from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
 
-        _parser = build_parser()
-    out, err = io.StringIO(), io.StringIO()
-    code = 0
-    try:
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            _parser.parse_args([*verbs, "--help"])
-    except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
-        code = exc.code if isinstance(exc.code, int) else 0
+            _parser = build_parser()
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                _parser.parse_args([*verbs, "--help"])
+        except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
+            code = exc.code if isinstance(exc.code, int) else 0
     return P.Captured(code, out.getvalue(), err.getvalue())
 
 

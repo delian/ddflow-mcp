@@ -80,6 +80,27 @@ def test_every_way_of_spelling_this_ddflow_is_replayed_not_spawned(monkeypatch):
     assert spawned_calls == [["/venv/bin/ddflow", "gate", "--help"]]
 
 
+def test_in_process_serializes_overlapping_runs():
+    """A run waits behind the capture lock, so it answers from its own buffers: the
+    ``redirect_stdout`` pair is process-global, and unsilenced overlap would let one
+    run's help land in another run's ``Captured``."""
+    import threading
+
+    out: list = []
+    H._capture_lock.acquire()  # a first run is "in progress"
+    try:
+        t = threading.Thread(target=lambda: out.append(H.in_process(["gate"])))
+        t.start()
+        t.join(timeout=5)
+        assert t.is_alive()  # blocked behind the held lock: the overlap serializes
+    finally:
+        H._capture_lock.release()
+    t.join(timeout=5)
+    assert not t.is_alive()
+    assert out and out[0].ran and out[0].returncode == 0
+    assert "usage: ddflow gate" in (out[0].stdout or out[0].stderr)
+
+
 def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_path, monkeypatch):
     """The walk `check_docs` runs: nothing spawns for a ddflow mention, a non-ddflow tool
     still spawns (it is the walk), and the flag the walk then judges is ddflow's own."""
@@ -104,9 +125,9 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
     rep = D.check_docs(
         tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
     )
-    assert [c for c in spawned_calls if c[0].endswith("/ddflow")] == []  # path-spelt ddflow ran
-    assert [c for c in spawned_calls if c[0] == "ddflow"] == []  # bare ddflow never spawned
-    assert all(c[0] != "ddflow" and "/ddflow" not in c[0] for c in spawned_calls)
+    #: the whole walk, argv for argv: the one nix chain ran, and NOTHING ddflow-shaped --
+    #: spelled bare, path-spelt, `ddflow.exe` or `… -m ddflow` -- spawned for the mention.
+    assert spawned_calls == [["nix", "run", "--help"]]
     assert not rep.findings, rep.findings
     assert [n.kind for n in rep.notes] == ["help"]  # the spawn for `nix`, still taken
 
