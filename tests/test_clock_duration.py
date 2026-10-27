@@ -108,8 +108,7 @@ def test_the_silent_mcp_wait_cap_sits_below_the_idle_cutoff_the_cli_keeps_the_lo
     # below the client's idle cutoff (Bfc43dae5b9: 1800 s in, cap 1800 s -- the abort),
     # while a progress-capable MCP wait keeps the CLI cap: its beats reset the timer.
     assert W.WAIT_MAX_S == 1800
-    assert MC.MCP_WAIT_SILENT_MAX_S < W.WAIT_MAX_S
-    assert MC.MCP_WAIT_SILENT_MAX_S < 1800
+    assert MC.MCP_WAIT_SILENT_MAX_S < MC.CLIENT_IDLE_ABORT_S
     assert MC.MCP_WAIT_MAX_S == W.WAIT_MAX_S
 
 
