@@ -67,7 +67,10 @@ def _wait_timeout(a: dict[str, Any], repo: Any = None) -> float:
 def _progress_will_flow(a: dict[str, Any], repo: Any = None) -> bool:
     """Whether the serving call's heartbeat sends `notifications/progress` for the wait,
     as `mcp_heartbeat.heartbeat` decides: a string-or-number `_meta.progressToken` (the
-    sender needs one to write to) AND `[mcp].progress_s` above 0 (0 is "no beat")."""
+    sender needs one to write to) AND `[mcp].progress_s` STRICTLY between 0 and
+    `CLIENT_IDLE_ABORT_S` -- the first beat must land before the client aborts, or the
+    call is silent for the abort's purposes either way (a beat scheduled at or past
+    the cutoff, e.g. progress_s = 2400, arrives too late to reset anything)."""
     meta = a.get("_meta")
     token = meta.get("progressToken") if isinstance(meta, dict) else None
     if isinstance(token, bool) or not isinstance(token, (str, int, float)):
@@ -76,7 +79,8 @@ def _progress_will_flow(a: dict[str, Any], repo: Any = None) -> bool:
         try:
             from ...config import Config
 
-            return float(Config.load(repo).mcp.progress_s) > 0
+            s = float(Config.load(repo).mcp.progress_s)
+            return 0 < s < CLIENT_IDLE_ABORT_S
         except Exception:  # a broken config must not shorten the cap into the cutoff
             return True  # broken here is read as defaulted: heartbeat defaults to 20.0
     return token is not None  # no repo to ask, the token alone: the caller checked

@@ -44,13 +44,15 @@ def test_a_wait_that_can_send_progress_keeps_the_full_cap(repo):
     assert MCP_WAIT_MAX_S == CLIENT_IDLE_ABORT_S  # the CLI cap, full 1800 s
 
 
-def test_a_tokened_wait_is_silent_capped_when_progress_is_off(repo):
-    # A token alone is not progress: `[mcp].progress_s = 0` means no beats, so the call
-    # reverts to the silent cap.
-    (repo / ".ddflow").mkdir(exist_ok=True)
-    (repo / ".ddflow" / "config.toml").write_text("[mcp]\nprogress_s = 0\n")
-    tokened = {"timeout": 1800, "_meta": {"progressToken": "t"}}
-    assert _wait_timeout(tokened, repo) == MCP_WAIT_SILENT_MAX_S
+def test_a_tokened_wait_is_silent_capped_when_progress_is_off_or_lands_too_late(repo):
+    # A token alone is not progress: `[mcp].progress_s = 0` means no beats, and a beat
+    # scheduled at or past the cutoff lands too late to reset the idle timer, so both
+    # revert to the silent cap.
+    for progress_s in (0, 1800, 2400):
+        (repo / ".ddflow").mkdir(exist_ok=True)
+        (repo / ".ddflow" / "config.toml").write_text(f"[mcp]\nprogress_s = {progress_s}\n")
+        tokened = {"timeout": 1800, "_meta": {"progressToken": "t"}}
+        assert _wait_timeout(tokened, repo) == MCP_WAIT_SILENT_MAX_S, progress_s
 
 
 def test_a_nonconformant_progress_token_is_no_token(repo):
