@@ -457,6 +457,7 @@ def cmd_hooks(a, c: Ctx) -> int:
             event=event,
             harness=harness,
             stdin=_hook_stdin(),
+            dry_run=bool(getattr(a, "dry_run", False)),
         )
         if c.json:
             c.out("", {"stdout": out.data["stdout"], "note": out.data["note"]})

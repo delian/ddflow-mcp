@@ -1007,7 +1007,7 @@ def _synth_stdin(p) -> str:
     return json.dumps(raw)
 
 
-def _on_session_start(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_session_start(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if "session_start" not in plan.inject:
         # This agent's SessionStart hook cannot show the model anything, so building the
         # brief (an external sync, a cadence check, the log fold) would be wasted work.
@@ -1016,9 +1016,11 @@ def _on_session_start(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(context=out.data["message"], result="injected")
 
 
-def _on_prompt(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_prompt(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if p.prompt is None:
         return _HookResult(result="skipped")  # silent, as the prompt hook always was
+    if dry_run:  # the probe records nothing: the reply is shaped, the log stays untouched
+        return _HookResult(result="not recorded (dry-run)")
     try:
         out = _prompt_core(repo, agent, p.session_id, p.prompt, p.model)
     except Exception:  # a hook must not break the prompt it observes
@@ -1026,12 +1028,15 @@ def _on_prompt(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result=str(out.data.get("result", "")))
 
 
-def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if p.malformed:
         return _HookResult(
             result="skipped",
             note="ddflow pre-compact: ValueError: the hook's stdin is not a JSON object",
         )
+    if dry_run:
+        # Nothing is recorded, so nothing can block: the note says a probe was computed.
+        return _HookResult(result="dry-run", note="ddflow pre-compact: dry-run")
     out = _record_compaction(repo, _synth_stdin(p), agent)
     result = str(out.data.get("result", ""))
     # stdout stays empty: PreCompact output can only block, never inform (B195). Why a run
@@ -1040,7 +1045,7 @@ def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result=result, note=note and f"ddflow pre-compact: {note}")
 
 
-def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
     else (another tool, no command, any problem) is allowed: a guard that fails closed on its
     own bug would stop every command the agent runs."""
@@ -1052,25 +1057,26 @@ def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
     refusal = FB.check(command, cfg, cwd=p.cwd or Path.cwd())
     if refusal is None:
         return _HookResult(result="allowed")
-    try:
-        holds = (
-            HI.emit_deny(plan, "pre_tool", "") is not None
-        )  # only a refusal that holds is recorded
-    except Exception:
-        holds = True
-    if holds:
+    if not dry_run:
         try:
-            log, _who = ID.open_log(
-                repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
-            )
-            FB.record(log, cfg, refusal, p.session_id, p.harness)
-        except Exception:  # an unrecorded refusal is still a refusal
-            pass
+            holds = (
+                HI.emit_deny(plan, "pre_tool", "") is not None
+            )  # only a refusal that holds is recorded
+        except Exception:
+            holds = True
+        if holds:
+            try:
+                log, _who = ID.open_log(
+                    repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
+                )
+                FB.record(log, cfg, refusal, p.session_id, p.harness)
+            except Exception:  # an unrecorded refusal is still a refusal
+                pass
     msg = refusal.message()
     return _HookResult(result="denied", deny=msg, note=msg)
 
 
-def _on_nothing(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_nothing(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     """pre_tool, post_tool, stop and session_end: the entry point accepts them so an agent's
     hook can be wired to every event today; the handlers (heartbeat, stop protocol, session
     end) arrive with the tasks that need them."""
@@ -1089,10 +1095,14 @@ _HOOK_HANDLERS = {
 }
 
 
-def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O.Outcome:
+def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, dry_run: bool = False) -> O.Outcome:
     """`ddflow hooks run <event> --harness <id>`: normalize the agent's JSON, run the event's
     handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
-    agents, the very turn it observes. Every problem becomes a `note` for stderr."""
+    agents, the very turn it observes. Every problem becomes a `note` for stderr.
+
+    `dry_run` computes and shapes exactly the reply the real run would, but no event is
+    written: probing the hook must not append to the committed event log.
+    """
     handler = _HOOK_HANDLERS.get(event)
     if handler is None:
         return O.ok(
@@ -1108,7 +1118,7 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
                 result="skipped",
                 note=f"no command-hook descriptor for harness {harness!r}",
             )
-        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan)
+        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan, dry_run=dry_run)
         out = HI.emit(plan, event, res.context)
         if res.deny:
             denied = HI.emit_deny(plan, event, res.deny)
@@ -1127,7 +1137,9 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
             result="skipped",
             note=f"{type(exc).__name__}: {exc}",
         )
-    return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note)
+    return O.ok(
+        "hooks", message=out, stdout=out, result=res.result, note=res.note, dry_run=dry_run
+    )
 
 
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
@@ -1228,17 +1240,19 @@ def hooks(
     stdin: str = "",
     event: str = "",
     harness: str = "",
+    dry_run: bool = False,
 ) -> O.Outcome:
     """The commit hook: install, uninstall, status, or run the check itself.
 
     `claude=True` installs or removes the Claude Code SessionStart and UserPromptSubmit
     hooks instead (`services.claudehooks`); `gemini=True` the Gemini CLI BeforeAgent
     one. `session-start` is what the first runs; `prompt` records the operator's prompt
-    from the hook's JSON on `stdin`.
+    from the hook's JSON on `stdin`. `run`'s `dry_run` computes and shapes the reply
+    and writes no event.
     """
 
     if action == "run":
-        return _run_hook(repo, event, harness, agent, stdin)
+        return _run_hook(repo, event, harness, agent, stdin, dry_run=dry_run)
     if action == "session-start":
         return _session_start(repo, agent, stdin)
     if action == "pre-compact":
