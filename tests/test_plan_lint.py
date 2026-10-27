@@ -134,7 +134,9 @@ def test_a_no_auto_order_side_keeps_its_pair_report_only():
         "fix1": _it(tags=["bugfix", "no-auto-order"], globs=["docs/a.md"]),
         "feat": _it(globs=["docs/a.md"], priority=50),
     }
-    assert all(f.fix is None for f in _of(lint(items), "overlap"))
+    overlaps = _of(lint(items), "overlap")
+    assert overlaps
+    assert all(f.fix is None for f in overlaps)
 
 
 def test_an_order_THROUGH_a_settled_item_is_an_order():
@@ -222,6 +224,15 @@ def test_a_body_naming_an_open_unordered_item_is_a_report_only_reference():
     # The ordering edge suppresses the finding: the mention IS the dependency.
     items["a"]["needs"] = ["fix-node"]
     assert _of(lint(items), "body_ref") == []
+
+
+def test_a_body_mention_before_a_final_period_still_names_the_item():
+    items = {
+        "a": _it(globs=["src/a.py"], body="Waits on fix-node."),
+        "fix-node": _it(tags=["bugfix"], globs=["src/n.py"], priority=100),
+    }
+
+    assert [f.ids for f in _of(lint(items), "body_ref")] == [("a", "fix-node")]
 
 
 def test_a_body_still_naming_a_settled_item_is_stale():

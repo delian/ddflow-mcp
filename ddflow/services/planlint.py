@@ -66,8 +66,10 @@ from ..core.graph import closure
 
 #: An id-shaped token in a body: what a mention of `RH-prune-needs` or `B-gap-plan-lint`
 #: looks like. Every candidate is filtered against the snapshot's own ids, so a plain
-#: word matches only when an item is literally named after it.
-_ID_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+#: word matches only when an item is literally named after it. A trailing period after a
+#: mention (`See RH-prune-needs.`) is the sentence's punctuation, not the id's last letter:
+#: a dot may only continue a token when more token characters follow it.
+_ID_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
 
 def _needs(item: Mapping[str, Any]) -> list[str]:
@@ -262,7 +264,8 @@ def dx_priority(
         )
         for iid in sorted(scope)
         for tags in [tuple(str(t) for t in items[iid].get("tags", ()))]
-        if band(iid, tags) and int(items[iid]["priority"]) == DEFAULT_PRIORITY
+        if band(iid, tags) in FIXABLE_KINDS
+        and int(items[iid]["priority"]) == DEFAULT_PRIORITY
     ]
 
 
