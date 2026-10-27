@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -259,3 +260,40 @@ def test_renew_release_and_expire_all_go_through_one_body():
         assert "transaction" not in attrs, f"{name} opens its own transaction again"
         assert "append" not in attrs, f"{name} appends directly, bypassing the shared guard"
         assert "fold" not in calls, f"{name} folds the log itself again"
+
+
+# -- Bf7f6540615: threads of one process are separate writers ---------------------------------
+
+def test_a_second_thread_is_a_second_writer_not_a_reentrant_caller(repo):
+    """The re-entrancy guard must cover re-entry on the SAME thread, not this process.
+
+    `transaction()` skips the flock when this process already holds the lock, because a
+    re-entrant open of the lock file would deadlock against the open-file-description
+    lock the first open holds. Keyed on (pid, lock path), the same guard also let a
+    DIFFERENT thread's EventLog through: 8 threads each with their own EventLog walked
+    into the same read-check-append and two (the probe measured 2) both saw 'unused'.
+    A different thread is a different writer and must queue on the flock like another
+    process; exactly one check may see the marker absent.
+    """
+    successes: list[bool] = []
+    go = threading.Event()
+
+    def worker() -> None:
+        log = EventLog(repo, "x")  # one agent-shard name, eight independent writers
+        go.wait()
+        with log.transaction():
+            if not any(
+                e.kind == "session.note" and e.subject == "bf7f6540615-taken"
+                for e in log.read_all()
+            ):
+                time.sleep(0.05)  # widen the window enough the race cannot hide
+                log.append("session.note", "bf7f6540615-taken", {"text": "mine"})
+                successes.append(True)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    go.set()
+    for t in threads:
+        t.join()
+    assert len(successes) == 1, f"{len(successes)} threads saw 'unused' (want exactly 1)"
