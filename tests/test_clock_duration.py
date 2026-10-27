@@ -102,13 +102,15 @@ def test_the_cluster_window_honours_a_fraction_of_a_minute():
     assert TR.cluster(evs, 3, 0.75) == []  # the three span 90s
 
 
-def test_the_mcp_wait_cap_is_below_the_idle_cutoff_the_cli_keeps_the_long_surface():
-    # The CLI's wait narrates its own progress, so it keeps the full 1800 s; the MCP
-    # surface sits below the client's idle cutoff, where a token-less call sends no
-    # frame at all until the answer (Bfc43dae5b9: 1800 s in, cap 1800 s -- the abort).
+def test_the_silent_mcp_wait_cap_sits_below_the_idle_cutoff_the_cli_keeps_the_long_surface():
+    # The CLI's wait narrates its own progress, so it keeps the full 1800 s; an MCP
+    # token-less call sends no frame at all until the answer, so its SILENT cap sits
+    # below the client's idle cutoff (Bfc43dae5b9: 1800 s in, cap 1800 s -- the abort),
+    # while a progress-capable MCP wait keeps the CLI cap: its beats reset the timer.
     assert W.WAIT_MAX_S == 1800
-    assert MC.MCP_WAIT_MAX_S < W.WAIT_MAX_S
-    assert MC.MCP_WAIT_MAX_S < 1800
+    assert MC.MCP_WAIT_SILENT_MAX_S < W.WAIT_MAX_S
+    assert MC.MCP_WAIT_SILENT_MAX_S < 1800
+    assert MC.MCP_WAIT_MAX_S == W.WAIT_MAX_S
 
 
 def test_a_wait_longer_than_the_cap_is_shortened_and_says_so(repo, monkeypatch):
