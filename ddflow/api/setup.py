@@ -675,6 +675,44 @@ SESSION_START_FOOTER = (
 )
 
 
+def _sync_sections(repo: Path, agent: str) -> list[str]:
+    """The session-start lines the syncing work adds: sibling-dependency observations and
+    the periodic passes due now. Both can WRITE (`external.observed` on an observed
+    change), which is why a dry run does not call this."""
+
+    parts: list[str] = []
+    try:
+        # Work waiting on a sibling repository becomes ready the moment its dependency
+        # is observed done, and session start is when an agent decides what to take.
+
+        ext = external_sync(repo, agent=agent)
+        changed = [o for o in ext.data.get("observed", []) if o["changed"]]
+        if changed:
+            parts += [
+                "Observed in sibling repositories: "
+                + ", ".join(f"{o['dep']} is {o['state']}" for o in changed),
+                "",
+            ]
+        if ext.exit == O.FAIL:
+            parts += [f"_(external dependencies not observed: {ext.reason})_", ""]
+    except Exception as exc:
+        parts += [f"_(external sync failed: {exc})_", ""]
+    try:
+        due = cadence(repo, agent=agent)
+        if due.exit == O.FAIL:
+            parts += [f"_(cadence check failed: {due.reason})_", ""]
+        elif due.exit == O.OK and due.data.get("due"):
+            parts += [
+                "Periodic passes DUE: "
+                + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
+                + ". Record each with `ddflow cadence --ran <name>` when done.",
+                "",
+            ]
+    except Exception as exc:
+        parts += [f"_(cadence check failed: {exc})_", ""]
+    return parts
+
+
 def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = False) -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
@@ -698,35 +736,7 @@ def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = F
     except Exception as exc:
         parts += [f"_(worktree drift check failed: {exc})_", ""]
     if not dry_run:
-        try:
-            # Work waiting on a sibling repository becomes ready the moment its dependency
-            # is observed done, and session start is when an agent decides what to take.
-
-            ext = external_sync(repo, agent=agent)
-            changed = [o for o in ext.data.get("observed", []) if o["changed"]]
-            if changed:
-                parts += [
-                    "Observed in sibling repositories: "
-                    + ", ".join(f"{o['dep']} is {o['state']}" for o in changed),
-                    "",
-                ]
-            if ext.exit == O.FAIL:
-                parts += [f"_(external dependencies not observed: {ext.reason})_", ""]
-        except Exception as exc:
-            parts += [f"_(external sync failed: {exc})_", ""]
-        try:
-            due = cadence(repo, agent=agent)
-            if due.exit == O.FAIL:
-                parts += [f"_(cadence check failed: {due.reason})_", ""]
-            elif due.exit == O.OK and due.data.get("due"):
-                parts += [
-                    "Periodic passes DUE: "
-                    + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
-                    + ". Record each with `ddflow cadence --ran <name>` when done.",
-                    "",
-                ]
-        except Exception as exc:
-            parts += [f"_(cadence check failed: {exc})_", ""]
+        parts += _sync_sections(repo, agent)
     try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
