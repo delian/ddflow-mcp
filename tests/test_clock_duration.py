@@ -166,4 +166,7 @@ def test_an_mcp_timeout_beyond_a_double_is_capped_not_raised():
 
 def test_an_mcp_timeout_given_as_text_is_still_read_as_a_number():
     assert MC._wait_timeout({"timeout": "120"}) == 120.0
-    assert MC._wait_timeout({"timeout": "99999"}) == MC.MCP_WAIT_MAX_S
+    # No `_meta.progressToken`: the call is silent for the client's purposes, so the cap is
+    # the silent one (Bfc43dae5b9), not the full CLI cap a progress beat may hold.
+    assert MC._wait_timeout({"timeout": "99999"}) == MC.MCP_WAIT_SILENT_MAX_S
+    assert MC._wait_timeout({"timeout": "300"}) == 300.0
