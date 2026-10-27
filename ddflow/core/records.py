@@ -563,6 +563,15 @@ class Bug:
     upstream_digest: str = ""
     #: `bug.found` `repro`: the link to the reproduction bundle ({ref, bytes, mode, truncated}).
     repro: dict[str, Any] = field(default_factory=dict)
+    #: `bug.found` `sighted`: what the bug's repro command said the last time it ran
+    #: ("" none). "yes" once any sighting's run failed -- it is the sighting that
+    #: CONFIRMED the bug, and no later non-failing run unconfirms it; "no" while every
+    #: run so far exited 0, which makes an open bug UNCONFIRMED (DX-bug-repro-verify).
+    reproduced: str = ""
+    #: The counts of the last sighting that ran (`bug.found` `sighted` runs/failures):
+    #: how many runs reached an exit code and how many of them failed.
+    repro_runs: int = 0
+    repro_failures: int = 0
     #: `bug.reopened`: the last time a closure was undone, and why (B7bdcc6b212).
     reopened_at: str = ""
     reopen_reason: str = ""

@@ -22,6 +22,7 @@ from ..core.redact import redact_leaves
 from ..infra.blobstore import BlobStore
 from . import logblobs
 from . import repro_facts as F
+from . import reprocheck as RC
 from .redact_report import redactor
 
 _MIN_LEAF = 64
@@ -40,6 +41,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     agent: str = "",
     test: str = "",
     repro_cmd: str = "",
+    check: dict[str, Any] | None = None,
     mode: str = "",
     now: float = 0.0,
 ) -> dict[str, Any] | None:
@@ -66,7 +68,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         },
     }
     if repro_cmd:
-        out["repro_cmd"] = {"command": repro_cmd, "executed": False}
+        out["repro_cmd"] = {"command": repro_cmd, **(check if check is not None else {"executed": False})}
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
         out["machine"] = F.machine(repo)
@@ -221,12 +223,33 @@ def mode_problem(capture: str) -> str:
     return "" if not capture or capture in MODES else f"repro_capture must be one of {MODES}"
 
 
+def sighting(run: Any) -> dict[str, Any]:
+    """The part of a run's record the bug's EVENT keeps beside the bundle link
+    (DX-bug-repro-verify): the verdict the fold folds, nothing the blob already has. A run
+    that reached no exit code (nothing to say) gives {}: an unavailable run is no sighting."""
+    if not isinstance(run, dict) or "reproduced" not in run:
+        return {}
+    return {k: run[k] for k in ("reproduced", "runs", "failures") if k in run}
+
+
 def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any) -> dict[str, Any]:
-    """The `bug.found` field linking the bundle: ``{"repro": link}``, or ``{}`` when capture
-    is off. Filing a bug must never fail for want of evidence: a bundle that cannot be built
-    or stored is linked as ``{"unavailable": why}``, which `show` prints. ``given``: item,
-    agent, test, repro_cmd, capture."""
+    """The `bug.found` fields linking the bundle and the sighting: ``{"repro": link,
+    "sighted": verdict}`` -- the sighting only when a run reached an exit code -- or
+    ``{}`` when capture is off. Filing a bug must never fail for want of evidence: a
+    bundle that cannot be built or stored is linked as ``{"unavailable": why}``, which
+    `show` prints. ``given``: item, agent, test, repro_cmd, capture."""
     try:
+        cmd_arg = given.get("repro_cmd", "")
+        run = given.get("check")
+        if run is None and cmd_arg:
+            run = RC.check(
+                repo,
+                F.tree(repo).get("tree_sha", ""),
+                cmd_arg,
+                int(cfg.bugs.repro_runs),
+                float(cfg.bugs.repro_test_timeout_s),
+                int(cfg.bugs.repro_tail_bytes),
+            )
         bundle = build(
             repo,
             cfg,
@@ -236,9 +259,14 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
             item=given.get("item", ""),
             agent=given.get("agent", ""),
             test=given.get("test", ""),
-            repro_cmd=given.get("repro_cmd", ""),
+            repro_cmd=cmd_arg,
+            check=run,
             mode=given.get("capture", ""),
         )
-        return {"repro": store(repo, bundle)} if bundle is not None else {}
+        if bundle is None:
+            return {}
+        linked = {"repro": store(repo, bundle)}
+        sig = sighting(run)
+        return {**linked, **({"sighted": sig} if sig else {})}
     except Exception as exc:  # evidence is a courtesy; the bug is the point
         return {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}

@@ -106,6 +106,20 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.repro = dict(ev.data.get("repro") or {}) or bug.repro
     bug.globs = list(ev.data.get("globs") or bug.globs)
     bug.found_at = bug.found_at or ev.ts
+    # The sighting a run of the bug's repro command gave (DX-bug-repro-verify): `sighted`
+    # carries `reproduced` yes|no with `runs` and `failures`. "yes" sticks -- the sighting
+    # that FAILED confirmed the bug, and a later non-failing run never unconfirms it -- while
+    # the counts are the last sighting that reached exit codes. `bug.found` events folded
+    # before the field existed carry no `sighted` and change nothing.
+    sig = ev.data.get("sighted")
+    if isinstance(sig, dict):
+        if sig.get("reproduced") == "yes":
+            bug.reproduced = "yes"
+        elif sig.get("reproduced") == "no" and bug.reproduced != "yes":
+            bug.reproduced = "no"
+        if sig.get("runs"):
+            bug.repro_runs = int(sig.get("runs") or 0)
+            bug.repro_failures = int(sig.get("failures") or 0)
 
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:

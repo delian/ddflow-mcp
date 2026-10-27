@@ -717,11 +717,17 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     tag, the same test gitflow names its branches by -- or an item an OPEN bug record
     names, or the fix task `bug found` filed for it (`fix_task`). A closed record stops
     counting -- fixed, or invalid (a false finding was never a bug): its item is ordinary
-    work again.
+    work again. An UNCONFIRMED one (its repro command ran and did not fail,
+    DX-bug-repro-verify) counts for nothing either: such a bug is not offered ahead of
+    confirmed ones.
     """
     ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
+    unconfirmed = {
+        b.fix_task for b in state.bugs.values() if b.open and b.reproduced == "no"
+    }
+    ids.difference_update(unconfirmed)
     for b in state.bugs.values():
-        if b.open:
+        if b.open and b.reproduced != "no":
             ids.update(x for x in (b.item, b.fix_task) if x)
     return ids
 
