@@ -703,7 +703,7 @@
   ],
   0,
   "T1.bug_hunt = skipped\n",
-  "NOTE: bug_hunt comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n"
+  "NOTE: bug_hunt comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn'). not gated: a gate skip needs the operator's approval only over a FAILED review with findings still unanswered; bug_hunt is not one, so this skip was recorded directly, and no approval request was filed\n"
  ],
  [
   [
@@ -717,7 +717,7 @@
   ],
   0,
   "{\n  \"schema\": \"gate_skip@1\",\n  \"gate\": \"dedupe\",\n  \"outcome\": \"skipped\"\n}\n",
-  "NOTE: dedupe comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n"
+  "NOTE: dedupe comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn'). not gated: a gate skip needs the operator's approval only over a FAILED review with findings still unanswered; dedupe is not one, so this skip was recorded directly, and no approval request was filed\n"
  ],
  [
   [
