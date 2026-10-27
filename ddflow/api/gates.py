@@ -1271,8 +1271,11 @@ def _not_gated_skip_note(warning, skip, approval_stamp, it, gdef, gate, agent, h
     with no reviewer silent again. So the not-gated note fires on every non-stamped
     skip and names the one sub-case that differs: over review findings still
     unanswered the skip IS the operator's own override (an agent over one is refused
-    before it gets here)."""
-    if not skip or approval_stamp:
+    before it gets here). The guard keys off `hard_skip`, the flag `record` itself
+    uses to treat the call as a skip: `skip=False, outcome="skipped"` records
+    `result` as 'skipped' all the same, and must say which case it is too
+    (second critic round)."""
+    if not hard_skip or approval_stamp:
         return warning
     failed = bool(
         gdef is not None

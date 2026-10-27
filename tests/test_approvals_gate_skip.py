@@ -181,6 +181,21 @@ def test_the_not_gated_note_does_not_need_a_reviewer_gate_or_an_agent_marker(pro
     assert "no approval request was filed" in out + err, (out, err)
 
 
+def test_a_hand_recorded_skipped_outcome_is_the_not_gated_case_too(proj):
+    """B97106be46a (second critic round): `gate record --outcome skipped` reaches
+    `record()` with ``skip=False``, but the api treats the call as a skip (``hard_skip``)
+    and writes ``result`` as 'skipped' -- the note must key off that, or this path is
+    the same silent skip the bug reported."""
+    code, _o, err = run_cli(proj, "task", "add", "T5", "--globs", "x.py")
+    assert code == 0, err
+    code, out, err = run_cli(
+        proj, "gate", "record", "T5", "rubber_duck", "--outcome", "skipped", "--reason", "docs"
+    )
+    assert code == 0, (out, err)
+    assert "not gated" in out + err, (out, err)
+    assert "no approval request was filed" in out + err, (out, err)
+
+
 def test_the_request_can_also_be_filed_by_hand(proj):
     code, out, err = run_cli(proj, "--json", "approvals", "request", "gate.skip.failed_review",
                              "--item", "T1", "--target", "critic", agent="bot")  # fmt: skip
