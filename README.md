@@ -3155,8 +3155,9 @@ whole). A glob mangled by quoting is refused with the form every surface reads. 
 names what it dropped, and `show` prints the lease's globs beside the item's. `--resources`
 works the same way. `ddflow wait --item X --globs ..` judges the claim you are about to make
 rather than the stored globs, so READY means that claim will not be refused. One `wait` blocks
-for at most 1800 seconds, on the CLI as over MCP: a longer `--timeout` is shortened (and says so
-on stderr), and you call again to wait longer.
+for at most 1800 seconds on the CLI, and at most 1500 over MCP — below the 1800 s a client
+gives a silent tool call before aborting it (Bfc43dae5b9) — a longer `--timeout` is shortened
+(and says so on stderr), and you call again to wait longer.
 
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
