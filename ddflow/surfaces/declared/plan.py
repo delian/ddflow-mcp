@@ -56,6 +56,48 @@ def _confirm_text(out, a) -> str:
     return out.reason
 
 
+#: Finding kinds, in a report's reading order. The counts are the reason the lint exists,
+#: so every kind gets its HEADLINE line even when the details are capped below.
+_LINT_KINDS = (
+    "overlap",
+    "no_globs",
+    "duplicate",
+    "dx_priority",
+    "stale_needs",
+    "body_ref",
+    "stale_ref",
+)
+
+#: Detail rows shown per kind; `--json` carries every finding (a whole-queue run counts
+#: them in thousands -- a person reads the headline and the first rows, never a list).
+_LINT_SHOWN = 60
+
+
+def _lint_text(out, a) -> str:
+    d = out.data
+    if "findings" not in d:
+        return out.reason
+    by: dict[str, list[dict]] = {k: [] for k in _LINT_KINDS}
+    for f in d["findings"]:
+        by[f["kind"]].append(f)
+    lines = [out.reason]
+    if d.get("note"):
+        lines.append(f"note  {d['note']}")
+    for kind in _LINT_KINDS:
+        rows = by[kind]
+        if not rows:
+            continue
+        lines.append(f"{kind} ({len(rows)}):")
+        for f in rows[:_LINT_SHOWN]:
+            fix = f"  -> fix: {f['fix']}" if f.get("fix") else ""
+            lines.append(f"  {' '.join(f['ids'])}: {f['detail']}{fix}")
+        if len(rows) > _LINT_SHOWN:
+            lines.append(f"  ... and {len(rows) - _LINT_SHOWN} more (--json holds them all)")
+    lines += [f"applied  {s}" for s in (d.get("fixed") or {}).get("applied", [])]
+    lines += [f"refused  {s}" for s in (d.get("fixed") or {}).get("skipped", [])]
+    return "\n".join(lines)
+
+
 #: The findings are the OUTPUT, so they are printed on EVERY exit -- the default prints
 #: only a failure's reason on stderr, which would hide what the check exists to say.
 _SHOWN = CliPolicy(shown=None)
@@ -139,6 +181,34 @@ COMMANDS: tuple[Command, ...] = (
             Param("plan_id", help="The plan's label.", positional=True),
             Param("yes", type="boolean", help="The operator's consent."),
             Param("reason", help="Why the operator accepts the plan."),
+        ),
+    ),
+    Command(
+        path=("plan", "lint"),
+        summary="lint the live queue: overlaps without an ordering edge, missing globs, stale needs, duplicates, DX/fix at default priority (--fix applies the high-confidence ones)",
+        tool="",
+        reason=(
+            "CLI-only by design, like `plan check`: it reads the queue and its output is "
+            "a report to read -- not a tool an agent calls mid-task."
+        ),
+        call=lambda repo, a, agent: _api().plan_lint(
+            repo,
+            since=a.get("since") or "",
+            phase=a.get("phase") or "",
+            fix=bool(a.get("fix")),
+            agent=agent,
+        ),
+        payload=("clean", "items", "findings", "fixed", "note"),
+        render=_lint_text,
+        cli=_SHOWN,
+        params=(
+            Param("since", help="Only live work filed on or after this ISO date (default: the whole open queue)."),
+            Param("phase", help="Only live work under this phase id (default: the whole open queue)."),
+            Param(
+                "fix",
+                type="boolean",
+                help="Apply the high-confidence fixes: rule-forced ordering edges, stale-needs removals, priority bands.",
+            ),
         ),
     ),
 )
