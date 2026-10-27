@@ -49,7 +49,6 @@ from ..core.admission import new_file_globs
 from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
-from ..core.globs import overlap as globs_overlap
 from ..core.model import Lease, fold
 from ..core.outcome import FAIL, NOTHING, OK, Verdict
 from ..core.schedule import is_shared, shared_globs
@@ -1479,15 +1478,26 @@ def _lapsed_mine(
     not taken over. Invisible above, so the message said "(no live lease)" and "claim
     the work" to the holder committing in its own tree, and the lapse was misread as
     an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
-    Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
-    globs, and reviving them over someone's live paths is the very race the STOP
-    text warns against."""
+
+    Per path, not per lease (DX-lapsed-lease-merge-deadlock): a lease whose globs overlap
+    another agent's live lease is withheld only because ACCEPTING it would wave a staged
+    path that other lease covers -- the one acceptance that could take a held path. By
+    that scope, the old overlap test withheld the lease for the paths too, stranding a
+    lapsed item unable to commit its merge of main with no remedy that works (a heartbeat
+    would revive the lease over someone's live paths, the race the STOP text warns
+    against). Held per path still: a staged path the other live lease covers must take a
+    live lease to commit, and `renew`'s revival refusal over a live claim
+    (L-revival-judged-on-lease-globs) stays as is."""
     return [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, grace_s).items()
         if _counts_as_mine(repo, lease, me, here, bound)
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
-        and not any(globs_overlap(g, o) for g in lease.globs for o in others)
+        and not any(
+            any(path_in_glob(p, o) for o in others)
+            for p in uncovered
+            if any(path_in_glob(p, g) for g in lease.globs)
+        )
     ]
 
 

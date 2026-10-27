@@ -6457,7 +6457,10 @@ part that matters.
   and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
   `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
   refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
-  salvaged`, `claim`). Another agent's live lease is never accepted. When
+  salvaged`, `claim`). Paths ANOTHER agent's live lease covers are never accepted: each
+  lapsed lease is judged path by path, so one whose globs overlap a live lease still
+  vouches for the staged paths nobody holds (a merge of main stays committable), while the
+  held paths keep the STOP. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted
