@@ -675,24 +675,12 @@ SESSION_START_FOOTER = (
 )
 
 
-def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
-    """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
+def _sync_sections(repo: Path, agent: str) -> list[str]:
+    """The session-start lines the syncing work adds: sibling-dependency observations and
+    the periodic passes due now. Both can WRITE (`external.observed` on an observed
+    change), which is why a dry run does not call this."""
 
-    A hook that fails at session start blocks nothing useful and teaches the operator to
-    remove it. Every failure becomes one line of text saying what to run instead.
-    """
-
-    parts = [SESSION_START_HEADER]
-    try:
-        parts += _after_compaction(repo, stdin)
-    except Exception as exc:  # never fail a session start
-        parts += [f"_(compaction record unavailable: {exc})_", ""]
-    try:
-        drift = _worktree_drift(repo, Path.cwd())
-        if drift:
-            parts += [f"**{drift}**", ""]
-    except Exception as exc:
-        parts += [f"_(worktree drift check failed: {exc})_", ""]
+    parts: list[str] = []
     try:
         # Work waiting on a sibling repository becomes ready the moment its dependency
         # is observed done, and session start is when an agent decides what to take.
@@ -722,8 +710,35 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
             ]
     except Exception as exc:
         parts += [f"_(cadence check failed: {exc})_", ""]
+    return parts
+
+
+def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = False) -> O.Outcome:
+    """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
+
+    A hook that fails at session start blocks nothing useful and teaches the operator to
+    remove it. Every failure becomes one line of text saying what to run instead.
+
+    `dry_run` probes the reply without the syncing sections whose observation writes
+    `external.observed` events: the brief, drift warning and companion lines are what a
+    hook --dry-run must still show, and the committed log must stay untouched.
+    """
+
+    parts = [SESSION_START_HEADER]
     try:
-        out = brief(repo, check_recovery=True, agent=agent)
+        parts += _after_compaction(repo, stdin)
+    except Exception as exc:  # never fail a session start
+        parts += [f"_(compaction record unavailable: {exc})_", ""]
+    try:
+        drift = _worktree_drift(repo, Path.cwd())
+        if drift:
+            parts += [f"**{drift}**", ""]
+    except Exception as exc:
+        parts += [f"_(worktree drift check failed: {exc})_", ""]
+    if not dry_run:
+        parts += _sync_sections(repo, agent)
+    try:
+        out = brief(repo, check_recovery=True, agent=agent, dry_run=dry_run)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:
         parts.append(f"ddflow could not build the brief ({exc}). Run `ddflow doctor`.")
@@ -1007,18 +1022,20 @@ def _synth_stdin(p) -> str:
     return json.dumps(raw)
 
 
-def _on_session_start(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_session_start(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if "session_start" not in plan.inject:
         # This agent's SessionStart hook cannot show the model anything, so building the
         # brief (an external sync, a cadence check, the log fold) would be wasted work.
         return _HookResult(result="not injectable")
-    out = _session_start(repo, agent, _synth_stdin(p))
+    out = _session_start(repo, agent, _synth_stdin(p), dry_run=dry_run)
     return _HookResult(context=out.data["message"], result="injected")
 
 
-def _on_prompt(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_prompt(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if p.prompt is None:
         return _HookResult(result="skipped")  # silent, as the prompt hook always was
+    if dry_run:  # the probe records nothing: the reply is shaped, the log stays untouched
+        return _HookResult(result="not recorded (dry-run)")
     try:
         out = _prompt_core(repo, agent, p.session_id, p.prompt, p.model)
     except Exception:  # a hook must not break the prompt it observes
@@ -1026,12 +1043,15 @@ def _on_prompt(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result=str(out.data.get("result", "")))
 
 
-def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     if p.malformed:
         return _HookResult(
             result="skipped",
             note="ddflow pre-compact: ValueError: the hook's stdin is not a JSON object",
         )
+    if dry_run:
+        # Nothing is recorded, so nothing can block: the note says a probe was computed.
+        return _HookResult(result="dry-run", note="ddflow pre-compact: dry-run")
     out = _record_compaction(repo, _synth_stdin(p), agent)
     result = str(out.data.get("result", ""))
     # stdout stays empty: PreCompact output can only block, never inform (B195). Why a run
@@ -1040,7 +1060,7 @@ def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
     return _HookResult(result=result, note=note and f"ddflow pre-compact: {note}")
 
 
-def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
     else (another tool, no command, any problem) is allowed: a guard that fails closed on its
     own bug would stop every command the agent runs."""
@@ -1052,25 +1072,26 @@ def _on_pre_tool(repo: Path, agent: str, p, plan) -> _HookResult:
     refusal = FB.check(command, cfg, cwd=p.cwd or Path.cwd())
     if refusal is None:
         return _HookResult(result="allowed")
-    try:
-        holds = (
-            HI.emit_deny(plan, "pre_tool", "") is not None
-        )  # only a refusal that holds is recorded
-    except Exception:
-        holds = True
-    if holds:
+    if not dry_run:
         try:
-            log, _who = ID.open_log(
-                repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
-            )
-            FB.record(log, cfg, refusal, p.session_id, p.harness)
-        except Exception:  # an unrecorded refusal is still a refusal
-            pass
+            holds = (
+                HI.emit_deny(plan, "pre_tool", "") is not None
+            )  # only a refusal that holds is recorded
+        except Exception:
+            holds = True
+        if holds:
+            try:
+                log, _who = ID.open_log(
+                    repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
+                )
+                FB.record(log, cfg, refusal, p.session_id, p.harness)
+            except Exception:  # an unrecorded refusal is still a refusal
+                pass
     msg = refusal.message()
     return _HookResult(result="denied", deny=msg, note=msg)
 
 
-def _on_nothing(repo: Path, agent: str, p, plan) -> _HookResult:
+def _on_nothing(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
     """pre_tool, post_tool, stop and session_end: the entry point accepts them so an agent's
     hook can be wired to every event today; the handlers (heartbeat, stop protocol, session
     end) arrive with the tasks that need them."""
@@ -1089,14 +1110,26 @@ _HOOK_HANDLERS = {
 }
 
 
-def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O.Outcome:
+def _run_hook(
+    repo: Path, event: str, harness: str, agent: str, stdin: str, *, dry_run: bool = False
+) -> O.Outcome:
     """`ddflow hooks run <event> --harness <id>`: normalize the agent's JSON, run the event's
     handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
-    agents, the very turn it observes. Every problem becomes a `note` for stderr."""
+    agents, the very turn it observes. Every problem becomes a `note` for stderr.
+
+    `dry_run` computes and shapes the reply the real run would, omitting its
+    write-producing sections, and writes no event: probing the hook must not append to
+    the committed event log.
+    """
     handler = _HOOK_HANDLERS.get(event)
     if handler is None:
         return O.ok(
-            "hooks", message="", stdout="", result="skipped", note=f"unknown event {event!r}"
+            "hooks",
+            message="",
+            stdout="",
+            result="skipped",
+            note=f"unknown event {event!r}",
+            dry_run=dry_run,
         )
     try:
         plan = HI.plan_for(harness)
@@ -1107,8 +1140,11 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
                 stdout="",
                 result="skipped",
                 note=f"no command-hook descriptor for harness {harness!r}",
+                dry_run=dry_run,
             )
-        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan)
+        res = handler(
+            repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan, dry_run=dry_run
+        )
         out = HI.emit(plan, event, res.context)
         if res.deny:
             denied = HI.emit_deny(plan, event, res.deny)
@@ -1126,8 +1162,9 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
             stdout="",
             result="skipped",
             note=f"{type(exc).__name__}: {exc}",
+            dry_run=dry_run,
         )
-    return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note)
+    return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note, dry_run=dry_run)
 
 
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
@@ -1216,7 +1253,7 @@ def _installed_hooks(E: Any, repo: Path, msg: str) -> O.Outcome:
     return O.ok("hooks", message=msg, installed=installed)
 
 
-def hooks(
+def hooks(  # noqa: PLR0913 -- one keyword per hooks mode; the CLI and MCP map 1:1
     repo: Path,
     *,
     action: str = "status",
@@ -1228,17 +1265,19 @@ def hooks(
     stdin: str = "",
     event: str = "",
     harness: str = "",
+    dry_run: bool = False,
 ) -> O.Outcome:
     """The commit hook: install, uninstall, status, or run the check itself.
 
     `claude=True` installs or removes the Claude Code SessionStart and UserPromptSubmit
     hooks instead (`services.claudehooks`); `gemini=True` the Gemini CLI BeforeAgent
     one. `session-start` is what the first runs; `prompt` records the operator's prompt
-    from the hook's JSON on `stdin`.
+    from the hook's JSON on `stdin`. `run`'s `dry_run` computes and shapes the reply
+    and writes no event.
     """
 
     if action == "run":
-        return _run_hook(repo, event, harness, agent, stdin)
+        return _run_hook(repo, event, harness, agent, stdin, dry_run=dry_run)
     if action == "session-start":
         return _session_start(repo, agent, stdin)
     if action == "pre-compact":
