@@ -141,21 +141,27 @@ class _InProcessHelp:
         import io
         from contextlib import redirect_stderr, redirect_stdout
 
-        parser = self.parser()  # build (or rebuild, per version) BEFORE taking its memo
-        memo = self._built[2]  # the memo the build left; a fresh one starts every detail in it empty
+        memo = self._built[2] if self._built is not None else None
         key = tuple(argv[1:])
-        if key in memo:
+        if memo is not None and key in memo:
             return memo[key]
 
         try:
+            # The build is replayed too: one that cannot import is "could not run", never a
+            # raise out of a walk (a plugin that cannot import must note itself, not crash
+            # the check). `parser()` may rebuild for a new ddflow version; afterward the
+            # memo is the rebuild's own (a fresh one starts empty) -- read it, not a stale ref.
+            parser = self.parser()
+            memo = self._built[2]
             out, err = io.StringIO(), io.StringIO()
             # The redirects swap the process-global sys.stdout/stderr for the length of the
-            # render; argparse offers no per-call file a replay could hand it. The lock
-            # serializes RENDERS alone: it cannot fence another thread's write to the
-            # redirected standard streams, which the module cannot know about. So a render is
-            # safe where no other thread of the process prints to stdio -- the docs check's
-            # workers are subprocesses whose output goes to pipes, never this process's stdio
-            # -- and it never starts one of its own while a render holds the streams.
+            # render; argparse offers no per-call file a replay could hand it, and no lock
+            # can fence ANOTHER thread's write to those streams -- the lock serializes
+            # renders alone. So a render the process ran while another thread could have
+            # written is NOT trusted: its text cannot be told apart from that thread's, and
+            # a mix would plant phantom flags in the finding set (the docs check is
+            # single-threaded; subprocess workers' output goes to pipes, never this stdio,
+            # so a lone render is the clean case and is cached as the replay).
             with _RENDER_LOCK:
                 try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
                     with redirect_stdout(out), redirect_stderr(err):
@@ -166,6 +172,8 @@ class _InProcessHelp:
                     code = 0
         except Exception as exc:  # a registry that cannot build is "could not run"
             return P.Captured(error=exc)
+        if threading.active_count() > 1:  # a render that may be mixed is refused, not reported
+            return P.Captured(error=RuntimeError("another thread ran while the help render held the redirected stdio"))
         capped = (
             P.Captured(code, out.getvalue(), err.getvalue())
             if code

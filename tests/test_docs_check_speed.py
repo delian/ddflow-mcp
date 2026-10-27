@@ -137,8 +137,10 @@ def test_one_in_process_command_cannot_blanket_the_others(monkeypatch):
     monkeypatch.setattr(H._InProcessHelp, "chains", chains)
     run = H.command_runner(_ROOT, 60, in_process_commands=["ddflow", "ddflowx"])
     idx = H.HelpIndex(run, ["ddflow", "ddflowx"])
-    #: the broken command notes ITSELF; ddflow's walk still filled the eager cache
-    assert idx.unavailable == {"ddflowx": "could not walk: no registry here"}
+    #: the broken command notes ITSELF (never some joined "ddflow ddflowx" key), and
+    #: ddflow's own chains are still judged on their own -- however THEY ended
+    assert idx.unavailable.get("ddflowx") == "could not walk: no registry here"
+    assert "ddflow ddflowx" not in idx.unavailable
     assert idx._cache
 
 
@@ -154,3 +156,38 @@ def test_a_verb_chain_that_exits_nonzero_is_noted_chain_by_chain(monkeypatch):
     idx = H.HelpIndex(H.command_runner(_ROOT, 60), ["ddflow"])
     assert idx._cache[("ddflow", "workflow", "state")] is None
     assert "ddflow workflow state" in idx.unavailable  # the chain's own key, however deep
+
+
+def test_a_registry_that_cannot_build_still_reports_could_not_run(monkeypatch):
+    walker = H._InProcessHelp()  # fresh: _built is None, so help() builds the parser here
+
+    def broken_parser(self):
+        raise ImportError("no registry importable here")
+
+    monkeypatch.setattr(type(walker), "parser", broken_parser)
+    capped = walker.help(["ddflow", "--help"])
+    assert not capped.ran and "no registry importable here" in f"{capped.error}"
+
+
+def test_a_render_shared_with_another_thread_is_never_returned_mixed():
+    import threading
+
+    stop = threading.Event()
+
+    def spammer():
+        while not stop.is_set():
+            print("--phantom-flag-never-declared")
+
+    #: the module walker answers any argv, but the memo may already hold it; free a FRESH
+    #: walker's build so this render runs (and is refused, or ran clean) under >1 thread
+    walker = H._InProcessHelp()
+    thread = threading.Thread(target=spammer)
+    thread.start()
+    try:
+        capped = walker.help(["ddflow", "--never-a-verb-zz"])
+    finally:
+        stop.set()
+        thread.join(5)
+    if capped.ran:  # ran clean: the spam never landed in this render's window
+        assert "--phantom-flag-never-declared" not in capped.stdout
+    # else: refused as possibly mixed -- either way no phantom text is REPORTED as ddflow's
