@@ -169,25 +169,46 @@ def test_a_registry_that_cannot_build_still_reports_could_not_run(monkeypatch):
     assert not capped.ran and "no registry importable here" in f"{capped.error}"
 
 
-def test_a_render_shared_with_another_thread_is_never_returned_mixed():
+def test_a_render_never_serves_a_mix_of_a_foreign_threads_print():
+    import io
     import threading
+    from contextlib import redirect_stdout
 
-    stop = threading.Event()
+    letgo = threading.Event()
 
-    def spammer():
-        while not stop.is_set():
-            print("--phantom-flag-never-declared")
+    def foreign_write():
+        letgo.wait()  # prints while the routed stream IS sys.stdout
+        print("--phantom-flag-never-declared")
 
-    #: the module walker answers any argv, but the memo may already hold it; free a FRESH
-    #: walker's build so this render runs (and is refused, or ran clean) under >1 thread
-    walker = H._InProcessHelp()
-    thread = threading.Thread(target=spammer)
+    thread = threading.Thread(target=foreign_write)
     thread.start()
-    try:
-        capped = walker.help(["ddflow", "--never-a-verb-zz"])
-    finally:
-        stop.set()
-        thread.join(5)
-    if capped.ran:  # ran clean: the spam never landed in this render's window
-        assert "--phantom-flag-never-declared" not in capped.stdout
-    # else: refused as possibly mixed -- either way no phantom text is REPORTED as ddflow's
+    real = io.StringIO()  # the stream the foreign print meant (a stand-in for the terminal)
+    sink = io.StringIO()  # the render's own capture
+    with redirect_stdout(H._RoutedTo(real, sink, threading.get_ident())):
+        letgo.set()  # release the foreign print inside the window
+        print("--renders-own-flag")
+        thread.join()
+    assert "--renders-own-flag" in sink.getvalue()  # the render captured only ITS thread
+    assert "--phantom-flag-never-declared" not in sink.getvalue()  # never mixed INTO it
+    assert "--phantom-flag-never-declared" in real.getvalue()  # forwarded, not swallowed
+
+
+def test_the_memo_cannot_serve_an_other_versions_replay(monkeypatch):
+    walker = H._InProcessHelp()
+    #: a memo built when this process used another version answers for THAT version; the
+    #: running version's reply must come from its own (re)build, not a stale key
+    monkeypatch.setattr(walker, "_built", ("EVIL-VERSION", object(), {("--help",): P.Captured(0, "STALE HELP", "")}))
+    capped = walker.help(["ddflow", "--help"])
+    assert "STALE HELP" not in (capped.stdout or "")
+    assert "--repo" in (capped.stdout or "")
+
+
+def test_a_registry_that_exits_while_building_still_notes_could_not_run(monkeypatch):
+    walker = H._InProcessHelp()
+
+    def exiting_parser(self):
+        raise SystemExit(2)
+
+    monkeypatch.setattr(type(walker), "parser", exiting_parser)
+    capped = walker.help(["ddflow", "--help"])
+    assert not capped.ran and "registry build exited" in f"{capped.error}"

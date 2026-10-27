@@ -139,41 +139,41 @@ class _InProcessHelp:
         prints the config help, exit 0, though ``set`` is no subcommand), and invalid words
         error with exit 2 — no flag-counting of our own."""
         import io
+        import sys
         from contextlib import redirect_stderr, redirect_stdout
 
-        memo = self._built[2] if self._built is not None else None
-        key = tuple(argv[1:])
-        if memo is not None and key in memo:
-            return memo[key]
-
         try:
-            # The build is replayed too: one that cannot import is "could not run", never a
-            # raise out of a walk (a plugin that cannot import must note itself, not crash
-            # the check). `parser()` may rebuild for a new ddflow version; afterward the
-            # memo is the rebuild's own (a fresh one starts empty) -- read it, not a stale ref.
+            # The build is part of the replay: one that cannot import (or exits) is "could
+            # not run", never a raise out of a walk, and `parser()` re-runs the version
+            # check on EVERY call, so a chain replayed from version A is never answered for
+            # version B (a rebuild starts the memo empty under the new version).
             parser = self.parser()
-            memo = self._built[2]
+            memo = self._built[2]  # the running version's own memo, bound AFTER its check
+            key = tuple(argv[1:])
+            if key in memo:
+                return memo[key]
+
             out, err = io.StringIO(), io.StringIO()
-            # The redirects swap the process-global sys.stdout/stderr for the length of the
-            # render; argparse offers no per-call file a replay could hand it, and no lock
-            # can fence ANOTHER thread's write to those streams -- the lock serializes
-            # renders alone. So a render the process ran while another thread could have
-            # written is NOT trusted: its text cannot be told apart from that thread's, and
-            # a mix would plant phantom flags in the finding set (the docs check is
-            # single-threaded; subprocess workers' output goes to pipes, never this stdio,
-            # so a lone render is the clean case and is cached as the replay).
+            renderer = threading.get_ident()  # the one thread whose stdio writes ARE the render
             with _RENDER_LOCK:
                 try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
-                    with redirect_stdout(out), redirect_stderr(err):
+                    #: the redirects swap the process-global stdio, which no lock can make
+                    #: thread-local; the swaps below route per thread instead, so the render
+                    #: captures ONLY the rendering thread's writes, and any OTHER thread's
+                    #: print goes to the real stream it meant -- never swallowed into the
+                    #: render's text (a mix would plant phantom flags in the finding set).
+                    with redirect_stdout(_RoutedTo(sys.stdout, out, renderer)), redirect_stderr(
+                        _RoutedTo(sys.stderr, err, renderer)
+                    ):
                         parser.parse_args(argv[1:])
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1
                 else:
                     code = 0
+        except SystemExit as exc:  # the build itself exited (argparse ends exits): could not run
+            return P.Captured(error=RuntimeError(f"registry build exited: {exc.code}"))
         except Exception as exc:  # a registry that cannot build is "could not run"
             return P.Captured(error=exc)
-        if threading.active_count() > 1:  # a render that may be mixed is refused, not reported
-            return P.Captured(error=RuntimeError("another thread ran while the help render held the redirected stdio"))
         capped = (
             P.Captured(code, out.getvalue(), err.getvalue())
             if code
@@ -200,8 +200,30 @@ class _InProcessHelp:
 #: builds the runner (the CLI, the MCP tool, a test).
 _HERE = _InProcessHelp()
 
-#: Serializes `analyze_args` renders: the redirects in `_InProcessHelp.help` hold the
-#: process-global stdio while one render runs, so two renders never overlap.
+
+class _RoutedTo:
+    """A stand-in for ``sys.stdout``/``sys.stderr`` while one render holds them: writes of
+    the thread rendering go to ``sink`` (the render's own capture); ANY other thread's
+    write goes to ``real`` -- the process-wide stream it meant. A foreign print during a
+    render is therefore neither swallowed into the capture (a mix would plant phantom
+    flags in the finding set) nor dropped from its terminal: the redirect cannot be made
+    thread-local, but a capture can be made this-thread-of-it."""
+
+    __slots__ = ("_sink", "_real", "_owner")
+
+    def __init__(self, real, sink, owner: int) -> None:
+        self._real, self._sink, self._owner = real, sink, owner
+
+    def write(self, text: str) -> int:
+        (self._sink if threading.get_ident() == self._owner else self._real).write(text)
+        return len(text)
+
+    def flush(self) -> None:
+        self._real.flush()
+
+
+#: Serializes `parse_args` replays: one render's `_RoutedTo` swaps hold the process-global
+#: stdio while it runs, so two renders never overlap.
 _RENDER_LOCK = threading.Lock()
 
 
