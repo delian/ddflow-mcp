@@ -89,8 +89,8 @@ Per agent: `units = W + C * k * 0.1 + N * 1 + O * 5`, where W is the prefix writ
 Worked example, ASSUMED inputs (not measured for workflows): prefix P = 25K, average context C = 60K, k = 25 calls, N = 40K new tokens in total, O = 8K.
 - First agent: 31K write + 150K reads + 40K + 40K = about 261K units.
 - Each later agent (prefix shared): 2.5K + 150K + 40K + 40K = about 233K units.
-- 18 agents: about 4.4M units. At an ASSUMED $3 per million base input tokens, about $13. Not a quote: prices were not verified for this model, and subscription plans meter differently (UNVERIFIED).
-- Doubling k to 50 gives about 8M units; k and C dominate and are unknowable before the run.
+- 18 agents (261K + 17 x 233K): about 4.2M units. At an ASSUMED $3 per million base input tokens, about $13. Not a quote: prices were not verified for this model, and subscription plans meter differently (UNVERIFIED).
+- Doubling k to 50 gives about 6.9M units (411K + 17 x 382K), not 2x; k and C dominate and are unknowable before the run.
 
 How ddflow should show it:
 1. A range, never a point: low at 0.5x and high at 2x of the formula, with the assumptions listed under the number.
