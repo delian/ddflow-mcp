@@ -62,6 +62,10 @@ def command_runner(
             return _HERE.help(argv)
         return spawn(argv)
 
+    #: The set this runner actually treats as in-process — stamped on the runner so
+    #: `HelpIndex.walk_all` walks exactly the commands THIS runner answers in-process,
+    #: not a re-derived list (the runner's knob is the one source of the fact).
+    run.in_process_of = set(known)
     return run
 
 
@@ -199,17 +203,24 @@ class HelpIndex:
         # The in-process commands are walked whole, now: `ddflow docs check` resolves the
         # chains a document mentions against a cache the eager walk already filled, paying
         # one bounded batch per check instead of a render per mention (DX-docs-check-speed).
-        if any(c in IN_PROCESS_COMMANDS for c in self.commands):
+        if any(c in self._in_process() for c in self.commands):
             self.walk_all()
+
+    def _in_process(self) -> set[str]:
+        """The commands THIS runner answers in-process: what the runner itself was told
+        (``command_runner`` stamps it), the module default for a custom runner."""
+        stamp = getattr(self._run, "in_process_of", None)
+        return IN_PROCESS_COMMANDS if stamp is None else set(stamp)
 
     def walk_all(self) -> int:
         """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
         and return how many chains were walked; a tool a custom runner walks its own way is
         still resolved lazily, chain by a document's mention. At most ``workers`` help texts
-        are prepared at once, so the whole ddflow walk is one bounded batch instead of one
-        render per mentioned verb — the walk `ddflow docs check` pays for a check of ddflow
-        itself (DX-docs-check-speed)."""
-        in_tree = [c for c in sorted(self.commands) if c in IN_PROCESS_COMMANDS]
+        are prepared at once (the renders serialize one at a time: each holds the redirected
+        process stdio), so the whole ddflow walk is one bounded batch instead of one render
+        per mentioned verb — the walk `ddflow docs check` pays for a check of ddflow itself
+        (DX-docs-check-speed)."""
+        in_tree = [c for c in sorted(self.commands) if c in self._in_process()]
         try:
             chains = [chain for cmd in in_tree for chain in _HERE.chains(cmd)]
         except Exception as exc:  # a registry that cannot build is "could not run", not a crash
