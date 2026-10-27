@@ -1548,9 +1548,11 @@ def _uncovered_message(
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
+        widen = ", ".join(uncovered)
         lines += [
             "These paths belong to another item YOU hold, bound to a tree of its own: commit",
-            "them there, or widen THIS item's claim (`ddflow update <ID> --globs '...'`).",
+            "them there, or widen THIS item's claim "
+            f"(`ddflow update <ID> --add-globs '{widen}'`).",
             "",
         ]
     elif stolen:
@@ -1573,6 +1575,7 @@ def _uncovered_message(
     held = ", ".join(mine) if mine else "(no live lease)"
     if lapsed and not mine:
         held = "nothing live (the lease above lapsed)"
+    widen = ", ".join(uncovered)
     lines += [
         f"You hold: {held}",
         "",
@@ -1580,8 +1583,9 @@ def _uncovered_message(
         if lapsed
         else "Fix by claiming the work, or by widening the claim you already hold:",
         "    ddflow next                     # what may be started",
-        "    ddflow claim <ID> --globs '...' # lease it and get a worktree",
-        "    ddflow update <ID> --globs '...'# widen an existing claim",
+        "    ddflow claim <ID>                # lease it and get a worktree",
+        f"    ddflow update <ID> --add-globs '{widen}'  # add THESE paths;"
+        " --globs would replace the list",
         "",
         f'Policy is [enforce].commit_without_lease = "{mode}" in .ddflow/config.toml.',
     ]
