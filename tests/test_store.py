@@ -220,9 +220,11 @@ def test_prompt_note_and_summary_seqs_are_disjoint_and_invertible():
     and its letter maps it back, so two FTS rows can never sit under one base row
     (the shifted-10,000 scheme a 20,001st entry overflowed). The boundaries that
     scheme spilled across are sampled exactly -- a prompt at 10,000 (the old
-    note band) and at 20,000 (the old summary slot) -- so a regression to any
-    fixed offset above 999 fails the disjointness check."""
-    boundary = list(range(1000)) + [9_999, 10_000, 10_001, 19_999, 20_000, 20_001]
+    note band) and at 20,000 (the old summary slot) and at 30,000 -- and the
+    prompt band is sampled contiguously through 20,002, so a regression to ANY
+    fixed note offset through 20,002 collides with notes at that offset and fails
+    the disjointness check."""
+    boundary = list(range(20_003)) + [30_000]
     for role in ("prompt", "note", "summary"):
         for seq in boundary:
             assert _seq_role(role, _role_seq(role, seq)) == seq
