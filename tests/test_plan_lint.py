@@ -20,17 +20,19 @@ from ddflow.services import planlint as PL
 
 
 def _it(state="open", needs=(), globs=(), tags=(), priority=100, body="", title="t", **kw) -> dict:
+    terminal = kw.pop("terminal", None)
+    state = "done" if terminal else state
     return {
         "id": kw.pop("id", ""),
         "kind": kw.pop("kind", "task"),
-        "state": "done" if kw.pop("terminal", False) else state,
+        "state": state,
         "title": title,
         "body": body,
         "needs": list(needs),
         "globs": list(globs),
         "tags": list(tags),
         "priority": priority,
-        "terminal": kw.pop("terminal", state == "done"),
+        "terminal": state == "done" if terminal is None else terminal,
         **kw,
     }
 

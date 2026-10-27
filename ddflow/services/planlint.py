@@ -297,18 +297,23 @@ def duplicates(
     provide the check (its machinery is off or unavailable), as in `plancheck`."""
     if similar is None:
         return []
-    return [
-        Finding(
-            "duplicate",
-            tuple(sorted((iid, hit))),
-            f"{iid} reads like {hit}, also open: one may BE the other's work",
-        )
-        for iid in sorted(scope)
+    out: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for iid in sorted(scope):
         for hit in sorted(
             set(similar(str(items[iid].get("title", "")), str(items[iid].get("body", ""))))
-        )
-        if hit in scope and hit != iid
-    ]
+        ):
+            pair = tuple(sorted((iid, hit)))
+            if hit in scope and hit != iid and pair not in seen:
+                seen.add(pair)
+                out.append(
+                    Finding(
+                        "duplicate",
+                        pair,
+                        f"{iid} reads like {hit}, also open: one may BE the other's work",
+                    )
+                )
+    return out
 
 
 def lint(

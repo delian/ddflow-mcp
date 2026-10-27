@@ -496,8 +496,7 @@ def plan_lint(
         return O.nothing("plan.lint", f"no live work{where} to lint")
     band = lambda iid, tags: PRI.kind_of(cfg, iid, tags)  # noqa: E731
     band_priority = lambda iid, tags: PRI.band(cfg, iid, tags)  # noqa: E731
-    hunt = _hunt(repo, log, cfg, st, set())
-    similar = hunt if len(scope) <= _DUPE_HUNT_MAX else None
+    similar = _hunt(repo, log, cfg, st, set()) if len(scope) <= _DUPE_HUNT_MAX else None
     note = (
         ""
         if similar is not None
