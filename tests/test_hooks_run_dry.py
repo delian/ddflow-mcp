@@ -119,16 +119,15 @@ def _git_repo(path: Path) -> Path:
 
 
 def test_dry_run_session_start_does_not_record_external_observations(repo):
-    """Non-vacuous: with a live external need CONFIGURED, a real session start's sync
-    records external.observed; --dry-run must still write nothing (test_external_deps.py
-    is the pair's model)."""
+    """Non-vacuous: with a live external need CONFIGURED, the FIRST sync records and the
+    dry probe must not. First observation fires HERE (prev None -> open), so the
+    counterfactual real run after it appends; the dry run between records nothing."""
     trainer = _git_repo(repo.parent / "trainer")
     run_cli(trainer, "init")
     run_cli(trainer, "task", "add", "132.D", "--title", "train-record type", "--globs", "t.py")
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text('[schedule]\nrepos = ["trainer=../trainer"]\n')
     run_cli(repo, "task", "add", "GEN.1", "--needs", "trainer:132.D", "--globs", "g.py")
-    assert run_cli(repo, "--json", "external", "sync")[0] == 0
     before = _shards(repo)
     code, out, err = _run(
         repo, "hooks", "run", "session_start", "--harness", "claude", "--dry-run", stdin="{}"
@@ -136,8 +135,16 @@ def test_dry_run_session_start_does_not_record_external_observations(repo):
     assert code == 0, err
     assert out.startswith("# ddflow session start")
     assert _shards(repo) == before
-    # The drain: the dry probe was AFTER the initial observation, which a real session
-    # start on an unconfigured pair would have written inside the dry run instead.
+    # The same run without --dry-run IS the first sync: external.observed must land then.
+    code, _out, err = _run(repo, "hooks", "run", "session_start", "--harness", "claude", stdin="{}")
+    assert code == 0, err
+    observed = [
+        json.loads(line)["subject"]
+        for shard in (repo / ".ddflow" / "events").glob("*.jsonl")
+        for line in shard.read_text().splitlines()
+        if json.loads(line)["kind"] == "external.observed"
+    ]
+    assert "trainer:132.D" in observed
 
 
 def test_dry_run_session_start_never_runs_the_brief_sweep(repo, monkeypatch):
