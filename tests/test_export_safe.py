@@ -3,6 +3,7 @@ says what was removed, the digest covers the redacted body, MCP output is fenced
 
 from __future__ import annotations
 
+import datetime
 import sys
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from ddflow.services.export import ExportError, frame, ops, query, safe
 LAN = ".".join(("192", "168", "7", "41"))  # built, so no private host is committed text
 HOST = "buildbox." + "lan"
 HOME = "/" + "home/someone/src/proj"
+# the worklog shows only the last 30 days: a fixed date would age out of the document
+_TODAY = datetime.date.today().isoformat()
 KEY = "sk-" + "a1b2c3d4e5f6a7b8c9d0e1f2"
 
 
@@ -32,7 +35,7 @@ def _log(root: Path) -> None:
     log.append(
         "session.note",
         "s-import",
-        {"text": f"built in {HOME}, v0.1.7 shipped", "at": "2026-09-25", "source": "docs/LOG.md:1"},
+        {"text": f"built in {HOME}, v0.1.7 shipped", "at": _TODAY, "source": "docs/LOG.md:1"},
     )
 
 

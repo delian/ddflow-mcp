@@ -14,6 +14,7 @@ import time
 from ...api import reporting as A
 from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
+from ...views.progress import status_tasks_note
 from ..context import FAIL, OK, REFUSED, Ctx
 from ..render import emit_json
 from ..startcost_texts import start_texts
@@ -146,8 +147,14 @@ def _recorded_line(r) -> list[str]:
     if r.get("refuted"):
         extras.append(f"{r['refuted']} gate(s) passed on refutation (`ddflow gate list --refuted`)")
     if r.get("approvals"):
+        # each request's digest and answer form: what a remote operator answers with
+        named = ", ".join(
+            f"{a['id']} ({a['verb']}, digest {a['digest'][:12]}, answer `{a['answer']}`)"
+            for a in r.get("approvals_pending", ())
+        )
         extras.append(
-            f"{r['approvals']} approval request(s) waiting for the operator (`ddflow approvals list`)"
+            f"{r['approvals']} approval request(s) waiting for the operator"
+            f" (`ddflow approvals pending`){': ' + named if named else ''}"
         )
     return ["", "Recorded: " + " · ".join(extras)] if extras else []
 
@@ -194,6 +201,8 @@ def cmd_status(a, c: Ctx) -> int:
         "",
         f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
         f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
+        "",
+        status_tasks_note(),
         "",
         *_queue_lines(r),
         *_recorded_line(r),

@@ -111,6 +111,15 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals pending]
+  '''
+  usage: ddflow approvals pending [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow approvals request]
   '''
   usage: ddflow approvals request [-h] [--item ITEM] [--target TARGET] [--reason REASON] verb
@@ -164,12 +173,14 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
   
   positional arguments:
-    {list,log,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
+      pending             the requests still waiting for a person, each with its digest and its
+                          answer form
       log                 the audit timeline of approvals (who asked, who answered, which channel
                           and level, what was spent) and what looks wrong
       show                one request as ddflow rendered it for the person, with its digest and
@@ -388,17 +399,20 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
-    -h, --help       show this help message and exit
-    --state STATE    only rows in this state
-    --phase PHASE    only rows under this phase id
-    --since SINCE    only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
-    --offset OFFSET  skip this many rows (paging)
-    --all            include fixed and invalid bugs
-    --item ITEM      only bugs filed in or against this queue item id
+    -h, --help         show this help message and exit
+    --state STATE      only rows in this state
+    --phase PHASE      only rows under this phase id
+    --since SINCE      only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
+                       most)
+    --offset OFFSET    skip this many rows (paging)
+    --all              include fixed and invalid bugs
+    --item ITEM        only bugs filed in or against this queue item id
+    --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
+                       newest change first
   
   '''
 # ---
@@ -638,7 +652,7 @@
 # ---
 # name: test_help[ddflow config]
   '''
-  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [value ...]
+  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
   
   positional arguments:
     value                 the value, when --set is used; or `KEY VALUE` with no --set (ddflow config
@@ -653,6 +667,9 @@
                           append this TOML to .ddflow/config.toml (validated first)
     --local               write --set/--append-toml to the git-ignored .ddflow/local/config.toml:
                           this machine's endpoints, hosts, key variables and sizing, never committed
+    --approval APPROVAL   with --set KEY VALUE: an agent's route (`request` files an operator
+                          approval to answer anywhere, an approval id applies and records it); a
+                          person configures directly
   
   '''
 # ---
@@ -1555,7 +1572,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1574,6 +1591,8 @@
     --offset OFFSET       skip this many rows (paging)
     --all                 accepted for every list kind; this kind lists all its rows already
     --item ITEM           only bugs filed in or against this queue item id
+    --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
+                          newest change first
   
   '''
 # ---
@@ -1803,7 +1822,7 @@
 # ---
 # name: test_help[ddflow pins]
   '''
-  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target ...]
+  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--approval APPROVAL] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target ...]
   
   positional arguments:
     document              the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale
@@ -1818,6 +1837,9 @@
     --install             regenerate: install the git merge driver and post-merge hook for the pin
                           files
     --after-merge         regenerate: what the post-merge hook runs
+    --approval APPROVAL   regenerate: an agent's route (`request` files an operator approval to
+                          answer anywhere, an approval id re-records the pins and records the
+                          approval); a person re-records directly
     --tests TESTS         comma-separated test dirs (default: tests,test)
     --min-needle MIN_NEEDLE
                           shortest literal that counts as a pin (default 12)
@@ -3070,6 +3092,16 @@
   
   '''
 # ---
+# name: test_help[ddflow waves]
+  '''
+  usage: ddflow waves [-h] [--stamp]
+  
+  options:
+    -h, --help  show this help message and exit
+    --stamp     write derived wave:N labels (not implemented yet; LB-waves ships it).
+  
+  '''
+# ---
 # name: test_help[ddflow workflow drop]
   '''
   usage: ddflow workflow drop [-h] [--dry-run] id
@@ -3149,13 +3181,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,waves}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -3267,6 +3299,8 @@
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
+      waves               report that `--stamp` is not implemented and name the interim wave-
+                          stamping mechanism (LB-waves ships it)
   
   options:
     -h, --help            show this help message and exit
@@ -3295,6 +3329,7 @@
     'ddflow approvals deny',
     'ddflow approvals list',
     'ddflow approvals log',
+    'ddflow approvals pending',
     'ddflow approvals request',
     'ddflow approvals revoke',
     'ddflow approvals show',
@@ -3477,6 +3512,7 @@
     'ddflow version lint',
     'ddflow version show',
     'ddflow wait',
+    'ddflow waves',
     'ddflow workflow',
     'ddflow workflow drop',
     'ddflow workflow gate',

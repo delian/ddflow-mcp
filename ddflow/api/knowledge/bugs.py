@@ -18,9 +18,9 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
+from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
 
 BUG_SCOPES = ("project", "ddflow")
-BUG_SEVERITIES = ("low", "medium", "high", "critical")
 #: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
 #: The offer to prepare a report names it, so it is only made when this is set
 #: (tests/test_bug_scope.py pins it to the parser).

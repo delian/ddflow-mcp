@@ -279,6 +279,7 @@ def cmd_config(a, c: Ctx) -> int:
             local=bool(getattr(a, "local", False)),
         ),
         agent=c.requested_agent,
+        approval=getattr(a, "approval", "") or "",
     )
     if out.exit != OK:  # failed (1), nothing (2) or refused (3): never collapsed into 0
         print(out.reason, file=sys.stderr)
@@ -303,6 +304,7 @@ def cmd_config(a, c: Ctx) -> int:
                     "effective",
                     "effective_source",
                     "shadowed",
+                    "approval",
                 )
             ),
         )

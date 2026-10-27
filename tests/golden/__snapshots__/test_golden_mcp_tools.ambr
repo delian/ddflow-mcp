@@ -933,6 +933,10 @@
           "type": "string",
           "description": "Earlier fix this follows up: reuses the lines it reached."
          },
+         "kind": {
+          "type": "string",
+          "description": "Work kind: task (default), doc, research or job (its gate pipeline)."
+         },
          "question": {
           "type": "string",
           "description": "What was asked."
@@ -988,10 +992,6 @@
          "landed_paths": {
           "type": "string",
           "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone."
-         },
-         "kind": {
-          "type": "string",
-          "description": "Work kind: task, doc, research or job (its gate pipeline)."
          },
          "worktree": {
           "type": "string",
@@ -1157,6 +1157,10 @@
           "type": "string",
           "description": "search: comma-separated search sources (default all)."
          },
+         "sort": {
+          "type": "string",
+          "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). Default: newest change first."
+         },
          "tail": {
           "type": "integer",
           "description": "Last N entries, oldest first (overrides limit)."
@@ -1192,6 +1196,10 @@
          "after_merge": {
           "type": "boolean",
           "description": "regenerate: the post-merge hook entry."
+         },
+         "approval": {
+          "type": "string",
+          "description": "regenerate: an agent's route: 'request' files an operator approval, an approval id re-records the pins."
          },
          "tests": {
           "type": "string",

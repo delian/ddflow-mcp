@@ -87,7 +87,8 @@ DECIDED 2026-10-23 by the operator (verbatim words are in the session log and in
 
 Wave convention for the tasks named in the Tasks column above: `wave:N` tags follow D-labels and
 D-wave-semantics (derived, priority-ordered, never hand-edited). The stamp writer is not a
-CLI yet: `ddflow waves` does not exist today — `ddflow waves --stamp` arrives with LB-waves,
+CLI yet: `ddflow waves` is a surface that reports the missing `--stamp` with the followable
+mechanism (bug B47acb25115) — the real `ddflow waves --stamp` arrives with LB-waves,
 and GR-wave-derived makes the tags derived values. Until then the followable mechanism is
 the roadmap-review restamp script `docs/ddflow/research/scripts/wave_stamp_accurate.py`
 (via `ddflow update --add-tags`/`--remove-tags`; `docs/ddflow/research/queue-review-2026-10-23.md`),

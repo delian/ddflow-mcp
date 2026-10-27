@@ -90,7 +90,9 @@ def test_every_add_command_carries_the_duplicate_check_answer():
     for command in adds:
         at = command.params.index(ANSWER_PARAMS[0])
         assert command.params[at : at + len(ANSWER_PARAMS)] == ANSWER_PARAMS
-        assert list(command.properties())[-2:] == ["relation", "check_only"]
+        # `kind` (task add only) is declared after the answer, so it follows `check_only`
+        props = [p for p in command.properties() if p != "kind"]
+        assert props[-2:] == ["relation", "check_only"]
 
 
 def test_the_answer_flags_exclude_each_other_on_every_add_command():
@@ -164,6 +166,7 @@ def test_a_task_lists_its_own_arguments_first_on_the_tool_though_its_flags_follo
     """The order of the flags in `task add --help` and of the tool's properties differ; the
     goldens pin both, this names the one that is easy to lose."""
     props = list(TOOLS["ddflow_task_add"]["properties"])
+    props = [p for p in props if p != "kind"]  # declared after the answer, on task add only
     assert props[:3] == ["id", "phase", "parent"] and props[-2:] == ["relation", "check_only"]
 
 

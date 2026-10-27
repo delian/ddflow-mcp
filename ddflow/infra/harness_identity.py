@@ -101,7 +101,7 @@ def _matches(name: str, tags: set[str], scope: str) -> bool:
     """A record is taken by a caller of `scope` when it carries the SAME fingerprint, or
     carries none (a pre-scope record applies to everyone); a caller of no scope takes
     only an untagged one."""
-    return is_valid(name) and (not tags or bool(scope) and scope in tags)
+    return is_valid(name) and (not tags or (bool(scope) and scope in tags))
 
 
 def _gone(key: str) -> bool:

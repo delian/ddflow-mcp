@@ -28,8 +28,8 @@ from helpers import git_quiet as _git
 
 from ddflow import api
 from ddflow.infra import worktree as W
-from ddflow.services import cleanup as CU
 from ddflow.services import ci as CI
+from ddflow.services import cleanup as CU
 
 
 def _owner_marker(tree: Path) -> Path:
@@ -96,7 +96,11 @@ def test_apply_prunes_the_leftover_tree_and_its_registration(repo):
 
     assert not tree.exists(), f"the leftover scratch tree survived: {out.data['performed']}"
     registered = next(
-        (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == tree.resolve()),
+        (
+            e
+            for e in W.list_worktrees(repo)
+            if Path(e.get("worktree", "")).resolve() == tree.resolve()
+        ),
         None,
     )
     assert registered is None, "git worktree list still registers the leftover"
@@ -158,7 +162,9 @@ def test_a_markerless_scratchname_tree_is_pruned_only_in_the_temp_dir(repo):
 
     out = api.cleanup(repo, apply=True, agent="sweeper")
 
-    assert not in_tmp.exists(), f"the markerless temp-dir leftover survived: {out.data['performed']}"
+    assert not in_tmp.exists(), (
+        f"the markerless temp-dir leftover survived: {out.data['performed']}"
+    )
     row = _row(out, far)
     assert far.exists(), f"a markerless tree outside the temp dir was removed: {row}"
     assert row["action"] == "", row
@@ -191,10 +197,14 @@ def test_a_sigterm_ends_a_merge_tree_with_no_scratch_or_registration(repo):
     child.send_signal(signal.SIGTERM)
     child.wait(timeout=30)
 
-    assert child.returncode == -signal.SIGTERM, f"the handler did not re-raise the signal"
+    assert child.returncode == -signal.SIGTERM, "the handler did not re-raise the signal"
     assert not tree.exists(), "the SIGTERMed run left its scratch tree"
     registered = next(
-        (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == tree.resolve()),
+        (
+            e
+            for e in W.list_worktrees(repo)
+            if Path(e.get("worktree", "")).resolve() == tree.resolve()
+        ),
         None,
     )
     assert registered is None, "git worktree list still registers the SIGTERMed run's tree"
