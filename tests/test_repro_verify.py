@@ -132,7 +132,7 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
 def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
     # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
     # the sighting is lost; through the shell the variable is set and the run answers.
-    line = 'X=set ' + python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")
+    line = "X=set " + python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")
     _bid, bug = _file(proj, repro_cmd=line)
     run = _run(proj, bug)
     assert run["executed"] is True and run["reproduced"] == "no"
