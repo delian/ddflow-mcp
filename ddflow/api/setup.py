@@ -1115,13 +1115,19 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, d
     handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
     agents, the very turn it observes. Every problem becomes a `note` for stderr.
 
-    `dry_run` computes and shapes exactly the reply the real run would, but no event is
-    written: probing the hook must not append to the committed event log.
+    `dry_run` computes and shapes the reply the real run would, omitting its
+    write-producing sections, and writes no event: probing the hook must not append to
+    the committed event log.
     """
     handler = _HOOK_HANDLERS.get(event)
     if handler is None:
         return O.ok(
-            "hooks", message="", stdout="", result="skipped", note=f"unknown event {event!r}"
+            "hooks",
+            message="",
+            stdout="",
+            result="skipped",
+            note=f"unknown event {event!r}",
+            dry_run=dry_run,
         )
     try:
         plan = HI.plan_for(harness)
@@ -1132,6 +1138,7 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, d
                 stdout="",
                 result="skipped",
                 note=f"no command-hook descriptor for harness {harness!r}",
+                dry_run=dry_run,
             )
         res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan, dry_run=dry_run)
         out = HI.emit(plan, event, res.context)
@@ -1151,6 +1158,7 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str, *, d
             stdout="",
             result="skipped",
             note=f"{type(exc).__name__}: {exc}",
+            dry_run=dry_run,
         )
     return O.ok(
         "hooks", message=out, stdout=out, result=res.result, note=res.note, dry_run=dry_run
