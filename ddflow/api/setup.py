@@ -738,7 +738,7 @@ def _session_start(repo: Path, agent: str, stdin: str = "", *, dry_run: bool = F
     if not dry_run:
         parts += _sync_sections(repo, agent)
     try:
-        out = brief(repo, check_recovery=True, agent=agent)
+        out = brief(repo, check_recovery=True, agent=agent, dry_run=dry_run)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:
         parts.append(f"ddflow could not build the brief ({exc}). Run `ddflow doctor`.")

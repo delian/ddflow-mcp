@@ -238,17 +238,22 @@ def brief(
     agent: str = "",
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
+    dry_run: bool = False,
 ) -> O.Outcome:
     """The budgeted reading pack: what to do next, and what governs it.
 
     Decisions reach the agent by GLOB rather than by search — the whole point is that they
     arrive without its having to suspect they exist.
+
+    `dry_run` skips the sweep housekeeping (`_sweep_finished` writes `worktree.removed`
+    events and removes leftover trees): a hook probe over the brief must not mutate.
     """
 
     log, cfg, loaded = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
-    _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd))
+    if not dry_run:
+        _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd))
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")

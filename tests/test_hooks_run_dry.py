@@ -109,6 +109,29 @@ def test_dry_run_session_start_still_prints_the_brief_and_writes_no_event(repo):
     assert _shards(repo) == before
 
 
+def test_dry_run_session_start_never_runs_the_brief_sweep(repo, monkeypatch):
+    """The brief's sweep housekeeping is a WRITE (worktree.removed events, leftover trees
+    removed), so a dry run must not reach it; a spy pins that the dry brief build skips it."""
+    from ddflow.services import cleanup as CL
+
+    run_cli(repo, "init")
+    before = _shards(repo)
+    seen: list = []
+
+    def spy(*args, **kwargs):
+        seen.append(True)
+        return CL.sweep_finished(*args, **kwargs)
+
+    monkeypatch.setattr(CL, "sweep_finished", spy)
+    out = A.hooks(
+        repo, action="run", event="session_start", harness="claude", stdin="{}", dry_run=True
+    )
+    assert out.exit == 0
+    assert "# ddflow session start" in out.data["stdout"]
+    assert seen == []  # the sweeping write path was never entered
+    assert _shards(repo) == before
+
+
 def test_the_api_route_the_mcp_twin_takes_also_writes_nothing_on_dry_run(repo):
     """Over MCP the same work is `ddflow_hooks` reaching `api.hooks(action="run", ...)`;
     its `dry_run` argument must behave exactly as the CLI flag."""

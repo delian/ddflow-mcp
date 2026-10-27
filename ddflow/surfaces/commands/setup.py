@@ -460,7 +460,9 @@ def cmd_hooks(a, c: Ctx) -> int:
             dry_run=bool(getattr(a, "dry_run", False)),
         )
         if c.json:
-            c.out("", {"stdout": out.data["stdout"], "note": out.data["note"]})
+            # The MCP twin's declared payload for `run` (`_HARNESS_PAYLOAD["run"]`), so the
+            # two surfaces stay parity-shaped; non-json prints stdout, shaped for the agent.
+            c.out("", {"stdout": out.data["stdout"], "note": out.data["note"], "result": out.data["result"], "dry_run": bool(out.data["dry_run"])})
         elif out.data["stdout"]:
             print(out.data["stdout"])
         if out.data["note"] and not c.json:
