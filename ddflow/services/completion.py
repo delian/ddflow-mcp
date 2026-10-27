@@ -105,6 +105,21 @@ def fixes_of(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
     return {b for b in named if b in state.bugs}
 
 
+def fix_task_for(state: State, bug_id: str, cfg: Config | None = None) -> Item | None:
+    """The queued item filed to fix ``bug_id``: the one the bug's `fix_task` names, else one
+    whose `fixes_of` includes it (a hand-filed task named by the `[ids].fix_task` template
+    carries no link on the bug), else None."""
+    rec = state.bugs.get(bug_id)
+    named = state.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    if named is not None and not named.removed:
+        return named
+    fixers = [i for i in state.live_items() if bug_id in fixes_of(state, i.id, cfg)]
+    # Several may name the bug: the one working in a worktree, then the one the configured
+    # id template names, then the first filed.
+    fixers.sort(key=lambda i: (not i.worktree, bug_id not in IDS.bugs_named_by_fix_task(cfg, i.id)))
+    return fixers[0] if fixers else None
+
+
 def open_bugs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
     """The open bugs ``item_id`` was filed to fix (`fixes_of`), sorted: what its completion
     must close, and what `--regression-test` closes."""

@@ -231,7 +231,14 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         }
     if approvals := V.waiting_for_a_person(st):  # RA-cli: only when a request waits
         data["approvals_pending"] = [
-            {"id": r["id"], "verb": r["verb"], "agent": r["requested_by"]} for r in approvals
+            {
+                "id": r["id"],
+                "verb": r["verb"],
+                "agent": r["requested_by"],
+                "digest": r["digest"],
+                "answer": f"ddflow approvals approve {r['id']}",
+            }
+            for r in approvals
         ]
     if st.highest_version:
         # Which ddflow versions have worked on this log, and the highest (the version stamp).
@@ -271,6 +278,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "open_bugs": len(open_bugs),
         "refuted": len(flagged),
         "approvals": len(data.get("approvals_pending", ())),
+        "approvals_pending": data.get("approvals_pending", []),
         "release": release,
     }
     return O.ok("status", **data)

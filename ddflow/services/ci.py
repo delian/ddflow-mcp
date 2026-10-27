@@ -274,7 +274,7 @@ def _claim_owner(tree: Path) -> Path:
     (a read-only temp dir) costs `cleanup` the liveness check, never the run itself."""
     marker = owner_marker(tree)
     try:
-        marker.write_text(owner_line() + "\n")
+        fsio.atomic_write(marker, owner_line() + "\n")
     except OSError:
         pass
     return marker
@@ -452,7 +452,9 @@ def run(
     tick: tuple[Callable[[], None], float] | None = None,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
+    queued phase of the host suite lock besides (the per-run override covers the queue wait,
+    not only the run behind it, Ba5d5d63f12).
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
@@ -496,7 +498,17 @@ def run(
         full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
         try:
             p, out_prefix, waited = _run_locked(
-                cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite
+                cfg,
+                repo,
+                ref,
+                tree,
+                cmd,
+                scope,
+                budget,
+                tick,
+                used,
+                full_suite,
+                lock_wait=_lock_wait(timeout_s),
             )
         except SL.SuiteBusy as busy:
             return Result(
@@ -513,12 +525,26 @@ def run(
     return res
 
 
-def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite):
+def _lock_wait(timeout_s: int) -> float | None:
+    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone, what
+    `SL.hold` falls back to), or ``timeout_s`` when it is a positive per-run override: the
+    override caps the queued wait (this value) and is the budget of the run behind it.
+    A queued run used to give up at the knob although the caller had authorised a much
+    longer run, and a shorter run had no say about its queue wait either (Ba5d5d63f12)."""
+    if timeout_s <= 0:
+        return None
+    return float(timeout_s)
+
+
+def _run_locked(
+    cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None
+):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
-    its output prefix and the seconds spent queued for the slot (None without one)."""
+    its output prefix and the seconds spent queued for the slot (None without one). ``lock_wait``
+    replaces the wait limit for this hold (see `_lock_wait`)."""
     waited: float | None = None
     queued_at = time.monotonic()
-    with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+    with SL.hold(cfg, _holder(repo, ref), wait_s=lock_wait) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
         p, out_prefix = _execute(
