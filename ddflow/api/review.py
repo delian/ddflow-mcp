@@ -1293,7 +1293,9 @@ def _full_rounds(it, gate: str) -> int:
     charges nothing (Bfdcb5c177c). One whose record carries NO `status` at all and
     some outcome is a declared round (a full record of the era before `status`
     evidence carried into a re-claim or hand record): it still counts, or a
-    re-record would silently hand the budget back.
+    re-record would silently hand the budget back. The same era's refused and
+    errored full records have no verdict either and this contract excludes them
+    there too (rubber_duck finding #1): outcomes without a verdict charge nothing.
     """
     return sum(
         1
@@ -1301,7 +1303,10 @@ def _full_rounds(it, gate: str) -> int:
         if r.evidence.get("review_kind") == "full"
         and (
             r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-            or (r.evidence.get("status") is None and r.outcome not in (None, "unavailable"))
+            or (
+                r.evidence.get("status") is None
+                and r.outcome not in (None, "unavailable", "error", "refused")
+            )
         )
         and not _kept_copy(r)
         and not _settled_pass(r)
