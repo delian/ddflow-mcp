@@ -1,6 +1,6 @@
 # Ultracode and Claude Code dynamic workflows: research for ddflow
 
-Status: research only, 2026-10-26. Nothing was run, installed or edited. Every item is marked verified, reported, inferred or unverified. Refuted claims were dropped. Disputed claims are marked.
+Status: research only, 2026-10-26. No code was run, installed, or edited in the repo; the only artifact is this document. Every item is marked verified, reported, inferred or unverified. Refuted claims were dropped. Disputed claims are marked.
 
 Sources:
 - Official docs: https://code.claude.com/docs/en/workflows, /model-config, /settings-reference, /tools-reference, /hooks, /agent-sdk/typescript
@@ -120,24 +120,24 @@ Reading the table:
 ## 3. What ddflow already has
 
 **Shipped (code or docs read):**
-- Claim, lease and heartbeat, a worktree per item, the needs and wave DAG, and declared globs. Overlapping globs are refused at claim (`core/admission.py`), with shared globs exempt.
-- Gate pipeline: every gate must carry an outcome, skips need a reason, and reviewer independence by model family is enforced (`services/gates/`).
-  - Chunked parallel model review (`services/review.py`), range reviews through roborev, and test selection.
-  - ddmin culprit search (`services/bisect.py`), kind pipelines, and cadence passes.
+- Claim, lease and heartbeat, a worktree per item, the needs and wave DAG, and declared globs. Overlapping globs are refused at claim (`ddflow/core/admission.py`), with shared globs exempt.
+- Gate pipeline: every gate must carry an outcome, skips need a reason, and reviewer independence by model family is enforced (`ddflow/services/gates/`).
+  - Chunked parallel model review (`ddflow/services/review.py`), range reviews through roborev, and test selection.
+  - ddmin culprit search (`ddflow/services/bisect.py`), kind pipelines, and cadence passes.
   - This is the deterministic analogue of ultracode's adversarial verification, but bound to item and diff review, not arbitrary fan-out.
 - Merge queue (`ddflow queue add|run|status|remove`): a serial integrator that runs `ci` once per entry, with `max_batch` as a loop bound.
-- Atomic multi-record writes in `api/batch.py` (`ddflow batch`, `fold`). The name clashes with gate batching.
+- Atomic multi-record writes in `ddflow/api/batch.py` (`ddflow batch`, `fold`). The name clashes with gate batching.
 - Detached jobs (`ddflow_job_run`, `ddflow_job_list`) and `ddflow_loops`, which detects repetition. `ddflow_wait` waits for a claimable lease, not for a job.
-- A read-only lane ledger and advisor (`services/lanes/`) that never spawns or kills anything.
+- A read-only lane ledger and advisor (`ddflow/services/lanes/`) that never spawns or kills anything.
 - Concurrency primitives.
-  - `services/slots.py` is a cross-process flock counting semaphore.
-  - `schedule.parallel` and `[ci].max_concurrent_suites` limit concurrency, and `suitelock.py` already implements a FIFO queue.
+  - `ddflow/services/slots.py` is a cross-process flock counting semaphore.
+  - `schedule.parallel` and `[ci].max_concurrent_suites` limit concurrency, and `ddflow/services/suitelock.py` already implements a FIFO queue.
   - Declared `--resources` capacities.
-  - The three limiters are not unified. That statement in the raw findings was refuted, and only `cmdrunner.py` and `suitelock.py` use `Slots`.
-- Approvals by digest (`services/approval.py`): single-use, agent identities refused, and forgery visible rather than impossible. Remote delivery (`P-remote-approvals`) is still open.
-- The event log is the shared blackboard: append-only, sharded per agent, committed, with a blob store (`infra/blobstore.py`).
-  - Event kinds are declared as TOML in `ddflow/templates/events/<owner>.toml` (`core/eventkinds.py`).
-- Reviewer transports in `services/review.py`, with PRESETS for openai-compatible, anthropic, gemini and command kinds, plus local servers (ollama, llamacpp, vllm, litellm).
+  - The three limiters are not unified. That statement in the raw findings was refuted, and only `ddflow/services/cmdrunner.py` and `ddflow/services/suitelock.py` use `Slots`.
+- Approvals by digest (`ddflow/services/approval.py`): single-use, agent identities refused, and forgery visible rather than impossible. Remote delivery (`P-remote-approvals`) is still open.
+- The event log is the shared blackboard: append-only, sharded per agent, committed, with a blob store (`ddflow/infra/blobstore.py`).
+  - Event kinds are declared as TOML in `ddflow/templates/events/<owner>.toml` (`ddflow/core/eventkinds.py`).
+- Reviewer transports in `ddflow/services/review.py`, with PRESETS for openai-compatible, anthropic, gemini and command kinds, plus local servers (ollama, llamacpp, vllm, litellm).
   - There is an off-contract rule: a missing `STATUS:` line means the review did not happen.
   - The transport is one-shot text in and text out, with no tool-use loop and no JSON-schema mode. The parser is review-specific.
 - 23 harness descriptors (`ddflow/harnesses/*.toml`). They cover files, hooks and identity, not launch, stream, resume or limits.
@@ -153,7 +153,7 @@ Reading the table:
 
 **Design tension.** The accepted swarm decision rejects an LLM-driven orchestrator, "option C", except for read-only research items. The reasons are about 15x tokens, non-determinism, the single-writer leases and unauditable fan-out. An ultracode-like mode that lets agents author scripts is a form of option C. Any ddflow adoption must therefore confine it to read-only fan-out (research, review, verification), or route every write through a claimed item, a worktree and the gates.
 
-**Naming.** `ddflow_workflow`, `_state`, `_pipeline`, `_gate` and `_drop` already mean the project's gate-pipeline configuration (`ddflow/api/workflow.py`, `surfaces/declared/hooks.py`). A new orchestration feature must use another noun, for example `program`.
+**Naming.** `ddflow_workflow`, `_state`, `_pipeline`, `_gate` and `_drop` already mean the project's gate-pipeline configuration (`ddflow/api/workflow.py`, `ddflow/surfaces/declared/hooks.py`). A new orchestration feature must use another noun, for example `program`.
 
 ---
 
@@ -171,24 +171,24 @@ Reading the table:
 1. Docs and templates only (small).
    - Ship a `workflow-wave` recipe and a saved `.claude/workflows/ddflow-wave.js` through `ddflow adopt`.
    - Each stage prompt puts `as_agent=<role>-<item>` into every ddflow call.
-2. A `ddflow next`-style read that returns a conflict-free wave with tier or model hints. The scheduler pieces already exist in `core/schedule.py` and `core/admission.py`.
+2. A `ddflow next`-style read that returns a conflict-free wave with tier or model hints. The scheduler pieces already exist in `ddflow/core/schedule.py` and `ddflow/core/admission.py`.
 3. A run-recording event family (`workflow.run.*`: run id, script digest, agent-to-item map). Nothing records runs today. The name must avoid "workflow".
-4. A spend link to `services/quota.py` and the token-spend work.
+4. A spend link to `ddflow/services/quota.py` and the token-spend work.
 
 ### 4.3 Risks, with the code that decides each
 
 - **Identity collisions are silent.**
   - Several agents on one tree merge into one identity with no error, so a review gate can compare the author with itself and pass (`ddflow/surfaces/mcp.py`, `Server._caller` and `_someone_else`).
-  - Every workflow prompt must carry a unique `as_agent`, matching `[A-Za-z0-9._-]{1,64}` (`core/agentname.py`).
+  - Every workflow prompt must carry a unique `as_agent`, matching `[A-Za-z0-9._-]{1,64}` (`ddflow/core/agentname.py`).
   - Workflow agents must not call `ddflow_identify`.
 - **Double-worktree hazard (code read, runtime behavior unverified).**
-  - For a foreign `as_agent`, `_invoke_marked` forces the caller location to the primary checkout, so `ddflow_claim` creates a second tree instead of adopting the runtime's `isolation:'worktree'` tree (`api/lifecycle/claim.py`, `infra/worktree.py`).
+  - For a foreign `as_agent`, `_invoke_marked` forces the caller location to the primary checkout, so `ddflow_claim` creates a second tree instead of adopting the runtime's `isolation:'worktree'` tree (`ddflow/api/lifecycle/claim.py`, `ddflow/infra/worktree.py`).
   - Gates and merge then act on a tree the agent did not edit.
   - Options: (a) skip `isolation:'worktree'` and have the agent `cd` into the tree `ddflow_claim` returns, or (b) have the agent use the CLI from inside its isolated tree, where `ddflow claim` adopts it.
-  - Option (b) needs `DDFLOW_AGENT` set per command, because harness identity is per harness process (`infra/harness_identity.py`).
+  - Option (b) needs `DDFLOW_AGENT` set per command, because harness identity is per harness process (`ddflow/infra/harness_identity.py`).
   - The biggest code change would be letting `ddflow_claim` bind an explicit tree when `as_agent` is foreign.
 - **Lease races.**
-  - Acquisition is check-then-act inside `EventLog.transaction` (flock, `services/leases.py`).
+  - Acquisition is check-then-act inside `EventLog.transaction` (flock, `ddflow/services/leases.py`).
   - With 16 concurrent agents the real risk is lock timeouts and refused claims, not double claims.
   - Expiry never steals work (`reclaim_policy=report`).
   - Scripts must treat a claim refusal as normal and must not retry in a tight loop.
@@ -198,7 +198,7 @@ Reading the table:
   - The runtime's stall auto-restart reruns the prompt from scratch, so claims must be idempotent.
   - `_renew_in_place` and `worktree.create` are idempotent, but the retry must pass the same `as_agent` and item.
 - **Reviewer independence.**
-  - `reviewer_independence` (`services/gates/reviewers.py`) compares the author's model with the reviewer's recorded model. An `inherit` model cannot satisfy it (D-subagents).
+  - `reviewer_independence` (`ddflow/services/gates/reviewers.py`) compares the author's model with the reviewer's recorded model. An `inherit` model cannot satisfy it (D-subagents).
   - A workflow `agent()` that omits `model` inherits the author's.
   - An Anthropic-only runtime cannot supply another family. Whether `opts.model` accepts non-Anthropic ids is unverified.
   - Critic and rubber_duck gates still need Kimi or Codex through `ddflow_review` (command reviewers are operator-only, D-reviewer-trust).
@@ -217,14 +217,14 @@ Reading the table:
   - `/loop`- or schedule-driven `implement` needs a saved workflow with a `Workflow` allow rule, or auto or bypass mode.
   - ddflow MCP tools must be on the allow list, or agents prompt mid-run.
 - **Long MCP operations.**
-  - Heavy tools (`gate_run`, `review`, `ci`) are offloaded to worker processes with progress frames (`surfaces/mcp.py`), so one stdio connection is not blocked.
+  - Heavy tools (`gate_run`, `review`, `ci`) are offloaded to worker processes with progress frames (`ddflow/surfaces/mcp.py`), so one stdio connection is not blocked.
   - Polling is the only portable completion contract (`docs/ddflow/research/mcp-long-ops.md`).
 
 ### 4.4 Unverified, needs a probe
 
 - Whether workflow agents share the parent's MCP connection or start their own ddflow server.
 - Where `isolation:'worktree'` trees live and what branches they use.
-- Whether ddflow's PreToolUse and commit hooks fire in workflow agents, and whether `agent_id` is in the payload. ddflow's `services/claudehooks.py` does not read `agent_id` today.
+- Whether ddflow's PreToolUse and commit hooks fire in workflow agents, and whether `agent_id` is in the payload. ddflow's `ddflow/services/claudehooks.py` does not read `agent_id` today.
 - Whether `agent()` accepts env or cwd options.
 - Whether the runtime can export its journal.
 
@@ -254,9 +254,9 @@ Feasible, but as a deliberately narrower runtime. ddflow can mimic the control-f
   | `budget` | Hard stop that writes an event |
   | `workflow()` | `include`, with a depth cap (about 3) and an agent-count cap |
 
-  Budget accuracy is limited: `core/budget.py` is a chars-divided-by-4 estimate. Real spend needs usage data from harnesses (the ATF-* work).
+  Budget accuracy is limited: `ddflow/core/budget.py` is a chars-divided-by-4 estimate. Real spend needs usage data from harnesses (the ATF-* work).
 - **Launching agents, three tiers, in build order.**
-  - T1 (MVP): the reviewer transports in `services/review.py` give read-only thinker agents (researchers, critics, classifiers, planners) with no new launcher. They need a JSON-schema mode and a generalised parser.
+  - T1 (MVP): the reviewer transports in `ddflow/services/review.py` give read-only thinker agents (researchers, critics, classifiers, planners) with no new launcher. They need a JSON-schema mode and a generalised parser.
   - T2: headless coding subprocesses (`claude -p`, `codex exec`, `gemini`, opencode, qwen, kimi) through the Lane interface. This is blocked on DRV-engines and DRV-lane-interface, both open.
   - T3: Herdr, ACP and tmux lanes, and plugin lanes through DRV-plugin-sdk.
   - A step declares required capabilities. A lane lacking one is reported `unavailable`, as D-DRV-4 requires.
@@ -278,7 +278,7 @@ Feasible, but as a deliberately narrower runtime. ddflow can mimic the control-f
   - Overlapping-glob fan-outs are refused or serialised at plan time.
   - Worktrees do not isolate ports, databases or network.
 - **Mixed model fleets.** Programs name roles (`cheap_bulk`, `strong_planner`, `critic`), mapped to (harness, model, route) lanes through the DRV catalog. A `verify()` helper runs N verifiers from distinct families with a quorum, reusing the family-independence rule.
-- **Approvals.** The program digest (script, resolved lanes, budget, fan-out bound) is approved once through `services/approval.py`. Writer or high-spend programs require it. Small read-only T1 programs may be auto-approved by config. The digest subject type is new (inferred, not yet existing).
+- **Approvals.** The program digest (script, resolved lanes, budget, fan-out bound) is approved once through `ddflow/services/approval.py`. Writer or high-spend programs require it. Small read-only T1 programs may be auto-approved by config. The digest subject type is new (inferred, not yet existing).
 
 ### 5.3 Phases
 
@@ -331,11 +331,11 @@ Questions, each with a default:
 
 ## 7. Defects and gaps found in ddflow worth filing
 
-1. **Identity is not per workflow agent.** Harness identity records are per harness process, so every shell under one harness shares a name unless `DDFLOW_AGENT` or `--agent` is set per command. Hooks do not read `agent_id` (`infra/harness_identity.py`, `services/claudehooks.py`). This matches the known identity bug.
-2. **Foreign `as_agent` claim forces the primary checkout.** `ddflow_claim` creates a second worktree and does not adopt the caller's tree (`surfaces/mcp.py` `_invoke_marked`, `api/lifecycle/claim.py`). Enhancement: an explicit adopt or worktree argument.
+1. **Identity is not per workflow agent.** Harness identity records are per harness process, so every shell under one harness shares a name unless `DDFLOW_AGENT` or `--agent` is set per command. Hooks do not read `agent_id` (`ddflow/infra/harness_identity.py`, `ddflow/services/claudehooks.py`). This matches the known identity bug.
+2. **Foreign `as_agent` claim forces the primary checkout.** `ddflow_claim` creates a second worktree and does not adopt the caller's tree (`ddflow/surfaces/mcp.py` `_invoke_marked`, `ddflow/api/lifecycle/claim.py`). Enhancement: an explicit adopt or worktree argument.
 3. **No SubagentStart handler.** `docs/ddflow/research/requirements-management.md:216` says ddflow has none. A workflow-aware identity story would use it.
-4. **Stale research doc.** `docs/ddflow/research/batch-gates.md` section 3 says the suite lock has "no FIFO (fix-B1fa77a6832 in flight)". `services/suitelock.py` already has a FIFO queue with positions and grace (verified in code, HEAD 4aee0038f).
-5. **Documentation overstatement.** `services/slots.py` says its three limiters "exist or are planned", and only `cmdrunner.py` and `suitelock.py` use `Slots`. Do not describe the limiters as unified.
+4. **Stale research doc.** `docs/ddflow/research/batch-gates.md` section 3 says the suite lock has "no FIFO (fix-B1fa77a6832 in flight)". `ddflow/services/suitelock.py` already has a FIFO queue with positions and grace (verified in code, HEAD 4aee0038f).
+5. **Documentation overstatement.** `ddflow/services/slots.py` says its three limiters "exist or are planned", and only `ddflow/services/cmdrunner.py` and `ddflow/services/suitelock.py` use `Slots`. Do not describe the limiters as unified.
 6. **Event-kind extension is not data-only.** Declaring a kind in TOML needs a fold handler in `core.model.HANDLERS`, an upcaster entry and a fixture update, or `eventkinds.problems()` fails. This should be documented where the docstring says a new phase edits no core.
 7. **Naming collision.** "Workflow" means gate rules in ddflow (`ddflow_workflow*`) and orchestration scripts in Claude Code. `docs/ddflow/decisions/shared-engines.md` already uses "workflow packs" and "workflow-template engine" loosely. A glossary entry would help.
 8. **No generic structured-output transport.** Reviewer transports have no JSON-schema or response-format support and no tool-use loop. The parser is `STATUS`/`FINDING`-specific.
@@ -350,5 +350,3 @@ Questions, each with a default:
 - Framework claims (LangGraph Send API, Temporal replay) were not checked against primary docs.
 - No measurements. The LOC and task estimates are rough, and the Herdr probe has not been run.
 - Task states were read in this worktree. Main may have moved.
-
-The finished document is intended for `docs/ddflow/research/ultracode.md`. It is not written to disk.
