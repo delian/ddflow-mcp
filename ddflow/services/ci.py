@@ -496,11 +496,11 @@ def run(
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
         full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
+        holder = _holder(repo, ref)
         try:
             p, out_prefix, waited = _run_locked(
                 cfg,
-                repo,
-                ref,
+                holder,
                 tree,
                 cmd,
                 scope,
@@ -536,15 +536,15 @@ def _lock_wait(timeout_s: int) -> float | None:
     return float(timeout_s)
 
 
-def _run_locked(
-    cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None
-):
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
-    its output prefix and the seconds spent queued for the slot (None without one). ``lock_wait``
-    replaces the wait limit for this hold (see `_lock_wait`)."""
+    its output prefix and the seconds spent queued for the slot (None without one). ``holder``
+    is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
+    an empty named command is the suite, never `not cmd.strip()` on the materialized command.
+    ``lock_wait`` replaces the wait limit for this hold (see `_lock_wait`)."""
     waited: float | None = None
     queued_at = time.monotonic()
-    with SL.hold(cfg, _holder(repo, ref), wait_s=lock_wait) if full_suite else nullcontext():
+    with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
         p, out_prefix = _execute(

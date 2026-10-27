@@ -220,9 +220,11 @@ def test_a_lapsed_lease_is_not_offered_for_paths_another_agent_now_holds(repo, c
 
 
 def test_a_lapsed_lease_straddling_another_agents_paths_is_not_offered(repo, cfg, monkeypatch):
-    """Per lease, not per path: the heartbeat revives every glob of the lapsed lease, so
-    one overlapping another agent's live lease anywhere is not offered -- even when the
-    staged path itself is free."""
+    """Per path, not per lease (DX-lapsed-lease-merge-deadlock): the lapsed lease still
+    vouches for the staged path NOBODY's live lease covers, accepted under
+    [enforce].lapsed_lease; a path the other lease holds stays STOPped. The lapsed lease
+    over the held paths is not offered a wholesale revival, which is the race the STOP
+    text warns against."""
     tree = _setup(repo, cfg)
     assert run_cli(repo, "task", "add", "T2", "--globs", "src/taken.py")[0] == 0
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
@@ -230,9 +232,64 @@ def test_a_lapsed_lease_straddling_another_agents_paths_is_not_offered(repo, cfg
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
     L.acquire(EventLog(repo, "other"), cfg, "T2", holder="other", globs=["src/taken.py"])
     monkeypatch.chdir(tree)
-    _code, msg = E.check_commit(repo, cfg, agent="owner")  # stages only src/new.py
-    assert "src/new.py" in msg and "ANOTHER agent" not in msg, msg
-    assert "heartbeat" not in msg, msg
+    code, msg = E.check_commit(repo, cfg, agent="owner")  # stages only src/new.py
+    assert code == 0, msg
+    assert "ANOTHER agent" not in msg, msg
+    assert "lapsed" in msg, msg
+    # The held path is a different outcome; its own test covers the STOP it still gets.
+
+
+def test_a_lapsed_lease_item_can_commit_its_merge_of_main_despite_an_overlapping_glob(
+    repo, cfg, monkeypatch
+):
+    """DX-lapsed-lease-merge-deadlock: T1's lease on src/* lapses, then T2 claims
+    src/taken.py -- a glob that OVERLAPS T1's without covering src/own.py, the path the
+    branch itself commits. The merge of main is not new work: src/own.py's branch side was
+    committed while the lease was live, and nobody holds it live now, so the lapse is
+    accepted for it and the merge can be concluded -- instead of refusing the committer a
+    remedy that works (a heartbeat can only revive src/* over T2's live src/taken.py)."""
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--globs", "src/*")[0] == 0
+    wt = W.create(repo, cfg, "T1")
+    L.acquire(
+        EventLog(repo, "owner"),
+        cfg,
+        "T1",
+        holder="owner",
+        worktree=W.store_path(repo, wt.path),
+        branch=wt.branch,
+        globs=["src/*"],
+    )
+    cfg.enforce.commit_without_lease = "block"
+    (wt.path / "src").mkdir(exist_ok=True)
+    (wt.path / "src" / "own.py").write_text("x = branch\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "src/own.py"], check=True)
+    subprocess.run(["git", "-C", str(wt.path), "commit", "-qm", "branch work"], check=True)
+    # Main changes src/own.py differently (the merge will conflict) and adds src/taken.py.
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "own.py").write_text("x = main\n")
+    (repo / "src" / "taken.py").write_text("t = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "main moves"], check=True)
+    # T1's lease lapses, and T2's live claim takes one file under an overlapping glob.
+    later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
+    _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
+    monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
+    assert run_cli(repo, "task", "add", "T2", "--globs", "src/taken.py")[0] == 0
+    L.acquire(EventLog(repo, "other"), cfg, "T2", holder="other", globs=["src/taken.py"])
+    monkeypatch.chdir(wt.path)
+    m = subprocess.run(
+        ["git", "-C", str(wt.path), "merge", "--no-commit", "--no-ff", "main"],
+        capture_output=True,
+        text=True,
+    )
+    assert m.returncode != 0, m.stdout + m.stderr  # src/own.py conflicts
+    (wt.path / "src" / "own.py").write_text("x = both\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "src/own.py"], check=True)
+    code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert code == 0, msg
+    assert "lapsed" in msg.lower(), msg
+    assert "ANOTHER agent" not in msg, msg
 
 
 def test_a_derived_identity_is_told_how_the_holder_would_be_covered(repo, cfg, monkeypatch):
