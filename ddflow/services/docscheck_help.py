@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import threading
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
@@ -132,13 +133,17 @@ class _InProcessHelp:
 
         try:
             out, err = io.StringIO(), io.StringIO()
-            try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
-                with redirect_stdout(out), redirect_stderr(err):
-                    self.parser().parse_args(argv[1:])
-            except SystemExit as exc:
-                code = exc.code if isinstance(exc.code, int) else 1
-            else:
-                code = 0
+            # The redirects swap the process-global sys.stdout/stderr while argparse
+            # renders; renders of several chains never overlap (one lock), so a render can
+            # neither take another thread's print nor take this process's own stdout.
+            with _RENDER_LOCK:
+                try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
+                    with redirect_stdout(out), redirect_stderr(err):
+                        self.parser().parse_args(argv[1:])
+                except SystemExit as exc:
+                    code = exc.code if isinstance(exc.code, int) else 1
+                else:
+                    code = 0
         except Exception as exc:  # a registry that cannot build is "could not run"
             return P.Captured(error=exc)
         if code:
@@ -162,6 +167,10 @@ class _InProcessHelp:
 #: The in-process walker every runner here shares: one registry per process, whatever
 #: builds the runner (the CLI, the MCP tool, a test).
 _HERE = _InProcessHelp()
+
+#: Serializes `analyze_args` renders: the redirects in `_InProcessHelp.help` hold the
+#: process-global stdio while one render runs, so two renders never overlap.
+_RENDER_LOCK = threading.Lock()
 
 
 def _require_walk(root: argparse.ArgumentParser, chain: list[str]) -> argparse.ArgumentParser:
@@ -187,6 +196,11 @@ class HelpIndex:
         #: Why a command could not be walked, one note each (command or verb chain -> reason).
         self.unavailable: dict[str, str] = {}
         self._broken: set[tuple[str, ...]] = set()  #: chains whose help could not run
+        # The in-process commands are walked whole, now: `ddflow docs check` resolves the
+        # chains a document mentions against a cache the eager walk already filled, paying
+        # one bounded batch per check instead of a render per mention (DX-docs-check-speed).
+        if any(c in IN_PROCESS_COMMANDS for c in self.commands):
+            self.walk_all()
 
     def walk_all(self) -> int:
         """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
