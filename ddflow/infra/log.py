@@ -29,6 +29,7 @@ import os
 import re
 import secrets
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, fields
@@ -894,16 +895,18 @@ def _clone_suffix(root: Path) -> str:
         return ""
 
 
-#: Transaction depth per (pid, lock path), NOT per EventLog instance.
+#: Transaction depth per (pid, thread, lock path), NOT per EventLog instance.
 #: `fcntl.flock` is per-open-file-description, so a second `os.open` of the same file
-#: in the same process blocks forever against the lock this process already holds. Two
+#: on the SAME thread blocks forever against the lock that thread already holds. Two
 #: EventLog objects for one repo in one process is entirely reasonable and happens
-#: today, so the guard has to be keyed on what actually identifies the lock.
-_HELD: dict[tuple[int, str], int] = {}
+#: today, so the guard has to be keyed on what actually identifies the lock AND the
+#: thread: re-entry on the same thread is the deadlock case; a DIFFERENT thread is a
+#: different writer and must park on the flock like another process (Bf7f6540615).
+_HELD: dict[tuple[int, int, str], int] = {}
 
 
-def _held_key(path: Path) -> tuple[int, str]:
-    return (os.getpid(), str(path))
+def _held_key(path: Path) -> tuple[int, int, str]:
+    return (os.getpid(), threading.get_ident(), str(path))
 
 
 def _holder_note(path: Path) -> str:
@@ -1204,9 +1207,11 @@ class EventLog:
         Lease acquisition is check-then-act: "is anyone holding this? no -> claim it".
         Without a lock spanning BOTH halves, two agents both read "free" and both
         claim, which is the exact race this whole coordination layer exists to stop.
-        Re-entrant by depth count, keyed on (pid, lock path) rather than on this object,
-        because flock is per-open-file-description: a SECOND EventLog instance in the
-        same process would otherwise deadlock against the lock the first one holds.
+        Re-entrant by depth count, keyed on (pid, thread, lock path) rather than on this
+        object, because flock is per-open-file-description: a SECOND EventLog instance on
+        the SAME thread would otherwise deadlock against the lock the first one holds.
+        A DIFFERENT thread is not a re-entrant caller: it queues on the flock and waits
+        the holder out, like a writer in another process (Bf7f6540615).
         """
         key = _held_key(self.lock_path)
         if _HELD.get(key, 0):

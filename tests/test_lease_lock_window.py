@@ -265,36 +265,36 @@ def test_renew_release_and_expire_all_go_through_one_body():
 # -- Bf7f6540615: threads of one process are separate writers ---------------------------------
 
 
-def test_a_second_thread_is_a_second_writer_not_a_reentrant_caller(repo):
-    """The re-entrancy guard must cover re-entry on the SAME thread, not this process.
+def test_a_second_thread_is_waited_out_of_the_lock_not_let_past(repo):
+    """The re-entrancy guard must cover re-entry on the SAME thread, not the process.
 
     `transaction()` skips the flock when this process already holds the lock, because a
     re-entrant open of the lock file would deadlock against the open-file-description
     lock the first open holds. Keyed on (pid, lock path), the same guard also let a
-    DIFFERENT thread's EventLog through: 8 threads each with their own EventLog walked
-    into the same read-check-append and two (the probe measured 2) both saw 'unused'.
-    A different thread is a different writer and must queue on the flock like another
-    process; exactly one check may see the marker absent.
+    DIFFERENT thread in: its read-check-append ran concurrently with the holder's, and
+    two of eight both saw 'unused' (Bf7f6540615's probe measured 2 successes, 1 right).
+    A different thread is a different writer and must PARK on the flock exactly like
+    another process: while one thread holds the transaction, a second must not reach
+    its read inside one. Held a whole second, deterministically: waiting on the
+    re-entrancy check is prompted by the holder's own event, so a path that let the
+    rival through cannot hide in a scheduling nicety.
     """
-    successes: list[bool] = []
-    go = threading.Event()
+    a_holds = threading.Event()
+    entered = threading.Event()
 
-    def worker() -> None:
-        log = EventLog(repo, "x")  # one agent-shard name, eight independent writers
-        go.wait()
+    def rival() -> None:
+        log = EventLog(repo, "r")
+        a_holds.wait()  # parked until the holder is ALREADY inside its transaction
         with log.transaction():
-            if not any(
-                e.kind == "session.note" and e.subject == "bf7f6540615-taken"
-                for e in log.read_all()
-            ):
-                time.sleep(0.05)  # widen the window enough the race cannot hide
-                log.append("session.note", "bf7f6540615-taken", {"text": "mine"})
-                successes.append(True)
+            entered.set()
 
-    threads = [threading.Thread(target=worker) for _ in range(8)]
-    for t in threads:
-        t.start()
-    go.set()
-    for t in threads:
-        t.join()
-    assert len(successes) == 1, f"{len(successes)} threads saw 'unused' (want exactly 1)"
+    t = threading.Thread(target=rival)
+    t.start()
+    try:
+        log = EventLog(repo, "h")
+        with log.transaction():
+            a_holds.set()
+            time.sleep(1.0)
+            assert not entered.is_set(), "a second thread entered while the lock was held"
+    finally:
+        t.join(35.0)
