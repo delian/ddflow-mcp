@@ -1262,7 +1262,7 @@ def _evidence_fields(
     return ev, None
 
 
-def _not_gated_skip_note(warning, skip, approval_stamp, it, gdef, gate, agent, hard_skip) -> str:
+def _not_gated_skip_note(warning, approval_stamp, it, gdef, gate, hard_skip) -> str:
     """B97106be46a: a skip must say WHICH case it is. A refused one already names the
     approval request; one recorded on the strength of a consumed approval carries its
     ask id in the evidence (`approval_stamp`). Any OTHER skip needs neither, for ANY
@@ -1277,11 +1277,11 @@ def _not_gated_skip_note(warning, skip, approval_stamp, it, gdef, gate, agent, h
     (second critic round)."""
     if not hard_skip or approval_stamp:
         return warning
-    failed = bool(
-        gdef is not None
-        and gdef.reviewer
-        and GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
-    )
+    # `confirmed_only` stays its False default: past the guard `hard_skip` is truthy,
+    # so the not-gated note always reads the review the way a hard skip does. (A
+    # mirrored `confirmed_only=not hard_skip`, like `_agent_skip_refusal` carries,
+    # would be constant here -- roborev job 3679.)
+    failed = bool(gdef is not None and gdef.reviewer and GO.unresolved_review_failure(it, gate))
     clause = (
         f"{gate} is a failed review with findings still unanswered, so this skip is "
         "the operator's own override"
@@ -1415,12 +1415,10 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
     warning = _not_gated_skip_note(
         warning,
-        skip,
         approval_stamp,
         it,
         gdef,
         gate,
-        agent,
         hard_skip,
     )
 
