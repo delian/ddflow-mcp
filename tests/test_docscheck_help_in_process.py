@@ -53,8 +53,9 @@ def test_the_in_process_help_flags_match_the_spawned_walk():
         ), chain
     for chain in BOGUS_CHAINS:
         inproc = H.in_process(chain)
-        real = spawned(chain)  # invalid verbs: both refuse, and refuse the same way
-        assert inproc.ran == real.ran and inproc.returncode != 0, chain
+        real = spawned(chain)  # invalid verbs: the spawned walk refuses them too
+        assert inproc.ran == real.ran, chain
+        assert inproc.returncode != 0 and real.returncode != 0, chain
         assert H.help_flags(inproc.stdout or inproc.stderr) == H.help_flags(
             real.stdout or real.stderr
         ), chain
