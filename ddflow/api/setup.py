@@ -1253,7 +1253,7 @@ def _installed_hooks(E: Any, repo: Path, msg: str) -> O.Outcome:
     return O.ok("hooks", message=msg, installed=installed)
 
 
-def hooks(
+def hooks(  # noqa: PLR0913 -- one keyword per hooks mode; the CLI and MCP map 1:1
     repo: Path,
     *,
     action: str = "status",
