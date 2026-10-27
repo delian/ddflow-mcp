@@ -906,6 +906,13 @@ _HELD: dict[tuple[int, int, str], int] = {}
 
 
 def _held_key(path: Path) -> tuple[int, int, str]:
+    # threading.get_ident() values are unique only among LIVE threads and can be
+    # recycled once a thread exits. This is safe because every release path cleans
+    # `_HELD[key]` in a finally, so a recycled ident cannot meet a stale entry --
+    # UNLESS a thread were killed mid-`transaction()` without its finally running
+    # (pthread_cancel-style death, unreachable from Python exceptions or any managed
+    # code path here). Transactions must therefore never be abandoned mid-hold by a
+    # killed thread; there is no reclamation for that, by design.
     return (os.getpid(), threading.get_ident(), str(path))
 
 
