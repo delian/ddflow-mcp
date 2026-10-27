@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...config import csv_list
+from ...config import Config, csv_list
 from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
 from ...services.adopt import AGENT_TARGETS
@@ -77,8 +77,6 @@ def _progress_will_flow(a: dict[str, Any], repo: Any = None) -> bool:
         return False
     if repo is not None:
         try:
-            from ...config import Config
-
             s = float(Config.load(repo).mcp.progress_s)
         except Exception:
             s = 20.0  # as mcp_heartbeat reads a broken config: its beats run at 20 s
