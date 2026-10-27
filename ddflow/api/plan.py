@@ -500,9 +500,9 @@ def plan_lint(
     note = (
         ""
         if similar is not None
-        else f"duplicates not checked: {len(scope)} scoped item(s) would each pay ~1s for "
+        else f"duplicates NOT checked: {len(scope)} scoped item(s) would each pay ~1s for "
         f"the add-time hunt; rerun --phase <id> or --since DATE to buy it back "
-        f"(duplicates: 0 when skipped)"
+        f"(its findings are absent from the report, not empty of duplicates)"
     )
     report = PL.lint(snap, scope=scope, band=band, band_priority=band_priority, similar=similar)
     data: dict[str, Any] = {
