@@ -37,10 +37,16 @@ def _AGENT_KEYS() -> list[str]:
 
 #: `ddflow_wait` over MCP: shorter than the CLI's default, because the client -- not
 #: ddflow -- decides when a tool call has hung, and a timed-out call is a lost answer.
-#: Capped for the same reason, at the cap the CLI's wait has too; an agent that wants longer
-#: calls again.
+#: Capped for the same reason; an agent that wants longer calls again.
+#
+#: The cap is NOT the CLI's (core.clock.WAIT_MAX_S): a client aborts a tool call that
+#: sent no frame for this many seconds (Bfc43dae5b9), and a wait whose client gave no
+#: `_meta.progressToken` has no channel at all -- not even the heartbeat (B7b3b4cf483),
+#: which needs the token to reset the idle timer -- so the answer must arrive strictly
+#: below the cutoff. The CLI keeps WAIT_MAX_S: its own wait says its progress lines.
+CLIENT_IDLE_ABORT_S = 1800
 MCP_WAIT_DEFAULT_S = 300
-MCP_WAIT_MAX_S = WAIT_MAX_S  # one cap for both surfaces: core.clock
+MCP_WAIT_MAX_S = 1500.0  # strictly below CLIENT_IDLE_ABORT_S, above the default
 
 
 def _wait_timeout(a: dict[str, Any]) -> float:
