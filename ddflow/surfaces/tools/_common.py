@@ -80,9 +80,9 @@ def _progress_will_flow(a: dict[str, Any], repo: Any = None) -> bool:
             from ...config import Config
 
             s = float(Config.load(repo).mcp.progress_s)
-            return 0 < s < CLIENT_IDLE_ABORT_S
-        except Exception:  # a broken config must not shorten the cap into the cutoff
-            return True  # broken here is read as defaulted: heartbeat defaults to 20.0
+        except Exception:
+            s = 20.0  # as mcp_heartbeat reads a broken config: its beats run at 20 s
+        return 0 < s < CLIENT_IDLE_ABORT_S
     return token is not None  # no repo to ask, the token alone: the caller checked
 
 
