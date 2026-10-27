@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=c3f5855a5a4a -->
+<!-- ddflow:begin README/commands sha=823c562434d7 -->
 <details><summary>All 90 commands</summary>
 
 | Command | What it does |
@@ -557,7 +557,7 @@ needs a line written by hand here.
 | `ddflow chore` | commit or approve chore files (no reviewer) |
 | `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow approvals` | approval requests for operator-gated commands (a person answers) |
-| `ddflow plan` | check, file (proposed) and confirm a plan |
+| `ddflow plan` | check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |
