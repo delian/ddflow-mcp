@@ -82,7 +82,10 @@ def _run_at(
                 out.append(shot.out)
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
-        record: dict[str, Any] = {"executed": False, "unavailable": f"{why} reached an exit code to read"}
+        record: dict[str, Any] = {
+            "executed": False,
+            "unavailable": f"{why} reached an exit code to read",
+        }
         record["unreached"] = unreached
         record["load"] = load_start
         return record

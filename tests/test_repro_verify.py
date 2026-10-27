@@ -78,7 +78,9 @@ def test_a_run_that_succeeded_is_never_read_as_reproduced(proj):
 def test_how_many_runs_is_a_knob_and_partial_failures_are_the_rate(proj):
     _config(proj, "[bugs]\nrepro_runs = 3\n")
     # Fail only after the first exit: one 0, then two 1s -- the rate a flaky bug records.
-    flip = python("import sys; f='seen' if __import__('os').path.exists('seen') else 0; open('seen','w').write('x'); sys.exit(1 if f else 0)")
+    flip = python(
+        "import sys; f='seen' if __import__('os').path.exists('seen') else 0; open('seen','w').write('x'); sys.exit(1 if f else 0)"
+    )
     bid, bug = _file(proj, repro_cmd=flip)
     run = _run(proj, bug)
     assert run["runs"] == 3 and run["failures"] == 2 and run["reproduced"] == "yes"
@@ -90,7 +92,9 @@ def test_the_run_sees_the_recorded_sha_not_the_filers_dirty_tree(proj):
     git_quiet(proj, "add", "marker.txt")
     git_quiet(proj, "commit", "-qm", "marker")
     (proj / "marker.txt").write_text("uncommitted\n")  # dirty: a run THERE would say so
-    bid, bug = _file(proj, repro_cmd=python("import sys; print(open('marker.txt').read()); sys.exit(0)"))
+    bid, bug = _file(
+        proj, repro_cmd=python("import sys; print(open('marker.txt').read()); sys.exit(0)")
+    )
     run = _run(proj, bug)
     assert run["at"] == git(proj, "rev-parse", "HEAD")
     assert run["reproduced"] == "no"
@@ -100,7 +104,9 @@ def test_the_run_sees_the_recorded_sha_not_the_filers_dirty_tree(proj):
 def test_a_second_sighting_whose_run_fails_overrides_the_earlier_no(proj):
     bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
     assert bug.reproduced == "no"
-    again = K.bug_found(proj, summary="it breaks", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(1)"))
+    again = K.bug_found(
+        proj, summary="it breaks", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(1)")
+    )
     assert again.ok, again.reason
     bug = state(proj).bugs[bid]
     assert bug.reproduced == "yes" and bug.repro_failures == 1
@@ -126,7 +132,7 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
 def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
     # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
     # the sighting is lost; through the shell the variable is set and the run answers.
-    line = f'X=set {python("import os,sys; sys.exit(0 if os.environ.get(\'X\') else 9)")}'
+    line = f"X=set {python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")}"
     bid, bug = _file(proj, repro_cmd=line)
     run = _run(proj, bug)
     assert run["executed"] is True and run["reproduced"] == "no"
@@ -136,7 +142,9 @@ def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
 def test_a_second_sighting_opens_the_bug_again_even_though_its_run_passed(proj):
     bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
     assert bug.reproduced == "no" and bug.sightings == 1
-    again = K.bug_found(proj, summary="seen again", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(0)"))
+    again = K.bug_found(
+        proj, summary="seen again", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(0)")
+    )
     assert again.ok, again.reason
     code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
     assert code == 0

@@ -68,7 +68,10 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         },
     }
     if repro_cmd:
-        out["repro_cmd"] = {"command": repro_cmd, **(check if check is not None else {"executed": False})}
+        out["repro_cmd"] = {
+            "command": repro_cmd,
+            **(check if check is not None else {"executed": False}),
+        }
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
         out["machine"] = F.machine(repo)
