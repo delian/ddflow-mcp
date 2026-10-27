@@ -297,7 +297,7 @@ def test_a_second_thread_is_waited_out_of_the_lock_not_let_past(repo):
         with log.transaction():
             entered.set()
 
-    t = threading.Thread(target=rival)
+    t = threading.Thread(target=rival, daemon=True)
     t.start()
     try:
         log = EventLog(repo, "h")
