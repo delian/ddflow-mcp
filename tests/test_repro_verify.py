@@ -121,3 +121,33 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
     assert ok_bug.fix_task in ids  # the confirmed bug's fix is a bugs-first item
     assert bad_bug.fix_task not in ids and ok_id not in ids and no_id not in ids
     assert bad_bug.reproduced == "no"
+
+
+def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
+    # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
+    # the sighting is lost; through the shell the variable is set and the run answers.
+    line = f'X=set {python("import os,sys; sys.exit(0 if os.environ.get(\'X\') else 9)")}'
+    bid, bug = _file(proj, repro_cmd=line)
+    run = _run(proj, bug)
+    assert run["executed"] is True and run["reproduced"] == "no"
+    assert bug.reproduced == "no"  # the 0 the passthrough env made: recorded, not lost
+
+
+def test_a_second_sighting_opens_the_bug_again_even_though_its_run_passed(proj):
+    bid, bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
+    assert bug.reproduced == "no" and bug.sightings == 1
+    again = K.bug_found(proj, summary="seen again", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(0)"))
+    assert again.ok, again.reason
+    code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
+    assert code == 0
+    rows = {r["id"]: r for r in json.loads(out)["rows"]}
+    assert rows[bid]["state"] == "open" and rows[bid]["reproduced"] == "no"
+
+
+def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
+    _config(proj, "[bugs]\nrepro_tail_bytes = 3\n")
+    # 'é' is two UTF-8 bytes: a CHARACTER cut at 3 would store 'ééé', six bytes.
+    bid, bug = _file(proj, repro_cmd=python("import sys; sys.stdout.write('é'*5); sys.exit(0)"))
+    run = _run(proj, bug)
+    assert run.get("output_truncated") is True
+    assert len(run["output"].encode("utf-8")) <= 3

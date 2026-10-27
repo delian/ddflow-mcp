@@ -719,15 +719,19 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     counting -- fixed, or invalid (a false finding was never a bug): its item is ordinary
     work again. An UNCONFIRMED one (its repro command ran and did not fail,
     DX-bug-repro-verify) counts for nothing either: such a bug is not offered ahead of
-    confirmed ones.
+    confirmed ones -- until a second sighting or a run that failed makes it confirmed.
     """
     ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
     unconfirmed = {
-        b.fix_task for b in state.bugs.values() if b.open and b.reproduced == "no"
+        x
+        for b in state.bugs.values()
+        if b.open and b.reproduced == "no" and b.sightings < 2
+        for x in (b.item, b.fix_task)
+        if x
     }
     ids.difference_update(unconfirmed)
     for b in state.bugs.values():
-        if b.open and b.reproduced != "no":
+        if b.open and (b.reproduced != "no" or b.sightings >= 2):
             ids.update(x for x in (b.item, b.fix_task) if x)
     return ids
 

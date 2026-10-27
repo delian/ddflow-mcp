@@ -572,6 +572,11 @@ class Bug:
     #: how many runs reached an exit code and how many of them failed.
     repro_runs: int = 0
     repro_failures: int = 0
+    #: How many `bug.found` sightings the bug has (every `bug.found` event counts, run
+    #: or not): 1 is the filing, 2 makes a second sighting, which reads confirmed-open
+    #: even while every run so far exited 0 (DX-bug-repro-verify, "until a second
+    #: sighting or a confirming run").
+    sightings: int = 0
     #: `bug.reopened`: the last time a closure was undone, and why (B7bdcc6b212).
     reopened_at: str = ""
     reopen_reason: str = ""

@@ -106,6 +106,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.repro = dict(ev.data.get("repro") or {}) or bug.repro
     bug.globs = list(ev.data.get("globs") or bug.globs)
     bug.found_at = bug.found_at or ev.ts
+    bug.sightings += 1
     _merge_sighted(bug, ev)
 
 
@@ -113,8 +114,10 @@ def _merge_sighted(bug, ev) -> None:
     """Fold a `sighted` sighting into ``bug`` in place (DX-bug-repro-verify): `reproduced`
     yes|no with `runs` and `failures`. "yes" sticks -- the sighting that FAILED confirmed
     the bug, and a later non-failing run never unconfirms it -- while the counts are the
-    last sighting that reached exit codes. Events folded before the field existed carry
-    no `sighted` and change nothing."""
+    last sighting that reached exit codes. Every sighting counts (`bug.sightings`),
+    whatever its runs said: the first filed, a second one confirms the bug even when its
+    run also passed, per "until a second sighting or a confirming run". Events folded
+    before the field existed carry no `sighted` and change nothing."""
     sig = ev.data.get("sighted")
     if not isinstance(sig, dict):
         return

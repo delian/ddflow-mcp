@@ -16,16 +16,18 @@ runs answered:
     "output": the tail of the runs' merged output (`[bugs] repro_tail_bytes`),
     "unavailable": why nothing reached an exit code.
 
-A bug whose repro did not fail is UNCONFIRMED until a sighting fails (the fold keeps
-"yes" once a run places it). Nothing is read as reproduced without a run behind it: a
-window that produced no exit code is unavailable, never reproduced. The command is split
-with ``shlex`` and run through the ``infra.proc`` capture call, not the host shell.
+A bug whose repro did not fail is UNCONFIRMED until a second sighting or a failing run
+(the fold keeps "yes" once a run places it). Nothing is read as reproduced without a run
+behind it: a window that produced no exit code is unavailable, never reproduced, and a
+run that never reached an exit code is counted apart as ``unreached``, never cited for
+the verdict. The line runs THROUGH THE SHELL, like the ci gate's line: it is the
+operator's own command, so ``VAR=val cmd`` prefixes, ``&&``, redirections and globs are
+the shell's, and a timeout kills the whole process group (`infra.proc.run_shell`).
 """
 
 from __future__ import annotations
 
 import os
-import shlex
 from pathlib import Path
 from typing import Any
 
@@ -42,24 +44,23 @@ def check(
     so the command sees the recorded commit, not the filer's uncommitted edits; no
     ``sha`` (git could not name one) is ``unavailable``, never a run somewhere else."""
     count = max(1, int(runs))
-    try:
-        words = shlex.split(cmd or "")
-    except ValueError as exc:
-        return {"unavailable": f"repro command could not be split: {exc}"}
-    if not words:
+    if not (cmd or "").strip():
         return {"unavailable": "repro command is empty"}
     clean = str(sha or "").strip()
     if not clean:
         return {"unavailable": "the tree sha the repro would run at is not recorded"}
-    return _run_at(repo, clean, words, count, float(timeout_s), int(tail_bytes))
+    return _run_at(repo, clean, cmd, count, float(timeout_s), int(tail_bytes))
 
 
 def _run_at(
-    repo: Path, sha: str, words: list[str], count: int, timeout_s: float, tail_bytes: int
+    repo: Path, sha: str, line: str, count: int, timeout_s: float, tail_bytes: int
 ) -> dict[str, Any]:
-    """Run ``words`` up to ``count`` times in one scratch checkout of ``sha`` (empty tail:
-    no output kept). A run cut off (timeout, could not start, no such program) never
-    yields an exit code, so a verdict can never cite it; the joined output's tail is the
+    """Run ``line`` up to ``count`` times in one scratch checkout of ``sha``. The line is
+    the SHELL's: `run_shell` runs it whole, so a `VAR=val` prefix, ``&&``, a redirection
+    or a glob behave as the saw it did, and a timeout kills the line's process group. A
+    run cut off (timed out, could not start) never yields an exit code: it is not part of
+    the verdict, it is counted as ``unreached`` -- without runs that answered, the record
+    is ``unavailable``, never reproduced. The joined output's byte-cut tail is the
     record's single ``output``."""
     load_start = _first_load()
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
@@ -70,17 +71,20 @@ def _run_at(
             }
         codes: list[int] = []
         out: list[str] = []
+        unreached = 0
         for _ in range(count):
-            shot = P.capture(words, timeout=timeout_s, cwd=s.path)
-            if shot.error is not None or shot.returncode is None:
+            shot = P.run_shell(line, timeout_s=timeout_s, cwd=s.path, merge_stderr=True)
+            if shot.could_not_run or shot.timed_out or shot.code is None:
+                unreached += 1
                 continue
-            codes.append(int(shot.returncode))
-            part = f"{shot.stdout or ''}{shot.stderr or ''}"
-            if part:
-                out.append(part)
-    record: dict[str, Any] = {"executed": bool(codes)}
+            codes.append(int(shot.code))
+            if shot.out:
+                out.append(shot.out)
     if not codes:
-        record.update({"unavailable": "no run reached an exit code to read", "load": load_start})
+        why = "every run was cut off before an exit code" if unreached else "no run"
+        record: dict[str, Any] = {"executed": False, "unavailable": f"{why} reached an exit code to read"}
+        record["unreached"] = unreached
+        record["load"] = load_start
         return record
     failed = [c for c in codes if c != 0]
     record = {
@@ -91,12 +95,17 @@ def _run_at(
         "failures": len(failed),
         "load": load_start,
     }
+    if unreached:
+        record["unreached"] = unreached
     text = "\n".join(out)
     keep = max(0, int(tail_bytes))
     if text and keep:
-        record["output"] = text[-keep:]
-        if len(text) > keep:
-            record["output_truncated"] = True
+        raw = text.encode("utf-8", errors="replace")
+        record["output_truncated"] = len(raw) > keep
+        # Cut at the BYTE the knob staffed -- a character cut could double the budget in
+        # UTF-8 -- and drop the boundary bytes the cut split (a cut character was never
+        # fully stored): what stays re-encodes within the budget.
+        record["output"] = raw[-keep:].decode("utf-8", errors="ignore")
     return record
 
 

@@ -235,38 +235,40 @@ def sighting(run: Any) -> dict[str, Any]:
 def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any) -> dict[str, Any]:
     """The `bug.found` fields linking the bundle and the sighting: ``{"repro": link,
     "sighted": verdict}`` -- the sighting only when a run reached an exit code -- or
-    ``{}`` when capture is off. Filing a bug must never fail for want of evidence: a
-    bundle that cannot be built or stored is linked as ``{"unavailable": why}``, which
-    `show` prints. ``given``: item, agent, test, repro_cmd, capture."""
-    try:
-        cmd_arg = given.get("repro_cmd", "")
-        run = given.get("check")
-        if run is None and cmd_arg:
-            run = RC.check(
-                repo,
-                F.tree(repo).get("tree_sha", ""),
-                cmd_arg,
-                int(cfg.bugs.repro_runs),
-                float(cfg.bugs.repro_test_timeout_s),
-                int(cfg.bugs.repro_tail_bytes),
-            )
-        bundle = build(
+    ``{}`` + the sighting when capture is off (the run still happened; dropping its
+    verdict would run the command and lose what it said). Filing a bug must never fail
+    for want of evidence: a bundle that cannot be built or stored is linked as
+    ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
+    ``given``: item, agent, test, repro_cmd, capture."""
+    run = given.get("check")
+    if run is None and given.get("repro_cmd", ""):
+        run = RC.check(
             repo,
-            cfg,
-            st,
-            log.read_all(),
-            bug=bid,
-            item=given.get("item", ""),
-            agent=given.get("agent", ""),
-            test=given.get("test", ""),
-            repro_cmd=cmd_arg,
-            check=run,
-            mode=given.get("capture", ""),
+            F.tree(repo).get("tree_sha", ""),
+            given.get("repro_cmd", ""),
+            int(cfg.bugs.repro_runs),
+            float(cfg.bugs.repro_test_timeout_s),
+            int(cfg.bugs.repro_tail_bytes),
         )
-        if bundle is None:
-            return {}
-        linked = {"repro": store(repo, bundle)}
+    try:
+        try:
+            bundle = build(
+                repo,
+                cfg,
+                st,
+                log,
+                bug=bid,
+                item=given.get("item", ""),
+                agent=given.get("agent", ""),
+                test=given.get("test", ""),
+                repro_cmd=given.get("repro_cmd", ""),
+                check=run,
+                mode=given.get("capture", ""),
+            )
+            linked = {"repro": store(repo, bundle)} if bundle is not None else {}
+        except Exception as exc:  # evidence is a courtesy; the bug is the point
+            linked = {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}
         sig = sighting(run)
         return {**linked, **({"sighted": sig} if sig else {})}
-    except Exception as exc:  # evidence is a courtesy; the bug is the point
+    except Exception as exc:
         return {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}

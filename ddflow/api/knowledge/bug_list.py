@@ -115,9 +115,10 @@ def _row_edges(row: dict, st) -> None:
     b = st.bugs.get(row.get("id") or "")
     row["severity"] = b.severity if b is not None else ""
     row["fix_task"] = b.fix_task if b is not None else ""
-    # An open bug whose repro command ran and did NOT fail is unconfirmed until a sighting
-    # fails (DX-bug-repro-verify): the row says so instead of "open".
-    if b is not None and b.open and b.reproduced == "no":
+    # An open bug whose repro command ran and did NOT fail is unconfirmed until a
+    # confirming sighting (DX-bug-repro-verify): a run that failed, or a second sighting
+    # -- so far the filing alone ran clean -- reads "open" again.
+    if b is not None and b.open and b.reproduced == "no" and b.sightings < 2:
         row["state"] = "unconfirmed"
         row["reproduced"] = "no"
     elif b is not None:
