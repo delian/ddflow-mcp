@@ -397,8 +397,12 @@ class Store:
                 # A `None` here is doubt all the same: it stays a rebuild, not an empty
                 # licence (`or {}` would turn an unreadable shard into marks-verified).
                 marks = self._verified_shard_marks({}, log)
-        # The marks BEFORE the read, like the fingerprint above: marked afterwards, a
-        # byte the projection never folded could be claimed consumed the same way.
+        if marks is None:
+            # Every path that revoked the licence above -- the knob off, a mismatch,
+            # a first build under doubt -- still needs the marks the fresh index will
+            # claim. Taken BEFORE the read, like the fingerprint: marked afterwards, a
+            # byte the projection never folded could be claimed consumed the same way.
+            marks = self._verified_shard_marks({}, log) or {}
         events = log.read_all()
         state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
@@ -428,13 +432,7 @@ class Store:
             f"{self.path.name}-rebuilding.{os.getpid()}.{secrets.token_hex(4)}"
         )
         try:
-            return self._build_into(
-                tmp,
-                state,
-                events,
-                fingerprint,
-                marks if marks is not None else self._verified_shard_marks({}, log) or {},
-            )
+            return self._build_into(tmp, state, events, fingerprint, marks)
         finally:
             for suf in ("", "-wal", "-shm"):
                 tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
@@ -558,9 +556,13 @@ class Store:
                 con.execute("BEGIN IMMEDIATE")
                 _reconcile_tables(con, _project(state), self.fts, self.trigram)
                 records = similar_records(state)
-                if [
-                    r["digest"] for r in con.execute("select digest from similar_docs order by ord")
-                ] != [textsim.digest(r["title"], r["body"]) for r in records]:
+                # The identity as well as the digested text: an id that changed under
+                # content the digest cannot see (a rename kept title and body) must still
+                # touch the rows, or a stale id survives a change that "sameness" missed.
+                if [tuple(r) for r in con.execute("select kind, item, id, digest from similar_docs order by ord")] != [
+                    (r["kind"], r["item"], r["id"], textsim.digest(r["title"], r["body"]))
+                    for r in records
+                ]:
                     _insert_similar(con, records, clear=True)
                 self._write_meta(con, len(events), fingerprint, marks)
                 con.execute("COMMIT")
@@ -785,7 +787,7 @@ class Store:
             for ident in ids:
                 sess, _, tail = ident.partition("#")
                 role, digits = (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
-                seq = int(digits or 0) + _LETTER_OFFSET.get(role, 0)
+                seq = _role_seq(role, int(digits or 0))
                 r = con.execute("select * from prompts where session=? and seq=?", (sess, seq))
                 row = r.fetchone()
                 if row:
@@ -828,7 +830,7 @@ def _row_key(table: str, row: dict[str, Any], n: int) -> str:
     if table != "prompts":
         return str(row.get("id", n))
     role = str(row.get("role") or "prompt")
-    return f"{row.get('session', '')}#{role[0]}{int(row.get('seq', 0)) - _ROLE_OFFSET.get(role, 0)}"
+    return f"{row.get('session', '')}#{role[0]}{_seq_role(role, row.get('seq', 0))}"
 
 
 def _fill_trigram(con) -> None:
@@ -1223,20 +1225,21 @@ def _rows_bugs(rows: dict[str, list[_Row]], state: State) -> None:
 
 def _rows_prompts(rows: dict[str, list[_Row]], state: State) -> None:
     """Prompts, notes AND the session's summary, one table, distinguished by `role`;
-    notes are shifted by 10,000 so a note and a prompt with the same `seq` do not
-    collide on the primary key (the FTS id's letter maps back)."""
+    each role's ``seq`` sits in a band the others cannot reach (`_role_seq`), so the
+    session's own seqs can never collide on the primary key (the FTS id's letter
+    maps back)."""
     for sess in state.sessions.values():
         entries = [(pr, "prompt") for pr in sess.prompts] + [(nt, "note") for nt in sess.notes]
         if sess.summary:  # what `session end --summary` said the session did (B194)
             entries.append(({"at": sess.ended_at, "text": sess.summary, "seq": 0}, "summary"))
         for n, (entry, role) in enumerate(entries):
-            seq = int(entry.get("seq", n))
+            seq = _role_seq(role, int(entry.get("seq", n)))
             rows["prompts"].append(
                 _Row(
-                    (sess.id, seq + _ROLE_OFFSET[role]),
+                    (sess.id, seq),
                     (
                         sess.id,
-                        seq + _ROLE_OFFSET[role],
+                        seq,
                         # `origin_at` when the note records something that happened before
                         # it was written down -- so `recall` dates it by when it was TRUE.
                         entry.get("origin_at") or entry.get("at", ""),
@@ -1244,7 +1247,7 @@ def _rows_prompts(rows: dict[str, list[_Row]], state: State) -> None:
                         entry.get("text", ""),
                         role,
                     ),
-                    (f"{sess.id}#{role[0]}{seq}", entry.get("text", "")),
+                    (f"{sess.id}#{role[0]}{int(entry.get('seq', n))}", entry.get("text", "")),
                 )
             )
 
@@ -1354,31 +1357,65 @@ def _reconcile_tables(con, proj: dict[str, list[_Row]], fts: bool, trig: bool) -
         if not trig or not t.fts:
             continue
         if gone and t.key_len == 1:
-            phs = ",".join("?" * len(gone))
-            con.execute(
-                f"delete from {t.name}_tri where id in ({phs})",  # nosec B608
-                [k[0] for k in gone],
-            )
+            for chunk in _chunks([k[0] for k in gone], _RECONCILE_BATCH):
+                phs = ",".join("?" * len(chunk))
+                con.execute(
+                    f"delete from {t.name}_tri where id in ({phs})",  # nosec B608
+                    chunk,
+                )
         ids = [r.fts[0] for r in touched if r.fts is not None]
-        if ids:
-            phs = ",".join("?" * len(ids))
+        for chunk in _chunks(ids, _RECONCILE_BATCH):
+            phs = ",".join("?" * len(chunk))
             con.execute(
                 f"delete from {t.name}_tri where id in ({phs})",  # nosec B608
-                ids,
+                chunk,
             )
             con.execute(
                 "insert into "
                 f"{t.name}_tri(id, text) select id, {_TRI_EXPR[t.name]} "
                 f"from {t.fts} where id in ({phs})",  # nosec B608
-                ids,
+                chunk,
             )
 
 
-#: Where each role's rows sit in a session's `seq` space, so a prompt, a note and the
-#: summary never collide on the primary key; the FTS id's letter maps back to it.
-_ROLE_OFFSET = {"prompt": 0, "note": 10_000, "summary": 20_000}
-_LETTER_OFFSET = {role[0]: off for role, off in _ROLE_OFFSET.items()}
-assert len(_LETTER_OFFSET) == len(_ROLE_OFFSET), "two roles share an FTS id letter"
+def _chunks(items: list, n: int) -> list:
+    """``items`` in slices of ``n``, so an ``id in (?, ...)`` list stays far under
+    SQLite's bound-variable limit (999 on older builds): a delta large enough to
+    exceed it batches, instead of the transaction dying mid-reconcile."""
+    return [items[i : i + n] for i in range(0, len(items), n)]
+
+
+#: Row cap per ``id in (...)`` clause in a reconcile (``_RECONCILE_BATCH``):
+#: 900 bounds the variables below any SQLite build's limit; a bigger delta just
+#: batches. A batch that FAILED would answer the whole reconcile with a rebuild.
+_RECONCILE_BATCH = 900
+
+
+#: Two roles' rows sit in `seq` bands no other role can reach, however many entries
+#: one session holds: a prompt's seq IS its count (>= 0, what `sessions.start`
+#: assigns), a note's is its count, so notes sit at -(seq+1) and the summary at one
+#: fixed negative slot -- a prompt, a note and the summary can never collide on the
+#: primary key at any size a log fits on. The FTS id's letter maps the row back
+#: (`_seq_role`), which is what makes the bands invertible instead of shifted.
+_SUMMARY_SLOT = 1 << 62  # negative for the summary; 2**62 notes away from every note
+
+
+def _role_seq(role: str, seq: int) -> int:
+    """The ``seq`` a ``prompts`` row keeps, from the entry's own seq and its role."""
+    if role == "note":
+        return -(int(seq) + 1)
+    if role == "summary":
+        return int(seq) - _SUMMARY_SLOT
+    return int(seq)
+
+
+def _seq_role(role: str, seq: int) -> int:
+    """The inverse of ``_role_seq``: the seq an FTS id's digits carried."""
+    if role == "note":
+        return -(int(seq) + 1)
+    if role == "summary":
+        return int(seq) + _SUMMARY_SLOT
+    return int(seq)
 
 
 def similar_records(state: State) -> list[dict[str, str]]:
@@ -1442,7 +1479,9 @@ def similar_records(state: State) -> list[dict[str, str]]:
 def _insert_similar(con, records: list[dict[str, str]], clear: bool = False) -> None:
     """The similarity engine's index (``services.similar``): one row per record, and
     per term its postings -- record ordinals and TF-IDF weights, packed. With `clear`
-    (a reconcile over changed records) the rows it replaces are deleted first."""
+    (a reconcile decided the corpus changed) every previous row is replaced from
+    `records`; the caller must pass the COMPLETE current record set for that -- a
+    partial list would wipe the unchanged records' postings with reclaiming."""
     if clear:
         con.execute("delete from similar_docs")
         con.execute("delete from similar_terms")
