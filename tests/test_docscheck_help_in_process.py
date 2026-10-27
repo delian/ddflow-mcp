@@ -71,12 +71,13 @@ def test_every_way_of_spelling_this_ddflow_is_replayed_not_spawned(monkeypatch):
     monkeypatch.setattr(P, "capture", capture)
     for spelling in (
         ["ddflow", "gate", "run", "--help"],
-        ["/venv/bin/ddflow", "gate", "--help"],
         [sys.executable, "-m", "ddflow", "gate", "--help"],
     ):
         out = H.command_runner(ROOT, 60)(list(spelling))
         assert out.ran and out.returncode == 0, spelling
-    assert spawned_calls == []  # ddflow itself is replayed whatever the spelling
+    path_spelled = H.command_runner(ROOT, 60)(["/venv/bin/ddflow", "gate", "--help"])
+    assert not path_spelled.ran  # a path names that binary; it is run, not replayed
+    assert spawned_calls == [["/venv/bin/ddflow", "gate", "--help"]]
 
 
 def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_path, monkeypatch):

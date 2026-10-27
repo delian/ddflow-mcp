@@ -58,23 +58,33 @@ def in_process(verbs: list[str]) -> P.Captured:
 def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     """The verbs to replay when ``argv`` spells `ddflow [<verb>...] --help` naming THIS
     ddflow; None when it names another tool (then the spawn is the walk). This process IS
-    ddflow, so its own registry is the authority no matter how the command was typed:
-    the bare name, a path to the binary (`/venv/bin/ddflow`) or `python -m ddflow`."""
+    ddflow, so the registry it built is the authority when the command is spelled by name
+    (`ddflow`) or run as this interpreter's module (`python -m ddflow`); a spelling with a
+    slash names a specific binary and is run as before."""
     if len(argv) < 2 or argv[-1] != "--help":
         return None
-    if argv[0] == "ddflow" or argv[0].rsplit("/", 1)[-1] == "ddflow":
+    if argv[0] == "ddflow":
         return argv[1:-1]
-    if argv[1:3] == ["-m", "ddflow"]:
+    if argv[1:3] == ["-m", "ddflow"] and _is_a_python(argv[0]):
         return argv[3:-1]
     return None
+
+
+def _is_a_python(program: str) -> bool:
+    """``program`` is `python`, `python3`, `python3.12` (`python.exe` on Windows)."""
+    name = program.rsplit("/", 1)[-1].lower()
+    body = name.removeprefix("python")
+    body = body.removesuffix(".exe")
+    body = body.replace(".", "")
+    return body == "" or body.isdigit()
 
 
 def command_runner(root, timeout_s: int) -> Runner:
     """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
 
-    Every spelling of `ddflow [<verb>...] --help` goes to `in_process` instead of a spawn
-    (Bc621160a82): it is this ddflow's own help, and nothing runs, so no ``timeout_s``
-    applies; any argv naming another tool still runs in ``root`` under ``timeout_s``."""
+    A `ddflow [<verb>...] --help` naming this process goes to `in_process` instead of a
+    spawn (Bc621160a82): it is this ddflow's own help, and nothing runs, so no
+    ``timeout_s`` applies; any argv naming another tool still runs in ``root``."""
 
     def run(argv: list[str]) -> P.Captured:
         verbs = _ddflow_help_verbs(argv)
