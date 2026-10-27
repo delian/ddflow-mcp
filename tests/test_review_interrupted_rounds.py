@@ -65,7 +65,8 @@ def test_one_finished_round_plus_an_interrupted_review_leave_one_round_used(repo
     log, cfg, st = api._load(repo, "")
     api._record(
         repo, log, cfg, st, "T1", "critic", "unavailable", None, None,
-        reason="interrupted before a reviewer finished", evidence={"review_kind": "full"},
+        reason="interrupted before a reviewer finished",
+        evidence={"review_kind": "full", "status": "UNAVAILABLE"},
     )  # fmt: skip
     assert _rounds(repo, "critic") == 1, (
         "the interrupted review recorded no verdict: the budget must not charge it"
@@ -84,6 +85,20 @@ def test_a_full_shaped_record_whose_status_says_no_verdict_charges_nothing(repo,
         reason="killed mid-flight", evidence={"review_kind": "full", "status": "UNAVAILABLE"},
     )  # fmt: skip
     assert _rounds(repo, "critic") == 1
+
+
+def test_a_full_record_with_no_status_still_counts_not_a_silent_budget_reset(repo, tmp_path):
+    """A full record whose status evidence predates `status` (a re-claim or manual record
+    keeps `review_kind` without it) was a charged round; dropping it silently would hand
+    the budget back, which is the reset `_full_rounds` promises not to do."""
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    log, cfg, st = api._load(repo, "")
+    api._record(
+        repo, log, cfg, st, "T1", "critic", "failed", None, None,
+        reason="1 finding", evidence={"review_kind": "full"},
+    )  # fmt: skip
+    assert _rounds(repo, "critic") == 2
 
 
 def test_the_signal_termination_record_of_a_dead_run_charges_nothing(repo, tmp_path):
