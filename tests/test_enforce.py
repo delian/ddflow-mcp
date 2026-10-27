@@ -66,6 +66,27 @@ def test_an_unclaimed_commit_is_refused(enforced):
     assert "ddflow claim" in r.stderr, "the refusal must name the remedy"
 
 
+def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(enforced):
+    """The remedy names `--add-globs` filled with the staged paths: `--globs` REPLACES
+    the item's whole list, so an agent following the old advice dropped every glob it
+    held (DX-hook-suggests-add-globs)."""
+    (enforced / "src" / "a.py").write_text("x = 2\n")
+    (enforced / "src" / "b.py").write_text("y = 2\n")
+    r = _commit(enforced, "unclaimed", paths=["src/a.py", "src/b.py"])
+    assert r.returncode != 0, "the hook allowed an unclaimed commit"
+    msg = r.stderr
+    assert "ddflow update <ID> --add-globs 'src/a.py, src/b.py'" in msg, (
+        f"the remedy must name --add-globs with the staged paths filled in:\n{msg}"
+    )
+    assert "ddflow update <ID> --globs" not in msg, (
+        f"the remedy must not name the replacing --globs:\n{msg}"
+    )
+    assert "ddflow claim <ID> --globs" not in msg, (
+        f"the claim remedy must not invite replacing the item's globs:\n{msg}"
+    )
+    assert "ddflow claim" in msg, "the refusal must still name the claim remedy"
+
+
 def test_a_claimed_commit_is_allowed(enforced):
     run_cli(enforced, "claim", "P1.T1", "--no-worktree", agent="alpha")
     (enforced / "src" / "a.py").write_text("x = 2\n")
