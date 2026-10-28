@@ -1099,8 +1099,19 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     if not author:
         return ""
     fam = _family_of_name_or_value(model, cfg)
-    if not fam or fam != _family_of_name_or_value(author, cfg):
-        return ""
+    author_fam = _family_of_name_or_value(author, cfg)
+    if not fam or fam != author_fam:
+        # An unrecognised `[agent].family` resolves to "" on BOTH legs -- nothing a map
+        # knows to compare -- yet the operator's own spelling still IS the author: the
+        # bare strings must compare too, or a writer recording "--model myorg-x" would
+        # never be told it just named its own family (roborev standards).
+        if not (
+            cfg.agent.family
+            and not author_fam
+            and (model or "").strip().lower() == author.strip().lower()
+        ):
+            return ""
+        fam = author
     declared = (
         f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
         if cfg.agent.family
