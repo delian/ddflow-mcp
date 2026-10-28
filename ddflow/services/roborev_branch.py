@@ -221,9 +221,14 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
         )  # fmt: skip
     if out.review is None:
         return Result("unavailable", out.note, job, head, out.text)
+    missing = (
+        ""
+        if out.text
+        else "(the review body could not be read: `roborev show --job` brought no text)"
+    )
     return Result(
         "clean" if not out.note else "findings",
-        out.note,
+        out.note or missing,
         job,
         head,
         out.text,
