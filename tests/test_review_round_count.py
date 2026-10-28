@@ -17,7 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-import ddflow.api.review as api
+import ddflow.api.review as review_api
+from ddflow import api
 from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.core.records import GateRun, Item
@@ -123,7 +124,7 @@ def _setup(repo: Path, tmp_path: Path) -> None:
 
 
 def _full_review(repo: Path):
-    out = api.review(repo, gate="critic", item="T1")
+    out = review_api.review(repo, gate="critic", item="T1")
     assert out.data["outcome"] == "failed", out.reason
     return out
 
@@ -189,6 +190,7 @@ def test_every_view_still_reports_n_when_the_current_record_undercounts(repo, tm
         "critic",
         "failed",
         by=rec.by or "dup-agent",
+        reason="the duplicate critic run recorded its own round count",
         evidence=evidence,
     )
     code, out, err = run_cli(repo, "gate", "status", "T1")
