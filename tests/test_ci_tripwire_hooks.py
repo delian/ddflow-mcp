@@ -277,7 +277,7 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
     # an expansion's own text keeps its own shell semantics and is never merged into --
     # but the bare default run after it is still scoped to the diff (a `$(` value, whose
     # word is inseparable, leaves the whole command as written)
-    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP "):
+    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP ", "SKIP=foo:~/bar "):
         cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
         assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
         assert " --all-files" not in cmd
