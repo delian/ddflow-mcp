@@ -74,7 +74,9 @@ def family_name_of(model: str, families: dict[str, str] | None = None) -> str:
     model is judged by `family_for` as before, never re-classified here.
     """
     low = (model or "").strip().lower()
-    known = {v.strip().lower() for v in (families if families is not None else FAMILY_HINTS).values()}
+    known = {
+        v.strip().lower() for v in (families if families is not None else FAMILY_HINTS).values()
+    }
     return low if low and low in known else ""
 
 

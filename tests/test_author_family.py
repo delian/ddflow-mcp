@@ -168,9 +168,7 @@ def test_a_configured_family_wins_over_a_session_model_record(repo, monkeypatch)
     error, _ = write_config(repo, [("agent.family", "deepseek")])
     assert error == "", error
     run_cli(repo, "task", "add", "T1", "--title", "add a")
-    code, out, err = run_cli(
-        repo, "session", "start", "--model", "deepseek-chat", agent="impl"
-    )
+    code, out, err = run_cli(repo, "session", "start", "--model", "deepseek-chat", agent="impl")
     assert code == OK, out + err
     pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
     code, out, err = run_cli(repo, "complete", "T1", agent="impl")
@@ -229,14 +227,30 @@ def test_gate_record_refuses_the_configured_family_without_a_session_model(repo,
     assert error == "", written
     run_cli(repo, "task", "add", "T1", "--title", "add a")
     code, out, err = run_cli(
-        repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
-        "--model", "deepseek", agent="impl",
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--evidence",
+        "found nothing",
+        "--model",
+        "deepseek",
+        agent="impl",
     )
     assert code == REFUSED, out + err
     assert "author's own family" in err and "deepseek" in err, err
     code, out, err = run_cli(
-        repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
-        "--model", "qwen-3-flash", agent="impl",
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--evidence",
+        "found nothing",
+        "--model",
+        "qwen-3-flash",
+        agent="impl",
     )
     assert code == OK, out + err
     rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
@@ -252,8 +266,16 @@ def test_gate_record_refuses_an_unrecognised_configured_family_spelling(repo, mo
     assert error == "", error
     run_cli(repo, "task", "add", "T1", "--title", "add a")
     code, out, err = run_cli(
-        repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
-        "--model", "myorg-x", agent="impl",
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "critic",
+        "--evidence",
+        "found nothing",
+        "--model",
+        "myorg-x",
+        agent="impl",
     )
     assert code == REFUSED, out + err
     assert "author's own family" in err and "myorg-x" in err, err
