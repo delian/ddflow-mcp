@@ -135,14 +135,17 @@ def test_a_body_already_inside_its_room_keeps_its_last_line():
 
     out = M._assemble(
         ["# pack"],
-        [("lessons", ["- " + "x" * 300, "## Lessons that remain"])],
-        200,
+        [("lessons", ["- short line here", "## Lessons heading", "- " + "x" * 300])],
+        240,
         "N" * 500,
         "",
         "T",
     )
-    assert "## Lessons that remain" in out, out
-    assert out.count("\n") >= 2, out
+    # The trimmed section's own marker is the LAST line of the already-fitting body: the
+    # old unconditional rsplit dropped it; the guard keeps it (the markers carry where
+    # the rest is when the global note is dropped too).
+    assert "cut to fit session.brief_max_tokens" in out, out
+    assert out.count("\n") >= 3, out
 
 
 def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
