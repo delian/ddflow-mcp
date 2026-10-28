@@ -133,3 +133,27 @@ def test_bounded_status_cuts_the_by_tag_values(project):
     assert out.data["truncated"]["lists"]["by_tag"] == STATUS_LIST_LIMIT + 3
     out_full = status(project, agent="tester", full=True, by_tag="team")
     assert len(out_full.data["by_tag"]["values"]) == STATUS_LIST_LIMIT + 3
+
+
+def test_capped_and_blocked_items_land_in_their_buckets():
+    # plan.capped holds IDS (core.schedule.Plan: list[str]) and Blocked.item is an id
+    # string; the two must never be compared against item objects (critic lan-deepseek
+    # #1's read was wrong, and a silent held/blocked 0 would hide both).
+    from types import SimpleNamespace
+
+    from ddflow.api.reporting.overview import _by_tag_view
+
+    done = SimpleNamespace(id="T-done", kind="task", state="done", tags=["wave:0"], removed=False)
+    held = SimpleNamespace(id="T-held", kind="task", state="open", tags=["wave:0"], removed=False)
+    stuck = SimpleNamespace(
+        id="T-stuck", kind="task", state="open", tags=["wave:0"], removed=False
+    )
+    p = SimpleNamespace(ready=[], running=[], review=[], capped=["T-held"], blocked=[
+        SimpleNamespace(item="T-stuck", reason="deps", waiting_on=["T-held", "T-done"])
+    ])
+    view = _by_tag_view("wave", [done, held, stuck], p)
+    w0 = view["values"][0]
+    assert w0["states"]["held_by_cap"] == 1
+    assert w0["states"]["blocked"] == 1
+    assert w0["blocked_by"] == {"deps": 1}
+    assert {"id": "T-held", "blocks": 1} in w0["top_blockers"]
