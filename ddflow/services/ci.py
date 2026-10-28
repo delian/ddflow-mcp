@@ -247,6 +247,8 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
             value.append(command[i + 1])
             i += 1
         elif quote:
+            if quote == '"' and c in "$`":
+                active = True  # expansions inside double quotes are shell-active
             value.append(c)  # inside the quotes: everything else is literal text
         elif c.isspace():
             break
