@@ -140,16 +140,21 @@ def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
     # Actions emitted THIS pass count too, so repeated rows for one item cannot
     # advertise a second expiry in a single run.
     spent: dict[str, int] = {}
+    capped: set[str] = set()  # one capped line per item; later rows for it say nothing
     for r in facts.recoveries:
+        if r["item"] in capped:
+            continue
         attempts = facts.attempts.get(r["item"], 0) + spent.get(r["item"], 0)
         if r.get("kind") == "expired_lease":
             if attempts >= limits.max_attempts:
                 out.append(_capped(r["item"], attempts, limits))
+                capped.add(r["item"])  # a shown line is not an attempt: never counted
             elif r.get("salvageable") is False:
                 out.append(_expiry(r, attempts))
+                spent[r["item"]] = spent.get(r["item"], 0) + 1
             else:
                 out.append(_resume(r, attempts))
-            spent[r["item"]] = spent.get(r["item"], 0) + 1
+                spent[r["item"]] = spent.get(r["item"], 0) + 1
         elif r.get("salvageable") is False:
             # A clean orphan / stale RUNNING item: nothing to lose, but taking it is
             # the operator's or the next agent's call -- shown, never done. The command
