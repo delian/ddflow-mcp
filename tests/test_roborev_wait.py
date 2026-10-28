@@ -14,11 +14,14 @@ from ddflow.services import roborev as RR
 
 #: The fake roborev: `list --json` cats `$FAKE_STATUS_FILE` (the test rewrites it between
 #: polls), `wait --job` exits $FAKE_WAIT_EXIT, `show --job` prints $FAKE_SHOW_TEXT. Every
-#: call is logged with its arguments.
+#: call is logged with its arguments; a list read serving a done job also logs `done-served`
+#: so a test can assert trap calls never precede the done read.
 FAKE = r"""#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
 case "$1" in
-  list) cat "$FAKE_STATUS_FILE" ;;
+  list) cat "$FAKE_STATUS_FILE"
+        grep -q '"status": "done"' "$FAKE_STATUS_FILE" && echo done-served >> "$FAKE_LOG"
+        exit 0 ;;
   wait) exit "${FAKE_WAIT_EXIT:-0}" ;;
   show) echo "${FAKE_SHOW_TEXT:-Review for job 7: no issues}" ;;
 esac
@@ -78,6 +81,8 @@ def test_a_queued_job_is_polled_until_the_list_says_done(tmp_path, monkeypatch):
     assert out.review is not None and out.review.job == 7 and out.review.reviewer == "x"
     assert out.live is False and out.note == ""
     assert "wait --job 7" in calls and "show --job 7" in calls  # consulted once done
+    mark = calls.index("done-served")  # wait/show came after a list read served done
+    assert calls.index("wait --job 7") > mark and calls.index("show --job 7") > mark
 
 
 def test_still_running_at_the_bound_says_running_not_failed(tmp_path, monkeypatch):
@@ -117,7 +122,7 @@ def test_a_done_job_whose_wait_exits_oddly_is_unjudged_not_findings(tmp_path, mo
     monkeypatch.setenv("FAKE_WAIT_EXIT", "2")
     _fake_clock(monkeypatch)
     out = RR.wait_job(repo, 7, 30)
-    assert out.review is None and "unjudged" in out.note
+    assert out.review is None and "unjudged" in out.note and "exit 2" in out.note
 
 
 def test_a_tick_that_overshoots_the_bound_ends_live_never_a_negative_sleep(tmp_path, monkeypatch):
@@ -152,6 +157,21 @@ def test_a_job_the_list_no_longer_has_is_vanished_distinct_from_running(tmp_path
     out = RR.wait_job(repo, 7, 30)
     assert out.review is None and out.live is False
     assert "no job 7" in out.note and "re-run" in out.note
+
+
+def test_a_bound_elapsed_between_polls_returns_live_without_another_read(tmp_path, monkeypatch):
+    """The bound checked only AFTER a list read would overshoot it by that read's own
+    `_TIMEOUT_S`: the sleep ends at the deadline, and the next thing asked must be the bound
+    answer, never one more (up to 30s) list."""
+    repo, log = _setup(tmp_path, monkeypatch)
+    clock = _fake_clock(monkeypatch)
+
+    def leap_past_deadline(s: float) -> None:
+        clock.append(clock[-1] + 100.0)
+
+    monkeypatch.setattr(RR, "sleep", leap_past_deadline)
+    _ = RR.wait_job(repo, 7, 5)
+    assert len(log.read_text().splitlines()) == 1  # the one read before the bound ran out
 
 
 def test_the_trap_primitives_are_never_called_while_the_list_says_queued(tmp_path, monkeypatch):
