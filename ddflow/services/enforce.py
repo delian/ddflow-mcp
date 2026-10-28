@@ -1527,12 +1527,13 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
 
 
 def _add_globs_arg(paths: list[str]) -> str:
-    """The `--add-globs` VALUE for the advice: ONE JSON array. Every other notation
-    splits on commas (`globspec.parse`), so a staged path holding a comma would be
-    printed as a command that ADDS DIFFERENT globs, and shell-quoting a bare path is
-    undefined once it holds an apostrophe; the JSON form parses whole and is safe
-    between single quotes (rubber_duck r2, critic r2 on DX-hook-suggests-add-globs)."""
-    return json.dumps(list(paths))
+    """The already-shell-quoted `--add-globs` VALUE for the advice: ONE JSON array
+    wrapped by `shlex.quote`. Every other notation splits on commas (`globspec.parse`),
+    so a staged path holding a comma would be printed as a command that ADDS DIFFERENT
+    globs; JSON keeps each path whole, and `shlex.quote` makes the printed command
+    copy-runnable even when a path holds an apostrophe (rubber_duck r2#'s successor
+    r3, critic r2 on DX-hook-suggests-add-globs)."""
+    return shlex.quote(json.dumps(list(paths)))
 
 
 def _uncovered_message(
@@ -1562,7 +1563,7 @@ def _uncovered_message(
         lines += [
             f"These paths belong to another item YOU hold, bound to a tree of its own: "
             f"commit them there, or widen THIS item's claim "
-            f"(`ddflow update <ID> --add-globs '{widen}'`).",
+            f"(`ddflow update <ID> --add-globs {widen}`).",
             "",
         ]
     elif stolen:
@@ -1594,7 +1595,7 @@ def _uncovered_message(
         else "Fix by claiming the work, or by widening the claim you already hold:",
         "    ddflow next                     # what may be started",
         "    ddflow claim <ID>                # lease it and get a worktree",
-        f"    ddflow update <ID> --add-globs '{widen}'  # add THESE paths;"
+        f"    ddflow update <ID> --add-globs {widen}  # add THESE paths;"
         " --globs would replace the list",
         "",
         f'Policy is [enforce].commit_without_lease = "{mode}" in .ddflow/config.toml.',
