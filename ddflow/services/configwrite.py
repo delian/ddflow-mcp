@@ -70,15 +70,35 @@ MACHINE_LOCAL_KEYS: dict[str, str] = {
     "schedule.max_parallel_tasks": "local",
     "schedule.max_parallel_min": "local",
     "schedule.max_parallel_max": "local",
+    # Reviewers and companion endpoints are this machine's services: a `[[reviewer]]` or
+    # `[[companion]]` block names a host and port that must never reach the committed
+    # file (the same facts that sent `[[reviewer]]` to the local reviewers.toml in
+    # bug B-reviewers-write-committed). They arrive as tables (`_appended_keys`), so the
+    # name here classifies the table itself and every dotted key under it; the `--set`
+    # surface never writes them (no `<section>.<knob>` under them is a knob).
+    "reviewer": "local",
+    "companion": "local",
 }
 
 
 def machine_local_layer(extra: set[str], dotted: str) -> str:
     """The layer a write of ``dotted`` defaults to: "local" for a machine-local key (here
-    or extended by `[enforce].machine_local_keys`), else "" -- the committed layer."""
+    or extended by `[enforce].machine_local_keys`), else "" -- the committed layer. A
+    table name classifies the table and everything under it: `reviewer` names `[[reviewer]]`
+    blocks as well as a dotted `reviewer.x`."""
     if dotted in MACHINE_LOCAL_KEYS or dotted in extra:
         return "local"
+    head = dotted.partition(".")[0]
+    if head in MACHINE_LOCAL_KEYS or head in extra:
+        return "local"
     return ""
+
+
+def machine_local_tables(extra: set[str], names: set[str]) -> bool:
+    """Whether EVERY top-level table ``names`` names is machine-local (classified or
+    extended). Used to default an appended TOML document that only configures this
+    machine's reviewers or companions to the local layer."""
+    return bool(names) and names <= set(MACHINE_LOCAL_KEYS) | extra
 
 
 def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") -> Path:
