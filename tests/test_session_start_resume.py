@@ -5,6 +5,7 @@ current item and the queue, so an agent that restarts after a crash acts on it f
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -32,7 +33,11 @@ def test_the_session_start_output_opens_with_the_resume_block(repo):
     code, out, err = run_cli(repo, "hooks", "session-start")
     assert code == 0, err
     text = out + "\n" + err
-    assert RESUME in text, text
+    # The FIRST section the output names is the RESUME block -- nothing may preamble it
+    # (duck #4): an interrupted session must see recoverable work in its first lines.
+    first = re.search(r"^## ", text, re.M)
+    assert first is not None, text
+    assert text[first.start() :].startswith(RESUME), text
     assert text.index(RESUME) < text.index("# ddflow brief"), text
     assert text.index(RESUME) < text.index("## Suggested next"), text
     assert "**T1** (stale_running" in text, text
@@ -42,5 +47,6 @@ def test_the_brief_itself_puts_recoverable_work_before_new_work(repo):
     _seed(repo, ["T1", "T9"])
     EventLog(repo, "c").append("item.started", "T1", {})
     text = LC.brief(repo, item="T9", check_recovery=True, agent="next").data["text"]
-    assert RESUME in text, text
+    first = re.search(r"^## ", text, re.M)
+    assert first is not None and text[first.start() :].startswith(RESUME), text
     assert text.index(RESUME) < text.index("## Suggested next: T9"), text
