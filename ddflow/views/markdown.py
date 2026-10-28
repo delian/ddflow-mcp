@@ -27,6 +27,7 @@ from ..core import progress as PR
 from ..core import provenance as PV
 from ..core.digest import content_digest
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
+from ..core.records import GateOutcome
 from ..core.schedule import Plan, critical_path
 from ..core.textcut import clip
 from ..core.tier import tier_of
@@ -43,7 +44,6 @@ from ..services.gates import (
 )
 from ..services.pipeline_diff import effective_pipeline
 from ..services.redact_report import redactor
-from ..core.records import GateOutcome
 
 #: What every view's first line starts with, stamped or not.
 GENERATED_PREFIX = (
