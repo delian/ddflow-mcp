@@ -224,7 +224,43 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
-_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
+def _leading_skip(command: str) -> tuple[str | None, str]:
+    """Split a leading shell ``SKIP=<word>`` off ``command``: the value the shell would
+    resolve it to (`'a b'` -> `a b`) and the untouched remainder, so the rest of the
+    command (shell text) is never re-tokenized. ``None`` when it does not start with
+    one; an unbalanced quote also nothings, so a command it cannot parse is run as
+    written."""
+    if not command.startswith("SKIP="):
+        return None, command
+    value: list[str] = []
+    quote = ""
+    i, n = len("SKIP="), len(command)
+    while i < n:
+        c = command[i]
+        if quote:
+            if c == quote:
+                quote = ""
+            else:
+                value.append(c)
+        elif c.isspace():
+            break
+        elif c in "'\"":
+            quote = c
+        elif c == "\\" and i + 1 < n:
+            value.append(command[i + 1])
+            i += 1
+        else:
+            value.append(c)
+        i += 1
+    if quote:
+        return None, command
+    return "".join(value), command[i:]
+
+
+def _sh_single(word: str) -> str:
+    """``word`` single-quoted for a POSIX shell: the value stays a literal whatever it
+    holds (`$(...)`, quotes), so re-emission cannot make it shell-active."""
+    return "'" + word.replace("'", "'\\''") + "'"
 
 
 def scope_to_diff(command: str, tree: Path, since: str) -> str:
@@ -237,15 +273,18 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
     resolve = W.rev(tree, since) if since else ""
     if not resolve or " --all-files" not in command:
         return command
-    lead = _LEADING_SKIP.match(command)
-    run = command[lead.end() :] if lead else command
+    own, run = _leading_skip(command)
     # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
-    # selected-tests plan), so merge the two like the earlier tripwire run did; with no
-    # assignment the environment's own SKIP reaches pre-commit as it is.
-    ids = lead["ids"] if lead else ""
-    if len(ids) >= 2 and ids[0] == ids[-1] and ids[0] in "\"'":
-        ids = ids[1:-1]  # one balanced quote layer: `SKIP='lint'` still skips `lint`
-    merged = f'SKIP="${{SKIP:+$SKIP,}}{ids}" ' if ids else ""
+    # selected-tests plan), so merge the two like the earlier tripwire run did; the merged
+    # value is the env expansion plus the command's own list as a shell literal. `SKIP=''` is
+    # an explicit EMPTY override -- it keeps clearing the inherited SKIP; with no assignment
+    # the environment's own SKIP reaches pre-commit as it is.
+    if own is None:
+        merged = ""
+    elif own:
+        merged = f'SKIP="${{SKIP:+$SKIP,}}"{_sh_single(own)}'
+    else:
+        merged = 'SKIP=""'
     # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
     # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
     return merged + run.replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
