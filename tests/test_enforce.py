@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -89,12 +90,15 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
 
 def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     (enforced / "src" / "a,b.py").write_text("x = 2\n")
-    (enforced / "src" / "b.py").write_text("y = 2\n")
-    r = _commit(enforced, "comma path", paths=["src/a,b.py", "src/b.py"])
+    (enforced / "src" / "it's.py").write_text("y = 2\n")
+    r = _commit(enforced, "comma/quote paths", paths=["src/a,b.py", "src/it's.py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
-    assert '--add-globs \'["src/a,b.py", "src/b.py"]\'' in msg, (
-        f"a comma inside a staged path must stay ONE glob in the remedy:\n{msg}"
+    expected = "ddflow update <ID> --add-globs " + shlex.quote(
+        json.dumps(["src/a,b.py", "src/it's.py"])
+    )
+    assert expected in msg, (
+        f"a comma or apostrophe inside a staged path must stay ONE runnable glob in the remedy:\n{msg}"
     )
 
 
