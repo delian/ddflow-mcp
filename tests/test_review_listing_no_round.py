@@ -29,6 +29,38 @@ def _kinds(repo: Path) -> list[str]:
     return [e.kind for e in EventLog(repo).read_all()]
 
 
+def _two_gate_setup(repo: Path, tmp_path: Path) -> None:
+    """A second command reviewer serving rubber_duck, so an item has findings on two gates."""
+    cli = tmp_path / "duck"
+    cli.write_text(
+        "#!/bin/sh\nin=$(cat)\n"
+        'case "$in" in *FINDA*) printf "FINDING HIGH a.py:1\\nduck problem\\n\\n";; esac\n'
+        'echo "STATUS: FINDINGS 1"\n'
+    )
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text()
+        + f'\n[[reviewer]]\nname = "duck"\nkind = "command"\ncommand = "{cli}"'
+        + 'model = "gemini-2.5-pro"\ngates = ["rubber_duck"]\nhedge = 1\n'
+    )
+
+
+def test_a_two_gate_listing_names_no_single_gate_in_the_recipe(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _two_gate_setup(repo, tmp_path)
+    _full_review(repo)  # critic findings
+    api.review(repo, gate="rubber_duck", item="T1", full=True)
+    code, out, err = run_cli(repo, "review", "triage", "T1")
+    assert code == OK, (out, err)
+    assert "T1.critic:" in out and "T1.rubber_duck:" in out, (out, err)
+    assert "#1 [" in out and "#2 [" in out, (out, err)
+    assert "record a verdict" in out
+    # per-finding numbers are per gate: the recipe must not point every reading at one gate
+    assert "--gate <its gate>" in out, out
+    assert "#1 [" in out and out.index("#1 [") < out.index("record a verdict"), out
+
+
 def test_a_listing_records_no_new_round_and_prints_findings_first(repo, tmp_path):
     _setup(repo, tmp_path)
     # Count every reviewer invocation: a listing must not add one (the read attempts that
