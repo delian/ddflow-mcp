@@ -175,7 +175,12 @@ def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
     # 'é' is two UTF-8 bytes: a CHARACTER cut at 3 would store 'ééé', six bytes. The
     # stored KEEP is 3 BYTES of 'é'*5 (a9 c3 a9): the led-off fragment renders as the
     # replacement marker and the complete é renders -- the byte cut happened, drawn.
-    _bid, bug = _file(proj, repro_cmd=python("import sys; sys.stdout.write('é'*5); sys.exit(0)"))
+    # The BYTES are written, not text: an ascii-stdio PYTHONIOENCODING would otherwise
+    # raise before any byte lands.
+    _bid, bug = _file(
+        proj,
+        repro_cmd=python(r'import sys; sys.stdout.buffer.write(b"\xc3\xa9" * 5); sys.exit(0)'),
+    )
     run = _run(proj, bug)
     assert run.get("output_truncated") is True
     assert run["output"] == "\ufffdé"  # the LAST three bytes a9 c3 a9: split fragment, then é
