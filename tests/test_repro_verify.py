@@ -75,16 +75,18 @@ def test_a_run_that_succeeded_is_never_read_as_reproduced(proj):
     assert bug.reproduced == "no" and bug.repro_runs == 1 and bug.repro_failures == 0
 
 
-def test_how_many_runs_is_a_knob_and_partial_failures_are_the_rate(proj):
+def test_how_many_runs_is_a_knob_and_each_run_sees_a_fresh_checkout(proj):
     _config(proj, "[bugs]\nrepro_runs = 3\n")
-    # Fail only after the first exit: one 0, then two 1s -- the rate a flaky bug records.
-    flip = python(
-        "import sys; f='seen' if __import__('os').path.exists('seen') else 0; open('seen','w').write('x'); sys.exit(1 if f else 0)"
+    # Each run is reset to the recorded sha first: the marker never survives into the
+    # next run, so a stateful line answers like the first time, every time. Pre-reset
+    # code would answer 1,0,0 -- the isolation makes it 1,1,1.
+    probe = python(
+        "import os; open('seen','a').write('x'); sys.exit(1 if len(open('seen').read()) == 1 else 0)"
     )
-    _bid, bug = _file(proj, repro_cmd=flip)
+    _bid, bug = _file(proj, repro_cmd=probe)
     run = _run(proj, bug)
-    assert run["runs"] == 3 and run["failures"] == 2 and run["reproduced"] == "yes"
-    assert bug.repro_runs == 3 and bug.repro_failures == 2 and bug.reproduced == "yes"
+    assert run["runs"] == 3 and run["failures"] == 3 and run["reproduced"] == "yes"
+    assert bug.repro_runs == 3 and bug.repro_failures == 3 and bug.reproduced == "yes"
 
 
 def test_the_run_sees_the_recorded_sha_not_the_filers_dirty_tree(proj):
@@ -227,6 +229,7 @@ def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatc
     line, kw = calls[0]
     assert line.lstrip().startswith("(") and " > " in line and " 2>&1" in line
     target = Path(line.split(" > ", 1)[1].split(" 2>&1", 1)[0].strip("'\""))
+    anchored = target if target.is_absolute() else Path(kw["cwd"]) / target
     here = Path(kw["cwd"]).resolve()
-    assert not target.resolve().is_relative_to(here)  # the tail file lives OUTSIDE the checkout
+    assert not anchored.resolve().is_relative_to(here)  # the tail file lives OUTSIDE the checkout
     assert run["output"] == "x" * 8

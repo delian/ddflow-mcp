@@ -77,7 +77,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         }
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
-        out["machine"] = machine or F.machine(repo)
+        out["machine"] = machine if machine is not None else F.machine(repo)
         out["recent_events"] = F.recent_events(events, cfg.agent.id, b.repro_events)
         if test:
             out["test"] = F.test_run(repo, test, b.repro_tail_bytes, b.repro_test_timeout_s)
@@ -246,16 +246,19 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
     for want of evidence: a bundle that cannot be built or stored is linked as
     ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
     ``given``: item, agent, test, repro_cmd, capture."""
+    events = None
+    machine = None
     try:
-        # The log snapshot and machine facts are read BEFORE the run (a repro that takes
-        # minutes must not let the bundle drift to post-run arrivals), and INSIDE the
-        # guard: a log that cannot be read degrades the evidence, never the filing.
-        events = log.read_all() if hasattr(log, "read_all") else log
-        machine = F.machine(repo)
+        # A computed run and its sighting stay what they are even when the pre-run
+        # evidence below cannot be read: a given verdict is never thrown away.
         run = given.get("check")
         if run is None and given.get("repro_cmd", ""):
-            # THE run also lives under the guard: a knob that cannot be coerced or a
-            # checkout that cannot be made must fail the EVIDENCE, not the filing.
+            # The log snapshot and machine facts are read BEFORE the run (a repro that
+            # takes minutes must not let the bundle drift to post-run arrivals); the run
+            # itself lives under the guard too: a knob that cannot be coerced or a
+            # checkout that cannot be made fails the EVIDENCE, not the filing.
+            events = log.read_all() if hasattr(log, "read_all") else log
+            machine = F.machine(repo)
             run = RC.check(
                 repo,
                 F.tree(repo).get("tree_sha", ""),
@@ -264,7 +267,14 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                 float(cfg.bugs.repro_test_timeout_s),
                 int(cfg.bugs.repro_tail_bytes),
             )
+        sig = sighting(run)
         try:
+            # A caller-supplied check ran before attach: without a run of ours there is
+            # nothing to wait for, so reading them here is still pre-run.
+            if events is None:
+                events = log.read_all() if hasattr(log, "read_all") else log
+            if machine is None:
+                machine = F.machine(repo)
             bundle = build(
                 repo,
                 cfg,
@@ -282,7 +292,6 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
             linked = {"repro": store(repo, bundle)} if bundle is not None else {}
         except Exception as exc:  # evidence is a courtesy; the bug is the point
             linked = {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}
-        sig = sighting(run)
         return {**linked, **({"sighted": sig} if sig else {})}
     except Exception as exc:
         return {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}

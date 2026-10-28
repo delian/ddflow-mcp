@@ -86,6 +86,11 @@ def _run_at(
             bigger = False
             unreached = 0
             for _ in range(count):
+                # Reset BEFORE each run: a forgetful-but-stateful line (a marker it left)
+                # must not bleed into the next run's answer -- every run sees the
+                # recorded sha as the checkout made it.
+                P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
+                P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
                 # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
                 # run's path cannot know the name (it was never on any argv line).
                 code, tailed, size = _one_run(
@@ -144,15 +149,20 @@ def _one_run(
     shot = P.run_shell(f"( {line}\n){dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
     if shot.could_not_run or shot.timed_out or shot.code is None:
         return None, b"", 0
+    code = int(shot.code)
+    if code in (126, 127):
+        # POSIX's could-not-execute exits: a missing or unexecutable program made the
+        # SHELL answer before the line's program ever ran. That confirms nothing.
+        return None, b"", 0
     if not keep:
-        return int(shot.code), b"", 0
+        return code, b"", 0
     tailed, size = _tail_from_file(tail_file, keep)
     if tailed is None:
         # The tail file was never created: the shell's own redirect failed (a removed or
         # full tails dir) and the LINE never ran. That is no run at all -- counting its
         # exit would confirm a bug from a command that never executed.
         return None, b"", 0
-    return int(shot.code), tailed, size
+    return code, tailed, size
 
 
 def _tail_from_file(path: Path, keep: int) -> tuple[bytes | None, int]:
