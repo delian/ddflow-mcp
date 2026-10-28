@@ -101,6 +101,22 @@ def test_in_process_serializes_overlapping_runs():
     assert "usage: ddflow gate" in (out[0].stdout or out[0].stderr)
 
 
+def test_a_parse_failure_reads_could_not_run_never_a_pass(monkeypatch):
+    """The degraded ``in_process`` (an import or parse failure) is a `Captured` with the
+    error -- ``ran`` False, no success returncode -- the same decline the spawn path
+    makes: the walk then notes it instead of checking against it (Bc621160a82 guard)."""
+
+    class _Broken:
+        def parse_args(self, argv):
+            raise RuntimeError("parse blown on purpose")
+
+    monkeypatch.setattr(H, "_parser", _Broken())
+    out = H.in_process(["gate"])
+    assert not out.ran
+    assert isinstance(out.error, RuntimeError)
+    assert out.returncode is None  # never 0: nothing is judged against nothing
+
+
 def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_path, monkeypatch):
     """The walk `check_docs` runs: nothing spawns for a ddflow mention, a non-ddflow tool
     still spawns (it is the walk), and the flag the walk then judges is ddflow's own."""
