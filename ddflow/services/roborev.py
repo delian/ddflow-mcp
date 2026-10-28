@@ -223,7 +223,12 @@ def wait_job(
             )
         status = str(rec.get("status") or "")
         if status == "done":
-            return _done(exe, where, job, rec)
+            if on_tick is not None:
+                on_tick()  # the verdict asks below can outlive the bound: renew the lease first
+            timeout = _TIMEOUT_S
+            if wait_s > 0 and (left := deadline - monotonic()) > 0:
+                timeout = min(_TIMEOUT_S, left)  # never run the verdict asks past the bound
+            return _done(exe, where, job, rec, timeout)
         if status not in _UNFINISHED:
             return WaitResult(
                 note=(
@@ -258,14 +263,15 @@ def _live(job: int, status: str, elapsed: float) -> str:
     )
 
 
-def _done(exe: str, where: Path, job: int, rec: dict) -> WaitResult:
+def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_S) -> WaitResult:
     """The job is done, so its verdict IS readable: `roborev wait --job` exits 0 clean and 1
     on findings, and `roborev show --job` prints the review. A verdict that cannot be read
     is unjudged, so its text (if any) is never presented as a clean pass or as findings: an
-    exit roborev never means by 1 (a signal, an unknown code) is unjudged too."""
+    exit roborev never means by 1 (a signal, an unknown code) is unjudged too. ``timeout``
+    caps each ask, so a done job whose verdict hangs cannot outlive the caller's bound."""
     rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
-    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
-    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
+    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=max(1.0, timeout))
+    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=max(1.0, timeout))
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.timed_out or w.returncode not in (0, 1):
         # `why` names the REAL trouble: a short-circuit chain over error/timed_out/exit
