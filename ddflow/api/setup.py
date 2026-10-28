@@ -374,6 +374,18 @@ def _said(added: list[str]) -> str:
     )
 
 
+def _default_layer(cfg, edit: ConfigEdit) -> str:
+    """The layer ``edit`` writes to: the one it names, except that a machine-local key
+    without one defaults to the local layer (DX-machine-local-keys: how many workers THIS
+    machine runs is not the next machine's answer). `[enforce].machine_local_keys` extends
+    the shipped classification, which is held in `services.configwrite`."""
+    if edit.local or not edit.set:
+        return "local" if edit.local else "file"
+    enforce = getattr(cfg, "enforce", None)
+    extra = set(getattr(enforce, "machine_local_keys", None) or [])
+    return CW.machine_local_layer(extra, edit.set) or "file"
+
+
 def configure(
     repo: Path, edit: ConfigEdit | None = None, *, agent: str = "", approval: str = ""
 ) -> O.Outcome:
@@ -388,16 +400,10 @@ def configure(
 
     edit = edit or ConfigEdit()
     log, cfg, _st = _load(repo, agent)
-    layer = "local" if edit.local else "file"
-    # Machine-local keys (parallelism, ... and every key [enforce].machine_local_keys
-    # adds) default to the local layer: this machine's own answer must not reach the
-    # committed file silently (DX-machine-local-keys, bug B65bbc8083c's follow-up).
-    defaulted = ""
-    if edit.set and layer == "file":
-        enforce = getattr(cfg, "enforce", None)
-        extra = set(getattr(enforce, "machine_local_keys", None) or [])
-        if CW.machine_local_layer(extra, edit.set) == "local":
-            layer, defaulted = "local", edit.set
+    layer = _default_layer(cfg, edit)
+    # Machine-local keys (parallelism, ...) default to the local layer: this machine's own
+    # answer must not reach the committed file silently (DX-machine-local-keys).
+    defaulted = edit.set if layer == "local" and not edit.local else ""
     target = str(CW.config_file(repo, local=layer == "local"))
 
     stamp: dict[str, Any] = {}
