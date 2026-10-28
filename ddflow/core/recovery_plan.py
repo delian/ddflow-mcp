@@ -104,8 +104,7 @@ def _capped(item: str, attempts: int, limits: Limits) -> Action:
     return Action(
         item,
         OPERATOR,
-        f"ddflow block {item} --reason 'recovery attempt cap "
-        f"({limits.max_attempts}) reached'",
+        f"ddflow block {item} --reason 'recovery attempt cap ({limits.max_attempts}) reached'",
         f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
         "only the operator settles it. <operator> settle, re-plan, or abandon",
         attempts,
@@ -172,6 +171,7 @@ def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
             )
         elif attempts >= limits.max_attempts:
             out.append(_capped(r["item"], attempts, limits))
+            capped.add(r["item"])
         else:
             out.append(_resume(r, attempts))
             spent[r["item"]] = spent.get(r["item"], 0) + 1
