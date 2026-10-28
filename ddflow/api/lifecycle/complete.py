@@ -188,6 +188,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
         "warnings": v.warnings,
         "blockers": v.blockers,
         "bugs_closed": closed,
+        # Optional: why no reviewer was needed (a chore's exemption, services.chore).
+        # In the base rather than the event only: both surfaces are told, like the gaps.
+        **({"chore": v.chore} if v.chore else {}),
     }
     force, stamp, denied = _override_by_approval(
         log, cfg, item, v, hard, force, approval, agent, base
@@ -256,6 +259,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
+            # Optional: why no reviewer was needed (a chore's exemption, services.chore);
+            # the gate.skipped events carry the same text. Absent = not a chore.
+            **({"chore": v.chore} if v.chore else {}),
             # Optional, additive (no new event kind): the gates the ACTUAL diff excused,
             # {gate: why}, so a required gate that did not run is accounted for on the
             # durable record (B-na-required-gate). Absent = none excused.

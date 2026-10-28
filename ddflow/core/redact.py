@@ -465,7 +465,7 @@ LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "gate.unavailable": ("evidence", "reason"),
     "item.abandoned": ("reason",),
     "item.blocked": ("reason",),
-    "item.completed": ("changelog", "evidence", "not_applicable"),
+    "item.completed": ("changelog", "evidence", "not_applicable", "chore"),
     "item.reopened": ("reason", "claims"),
     "item.unblocked": ("note",),
     "job.ended": ("note",),
