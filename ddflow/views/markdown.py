@@ -588,8 +588,9 @@ def _brief_recovery(
 ) -> list[str]:
     """The RESUME block: every recoverable entry, with what was interrupted and whether
     ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
-    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns what it
-    added."""
+    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
+    lines THIS call appended (not the lines ``out`` already held: duck #1)."""
+    start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
@@ -606,7 +607,7 @@ def _brief_recovery(
     if not any(bands.values()):
         if count:
             out += [f"_{count}_", ""]
-        return out
+        return out[start:]
     out += [
         "## ⚠ RESUME: recoverable work found",
         "",
@@ -626,7 +627,7 @@ def _brief_recovery(
     if count:
         out.append(f"- _{count}_")
     out.append("")
-    return out
+    return out[start:]
 
 
 def _last_prompt_of(state: State, rec) -> str:
@@ -1226,7 +1227,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
         f"\n\n_[brief truncated at {budget} tokens "
         f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
     )
-    return _assemble(head + reserved, sections, budget * 4, note, charter, item)
+    # The RESUME slice opens the pack, before even its own heading line (duck #2): a
+    # session that starts after a crash must see recoverable work in the first line.
+    return _assemble(reserved + head, sections, budget * 4, note, charter, item)
 
 
 #: Every generated view: its filename and how to render it. The ONE map. There were two
