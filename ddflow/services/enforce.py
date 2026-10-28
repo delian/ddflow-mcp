@@ -29,6 +29,7 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import difflib
+import glob
 import itertools
 import json
 import os
@@ -1527,13 +1528,14 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
 
 
 def _add_globs_arg(paths: list[str]) -> str:
-    """The already-shell-quoted `--add-globs` VALUE for the advice: ONE JSON array
-    wrapped by `shlex.quote`. Every other notation splits on commas (`globspec.parse`),
-    so a staged path holding a comma would be printed as a command that ADDS DIFFERENT
-    globs; JSON keeps each path whole, and `shlex.quote` makes the printed command
-    copy-runnable even when a path holds an apostrophe (rubber_duck r2#'s successor
-    r3, critic r2 on DX-hook-suggests-add-globs)."""
-    return shlex.quote(json.dumps(list(paths)))
+    """The already-shell-quoted `--add-globs` VALUE for the advice: ONE JSON array,
+    each staged path `glob.escape`d, wrapped by `shlex.quote`. Every other notation
+    splits on commas (`globspec.parse`), so a staged path holding a comma would be
+    printed as a command that ADDS DIFFERENT globs; JSON keeps each path whole,
+    `glob.escape` keeps metacharacters literal (a staged `src/a[b].py` must not
+    become a class matching `src/ab.py`), and `shlex.quote` keeps the printed
+    command copy-runnable (rubber_duck/critic rounds on DX-hook-suggests-add-globs)."""
+    return shlex.quote(json.dumps([glob.escape(p) for p in paths]))
 
 
 def _uncovered_message(

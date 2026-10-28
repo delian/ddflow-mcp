@@ -8,6 +8,7 @@ measuring the wrong thing entirely.
 
 from __future__ import annotations
 
+import glob
 import io
 import json
 import os
@@ -90,12 +91,13 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
 
 def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     (enforced / "src" / "a,b.py").write_text("x = 2\n")
-    (enforced / "src" / "it's.py").write_text("y = 2\n")
-    r = _commit(enforced, "comma/quote paths", paths=["src/a,b.py", "src/it's.py"])
+    (enforced / "src" / "a[b].py").write_text("z = 3\n")
+    r = _commit(enforced, "comma/bracket paths", paths=["src/a,b.py", "src/a[b].py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
-    expected = "ddflow update <ID> --add-globs " + shlex.quote(
-        json.dumps(["src/a,b.py", "src/it's.py"])
+    advised = shlex.quote(json.dumps([glob.escape(p) for p in ["src/a,b.py", "src/a[b].py"]]))
+    assert "ddflow update <ID> --add-globs " + advised in msg, (
+        f"a comma must stay ONE whole glob and a bracket must stay literal in the remedy:\n{msg}"
     )
     assert expected in msg, (
         f"a comma or apostrophe inside a staged path must stay ONE runnable glob in the remedy:\n{msg}"
