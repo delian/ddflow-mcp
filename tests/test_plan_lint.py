@@ -50,7 +50,7 @@ def _band(iid: str, tags) -> str:
     return ""
 
 
-def _band_prio(iid: str, tags) -> int:  # noqa: ARG001
+def _band_prio(iid: str, tags) -> int:
     return {"dx": 1, "bug": 5}.get(_band(iid, tags), 100)
 
 
@@ -268,7 +268,7 @@ def test_the_add_time_hunt_reports_duplicates_when_provided():
 def test_plan_lint_on_an_empty_queue_is_nothing_to_do(repo):
     """exit 2, not exit 0: there is no live work to lint, and '0' would claim a clean
     queue for a lint that never looked at one."""
-    code, out, _err = run_cli(repo, "plan", "lint")
+    code, _out, _err = run_cli(repo, "plan", "lint")
 
     assert code == 2
 
