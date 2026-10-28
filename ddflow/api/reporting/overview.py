@@ -256,11 +256,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         }
     if release := UC.known_line(repo, cfg):  # cached answer only: status never asks the network
         data["release"] = release
+    if by_tag:
+        data["by_tag"] = _by_tag_view(by_tag, [*tasks, *phases], p)
     if not full:
         _bound(data)
-    if by_tag:
-        view = _by_tag_view(by_tag, [*tasks, *phases], p)
-        data["by_tag"] = view
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
     # blocked ids, how many recoverables are not salvageable) rather than a second fold.
     # Under `_render`, never on the wire.
@@ -422,6 +421,14 @@ def _bound(data: dict[str, Any]) -> None:
                 else slice(STATUS_LIST_LIMIT)
             )
             data[key] = rows[keep]
+    # The by-tag view is a list too: a namespace with thousands of distinct values (an
+    # `assignee:` label space) is exactly the unbounded answer Bd6aa9ffde9 is about, so
+    # the bounded MCP path cuts it the same way (the first values, lowest tag first).
+    if "by_tag" in data:
+        values = data["by_tag"]["values"]
+        if len(values) > STATUS_LIST_LIMIT:
+            cut["by_tag"] = len(values)
+            data["by_tag"]["values"] = values[:STATUS_LIST_LIMIT]
     if cut:
         data["truncated"] = {
             "lists": cut,

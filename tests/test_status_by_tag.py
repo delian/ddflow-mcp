@@ -107,10 +107,29 @@ def test_status_by_tag_names_top_blockers_and_reasons(project):
 
 def test_status_text_prints_the_by_tag_section(project):
     text = _run(project, "status", "--by-tag", "wave")
-    assert "wave:2" in text
-    assert "T-w1" in text  # the top blocker, named for the operator
+    assert "per wave value" in text
+    # The EXACT wave:2 blocker line -- a bare "T-w1" substring would also match the
+    # normal panel and the other T-w1* ids, and pass without the section.
+    assert "top blockers: T-w1 (1)" in text
 
 
 def test_status_without_by_tag_has_no_by_tag_key(project):
     body = _json(project, "status")
     assert "by_tag" not in body
+
+
+def test_bounded_status_cuts_the_by_tag_values(project):
+    # Bd6aa9ffde9: the bounded MCP answer stays bounded -- a namespace with thousands of
+    # distinct values must not smuggle an uncut list past `_bound` (rubber_duck #1).
+    from ddflow.api.reporting.overview import STATUS_LIST_LIMIT, status
+
+    log = EventLog(project, "more")
+    for i in range(STATUS_LIST_LIMIT + 3):
+        log.append(
+            "task.added", f"T-team{i}", {"parent": "P1", "title": f"t{i}", "tags": [f"team:{i}"]}
+        )
+    out = status(project, agent="tester", full=False, by_tag="team")
+    assert len(out.data["by_tag"]["values"]) == STATUS_LIST_LIMIT
+    assert out.data["truncated"]["lists"]["by_tag"] == STATUS_LIST_LIMIT + 3
+    out_full = status(project, agent="tester", full=True, by_tag="team")
+    assert len(out_full.data["by_tag"]["values"]) == STATUS_LIST_LIMIT + 3
