@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=823c562434d7 -->
+<!-- ddflow:begin README/commands sha=1e4509de3554 -->
 <details><summary>All 90 commands</summary>
 
 | Command | What it does |
@@ -595,7 +595,7 @@ needs a line written by hand here.
 | `ddflow session` | see `ddflow session --help` |
 | `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
-| `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
+| `ddflow recover` | find crashed agents' work; --all --plan triages it (exit 2 = nothing) |
 | `ddflow progress` | work actually done, aggregated from the log |
 | `ddflow loops` | circular references and runtime loops (exit 2 = none) |
 | `ddflow cleanup` | classify ddflow worktrees/branches; --apply lands the safe ones |

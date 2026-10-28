@@ -117,7 +117,7 @@ def test_the_last_prompt_of_the_lost_holder_is_in_the_slice(repo):
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert "**T1** (expired_lease, was crashed)" in text, text
-    fact = [l for l in text.splitlines() if "last prompt:" in l]
+    fact = [line for line in text.splitlines() if "last prompt:" in line]
     assert fact and "graph parser before lunch" in fact[0], text
     # A prompt with another item's id is that item's context, never borrowed for T1
     # (critic: local to the T1 fact line, not a global absence claim).
