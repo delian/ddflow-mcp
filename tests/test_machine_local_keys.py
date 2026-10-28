@@ -36,6 +36,7 @@ def test_a_plain_key_still_defaults_to_the_committed_layer(repo):
     code, out, err = run_cli(repo, "config", "cadence.max_missed", "3")
     assert code == 0, err
     assert "max_missed = 3" in (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    assert "max_missed" not in (repo / ".ddflow" / "local" / "config.toml").read_text("utf-8")
 
 
 def test_the_enforce_knob_extends_the_classification(repo):
