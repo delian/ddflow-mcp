@@ -212,7 +212,7 @@ def test_the_commands_own_skip_applies_to_the_diff_scoped_run_too(tmp_path, repo
     assert " --all-files" not in cmd
     # the caller's skip merges with the environment's (a bare assignment would drop it); the
     # range is exactly since..HEAD, so it cannot silently lose the pushed tip
-    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}op-skip" pre-commit run --hook-stage pre-push '), cmd
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'op-skip\' pre-commit run --hook-stage pre-push '), cmd
     assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
 
 
@@ -222,7 +222,23 @@ def test_the_commands_own_quoted_skip_still_skips_after_the_diff_scope_rebuild(t
     for prefix in ("SKIP='op-skip' ", 'SKIP="op-skip" '):
         cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
         assert " --all-files" not in cmd
-        # the rebuild drops one balanced quote layer, so the hook id survives as an id --
-        # re-embedding the quotes would make pre-commit skip the literal `'op-skip'` hook
-        assert cmd.startswith('SKIP="${SKIP:+$SKIP,}op-skip" pre-commit run '), cmd
+        # the rebuild drops the quote layer the shell would drop and re-emits the ids as a
+        # single-quoted literal; re-embedding the original quotes would skip the literal
+        # `'op-skip'` hook instead of `op-skip`
+        assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'op-skip\' pre-commit run '), cmd
         assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    # a space inside the quotes is the ids the operator wrote, not a command boundary...
+    cmd = CI.scope_to_diff("SKIP='lint, slow' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint, slow\' pre-commit run '), cmd
+    # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
+    cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # `SKIP=''` means "skip nothing": the explicit empty override clears the inherited SKIP
+    cmd = CI.scope_to_diff("SKIP='' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="" pre-commit run --hook-stage pre-push '), cmd
