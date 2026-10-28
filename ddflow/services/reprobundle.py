@@ -71,9 +71,13 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     if repro_cmd:
         # The filed command wins any key the check dict might carry: what the operator
         # told ddflow to run is the record of what was filed (never silently replaced).
+        # `executed` defaults in either branch: a check without the key means the run
+        # happened, no check means it was recorded as given.
+        check_dict = dict(check) if check is not None else {}
+        check_dict.setdefault("executed", check is not None)
         out["repro_cmd"] = {
-            **(check if check is not None else {"executed": False}),
-            "command": repro_cmd,
+            **check_dict,
+            "command": repro_cmd,  # the filed command wins any key the check carried
         }
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
@@ -249,16 +253,19 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
     events = None
     machine = None
     try:
-        # A computed run and its sighting stay what they are even when the pre-run
-        # evidence below cannot be read: a given verdict is never thrown away.
+        # Evidence reads degrade per-step, BEFORE the run: a log or machine probe that
+        # cannot be read strips its own section, never the run -- the contract is that
+        # the repro command STILL RUNS and its sighting is still recorded.
         run = given.get("check")
         if run is None and given.get("repro_cmd", ""):
-            # The log snapshot and machine facts are read BEFORE the run (a repro that
-            # takes minutes must not let the bundle drift to post-run arrivals); the run
-            # itself lives under the guard too: a knob that cannot be coerced or a
-            # checkout that cannot be made fails the EVIDENCE, not the filing.
-            events = log.read_all() if hasattr(log, "read_all") else log
-            machine = F.machine(repo)
+            try:
+                events = log.read_all() if hasattr(log, "read_all") else log
+            except Exception:
+                events = None
+            try:
+                machine = F.machine(repo)
+            except Exception:
+                machine = None
             run = RC.check(
                 repo,
                 F.tree(repo).get("tree_sha", ""),
@@ -270,11 +277,18 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
         sig = sighting(run)
         try:
             # A caller-supplied check ran before attach: without a run of ours there is
-            # nothing to wait for, so reading them here is still pre-run.
+            # nothing to wait for, so reading them here is still pre-run; failed reads
+            # degrade and never surface over the verdict.
             if events is None:
-                events = log.read_all() if hasattr(log, "read_all") else log
+                try:
+                    events = log.read_all() if hasattr(log, "read_all") else log
+                except Exception:
+                    events = []
             if machine is None:
-                machine = F.machine(repo)
+                try:
+                    machine = F.machine(repo)
+                except Exception:
+                    machine = None
             bundle = build(
                 repo,
                 cfg,

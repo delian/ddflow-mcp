@@ -88,9 +88,13 @@ def _run_at(
             for _ in range(count):
                 # Reset BEFORE each run: a forgetful-but-stateful line (a marker it left)
                 # must not bleed into the next run's answer -- every run sees the
-                # recorded sha as the checkout made it.
-                P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
-                P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
+                # recorded sha as the checkout made it. A reset that FAILED breaks that
+                # guarantee: with no fresh checkout there is no run to read.
+                reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
+                cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
+                if reset.code != 0 or cleaned.code != 0:
+                    unreached += 1
+                    continue
                 # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
                 # run's path cannot know the name (it was never on any argv line).
                 code, tailed, size = _one_run(

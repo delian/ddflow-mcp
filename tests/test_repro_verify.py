@@ -81,7 +81,7 @@ def test_how_many_runs_is_a_knob_and_each_run_sees_a_fresh_checkout(proj):
     # next run, so a stateful line answers like the first time, every time. Pre-reset
     # code would answer 1,0,0 -- the isolation makes it 1,1,1.
     probe = python(
-        "import os; open('seen','a').write('x'); sys.exit(1 if len(open('seen').read()) == 1 else 0)"
+        "import os,sys; open('seen','a').write('x'); sys.exit(1 if len(open('seen').read()) == 1 else 0)"
     )
     _bid, bug = _file(proj, repro_cmd=probe)
     run = _run(proj, bug)
