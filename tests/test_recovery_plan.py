@@ -68,6 +68,15 @@ class TestExpiredLease:
         assert a.command.startswith("record `lease.expired` for a's lease")
         assert a.attempts == 0
 
+    def test_clean_tree_at_the_cap_is_operator_too(self):
+        """The cap gates every recovery arm: a clean lease at the cap is OPERATOR, not a
+        third automatic expiry -- the expire-to-claim loop has run its course."""
+        facts = _facts(recoveries=[_row(salvageable=False)], attempts={"T1": 2})
+        (a,) = _one(facts)
+        assert a.cls == RP.OPERATOR
+        assert a.attempts == 2
+        assert "ddflow block T1" in a.command
+
     def test_dirty_tree_is_propose_resume_with_the_exact_claim(self):
         (a,) = _one(_facts(recoveries=[_row(salvageable=True, unmerged=3)]))
         assert a.cls == RP.PROPOSE
@@ -169,7 +178,13 @@ class TestShape:
         assert set(d) >= {"item", "cls", "command", "reason", "attempts", "evidence"}
 
     def test_nothing_in_means_no_actions_even_with_a_kill_switch(self):
-        assert _one(_facts()) == []
+        assert _one(_facts(kill_switch=True)) == []
+
+    def test_a_kill_switch_does_not_silence_the_dry_run(self):
+        """The triage itself is always a dry run: with the switch on it still prints the
+        actions; refusing to run them is `services.recovery`'s contract, not this one."""
+        (a,) = _one(_facts(kill_switch=True, recoveries=[_row(salvageable=False)]))
+        assert a.cls == RP.SAFE_AUTO
 
 
 # -- `ddflow recover --all --plan [--json]` end to end -----------------------------------

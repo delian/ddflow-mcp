@@ -37,17 +37,24 @@ def _render_plan(out) -> str:
     actions = out.data["_render"]["actions"]
     if not actions:
         return ""
-    paused = "PAUSED: the kill switch is on; nothing will run." if out.data.get("paused") else ""
-    lines = [f"recovery plan: {len(actions)} action(s). {paused}\n"]
+    lines = []
+    if out.data.get("paused"):
+        lines.append(
+            f"recovery plan: {len(actions)} action(s). PAUSED: the kill switch is on, so "
+            "`ddflow recover --all --apply` refuses and nothing will run.\n"
+        )
+    else:
+        lines.append(f"recovery plan: {len(actions)} action(s).\n")
     for a in actions:
         lines.append(f"  [{a.cls.upper():9}] {a.item}  attempts {a.attempts}")
         lines.append(f"       {a.reason}")
         lines.append(f"       {a.command}")
     lines.append("")
-    lines.append(
-        "Nothing here runs PROPOSE or OPERATOR: `ddflow recover --all --apply` performs only "
-        "SAFE_AUTO."
-    )
+    if not out.data.get("paused"):
+        lines.append(
+            "Nothing here runs PROPOSE or OPERATOR: `ddflow recover --all --apply` performs "
+            "only SAFE_AUTO."
+        )
     return "\n".join(lines)
 
 

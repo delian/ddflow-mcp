@@ -134,7 +134,23 @@ def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
     for r in facts.recoveries:
         attempts = facts.attempts.get(r["item"], 0)
         if r.get("kind") == "expired_lease" and r.get("salvageable") is False:
-            out.append(_expiry(r, attempts))
+            if attempts >= limits.max_attempts:
+                # On the cap the item becomes OPERATOR, whatever the tree measured: the
+                # expire-to-claim loop has run its course and only a person settles it.
+                out.append(
+                    Action(
+                        r["item"],
+                        OPERATOR,
+                        f"ddflow block {r['item']} --reason 'recovery attempt cap "
+                        f"({limits.max_attempts}) reached'",
+                        f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
+                        "only the operator settles it. <operator> settle, re-plan, or abandon",
+                        attempts,
+                        {"effect": "block", "cap": limits.max_attempts},
+                    )
+                )
+            else:
+                out.append(_expiry(r, attempts))
         elif r.get("kind") == "expired_lease":
             out.append(_resume(r, attempts, limits))
         elif r.get("salvageable") is False:
