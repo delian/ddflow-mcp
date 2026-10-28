@@ -92,7 +92,7 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
 def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     (enforced / "src" / "a,b.py").write_text("x = 2\n")
     (enforced / "src" / "a[b].py").write_text("z = 3\n")
-    r = _commit(enforced, "comma/bracket paths", paths=["src/a,b.py", "src/a[b].py"])
+    r = _commit(enforced, "comma/bracket paths", paths=["src/a,b.py", ":(literal)src/a[b].py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
     advised = shlex.quote(json.dumps([glob.escape(p) for p in ["src/a,b.py", "src/a[b].py"]]))
