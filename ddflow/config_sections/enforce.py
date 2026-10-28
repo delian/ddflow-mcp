@@ -192,6 +192,6 @@ class EnforceConfig:
         check=lambda v: (
             _extra_machine_local_problem(v)
             if isinstance(v, list)
-            else "must be a list of dotted config keys, e.g. [\"lease.ttl_s\"]"
+            else 'must be a list of dotted config keys, e.g. ["lease.ttl_s"]'
         ),
     )

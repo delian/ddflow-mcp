@@ -457,9 +457,12 @@ def configure(
             rows=[],
             gitattributes_added=res.attributes_added,
             text=f"{edit.set} = {literal}  ({target})"
-            + (f"\n  machine-local key {defaulted}: this machine's own answer, defaulted "
-               f"to the local layer; [enforce].machine_local_keys extends which keys do"
-               if defaulted else "")
+            + (
+                f"\n  machine-local key {defaulted}: this machine's own answer, defaulted "
+                f"to the local layer; [enforce].machine_local_keys extends which keys do"
+                if defaulted
+                else ""
+            )
             + shadow["shadow_note"]
             + _said(res.attributes_added),
             **shadow,
