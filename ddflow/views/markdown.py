@@ -681,14 +681,18 @@ def _resume_line(state: State, cfg: Config, r) -> str:
         bits = (
             (bits + ' · last prompt: "' + prompt + '"') if bits else 'last prompt: "' + prompt + '"'
         )
-    if r.salvageable:
+    if r.kind == "stale_running":
+        # Nobody holds the RUNNING item RIGHT NOW (the schedule's own predicate): the
+        # "was <holder>" above names the lost holder, "now" says no claim is live (duck #6).
+        status = "NOT resumed: nobody holds it now — the claim command above takes it over"
+    elif r.salvageable:
         status = "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
     elif r.salvageable is None:
         status = (
             "NOT resumed: COULD NOT MEASURE — treat it as holding work until one answer decides"
         )
     else:
-        status = "NOT resumed: nobody holds it — the claim command above takes it over"
+        status = "NOT resumed: nobody holds it now — the claim command above takes it over"
     return status + (" · " + bits if bits else "")
 
 
