@@ -63,6 +63,21 @@ def family_for(model: str, families: dict[str, str] | None = None) -> str:
     return ""
 
 
+def family_name_of(model: str, families: dict[str, str] | None = None) -> str:
+    """The family ``model`` IS when it is itself a family name, else ``""``.
+
+    `family_for` maps a MODEL name to its family; this answers the other half of
+    "accept a family in place of a model id" (DX-author-family): a bare family name --
+    an `[agent].families` VALUE such as "alibaba" -- is a legal author identity, so it
+    must not fall into ``""`` = "unknown" and be refused as an unrecognised model. The
+    comparison is exact and case-blind: a model id never EQUALS a family value, so a
+    model is judged by `family_for` as before, never re-classified here.
+    """
+    low = (model or "").strip().lower()
+    known = {v.strip().lower() for v in (families if families is not None else FAMILY_HINTS).values()}
+    return low if low and low in known else ""
+
+
 def router_set(model: str, routers: dict[str, list[str]]) -> list[str] | None:
     """The family SET a router model draws on, or ``None`` when ``model`` is no router.
 
@@ -128,6 +143,10 @@ class AgentConfig:
     families: dict[str, str] = knob(
         factory=lambda: dict(FAMILY_HINTS),
         doc="Model-name substring (matched case-blind; an empty key matches nothing) to pretraining-family map, used to enforce the rule above. Extend it as new families appear; an unknown model establishes nothing -- an unrecognised author is refused, an unrecognised reviewer is not counted as different.",
+    )
+    family: str = knob(
+        "",
+        doc="The author model's pretraining family, so `complete` never needs a model id written into this repository's log: `[agent].family` (or DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in place of `--model <author model>` -- a `--model` flag or the model the session declared still wins -- and the completion event then stores the family only, never a model name. Set it once per harness here, and let `ddflow setup`/onboarding fill it in per harness. Change it for the project (`ddflow config --set agent.family deepseek`), for this machine (add --local), per run (DDFLOW_AGENT_FAMILY), or over MCP with `ddflow_configure`.",
     )
     # HydraFusion ships with NO members: GitHub publishes no fixed roster (research
     # R-hydrafusion-families), and a guessed set that misses a provider passes that

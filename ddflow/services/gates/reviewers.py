@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config, family_for, router_set
+from ...config_sections.agent import family_name_of
 from ...core.bookkeeping import STATE_EXCLUDE
 from ...core.digest import content_digest, hasher
 from ...core.model import State
@@ -118,8 +119,15 @@ def reviewer_independence(
     # have written the diff, so a reviewer must sit outside all of them.
     routed = router_set(author_model, cfg.agent.routers)
     # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
-    # 'ALIBABA' are one family (B-fam-case).
-    author_fam = family_of(author_model, cfg).strip().lower() if routed is None else ""
+    # 'ALIBABA' are one family (B-fam-case). A bare family name is an identity of its
+    # own: `[agent].family` / DDFLOW_AGENT_FAMILY says "the AUTHOR is this family" with
+    # no model id to record (DX-author-family), so it must not resolve to "" and read as
+    # an unrecognised model.
+    author_fam = (
+        (family_name_of(author_model, cfg.agent.families) or family_of(author_model, cfg)).strip().lower()
+        if routed is None
+        else ""
+    )
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     unapproved: list[tuple[str, str]] = []
@@ -131,7 +139,11 @@ def reviewer_independence(
             unapproved.append((gname, who))
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
-        fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
+        fam = (
+            _declared_family(rec.evidence)
+            or family_name_of(m, cfg.agent.families)
+            or family_of(m, cfg).strip().lower()
+        )
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")
@@ -148,15 +160,20 @@ def reviewer_independence(
         # Quoting `''` back at the agent named nothing it could act on (B7a5c63e3d2).
         return False, (
             "the author's model is unknown, so no reviewer can be shown to differ from "
-            "it: pass `--model <author model>` (`model` over MCP), or declare it once "
-            "with `ddflow session start --model <author model>` under the same identity."
+            "it: pass `--model <author model>` (or an `[agent].families` family name) "
+            "(`model` over MCP), declare it once with `ddflow session start --model "
+            "<author model>` under the same identity, or set `[agent].family` "
+            "(DDFLOW_AGENT_FAMILY) so no model id is ever written to the log."
         )
     if routed is None and not author_fam:
         return False, (
             f"the author's model {author_model!r} is not in [agent].families, so no "
             f"reviewer can be shown to differ from it. Add it to the map (or, for a "
             f"model that routes across providers, to [agent].routers with the families "
-            f"it draws on), or pass `--model` with a name the map recognises."
+            f"it draws on), pass `--model` with a name the map recognises, or pass a "
+            f"family name value of [agent].families (`[agent].family` / "
+            f"DDFLOW_AGENT_FAMILY` does the same): the family is the author then, with "
+            f"no model id recorded."
         )
     # `router_set` returns its members stripped and lowercased, so the router side is
     # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
