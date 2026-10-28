@@ -390,6 +390,7 @@ COMPLETE_BODY = (
     "id",
     "sha",
     "author_model",
+    "author_family",
     "model_source",
     "independence",
     "forced",
@@ -417,10 +418,14 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
         yield f"bug {bid} closed"
     if out.exit != OK:
         return
+    src = out.data.get("model_source") or ""
+    where = {"flag": "--model", "config": "[agent].family"}.get(src, "the agent's session")
     if out.data.get("author_model") and out.data.get("model_source"):
         # Say where the judged author model came from (B-complete-requires-model-even-when-recorded).
-        where = "--model" if out.data["model_source"] == "flag" else "the agent's session"
         yield f"author model: {out.data['author_model']} (from {where})"
+    if out.data.get("author_family") and out.data.get("model_source"):
+        # A family-only author is said out loud too (DX-author-family), from the same sources.
+        yield f"author family: {out.data['author_family']} (from {where})"
     if out.data.get("export_refresh"):
         yield f"  {out.data['export_refresh']['summary']}"
     for up in out.data.get("umbrellas_completed", []):
