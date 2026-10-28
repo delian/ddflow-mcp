@@ -1116,8 +1116,13 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
 
 def _family_of_name_or_value(model: str, cfg) -> str:
     """`model`'s family with a bare family name recognised as itself: the author and the
-    typed reviewer model are judged by the same resolution (DX-author-family)."""
-    return G.family_name_of(model, cfg.agent.families) or G.family_of(model, cfg).strip().lower()
+    typed reviewer model are judged by the same resolution (DX-author-family). One
+    canonical form for both legs, so a configured value 'DeepSeek' and a family_for
+    answer 'deepseek' are one family, however they were spelled."""
+    return (
+        G.family_name_of(model, cfg.agent.families)
+        or G.family_of(model, cfg).strip().lower()
+    )
 
 
 def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:
