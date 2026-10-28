@@ -247,6 +247,11 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
         elif quote == '"':
             if c == '"':
                 quote = ""
+            elif c == "\\" and i + 1 < n and command[i + 1] in '$`"\\':
+                # the shell's own double-quote escapes: the escaped char is a literal,
+                # so a `\$` is never an expansion
+                value.append(command[i + 1])
+                i += 1
             elif c in "$`":
                 active = True
                 value.append(c)

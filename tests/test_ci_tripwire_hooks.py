@@ -235,6 +235,9 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
     # a space inside the quotes is the ids the operator wrote, not a command boundary...
     cmd = CI.scope_to_diff("SKIP='lint, slow' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint, slow\' pre-commit run '), cmd
+    # ...inside double quotes a `\\` pair is ONE backslash, kept as the shell keeps it...
+    cmd = CI.scope_to_diff('SKIP="a\\\\b" ' + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'a\\b\' pre-commit run '), cmd
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
