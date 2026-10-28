@@ -727,6 +727,7 @@ COMMANDS: tuple[Command, ...] = (
             "id",
             "sha",
             "author_model",
+            "author_family",
             "model_source",
             "independence",
             "forced",

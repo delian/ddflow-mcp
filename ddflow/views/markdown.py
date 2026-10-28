@@ -43,6 +43,7 @@ from ..services.gates import (
 )
 from ..services.pipeline_diff import effective_pipeline
 from ..services.redact_report import redactor
+from ..core.records import GateOutcome
 
 #: What every view's first line starts with, stamped or not.
 GENERATED_PREFIX = (
@@ -582,7 +583,14 @@ def may_hold_work(r) -> bool:
     return recovery_band(r) is not None
 
 
-def _brief_recovery(out: list[str], recovery: list) -> None:
+def _brief_recovery(
+    out: list[str], recovery: list, *, state: State | None = None, cfg: Config | None = None
+) -> list[str]:
+    """The RESUME block: every recoverable entry, with what was interrupted and whether
+    ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
+    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
+    lines THIS call appended (not the lines ``out`` already held: duck #1)."""
+    start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
@@ -599,24 +607,93 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
     if not any(bands.values()):
         if count:
             out += [f"_{count}_", ""]
-        return
+        return out[start:]
     out += [
-        "## ⚠ Recoverable work found",
+        "## ⚠ RESUME: recoverable work found",
         "",
         "Handle these BEFORE starting anything new — a crashed agent's worktree often",
         "holds finished work that exists nowhere else.",
         "",
     ]
     for what, band in bands.items():
-        out += [
-            f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in band[:_RECOVERY_SHOWN]
-        ]
+        for r in band[:_RECOVERY_SHOWN]:
+            out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
+            if state is not None:
+                out.append(_resume_line(state, cfg, r, what))
         if len(band) > _RECOVERY_SHOWN:
             more = len(band) - _RECOVERY_SHOWN
             out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
     if count:
         out.append(f"- _{count}_")
     out.append("")
+    return out[start:]
+
+
+def _last_prompt_of(state: State, rec) -> str:
+    """The interrupted holder's last recorded prompt that NAMES THIS ITEM (a prompt on
+    another item is that item's context, never borrowed here: duck #1), clipped to one
+    line; "" when the holder recorded none for it."""
+    holder = rec.holder if rec.holder and rec.holder != "(none)" else ""
+    if not holder:
+        return ""
+    prompts = [
+        p
+        for s in sorted(state.sessions.values(), key=lambda s: s.started_at)
+        if s.agent == holder
+        for p in s.prompts
+        if p.get("item") == rec.item
+    ]
+    pick = prompts[-1] if prompts else None
+    if not pick:
+        return ""
+    text = " ".join((pick.get("text") or "").split())
+    return clip(text, 90).strip('"') or ""
+
+
+def _gate_facts(state: State, cfg: Config, item: str) -> str:
+    """`gates done: research, rules` and `next gate: implement` for the interrupted
+    item: what was left undone is what a fresh agent must know first."""
+    it = state.items.get(item)
+    if it is None:
+        return ""
+    pipe = list(pipeline_for(it, cfg))
+    needed = set(required_gates(cfg))
+    done = [g for g in pipe if GateOutcome.settled(it.gate_outcome(g), g in needed)]
+    next_up = next(
+        (g for g in pipe if not GateOutcome.settled(it.gate_outcome(g), g in needed)), ""
+    )
+    facts = []
+    if done:
+        facts.append("gates done: " + ", ".join(done))
+    if next_up:
+        facts.append("next gate: " + next_up)
+    return " · ".join(facts)
+
+
+def _resume_line(state: State, cfg: Config, r, what: str) -> str:
+    """One indented line per entry: ddflow has NOT resumed it (its safe pass records, it
+    never takes over a tree that may hold work: D-orphan-recovery), and what the item
+    still owes. `r.advice` already says the exact command. The status is keyed to the
+    BAND the entry renders in (the same `recovery_band` truth the line above shows), so
+    the words can never contradict the line they sit under whatever the raw flags say
+    (duck #4/#5: a held entry cannot be described as unheld, and vice versa)."""
+    bits = _gate_facts(state, cfg, r.item) if cfg is not None else ""
+    prompt = _last_prompt_of(state, r)
+    if prompt:
+        bits = (
+            (bits + ' · last prompt: "' + prompt + '"') if bits else 'last prompt: "' + prompt + '"'
+        )
+    if what == _UNHELD:
+        # Nobody holds the RUNNING item RIGHT NOW (the schedule's own predicate): the
+        # "was <holder>" above names the lost holder, "now" says no claim is live.
+        status = "NOT resumed: nobody holds it now — the claim command above takes it over"
+    elif what == _UNMEASURED:
+        status = (
+            "NOT resumed: COULD NOT MEASURE — treat it as holding work until one answer decides"
+        )
+    else:
+        status = "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
+    return status + (" · " + bits if bits else "")
 
 
 def _brief_current(
@@ -1052,7 +1129,7 @@ def _fit_sections(
 
 
 def _assemble(
-    head: list[str],
+    prefix: list[str],
     sections: list[tuple[str, list[str]]],
     chars: int,
     note: str,
@@ -1061,17 +1138,35 @@ def _assemble(
 ) -> str:
     """The brief's text within ``chars``: the sections cut to what the charter (set aside
     first, appended whole) leaves, then the backstop for a heading that alone overran its
-    share -- the note counts too, and the backstop cuts the sections, never the charter."""
+    share -- the note counts too, the backstop cuts the sections, never the charter, and
+    ``prefix`` (the head and the RESUME slice) is never cut (DX-recover-brief-slice): a
+    squeeze takes from the budgeted sections, never from recoverable work. When even the
+    note no longer fits after the prefix (a RESUME slice that alone fills the budget),
+    the note is dropped rather than the slice: each trimmed section's own marker already
+    says where its rest is."""
     set_aside = len(charter) + 2 if charter else 0
-    room = chars - len("\n".join(head)) - len(note) - 1 - set_aside
-    body, trimmed = _fit_sections(sections, room, item)
-    text = "\n".join(head + body)
     cap = chars - set_aside
+    prefix_text = "\n".join(prefix)
+    # Reserve the note's room only when the note could ever be appended (prefix + note
+    # must fit below the cap): reserving it unconditionally charged the body for a note
+    # that would be dropped, which starved sections that fit without it (duck/critic
+    # _assemble findings).
+    note_room = len(note) if len(prefix_text) + len(note) + 1 <= cap else 0
+    room = chars - len(prefix_text) - note_room - 1 - set_aside
+    body_lines, trimmed = _fit_sections(sections, max(1, room), item)
+    body = "\n".join(body_lines)
+    text = prefix_text + ("\n" + body if body else "")
     if len(text) + (len(note) if trimmed else 0) > cap:
-        text = text[: max(0, cap - len(note))].rsplit("\n", 1)[0]
+        # The backstop cuts the BODY only: the head and the reserved RESUME slice hold.
+        # With no note reserved (prefix + note alone exceed the cap), the body keeps
+        # its place; nothing may cut the prefix.
+        room = max(0, cap - len(prefix_text) - 1 - (len(note) if note_room else 0))
+        if len(body) > room:  # a body already inside the room loses nothing here
+            body = body[:room].rsplit("\n", 1)[0]
+        text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
-        text += note
+        text += note if len(text) + len(note) <= cap else ""
     return text + ("\n\n" + charter if charter else "")
 
 
@@ -1098,8 +1193,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     """The session-start pack, under ``session.brief_max_tokens``.
 
     Ordered by what an agent must not miss: anything needing rescue first, then what
-    it is doing, then what it may do next, then the lessons that bear on it. When the
-    whole does not fit, each section is cut to its share of the budget
+    it is doing, then what it may do next, then the lessons that bear on it. The RESUME
+    slice (recoverable work) is RESERVED and never cut by the budget; when the rest does
+    not fit, each section is cut to its share of the budget
     (``_SECTION_SHARE``, B1472311a63) and says what it left out and where it is; what a
     short section does not use goes to the ones after it, head first, so the
     safety-critical head still survives a squeeze -- and no section ahead of them can
@@ -1107,8 +1203,13 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     the backstop.
     """
     sections: list[tuple[str, list[str]]] = [(name, []) for name in _SECTION_SHARE]
+    # "recovery" leads _SECTION_SHARE but is no longer a trimmed section: the RESUME
+    # slice is reserved and never cut by the budget (DX-recover-brief-slice), so it
+    # leaves the budgeted set first (dict order is the literal order: recovery leads).
+    sections.pop(0)
     part = dict(sections)
-    _brief_recovery(part["recovery"], recovery or [])
+    reserved: list[str] = []
+    _brief_recovery(reserved, recovery or [], state=state, cfg=cfg)
     _brief_jobs(part["jobs"], state, item, agent)
     if item:
         _brief_current(
@@ -1140,7 +1241,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
         f"\n\n_[brief truncated at {budget} tokens "
         f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
     )
-    return _assemble(head, sections, budget * 4, note, charter, item)
+    # The RESUME slice opens the pack, before even its own heading line (duck #2): a
+    # session that starts after a crash must see recoverable work in the first line.
+    return _assemble(reserved + head, sections, budget * 4, note, charter, item)
 
 
 #: Every generated view: its filename and how to render it. The ONE map. There were two
