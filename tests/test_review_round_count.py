@@ -58,6 +58,23 @@ def test_a_kept_copy_marked_only_by_an_empty_unavailable_deltas_charges_no_round
     assert rounds_used(it, "critic") == 1
 
 
+def test_a_pre_status_era_declared_outcome_charges_a_delta_round_too(repo):
+    """The fold's pair of rules is SYMMETRIC: a delta run with no `status` evidence but a
+    declared outcome charges a round, exactly like the same shaped full run."""
+    it = _item(
+        _run({"review_kind": "delta"}, outcome="reviewed"),
+        _run({"review_kind": "delta", "status": "REVIEWED"}),
+    )
+    assert delta_rounds(it, "critic") == 2
+    assert rounds_used(it, "critic") == 2
+    # an outcome-less or unavailable-era record charges nothing, delta or full
+    it = _item(
+        _run({"review_kind": "delta"}, outcome="unavailable"),
+        _run({"review_kind": "full"}, outcome="unavailable"),
+    )
+    assert rounds_used(it, "critic") == 0
+
+
 def _setup(repo: Path, tmp_path: Path) -> None:
     """A captured project whose command reviewer flags one `FINDME` finding, with the
     SHIPPED round cap (2): the cap the three views must count against."""
