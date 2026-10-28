@@ -257,8 +257,17 @@ def test_complete_outputs_the_chore_exemption(proj):
     (wt / ".mailmap").write_text("A <a@x> <b@x>\n")
     _git(wt, "add", ".mailmap")
     _git(wt, "commit", "-qm", "mailmap")
-    for gate in ("research", "rules", "implement", "rubber_duck", "critic",
-                 "standards", "unit_tests", "bug_hunt", "dedupe"):
+    for gate in (
+        "research",
+        "rules",
+        "implement",
+        "rubber_duck",
+        "critic",
+        "standards",
+        "unit_tests",
+        "bug_hunt",
+        "dedupe",
+    ):
         code, _o, err = run_cli(proj, "gate", "skip", "CH", gate, "--reason", "chore")
         assert code == 0, err
     code, _o, err = run_cli(proj, "merge", "CH", "--model", "claude-x")
