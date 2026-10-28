@@ -256,6 +256,8 @@ def _sub_end(quote: str, c: str, command: str, i: int, n: int) -> int:
         if inner:
             if c == inner:
                 inner = ""
+            elif inner == '"' and c == "\\" and i + 1 < n and command[i + 1] in '"\\$`':
+                i += 1  # `\"` etc. inside the inner double quotes is a literal quote char
         elif c in "\"'":
             inner = c
         elif c == "\\" and i + 1 < n:
