@@ -224,18 +224,28 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
+_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
+
+
 def scope_to_diff(command: str, tree: Path, since: str) -> str:
     """``command`` (the default pre-push command, maybe after `SKIP=...`) run over the diff
     ``since``..HEAD instead of over every file (`--all-files`): the checks a push is about run
     on what the push changes, so an error the base itself carries does not fail a branch that
-    did not make it (Bf333cb2f5d). ``command`` as written when ``since`` is not a commit there."""
-    if not since or not W.rev(tree, since):
+    did not make it (Bf333cb2f5d). The ref name itself is never interpolated: the command runs
+    through a shell, and a ref name is not shell text (the resolved commit is).
+    ``command`` as written when ``since`` is not a commit there."""
+    resolve = W.rev(tree, since) if since else ""
+    if not resolve or " --all-files" not in command:
         return command
-    if " --all-files" not in command:
-        return command
-    # `--from-ref since --to-ref HEAD` is pre-commit's three-dot there: in a merged tree HEAD
-    # holds the base, so the range is exactly the pushed change, nothing the base brought.
-    return command.replace(" --all-files", f" --from-ref {since} --to-ref HEAD", 1)
+    lead = _LEADING_SKIP.match(command)
+    run = command[lead.end() :] if lead else command
+    # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
+    # selected-tests plan), so merge the two like the earlier tripwire run did; with no
+    # assignment the environment's own SKIP reaches pre-commit as it is.
+    merged = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
+    # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
+    # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
+    return merged + run.replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
 
 
 def tool_missing(command: str) -> str:
