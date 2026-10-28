@@ -81,7 +81,7 @@ def _run_at(
                     "load": load_start,
                 }
             codes: list[int] = []
-            out: list[str] = []
+            out: list[bytes] = []
             bigger = False
             unreached = 0
             for i in range(count):
@@ -115,20 +115,22 @@ def _run_at(
     }
     if unreached:
         record["unreached"] = unreached
-    text = "\n".join(out)
-    if text and keep:
-        raw = text.encode("utf-8", errors="replace")
-        record["output_truncated"] = bigger or len(raw) > keep
-        # Cut at the BYTE the knob staffed -- a character cut could double the budget in
-        # UTF-8 -- and drop the boundary bytes the cut split (a cut character was never
-        # fully stored): what stays re-encodes within the budget.
-        record["output"] = raw[-keep:].decode("utf-8", errors="ignore")
+    joined = b"\n".join(out)
+    if joined and keep:
+        # The whole pipeline is BYTES until now: decode-replace inflation can never say a
+        # store-fits cut of one byte is 'truncated', and the join's byte length against
+        # the budget IS the truncation (a run file larger than the budget staffed the cut).
+        record["output_truncated"] = bigger or len(joined) > keep
+        # Cut at the BYTE the knob staffed -- a character cut could double the budget --
+        # and drop the boundary bytes the cut split (a cut cut character was never fully
+        # stored): the kept bytes re-encode within the budget.
+        record["output"] = joined[-keep:].decode("utf-8", errors="replace")
     return record
 
 
 def _one_run(
     scratch: Path, tail_file: Path, line: str, keep: int, timeout_s: float
-) -> tuple[int | None, str, int]:
+) -> tuple[int | None, bytes, int]:
     """One run of ``line`` in the scratch tree: its exit code (None when it reached none),
     the tail bytes of its output file, and that file's size. The run is a subshell with
     the WHOLE line redirecting to ``tail_file`` (outside the checkout; /dev/null when
@@ -136,25 +138,26 @@ def _one_run(
     dest = f" > {shlex.quote(str(tail_file))} 2>&1" if keep else " > /dev/null 2>&1"
     shot = P.run_shell(f"( {line}\n){dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
     if shot.could_not_run or shot.timed_out or shot.code is None:
-        return None, "", 0
+        return None, b"", 0
     if not keep:
-        return int(shot.code), "", 0
+        return int(shot.code), b"", 0
     tailed, size = _tail_from_file(tail_file, keep)
     return int(shot.code), tailed, size
 
 
-def _tail_from_file(path: Path, keep: int) -> tuple[str, int]:
-    """The last ``keep`` bytes of ``path`` (decoded) and its total size; ``("", size)`` when
-    the file is not readable. Reading with a seek bounds what an enormous run loads into
-    memory -- the size still says a run was cut."""
+def _tail_from_file(path: Path, keep: int) -> tuple[bytes, int]:
+    """The last ``keep`` BYTES of ``path`` and its total size; ``(b"", size)`` when the file
+    is not readable. Reading with a seek bounds what an enormous run loads into memory;
+    the size still says a run was cut. Bytes stay bytes to ``_run_at``: decode-replace
+    inflation happens once, at presentation, and cannot wander into the arithmetic."""
     try:
         with open(path, "rb") as fh:
             fh.seek(0, os.SEEK_END)
             size = fh.tell()
             fh.seek(max(0, size - keep))
-            return fh.read(keep).decode("utf-8", errors="replace"), size
+            return fh.read(keep), size
     except OSError:
-        return "", 0
+        return b"", 0
 
 
 def _first_load() -> str:
