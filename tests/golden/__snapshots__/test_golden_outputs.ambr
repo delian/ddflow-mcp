@@ -2908,6 +2908,19 @@
           pretraining-family map, used to enforce the rule above. Extend it as new
           families appear; an unknown model establishes nothing -- an unrecognised
           author is refused, an unrecognised reviewer is not counted as different.
+      agent.family = ''   [default]
+          The author model's pretraining family, so `complete` never needs a model id
+          written into this repository's log: `[agent].family` (or
+          DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in
+          place of `--model <author model>` -- a `--model` flag still wins, and the
+          configured family otherwise wins over the model the session declared -- and
+          the completion event then stores the family only, never a model name (a non-
+          canonical spelling that is a `[agent].families` NEEDLE, such as "gemini",
+          resolves to its canonical family value there). Set it once per harness here,
+          and let `ddflow setup`/onboarding fill it in per harness. Change it for the
+          project (`ddflow config --set agent.family deepseek`), for this machine (add
+          --local), per run (DDFLOW_AGENT_FAMILY), or over MCP with
+          `ddflow_configure`.
       agent.routers = {'hydrafusion': []}   [default]
           Model-name substring to the SET of families a router author draws on -- a
           model that routes each task across providers, such as Copilot's HydraFusion.
@@ -3239,7 +3252,7 @@
       docs.command_timeout_s = 20   [default]
           Seconds one `--help` walk step, one count command or the `lint_command` may
           run before the check records it as not run (a note) instead of waiting.
-  
+      
     ''',
   )
 # ---
