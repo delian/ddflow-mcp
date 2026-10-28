@@ -20,10 +20,42 @@ from conftest import run_cli
 import ddflow.api.review as api
 from ddflow.config import Config
 from ddflow.core.model import fold
+from ddflow.core.records import GateRun, Item
 from ddflow.infra.log import EventLog
 from ddflow.services import gates as G
+from ddflow.services.gates.rounds import delta_rounds, full_rounds, rounds_used
 
 OK, FAIL = 0, 1
+
+
+def _item(*runs: GateRun) -> Item:
+    return Item(id="T1", kind="task", gate_history=list(runs))
+
+
+def _run(evidence: dict, outcome: str = "failed") -> GateRun:
+    return GateRun(gate="critic", outcome=outcome, evidence=evidence)
+
+
+def test_a_free_retry_of_a_partial_delta_round_charges_no_round(repo):
+    """The fold's delta count excludes a `retry_of_partial` just like the full count does:
+    two delta runs where the second is the free retry of the first charge one round."""
+    it = _item(
+        _run({"review_kind": "delta", "status": "PARTIAL"}),
+        _run({"review_kind": "delta", "status": "REVIEWED", "retry_of_partial": True}),
+    )
+    assert delta_rounds(it, "critic") == 1
+    assert rounds_used(it, "critic") == 1
+
+
+def test_a_kept_copy_marked_only_by_an_empty_unavailable_deltas_charges_no_round(repo):
+    """`unavailable_deltas` is a MARKER: an empty list still says 'kept copy', so the
+    pre-`round_kept` era's re-emitted round is not counted twice."""
+    it = _item(
+        _run({"review_kind": "full", "status": "REVIEWED"}),
+        _run({"review_kind": "full", "status": "REVIEWED", "unavailable_deltas": []}),
+    )
+    assert full_rounds(it, "critic") == 1
+    assert rounds_used(it, "critic") == 1
 
 
 def _setup(repo: Path, tmp_path: Path) -> None:

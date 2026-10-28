@@ -21,8 +21,9 @@ def _runs(it, gate: str) -> list:
 def kept_copy(run) -> bool:
     """A record `api.review._keep_reviewed_round` re-emitted over an outage: a copy of an
     earlier round, no round of its own (B435bbddb18). Copies written before `round_kept`
-    existed are told by `unavailable_deltas`, which only that path writes."""
-    return bool(run.evidence.get("round_kept") or run.evidence.get("unavailable_deltas"))
+    existed are told by `unavailable_deltas`, which only that path writes. Both are
+    MARKER tests, presence not truthiness: an empty list is still the marker."""
+    return "round_kept" in run.evidence or "unavailable_deltas" in run.evidence
 
 
 def settled_pass(run) -> bool:
@@ -68,7 +69,8 @@ def full_rounds(it, gate: str) -> int:
 
 def delta_rounds(it, gate: str) -> int:
     """Delta rechecks already recorded for ``it``'s ``gate`` (counted from its history,
-    like `full_rounds`): only ones that reached a reviewer."""
+    like `full_rounds`): only ones that reached a reviewer and are a round of their own
+    (a free retry of a partial round is no round, exactly as for full rounds)."""
     return sum(
         1
         for r in _runs(it, gate)
@@ -77,6 +79,7 @@ def delta_rounds(it, gate: str) -> int:
         and not kept_copy(r)
         and not settled_pass(r)
         and not r.evidence.get("fix_round")
+        and not r.evidence.get("retry_of_partial")
     )
 
 
