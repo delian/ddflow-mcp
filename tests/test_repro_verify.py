@@ -13,6 +13,7 @@ not offered ahead of confirmed work.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -40,8 +41,10 @@ def _config(repo: Path, text: str) -> None:
 
 
 def python(source: str) -> str:
-    """A repro command line that runs ``source`` with THIS interpreter (github-safe split)."""
-    return f'"{sys.executable}" -c "{source}"'
+    """A repro command line that runs ``source`` with THIS interpreter (github-safe split).
+    The snippet is shell-QUOTED: an embedded double quote or shell-active char in it must
+    not end the -c word for the shell."""
+    return f'"{sys.executable}" -c {shlex.quote(source)}'
 
 
 def _file(repo: Path, **kw):

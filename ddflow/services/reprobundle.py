@@ -74,7 +74,9 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         # `executed` defaults in either branch: a check without the key means the run
         # happened, no check means it was recorded as given.
         check_dict = dict(check) if check is not None else {}
-        check_dict.setdefault("executed", check is not None)
+        # An UNAVAILABLE check could not reach a run: it carries no 'reproduced', so its
+        # executed must be False -- never the cpu of "the check existed".
+        check_dict.setdefault("executed", "reproduced" in check_dict)
         out["repro_cmd"] = {
             **check_dict,
             "command": repro_cmd,  # the filed command wins any key the check carried
