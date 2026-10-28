@@ -299,15 +299,10 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
     )
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.timed_out or w.returncode not in (0, 1):
-        # `why` names the REAL trouble: a short-circuit chain over error/timed_out/exit
-        # cannot (`'timed out'` is truthy and would shadow the exit code forever).
-        why = (
-            f"{w.error}"
-            if w.error is not None
-            else "timed out"
-            if w.timed_out
-            else f"exit {w.returncode}"
-        )
+        # `why` names the REAL trouble. A timeout IS an error (`Captured.timed_out` is
+        # exactly `isinstance(error, TimeoutExpired)`), so `str(w.error)` already says it;
+        # the exit code is the fallback.
+        why = str(w.error) if w.error is not None else f"exit {w.returncode}"
         return WaitResult(
             note=(
                 f"roborev job {job} is done but `roborev wait --job {job}` gave no verdict "
@@ -322,8 +317,9 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
 
 def main(argv: list | None = None) -> int:
     """`python -m ddflow.services.roborev wait --job N [--wait-s S] [--repo .]`: the bounded
-    poll of one enqueued job. Exit 0 reviewed clean, 1 findings, 2 still running at the
-    bound / ended without a review / could not tell (never a pass)."""
+    poll of one enqueued job. `--wait-s` defaults to `[gates].standards_wait_s`; 0 (or a
+    negative, which `wait_job` reads as <= 0) polls once. Exit 0 reviewed clean, 1 findings,
+    2 still running at the bound / ended without a review / could not tell (never a pass)."""
     import argparse
 
     ap = argparse.ArgumentParser(prog="roborev", description=__doc__.partition("\n")[0])
@@ -337,7 +333,10 @@ def main(argv: list | None = None) -> int:
     if a.wait not in (None, "wait"):
         ap.error(f"unknown command {a.wait!r} -- this entry point only knows `wait`")
     where = Path(a.repo).resolve()
-    if a.wait_s is None or a.wait_s < 0:
+    if a.wait_s is None:
+        # A NEGATIVE value stays negative: wait_job reads anything <= 0 as one poll, exactly
+        # as its contract says -- replacing a caller's -1 with the default would quietly turn
+        # a poll-once into a 900s wait.
         # Imported here, not at the top (deferred: this module loads to READ a review too).
         from ..config import Config
 
