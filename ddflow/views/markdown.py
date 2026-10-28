@@ -1145,16 +1145,17 @@ def _assemble(
     the note is dropped rather than the slice: each trimmed section's own marker already
     says where its rest is."""
     set_aside = len(charter) + 2 if charter else 0
+    cap = chars - set_aside
     prefix_text = "\n".join(prefix)
     # Reserve the note's room only when the note could ever be appended (prefix + note
     # must fit below the cap): reserving it unconditionally charged the body for a note
-    # that would be dropped, which starved sections that fit without it (duck #1/#4/#5).
-    note_room = len(note) if len(prefix_text) + len(note) + 1 <= cap or charter else 0
+    # that would be dropped, which starved sections that fit without it (duck/critic
+    # _assemble findings).
+    note_room = len(note) if len(prefix_text) + len(note) + 1 <= cap else 0
     room = chars - len(prefix_text) - note_room - 1 - set_aside
     body_lines, trimmed = _fit_sections(sections, max(1, room), item)
     body = "\n".join(body_lines)
     text = prefix_text + ("\n" + body if body else "")
-    cap = chars - set_aside
     if len(text) + (len(note) if trimmed else 0) > cap:
         # The backstop cuts the BODY only: the head and the reserved RESUME slice hold.
         # With no note reserved (prefix + note alone exceed the cap), the body keeps
