@@ -64,6 +64,9 @@ def test_the_in_process_walk_agrees_with_the_spawning_walk():
         by_tree = run(["ddflow", *chain, "--help"])
         assert by_tree.ran and by_tree.returncode == 0
         assert by_spawn.ran and by_spawn.returncode == 0
+        assert by_spawn.returncode == by_tree.returncode and by_spawn.stderr == by_tree.stderr, (
+            f"ddflow {' '.join(chain)} --help replay drifted from the spawned exit/stderr"
+        )
         assert H.help_flags(by_spawn.stdout) == H.help_flags(by_tree.stdout), (
             f"ddflow {' '.join(chain)} --help flags drifted from the spawned walk"
         )

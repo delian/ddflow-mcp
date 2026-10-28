@@ -140,9 +140,11 @@ class _InProcessHelp:
     def owns(self, cmd: str) -> bool:
         """Whether THIS process's registry is ``cmd``'s own help (only the parser's own
         prog is): any other command must spawn its real tool, never receive this tree.
-        A registry that cannot even build owns nothing."""
+        A registry that cannot even build owns nothing. The read takes the render lock:
+        the check-and-reassign it reads is a critical section, like ``help``'s render."""
         try:
-            return cmd == self.parser().prog
+            with _RENDER_LOCK:
+                return cmd == self.parser().prog
         except BaseException:  # a build that exits or fails has no registry to own with
             return False
 
@@ -213,9 +215,10 @@ class _InProcessHelp:
         """Every verb chain of ``cmd``'s tree, root first, deepest last; a ``cmd`` this
         process holds NO registry for (anything but the parser's own prog) is not silently
         walked as it and noted by ``walk_all`` instead of serving another command's help."""
-        if cmd != self.parser().prog:
-            raise RuntimeError(f"{cmd} has no registry in this process")
-        tree = self.parser()
+        with _RENDER_LOCK:  # a locked read: the build it may trigger is a critical section
+            if cmd != self.parser().prog:
+                raise RuntimeError(f"{cmd} has no registry in this process")
+            tree = self.parser()
         stack: list[list[str]] = [[cmd]]
         while stack:
             chain = stack.pop()
