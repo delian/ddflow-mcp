@@ -24,14 +24,10 @@ EXPIRED = "expired"
 def asks_of(st: State) -> dict[str, dict[str, Any]]:
     """The folded asks, ask id -> row. A declared `State` field since SE-state-asks-field
     (before, it was setdefault'd beside the declared fields); every reader goes through
-    here, so the fold stays in one place. An instance built WITHOUT ``__init__`` (a
-    pre-field pickle) has no key: it gets the dict lazily, exactly like the old
-    setdefault."""
-    asks = st.__dict__.get("asks")
-    if asks is None:
-        asks = {}
-        st.__dict__["asks"] = asks
-    return asks
+    here, so the fold stays in one place. The setdefault stays: a declared-field instance
+    returns its field dict, and one built WITHOUT ``__init__`` (a pre-field pickle) gets
+    the dict lazily, exactly the old one-op create."""
+    return st.__dict__.setdefault("asks", getattr(st, "asks", {}))
 
 
 def _int(v: Any) -> int:
