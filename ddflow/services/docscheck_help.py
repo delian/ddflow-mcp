@@ -74,11 +74,12 @@ def in_process(verbs: list[str]) -> P.Captured:
             if parser is None:
                 factory = _parser_factory[0]
                 if factory is None:
-                    return P.Captured(
-                        error=RuntimeError(
-                            "no ddflow CLI parser is bound in this process "
-                            "(bind_parser_factory); the spawned walk would answer it"
-                        )
+                    # `ddflow.surfaces` binds the factory at import; a caller that reached
+                    # this module without it (an embed that imports services directly) gets
+                    # the spawned walk instead -- slower, never wrong, never an invented
+                    # pass (rubber_duck #1 of fix-B66f6d0c93e).
+                    return P.capture(
+                        [sys.executable, "-m", "ddflow", *verbs, "--help"], timeout=60
                     )
                 parser = _parser[0] = factory()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
