@@ -42,6 +42,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     test: str = "",
     repro_cmd: str = "",
     check: dict[str, Any] | None = None,
+    machine: dict[str, Any] | None = None,
     mode: str = "",
     now: float = 0.0,
 ) -> dict[str, Any] | None:
@@ -76,7 +77,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         }
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
-        out["machine"] = F.machine(repo)
+        out["machine"] = machine or F.machine(repo)
         out["recent_events"] = F.recent_events(events, cfg.agent.id, b.repro_events)
         if test:
             out["test"] = F.test_run(repo, test, b.repro_tail_bytes, b.repro_test_timeout_s)
@@ -245,11 +246,12 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
     for want of evidence: a bundle that cannot be built or stored is linked as
     ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
     ``given``: item, agent, test, repro_cmd, capture."""
-    # The log snapshot is read BEFORE the run: a repro that takes minutes must not let
-    # the bundle's events drift to post-run arrivals (and st is the filing-time fold the
-    # caller passed, also from before the run).
-    events = log.read_all() if hasattr(log, "read_all") else log
     try:
+        # The log snapshot and machine facts are read BEFORE the run (a repro that takes
+        # minutes must not let the bundle drift to post-run arrivals), and INSIDE the
+        # guard: a log that cannot be read degrades the evidence, never the filing.
+        events = log.read_all() if hasattr(log, "read_all") else log
+        machine = F.machine(repo)
         run = given.get("check")
         if run is None and given.get("repro_cmd", ""):
             # THE run also lives under the guard: a knob that cannot be coerced or a
@@ -274,6 +276,7 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                 test=given.get("test", ""),
                 repro_cmd=given.get("repro_cmd", ""),
                 check=run,
+                machine=machine,
                 mode=given.get("capture", ""),
             )
             linked = {"repro": store(repo, bundle)} if bundle is not None else {}

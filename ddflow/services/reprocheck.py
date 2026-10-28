@@ -147,17 +147,23 @@ def _one_run(
     if not keep:
         return int(shot.code), b"", 0
     tailed, size = _tail_from_file(tail_file, keep)
+    if tailed is None:
+        # The tail file was never created: the shell's own redirect failed (a removed or
+        # full tails dir) and the LINE never ran. That is no run at all -- counting its
+        # exit would confirm a bug from a command that never executed.
+        return None, b"", 0
     return int(shot.code), tailed, size
 
 
-def _tail_from_file(path: Path, keep: int) -> tuple[bytes, int]:
-    """The last ``keep`` BYTES of ``path`` and its total size; ``(b"", size)`` when the file
-    is not readable. Reading with a seek bounds what an enormous run loads into memory;
-    the size still says a run was cut. Bytes stay bytes to ``_run_at``: decode-replace
-    inflation happens once, at presentation, and cannot wander into the arithmetic. The
-    open is O_NOFOLLOW|O_NONBLOCK: a repro line that planted a symlink (a leak) or a FIFO
-    (a hang) at the tail path -- it knows the path, it is part of its own argv -- is
-    refused by O_NOFOLLOW and fails O_NONBLOCK with ENXIO instead of blocking the filing."""
+def _tail_from_file(path: Path, keep: int) -> tuple[bytes | None, int]:
+    """The last ``keep`` BYTES of ``path`` and its total size; ``(None, 0)`` when the file
+    is NOT THERE (the shell could not create it -- the run never happened), ``(b"", size)``
+    when it is not readable otherwise. Reading with a seek bounds what an enormous run
+    loads into memory; the size still says a run was cut. Bytes stay bytes to ``_run_at``:
+    decode-replace inflation happens once, at presentation, and cannot wander into the
+    arithmetic. The open is O_NOFOLLOW|O_NONBLOCK: a repro line that planted a symlink (a
+    leak) or a FIFO (a hang) at the tail path -- it knows the path, it is part of its own
+    argv -- is refused by O_NOFOLLOW and fails O_NONBLOCK with ENXIO instead of blocking."""
     try:
         flags = (
             os.O_RDONLY
@@ -167,7 +173,7 @@ def _tail_from_file(path: Path, keep: int) -> tuple[bytes, int]:
         )
         fd = os.open(path, flags)
     except OSError:
-        return b"", 0
+        return None, 0
     try:
         with os.fdopen(fd, "rb") as fh:
             fh.seek(0, os.SEEK_END)
