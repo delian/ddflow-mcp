@@ -50,7 +50,10 @@ def _recorded_identity(model: str, model_source: str, cfg) -> tuple[str, bool]:
     author a FAMILY, recorded as the family only -- a model id never reaches the log
     where a name was not given (DX-author-family); a non-canonical configured spelling
     (a `[agent].families` NEEDLE such as "gemini") resolves to its canonical family
-    value, so the key the log records matches the family the verdict judged."""
+    value, so the key the log records matches the family the verdict judged. Only the
+    CONFIG leg canonicalizes: the same needle after `--model` is a MODEL id given out
+    loud, recorded as `author_model` (a model name is recorded only when one was
+    actually given) -- tests pin the asymmetry."""
     family = G.family_name_of(model, cfg.agent.families)
     if model_source == "config" and not family:
         family = G.family_of(model, cfg).strip().lower()

@@ -210,6 +210,24 @@ def test_gate_record_refuses_the_configured_family_without_a_session_model(repo,
     assert rec.evidence["model"] == "qwen-3-flash"
 
 
+def test_a_needle_after_model_is_recorded_as_the_model_id_pinned(repo, monkeypatch):
+    """roborev standards (low): `--model kimi` (a NEEDLE) is a MODEL id given out loud,
+    recorded as `author_model`; the same spelling as `[agent].family` resolves to its
+    canonical family value instead (its own test). The asymmetry is intended."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "kimi")
+    assert code == OK, f"{out}{err}"
+    data = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"][-1].data
+    assert data.get("author_model") == "kimi", data
+    assert data.get("model_source") == "flag", data
+    assert "author_family" not in data
+
+
 def test_complete_surfaces_the_author_family_to_the_caller(repo, monkeypatch):
     """roborev standards (medium): the --json surface carries `author_family` (projected
     through the declared payload), not a dangling `model_source` with no identity key."""
