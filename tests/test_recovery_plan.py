@@ -228,7 +228,7 @@ def test_plan_flags_the_work_and_apply_never_touches_it(repo):
     """Plan: PROPOSE with the exact claim. Apply: PROPOSE is shown, never done."""
     from ddflow.api import reporting as RP
 
-    _crashed_leaves_work(repo, work=True)
+    wt = _crashed_leaves_work(repo, work=True)
     code, out, _ = run_cli(repo, "recover", "--all", "--plan", "--json")
     assert code == 0
     rows = json.loads(out)
@@ -245,6 +245,10 @@ def test_plan_flags_the_work_and_apply_never_touches_it(repo):
     assert all(r["applied"] is False for r in rows)
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and not lease.expired_at
+    # Observable state, not just the report: a performed claim would have re-recorded
+    # its new holder (`op`) on the item. The crashed holder still holds it.
+    assert lease.holder == "crashed"
+    assert (Path(wt) / "work.py").read_text().startswith("x = 1")
 
 
 def test_apply_records_a_clean_expiry_and_the_kill_switch_stops_apply_only(repo):

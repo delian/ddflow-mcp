@@ -122,9 +122,14 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
         for i, a in enumerate(actions):
             if kill_switch(repo, cfg):
                 # Re-read per action: the operator can pull the brake mid-pass and the
-                # remaining SAFE_AUTO must stop.
+                # remaining SAFE_AUTO must stop. The note says which of the two it was.
+                note = (
+                    "the kill switch was pulled mid-pass"
+                    if i
+                    else "the kill switch is on: nothing ran"
+                )
                 rows += [
-                    {"item": x.item, "applied": False, "note": "the kill switch was pulled mid-pass"}
+                    {"item": x.item, "applied": False, "note": note}
                     for x in actions[i:]
                 ]
                 break
