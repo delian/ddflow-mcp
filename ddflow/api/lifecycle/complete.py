@@ -42,6 +42,21 @@ def _session_model(st: State, agent: str) -> str:
     return L.open_session_model(st, agent)
 
 
+def _recorded_identity(model: str, model_source: str, cfg) -> tuple[str, bool]:
+    """(recorded, family_only) for the completion event's author key: the family spelled
+    CANONICALLY when the author IS a family (family_only=True), else the model as given.
+
+    `[agent].family` / DDFLOW_AGENT_FAMILY / a bare family after `--model` makes the
+    author a FAMILY, recorded as the family only -- a model id never reaches the log
+    where a name was not given (DX-author-family); a non-canonical configured spelling
+    (a `[agent].families` NEEDLE such as "gemini") resolves to its canonical family
+    value, so the key the log records matches the family the verdict judged."""
+    family = G.family_name_of(model, cfg.agent.families)
+    if model_source == "config" and not family:
+        family = G.family_of(model, cfg).strip().lower()
+    return (family, True) if family else (model, False)
+
+
 def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:
     """(model, source) judged against for reviewer independence: `--model`, else the
     `[agent].family` the harness configured (DX-author-family): the family is declared
@@ -173,15 +188,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model, model_source = _author_model(st, log.agent_id, model, cfg)
-    # `[agent].family` / DDFLOW_AGENT_FAMILY / a bare family after `--model`: the author
-    # is a FAMILY, recorded as the family only, CANONICALLY -- a model id never reaches
-    # the log where a name was not given (DX-author-family); a non-canonical configured
-    # spelling (a `[agent].families` NEEDLE such as "gemini") resolves to its canonical
-    # family value, so the key the log records matches the family the verdict judged.
-    family = G.family_name_of(model, cfg.agent.families)
-    if model_source == "config" and not family:
-        family = G.family_of(model, cfg).strip().lower()
-    family_only = bool(family)
+    family, family_only = _recorded_identity(model, model_source, cfg)
     recorded = family if family_only else model
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
