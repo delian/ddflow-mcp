@@ -244,6 +244,22 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
     cmd = CI.scope_to_diff('SKIP="foo\\\nbar" ' + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'foobar\' pre-commit run '), cmd
     assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    cmd = CI.scope_to_diff(
+        "SKIP=lint; pre-commit run --hook-stage pre-push --all-files --files ' --all-files'",
+        repo,
+        default,
+    )
+    # the flag the RUN takes carries the range; the quoted file argument keeps its text
+    assert "pre-commit run --hook-stage pre-push --from-ref {sha} --to-ref HEAD --files".format(
+        sha=since
+    ) in cmd, cmd
+    assert cmd.endswith("--files ' --all-files'"), cmd
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
