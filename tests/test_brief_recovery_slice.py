@@ -127,6 +127,24 @@ def test_the_last_prompt_of_the_lost_holder_is_in_the_slice(repo):
     assert "`ddflow release T1 --note salvaged`" in text, text
 
 
+def test_a_body_already_inside_its_room_keeps_its_last_line():
+    """roborev job 3736 (LOW): the backstop once applied ``rsplit`` unconditionally, so a
+    multi-line body that already fit inside its room lost every line after its last
+    newline. The guard at the backstop must keep a fitting body whole."""
+    from ddflow.views import markdown as M
+
+    out = M._assemble(
+        ["# pack"],
+        [("lessons", ["- " + "x" * 300, "## Lessons that remain"])],
+        200,
+        "N" * 500,
+        "",
+        "T",
+    )
+    assert "## Lessons that remain" in out, out
+    assert out.count("\n") >= 2, out
+
+
 def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     """The slice is reserved from the budget, not from its own per-band cap."""
     log = _seed(repo, ["T1", *[f"W{i}" for i in range(7)], "T9"])
