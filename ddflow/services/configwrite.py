@@ -56,6 +56,30 @@ from .review import Reviewer
 #: LAST by `Config.load` and `tomlcfg.config_paths`, so what is written here wins.
 LOCAL_DIR = TC.LOCAL_DIR
 
+#: Machine-local keys and the layer their writes default to (DX-machine-local-keys, the
+#: follow-up of bug B65bbc8083c): what ONE machine answers for itself -- how many workers
+#: it runs, how it reaches its reviewers and endpoints -- is not the next machine's
+#: answer, so `config KEY VALUE` stops dropping it into the committed file unless the
+#: operator deliberately sends it there. `[enforce].machine_local_keys` extends this table
+#: (a knob, config_sections/enforce.py), the one place it is held so a knob's default
+#: layer is stated where the write is applied.
+MACHINE_LOCAL_KEYS: dict[str, str] = {
+    # Parallelism is machine sizing: the adaptive limit is "derived on this machine, never
+    # committed", and the schedule docs already say "set it in the local layer".
+    "schedule.parallel": "local",
+    "schedule.max_parallel_tasks": "local",
+    "schedule.max_parallel_min": "local",
+    "schedule.max_parallel_max": "local",
+}
+
+
+def machine_local_layer(extra: set[str], dotted: str) -> str:
+    """The layer a write of ``dotted`` defaults to: "local" for a machine-local key (here
+    or extended by `[enforce].machine_local_keys`), else "" -- the committed layer."""
+    if dotted in MACHINE_LOCAL_KEYS or dotted in extra:
+        return "local"
+    return ""
+
 
 def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") -> Path:
     """The file a writer targets: the committed `.ddflow/<own>`, or its local twin.
