@@ -14,7 +14,7 @@ from ._docs import declare, knob
 BLOCK_WARN_OFF = ("block", "warn", "off")
 
 #: A dotted config key as the CLIs accept it (D-plain-keys): bare, dot-separated segments.
-_PLAIN_DOTTED = re.compile(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+_PLAIN_DOTTED = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+")
 
 
 def _extra_machine_local_problem(v: Any) -> str:

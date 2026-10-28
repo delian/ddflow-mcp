@@ -43,7 +43,11 @@ def test_a_plain_key_still_defaults_to_the_committed_layer(repo):
 
 
 def test_the_enforce_knob_extends_the_classification(repo):
-    # lease.ttl_s is machine sizing but not in the shipped table: classify it here.
+    # Without the knob lease.ttl_s defaults to the committed layer, as any plain key.
+    code, out, err = run_cli(repo, "config", "lease.ttl_s", "99")
+    assert code == 0, err
+    assert "ttl_s = 99" in _text(repo, False)
+    # Classify it: now the same write defaults local, and stays out of the committed file.
     run_cli(repo, "config", "--set", "enforce.machine_local_keys", '["lease.ttl_s"]')
     code, out, err = run_cli(repo, "config", "lease.ttl_s", "100")
     assert code == 0, err
