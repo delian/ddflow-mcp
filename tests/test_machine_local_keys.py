@@ -29,7 +29,7 @@ def test_the_json_body_names_the_local_layer(repo):
     assert code == 0, err
     body = json.loads(out)
     assert body["local"] is True
-    assert str(body["path"]).endswith(".ddflow/local/config.toml")
+    assert body["path"].replace("\\", "/").endswith(".ddflow/local/config.toml")
 
 
 def test_a_plain_key_still_defaults_to_the_committed_layer(repo):
@@ -44,3 +44,13 @@ def test_the_enforce_knob_extends_the_classification(repo):
     code, out, err = run_cli(repo, "config", "lease.ttl_s", "100")
     assert code == 0, err
     assert "ttl_s = 100" in (repo / ".ddflow" / "local" / "config.toml").read_text("utf-8")
+    assert "ttl_s" not in (repo / ".ddflow" / "config.toml").read_text("utf-8")
+
+
+def test_an_appended_reviewer_block_defaults_to_the_local_layer(repo):
+    doc = '[[reviewer]]\nname = "x"\nkind = "command"\ncommand = "true"\n'
+    code, out, err = run_cli(repo, "config", "--append-toml", doc)
+    assert code == 0, err
+    assert "local" in out
+    assert "name = \"x\"" in (repo / ".ddflow" / "local" / "config.toml").read_text("utf-8")
+    assert "name = \"x\"" not in (repo / ".ddflow" / "config.toml").read_text("utf-8")

@@ -374,6 +374,12 @@ def _said(added: list[str]) -> str:
     )
 
 
+def _extra_keys(cfg) -> set[str]:
+    """The keys `[enforce].machine_local_keys` adds to the machine-local classification."""
+    enforce = getattr(cfg, "enforce", None)
+    return set(getattr(enforce, "machine_local_keys", None) or [])
+
+
 def _default_layer(cfg, edit: ConfigEdit) -> str:
     """The layer ``edit`` writes to: the one it names, except that a machine-local key
     without one defaults to the local layer (DX-machine-local-keys: how many workers THIS
@@ -381,9 +387,7 @@ def _default_layer(cfg, edit: ConfigEdit) -> str:
     the shipped classification, which is held in `services.configwrite`."""
     if edit.local or not edit.set:
         return "local" if edit.local else "file"
-    enforce = getattr(cfg, "enforce", None)
-    extra = set(getattr(enforce, "machine_local_keys", None) or [])
-    return CW.machine_local_layer(extra, edit.set) or "file"
+    return CW.machine_local_layer(_extra_keys(cfg), edit.set) or "file"
 
 
 def configure(
@@ -404,6 +408,15 @@ def configure(
     # Machine-local keys (parallelism, ...) default to the local layer: this machine's own
     # answer must not reach the committed file silently (DX-machine-local-keys).
     defaulted = edit.set if layer == "local" and not edit.local else ""
+    if edit.append_toml and layer == "file":
+        # An appended document that only configures this machine's reviewers or
+        # companions ([[table]] blocks: hosts, endpoints, keys) defaults local too.
+        try:
+            tables = set(tomllib.loads(edit.append_toml))
+        except tomllib.TOMLDecodeError:
+            tables = set()
+        if CW.machine_local_tables(_extra_keys(cfg), tables):
+            layer, defaulted = "local", "; ".join(sorted(tables))
     target = str(CW.config_file(repo, local=layer == "local"))
 
     stamp: dict[str, Any] = {}
@@ -481,10 +494,18 @@ def configure(
             "config",
             path=str(res.path),
             appended=True,
-            local=edit.local,
+            local=layer == "local",
             rows=[],
             gitattributes_added=res.attributes_added,
-            text=f"appended to {res.path}" + _said(res.attributes_added),
+            text=f"appended to {res.path}"
+            + (
+                f"\n  machine-local document ({defaulted} blocks): this machine's own "
+                "reviewers and endpoints, defaulted to the local layer; "
+                "[enforce].machine_local_keys extends which keys do"
+                if defaulted
+                else ""
+            )
+            + _said(res.attributes_added),
         )
 
     rows = [
