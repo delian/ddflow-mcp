@@ -381,13 +381,22 @@ def _extra_keys(cfg) -> set[str]:
 
 
 def _default_layer(cfg, edit: ConfigEdit) -> str:
-    """The layer ``edit`` writes to: the one it names, except that a machine-local key
-    without one defaults to the local layer (DX-machine-local-keys: how many workers THIS
-    machine runs is not the next machine's answer). `[enforce].machine_local_keys` extends
-    the shipped classification, which is held in `services.configwrite`."""
-    if edit.local or not edit.set:
-        return "local" if edit.local else "file"
-    return CW.machine_local_layer(_extra_keys(cfg), edit.set) or "file"
+    """The layer ``edit`` writes to: the one it names, except that a machine-local key or
+    a reviewer/companion-only TOML document without one defaults to the local layer
+    (DX-machine-local-keys: how many workers THIS machine runs, and which reviewers and
+    endpoints serve it, are not the next machine's answers). `[enforce].machine_local_keys`
+    extends the shipped classification held in `services.configwrite`."""
+    if edit.local:
+        return "local"
+    if edit.set:
+        return CW.machine_local_layer(_extra_keys(cfg), edit.set) or "file"
+    if not edit.append_toml:
+        return "file"
+    try:
+        tables = set(tomllib.loads(edit.append_toml))
+    except tomllib.TOMLDecodeError:
+        tables = set()
+    return "local" if CW.machine_local_tables(_extra_keys(cfg), tables) else "file"
 
 
 def configure(
@@ -405,18 +414,9 @@ def configure(
     edit = edit or ConfigEdit()
     log, cfg, _st = _load(repo, agent)
     layer = _default_layer(cfg, edit)
-    # Machine-local keys (parallelism, ...) default to the local layer: this machine's own
-    # answer must not reach the committed file silently (DX-machine-local-keys).
-    defaulted = edit.set if layer == "local" and not edit.local else ""
-    if edit.append_toml and layer == "file":
-        # An appended document that only configures this machine's reviewers or
-        # companions ([[table]] blocks: hosts, endpoints, keys) defaults local too.
-        try:
-            tables = set(tomllib.loads(edit.append_toml))
-        except tomllib.TOMLDecodeError:
-            tables = set()
-        if CW.machine_local_tables(_extra_keys(cfg), tables):
-            layer, defaulted = "local", "; ".join(sorted(tables))
+    # Machine-local keys (parallelism, reviewers, companions) default to the local layer:
+    # this machine's own answer must not reach the committed file silently (DX-machine-local-keys).
+    defaulted = not edit.local and layer == "local"
     target = str(CW.config_file(repo, local=layer == "local"))
 
     stamp: dict[str, Any] = {}
@@ -471,7 +471,7 @@ def configure(
             gitattributes_added=res.attributes_added,
             text=f"{edit.set} = {literal}  ({target})"
             + (
-                f"\n  machine-local key {defaulted}: this machine's own answer, defaulted "
+                f"\n  machine-local key {edit.set}: this machine's own answer, defaulted "
                 f"to the local layer; [enforce].machine_local_keys extends which keys do"
                 if defaulted
                 else ""
@@ -499,9 +499,9 @@ def configure(
             gitattributes_added=res.attributes_added,
             text=f"appended to {res.path}"
             + (
-                f"\n  machine-local document ({defaulted} blocks): this machine's own "
-                "reviewers and endpoints, defaulted to the local layer; "
-                "[enforce].machine_local_keys extends which keys do"
+                "\n  machine-local document (reviewer/companion blocks): this machine's own "
+                "reviewers and endpoints, defaulted to the local layer; [enforce]."
+                "machine_local_keys extends which keys do"
                 if defaulted
                 else ""
             )
