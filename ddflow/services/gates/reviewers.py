@@ -99,6 +99,36 @@ def reviewer_ran(state: State, item_id: str, gates: Mapping[str, GateDef] | None
     return False
 
 
+def _reviewer_fams(
+    state: State, it, gates: Mapping[str, GateDef] | None, cfg: Config
+) -> tuple[list[tuple[str, str]], list[str], list[tuple[str, str]]]:
+    """(fams, anonymous, unapproved) over every reviewer gate of ``it`` with an outcome a
+    review recorded: its (gate, family) pairs, names with no recognisable family, and
+    tool-written entries a person has not approved."""
+    fams: list[tuple[str, str]] = []
+    anonymous: list[str] = []
+    unapproved: list[tuple[str, str]] = []
+    for gname in reviewer_gates(gates):
+        rec = it.gates.get(gname)
+        if not rec or rec.outcome not in ("passed", "failed", "partial"):
+            continue
+        if who := _unapproved_reviewer(state, rec.evidence):
+            unapproved.append((gname, who))
+            continue
+        m = str(rec.evidence.get("model", rec.by) or "").strip()
+        fam = (
+            _declared_family(rec.evidence)
+            or family_name_of(m, cfg.agent.families)
+            or family_of(m, cfg).strip().lower()
+        )
+        # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
+        if not fam:
+            anonymous.append(f"{gname}={m or 'no model'}")
+            continue
+        fams.append((gname, fam))
+    return fams, anonymous, unapproved
+
+
 def reviewer_independence(
     state: State,
     cfg: Config,
@@ -128,27 +158,7 @@ def reviewer_independence(
         if routed is None
         else ""
     )
-    fams: list[tuple[str, str]] = []
-    anonymous: list[str] = []
-    unapproved: list[tuple[str, str]] = []
-    for gname in reviewer_gates(gates):
-        rec = it.gates.get(gname)
-        if not rec or rec.outcome not in ("passed", "failed", "partial"):
-            continue
-        if who := _unapproved_reviewer(state, rec.evidence):
-            unapproved.append((gname, who))
-            continue
-        m = str(rec.evidence.get("model", rec.by) or "").strip()
-        fam = (
-            _declared_family(rec.evidence)
-            or family_name_of(m, cfg.agent.families)
-            or family_of(m, cfg).strip().lower()
-        )
-        # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
-        if not fam:
-            anonymous.append(f"{gname}={m or 'no model'}")
-            continue
-        fams.append((gname, fam))
+    fams, anonymous, unapproved = _reviewer_fams(state, it, gates, cfg)
     if routed == []:
         return False, (
             f"the author's model {author_model!r} is a router in [agent].routers with "
