@@ -35,9 +35,17 @@ def render_recover(out, a) -> str:
 
 def _render_plan(out) -> str:
     actions = out.data["_render"]["actions"]
-    if not actions:
+    if not actions and not out.data.get("paused"):
         return ""
     lines = []
+    if not actions:
+        # A paused-but-empty plan must say so: the operator cannot tell the brake is
+        # on from silence.
+        lines.append(
+            "recovery plan: nothing to action. PAUSED: the kill switch is on -- "
+            "`ddflow recover --all --apply` refuses."
+        )
+        return "\n".join(lines)
     if out.data.get("paused"):
         lines.append(
             f"recovery plan: {len(actions)} action(s). PAUSED: the kill switch is on, so "
