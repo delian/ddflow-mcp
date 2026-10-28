@@ -54,8 +54,10 @@ class Review:
         return self.model or self.agent
 
 
-#: Job states that will still become a review; failed/canceled never will.
+#: Job states that will still become a review.
 _UNFINISHED = ("queued", "running")
+#: Job states that will NEVER become a review (a re-enqueue is the way forward).
+_ENDED = ("failed", "canceled", "cancelled")
 
 #: Seconds between two `wait_job` polls of `roborev list --json`.
 _POLL_S = 5.0
@@ -218,10 +220,19 @@ def _settled(rec: dict | None, job: int) -> WaitResult | None:
         )
     if status in _UNFINISHED or status == "done":
         return None  # still live, or done -- the caller's done path (wait_job) takes the job
+    if status in _ENDED:
+        return WaitResult(
+            note=(
+                f"roborev job {job} ended {status}: it will never carry a review; re-run "
+                f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
+            )
+        )
+    # any OTHER non-empty status (a roborev state this reader does not know) may still be a
+    # live one: wait again -- an unknown word must not order a re-enqueue over a live job.
     return WaitResult(
         note=(
-            f"roborev job {job} ended {status}: it will never carry a review; re-run "
-            f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
+            f"roborev job {job} has an unknown status {status!r}: it may still be running; "
+            f"the reviewer is unchecked -- wait again"
         )
     )
 
