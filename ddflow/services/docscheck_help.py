@@ -19,6 +19,7 @@ import io
 import re
 import sys
 import threading
+from argparse import ArgumentParser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,8 +33,10 @@ VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
 #: This process's own argparse root, built once, on first use: the CLI import drags in
-#: the whole surface, and one parser answers every chain of one walk.
-_parser = None
+#: the whole surface, and one parser answers every chain of one walk. A one-element cell
+#: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
+#: cell is reassignment-free where a module global would need one.
+_parser: list[ArgumentParser | None] = [None]
 
 #: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
 #: runs could capture each other's output: every run takes the lock, and that overlap
@@ -49,16 +52,16 @@ def in_process(verbs: list[str]) -> P.Captured:
     The very ``parse_args`` the spawned CLI makes, so the answer is its ``--help`` and its
     flags are exactly the spawned text's (Bc621160a82; the equivalence is pinned by
     tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
-    global _parser
     with _capture_lock:  # serializes redirect+parse: a run answers from its own buffers
         out, err = io.StringIO(), io.StringIO()
         try:
-            if _parser is None:
+            parser = _parser[0]
+            if parser is None:
                 from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
 
-                _parser = build_parser()
+                parser = _parser[0] = build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                _parser.parse_args([*verbs, "--help"])
+                parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
             #: a non-int code (argparse never raises one, so this branch is a guard, not
             #: a path): folded into neither a success-0 nor an inconsistent "ran with no
@@ -78,7 +81,7 @@ def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     (`ddflow`) or run as this very interpreter's module ``sys.executable -m ddflow``; any
     other spelling -- a different interpreter or a path to some binary -- names a
     specific executable and is run as before."""
-    if len(argv) < 2 or argv[-1] != "--help":
+    if not argv[1:] or argv[-1] != "--help":
         return None
     if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
         return argv[1:-1]

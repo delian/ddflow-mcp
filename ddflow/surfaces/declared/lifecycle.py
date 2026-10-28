@@ -740,6 +740,8 @@ COMMANDS: tuple[Command, ...] = (
             "refuted_passes",
             "worktree_removed",
             "kept_reason",
+            # Optional: a chore's exemption (no key when not a chore).
+            "chore",
         ),
         cli=CliPolicy(
             shown=(OK,),

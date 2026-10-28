@@ -264,8 +264,7 @@ def dx_priority(
         )
         for iid in sorted(scope)
         for tags in [tuple(str(t) for t in items[iid].get("tags", ()))]
-        if band(iid, tags) in FIXABLE_KINDS
-        and int(items[iid]["priority"]) == DEFAULT_PRIORITY
+        if band(iid, tags) in FIXABLE_KINDS and int(items[iid]["priority"]) == DEFAULT_PRIORITY
     ]
 
 
@@ -335,11 +334,15 @@ def lint(
     """
     scope = list(scope)
     if band is None:
+
         def band(_iid, _tags):
             return ""
+
     if band_priority is None:
+
         def band_priority(_iid, _tags):
             return DEFAULT_PRIORITY
+
     report = Report(
         findings=[
             *overlaps(items, scope, band),

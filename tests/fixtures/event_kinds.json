@@ -392,6 +392,7 @@
   "item.completed": {
    "fields": {
     "changelog": ["dict", "str"],
+    "chore": ["dict", "str"],
     "evidence": ["str"],
     "forced": ["bool"],
     "imported": ["bool"],

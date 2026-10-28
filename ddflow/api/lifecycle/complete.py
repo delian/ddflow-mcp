@@ -31,7 +31,7 @@ from .. import jobs as JB
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
-from ._common import _require
+from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _waiters
 from .planning import plan_for
@@ -177,6 +177,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
         "warnings": v.warnings,
         "blockers": v.blockers,
         "bugs_closed": closed,
+        **_chore_base(v),
     }
     force, stamp, denied = _override_by_approval(
         log, cfg, item, v, hard, force, approval, agent, base
@@ -247,6 +248,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
+            **_chore_event(v, st, cfg, it, repo),
             # Optional, additive (no new event kind): the gates the ACTUAL diff excused,
             # {gate: why}, so a required gate that did not run is accounted for on the
             # durable record (B-na-required-gate). Absent = none excused.
