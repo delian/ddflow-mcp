@@ -616,11 +616,10 @@ def _brief_recovery(
         "",
     ]
     for what, band in bands.items():
-        out += [
-            f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in band[:_RECOVERY_SHOWN]
-        ]
-        if state is not None:
-            out += [_resume_line(state, cfg, r, what) for r in band[:_RECOVERY_SHOWN]]
+        for r in band[:_RECOVERY_SHOWN]:
+            out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
+            if state is not None:
+                out.append(_resume_line(state, cfg, r, what))
         if len(band) > _RECOVERY_SHOWN:
             more = len(band) - _RECOVERY_SHOWN
             out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
@@ -1139,9 +1138,12 @@ def _assemble(
 ) -> str:
     """The brief's text within ``chars``: the sections cut to what the charter (set aside
     first, appended whole) leaves, then the backstop for a heading that alone overran its
-    share -- the note counts too, and the backstop cuts the sections, never the charter.
+    share -- the note counts too, the backstop cuts the sections, never the charter, and
     ``prefix`` (the head and the RESUME slice) is never cut (DX-recover-brief-slice): a
-    squeeze takes from the budgeted sections, never from recoverable work."""
+    squeeze takes from the budgeted sections, never from recoverable work. When even the
+    note no longer fits after the prefix (a RESUME slice that alone fills the budget),
+    the note is dropped rather than the slice: each trimmed section's own marker already
+    says where its rest is."""
     set_aside = len(charter) + 2 if charter else 0
     prefix_text = "\n".join(prefix)
     room = chars - len(prefix_text) - len(note) - 1 - set_aside
@@ -1156,7 +1158,7 @@ def _assemble(
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
-        text += note
+        text += note if len(text) + len(note) <= cap else ""
     return text + ("\n\n" + charter if charter else "")
 
 

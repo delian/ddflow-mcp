@@ -39,7 +39,8 @@ def test_the_session_start_output_opens_with_the_resume_block(repo):
     assert first is not None, text
     assert text[first.start() :].startswith(RESUME), text
     assert text.index(RESUME) < text.index("# ddflow brief"), text
-    assert text.index(RESUME) < text.index("## Suggested next"), text
+    # The interrupted item is IN the leading block, before anything new (duck #10).
+    assert text.index("**T1** (stale_running") < text.index("## Suggested next"), text
     assert "**T1** (stale_running" in text, text
 
 
@@ -49,4 +50,5 @@ def test_the_brief_itself_puts_recoverable_work_before_new_work(repo):
     text = LC.brief(repo, item="T9", check_recovery=True, agent="next").data["text"]
     first = re.search(r"^## ", text, re.M)
     assert first is not None and text[first.start() :].startswith(RESUME), text
-    assert text.index(RESUME) < text.index("## Suggested next: T9"), text
+    # The recoverable ENTRY precedes the suggested work, not only its heading (duck #6).
+    assert text.index("**T1** (stale_running") < text.index("## Suggested next: T9"), text
