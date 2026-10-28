@@ -56,6 +56,17 @@ def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:
     return (cfg.agent.family, "config") if cfg.agent.family else ("", "")
 
 
+def _author_event_identity(model: str, model_source: str, family_only: bool) -> dict[str, str]:
+    """The completion event's author keys: `author_family` when the author declared a
+    FAMILY (the family only, never a model id — DX-author-family), else `author_model`
+    with the model name, else nothing."""
+    if family_only:
+        return {"author_family": model, "model_source": model_source}
+    if model:
+        return {"author_model": model, "model_source": model_source}
+    return {}
+
+
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
     """(force, event fields, refusal): an agent's `--approval` turns an unmet-conditions refusal
     into a recorded override, never over a failed review gate and never for a person."""
@@ -262,8 +273,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # record to carry the id, so the event names both for any known source. A
             # family-only author ([agent].family, a bare family after --model) records
             # `author_family` instead: the family only, never a model id (DX-author-family).
-            **({"author_model": model, "model_source": model_source} if model and not family_only else {}),
-            **({"author_family": model, "model_source": model_source} if family_only else {}),
+            **_author_event_identity(model, model_source, family_only),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
