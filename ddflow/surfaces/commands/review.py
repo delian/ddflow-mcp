@@ -71,9 +71,10 @@ def _list_verb(a, c: Ctx, item: str) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    gate = a.gate or "G"
+    read_gate = out.data.get("gate", "")  # the gate(s) the listing actually read
+    recipe_gate = read_gate.split(",")[0] if read_gate else "G"
     recipe = (
-        f"\nrecord a verdict:\n  ddflow review triage {item} --gate {gate} --finding N "
+        f"\nrecord a verdict:\n  ddflow review triage {item} --gate {recipe_gate} --finding N "
         '--refuted|--confirmed --probe "..."'
     )
     c.out(
