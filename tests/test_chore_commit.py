@@ -257,7 +257,18 @@ def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
     fall outside [chore].globs is an ordinary item, and its completion payload carries no
     `chore` key (roborev review of DX-chore-completed-event: nothing covered the negative)."""
     _approve(proj)
-    run_cli(proj, "task", "add", "CH", "--title", "code change", "--globs", "code.py", "--tags", "chore")
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "CH",
+        "--title",
+        "code change",
+        "--globs",
+        "code.py",
+        "--tags",
+        "chore",
+    )
     code, out, err = run_cli(proj, "--json", "complete", "CH")
     assert code == 3, (out, err)
     body = json.loads(out)
