@@ -145,8 +145,8 @@ class _InProcessHelp:
         try:
             with _RENDER_LOCK:
                 return cmd == self.parser().prog
-        except BaseException:  # a build that exits or fails has no registry to own with
-            return False
+        except (SystemExit, Exception):  # a build that exits or fails has no registry to
+            return False               # own with; KeyboardInterrupt/MemoryError propagate
 
     def help(self, argv: list[str]) -> P.Captured:
         """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
@@ -197,7 +197,9 @@ class _InProcessHelp:
                     elif exc.code is None:
                         code = 0
                     else:
-                        err.write(str(exc.code))
+                        #: the spawn of `sys.exit("reason")` prints "reason\n" to stderr
+                        #: and exits 1: replayed verbatim, newline included.
+                        err.write(f"{exc.code}\n")
                         code = 1
                 else:
                     code = 0
@@ -302,9 +304,10 @@ class HelpIndex:
 
     def _in_process(self) -> set[str]:
         """The commands THIS runner answers in-process: what the runner itself was told
-        (``command_runner`` stamps it), the module default for a custom runner."""
+        (``command_runner`` stamps it). A runner with no stamp answers nothing in-process:
+        the runner is the ONE source of that fact (a default would be a second one)."""
         stamp = getattr(self._run, "in_process_of", None)
-        return IN_PROCESS_COMMANDS if stamp is None else set(stamp)
+        return set() if stamp is None else set(stamp)
 
     def walk_all(self) -> int:
         """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
