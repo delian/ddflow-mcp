@@ -239,27 +239,27 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
     i, n = len("SKIP="), len(command)
     while i < n:
         c = command[i]
-        if quote and c == quote:
-            quote = ""
-        elif quote == '"' and c == "\\" and i + 1 < n and command[i + 1] in '$`"\\':
-            # the shell's own double-quote escapes: the escaped char is a literal,
-            # so a `\$` is never an expansion
-            value.append(command[i + 1])
+        if c == "\\" and i + 1 < n and (
+            not quote or (quote == '"' and command[i + 1] in '$`"\\\n')
+        ):
+            # an escape pair consumes both chars; `\<newline>` is a line continuation
+            # that leaves NOTHING (the same rule outside and inside double quotes)
+            if command[i + 1] != "\n":
+                value.append(command[i + 1])
             i += 1
+        elif quote and c == quote:
+            quote = ""
         elif quote:
             if quote == '"' and c in "$`":
                 active = True  # expansions inside double quotes are shell-active
             value.append(c)  # inside the quotes: everything else is literal text
-        elif c.isspace():
-            break
+        elif c.isspace() or c in ";\n|&<>()":
+            break  # a word ends at whitespace or a shell operator (kept in the rest)
         elif c in "\"'":
             quote = c
         elif c in "$`":
             active = True  # an expansion the ORIGINAL shell would perform
             value.append(c)
-        elif c == "\\" and i + 1 < n:
-            value.append(command[i + 1])
-            i += 1
         else:
             value.append(c)
         i += 1
@@ -272,6 +272,14 @@ def _sh_single(word: str) -> str:
     """``word`` single-quoted for a POSIX shell: the value stays a literal whatever it
     holds (`$(...)`, quotes), so re-emission cannot make it shell-active."""
     return "'" + word.replace("'", "'\\''") + "'"
+
+
+def _scope_the_run(run: str, resolve: str) -> str:
+    """``run`` with its own ` --all-files` replaced by the since..HEAD range. The range
+    goes on the LAST occurrence -- a leading `SKIP=` value left in place (an
+    unparseable one) may itself contain an earlier ` --all-files` nothing must change."""
+    head, _, tail = run.rpartition(" --all-files")
+    return head + f" --from-ref {resolve} --to-ref HEAD" + tail
 
 
 def scope_to_diff(command: str, tree: Path, since: str) -> str:
@@ -299,7 +307,7 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
         merged = 'SKIP=""'
     # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
     # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
-    return merged + run.replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
+    return merged + _scope_the_run(run, resolve)
 
 
 def tool_missing(command: str) -> str:
