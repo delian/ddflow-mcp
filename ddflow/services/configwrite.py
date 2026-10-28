@@ -82,16 +82,17 @@ MACHINE_LOCAL_KEYS: dict[str, str] = {
 
 
 def machine_local_layer(extra: set[str], dotted: str) -> str:
-    """The layer a write of ``dotted`` defaults to: "local" for a machine-local key (here
-    or extended by `[enforce].machine_local_keys`), else "" -- the committed layer. A
-    table name classifies the table and everything under it: `reviewer` names `[[reviewer]]`
-    blocks as well as a dotted `reviewer.x`."""
-    if dotted in MACHINE_LOCAL_KEYS or dotted in extra:
-        return "local"
+    """The layer a write of ``dotted`` defaults to: the layer its classification names
+    ("local" here, or in `[enforce].machine_local_keys`), else "" -- the committed layer.
+    A table name classifies the table and everything under it: `reviewer` names
+    `[[reviewer]]` blocks as well as a dotted `reviewer.x`. The mapping's VALUE is the
+    layer, so reclassifying a key edits one table, never this function."""
     head = dotted.partition(".")[0]
-    if head in MACHINE_LOCAL_KEYS or head in extra:
-        return "local"
-    return ""
+    if dotted in MACHINE_LOCAL_KEYS:
+        return MACHINE_LOCAL_KEYS[dotted]
+    if head in MACHINE_LOCAL_KEYS:
+        return MACHINE_LOCAL_KEYS[head]
+    return "local" if dotted in extra or head in extra else ""
 
 
 def machine_local_tables(extra: set[str], names: set[str]) -> bool:
