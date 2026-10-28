@@ -55,8 +55,12 @@ def test_a_listing_records_no_new_round_and_prints_findings_first(repo, tmp_path
 def test_a_triage_missing_the_verdict_still_prints_the_findings_first(repo, tmp_path):
     _setup(repo, tmp_path)
     _full_review(repo)
+    before = _rounds_used(_state(repo), "critic")
     out = api.triage(repo, "T1", gate="critic", finding=1, verdict="")
     assert out.exit == FAIL
     assert "--refuted (the probe" in out.reason
     # the numbered findings come BEFORE the remedy, so the read is served first
     assert out.reason.index("#1 [") < out.reason.index("say which"), out.reason
+    # the refusal records nothing: no round, no triage event
+    assert _rounds_used(_state(repo), "critic") == before
+    assert _kinds(repo).count("review.triaged") == 0
