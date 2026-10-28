@@ -214,3 +214,15 @@ def test_the_commands_own_skip_applies_to_the_diff_scoped_run_too(tmp_path, repo
     # range is exactly since..HEAD, so it cannot silently lose the pushed tip
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}op-skip" pre-commit run --hook-stage pre-push '), cmd
     assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_the_commands_own_quoted_skip_still_skips_after_the_diff_scope_rebuild(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    for prefix in ("SKIP='op-skip' ", 'SKIP="op-skip" '):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert " --all-files" not in cmd
+        # the rebuild drops one balanced quote layer, so the hook id survives as an id --
+        # re-embedding the quotes would make pre-commit skip the literal `'op-skip'` hook
+        assert cmd.startswith('SKIP="${SKIP:+$SKIP,}op-skip" pre-commit run '), cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
