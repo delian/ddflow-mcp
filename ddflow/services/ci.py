@@ -235,7 +235,6 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
     if not command.startswith("SKIP="):
         return None, "", command
     value: list[str] = []
-    active = False  # an expansion the ORIGINAL shell would perform
     quote = ""  # "'" or '"' inside it, "" outside
     i, n = len("SKIP="), len(command)
     while i < n:
@@ -252,23 +251,22 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
             quote = ""
         elif quote:
             if quote == '"' and c in "$`":
-                active = True  # expansions inside double quotes are shell-active
+                return None, command, ""  # an expansion: the WHOLE command runs as written
             value.append(c)  # inside the quotes: everything else is literal text
         elif c.isspace() or c in ";\n|&<>()":
             break  # a word ends at whitespace or a shell operator (kept in the rest)
         elif c in "\"'":
             quote = c
         elif c in "$`":
-            active = True  # an expansion the ORIGINAL shell would perform
-            value.append(c)
+            return None, command, ""  # an expansion: the WHOLE command runs as written
+        elif c == "\\" and i + 1 < n:
+            value.append(command[i + 1])
+            i += 1
         else:
             value.append(c)
         i += 1
-    if quote or active:
-        # cannot reproduce it as a literal: the word's END is still known, so hand back
-        # its verbatim text (the assignment keeps its own expansion semantics) and the
-        # run from after the word -- the caller must not rewrite inside either part
-        return None, command[:i], command[i:]
+    if quote:
+        return None, command, ""  # unbalanced quotes: as written
     return "".join(value), "", command[i:]
 
 
@@ -279,16 +277,16 @@ def _sh_single(word: str) -> str:
 
 
 def _scope_the_run(run: str, resolve: str) -> str:
-    """``run`` with its own ` --all-files` replaced by the since..HEAD range. The range
-    only ever lands on the DEFAULT run phrase -- `pre-commit run --hook-stage pre-push
-    --all-files` -- the one token sequence whose last part IS the run's flag; a literal
-    ` --all-files` elsewhere (a verbatim `SKIP=` value, an earlier or later quoted file
-    argument, a comment) is never mistaken for it, and a run without the phrase is left
-    as written, uncorrupted."""
-    if DEFAULT_COMMAND in run:
-        return run.replace(
-            DEFAULT_COMMAND, f"{PRE_PUSH_RUN} --from-ref {resolve} --to-ref HEAD", 1
-        )
+    """``run`` with its own ` --all-files` replaced by the since..HEAD range -- when the
+    run IS the default run phrase, give or take the shell operator the `SKIP=` word ended
+    at (`;`, `&&`). A run carrying anything beyond that phrase is shell text, not the
+    default one: it stays as written, uncorrupted, unscoped."""
+    at = run.find(DEFAULT_COMMAND)
+    if at < 0:
+        return run
+    lead, tail = run[:at], run[at + len(DEFAULT_COMMAND) :]
+    if lead.strip() in ("", ";", "&&", "&") and not tail.strip():
+        return lead + f"{PRE_PUSH_RUN} --from-ref {resolve} --to-ref HEAD" + tail
     return run
 
 
