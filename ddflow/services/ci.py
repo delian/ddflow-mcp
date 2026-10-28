@@ -228,31 +228,44 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
     """Split a leading shell ``SKIP=<word>`` off ``command``: the value the shell would
     resolve it to (`'a b'` -> `a b`) and the untouched remainder, so the rest of the
     command (shell text) is never re-tokenized. ``None`` when it does not start with
-    one; an unbalanced quote also nothings, so a command it cannot parse is run as
-    written."""
+    one; the same when the value is not *certain* -- unbalanced quotes, or `$`/backtick
+    expansions outside single quotes, which the rebuild would have to reproduce, not
+    guess at. A runner that cannot parse it runs it as written."""
     if not command.startswith("SKIP="):
         return None, command
     value: list[str] = []
-    quote = ""
+    active = False  # an expansion the ORIGINAL shell would perform
+    quote = ""  # "'" or '"' inside it, "" outside
     i, n = len("SKIP="), len(command)
     while i < n:
         c = command[i]
-        if quote:
-            if c == quote:
+        if quote == "'":
+            if c == "'":
                 quote = ""
+            else:  # single quotes: everything literal, nothing active
+                value.append(c)
+        elif quote == '"':
+            if c == '"':
+                quote = ""
+            elif c in "$`":
+                active = True
+                value.append(c)
             else:
                 value.append(c)
         elif c.isspace():
             break
-        elif c in "'\"":
+        elif c in "\"'":
             quote = c
+        elif c in "$`":
+            active = True
+            value.append(c)
         elif c == "\\" and i + 1 < n:
             value.append(command[i + 1])
             i += 1
         else:
             value.append(c)
         i += 1
-    if quote:
+    if quote or active:
         return None, command
     return "".join(value), command[i:]
 
@@ -277,7 +290,8 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
     # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
     # selected-tests plan), so merge the two like the earlier tripwire run did; the merged
     # value is the env expansion plus the command's own list as a shell literal. `SKIP=''` is
-    # an explicit EMPTY override -- it keeps clearing the inherited SKIP; with no assignment
+    # an explicit EMPTY override -- it keeps clearing the inherited SKIP. When the value is not
+    # certainly parseable (`None`) the assignment runs as written, unmerged; with no assignment
     # the environment's own SKIP reaches pre-commit as it is.
     if own is None:
         merged = ""

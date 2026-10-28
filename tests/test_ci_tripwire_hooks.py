@@ -242,3 +242,17 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
     # `SKIP=''` means "skip nothing": the explicit empty override clears the inherited SKIP
     cmd = CI.scope_to_diff("SKIP='' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="" pre-commit run --hook-stage pre-push '), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP "):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        # the assignment keeps the operator's own expansion semantics, unmerged -- the
+        # rebuild must not guess at expansions -- only the run is scoped to the diff
+        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
+        assert " --all-files" not in cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
