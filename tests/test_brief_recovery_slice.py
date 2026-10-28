@@ -71,7 +71,7 @@ def test_each_entry_says_what_was_interrupted_and_that_ddflow_has_not_resumed(re
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert RESUME in text, text[:3000]
-    assert "NOT resumed: nobody holds it — the claim command above takes it over" in text
+    assert "NOT resumed: nobody holds it now — the claim command above takes it over" in text
     assert "gates done: research" in text, text
     assert "next gate: rules" in text, text
 
