@@ -56,6 +56,8 @@ def test_the_reserved_slice_survives_a_budget_that_trims_the_rest(repo):
     assert RESUME in text, text[:2000]
     assert "**T1** (stale_running" in text, text
     assert "`ddflow claim T1` to resume" in text, text
+    # The claim command the status line refers to is PRESENT, above it (duck #6).
+    assert text.index("`ddflow claim T1` to resume") < text.index("takes it over"), text
     assert text.index(RESUME) < text.index("cut to fit session.brief_max_tokens")
     # The ENTRY survives the cut the same way the heading does: nothing may cut in
     # between them (duck #7).
