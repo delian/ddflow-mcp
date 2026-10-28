@@ -8,7 +8,6 @@ measuring the wrong thing entirely.
 
 from __future__ import annotations
 
-import glob
 import io
 import json
 import os
@@ -22,6 +21,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.core import globspec
+from ddflow.core.globs import inside as path_in_glob
 from ddflow.services import enforce as E
 
 
@@ -95,10 +96,22 @@ def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     r = _commit(enforced, "comma/bracket paths", paths=["src/a,b.py", ":(literal)src/a[b].py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
-    advised = shlex.quote(json.dumps([glob.escape(p) for p in ["src/a,b.py", "src/a[b].py"]]))
-    assert "ddflow update <ID> --add-globs " + advised in msg, (
+    # Hardcoded expectation (the sibling test's style): the JSON array keeps the comma
+    # WHOLE and the `[[]` escape keeps the bracket LITERAL -- not a re-run of the
+    # production expression.
+    assert '--add-globs \'["src/a,b.py", "src/a[[]b].py"]\'' in msg, (
         f"a comma must stay ONE whole glob and a bracket must stay literal in the remedy:\n{msg}"
     )
+    # And the emitted value really is the two files: parse it off the message like a
+    # shell would, decode it like `update --add-globs` does, and match it like the
+    # lease check does. This binds the producer (enforce._add_globs_arg) to the
+    # consumer (globspec.parse, core.globs.inside) so the pair cannot drift apart.
+    line = next(x for x in msg.splitlines() if " --add-globs " in x)
+    value = shlex.split(line.split(" --add-globs ", 1)[1].split(" #", 1)[0])[0]
+    got = globspec.parse(value)
+    assert got == ["src/a,b.py", "src/a[[]b].py"], f"decoded as {got}, not the literal files"
+    assert path_in_glob("src/a[b].py", got[1]), "the escaped glob must match the literal file"
+    assert not path_in_glob("src/ab.py", got[1]), "the escaped glob must not match the class"
 
 
 def test_a_claimed_commit_is_allowed(enforced):
