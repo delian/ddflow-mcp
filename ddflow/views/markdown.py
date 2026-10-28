@@ -1146,22 +1146,21 @@ def _assemble(
     says where its rest is."""
     set_aside = len(charter) + 2 if charter else 0
     prefix_text = "\n".join(prefix)
-    room = chars - len(prefix_text) - len(note) - 1 - set_aside
+    # Reserve the note's room only when the note could ever be appended (prefix + note
+    # must fit below the cap): reserving it unconditionally charged the body for a note
+    # that would be dropped, which starved sections that fit without it (duck #1/#4/#5).
+    note_room = len(note) if len(prefix_text) + len(note) + 1 <= cap or charter else 0
+    room = chars - len(prefix_text) - note_room - 1 - set_aside
     body_lines, trimmed = _fit_sections(sections, max(1, room), item)
     body = "\n".join(body_lines)
     text = prefix_text + ("\n" + body if body else "")
     cap = chars - set_aside
     if len(text) + (len(note) if trimmed else 0) > cap:
         # The backstop cuts the BODY only: the head and the reserved RESUME slice hold.
-        room = max(0, cap - len(prefix_text) - 1 - len(note))
-        cut = body[:room].rsplit("\n", 1)[0] if body and room else ""
-        if len(prefix_text) + (len("\n" + cut) if cut else 0) + len(note) > cap:
-            # The note will not be appended anyway: give its room to the body (cut from
-            # the UNCUT body), never to the slice -- the note must not starve sections
-            # that fit without it.
-            room = max(0, cap - len(prefix_text) - 1)
-            cut = body[:room].rsplit("\n", 1)[0] if body and room else ""
-        body = cut
+        # With no note reserved (prefix + note alone exceed the cap), the body keeps
+        # its place; nothing may cut the prefix.
+        room = max(0, cap - len(prefix_text) - 1 - (len(note) if note_room else 0))
+        body = body[:room].rsplit("\n", 1)[0] if body else ""
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
