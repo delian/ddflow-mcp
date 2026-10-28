@@ -1004,6 +1004,14 @@ class State:
     #: {"digest", "user", "host", "human", "note", "token_hash", "used_at", "agent", "at"}.
     #: What runs is approved only when its digest is one approved here.
     approvals: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: ask id -> the folded ask (`ask.*` events, folded by `core.handlers.asks`; read it
+    #: through `asks_of`, never directly). Declared here (SE-state-asks-field) instead of
+    #: setdefault'd beside the declared fields: the ask rows belong to the record shape,
+    #: so field-walking state users see them, and an instance restored without `__init__`
+    #: (a pre-field pickle) still gets the dict lazily from `asks_of`. The rows hold
+    #: person-supplied text, so any full-state export redacts it leaf-wise like every
+    #: other field.
+    asks: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: item id -> the newest `lease.waiting` record of an agent refused the files it asked for
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.

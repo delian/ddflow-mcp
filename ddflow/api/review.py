@@ -403,10 +403,11 @@ def triage(
     if it is None:
         return bad(f"no such item {item!r}")
     if verdict not in ("refuted", "confirmed"):
-        return bad(
-            "say which: --refuted (the probe shows the finding false) or --confirmed"
-            + _finding_listing(it, gate)
-        )
+        # The LISTING leads, the refusal follows: a read of the recorded round prints the
+        # findings first, never hidden behind the error (bug Bdd43b55a2a).
+        listing = _finding_listing(it, gate)
+        remedy = "say which: --refuted (the probe shows the finding false) or --confirmed"
+        return bad(f"{listing}\n{remedy}" if listing else remedy)
     if not probe.strip():
         return bad(
             "--probe is required: for --refuted the run that shows the finding false, for "
