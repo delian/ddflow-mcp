@@ -562,7 +562,7 @@ def _name_paths(paths: list[str], cap: int = 5) -> str:
 def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     """The evidence of a pass recorded from settled triage (D-unify 5): passed ON
     REFUTATION, flagged, when a finding was refuted; `findings_fixed` when every one was
-    confirmed -- never in `gate list --refuted` (B1396d7bd55). `_settled_pass` keeps
+    confirmed -- never in `gate list --refuted` (B1396d7bd55). `rounds.settled_pass` keeps
     either off the round count."""
     rounds = {"rounds": used, "max_rounds": cap}
     refuted = counts["refuted"]
