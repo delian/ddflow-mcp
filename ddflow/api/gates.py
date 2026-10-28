@@ -1086,25 +1086,38 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     `gate record --model` names the REVIEWER's model; `complete --model` the author's.
     Recording the author's own model on a reviewer gate overwrote the reviewer's, and
     `complete` then judged independence against the author's family (B1979dac602). The
-    author is the model this agent declared at `session start`; with none declared there
-    is nothing to compare, and the record stands.
+    author is the model this agent declared at `session start`, or the family the
+    harness configured (`[agent].family` / DDFLOW_AGENT_FAMILY), with none declared
+    there is nothing to compare, and the record stands. A bare FAMILY name after
+    `--model` is judged as that family (DX-author-family): an `[agent].families` value
+    in place of a model id.
     """
     if not G.is_reviewer_gate(gate, gdef):
         return ""
 
-    author = _session_model(st, log.agent_id)
+    author = _session_model(st, log.agent_id) or cfg.agent.family
     if not author:
         return ""
-    fam = G.family_of(model, cfg).strip().lower()
-    if not fam or fam != G.family_of(author, cfg).strip().lower():
+    fam = _family_of_name_or_value(model, cfg)
+    if not fam or fam != _family_of_name_or_value(author, cfg):
         return ""
-    return (
-        f"--model {model!r} is the author's own family ({fam}, the model {log.agent_id} "
-        f"declared at `session start`), and --model on a reviewer gate names the "
-        f"REVIEWER's model (the author's is `complete --model`). Pass the model that "
-        f"reviewed, or --reviewer-model {model} to state that this reviewer really is "
-        f"of that family (it will not count as independent)."
+    declared = (
+        f"the model {log.agent_id} declared at `session start`"
+        if _session_model(st, log.agent_id)
+        else f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
     )
+    return (
+        f"--model {model!r} is the author's own family ({fam}, {declared}), and --model on "
+        f"a reviewer gate names the REVIEWER's model (the author's is `complete "
+        f"--model`). Pass the model that reviewed, or --reviewer-model {model} to state "
+        f"that this reviewer really is of that family (it will not count as independent)."
+    )
+
+
+def _family_of_name_or_value(model: str, cfg) -> str:
+    """`model`'s family with a bare family name recognised as itself: the author and the
+    typed reviewer model are judged by the same resolution (DX-author-family)."""
+    return G.family_name_of(model, cfg.agent.families) or G.family_of(model, cfg).strip().lower()
 
 
 def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:
