@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
 import re
 import shlex
 import shutil
@@ -63,7 +62,7 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
     if m:
         return int(m.group(1))
     ids = [
-        int(j["id"]) for j in _list(exe, where)
+        int(j["id"]) for j in _list(exe, where)[0]
         if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
     return max(ids) if ids else None
@@ -72,15 +71,11 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
 _LIVE = ("queued", "running")
 
 
-def _list(exe: str, where: Path, limit: int = 100) -> list[dict]:
-    p = proc.capture(
-        [exe, "list", "--json", "--limit", str(limit)], cwd=where, timeout=RR._TIMEOUT_S
-    )
-    try:
-        jobs = json.loads(p.stdout or "[]") or []
-    except ValueError:
-        return []
-    return [j for j in jobs if isinstance(j, dict)] if isinstance(jobs, list) else []
+def _list(exe: str, where: Path) -> tuple[list[dict], str]:
+    """(the jobs, the read's failure note): ONE reader for the whole wait surface
+    (`roborev._read_list`), so an ask that failed or printed no usable JSON comes back as a
+    NOTE here too -- it never collapses to `[]`, which says "no jobs in this repository"."""
+    return RR._read_list(exe, where)
 
 
 def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
@@ -106,7 +101,7 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
 def _reviewer(exe: str, where: Path, job: int) -> str:
     """The agent roborev ACTUALLY ran job ``job`` with (its model when it records one, as
     `roborev.Review.reviewer`), "" when the job record cannot be read."""
-    for j in _list(exe, where):
+    for j in _list(exe, where)[0]:
         if RR._job_id(j) == job:
             # the same name `roborev.Review.reviewer` judges the family by
             return RR.Review(
@@ -157,7 +152,7 @@ def _workers(exe: str, where: Path) -> int:
 
 def _job_status(exe: str, where: Path, job: int) -> str:
     """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
-    for j in _list(exe, where):
+    for j in _list(exe, where)[0]:
         if str(j.get("id")) == str(job):
             return str(j.get("status") or "")
     return ""
@@ -182,7 +177,7 @@ def run(where: Path, base: str, wait_s: int) -> Result:
     if mb == head:
         return Result("unavailable", f"the branch has no commit ahead of {base!r}", sha=head)
     with _enqueue_lock(where):  # list + enqueue is one step, or two callers both enqueue
-        job = _reusable_job(_list(exe, where), head, mb)
+        job = _reusable_job(_list(exe, where)[0], head, mb)
         if job is None:
             q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
             if q.error is not None or q.returncode != 0:
@@ -200,7 +195,10 @@ def run_job(where: Path, job: int, wait_s: int) -> Result:
     exe = shutil.which("roborev")
     if not exe:
         return Result("unavailable", "roborev is not on PATH", job=job)
-    me = next((j for j in _list(exe, where) if RR._job_id(j) == job), None)
+    jobs, failed = _list(exe, where)
+    if failed:
+        return Result("unavailable", f"roborev's job list could not be read ({failed})", job=job)
+    me = next((j for j in jobs if RR._job_id(j) == job), None)
     if me is None:
         return Result("unavailable", f"roborev has no job {job} in this repository", job=job)
     sha = str(me.get("git_ref") or "").rsplit("..", 1)[-1]
@@ -210,7 +208,8 @@ def run_job(where: Path, job: int, wait_s: int) -> Result:
 def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> Result:
     if job is None:
         return Result("unavailable", "roborev enqueued the review but named no job", sha=head)
-    where_in_queue = queue_position(_list(exe, where), job, _workers(exe, where))
+    jobs, _read_failed = _list(exe, where)
+    where_in_queue = queue_position(jobs, job, _workers(exe, where))
     if where_in_queue:
         print(f"roborev job {job}: {where_in_queue}", file=sys.stderr)
     suffix = f" [{where_in_queue}]" if where_in_queue else ""
@@ -225,7 +224,7 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
         )
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
     if w.timed_out:
-        now = queue_position(_list(exe, where), job, _workers(exe, where))
+        now = queue_position(_list(exe, where)[0], job, _workers(exe, where))
         return Result(
             "unavailable",
             f"roborev job {job} gave no result in {wait_s}s (the host is loaded?)"

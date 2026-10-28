@@ -231,9 +231,11 @@ def wait_job(
         if rec is None:
             return WaitResult(
                 note=(
-                    f"roborev holds no job {job} in this repository: the review for it was "
-                    f"never written ('no review found' would be the very same words); re-run "
-                    f"`roborev review <sha of the branch head>` to enqueue it, then wait again"
+                    f"roborev's last {_LIMIT} jobs hold no job {job} in this repository: the "
+                    f"review for it was never written (an older job may just be past the "
+                    f"{_LIMIT}-job list window; 'no review found' would be the very same "
+                    f"words); re-run `roborev review <sha of the branch head>` to enqueue it, "
+                    f"then wait again"
                 )
             )
         status = str(rec.get("status") or "")
@@ -348,6 +350,10 @@ def main(argv: list | None = None) -> int:
         print(f"reviewer: {out.review.reviewer} (the model roborev ran job {out.review.job} with)")
     if out.text:
         print(out.text)
+    elif out.review is not None and not out.note:
+        # the clean verdict is real (`roborev wait` exited 0 on a done job); the BODY is the
+        # part that could not be read, and a silently missing body must never look like one.
+        print("(the review body could not be read: `roborev show --job` brought no text)")
     return 2 if out.review is None else (1 if out.note else 0)
 
 
