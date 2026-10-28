@@ -285,7 +285,9 @@ def wait_job(
             # The two verdict asks SHARE the remaining bound (floored at _VERDICT_FLOOR_S):
             # even a hanging `wait`/`show` on a done job cannot run two whole ask timeouts,
             # and a healthy verdict that arrives just past the bound still gets a real ask.
-            allowance = _TIMEOUT_S if wait_s <= 0 else min(_TIMEOUT_S, deadline - monotonic())
+            # wait_s <= 0: one prompt verdict collect (a done job answers in moments); a
+            # bounded wait: what the bound still allows.
+            allowance = 5 * _VERDICT_FLOOR_S if wait_s <= 0 else min(_TIMEOUT_S, deadline - monotonic())
             return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
         elapsed = monotonic() - started
         if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
