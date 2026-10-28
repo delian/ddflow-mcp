@@ -124,8 +124,12 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
     ok_id, ok_bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
     no_id, bad_bug = _file(proj, summary="quiet one", repro_cmd=python("import sys; sys.exit(0)"))
     ids = bug_items(state(proj), Config.load(proj))
-    assert ok_bug.fix_task in ids  # the confirmed bug's fix is a bugs-first item
-    assert bad_bug.fix_task not in ids and ok_id not in ids and no_id not in ids
+    # Both fix tasks are bugfix branches in their own right: they stay bug items. The
+    # unconfirmed record counts for NOTHING: no promotion and no demotion -- what the
+    # record alone would have granted (the promotion of a plain item it names) is what
+    # it loses, and the fix branches stand.
+    assert ok_bug.fix_task in ids and bad_bug.fix_task in ids
+    assert ok_id not in ids and no_id not in ids
     assert bad_bug.reproduced == "no"
 
 
@@ -147,10 +151,15 @@ def test_an_unconfirmed_bugs_own_item_is_not_offered_before_confirmed_work(proj)
     assert "P1.CARRY" not in ids and carry.fix_task == ""
 
 
-def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
+def test_the_line_runs_through_the_shell_env_prefix_and_all(proj, monkeypatch):
     # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
     # the sighting is lost; through the shell the variable is set and the run answers.
-    line = "X=set " + python("import os,sys; sys.exit(0 if os.environ.get('X') else 9)")
+    # The variable is UNIQUE and STARTS UNSET: a stray inherited value must not decide
+    # the run in place of the prefix's assignment.
+    monkeypatch.delenv("DDFLOW_REPRO_PROBE_X", raising=False)
+    line = "DDFLOW_REPRO_PROBE_X=set " + python(
+        "import os,sys; sys.exit(0 if os.environ.get('DDFLOW_REPRO_PROBE_X') else 9)"
+    )
     _bid, bug = _file(proj, repro_cmd=line)
     run = _run(proj, bug)
     assert run["executed"] is True and run["reproduced"] == "no"
@@ -215,5 +224,5 @@ def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatc
         proj, repro_cmd=python("import sys; sys.stdout.write('x' * 100000); sys.exit(0)")
     )
     run = _run(proj, bug)
-    assert lines and lines[0].lstrip().startswith("(") and " 2>&1" in lines[0]
+    assert lines and lines[0].lstrip().startswith("(") and " > " in lines[0] and " 2>&1" in lines[0]
     assert run["output"] == "x" * 8

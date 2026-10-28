@@ -245,6 +245,10 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
     for want of evidence: a bundle that cannot be built or stored is linked as
     ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
     ``given``: item, agent, test, repro_cmd, capture."""
+    # The log snapshot is read BEFORE the run: a repro that takes minutes must not let
+    # the bundle's events drift to post-run arrivals (and st is the filing-time fold the
+    # caller passed, also from before the run).
+    events = log.read_all() if hasattr(log, "read_all") else log
     try:
         run = given.get("check")
         if run is None and given.get("repro_cmd", ""):
@@ -263,7 +267,7 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                 repo,
                 cfg,
                 st,
-                log.read_all() if hasattr(log, "read_all") else log,
+                events,
                 bug=bid,
                 item=given.get("item", ""),
                 agent=given.get("agent", ""),

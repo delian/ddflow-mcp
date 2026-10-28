@@ -723,17 +723,14 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     confirmed ones -- until a second sighting or a run that failed makes it confirmed.
     """
     ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
-    unconfirmed = {
-        x
-        for b in state.bugs.values()
-        if b.open and b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM
-        for x in (b.item, b.fix_task)
-        if x
-    }
-    ids.difference_update(unconfirmed)
     for b in state.bugs.values():
-        if b.open and (b.reproduced != "no" or b.sightings >= SIGHTINGS_THAT_CONFIRM):
-            ids.update(x for x in (b.item, b.fix_task) if x)
+        if not b.open or (b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM):
+            # An UNCONFIRMED bug counts for NOTHING -- no promotion of the item or fix
+            # task it names. It counts for nothing NEGATIVE either: an item that is a
+            # bug branch on its own rank never gets subtracted because an unconfirmed
+            # record happens to name it.
+            continue
+        ids.update(x for x in (b.item, b.fix_task) if x)
     return ids
 
 

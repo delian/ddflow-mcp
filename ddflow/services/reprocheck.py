@@ -28,6 +28,7 @@ the shell's, and a timeout kills the whole process group (`infra.proc.run_shell`
 from __future__ import annotations
 
 import os
+import secrets
 import shlex
 import shutil
 import tempfile
@@ -84,8 +85,12 @@ def _run_at(
             out: list[bytes] = []
             bigger = False
             unreached = 0
-            for i in range(count):
-                code, tailed, size = _one_run(s.path, tails / f"{i}.out", line, keep, timeout_s)
+            for _ in range(count):
+                # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
+                # run's path cannot know the name (it was never on any argv line).
+                code, tailed, size = _one_run(
+                    s.path, tails / secrets.token_hex(6), line, keep, timeout_s
+                )
                 if code is None:
                     unreached += 1
                     continue
