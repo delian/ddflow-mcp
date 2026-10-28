@@ -43,7 +43,10 @@ from .pins import pin_files
 from .pins import regenerate as regenerate_pins
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
-DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
+#: The pre-push run every derived default command is recognised by; the all-files arg is the
+#: only part `scope_to_diff` replaces (the configured run now checks the change, Bf333cb2f5d).
+PRE_PUSH_RUN = "pre-commit run --hook-stage pre-push"
+DEFAULT_COMMAND = f"{PRE_PUSH_RUN} --all-files"
 #: What `merge_tree` says of a base that conflicts with the ref, and what `run` reads back to
 #: tell that FAILED from a merge git could not finish (UNAVAILABLE): one constant for both.
 NOT_MERGEABLE = "does not merge with"
@@ -221,27 +224,18 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
-_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
-
-
-def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
-    """``command`` (the default pre-push command, maybe after `SKIP=...`) with the tripwire
-    hooks taken out of its all-files run and run once on the diff ``since``..HEAD instead; the
-    command as it is when the project has no tripwire or ``since`` is not a commit there."""
-    ids = tripwire_ids(tree)
-    if not ids or not since or not W.rev(tree, since):
+def scope_to_diff(command: str, tree: Path, since: str) -> str:
+    """``command`` (the default pre-push command, maybe after `SKIP=...`) run over the diff
+    ``since``..HEAD instead of over every file (`--all-files`): the checks a push is about run
+    on what the push changes, so an error the base itself carries does not fail a branch that
+    did not make it (Bf333cb2f5d). ``command`` as written when ``since`` is not a commit there."""
+    if not since or not W.rev(tree, since):
         return command
-    lead = _LEADING_SKIP.match(command)
-    rest = command[lead.end() :] if lead else command
-    skip = ",".join([*([lead["ids"]] if lead else []), *ids])
-    # The environment's own SKIP (the selected-tests plan sets one) stays in front.
-    first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
-    base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
-    # The command's own SKIP= is the operator's skip: it applies to the named runs as well.
-    mine = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
-    ranged = [f"{mine}{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
-    steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
-    return "rc=0; " + "; ".join(steps) + "; exit $rc"
+    if " --all-files" not in command:
+        return command
+    # `--from-ref since --to-ref HEAD` is pre-commit's three-dot there: in a merged tree HEAD
+    # holds the base, so the range is exactly the pushed change, nothing the base brought.
+    return command.replace(" --all-files", f" --from-ref {since} --to-ref HEAD", 1)
 
 
 def tool_missing(command: str) -> str:
@@ -489,7 +483,7 @@ def run(
         if stale := _stale_pins(tree, cfg, base, custom=bool(command.strip())):
             return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
+        cmd = _default_on_the_diff(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
@@ -597,18 +591,18 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
     )
 
 
-def _default_with_tripwires(
+def _default_on_the_diff(
     repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
 ) -> str:
-    """``cmd`` with the tripwire hooks on the diff, when it is the default command (an operator's
-    own `[ci].command` is run as written). The diff is the one the check is about: on the base
-    itself (the after-merge check) there is no branch to compare with, so the commit just made
-    against its first parent."""
+    """``cmd`` scoped to the diff the check is about, when it is the default command (an
+    operator's own `[ci].command` is run as written). The diff is the one the check is about:
+    on the base itself (the after-merge check) there is no branch to compare with, so the
+    commit just made against its first parent."""
     if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
         return cmd
     # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
-    return with_tripwires_on_the_diff(cmd, tree, since)
+    return scope_to_diff(cmd, tree, since)
 
 
 def _worker_log(scope) -> dict[str, dict]:
@@ -649,7 +643,7 @@ def _needs_suite_slot(cfg: Config, cmd: str, scope) -> bool:
 
 def _runs_whole_suite(cmd: str, scope) -> bool:
     """The default pre-push command with its test hooks on, not narrowed to a selection."""
-    if DEFAULT_COMMAND not in cmd or "SKIP=" in cmd:
+    if PRE_PUSH_RUN not in cmd or "SKIP=" in cmd:
         return False
     return scope is None or scope.scope != "selected"
 

@@ -35,16 +35,16 @@ repos:
       # -- the CI `tests` and `quality` jobs: lint and format -------------------------
       - id: ruff-check
         name: "ruff check (CI: Lint)"
-        entry: uv run ruff check .
+        entry: uv run ruff check
         language: system
         types_or: [python, pyi]
-        pass_filenames: false
+        pass_filenames: true
       - id: ruff-format
         name: "ruff format --check (CI: Lint)"
-        entry: uv run ruff format --check .
+        entry: uv run ruff format --check
         language: system
         types_or: [python, pyi]
-        pass_filenames: false
+        pass_filenames: true
 
       # -- the CI `quality` job --------------------------------------------------------
       - id: build-probe
