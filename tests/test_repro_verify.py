@@ -173,12 +173,12 @@ def test_a_second_sighting_opens_the_bug_again_even_though_its_run_passed(proj):
 def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
     _config(proj, "[bugs]\nrepro_tail_bytes = 3\n")
     # 'é' is two UTF-8 bytes: a CHARACTER cut at 3 would store 'ééé', six bytes. The
-    # stored KEEP is 3 BYTES of 'é'*5 (c3 a9 a9): the complete é renders, the boundary
-    # fragment renders as the replacement marker -- the byte cut happened, honestly drawn.
+    # stored KEEP is 3 BYTES of 'é'*5 (a9 c3 a9): the led-off fragment renders as the
+    # replacement marker and the complete é renders -- the byte cut happened, drawn.
     _bid, bug = _file(proj, repro_cmd=python("import sys; sys.stdout.write('é'*5); sys.exit(0)"))
     run = _run(proj, bug)
     assert run.get("output_truncated") is True
-    assert run["output"] == "é\ufffd"
+    assert run["output"] == "\ufffdé"  # the LAST three bytes a9 c3 a9: split fragment, then é
 
 
 def test_each_runs_output_is_bounded_before_the_tail_is_cut(proj):

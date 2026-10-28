@@ -149,9 +149,17 @@ def _tail_from_file(path: Path, keep: int) -> tuple[bytes, int]:
     """The last ``keep`` BYTES of ``path`` and its total size; ``(b"", size)`` when the file
     is not readable. Reading with a seek bounds what an enormous run loads into memory;
     the size still says a run was cut. Bytes stay bytes to ``_run_at``: decode-replace
-    inflation happens once, at presentation, and cannot wander into the arithmetic."""
+    inflation happens once, at presentation, and cannot wander into the arithmetic. The
+    open is O_NOFOLLOW: a repro line that planted a symlink at the tail path (it knows
+    the path: it is part of its own argv) must never turn the record into a leak of some
+    other file the agent can read, and never block on a FIFO it planted there."""
     try:
-        with open(path, "rb") as fh:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        fd = os.open(path, flags)
+    except OSError:
+        return b"", 0
+    try:
+        with os.fdopen(fd, "rb") as fh:
             fh.seek(0, os.SEEK_END)
             size = fh.tell()
             fh.seek(max(0, size - keep))
