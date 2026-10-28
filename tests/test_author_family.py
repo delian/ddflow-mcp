@@ -67,11 +67,25 @@ def _alibaba_review() -> dict:
     return _deepseek_review() | {"model": "qwen-3-flash", "family": "alibaba"}
 
 
+def _bare_family_review() -> dict:
+    """A reviewer recorded with a bare family VALUE after `--model` and no declared
+    `family` field: `_reviewer_fams` resolves it via `family_name_of` (DX-author-family)."""
+    return {"model": "alibaba", "reviewer": "lan-qwen-flash", "status": "REVIEWED"}
+
+
 def _independence_for(log, cfg, gd, author: str, evidence: dict) -> tuple[bool, str]:
     log.append("phase.added", "P1", {})
     log.append("task.added", "T1", {"parent": "P1"})
     G.record(log, cfg, "T1", "critic", "passed", evidence=evidence, gates=gd)
     return G.reviewer_independence(fold(log.read_all()), cfg, "T1", author)
+
+
+def test_a_reviewer_with_a_bare_family_model_resolves_through_family_name_of(log, cfg, gd):
+    """roborev standards (low): the reviewer-side bare-family branch of `_reviewer_fams`
+    (no declared `family` field) resolves the family VALUE, so it is not anonymous."""
+    ok, why = _independence_for(log, cfg, gd, "deepseek-chat", _bare_family_review())
+    assert ok, why
+    assert "alibaba" in why, why
 
 
 def test_a_bare_family_author_is_judged_as_that_family(log, cfg, gd):
