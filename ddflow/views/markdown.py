@@ -678,13 +678,15 @@ def _resume_line(state: State, cfg: Config, r) -> str:
     bits = _gate_facts(state, cfg, r.item) if cfg is not None else ""
     prompt = _last_prompt_of(state, r)
     if prompt:
-        bits = (bits + " · last prompt: \"" + prompt + "\"") if bits else "last prompt: \"" + prompt + "\""
-    if r.salvageable:
-        status = (
-            "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
+        bits = (
+            (bits + ' · last prompt: "' + prompt + '"') if bits else 'last prompt: "' + prompt + '"'
         )
+    if r.salvageable:
+        status = "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
     elif r.salvageable is None:
-        status = "NOT resumed: COULD NOT MEASURE — treat it as holding work until one answer decides"
+        status = (
+            "NOT resumed: COULD NOT MEASURE — treat it as holding work until one answer decides"
+        )
     else:
         status = "NOT resumed: nobody holds it — the claim command above takes it over"
     return status + (" · " + bits if bits else "")
