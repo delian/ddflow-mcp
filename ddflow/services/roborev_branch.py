@@ -177,7 +177,12 @@ def run(where: Path, base: str, wait_s: int) -> Result:
     if mb == head:
         return Result("unavailable", f"the branch has no commit ahead of {base!r}", sha=head)
     with _enqueue_lock(where):  # list + enqueue is one step, or two callers both enqueue
-        job = _reusable_job(_list(exe, where)[0], head, mb)
+        jobs, rfailed = _list(exe, where)
+        if rfailed:
+            return Result(
+                "unavailable", f"roborev's job list could not be read ({rfailed})", sha=head
+            )
+        job = _reusable_job(jobs, head, mb)
         if job is None:
             q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
             if q.error is not None or q.returncode != 0:
@@ -222,36 +227,27 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
             head,
             pending_rerun=True,
         )
-    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
-    if w.timed_out:
+    # The ONE truthful waiter: `roborev wait --job` of an unfinished job cannot tell live
+    # from gone, so the gate's wait is `roborev.wait_job` (the poll of the job list),
+    # mapped onto this module's Result.
+    out = RR.wait_job(where, job, wait_s)
+    if out.live:
         now = queue_position(_list(exe, where)[0], job, _workers(exe, where))
         return Result(
             "unavailable",
-            f"roborev job {job} gave no result in {wait_s}s (the host is loaded?)"
-            f"{f' [{now}]' if now else ''}; it is still queued or running: "
-            f"`roborev wait --job {job}`, or raise [gates].standards_wait_s. {rerun}",
+            f"{out.note}{f' [{now}]' if now else ''}. {rerun}",
             job, head, pending_rerun=True,
         )  # fmt: skip
-    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=RR._TIMEOUT_S)
-    text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
-    if w.returncode == 0:
-        return Result("clean", job=job, sha=head, text=text, reviewer=_reviewer(exe, where, job))
-    # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
-    status = _job_status(exe, where, job)
-    if status == "done":
-        return Result(
-            "findings",
-            f"roborev wait exited {w.returncode}",
-            job,
-            head,
-            text,
-            reviewer=_reviewer(exe, where, job),
-        )
+    if out.review is None:
+        return Result("unavailable", out.note, job, head, out.text)
     return Result(
-        "unavailable",
-        f"roborev job {job} ended {status or 'in an unknown state (its status could not be read; the text below, if any, is unjudged)'} with no review (wait exit {w.returncode})",
-        job, head, text,
-    )  # fmt: skip
+        "clean" if not out.note else "findings",
+        out.note,
+        job,
+        head,
+        out.text,
+        reviewer=out.review.reviewer,
+    )
 
 
 def _findings_summary(text: str) -> str:
