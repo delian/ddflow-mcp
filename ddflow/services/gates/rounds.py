@@ -11,8 +11,6 @@ and `review triage` ("N of cap rounds"), and `review show` all use these.
 
 from __future__ import annotations
 
-from typing import Any
-
 
 def _runs(it, gate: str) -> list:
     """The gate's recorded outcomes on ``it`` (an Item or None), oldest first: its

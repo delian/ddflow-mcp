@@ -50,6 +50,7 @@ from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
 from ..services.gates import running as RUN
+
 # Round counting lives in services.gates.rounds, ONE fold for every view of the budget:
 # `gate status`, `review triage` and `review show` all must report the same number
 # (DX-review-round-count: the first read the current record's evidence and the second
@@ -59,7 +60,6 @@ from ..services.gates.rounds import delta_rounds as _delta_rounds
 from ..services.gates.rounds import full_rounds as _full_rounds
 from ..services.gates.rounds import kept_copy as _kept_copy
 from ..services.gates.rounds import rounds_used as _rounds_used
-from ..services.gates.rounds import settled_pass as _settled_pass
 from ..services.guidance import inject as GI
 from ..services.review_noise import registered_submodules, without_stray_gitlinks
 from ..views import human
