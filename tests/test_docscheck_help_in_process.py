@@ -110,7 +110,7 @@ def test_a_parse_failure_reads_could_not_run_never_a_pass(monkeypatch):
         def parse_args(self, argv):
             raise RuntimeError("parse blown on purpose")
 
-    monkeypatch.setattr(H, "_parser", _Broken())
+    monkeypatch.setattr(H, "_parser", [_Broken()])  # the slot `in_process` reads, cell[0]
     out = H.in_process(["gate"])
     assert not out.ran
     assert isinstance(out.error, RuntimeError)
