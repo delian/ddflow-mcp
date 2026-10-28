@@ -52,9 +52,9 @@ def _recorded_identity(model: str, model_source: str, cfg) -> tuple[str, bool]:
     (a `[agent].families` NEEDLE such as "gemini") resolves to its canonical family
     value, and one the map does not know is recorded VERBATIM (the operator's
     declaration, never a model id), so the key the log records matches the family the
-    verdict judged. Only the CONFIG leg canonicalizes: the same needle after `--model`
-    is a MODEL id given out loud, recorded as `author_model` (a model name is recorded
-    only when one was actually given) -- tests pin the asymmetry."""
+    verdict judged. Only the CONFIG leg canonicalizes: a needle after `--model` that is
+    NOT itself a family value is a MODEL id given out loud, recorded as `author_model`
+    (a model name is recorded only when one was actually given) -- tests pin it."""
     family = G.family_name_of(model, cfg.agent.families)
     if model_source == "config" and not family:
         family = G.family_of(model, cfg).strip().lower() or model
