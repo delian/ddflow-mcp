@@ -93,25 +93,34 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
 def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     (enforced / "src" / "a,b.py").write_text("x = 2\n")
     (enforced / "src" / "a[b].py").write_text("z = 3\n")
-    r = _commit(enforced, "comma/bracket paths", paths=["src/a,b.py", ":(literal)src/a[b].py"])
+    (enforced / "src" / "it's.py").write_text("q = 4\n")
+    r = _commit(
+        enforced,
+        "comma/bracket/quote paths",
+        paths=["src/a,b.py", ":(literal)src/a[b].py", "src/it's.py"],
+    )
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
     # Hardcoded expectation (the sibling test's style): the JSON array keeps the comma
-    # WHOLE and the `[[]` escape keeps the bracket LITERAL -- not a re-run of the
-    # production expression.
-    assert '--add-globs \'["src/a,b.py", "src/a[[]b].py"]\'' in msg, (
-        f"a comma must stay ONE whole glob and a bracket must stay literal in the remedy:\n{msg}"
+    # WHOLE, the `[[]` escape keeps the bracket LITERAL and the `'"'"'` escape keeps the
+    # apostrophe inside the quoted shell word -- not a re-run of the production
+    # expression.
+    expected = '--add-globs \'["src/a,b.py", "src/a[[]b].py", "src/it\'"\'"\'s.py"]\''
+    assert expected in msg, (
+        f"comma, bracket and apostrophe must stay ONE runnable literal glob in the remedy:\n{msg}"
     )
-    # And the emitted value really is the two files: parse it off the message like a
+    # And the emitted value really is the three files: parse it off the message like a
     # shell would, decode it like `update --add-globs` does, and match it like the
     # lease check does. This binds the producer (enforce._add_globs_arg) to the
     # consumer (globspec.parse, core.globs.inside) so the pair cannot drift apart.
     line = next(x for x in msg.splitlines() if " --add-globs " in x)
     value = shlex.split(line.split(" --add-globs ", 1)[1].split(" #", 1)[0])[0]
     got = globspec.parse(value)
-    assert got == ["src/a,b.py", "src/a[[]b].py"], f"decoded as {got}, not the literal files"
+    want = ["src/a,b.py", "src/a[[]b].py", "src/it's.py"]
+    assert got == want, f"decoded as {got}, not the literal files"
     assert path_in_glob("src/a[b].py", got[1]), "the escaped glob must match the literal file"
     assert not path_in_glob("src/ab.py", got[1]), "the escaped glob must not match the class"
+    assert path_in_glob("src/it's.py", got[2]), "the apostrophe file must stay one glob"
 
 
 def test_a_claimed_commit_is_allowed(enforced):

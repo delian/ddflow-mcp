@@ -1560,8 +1560,8 @@ def _uncovered_message(
     if len(uncovered) > MAX_LISTED_PATHS:
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
+    widen = _add_globs_arg(uncovered)
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
-        widen = _add_globs_arg(uncovered)
         lines += [
             f"These paths belong to another item YOU hold, bound to a tree of its own: "
             f"commit them there, or widen THIS item's claim "
@@ -1588,7 +1588,6 @@ def _uncovered_message(
     held = ", ".join(mine) if mine else "(no live lease)"
     if lapsed and not mine:
         held = "nothing live (the lease above lapsed)"
-    widen = _add_globs_arg(uncovered)
     lines += [
         f"You hold: {held}",
         "",
