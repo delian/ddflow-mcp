@@ -258,14 +258,20 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
         # the repro command STILL RUNS and its sighting is still recorded.
         run = given.get("check")
         if run is None and given.get("repro_cmd", ""):
-            try:
-                events = log.read_all() if hasattr(log, "read_all") else log
-            except Exception:
-                events = None
-            try:
-                machine = F.machine(repo)
-            except Exception:
-                machine = None
+            # Evidence reads degrade per-step, BEFORE the run, and a FAILED read degrades
+            # to its terminal value AT ONCE -- [] / an unavailable marker -- so nothing is
+            # retried after the run and post-run events can never masquerade as the
+            # pre-run snapshot.
+            if events is None:
+                try:
+                    events = log.read_all() if hasattr(log, "read_all") else log
+                except Exception:
+                    events = []
+            if machine is None:
+                try:
+                    machine = F.machine(repo)
+                except Exception:
+                    machine = {"unavailable": "machine facts could not be collected"}
             run = RC.check(
                 repo,
                 F.tree(repo).get("tree_sha", ""),
@@ -276,9 +282,9 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
             )
         sig = sighting(run)
         try:
-            # A caller-supplied check ran before attach: without a run of ours there is
-            # nothing to wait for, so reading them here is still pre-run; failed reads
-            # degrade and never surface over the verdict.
+            # A caller-supplied check ran before attach, so no run of ours happened:
+            # reading here is still pre-run; failed reads degrade terminally and never
+            # surface over the verdict.
             if events is None:
                 try:
                     events = log.read_all() if hasattr(log, "read_all") else log
@@ -288,7 +294,7 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                 try:
                     machine = F.machine(repo)
                 except Exception:
-                    machine = None
+                    machine = {"unavailable": "machine facts could not be collected"}
             bundle = build(
                 repo,
                 cfg,
