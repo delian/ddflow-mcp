@@ -110,12 +110,13 @@ def _no_review_note(jobs: list, sha: str) -> str:
     return f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
 
 
-def _read_list(exe: str, where: Path) -> tuple[list, str]:
+def _read_list(exe: str, where: Path, timeout: float = _TIMEOUT_S) -> tuple[list, str]:
     """(the jobs, why it FAILED to read them): `roborev list --json` from ``where`` (the one
     source that carries a job's REAL status -- `show`/`wait` say 'no review found' for a job
     that is merely queued). `([], note)` when the ask failed: an empty list then reads as
-    empty, never as a guess about a status it could not fetch."""
-    p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=_TIMEOUT_S)
+    empty, never as a guess about a status it could not fetch. ``timeout`` caps the ask, so
+    a poll with a near caller's bound cannot overshoot it by a whole read."""
+    p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=timeout)
     if p.error is not None:
         return [], str(
             p.error
@@ -204,10 +205,11 @@ def wait_job(
     while True:
         if wait_s > 0 and monotonic() >= deadline:
             # the bound lapsed since the last read, which named the job live: say so NOW.
-            # The read after this check is a whole `_TIMEOUT_S` in itself, so checking only
-            # after it would overshoot the bound by one slow ask.
+            # The read after this check is a whole ask in itself, so checking only after it
+            # would overshoot the bound by one slow read.
             return WaitResult(live=True, note=_live(job, live_state, monotonic() - started))
-        jobs, failed = _read_list(exe, where)
+        cap = _TIMEOUT_S if wait_s <= 0 else max(1.0, min(_TIMEOUT_S, deadline - monotonic()))
+        jobs, failed = _read_list(exe, where, cap)
         if failed:
             return WaitResult(
                 note=f"roborev's job list could not be read ({failed}): job {job} is unchecked"
@@ -225,10 +227,10 @@ def wait_job(
         if status == "done":
             if on_tick is not None:
                 on_tick()  # the verdict asks below can outlive the bound: renew the lease first
-            timeout = _TIMEOUT_S
-            if wait_s > 0 and (left := deadline - monotonic()) > 0:
-                timeout = min(_TIMEOUT_S, left)  # never run the verdict asks past the bound
-            return _done(exe, where, job, rec, timeout)
+            # The two verdict asks SHARE the remaining bound (each floored at 1.0, so a held
+            # `wait`/`show` on a done job cannot run past it twice: never up to 2*_TIMEOUT_S).
+            allowance = (deadline - monotonic()) if wait_s > 0 else _TIMEOUT_S
+            return _done(exe, where, job, rec, max(1.0, allowance))
         if status not in _UNFINISHED:
             return WaitResult(
                 note=(
@@ -267,11 +269,16 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
     """The job is done, so its verdict IS readable: `roborev wait --job` exits 0 clean and 1
     on findings, and `roborev show --job` prints the review. A verdict that cannot be read
     is unjudged, so its text (if any) is never presented as a clean pass or as findings: an
-    exit roborev never means by 1 (a signal, an unknown code) is unjudged too. ``timeout``
-    caps each ask, so a done job whose verdict hangs cannot outlive the caller's bound."""
+    exit roborev never means by 1 (a signal, an unknown code) is unjudged too. The two asks
+    share the one ``timeout`` allowance: `show` gets the tail after `wait` (floored at 0.5s),
+    so a done job whose verdict asks both hang cannot run two whole allowances."""
     rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
+    t0 = monotonic()
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=max(1.0, timeout))
-    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=max(1.0, timeout))
+    spent = monotonic() - t0
+    shown = proc.capture(
+        [exe, "show", "--job", str(job)], cwd=where, timeout=max(0.5, timeout - spent)
+    )
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.timed_out or w.returncode not in (0, 1):
         # `why` names the REAL trouble: a short-circuit chain over error/timed_out/exit
