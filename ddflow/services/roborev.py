@@ -129,6 +129,9 @@ def _read_list(exe: str, where: Path, timeout: float = _TIMEOUT_S) -> tuple[list
     if p.returncode != 0:
         why = (p.stderr or p.stdout).strip().splitlines()[-1:] or [f"exit {p.returncode}"]
         return [], why[0][:160]
+    if not (p.stdout or "").strip():
+        # exit 0 with nothing printed is a read that said nothing: never an empty job list
+        return [], "roborev list returned no JSON"
     try:
         jobs = json.loads(p.stdout or "[]")
     except ValueError:
