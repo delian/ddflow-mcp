@@ -38,10 +38,10 @@ def _spawn(chain: tuple[str, ...]) -> P.Captured:
 
 
 def test_the_ddflow_help_walk_is_in_process_and_under_ten_seconds():
+    start = time.monotonic()  # the eager walk runs IN the constructor: time it with the walk
     idx = H.HelpIndex(H.command_runner(_ROOT, 60), ["ddflow"])
-    start = time.monotonic()
-    chains = idx.walk_all()
     elapsed = time.monotonic() - start
+    chains = idx.walk_all()  # the memo replay -- the budget above judged the COLD walk
 
     assert chains >= MIN_CHAINS, f"walked {chains} chains: the tree was not walked whole"
     assert elapsed < WALK_BUDGET_S, f"the ddflow walk took {elapsed:.1f}s (budget 10s)"

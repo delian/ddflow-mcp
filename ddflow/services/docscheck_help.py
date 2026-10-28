@@ -57,7 +57,10 @@ def command_runner(
     spawn = lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))  # noqa: E731
 
     def run(argv: list[str]) -> P.Captured:
-        if known and len(argv) > 1 and argv[0] in known and argv[-1] == "--help":
+        #: in-process answers ONLY for the command THIS process's registry declares (its own
+        #: prog): a foreign command named in the knob has no registry here and MUST spawn its
+        #: real tool -- answering it with ddflow's tree would serve another command's help.
+        if known and len(argv) > 1 and argv[0] in known and argv[-1] == "--help" and _HERE.owns(argv[0]):
             return _HERE.help(argv)
         return spawn(argv)
 
@@ -95,16 +98,19 @@ def flag_of(token: str) -> str | None:
 def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser] | None:
     """The subparser choice table of ``parser`` (None: it has none).
 
-    The walk descends argparse's private ``_actions`` (its ``_SubParsersAction`` and that
-    action's ``choices``) and relies on ``parse_args`` answering ``--help`` with a
+    Argparse allows MORE than one ``_SubParsersAction`` on a parser; the choice table is
+    every action's choices merged, so a second table is never silently dropped from the
+    walk. The walk descends argparse's private ``_actions`` (its ``_SubParsersAction`` and
+    that action's ``choices``) and relies on ``parse_args`` answering ``--help`` with a
     ``SystemExit`` — stdlib internals on the pinned argparse. A future argparse that
     renamed them would yield a partial walk, which the speed test's chain budget
     (`MIN_CHAINS`), not silent behavior, is what catches.
     """
+    merged: dict[str, argparse.ArgumentParser] = {}
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
-            return action.choices
-    return None
+            merged.update(action.choices)
+    return merged or None
 
 
 class _InProcessHelp:
@@ -131,6 +137,15 @@ class _InProcessHelp:
             self._built = (__version__, build_parser(), {})
         return self._built[1]
 
+    def owns(self, cmd: str) -> bool:
+        """Whether THIS process's registry is ``cmd``'s own help (only the parser's own
+        prog is): any other command must spawn its real tool, never receive this tree.
+        A registry that cannot even build owns nothing."""
+        try:
+            return cmd == self.parser().prog
+        except BaseException:  # a build that exits or fails has no registry to own with
+            return False
+
     def help(self, argv: list[str]) -> P.Captured:
         """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
         ``parse_args`` with ``--help`` run against the registry, its stdout/stderr and its
@@ -150,6 +165,11 @@ class _InProcessHelp:
                 #: the new memo -- other replays of one process share this registry, and
                 #: an interleaved second render would replay a chain twice).
                 parser = self.parser()
+                #: the registry answers ONLY for its own prog: a foreign ``argv[0]`` must
+                #: never render (and cache) ddflow's tree as another tool's help -- the
+                #: runner spawns those; a direct call gets "could not run", never wrong text.
+                if not argv or argv[0] != parser.prog:
+                    raise RuntimeError(f"{argv[0] if argv else '<none>'} has no registry in this process")
                 memo = self._built[2]  # the running version's own memo, bound AFTER its check
                 key = tuple(argv[1:])
                 if key in memo:
@@ -168,15 +188,20 @@ class _InProcessHelp:
                     ):
                         parser.parse_args(argv[1:])
                 except SystemExit as exc:
-                    #: `sys.exit()` with NO code is exit 0, exactly as the spawn of it is.
-                    code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+                    #: `sys.exit()` with NO code is exit 0, exactly as the spawn of it is; a
+                    #: `sys.exit("reason")` is the spawn's stderr line + exit 1: replayed so.
+                    if isinstance(exc.code, int):
+                        code = exc.code
+                    elif exc.code is None:
+                        code = 0
+                    else:
+                        err.write(str(exc.code))
+                        code = 1
                 else:
                     code = 0
-                capped = (
-                    P.Captured(code, out.getvalue(), err.getvalue())
-                    if code
-                    else P.Captured(0, out.getvalue() or err.getvalue(), "")
-                )
+                #: the replay keeps BOTH channels verbatim (a spawn does too): callers merge
+                #: with `stdout or stderr`, so nothing printed to stderr is dropped.
+                capped = P.Captured(code, out.getvalue(), err.getvalue())
                 memo[key] = capped  # inside the lock: one replay of the chain per version
                 return capped
         except SystemExit as exc:  # the build itself exited (argparse-ends-exits too): could not run
@@ -218,8 +243,12 @@ class _RoutedTo:
     __slots__ = ("_sink", "_real", "_owner", "isatty", "fileno")
 
     def __init__(self, real, sink, owner: int) -> None:
-        self.isatty = real.isatty  # stream introspection still answers as the REAL stream
-        self.fileno = real.fileno
+        #: stream introspection still answers as the REAL stream would -- including a
+        #: duck-typed stand-in without `isatty`/`fileno` (an embedder's sys.stdio swap):
+        #: not-a-tty, and fileno unsupported, never an AttributeError that would mark
+        #: every in-process chain could-not-run though a spawn prints.
+        self.isatty = getattr(real, "isatty", lambda: False)
+        self.fileno = getattr(real, "fileno", _no_fileno)
         self._real, self._sink, self._owner = real, sink, owner
 
     def write(self, text: str) -> int:
@@ -228,6 +257,12 @@ class _RoutedTo:
 
     def flush(self) -> None:
         self._real.flush()
+
+
+def _no_fileno() -> int:
+    """`fileno` as a stream WITHOUT one answers it (a duck-typed stand-in): raises, like
+    ``io`` streams do, instead of handing out a file number nothing backs."""
+    raise OSError("fileno is not supported here")
 
 
 #: Serializes `parse_args` replays: one render's `_RoutedTo` swaps hold the process-global
