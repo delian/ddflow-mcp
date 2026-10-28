@@ -14,6 +14,7 @@ from ..registry import Command, Param, by_tool
 from ..render import emit_json
 from ..tools._common import _api
 
+
 def _status_handler(a, c):
     """`cmd_status` with the `--by-tag` mode: the same sections plus the per-value one.
 

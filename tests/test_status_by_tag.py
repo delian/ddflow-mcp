@@ -31,7 +31,9 @@ def project(tmp_path: Path) -> Path:
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("task.added", "T-w0", {"parent": "P1", "title": "root", "tags": ["wave:0"]})
     log.append(
-        "task.added", "T-w1", {"parent": "P1", "title": "next", "tags": ["wave:1"], "needs": ["T-w0"]}
+        "task.added",
+        "T-w1",
+        {"parent": "P1", "title": "next", "tags": ["wave:1"], "needs": ["T-w0"]},
     )
     log.append("task.added", "T-w1done", {"parent": "P1", "title": "done w1", "tags": ["wave:1"]})
     log.append("item.completed", "T-w1done", {"sha": "abc"})
@@ -39,13 +41,22 @@ def project(tmp_path: Path) -> Path:
     log.append(
         "lease.acquired",
         "T-w1run",
-        {"holder": "w", "at": time.time(), "ttl_s": 1800, "kind": "task", "globs": [], "worktree": "/wt/w"},
+        {
+            "holder": "w",
+            "at": time.time(),
+            "ttl_s": 1800,
+            "kind": "task",
+            "globs": [],
+            "worktree": "/wt/w",
+        },
     )
     log.append("item.started", "T-w1run", {})
     log.append("task.added", "T-w1ab", {"parent": "P1", "title": "dropped w1", "tags": ["wave:1"]})
     log.append("item.abandoned", "T-w1ab", {"reason": "nope"})
     log.append(
-        "task.added", "T-w2", {"parent": "P1", "title": "deep", "tags": ["wave:2"], "needs": ["T-w1"]}
+        "task.added",
+        "T-w2",
+        {"parent": "P1", "title": "deep", "tags": ["wave:2"], "needs": ["T-w1"]},
     )
     log.append("task.added", "T-other", {"parent": "P1", "title": "untagged"})
     return tmp_path
@@ -146,17 +157,21 @@ def test_capped_and_blocked_items_land_in_their_buckets():
 
     done = SimpleNamespace(id="T-done", kind="task", state="done", tags=["wave:0"], removed=False)
     held = SimpleNamespace(id="T-held", kind="task", state="open", tags=["wave:0"], removed=False)
-    stuck = SimpleNamespace(
-        id="T-stuck", kind="task", state="open", tags=["wave:0"], removed=False
-    )
+    stuck = SimpleNamespace(id="T-stuck", kind="task", state="open", tags=["wave:0"], removed=False)
     ab = SimpleNamespace(id="T-ab", kind="task", state="abandoned", tags=["wave:0"], removed=False)
     stuck2 = SimpleNamespace(
         id="T-stuck2", kind="task", state="open", tags=["wave:0"], removed=False
     )
-    p = SimpleNamespace(ready=[], running=[], review=[], capped=["T-held"], blocked=[
-        SimpleNamespace(item="T-stuck", reason="deps", waiting_on=["T-held", "T-done"]),
-        SimpleNamespace(item="T-stuck2", reason="deps", waiting_on=["T-ab"]),
-    ])
+    p = SimpleNamespace(
+        ready=[],
+        running=[],
+        review=[],
+        capped=["T-held"],
+        blocked=[
+            SimpleNamespace(item="T-stuck", reason="deps", waiting_on=["T-held", "T-done"]),
+            SimpleNamespace(item="T-stuck2", reason="deps", waiting_on=["T-ab"]),
+        ],
+    )
     view = _by_tag_view("wave", [done, held, stuck, ab, stuck2], p)
     w0 = view["values"][0]
     assert w0["states"]["held_by_cap"] == 1

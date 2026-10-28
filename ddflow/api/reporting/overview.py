@@ -295,6 +295,65 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
     return O.ok("status", **data)
 
 
+def _by_tag_bucket(
+    members, tag, ready_ids, running_ids, review_ids, capped, blocked, done_ids
+) -> dict[str, Any]:
+    """One bucket: the counts for every member carrying ``tag`` and what blocks them.
+
+    ``done``/``abandoned`` close the item's own story; every other member counts as
+    ``open`` and into the one plan bucket that holds it (running, review, ready,
+    held_by_cap or blocked -- the plan puts each task in exactly one, Bdcce70d036).
+    """
+    states = dict.fromkeys(
+        (
+            "total",
+            "done",
+            "running",
+            "ready",
+            "review",
+            "held_by_cap",
+            "blocked",
+            "abandoned",
+            "open",
+        ),
+        0,
+    )
+    reasons: dict[str, int] = {}
+    blockers: dict[str, int] = {}
+    for it in members:
+        states["total"] += 1
+        if it.state == "done":
+            states["done"] += 1
+        elif it.state == "abandoned":
+            states["abandoned"] += 1
+        else:
+            states["open"] += 1
+            iid = it.id
+            if iid in running_ids:
+                states["running"] += 1
+            elif iid in review_ids:
+                states["review"] += 1
+            elif iid in ready_ids:
+                states["ready"] += 1
+            elif iid in capped:
+                states["held_by_cap"] += 1
+            if iid in blocked:
+                states["blocked"] += 1
+                for b in blocked[iid]:
+                    reasons[b.reason] = reasons.get(b.reason, 0) + 1
+                    if b.reason == "deps":
+                        for dep in b.waiting_on:
+                            if dep not in done_ids:
+                                blockers[dep] = blockers.get(dep, 0) + 1
+    tops = sorted(blockers.items(), key=lambda kv: (-kv[1], kv[0]))[:BY_TAG_TOP_BLOCKERS]
+    return {
+        "tag": tag,
+        "states": states,
+        "blocked_by": dict(sorted(reasons.items())),
+        "top_blockers": [{"id": dep, "blocks": n} for dep, n in tops],
+    }
+
+
 def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
     """The ONE `--by-tag KEY` description the JSON body and the prose lines share.
 
@@ -327,8 +386,6 @@ def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
     running_ids = {i.id for i in p.running}
     review_ids = {i.id for i in p.review}
     capped = set(p.capped)
-    # The plan's per-item blocked entries, minus the cap-held (Bdcce70d036: held_by_cap is
-    # its own bucket, and the same item never sits in both).
     blocked: dict[str, list[Any]] = {}
     for b in p.blocked:
         if b.item not in capped:
@@ -340,51 +397,11 @@ def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
     # the view has never seen (external `repo:item`, a deleted item) still counts -- the
     # plan reported it unsatisfied, and it reads as a blocker.
     done_ids = {it.id for it in items if it.state == "done"}
-
-    def bucket(members: list[Any], tag: str) -> dict[str, Any]:
-        states = dict.fromkeys(
-            ("total", "done", "running", "ready", "review", "held_by_cap", "blocked",
-             "abandoned", "open"), 0
-        )
-        reasons: dict[str, int] = {}
-        blockers: dict[str, int] = {}
-        for it in members:
-            states["total"] += 1
-            if it.state == "done":
-                states["done"] += 1
-            elif it.state == "abandoned":
-                states["abandoned"] += 1
-            else:
-                states["open"] += 1
-                iid = it.id
-                if iid in running_ids:
-                    states["running"] += 1
-                elif iid in review_ids:
-                    states["review"] += 1
-                elif iid in ready_ids:
-                    states["ready"] += 1
-                elif iid in capped:
-                    states["held_by_cap"] += 1
-                if iid in blocked:
-                    states["blocked"] += 1
-                    for b in blocked[iid]:
-                        reasons[b.reason] = reasons.get(b.reason, 0) + 1
-                        if b.reason == "deps":
-                            for dep in b.waiting_on:
-                                if dep not in done_ids:
-                                    blockers[dep] = blockers.get(dep, 0) + 1
-        tops = sorted(blockers.items(), key=lambda kv: (-kv[1], kv[0]))[:BY_TAG_TOP_BLOCKERS]
-        return {
-            "tag": tag,
-            "states": states,
-            "blocked_by": dict(sorted(reasons.items())),
-            "top_blockers": [{"id": dep, "blocks": n} for dep, n in tops],
-        }
-
+    shared = (ready_ids, running_ids, review_ids, capped, blocked, done_ids)
     return {
         "key": key,
-        "values": [bucket(buckets[t], t) for t in sorted(buckets)],
-        "untagged": bucket(untagged, "untagged"),
+        "values": [_by_tag_bucket(buckets[t], t, *shared) for t in sorted(buckets)],
+        "untagged": _by_tag_bucket(untagged, "untagged", *shared),
     }
 
 
