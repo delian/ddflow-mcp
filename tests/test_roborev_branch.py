@@ -117,7 +117,7 @@ def test_a_job_missing_from_the_list_is_unavailable_and_never_findings(tmp_path,
 
 def test_the_job_id_is_the_number_after_the_word_job_not_any_digit(tmp_path, monkeypatch):
     repo, _log = _setup(tmp_path, monkeypatch)
-    assert RB._find_job("roborev", repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
+    assert RB._find_job([], repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
 
 
 def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monkeypatch):

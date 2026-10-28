@@ -57,12 +57,15 @@ def _git(where: Path, *argv: str) -> str:
     return r.out.strip() if r.code == 0 else ""
 
 
-def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
+def _find_job(jobs: list, where: Path, sha: str, enqueue_out: str) -> int | None:
+    """The enqueued job's id from the enqueue's own words, else the newest list record
+    covering ``sha`` -- of the list already read under the lock (never a fresh read whose
+    failure note would have nowhere to go)."""
     m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
     if m:
         return int(m.group(1))
     ids = [
-        int(j["id"]) for j in _list(exe, where)[0]
+        int(j["id"]) for j in jobs
         if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
     return max(ids) if ids else None
@@ -170,7 +173,13 @@ def run(where: Path, base: str, wait_s: int) -> Result:
                 return Result(
                     "unavailable", f"roborev could not enqueue the range review: {why}", sha=head
                 )
-            job = _find_job(exe, where, head, q.stdout + q.stderr)
+            job = _find_job(jobs, where, head, q.stdout + q.stderr)
+            if job is None and rfailed:
+                return Result(
+                    "unavailable",
+                    f"roborev's job list could not be read ({rfailed})",
+                    sha=head,
+                )
     return _collect(exe, where, job, head, wait_s)
 
 
