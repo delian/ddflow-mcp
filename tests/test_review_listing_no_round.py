@@ -11,6 +11,7 @@ so the list is never hidden behind an error line.
 
 from __future__ import annotations
 
+import stat
 import sys
 from pathlib import Path
 
@@ -72,7 +73,7 @@ def test_a_listing_records_no_new_round_and_prints_findings_first(repo, tmp_path
     fake.write_text("".join(parts))
     _full_review(repo)
     before = _rounds_used(_state(repo), "critic")
-    runs_before = marker.exists() and marker.read_text().strip().splitlines() or []
+    runs_before = (marker.exists() and marker.read_text().strip().splitlines()) or []
     code, out, err = run_cli(repo, "review", "triage", "T1", "--gate", "critic")
     assert code == OK, (out, err)
     assert "#1 [" in out and "#2 [" in out, (out, err)
