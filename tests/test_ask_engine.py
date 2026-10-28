@@ -86,6 +86,21 @@ def test_an_agent_cannot_mark_its_own_ask_bot_answerable(log):
     assert not asks_of(_state(log))
 
 
+def test_asks_are_a_declared_state_field_not_fold_side_storage(log):
+    """SE-state-asks-field: the fold lands asks in `State.asks`, a declared field every
+    rebuild folds into, not `__dict__.setdefault` beside the declarations."""
+    from dataclasses import fields
+
+    empty = _state(log)
+    assert "asks" in {f.name for f in fields(empty)}  # declared, so rebuild covers it
+
+    cfg = Config()
+    ask = _ask(log, cfg)
+    got = _state(log)
+    assert got.asks is asks_of(got)  # one storage, read through asks_of
+    assert ask.id in got.asks and ask.id not in empty.asks
+
+
 def test_a_credentialed_agent_role_still_cannot_answer(log):
     cfg = Config()
     ask = _ask(log, cfg)

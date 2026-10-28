@@ -22,10 +22,10 @@ EXPIRED = "expired"
 
 
 def asks_of(st: State) -> dict[str, dict[str, Any]]:
-    """The folded asks, ask id -> row (created on first use). Held beside `State`'s declared
-    fields until `core/records.py` is free to take an `asks` field; every reader goes through
-    here, so that move changes this one line."""
-    return st.__dict__.setdefault("asks", {})
+    """The folded asks, ask id -> row. A declared `State` field since SE-state-asks-field
+    (before, it was setdefault'd beside the declared fields); every reader goes through
+    here, so the fold stays in one place."""
+    return st.asks
 
 
 def _int(v: Any) -> int:
