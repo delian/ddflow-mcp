@@ -560,10 +560,11 @@ def report_budget_change(
         return out
 
     default = ReviewConfig()
-    layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
+    local = bool(out.data.get("local", edit.local))
+    layer = "machine-local (.ddflow/local)" if local else "shared (.ddflow/config.toml)"
     revert = "; ".join(
         f"`ddflow config --set {k} {str(getattr(default, k.split('.')[1])).lower()}"
-        f"{' --local' if edit.local else ''}`"
+        f"{' --local' if local else ''}`"
         for k in touched
     )
     note = (
