@@ -50,6 +50,16 @@ from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
 from ..services.gates import running as RUN
+# Round counting lives in services.gates.rounds, ONE fold for every view of the budget:
+# `gate status`, `review triage` and `review show` all must report the same number
+# (DX-review-round-count: the first read the current record's evidence and the second
+# the history, so a duplicate run left them apart). These names keep the api callers
+# untouched.
+from ..services.gates.rounds import delta_rounds as _delta_rounds
+from ..services.gates.rounds import full_rounds as _full_rounds
+from ..services.gates.rounds import kept_copy as _kept_copy
+from ..services.gates.rounds import rounds_used as _rounds_used
+from ..services.gates.rounds import settled_pass as _settled_pass
 from ..services.guidance import inject as GI
 from ..services.review_noise import registered_submodules, without_stray_gitlinks
 from ..views import human
@@ -1278,73 +1288,6 @@ def _review_runs(it, gate: str) -> list:
     """The gate's recorded outcomes on ``it`` (an Item or None), oldest first: its
     `gate_history`, folded once, in place of a scan of the log for each question."""
     return it.runs_of(gate) if it is not None else []
-
-
-def _full_rounds(it, gate: str) -> int:
-    """Full review rounds already recorded for ``it``'s ``gate``.
-
-    Counted from the gate's HISTORY, not its current record: a later delta, a manual
-    `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
-    must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
-    count: a refused round, an errored one, an interrupted one that recorded nothing
-    and a `--chunk` re-run are not. A run whose record names a verdict it did not
-    reach (`status` UNAVAILABLE/ERROR) charged a round it never delivered; a dead
-    run's record says `unavailable`, so a full-shaped run recorded unavailable
-    charges nothing (Bfdcb5c177c). One whose record carries NO `status` at all and
-    some outcome is a declared round (a full record of the era before `status`
-    evidence carried into a re-claim or hand record): it still counts, or a
-    re-record would silently hand the budget back. The same era's refused and
-    errored full records have no verdict either and this contract excludes them
-    there too (rubber_duck finding #1): outcomes without a verdict charge nothing.
-    """
-    return sum(
-        1
-        for r in _review_runs(it, gate)
-        if r.evidence.get("review_kind") == "full"
-        and (
-            r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-            or (
-                r.evidence.get("status") is None
-                and r.outcome not in (None, "unavailable", "error", "refused")
-            )
-        )
-        and not _kept_copy(r)
-        and not _settled_pass(r)
-        and not r.evidence.get("fix_round")
-        and not r.evidence.get("retry_of_partial")
-    )
-
-
-def _delta_rounds(it, gate: str) -> int:
-    """Delta rechecks already recorded for ``it``'s ``gate`` (counted from its history,
-    like `_full_rounds`): only ones that reached a reviewer."""
-    return sum(
-        1
-        for r in _review_runs(it, gate)
-        if r.evidence.get("review_kind") == "delta"
-        and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-        and not _kept_copy(r)
-        and not _settled_pass(r)
-        and not r.evidence.get("fix_round")
-    )
-
-
-def _kept_copy(run) -> bool:
-    """A record `_keep_reviewed_round` re-emitted over an outage: a copy of an earlier round,
-    no round of its own (B435bbddb18). Copies written before `round_kept` existed are told
-    by `unavailable_deltas`, which only that path writes."""
-    return bool(run.evidence.get("round_kept") or run.evidence.get("unavailable_deltas"))
-
-
-def _settled_pass(run) -> bool:
-    """A pass `_settle_after_cap` recorded: it carries the settled review's evidence,
-    `review_kind` included, but is no review round (roborev on 1e5dab6e)."""
-    return bool(run.evidence.get("passed_on_refutation"))
-
-
-def _rounds_used(it, gate: str) -> int:
-    """Every review round of ``gate`` the budget counts: full and delta alike."""
-    return _full_rounds(it, gate) + _delta_rounds(it, gate)
 
 
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
