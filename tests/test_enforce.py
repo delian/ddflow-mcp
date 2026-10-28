@@ -75,7 +75,7 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
     r = _commit(enforced, "unclaimed", paths=["src/a.py", "src/b.py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     msg = r.stderr
-    assert "ddflow update <ID> --add-globs 'src/a.py, src/b.py'" in msg, (
+    assert 'ddflow update <ID> --add-globs \'["src/a.py", "src/b.py"]\'' in msg, (
         f"the remedy must name --add-globs with the staged paths filled in:\n{msg}"
     )
     assert "ddflow update <ID> --globs" not in msg, (
@@ -85,6 +85,17 @@ def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(
         f"the claim remedy must not invite replacing the item's globs:\n{msg}"
     )
     assert "ddflow claim" in msg, "the refusal must still name the claim remedy"
+
+
+def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
+    (enforced / "src" / "a,b.py").write_text("x = 2\n")
+    (enforced / "src" / "b.py").write_text("y = 2\n")
+    r = _commit(enforced, "comma path", paths=["src/a,b.py", "src/b.py"])
+    assert r.returncode != 0, "the hook allowed an unclaimed commit"
+    msg = r.stderr
+    assert '--add-globs \'["src/a,b.py", "src/b.py"]\'' in msg, (
+        f"a comma inside a staged path must stay ONE glob in the remedy:\n{msg}"
+    )
 
 
 def test_a_claimed_commit_is_allowed(enforced):

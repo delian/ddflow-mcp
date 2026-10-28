@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import difflib
 import itertools
+import json
 import os
 import re
 import shlex
@@ -1525,6 +1526,15 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _add_globs_arg(paths: list[str]) -> str:
+    """The `--add-globs` VALUE for the advice: ONE JSON array. Every other notation
+    splits on commas (`globspec.parse`), so a staged path holding a comma would be
+    printed as a command that ADDS DIFFERENT globs, and shell-quoting a bare path is
+    undefined once it holds an apostrophe; the JSON form parses whole and is safe
+    between single quotes (rubber_duck r2, critic r2 on DX-hook-suggests-add-globs)."""
+    return json.dumps(list(paths))
+
+
 def _uncovered_message(
     cfg: Config,
     state,
@@ -1548,7 +1558,7 @@ def _uncovered_message(
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
-        widen = ", ".join(uncovered)
+        widen = _add_globs_arg(uncovered)
         lines += [
             f"These paths belong to another item YOU hold, bound to a tree of its own: "
             f"commit them there, or widen THIS item's claim "
@@ -1575,7 +1585,7 @@ def _uncovered_message(
     held = ", ".join(mine) if mine else "(no live lease)"
     if lapsed and not mine:
         held = "nothing live (the lease above lapsed)"
-    widen = ", ".join(uncovered)
+    widen = _add_globs_arg(uncovered)
     lines += [
         f"You hold: {held}",
         "",
