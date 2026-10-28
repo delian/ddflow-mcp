@@ -14,7 +14,7 @@ import pytest
 from ddflow.config import Config
 from ddflow.infra import proc as P
 from ddflow.services import docscheck as D
-from ddflow.surfaces import docscheck_help as H
+from ddflow.services import docscheck_help as H
 
 PYPROJECT = '[project]\nname = "x"\n[project.scripts]\nddflow = "x:main"\n'
 CLI = """\
