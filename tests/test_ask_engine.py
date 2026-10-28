@@ -101,6 +101,16 @@ def test_asks_are_a_declared_state_field_not_fold_side_storage(log):
     assert ask.id in got.asks and ask.id not in empty.asks
 
 
+def test_asks_of_still_lazily_creates_on_a_state_built_without_init(log):
+    """An instance restored without `__init__` (a pre-field pickle) has no `asks` key;
+    asks_of must create it lazily, exactly like the old setdefault."""
+    from ddflow.core.records import State
+
+    restored = State.__new__(State)  # `__dict__` empty, as unpickling a pre-field fold yields
+    rows = asks_of(restored)
+    assert rows == {} and restored.asks == rows  # materialized once, in the declared storage
+
+
 def test_a_credentialed_agent_role_still_cannot_answer(log):
     cfg = Config()
     ask = _ask(log, cfg)
