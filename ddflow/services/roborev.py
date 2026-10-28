@@ -1,4 +1,5 @@
-"""Which agent roborev actually reviewed a commit with (B03437a6b45).
+"""Which agent roborev actually reviewed a commit with (B03437a6b45), and the WAIT that
+polls one job to its verdict (DX-roborev-wait-no-review).
 
 `roborev review <sha>` prints the agent it ENQUEUED the job for (`agent: kilo`). When
 that agent fails -- here, a kilo whose config file it can no longer parse -- the daemon
@@ -6,14 +7,24 @@ falls back to its `backup_agent` and the review is written by that one instead
 (`roborev show N` says "Review for job N (by claude-code)"). The standards gate was
 recorded with whatever `--model` the agent typed, so a same-family reviewer passed as a
 cross-family one. The job record roborev keeps names the agent that ran it; this reads it.
+
+`roborev show --job N` of an unfinished job says "no review found" -- the wording of a job
+that never existed -- and `roborev wait --job N` prints no live/failed distinction either.
+`roborev list --json` is the ONE output that always carries the job's real status, so
+`wait_job` polls that: queued/running reads as still running (waitable, never failed),
+done as a finished review, failed/canceled as ended (re-enqueue it), and a job the list
+no longer has as vanished. `python -m ddflow.services.roborev wait --job N` is the
+command form; it exits 0 reviewed clean, 1 findings, 2 still running / could not tell.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic, sleep
 
 from ..infra import proc
 
@@ -45,6 +56,9 @@ class Review:
 
 #: Job states that will still become a review; failed/canceled never will.
 _UNFINISHED = ("queued", "running")
+
+#: Seconds between two `wait_job` polls of `roborev list --json`.
+_POLL_S = 5.0
 
 
 def _covers(git_ref: str, sha: str) -> bool:
@@ -81,8 +95,10 @@ def _unfinished_note(jobs: list, sha: str) -> str:
         )
     return (
         f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status')}, not done: "
-        f"`roborev wait --job {_job_id(j)}` first (`roborev show --job` of an unfinished job "
-        "says 'no review found'); the reviewer is unchecked"
+        f"`roborev wait --job {_job_id(j)}` first, or let ddflow poll its status: "
+        f"`python -m ddflow.services.roborev wait --job {_job_id(j)}` (ddflow's wait reads "
+        "the job list, which says running vs failed where `roborev show --job` of an "
+        "unfinished job says 'no review found'); the reviewer is unchecked"
     )
 
 
@@ -94,6 +110,26 @@ def _no_review_note(jobs: list, sha: str) -> str:
     return f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
 
 
+def _read_list(exe: str, where: Path) -> tuple[list, str]:
+    """(the jobs, why it FAILED to read them): `roborev list --json` from ``where`` (the one
+    source that carries a job's REAL status -- `show`/`wait` say 'no review found' for a job
+    that is merely queued). `([], note)` when the ask failed: an empty list then reads as
+    empty, never as a guess about a status it could not fetch."""
+    p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=_TIMEOUT_S)
+    if p.error is not None:
+        return [], p.error
+    if p.returncode != 0:
+        why = (p.stderr or p.stdout).strip().splitlines()[-1:] or [f"exit {p.returncode}"]
+        return [], why[0][:160]
+    try:
+        jobs = json.loads(p.stdout or "[]")
+    except ValueError:
+        return [], "roborev list returned no JSON"
+    if isinstance(jobs, list):  # `null` for a repository roborev has no jobs for
+        return [j for j in jobs if isinstance(j, dict)], ""
+    return [], ""
+
+
 def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     """(the newest finished review of ``sha``, a note). ``(None, note)`` when roborev is
     not installed, could not be asked, or holds no finished review of ``sha``. Searched from ``where`` (the item's
@@ -101,18 +137,9 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     exe = shutil.which("roborev")
     if not exe:
         return None, f"roborev is not on PATH; the reviewer of {sha[:10]} is unchecked"
-    p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=_TIMEOUT_S)
-    if p.error is not None:
-        return None, f"could not ask roborev which agent reviewed {sha[:10]} ({p.error})"
-    if p.returncode != 0:
-        why = (p.stderr or p.stdout).strip().splitlines()[-1:] or [f"exit {p.returncode}"]
-        return None, f"could not ask roborev which agent reviewed {sha[:10]} ({why[0][:160]})"
-    try:
-        jobs = json.loads(p.stdout or "[]")
-    except ValueError:
-        return None, f"roborev list returned no JSON; the reviewer of {sha[:10]} is unchecked"
-    if not isinstance(jobs, list):  # `null` for a repository roborev has no jobs for
-        jobs = []
+    jobs, failed = _read_list(exe, where)
+    if failed:
+        return None, f"could not ask roborev which agent reviewed {sha[:10]} ({failed})"
     done = [
         (_job_id(j), j)
         for j in jobs if isinstance(j, dict)
@@ -132,3 +159,137 @@ def _job_id(j: dict) -> int | None:
         return int(j.get("id"))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+@dataclass
+class WaitResult:
+    """What a bounded wait for one roborev job knows. ``review`` is set only when the job
+    FINISHED; ``live`` names a job still queued/running at the bound -- RUNNING, never
+    failed (it may still finish; wait again); both unset names a job that ended without a
+    review or a list that could not be read. ``text`` is the review text ("" when none)."""
+
+    review: Review | None = None
+    note: str = ""
+    text: str = ""
+    live: bool = False
+
+
+def wait_job(
+    where: Path,
+    job: int,
+    wait_s: int,
+    *,
+    on_tick: Callable[[], None] | None = None,
+) -> WaitResult:
+    """Wait up to ``wait_s`` seconds for job ``job`` to end, POLLING `roborev list --json`
+    every ``_POLL_S`` -- never `roborev wait`/`show`, whose 'no review found' for an
+    unfinished job is the wording of a job that never existed. The poll's own words rule:
+    queued/running = still running (a progress line, then keep waiting, ticking ``on_tick``
+    -- the caller's lease keeper -- each poll); done = the finished review (its verdict read
+    with `roborev wait --job` and its text with `roborev show --job`, both truthful once
+    done); failed/canceled = ended (re-enqueue); no longer listed = vanished (re-enqueue);
+    the bound with the job still live = ``live``. ``wait_s`` <= 0 polls once and returns."""
+    import sys
+
+    exe = shutil.which("roborev")
+    if not exe:
+        return WaitResult(note=f"roborev is not on PATH; job {job} is unchecked")
+    started = monotonic()
+    deadline = started + max(0, wait_s)
+    while True:
+        jobs, failed = _read_list(exe, where)
+        if failed:
+            return WaitResult(
+                note=f"roborev's job list could not be read ({failed}): job {job} is unchecked"
+            )
+        rec = next((j for j in jobs if _job_id(j) == job), None)
+        if rec is None:
+            return WaitResult(
+                note=(
+                    f"roborev holds no job {job} in this repository: the review for it was "
+                    f"never written ('no review found' would be the very same words); re-run "
+                    f"`roborev review <sha of the branch head>` to enqueue it, then wait again"
+                )
+            )
+        status = str(rec.get("status") or "")
+        if status == "done":
+            return _done(exe, where, job, rec)
+        if status not in _UNFINISHED:
+            return WaitResult(
+                note=(
+                    f"roborev job {job} ended {status}: it will never carry a review; re-run "
+                    f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
+                )
+            )
+        elapsed = monotonic() - started
+        if elapsed >= wait_s:  # wait_s <= 0: this is the first check
+            return WaitResult(
+                live=True,
+                note=(
+                    f"roborev job {job} is still {status} after {round(elapsed)}s "
+                    f"(running, not failed: it may still finish); "
+                    f"`python -m ddflow.services.roborev wait --job {job}` again later, "
+                    f"or raise [gates].standards_wait_s"
+                ),
+            )
+        print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
+        if on_tick is not None:
+            on_tick()
+        sleep(min(_POLL_S, deadline - monotonic()) if wait_s > 0 else _POLL_S)
+
+
+def _done(exe: str, where: Path, job: int, rec: dict) -> WaitResult:
+    """The job is done, so its verdict IS readable: `roborev wait --job` exits 0 clean and 1
+    on findings, and `roborev show --job` prints the review. A verdict that cannot be read
+    is unjudged, so its text (if any) is never presented as a clean pass."""
+    rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
+    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
+    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
+    text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
+    if w.error is not None or w.timed_out:
+        return WaitResult(
+            note=(
+                f"roborev job {job} is done but `roborev wait --job {job}` gave no verdict "
+                f"({w.error or 'timed out'}): the text below, if any, is unjudged"
+            ),
+            text=text,
+        )
+    if w.returncode != 0:
+        return WaitResult(rv, f"roborev wait exited {w.returncode}", text)
+    return WaitResult(rv, "", text)
+
+
+def main(argv: list | None = None) -> int:
+    """`python -m ddflow.services.roborev wait --job N [--wait-s S] [--repo .]`: the bounded
+    poll of one enqueued job. Exit 0 reviewed clean, 1 findings, 2 still running at the
+    bound / ended without a review / could not tell (never a pass)."""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="roborev", description=__doc__.partition("\n")[0])
+    ap.add_argument(
+        "wait", nargs="?"
+    )  # the 'wait' in `python -m ddflow.services.roborev wait --job N`
+    ap.add_argument("--job", type=int, required=True)
+    ap.add_argument("--wait-s", type=int, default=None)
+    ap.add_argument("--repo", default=".")
+    a = ap.parse_args(argv)
+    where = Path(a.repo).resolve()
+    if a.wait_s is None or a.wait_s < 0:
+        # Imported here, not at the top (deferred: this module loads to READ a review too).
+        from ..config import Config
+
+        a.wait_s = Config.load(where).gates.standards_wait_s
+    out = wait_job(where, a.job, a.wait_s)
+    if out.note:
+        print(f"roborev: {out.note}")
+    if out.review is not None:
+        print(f"reviewer: {out.review.reviewer} (the model roborev ran job {out.review.job} with)")
+    if out.text:
+        print(out.text)
+    return 2 if out.review is None else (1 if out.note else 0)
+
+
+if __name__ == "__main__":
+    import sys as _sys
+
+    _sys.exit(main())
