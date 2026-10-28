@@ -277,6 +277,21 @@ def test_a_needle_after_model_is_recorded_as_the_model_id_pinned(repo, monkeypat
     assert "author_family" not in data
 
 
+def test_a_value_needle_after_model_is_the_family_value(repo, monkeypatch):
+    """roborev standards (low, doc pin): a needle that IS ALSO a family value, such as
+    "mistral", is a family on the flag leg too, and records `author_family`."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "mistral")
+    assert code == OK, f"{out}{err}"
+    data = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"][-1].data
+    assert data.get("author_family") == "mistral", data
+    assert data.get("model_source") == "flag", data
+    assert "author_model" not in data
+
+
 def test_complete_surfaces_the_author_family_to_the_caller(repo, monkeypatch):
     """roborev standards (medium): the --json surface carries `author_family` (projected
     through the declared payload), not a dangling `model_source` with no identity key."""
