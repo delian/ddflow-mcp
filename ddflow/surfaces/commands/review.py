@@ -54,7 +54,33 @@ def _triage_verb(a, c: Ctx, ids: list[str]) -> int:
     if a.chunk:
         print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
         return FAIL
+    if a.finding is None and not a.refuted and not a.confirmed and not (a.probe or ""):
+        return _list_verb(a, c, ids[1])
     return _triage(a, c, ids[1])
+
+
+def _list_verb(a, c: Ctx, item: str) -> int:
+    """`review triage <id>` with no triage flag: the listing -- the READ.
+
+    Prints the recorded round's numbered findings first and the recipe a triage takes
+    after them; it records nothing (no round, no triage) and never touches a reviewer
+    (bug Bdd43b55a2a: the read attempts that gave this bug its name spent live review
+    rounds against the budget).
+    """
+    out = RS.show(c.repo, item, gate=a.gate or "", agent=c.requested_agent)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    gate = a.gate or "G"
+    recipe = (
+        f"\nrecord a verdict:\n  ddflow review triage {item} --gate {gate} --finding N "
+        '--refuted|--confirmed --probe "..."'
+    )
+    c.out(
+        out.data["text"] + recipe,
+        {k: out.data[k] for k in ("id", "gate", "findings", "unreadable")},
+    )
+    return OK
 
 
 def _show_verb(a, c: Ctx, ids: list[str]) -> int:
