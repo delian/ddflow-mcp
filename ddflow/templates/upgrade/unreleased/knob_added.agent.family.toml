@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.family"
+new = "\"\""
+why = "The author model's pretraining family: `complete` and `gate record` accept it in place of `--model <author model>`, and the completion event stores the family only, never a model id (DX-author-family)."
+impact = "additive"
