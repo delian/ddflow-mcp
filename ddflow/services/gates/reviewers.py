@@ -117,10 +117,14 @@ def _reviewer_fams(
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
         fam = (
-            _declared_family(rec.evidence)
-            or family_name_of(m, cfg.agent.families)
-            or family_of(m, cfg).strip().lower()
-        ).strip().lower()
+            (
+                _declared_family(rec.evidence)
+                or family_name_of(m, cfg.agent.families)
+                or family_of(m, cfg).strip().lower()
+            )
+            .strip()
+            .lower()
+        )
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")
@@ -147,9 +151,7 @@ def _author_identity(author_model: str, cfg: Config) -> tuple[list[str] | None, 
     bare_family = family_name_of(author_model, cfg.agent.families)
     routed = None if bare_family else router_set(author_model, cfg.agent.routers)
     author_fam = (
-        (bare_family or family_of(author_model, cfg)).strip().lower()
-        if routed is None
-        else ""
+        (bare_family or family_of(author_model, cfg)).strip().lower() if routed is None else ""
     )
     return routed, author_fam
 
