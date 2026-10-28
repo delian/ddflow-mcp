@@ -388,8 +388,17 @@ def configure(
 
     edit = edit or ConfigEdit()
     log, cfg, _st = _load(repo, agent)
-    target = str(CW.config_file(repo, local=edit.local))
     layer = "local" if edit.local else "file"
+    # Machine-local keys (parallelism, ... and every key [enforce].machine_local_keys
+    # adds) default to the local layer: this machine's own answer must not reach the
+    # committed file silently (DX-machine-local-keys, bug B65bbc8083c's follow-up).
+    defaulted = ""
+    if edit.set and layer == "file":
+        enforce = getattr(cfg, "enforce", None)
+        extra = set(getattr(enforce, "machine_local_keys", None) or [])
+        if CW.machine_local_layer(extra, edit.set) == "local":
+            layer, defaulted = "local", edit.set
+    target = str(CW.config_file(repo, local=layer == "local"))
 
     stamp: dict[str, Any] = {}
     if edit.set and approval:
@@ -438,10 +447,13 @@ def configure(
             value=edit.value,
             literal=literal,
             path=target,
-            local=edit.local,
+            local=layer == "local",
             rows=[],
             gitattributes_added=res.attributes_added,
             text=f"{edit.set} = {literal}  ({target})"
+            + (f"\n  machine-local key {defaulted}: this machine's own answer, defaulted "
+               f"to the local layer; [enforce].machine_local_keys extends which keys do"
+               if defaulted else "")
             + shadow["shadow_note"]
             + _said(res.attributes_added),
             **shadow,
