@@ -168,6 +168,24 @@ def test_a_configured_family_wins_over_a_session_model_record(repo, monkeypatch)
     assert "model" not in data, "no model id may reach the event under any key"
 
 
+def test_a_non_canonical_configured_family_recorded_as_its_family_value(repo, monkeypatch):
+    """roborev standards (low): [agent].family spelled as a NEEDLE ('kimi') is stored as
+    its CANONICAL family value ('moonshot'), the one independence judged against."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "kimi")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1")
+    assert code == OK, f"{out}{err}"
+    data = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"][-1].data
+    assert data.get("author_family") == "moonshot", data
+    assert data.get("model_source") == "config", data
+    assert "author_model" not in data
+    assert "model" not in data
+
+
 # -- gate record: the author-family refusal reads the configured family too ------------
 
 

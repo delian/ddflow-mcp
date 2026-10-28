@@ -174,9 +174,15 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model, model_source = _author_model(st, log.agent_id, model, cfg)
     # `[agent].family` / DDFLOW_AGENT_FAMILY / a bare family after `--model`: the author
-    # is a FAMILY, recorded as the family only -- a model id never reaches the log where
-    # a name was not given (DX-author-family).
-    family_only = bool(G.family_name_of(model, cfg.agent.families))
+    # is a FAMILY, recorded as the family only, CANONICALLY -- a model id never reaches
+    # the log where a name was not given (DX-author-family); a non-canonical configured
+    # spelling (a `[agent].families` NEEDLE such as "gemini") resolves to its canonical
+    # family value, so the key the log records matches the family the verdict judged.
+    family = G.family_name_of(model, cfg.agent.families)
+    if model_source == "config" and not family:
+        family = G.family_of(model, cfg).strip().lower()
+    family_only = bool(family)
+    recorded = family if family_only else model
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
@@ -198,7 +204,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
-        "author_family" if family_only else "author_model": model,
+        "author_family" if family_only else "author_model": recorded,
         "model_source": model_source,
         "independence": v.independence,
         # BOTH surfaces, always. This used to print only in human mode, so an agent over
@@ -276,7 +282,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # record to carry the id, so the event names both for any known source. A
             # family-only author ([agent].family, a bare family after --model) records
             # `author_family` instead: the family only, never a model id (DX-author-family).
-            **_author_event_identity(model, model_source, family_only),
+            **_author_event_identity(recorded, model_source, family_only),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),

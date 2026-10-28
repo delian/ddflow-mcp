@@ -146,7 +146,7 @@ class AgentConfig:
     )
     family: str = knob(
         "",
-        doc="The author model's pretraining family, so `complete` never needs a model id written into this repository's log: `[agent].family` (or DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in place of `--model <author model>` -- a `--model` flag or the model the session declared still wins -- and the completion event then stores the family only, never a model name. Set it once per harness here, and let `ddflow setup`/onboarding fill it in per harness. Change it for the project (`ddflow config --set agent.family deepseek`), for this machine (add --local), per run (DDFLOW_AGENT_FAMILY), or over MCP with `ddflow_configure`.",
+        doc="The author model's pretraining family, so `complete` never needs a model id written into this repository's log: `[agent].family` (or DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in place of `--model <author model>` -- a `--model` flag still wins, and the configured family otherwise wins over the model the session declared -- and the completion event then stores the family only, never a model name (a non-canonical spelling that is a `[agent].families` NEEDLE, such as \"gemini\", resolves to its canonical family value there). Set it once per harness here, and let `ddflow setup`/onboarding fill it in per harness. Change it for the project (`ddflow config --set agent.family deepseek`), for this machine (add --local), per run (DDFLOW_AGENT_FAMILY), or over MCP with `ddflow_configure`.",
     )
     # HydraFusion ships with NO members: GitHub publishes no fixed roster (research
     # R-hydrafusion-families), and a guessed set that misses a provider passes that
