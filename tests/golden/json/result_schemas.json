@@ -252,7 +252,8 @@
    "umbrella_refused",
    "refuted_passes",
    "worktree_removed",
-   "kept_reason"
+   "kept_reason",
+   "chore"
   ],
   "output_schema": {
    "type": "object",
@@ -275,6 +276,7 @@
     "refuted_passes": {},
     "worktree_removed": {},
     "kept_reason": {},
+    "chore": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
