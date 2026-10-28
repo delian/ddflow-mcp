@@ -146,7 +146,9 @@ class _InProcessHelp:
             with _RENDER_LOCK:
                 return cmd == self.parser().prog
         except (SystemExit, Exception):  # a build that exits or fails has no registry to
-            return False               # own with; KeyboardInterrupt/MemoryError propagate
+            return False               # own with (MemoryError is an Exception, so it returns
+                                       # False and the runner spawns); a KeyboardInterrupt is
+                                       # NOT theirs to take, and propagates.
 
     def help(self, argv: list[str]) -> P.Captured:
         """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
