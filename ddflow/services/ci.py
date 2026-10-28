@@ -224,14 +224,27 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
+def _escaped(quote: str, nxt: str) -> str | None:
+    """What an escape pair contributes: outside quotes a backslash escapes ANY next char,
+    inside double quotes only `$`, backtick, `"` and backslash (a backslash-newline is a
+    line continuation that contributes NOTHING, the same outside); ``None`` is
+    not-an-escape here (single quotes, a bare backslash before an ordinary double-quoted
+    char) and both chars stay literal."""
+    if not quote:
+        return "" if nxt == "\n" else nxt
+    if quote == '"' and nxt in '$`"\\\n':
+        return "" if nxt == "\n" else nxt
+    return None
+
+
 def _leading_skip(command: str) -> tuple[str | None, str, str]:
     """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
     -- the value the shell would resolve it to (`'a b'` -> `a b`), its source text (empty
     when it was parsed), and the untouched remainder, so the rest of the command (shell
     text) is never re-tokenized. ``own`` is ``None`` when the value cannot be kept as a
     literal: unbalanced quotes, or `$`/backtick expansions outside single quotes, which
-    the rebuild would have to reproduce, not guess at -- its ``verbatim`` text then stays
-    the operator's shell's business."""
+    the rebuild would have to reproduce, not guess at -- the command then runs exactly
+    as written."""
     if not command.startswith("SKIP="):
         return None, "", command
     value: list[str] = []
@@ -239,13 +252,9 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
     i, n = len("SKIP="), len(command)
     while i < n:
         c = command[i]
-        if c == "\\" and i + 1 < n and (
-            not quote or (quote == '"' and command[i + 1] in '$`"\\\n')
-        ):
-            # an escape pair consumes both chars; `\<newline>` is a line continuation
-            # that leaves NOTHING (the same rule outside and inside double quotes)
-            if command[i + 1] != "\n":
-                value.append(command[i + 1])
+        if c == "\\" and i + 1 < n and (got := _escaped(quote, command[i + 1])) is not None:
+            if got:
+                value.append(got)
             i += 1
         elif quote and c == quote:
             quote = ""
@@ -259,9 +268,6 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
             quote = c
         elif c in "$`":
             return None, command, ""  # an expansion: the WHOLE command runs as written
-        elif c == "\\" and i + 1 < n:
-            value.append(command[i + 1])
-            i += 1
         else:
             value.append(c)
         i += 1
