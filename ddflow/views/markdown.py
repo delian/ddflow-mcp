@@ -1161,7 +1161,8 @@ def _assemble(
         # With no note reserved (prefix + note alone exceed the cap), the body keeps
         # its place; nothing may cut the prefix.
         room = max(0, cap - len(prefix_text) - 1 - (len(note) if note_room else 0))
-        body = body[:room].rsplit("\n", 1)[0] if body else ""
+        if len(body) > room:  # a body already inside the room loses nothing here
+            body = body[:room].rsplit("\n", 1)[0]
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
