@@ -333,6 +333,11 @@ def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
     for b in p.blocked:
         if b.item not in capped:
             blocked.setdefault(b.item, []).append(b)
+    # A blocker is an OPEN prerequisite (D-wave-semantics). A KNOWN dependency that has
+    # settled (done/abandoned) is not blocking anyone, whatever a buggy writer put in its
+    # `waiting_on`; an id the view has never seen (external `repo:item`, a deleted item)
+    # still counts -- the plan reported it unsatisfied, and it reads as a blocker.
+    settled_ids = {it.id for it in items if it.state in ("done", "abandoned")}
 
     def bucket(members: list[Any], tag: str) -> dict[str, Any]:
         states = dict.fromkeys(
@@ -364,7 +369,8 @@ def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
                         reasons[b.reason] = reasons.get(b.reason, 0) + 1
                         if b.reason == "deps":
                             for dep in b.waiting_on:
-                                blockers[dep] = blockers.get(dep, 0) + 1
+                                if dep not in settled_ids:
+                                    blockers[dep] = blockers.get(dep, 0) + 1
         tops = sorted(blockers.items(), key=lambda kv: (-kv[1], kv[0]))[:BY_TAG_TOP_BLOCKERS]
         return {
             "tag": tag,

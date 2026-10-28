@@ -157,3 +157,4 @@ def test_capped_and_blocked_items_land_in_their_buckets():
     assert w0["states"]["blocked"] == 1
     assert w0["blocked_by"] == {"deps": 1}
     assert {"id": "T-held", "blocks": 1} in w0["top_blockers"]
+    assert {"id": "T-done", "blocks": 1} not in w0["top_blockers"]  # done deps are not blockers
