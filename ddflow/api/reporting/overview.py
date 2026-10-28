@@ -97,8 +97,12 @@ def progress(repo: Path, item: str = "") -> O.Outcome:
 #: past what an MCP client accepts as one tool result (Bd6aa9ffde9).
 STATUS_LIST_LIMIT = 25
 
+#: How many of the most-blocking open dependencies each `--by-tag` bucket names. The
+#: counts below it stay exact; a queue like this one can have thousands of pairs.
+BY_TAG_TOP_BLOCKERS = 5
 
-def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
+
+def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "") -> O.Outcome:
     """One answer to "what is the state of this project?".
 
     ``full`` lists everything; otherwise each list is cut to ``STATUS_LIST_LIMIT`` (the
@@ -106,6 +110,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     scheduler's order) and
     ``truncated`` names each cut list with its real length. The CLI asks for ``full``; the
     MCP tool takes the bounded answer.
+
+    ``by_tag`` (the ``--by-tag KEY`` flag) adds the ``by_tag`` object: per-value counts
+    for every distinct tag in the KEY namespace, read off the same plan, so one command
+    answers "how is wave 3 doing, and what blocks it?" (DX-waves-status).
 
     The textbook B37 case: `cmd_status` folded the log, aggregated the work, detected the
     loops, planned and scanned for recoverables — and then built a JSON object and a
@@ -248,6 +256,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         }
     if release := UC.known_line(repo, cfg):  # cached answer only: status never asks the network
         data["release"] = release
+    if by_tag:
+        data["by_tag"] = _by_tag_view(by_tag, [*tasks, *phases], p)
     if not full:
         _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
@@ -280,8 +290,150 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "approvals": len(data.get("approvals_pending", ())),
         "approvals_pending": data.get("approvals_pending", []),
         "release": release,
+        "by_tag_lines": _by_tag_lines(data["by_tag"]) if by_tag else [],
     }
     return O.ok("status", **data)
+
+
+def _by_tag_bucket(
+    members, tag, ready_ids, running_ids, review_ids, capped, blocked, done_ids
+) -> dict[str, Any]:
+    """One bucket: the counts for every member carrying ``tag`` and what blocks them.
+
+    ``done``/``abandoned`` close the item's own story; every other member counts as
+    ``open`` and into the one plan bucket that holds it (running, review, ready,
+    held_by_cap or blocked -- the plan puts each task in exactly one, Bdcce70d036).
+    """
+    states = dict.fromkeys(
+        (
+            "total",
+            "done",
+            "running",
+            "ready",
+            "review",
+            "held_by_cap",
+            "blocked",
+            "abandoned",
+            "open",
+        ),
+        0,
+    )
+    reasons: dict[str, int] = {}
+    blockers: dict[str, int] = {}
+    for it in members:
+        states["total"] += 1
+        if it.state == "done":
+            states["done"] += 1
+        elif it.state == "abandoned":
+            states["abandoned"] += 1
+        else:
+            states["open"] += 1
+            iid = it.id
+            if iid in running_ids:
+                states["running"] += 1
+            elif iid in review_ids:
+                states["review"] += 1
+            elif iid in ready_ids:
+                states["ready"] += 1
+            elif iid in capped:
+                states["held_by_cap"] += 1
+            if iid in blocked:
+                states["blocked"] += 1
+                for b in blocked[iid]:
+                    reasons[b.reason] = reasons.get(b.reason, 0) + 1
+                    if b.reason == "deps":
+                        for dep in b.waiting_on:
+                            if dep not in done_ids:
+                                blockers[dep] = blockers.get(dep, 0) + 1
+    tops = sorted(blockers.items(), key=lambda kv: (-kv[1], kv[0]))[:BY_TAG_TOP_BLOCKERS]
+    row = {
+        "tag": tag,
+        "states": states,
+        "blocked_by": dict(sorted(reasons.items())),
+        "top_blockers": [{"id": dep, "blocks": n} for dep, n in tops],
+    }
+    if len(blockers) > BY_TAG_TOP_BLOCKERS:
+        # Bounded like the other status lists (Bd6aa9ffde9), and never silently: the cut
+        # is named here the way `truncated` names the top panel's cuts.
+        row["blockers_cut"] = len(blockers) - BY_TAG_TOP_BLOCKERS
+    return row
+
+
+def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
+    """The ONE `--by-tag KEY` description the JSON body and the prose lines share.
+
+    A tag is in KEY's namespace when it IS ``key`` or starts with ``key + ":"`` (D-labels:
+    ``wave:N``, ``track:fix``). Each distinct such tag is a bucket with the counts
+    done/running/ready/review/held_by_cap/blocked/abandoned/open, the blocked reasons and
+    the open dependencies blocking the most of its items; items carrying none of the
+    namespace land in ``untagged``. An item carrying several of the namespace counts in
+    every bucket it carries (labels are set-valued; the derived ``wave:N`` is one per
+    item). Every count is read off the ONE plan `status` folds — ``ready`` here is exactly
+    what `next` offers, ``blocked`` the plan's deps/conflict reasons minus the cap-held —
+    so the per-value view and the top panel agree (Bdcce70d036). ``open`` = neither done
+    nor abandoned; a phase member counts only there (its tasks are the queue's items).
+    """
+
+    def in_ns(tags: list[str]) -> list[str]:
+        return [t for t in (tags or []) if t == key or t.startswith(key + ":")]
+
+    buckets: dict[str, list[Any]] = {}
+    untagged: list[Any] = []
+    for it in items:
+        if it.removed:
+            continue
+        tags = in_ns(it.tags)
+        for t in tags:
+            buckets.setdefault(t, []).append(it)
+        if not tags:
+            untagged.append(it)
+    ready_ids = {i.id for i in p.ready}
+    running_ids = {i.id for i in p.running}
+    review_ids = {i.id for i in p.review}
+    capped = set(p.capped)
+    blocked: dict[str, list[Any]] = {}
+    for b in p.blocked:
+        if b.item not in capped:
+            blocked.setdefault(b.item, []).append(b)
+    # A blocker is an unsatisfied prerequisite as `dep_status` (core.schedule) settles it:
+    # DONE returns satisfied (so a `done` id in `waiting_on` is a buggy writer and stays
+    # out of `top_blockers`), ABANDONED counts as unsatisfied BY DESIGN (the dependent
+    # stays blocked and the abandoned prerequisite is exactly the blocker to show). An id
+    # the view has never seen (external `repo:item`, a deleted item) still counts -- the
+    # plan reported it unsatisfied, and it reads as a blocker.
+    done_ids = {it.id for it in items if it.state == "done"}
+    shared = (ready_ids, running_ids, review_ids, capped, blocked, done_ids)
+    return {
+        "key": key,
+        "values": [_by_tag_bucket(buckets[t], t, *shared) for t in sorted(buckets)],
+        "untagged": _by_tag_bucket(untagged, "untagged", *shared),
+    }
+
+
+def _by_tag_lines(view: dict[str, Any]) -> list[str]:
+    """The prose half of one ``by_tag`` description: the counts per value and, where a
+    value's items sit blocked, who holds most of them up."""
+    lines = [
+        "",
+        f"per {view['key']} value "
+        "(done/running/ready/review/held/blocked/abandoned of total, then open):",
+    ]
+    for v in [*view["values"], view["untagged"]]:
+        s = v["states"]
+        lines.append(
+            f"  {v['tag']:<12} {s['done']}/{s['running']}/{s['ready']}/{s['review']}/"
+            f"{s['held_by_cap']}/{s['blocked']}/{s['abandoned']} of {s['total']}"
+            f" (open {s['open']})"
+        )
+        if v["blocked_by"]:
+            reasons = ", ".join(f"{r}({n})" for r, n in sorted(v["blocked_by"].items()))
+            lines.append(f"    blocked by: {reasons}")
+        if v["top_blockers"]:
+            tops = ", ".join(f"{t['id']} ({t['blocks']})" for t in v["top_blockers"])
+            if v.get("blockers_cut"):
+                tops += f", {v['blockers_cut']} more"
+            lines.append(f"    top blockers: {tops}")
+    return lines
 
 
 def _bound(data: dict[str, Any]) -> None:
@@ -301,6 +453,14 @@ def _bound(data: dict[str, Any]) -> None:
                 else slice(STATUS_LIST_LIMIT)
             )
             data[key] = rows[keep]
+    # The by-tag view is a list too: a namespace with thousands of distinct values (an
+    # `assignee:` label space) is exactly the unbounded answer Bd6aa9ffde9 is about, so
+    # the bounded MCP path cuts it the same way (the first values, lowest tag first).
+    if "by_tag" in data:
+        values = data["by_tag"]["values"]
+        if len(values) > STATUS_LIST_LIMIT:
+            cut["by_tag"] = len(values)
+            data["by_tag"]["values"] = values[:STATUS_LIST_LIMIT]
     if cut:
         data["truncated"] = {
             "lists": cut,
