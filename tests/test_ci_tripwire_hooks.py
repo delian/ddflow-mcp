@@ -282,9 +282,12 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
         assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
         assert " --all-files" not in cmd
         assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
-    for prefix in ("SKIP=$(echo lint) ", "SKIP=$(echo --all-files) "):
-        source = prefix + CI.DEFAULT_COMMAND
-        assert CI.scope_to_diff(source, repo, default) == source
+    for prefix, inner in (("SKIP=$(echo lint) ", False), ("SKIP=$(echo --all-files) ", True)):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
+        # the value's own text is untouched; only the RUN's flag is gone
+        assert cmd.count(" --all-files") == (1 if inner else 0), cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
     quoted_run = (
         'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ' + CI.DEFAULT_COMMAND
     )
