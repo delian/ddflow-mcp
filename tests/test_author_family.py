@@ -243,6 +243,22 @@ def test_gate_record_refuses_the_configured_family_without_a_session_model(repo,
     assert rec.evidence["model"] == "qwen-3-flash"
 
 
+def test_gate_record_refuses_an_unrecognised_configured_family_spelling(repo, monkeypatch):
+    """roborev standards (optional low): for a family the map does not know, the bare
+    strings compare too, so the writer IS told "--model myorg-x" named its own family."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "myorg-x")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    code, out, err = run_cli(
+        repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
+        "--model", "myorg-x", agent="impl",
+    )
+    assert code == REFUSED, out + err
+    assert "author's own family" in err and "myorg-x" in err, err
+
+
 def test_a_needle_after_model_is_recorded_as_the_model_id_pinned(repo, monkeypatch):
     """roborev standards (low): `--model kimi` (a NEEDLE) is a MODEL id given out loud,
     recorded as `author_model`; the same spelling as `[agent].family` resolves to its
