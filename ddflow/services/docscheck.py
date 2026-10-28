@@ -46,9 +46,9 @@ from ..core.digest import content_digest
 from ..infra import git as G
 from .docscheck_count import check_counts
 from .docscheck_extract import Extractor, surface, undocumented
-from .docscheck_help import FLAG as _FLAG
-from .docscheck_help import VERB as _VERB
-from .docscheck_help import HelpIndex, Runner, flag_of
+from ..surfaces.docscheck_help import FLAG as _FLAG
+from ..surfaces.docscheck_help import VERB as _VERB
+from ..surfaces.docscheck_help import HelpIndex, Runner, flag_of
 from .docscheck_md import (  # noqa: F401  (anchors_of, slugify: re-exported)
     SPAN,
     Headings,
@@ -141,7 +141,7 @@ def check_docs(  # noqa: PLR0913 -- one keyword per option of a public entry poi
     the same way. Raises
     ``extract`` are ``[[docs.extract]]`` entries (names the code offers that no document
     mentions), ``count`` are ``[[docs.count]]`` entries (``<!-- ddflow:count -->`` markers
-    are always read). ``runner`` runs commands (``docscheck_help.command_runner``); without
+    are always read). ``runner`` runs commands (``surfaces.docscheck_help.command_runner``); without
     one nothing is spawned, so ``<tool> <verb> --flag`` mentions are checked only against the
     verb list and counts are noted as not recomputed. ``help_commands`` are the tools whose
     ``--help`` is walked (default: ``commands``). Raises

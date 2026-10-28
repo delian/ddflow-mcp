@@ -19,7 +19,7 @@ import shlex
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
-from .docscheck_help import Runner
+from ..surfaces.docscheck_help import Runner
 from .docscheck_md import prose_only
 from .docscheck_types import Finding, Report
 from .docsync import glob_regex

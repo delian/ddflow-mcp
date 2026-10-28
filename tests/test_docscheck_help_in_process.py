@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ddflow.infra import proc as P
 from ddflow.services import docscheck as D
-from ddflow.services import docscheck_help as H
+from ddflow.surfaces import docscheck_help as H
 
 ROOT = Path(__file__).resolve().parents[1]
 
