@@ -121,9 +121,9 @@ def _run_at(
         # store-fits cut of one byte is 'truncated', and the join's byte length against
         # the budget IS the truncation (a run file larger than the budget staffed the cut).
         record["output_truncated"] = bigger or len(joined) > keep
-        # Cut at the BYTE the knob staffed -- a character cut could double the budget --
-        # and drop the boundary bytes the cut split (a cut cut character was never fully
-        # stored): the kept bytes re-encode within the budget.
+        # The budget staffs the RAW bytes the tail keeps (joined[-keep:] is never longer
+        # than it); invalid bytes render as the replacement marker, whose 3-byte glyph is
+        # a rendering of the kept byte, not extra bytes stored.
         record["output"] = joined[-keep:].decode("utf-8", errors="replace")
     return record
 
@@ -150,11 +150,16 @@ def _tail_from_file(path: Path, keep: int) -> tuple[bytes, int]:
     is not readable. Reading with a seek bounds what an enormous run loads into memory;
     the size still says a run was cut. Bytes stay bytes to ``_run_at``: decode-replace
     inflation happens once, at presentation, and cannot wander into the arithmetic. The
-    open is O_NOFOLLOW: a repro line that planted a symlink at the tail path (it knows
-    the path: it is part of its own argv) must never turn the record into a leak of some
-    other file the agent can read, and never block on a FIFO it planted there."""
+    open is O_NOFOLLOW|O_NONBLOCK: a repro line that planted a symlink (a leak) or a FIFO
+    (a hang) at the tail path -- it knows the path, it is part of its own argv -- is
+    refused by O_NOFOLLOW and fails O_NONBLOCK with ENXIO instead of blocking the filing."""
     try:
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
         fd = os.open(path, flags)
     except OSError:
         return b"", 0

@@ -179,7 +179,7 @@ def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
     # raise before any byte lands.
     _bid, bug = _file(
         proj,
-        repro_cmd=python(r'import sys; sys.stdout.buffer.write(b"\xc3\xa9" * 5); sys.exit(0)'),
+        repro_cmd=python(r"import sys; sys.stdout.buffer.write(b'\xc3\xa9' * 5); sys.exit(0)"),
     )
     run = _run(proj, bug)
     assert run.get("output_truncated") is True

@@ -68,9 +68,11 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         },
     }
     if repro_cmd:
+        # The filed command wins any key the check dict might carry: what the operator
+        # told ddflow to run is the record of what was filed (never silently replaced).
         out["repro_cmd"] = {
-            "command": repro_cmd,
             **(check if check is not None else {"executed": False}),
+            "command": repro_cmd,
         }
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
