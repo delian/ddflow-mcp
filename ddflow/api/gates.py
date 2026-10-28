@@ -59,8 +59,8 @@ from ._base import _load
 from .gate_baseline import apply as baseline_apply
 from .gate_guard import guard_record
 from .lifecycle import callers_tree
-from .lifecycle.claim import _new_report_count
 from .lifecycle.author import _session_model
+from .lifecycle.claim import _new_report_count
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.

@@ -85,24 +85,47 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("recover",),
         tool="ddflow_recover",
-        summary="find crashed agents' work (exit 2 = nothing)",
+        summary="find crashed agents' work; --all --plan triages it (exit 2 = nothing)",
         description=(
             "Find work left behind by a crashed agent: expired leases, orphaned "
             "worktrees, items stuck running. Reports what each worktree contains and "
-            "never deletes anything. Run this at the start of any session that follows "
-            "an interruption."
+            "never deletes anything. With --all --plan this is the recovery plan: the "
+            "pure triage over the lease sweep, orphaned gate-run markers, unended jobs "
+            "and queue entries a dead integrator left running. Each item gets one "
+            "action, classed SAFE_AUTO (idempotent, loses nothing), PROPOSE (shown, "
+            "never done: the exact command) or OPERATOR (a person decides). --apply "
+            "runs only SAFE_AUTO and refuses while the kill switch "
+            "(.ddflow/local/recovery.stop) is on. Run --all --plan at the start of any "
+            "session that follows an interruption."
         ),
         params=(
             Param("item", help="Restrict to one item.", default="", cli_help=""),
             Param(
                 "apply",
                 type="boolean",
-                help="Act on the advice: release the leases and remove the worktrees reported as holding nothing. Only a tree MEASURED as having no uncommitted and no unmerged work is touched; 'could not tell' is not 'empty'.",
+                help="Act on the advice: release the leases and remove the worktrees reported as holding nothing. Only a tree MEASURED as having no uncommitted and no unmerged work is touched; 'could not tell' is not 'empty'. With --all: run the plan's SAFE_AUTO actions (record unwitnessed gate `unavailable` and job ends, requeue orphaned merge-queue entries), never PROPOSE or OPERATOR.",
+                cli_help="",
+            ),
+            Param(
+                "all",
+                type="boolean",
+                help="Sweep beyond leases: orphaned gate-run markers whose process is gone, unended jobs whose process already exited, and merge-queue entries left running.",
+                cli_help="",
+            ),
+            Param(
+                "plan",
+                type="boolean",
+                help="The triage, dry run: per item the class (SAFE_AUTO/PROPOSE/OPERATOR), the evidence, the exact command and the recovery attempt count. --json emits it as rows.",
                 cli_help="",
             ),
         ),
         call=lambda repo, a, agent: _api().recover(
-            repo, item=a.get("item", "") or "", apply=bool(a.get("apply")), agent=agent
+            repo,
+            item=a.get("item", "") or "",
+            apply=bool(a.get("apply")),
+            all=bool(a.get("all")),
+            plan=bool(a.get("plan")),
+            agent=agent,
         ),
         payload="found",
     ),
