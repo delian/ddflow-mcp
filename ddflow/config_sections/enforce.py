@@ -4,6 +4,7 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,20 @@ from ._docs import declare, knob
 
 #: The values of each `[enforce]` policy knob.
 BLOCK_WARN_OFF = ("block", "warn", "off")
+
+#: A dotted config key as the CLIs accept it (D-plain-keys): bare, dot-separated segments.
+_PLAIN_DOTTED = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+")
+
+
+def _extra_machine_local_problem(v: Any) -> str:
+    """Why an entry of `[enforce].machine_local_keys` cannot extend the classification."""
+    for k in v:
+        if not isinstance(k, str) or not _PLAIN_DOTTED.fullmatch(k):
+            return (
+                f"{k!r} is not a dotted config key; a machine-local key is written as "
+                "<section>.<knob>, e.g. lease.ttl_s"
+            )
+    return ""
 
 
 def _waivers_problem(v: Any) -> str:
@@ -169,5 +184,14 @@ class EnforceConfig:
             ""
             if isinstance(v, int) and not isinstance(v, bool) and v >= 1
             else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
+        ),
+    )
+    machine_local_keys: list[str] = knob(
+        factory=list,
+        doc="Extra dotted keys whose `config KEY VALUE` writes default to the machine-local layer, added to the shipped classification (services.configwrite.MACHINE_LOCAL_KEYS: the parallelism knobs -- this machine's worker count is not the next machine's). A write of such a key lands in the git-ignored `.ddflow/local/config.toml` unless it goes there anyway; `--local` says the same thing out loud, and a committed value is written by editing `.ddflow/config.toml` by hand. Keyed as plain dotted keys like the shipped table; a refusal names the first entry that is not one.",
+        check=lambda v: (
+            _extra_machine_local_problem(v)
+            if isinstance(v, list)
+            else 'must be a list of dotted config keys, e.g. ["lease.ttl_s"]'
         ),
     )

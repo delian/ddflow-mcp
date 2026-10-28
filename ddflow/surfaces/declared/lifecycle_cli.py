@@ -404,6 +404,9 @@ COMPLETE_OPTIONAL = (
     "progress",
     "umbrellas_completed",
     "umbrella_refused",
+    # A chore completed with no reviewer: the exemption (services.chore), so both
+    # surfaces are told why (DX-chore-completed-event).
+    "chore",
 )
 
 
@@ -440,6 +443,7 @@ def complete_text(out, a, ctx) -> str:
         + (f" as {a['sha']}" if a.get("sha") else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + waiting(data.get("woke", []), "woke:")
+        + (f"\n{data['chore']}" if data.get("chore") else "")
         + "".join(f"\nPASSED ON REFUTATION: {line}" for line in data.get("refuted_passes", []))
         + (f"\n{data['progress']}" if data.get("progress") else "")
         + _tree_line(out)

@@ -224,7 +224,7 @@ def test_prompt_note_and_summary_seqs_are_disjoint_and_invertible():
     prompt band is sampled contiguously through 20,002, so a regression to ANY
     fixed note offset through 20,002 collides with notes at that offset and fails
     the disjointness check."""
-    boundary = list(range(20_003)) + [30_000]
+    boundary = [*range(20_003), 30_000]
     for role in ("prompt", "note", "summary"):
         for seq in boundary:
             assert _seq_role(role, _role_seq(role, seq)) == seq

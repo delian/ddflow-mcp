@@ -541,7 +541,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=c3f5855a5a4a -->
+<!-- ddflow:begin README/commands sha=823c562434d7 -->
 <details><summary>All 90 commands</summary>
 
 | Command | What it does |
@@ -557,7 +557,7 @@ needs a line written by hand here.
 | `ddflow chore` | commit or approve chore files (no reviewer) |
 | `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow approvals` | approval requests for operator-gated commands (a person answers) |
-| `ddflow plan` | check, file (proposed) and confirm a plan |
+| `ddflow plan` | check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |
@@ -1102,7 +1102,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 405 knobs.
+cadences, and the rest of the 406 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5297,7 +5297,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 405): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 406): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5866,7 +5866,7 @@ declared once and persists — see
 
 ## Configuration
 
-405 knobs across 42 sections, every one documented in place and listed, with its default
+406 knobs across 42 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5933,8 +5933,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7eef2b566736 -->
-<details><summary>All 405 knobs across 42 sections</summary>
+<!-- ddflow:begin README/knobs sha=3c3632f28fa4 -->
+<details><summary>All 406 knobs across 42 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6155,6 +6155,7 @@ long default is left to `ddflow config --explain`.
 | `enforce.readme_files` | `["README.md"]` |  |
 | `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.max_behind` | `50` |  |
+| `enforce.machine_local_keys` | `[]` |  |
 | `loops.max_claims_per_item` | `3` |  |
 | `loops.max_gate_flaps` | `4` |  |
 | `loops.max_reopens` | `2` |  |
@@ -6457,7 +6458,10 @@ part that matters.
   and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
   `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
   refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
-  salvaged`, `claim`). Another agent's live lease is never accepted. When
+  salvaged`, `claim`). Paths ANOTHER agent's live lease covers are never accepted: each
+  lapsed lease is judged path by path, so one whose globs overlap a live lease still
+  vouches for the staged paths nobody holds (a merge of main stays committable), while the
+  held paths keep the STOP. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted

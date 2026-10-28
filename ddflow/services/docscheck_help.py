@@ -19,7 +19,10 @@ per-call timeout knob), and the walk of ddflow's own tree is cached per ddflow v
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import re
+import sys
 import threading
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
@@ -37,6 +40,61 @@ IN_PROCESS_COMMANDS: tuple[str, ...] = ("ddflow",)
 FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
+
+#: This process's own argparse root, built once, on first use: the CLI import drags in
+#: the whole surface, and one parser answers every chain of one walk. A one-element cell
+#: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
+#: cell is reassignment-free where a module global would need one.
+_parser: list[argparse.ArgumentParser | None] = [None]
+
+#: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
+#: runs could capture each other's output: every run takes the lock, and that overlap
+#: serializes. It is a plain non-reentrant lock: a same-thread reentry from inside the
+#: parse would self-deadlock, and no path reenters today; other threads writing to the
+#: real stdout/stderr are untouched, and the docs check is single-threaded.
+_capture_lock = threading.Lock()
+
+
+def in_process(verbs: list[str]) -> P.Captured:
+    """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
+
+    The very ``parse_args`` the spawned CLI makes, so the answer is its ``--help`` and its
+    flags are exactly the spawned text's (Bc621160a82; the equivalence is pinned by
+    tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
+    with _capture_lock:  # serializes redirect+parse: a run answers from its own buffers
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            parser = _parser[0]
+            if parser is None:
+                from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
+
+                parser = _parser[0] = build_parser()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                parser.parse_args([*verbs, "--help"])
+        except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
+            if isinstance(exc.code, int):
+                return P.Captured(exc.code, out.getvalue(), err.getvalue())
+            return P.Captured(error=exc)
+        except Exception as exc:  # the import or the parse raised: "could not run", exactly
+            return P.Captured(error=exc)  # as the spawn path reads its own failures
+        return P.Captured(0, out.getvalue(), err.getvalue())
+
+
+def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
+    """The verbs to replay when ``argv`` spells `ddflow [<verb>...] --help` naming THIS
+    ddflow; None when it names another tool (then the spawn is the walk). This process IS
+    ddflow, so the registry it built is the authority when the command is spelled by name
+    (`ddflow`) or run as this very interpreter's module ``sys.executable -m ddflow``; any
+    other spelling -- a different interpreter or a path to some binary -- names a
+    specific executable and is run as before."""
+    if len(argv) < 2 or argv[-1] != "--help":
+        return None
+    if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
+        return argv[1:-1]
+    if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
+        #: the walk itself never spells this (its argv start at a bare verb name)
+        return argv[3:-1]
+    return None
 
 
 def command_runner(
@@ -57,6 +115,11 @@ def command_runner(
     spawn = lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))  # noqa: E731
 
     def run(argv: list[str]) -> P.Captured:
+        #: an argv spelling THIS ddflow plays from the registry, never a spawn, even under
+        #: a custom ``known`` -- the '-m' spelling desugars to this same process's parser.
+        verbs = _ddflow_help_verbs(argv)
+        if verbs is not None:
+            return in_process(verbs)
         #: in-process answers ONLY for the command THIS process's registry declares (its own
         #: prog): a foreign command named in the knob has no registry here and MUST spawn its
         #: real tool -- answering it with ddflow's tree would serve another command's help.

@@ -1,4 +1,9 @@
-"""Bug B65bbc8083c: `config KEY VALUE` into a layer a higher layer shadows said nothing."""
+"""Bug B65bbc8083c: `config KEY VALUE` into a layer a higher layer shadows said nothing.
+
+`KEY` is deliberately not machine-local: `schedule.max_parallel_tasks` now defaults to
+the LOCAL layer (DX-machine-local-keys), so it can no longer play a shadowed COMMITTED
+write.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,7 @@ import json
 
 from conftest import run_cli
 
-KEY = "schedule.max_parallel_tasks"
+KEY = "cadence.max_missed"
 
 
 def test_writing_a_key_the_local_layer_shadows_names_the_winner(repo):
@@ -17,7 +22,7 @@ def test_writing_a_key_the_local_layer_shadows_names_the_winner(repo):
     assert "7" in text and "shadow" in text
     assert "local" in text and "6" in text  # the winning layer and its value
     assert f"ddflow config --local {KEY} VALUE" in text  # the command that sets the winner
-    assert (repo / ".ddflow" / "config.toml").read_text("utf-8").count("max_parallel_tasks = 7")
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8").count("max_missed = 7")
 
 
 def test_the_json_body_carries_the_effective_value_and_layer(repo):
@@ -41,7 +46,7 @@ def test_an_environment_winner_is_named_with_its_variable(repo):
     import sys
     from pathlib import Path
 
-    env = {**os.environ, "DDFLOW_SCHEDULE_MAX_PARALLEL_TASKS": "6"}
+    env = {**os.environ, "DDFLOW_CADENCE_MAX_MISSED": "6"}
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
     p = subprocess.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "config", KEY, "7"],
@@ -51,7 +56,7 @@ def test_an_environment_winner_is_named_with_its_variable(repo):
         timeout=300,
     )
     assert p.returncode == 0, p.stderr
-    assert "DDFLOW_SCHEDULE_MAX_PARALLEL_TASKS" in p.stdout and "shadow" in p.stdout
+    assert "DDFLOW_CADENCE_MAX_MISSED" in p.stdout and "shadow" in p.stdout
 
 
 def test_a_shadow_holding_the_same_value_does_not_claim_a_difference(repo):
