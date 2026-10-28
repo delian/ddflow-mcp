@@ -120,7 +120,7 @@ def _reviewer_fams(
             _declared_family(rec.evidence)
             or family_name_of(m, cfg.agent.families)
             or family_of(m, cfg).strip().lower()
-        )
+        ).strip().lower()
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")

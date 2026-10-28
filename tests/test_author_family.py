@@ -86,6 +86,17 @@ def test_a_same_family_reviewer_of_a_bare_family_author_does_not_pass(log, cfg, 
     assert "same as the author" in why, why
 
 
+def test_configured_sequences_canonicalise_case_across_legs(log, cfg, gd):
+    """Critic canon: a configured VALUE 'DeepSeek' and a needle ANSWER 'deepseek' are one
+    family however they were spelled, on the value leg (`family_name_of`) and the model
+    leg (`family_of`)."""
+    cfg.agent.families = dict(cfg.agent.families, deepseek="DeepSeek")
+    assert G.family_name_of("DeepSeek", cfg.agent.families) == "deepseek"
+    assert G.family_of("deepseek-chat", cfg).strip().lower() == "deepseek"
+    ok, why = _independence_for(log, cfg, gd, "deepseek-chat", _alibaba_review())
+    assert ok, why
+
+
 # -- complete records the family only ------------------------------------------------
 
 
@@ -124,14 +135,15 @@ def test_complete_accepts_a_bare_family_after_model_and_records_it_only(repo):
 
 def test_gate_record_refuses_the_configured_family_without_a_session_model(repo):
     run_cli(repo, "init")
-    write_config(repo, [("agent.family", "deepseek")])
+    error, written = write_config(repo, [("agent.family", "deepseek")])
+    assert error == "", written
     run_cli(repo, "task", "add", "T1", "--title", "add a")
     code, out, err = run_cli(
         repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
         "--model", "deepseek", agent="impl",
     )
     assert code == REFUSED, out + err
-    assert "--reviewer-model" in err
+    assert "author's own family" in err and "deepseek" in err, err
     code, out, err = run_cli(
         repo, "gate", "record", "T1", "critic", "--evidence", "found nothing",
         "--model", "qwen-3-flash", agent="impl",
