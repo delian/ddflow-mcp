@@ -244,3 +244,32 @@ def test_an_unreadable_list_read_is_said_so_never_an_empty_job_list(
     monkeypatch.setenv("FAKE_LIST_EXIT", str(exit))
     out = RR.wait_job(repo, 7, 0)
     assert out.review is None and out.live is False and needle in out.note
+
+
+@pytest.mark.parametrize(
+    ("status_file", "wait_exit", "want"),
+    [
+        (DONE, "0", 0),  # clean
+        (DONE, "1", 1),  # findings
+        (QUEUED, "0", 2),  # still running at the zero bound
+        ("[]", "0", 2),  # vanished: re-enqueue
+    ],
+)
+def test_main_exits_by_the_verdict(tmp_path, monkeypatch, status_file, wait_exit, want):
+    """The CLI's 0 / 1 / 2 contract: a wait that could not tell is NEVER a pass."""
+    repo, _ = _setup(tmp_path, monkeypatch)
+    (tmp_path / "status.json").write_text(status_file)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", wait_exit)
+    monkeypatch.setattr(RR, "sleep", lambda s: None)
+    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "0"]) == want
+
+
+def test_main_keeps_a_negative_wait_s_negative(tmp_path, monkeypatch):
+    """Negative --wait-s stays one poll (clean on a done job) instead of silently becoming
+    the 900s config default."""
+    repo, log = _setup(tmp_path, monkeypatch)
+    (tmp_path / "status.json").write_text(DONE)
+    monkeypatch.setattr(RR, "sleep", lambda s: None)
+    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "-5"]) == 0
+    reads = [c for c in log.read_text().splitlines() if c.startswith("list")]
+    assert len(reads) == 1
