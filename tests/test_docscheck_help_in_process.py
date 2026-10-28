@@ -110,7 +110,7 @@ def test_a_parse_failure_reads_could_not_run_never_a_pass(monkeypatch):
         def parse_args(self, argv):
             raise RuntimeError("parse blown on purpose")
 
-    monkeypatch.setattr(H, "_parser", _Broken())
+    monkeypatch.setattr(H, "_parser", [_Broken()])  # the slot `in_process` reads, cell[0]
     out = H.in_process(["gate"])
     assert not out.ran
     assert isinstance(out.error, RuntimeError)
@@ -138,9 +138,7 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
         return P.Captured(error=TimeoutError("spawned on purpose"))
 
     monkeypatch.setattr(P, "capture", capture)
-    rep = D.check_docs(
-        tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
-    )
+    rep = D.check_docs(tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"])
     #: the whole walk, argv for argv: it descends from the root verb, so `nix --help`
     #: spawns FIRST and -- the capture always times out -- the deeper `nix run --help` is
     #: never reached (the walk must not guess it). NOTHING ddflow-shaped -- spelled bare,
@@ -153,9 +151,7 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
         return P.Captured(0, "usage: nix [--alpha A]\n", "")
 
     monkeypatch.setattr(P, "capture", live)
-    rep = D.check_docs(
-        tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
-    )
+    rep = D.check_docs(tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"])
     assert rep.clean, rep.findings  # ddflow's --reason resolved by THIS ddflow's help
     #: `--reason` of the ddflow mention and `--alpha` of `nix run`: the walk judged both.
     assert rep.checked["verb_flags"] == 2

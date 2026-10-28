@@ -416,12 +416,16 @@ def test_the_cli_timeout_zero_is_honoured_not_defaulted(proj):
 
 def test_mcp_caps_the_wait_and_honours_zero():
     from ddflow.surfaces import mcp as M
+    from ddflow.surfaces.tools._common import MCP_WAIT_SILENT_MAX_S
 
+    # The silent cap is _common's, where Bfc43dae5b9 put it: the mcp module re-exports the
+    # wait surface it SERVES (MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S above) but not the caps'
+    # own file, exactly like tests/test_clock_duration.py.
     assert M._wait_timeout({}) == M.MCP_WAIT_DEFAULT_S
     assert M._wait_timeout({"timeout": 0}) == 0
     # From a bare call with no progress token the wait can send no frame at all until
     # its answer, so the cap is the silent one, below the client idle cutoff (Bfc43dae5b9).
-    assert M._wait_timeout({"timeout": 10**6}) == M.MCP_WAIT_SILENT_MAX_S
+    assert M._wait_timeout({"timeout": 10**6}) == MCP_WAIT_SILENT_MAX_S
 
 
 def test_mcp_wait_returns_what_the_holder_side_reports(proj):
