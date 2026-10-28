@@ -68,15 +68,26 @@ def test_every_view_reports_n_after_n_rounds(repo, tmp_path):
     shown = api.review_show(repo, "T1", gate="critic")
     assert shown.exit == OK, shown.reason
     assert "2 of 2 rounds -- 2 full, 0 delta" in shown.data["text"], shown.data["text"]
-    assert shown.data["rounds"]["critic"]["used"] == shown.data["rounds"]["critic"]["max_rounds"] == 2
+    assert (
+        shown.data["rounds"]["critic"]["used"] == shown.data["rounds"]["critic"]["max_rounds"] == 2
+    )
     out = _refute(repo, 1)
     assert "after 2 of 2 review rounds" in out, out
 
 
 def _refute(repo: Path, n: int) -> str:
     code, out, err = run_cli(
-        repo, "review", "triage", "T1", "--gate", "critic", "--finding", str(n),
-        "--refuted", "--probe", "ran it: no such bug",
+        repo,
+        "review",
+        "triage",
+        "T1",
+        "--gate",
+        "critic",
+        "--finding",
+        str(n),
+        "--refuted",
+        "--probe",
+        "ran it: no such bug",
     )
     assert code == OK, err
     return out
@@ -89,10 +100,22 @@ def test_every_view_still_reports_n_when_the_current_record_undercounts(repo, tm
     _full_review(repo)
     st = fold(EventLog(repo).read_all(), strict=False)
     rec = st.items["T1"].gates["critic"]
-    evidence = {**dict(rec.evidence or {}), "rounds": 1, "delta_rounds": 0,
-                "review_kind": "full", "status": "REVIEWED"}
-    G.record(EventLog(repo), Config.load(repo), "T1", "critic", "failed",
-             by=rec.by or "dup-agent", evidence=evidence)
+    evidence = {
+        **dict(rec.evidence or {}),
+        "rounds": 1,
+        "delta_rounds": 0,
+        "review_kind": "full",
+        "status": "REVIEWED",
+    }
+    G.record(
+        EventLog(repo),
+        Config.load(repo),
+        "T1",
+        "critic",
+        "failed",
+        by=rec.by or "dup-agent",
+        evidence=evidence,
+    )
     code, out, err = run_cli(repo, "gate", "status", "T1")
     assert code == OK, err
     assert "2 full rounds" in out, out
