@@ -219,9 +219,9 @@ def test_a_job_without_a_readable_status_is_unchecked_not_ended(tmp_path, monkey
     repo, _ = _setup(tmp_path, monkeypatch)
     (tmp_path / "status.json").write_text('[{"id": 7, "git_ref": "a..abcdef0", "agent": "kilo"}]')
     monkeypatch.setattr(RR, "sleep", lambda s: None)
-    out = RR.wait_job(repo, 7, 30)
-    assert out.review is None and out.live is False
-    assert "no readable status" in out.note and "ended " not in out.note
+    out = RR.wait_job(repo, 7, 3)
+    assert out.review is None and out.live is True  # pollable, not terminal-ended
+    assert "no readable status" in out.note and "will never carry a review" not in out.note
 
 
 @pytest.mark.parametrize(
@@ -265,14 +265,13 @@ def test_main_exits_by_the_verdict(tmp_path, monkeypatch, status_file, wait_exit
 
 
 def test_main_keeps_a_negative_wait_s_negative(tmp_path, monkeypatch):
-    """Negative --wait-s stays one poll (clean on a done job) instead of silently becoming
-    the 900s config default."""
+    """Negative --wait-s stays ONE poll even with a live job: the 900s default would keep
+    polling and read the list again (the fake clock skips 100s per call, so 900s = ~9 reads)."""
     repo, log = _setup(tmp_path, monkeypatch)
-    (tmp_path / "status.json").write_text(DONE)
-    monkeypatch.setattr(RR, "sleep", lambda s: None)
-    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "-5"]) == 0
+    clock, _ = _fake_clock(monkeypatch, 100.0)
+    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "-5"]) == 2  # live: never a pass
     reads = [c for c in log.read_text().splitlines() if c.startswith("list")]
-    assert len(reads) == 1
+    assert len(reads) == 1, clock
 
 
 def test_a_clean_verdict_whose_body_could_not_be_read_is_never_a_pass(

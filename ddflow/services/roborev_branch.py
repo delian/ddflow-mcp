@@ -57,19 +57,24 @@ def _git(where: Path, *argv: str) -> str:
     return r.out.strip() if r.code == 0 else ""
 
 
-def _find_job(jobs: list, where: Path, sha: str, enqueue_out: str) -> int | None:
-    """The enqueued job's id from the enqueue's own words, else the newest list record
-    covering ``sha`` -- of the list already read under the lock (never a fresh read whose
-    failure note would have nowhere to go)."""
+def _pluck_job_id(enqueue_out: str) -> int | None:
+    """The id the enqueue's own WORDS printed (`Enqueued job N ...`), None when they named no
+    job (the only case a list read may decide it)."""
     m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
+    return int(m.group(1)) if m else None
+
+
+def _find_job(jobs: list, where: Path, sha: str, enqueue_out: str) -> int | None:
+    """The enqueued job's id: the enqueue's own words first, else the newest list record
+    covering ``sha`` among ``jobs``. The newest covering record wins: a re-enqueue after a
+    failed record gets a NEW id and a POST-enqueue list contains it, so a stale failed
+    record cannot beat it."""
+    if (m := _pluck_job_id(enqueue_out)) is not None:
+        return m
     ids = [
         int(j["id"]) for j in jobs
         if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
-    # the newest covering record wins: a re-enqueue after a failed record gets a NEW id, and
-    # the list taken AFTER the enqueue contains it, so the stale record cannot beat it.
     return max(ids) if ids else None
 
 
@@ -175,11 +180,11 @@ def run(where: Path, base: str, wait_s: int) -> Result:
                 return Result(
                     "unavailable", f"roborev could not enqueue the range review: {why}", sha=head
                 )
-            job = _find_job(jobs, where, head, q.stdout + q.stderr)
+            job = _pluck_job_id(q.stdout + q.stderr)
             if job is None:
-                # the just-enqueued job POSTDATES the pre-enqueue read: one fresh read finds
-                # it (and its failure names itself; the pre-read's failure must not leak into
-                # a silent `named no job` misdiagnosis).
+                # the enqueue named no id in words: only a POST-enqueue list knows it. The
+                # PRE-enqueue list must NOT answer here -- a stale failed record for the same
+                # head would beat the just-enqueued job (a confirmed finding).
                 jobs, rfailed = _list(exe, where)
                 if rfailed:
                     return Result(

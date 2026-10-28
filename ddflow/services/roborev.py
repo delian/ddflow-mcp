@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,6 +69,10 @@ _FLOOR_S = 0.05
 #: round-trip fits in it, so a verdict that arrives a moment past the bound still reads
 #: truthfully instead of 'unjudged' on a 50ms cap.
 _VERDICT_FLOOR_S = 1.0
+#: How long a job the list does not name yet is polled before it reads as vanished: an
+#: enqueue is indexed moments after `roborev review` prints its id, and an instant vanish
+#: would re-enqueue a live job.
+_INDEX_GRACE_S = 5.0
 
 
 def _covers(git_ref: str, sha: str) -> bool:
@@ -195,45 +200,36 @@ class WaitResult:
     unjudged: bool = False  #: a verdict whose evidence could not be read: never a pass (exit 2)
 
 
-def _settled(rec: dict | None, job: int) -> WaitResult | None:
-    """The dead-end answers one list read can give for a job record -- vanished (the list no
-    longer has it), no readable status, or ended failed/canceled. ``None`` when the job is
-    still queued/running (the wait goes on), or done (the caller's verdict path takes it)."""
-    if rec is None:
-        return WaitResult(
-            note=(
-                f"roborev's last {_LIMIT} jobs hold no job {job} in this repository: the "
-                f"review for it was never written (an older job may just be past the "
-                f"{_LIMIT}-job list window; 'no review found' would be the very same words); "
-                f"re-run `roborev review <sha of the branch head>` to enqueue it, then wait "
-                f"again"
-            )
-        )
+def _rerun(repo_hint: str) -> str:
+    """The quoted follow-up in the dead-end notes: same-repository (a path with spaces stays
+    one argv token), never the bare word that would read the SHA as a job id."""
+    return f'`roborev review --repo "{repo_hint}" <sha of the branch head>`'
+
+
+def _ended(rec: dict, job: int, where: str) -> WaitResult | None:
+    """The ONE terminal dead end: a status roborev says will never become a review --
+    failed/canceled -- named with the honest re-run. Any other record (done, live, unknown,
+    blank) keeps the wait going in `wait_job`."""
     status = str(rec.get("status") or "")
-    if not status:
-        # no readable status is its own bucket: it MAY still be running -- an unknown
-        # status must not read as an ended job ordered to re-enqueue.
-        return WaitResult(
-            note=(
-                f"roborev job {job} has no readable status in its record: it may still be "
-                f"running, but nothing says so; the reviewer is unchecked -- wait again"
-            )
-        )
-    if status in _UNFINISHED or status == "done":
-        return None  # still live, or done -- the caller's done path (wait_job) takes the job
-    if status in _ENDED:
-        return WaitResult(
-            note=(
-                f"roborev job {job} ended {status}: it will never carry a review; re-run "
-                f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
-            )
-        )
-    # any OTHER non-empty status (a roborev state this reader does not know) may still be a
-    # live one: wait again -- an unknown word must not order a re-enqueue over a live job.
+    if status not in _ENDED:
+        return None
     return WaitResult(
         note=(
-            f"roborev job {job} has an unknown status {status!r}: it may still be running; "
-            f"the reviewer is unchecked -- wait again"
+            f"roborev job {job} ended {status}: it will never carry a review; re-run "
+            f"{_rerun(where)}; the reviewer is unchecked"
+        )
+    )
+
+
+def _vanished(job: int, where: str) -> WaitResult:
+    """The job survived the not-yet-listed grace but is still not among the last ``_LIMIT``:
+    it is GONE (or past the list window) -- re-enqueue, never 'keep waiting'."""
+    return WaitResult(
+        note=(
+            f"roborev's last {_LIMIT} jobs hold no job {job} in this repository: the "
+            f"review for it was never written (an older job may just be past the "
+            f"{_LIMIT}-job list window; 'no review found' would be the very same words); "
+            f"re-run {_rerun(where)} to enqueue it, then wait again"
         )
     )
 
@@ -248,22 +244,18 @@ def wait_job(
     """Wait up to ``wait_s`` seconds for job ``job`` to end, POLLING `roborev list --json`
     every ``_POLL_S`` -- never `roborev wait`/`show`, whose 'no review found' for an
     unfinished job is the wording of a job that never existed. The poll's own words rule:
-    queued/running = still running (a progress line, then keep waiting, ticking ``on_tick``
-    -- the hook a lease-holding host (the gate-run parent) plugs its keeper into -- each
-    poll); done = the finished review (its verdict read
-    with `roborev wait --job` and its text with `roborev show --job`, both truthful once
-    done); failed/canceled = ended (re-enqueue); no longer listed = vanished (re-enqueue);
+    queued/running (and unknown/blank/not-yet-listed) = still waiting (a progress line, then
+    keep polling, ticking ``on_tick`` -- the hook a lease-holding host plugs its keeper into);
+    done = the finished review (its verdict and text, both truthful once done); failed/
+    canceled = ended (re-enqueue); not listed past the index grace = vanished (re-enqueue);
     the bound with the job still live = ``live``. ``wait_s`` <= 0 polls once and returns."""
-    import sys
-
     exe = shutil.which("roborev")
     if not exe:
         return WaitResult(note=f"roborev is not on PATH; job {job} is unchecked")
     started = monotonic()
     deadline = started + max(0, wait_s)
-    live_state = (
-        "queued or running"  # the last status read (the bound-check reads it between polls)
-    )
+    live_state = "queued or running"  # the last status read (named between polls)
+    where_hint = str(where)
     while True:
         if wait_s > 0 and monotonic() >= deadline:
             # the bound lapsed since the last read, which named the job live: say so NOW.
@@ -277,25 +269,33 @@ def wait_job(
                 note=f"roborev's job list could not be read ({failed}): job {job} is unchecked"
             )
         rec = next((j for j in jobs if _job_id(j) == job), None)
-        if settled := _settled(rec, job):
-            return settled
-        status = str(rec.get("status") or "")
-        if status == "done":
-            if on_tick is not None:
-                on_tick()  # a lease-holding host renews before the verdict asks below
-            # The two verdict asks SHARE the remaining bound (floored at _VERDICT_FLOOR_S):
-            # even a hanging `wait`/`show` on a done job cannot run two whole ask timeouts,
-            # and a healthy verdict that arrives just past the bound still gets a real ask.
-            # wait_s <= 0: one prompt verdict collect (a done job answers in moments); a
-            # bounded wait: what the bound still allows.
-            allowance = (
-                5 * _VERDICT_FLOOR_S if wait_s <= 0 else min(_TIMEOUT_S, deadline - monotonic())
-            )
-            return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
-        elapsed = monotonic() - started
-        if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
-            return WaitResult(live=True, note=_live(job, status, elapsed, where))
-        print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
+        if rec is None:
+            # a just-enqueued job may not be indexed in the very next read: poll through the
+            # grace before calling it vanished -- an instant vanish would re-enqueue it.
+            elapsed = monotonic() - started
+            if wait_s <= 0 or elapsed >= min(_INDEX_GRACE_S, wait_s):
+                return _vanished(job, where_hint)
+            status = "not listed yet (an enqueue is indexed moments later)"
+        else:
+            if ended := _ended(rec, job, where_hint):
+                return ended
+            raw_status = str(rec.get("status") or "")
+            status = raw_status or "no readable status"
+            if raw_status == "done":
+                if on_tick is not None:
+                    on_tick()  # a lease-holding host renews before the verdict asks below
+                # The two verdict asks SHARE the remaining bound (floored at
+                # _VERDICT_FLOOR_S): a hanging pair cannot run two whole ask timeouts, and a
+                # healthy verdict just past the bound still gets a real ask. wait_s <= 0: one
+                # prompt verdict collect (a done job answers in moments).
+                allowance = (
+                    5 * _VERDICT_FLOOR_S if wait_s <= 0 else min(_TIMEOUT_S, deadline - monotonic())
+                )
+                return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
+            elapsed = monotonic() - started
+            if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
+                return WaitResult(live=True, note=_live(job, status, elapsed, where))
+        print(f"roborev job {job}: still {status} after {round(elapsed, 1)}s", file=sys.stderr)
         if on_tick is not None:
             on_tick()  # the caller's lease-keeper hook: a long wait outlives an unrenewed lease
         left = (deadline - monotonic()) if wait_s > 0 else _POLL_S
@@ -315,10 +315,13 @@ def _live(job: int, status: str, elapsed: float, where: Path | None = None) -> s
     rerun = f"`python -m ddflow.services.roborev wait --job {job}"
     if where is not None:
         rerun += f' --repo "{where}"'  # quoted: a path with spaces must stay one argv token
+    hint = ""
+    if "not listed" in status:
+        hint = "; if it is not indexed even after this, re-run `roborev review <sha of the branch head>`"
     return (
         f"roborev job {job} is still {status} after {round(elapsed)}s "
         f"(running, not failed: it may still finish); {rerun}` again later, "
-        f"or raise [gates].standards_wait_s"
+        f"or raise [gates].standards_wait_s{hint}"
     )
 
 
