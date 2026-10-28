@@ -192,8 +192,11 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model, model_source = _author_model(st, log.agent_id, model, cfg)
-    family, family_only = _recorded_identity(model, model_source, cfg)
-    recorded = family if family_only else model
+    recorded, family_only = _recorded_identity(model, model_source, cfg)
+    # ONE builder for both outlets -- the caller-facing `base` dict and the durable
+    # event spread the SAME dict, so the two cannot drift apart (they once re-derived
+    # the key and value each on their own; roborev flagged the drift class).
+    author_identity = _author_event_identity(recorded, model_source, family_only)
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
@@ -215,8 +218,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
-        "author_family" if family_only else "author_model": recorded,
-        "model_source": model_source,
+        **author_identity,
         "independence": v.independence,
         # BOTH surfaces, always. This used to print only in human mode, so an agent over
         # MCP -- which is always JSON -- completed the item and was never told a gate had
@@ -293,7 +295,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # record to carry the id, so the event names both for any known source. A
             # family-only author ([agent].family, a bare family after --model) records
             # `author_family` instead: the family only, never a model id (DX-author-family).
-            **_author_event_identity(recorded, model_source, family_only),
+            **author_identity,
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
