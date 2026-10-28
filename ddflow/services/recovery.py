@@ -125,70 +125,62 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
                 for a in actions
             ]
         for a in actions:
-            if a.cls != "safe_auto":
-                rows.append({"item": a.item, "applied": False, "note": f"{a.cls} is shown only"})
-                continue
-            effect = a.evidence.get("effect")
-            try:
-                if effect == "expire":
-                    recorded = L.expire(log, a.item, reason="recovery-plan sweep: clean tree")
-                    rows.append(
-                        {
-                            "item": a.item,
-                            "applied": bool(recorded),
-                            "note": a.reason if recorded else "an expiry is already recorded",
-                        }
-                    )
-                elif effect == "record_unavailable":
-                    GA = importlib.import_module("ddflow.api.gates")
-                    swept = GA.sweep_dead_runs(repo, agent, a.item)
-                    rows.append(
-                        {
-                            "item": a.item,
-                            "applied": bool(swept),
-                            "note": f"{a.evidence.get('gate')} unavailable recorded"
-                            if swept
-                            else f"{a.evidence.get('gate')}: nothing owed since the run began",
-                        }
-                    )
-                elif effect == "job_end":
-                    JAPI = importlib.import_module("ddflow.api.jobs")
-                    out = JAPI.job_end(repo, job=a.evidence.get("job", ""), agent=agent)
-                    rows.append(
-                        {
-                            "item": a.item,
-                            "applied": out.exit == 0,
-                            "note": out.reason,
-                        }
-                    )
-                elif effect == "requeue":
-                    # THIS entry only: a plan action may never requeue an entry the
-                    # plan did not name (the whole-list requeue is the integrator's own
-                    # standby, not this pass's).
-                    with MQ.integrator(repo, agent=agent) as integrator:
-                        taken: list[str] = []
-                        if integrator:
-                            for e in MQ.entries(repo):
-                                if e.item == a.item and e.state == MQ.RUNNING:
-                                    e.state, e.started_at = MQ.QUEUED, 0.0
-                                    e.reason = "the recovery pass requeued it (integrator gone)"
-                                    MQ._write(repo, e)
-                                    taken.append(e.item)
-                    rows.append(
-                        {
-                            "item": a.item,
-                            "applied": bool(taken),
-                            "note": f"{a.item} requeued"
-                            if taken
-                            else f"{a.item} is not a running entry anymore"
-                            if integrator
-                            else "the integrator lock is held; the next integrator run takes it",
-                        }
-                    )
-                else:
-                    rows.append(
-                        {"item": a.item, "applied": False, "note": f"unknown effect {effect!r}"}
-                    )
-            except Exception as e:  # one bad step must not sink the pass
-                rows.append({"item": a.item, "applied": False, "note": f"failed: {e!r}"})
+            rows.append(_one_safe(repo, log, agent, a, L, MQ))
     return rows
+
+
+def _one_safe(repo, log, agent, a, L, MQ) -> dict:
+    """One action under the flock, its own precondition re-checked immediately before it
+    acts. PROPOSE/OPERATOR come back shown-only; an unexpected step reports, never sinks."""
+    if a.cls != "safe_auto":
+        return {"item": a.item, "applied": False, "note": f"{a.cls} is shown only"}
+    if a.evidence.get("effect") == "expire":
+        recorded = L.expire(log, a.item, reason="recovery-plan sweep: clean tree")
+        return {
+            "item": a.item,
+            "applied": bool(recorded),
+            "note": a.reason if recorded else "an expiry is already recorded",
+        }
+    if a.evidence.get("effect") == "record_unavailable":
+        GA = importlib.import_module("ddflow.api.gates")
+        swept = GA.sweep_dead_runs(repo, agent, a.item)
+        return {
+            "item": a.item,
+            "applied": bool(swept),
+            "note": f"{a.evidence.get('gate')} unavailable recorded"
+            if swept
+            else f"{a.evidence.get('gate')}: nothing owed since the run began",
+        }
+    if a.evidence.get("effect") == "job_end":
+        JAPI = importlib.import_module("ddflow.api.jobs")
+        out = JAPI.job_end(repo, job=a.evidence.get("job", ""), agent=agent)
+        return {"item": a.item, "applied": out.exit == 0, "note": out.reason}
+    if a.evidence.get("effect") == "requeue":
+        return _requeue(repo, agent, a, MQ)
+    return {"item": a.item, "applied": False, "note": f"unknown effect {a.evidence.get('effect')!r}"}
+
+
+def _requeue(repo, agent, a, MQ) -> dict:
+    """THIS entry only: a plan action may never requeue an entry the plan did not name
+    (the whole-list requeue is the integrator's own standby, not this pass's)."""
+    try:
+        with MQ.integrator(repo, agent=agent) as integrator:
+            taken: list[str] = []
+            if integrator:
+                for e in MQ.entries(repo):
+                    if e.item == a.item and e.state == MQ.RUNNING:
+                        e.state, e.started_at = MQ.QUEUED, 0.0
+                        e.reason = "the recovery pass requeued it (integrator gone)"
+                        MQ._write(repo, e)
+                        taken.append(e.item)
+        return {
+            "item": a.item,
+            "applied": bool(taken),
+            "note": f"{a.item} requeued"
+            if taken
+            else f"{a.item} is not a running entry anymore"
+            if integrator
+            else "the integrator lock is held; the next integrator run takes it",
+        }
+    except Exception as e:  # one bad step must not sink the pass
+        return {"item": a.item, "applied": False, "note": f"failed: {e!r}"}
