@@ -177,8 +177,9 @@ def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
 
 
 def test_each_runs_output_is_bounded_before_the_tail_is_cut(proj):
-    # The tail budget must bound MEMORY too, not only the record: each run's output is
-    # pre-cut when it lands, and the joined tail still ends with the last run's bytes.
+    # The tail budget must bound CAPTURE too, not only the record: each run's output
+    # lands in a scratch FILE and only its tail is read back, and the joined tail still
+    # ends with the last run's bytes.
     _config(proj, "[bugs]\nrepro_runs = 3\nrepro_tail_bytes = 8\n")
     _bid, bug = _file(
         proj, repro_cmd=python("import sys; print('run-marker'); sys.exit(0)")
@@ -186,3 +187,22 @@ def test_each_runs_output_is_bounded_before_the_tail_is_cut(proj):
     run = _run(proj, bug)
     assert run["output_truncated"] is True
     assert run["output"] == "-marker\n"  # the joined tail, 'run' cut by the byte budget
+
+
+def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatch):
+    # Pins the mechanism: the budget must bound the run ITSELF, not cut after it. The
+    # line runs with the shell's own redirect into the scratch tree, so a run printing
+    # gigabytes never reaches this process's memory; a rollback to buffering the whole
+    # output then slicing would keep the same tail -- and lose the redirect.
+    _config(proj, "[bugs]\nrepro_tail_bytes = 8\n")
+    from ddflow.services import reprocheck as RC
+
+    lines: list[str] = []
+    real = RC.P.run_shell
+    monkeypatch.setattr(RC.P, "run_shell", lambda line, **kw: lines.append(line) or real(line, **kw))
+    _bid, bug = _file(
+        proj, repro_cmd=python("import sys; sys.stdout.write('x' * 100000); sys.exit(0)")
+    )
+    run = _run(proj, bug)
+    assert lines and ".ddflow-repro-0.out" in lines[0] and " 2>&1" in lines[0]
+    assert run["output"] == "x" * 8

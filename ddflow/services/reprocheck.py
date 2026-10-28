@@ -28,6 +28,7 @@ the shell's, and a timeout kills the whole process group (`infra.proc.run_shell`
 from __future__ import annotations
 
 import os
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -60,9 +61,12 @@ def _run_at(
     or a glob behave as the saw it did, and a timeout kills the line's process group. A
     run cut off (timed out, could not start) never yields an exit code: it is not part of
     the verdict, it is counted as ``unreached`` -- without runs that answered, the record
-    is ``unavailable``, never reproduced. Each run's output is pre-cut to the tail budget
-    right after the run, so a command that prints gigabytes cannot accumulate them in
-    memory; the joined output's byte-cut tail is the record's single ``output``."""
+    is ``unavailable``, never reproduced. Each run's output lands in a file INSIDE the
+    scratch tree (the shell's own redirect; /dev/null when nothing is kept), never in
+    this process's buffer, and only the tail bytes are read BACK -- a command that prints
+    gigabytes writes them to a tree that is deleted with the checkout instead of
+    accumulating them in memory. The joined tails' byte-cut tail is the record's single
+    ``output``."""
     load_start = _first_load()
     keep = max(0, int(tail_bytes))
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
@@ -73,15 +77,24 @@ def _run_at(
             }
         codes: list[int] = []
         out: list[str] = []
+        bigger = False
         unreached = 0
-        for _ in range(count):
-            shot = P.run_shell(line, timeout_s=timeout_s, cwd=s.path, merge_stderr=True)
+        for i in range(count):
+            dest = (
+                f" > {shlex.quote(str(tail := s.path / f'.ddflow-repro-{i}.out'))} 2>&1"
+                if keep
+                else " > /dev/null 2>&1"
+            )
+            shot = P.run_shell(f"{line}{dest}", timeout_s=timeout_s, cwd=s.path, merge_stderr=True)
             if shot.could_not_run or shot.timed_out or shot.code is None:
                 unreached += 1
                 continue
             codes.append(int(shot.code))
-            if shot.out and keep:
-                out.append(shot.out[-keep:])
+            if keep:
+                tailed, size = _tail_from_file(tail, keep)
+                if tailed:
+                    out.append(tailed)
+                bigger = bigger or size > keep
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
         record: dict[str, Any] = {
@@ -105,12 +118,26 @@ def _run_at(
     text = "\n".join(out)
     if text and keep:
         raw = text.encode("utf-8", errors="replace")
-        record["output_truncated"] = len(raw) > keep
+        record["output_truncated"] = bigger or len(raw) > keep
         # Cut at the BYTE the knob staffed -- a character cut could double the budget in
         # UTF-8 -- and drop the boundary bytes the cut split (a cut character was never
         # fully stored): what stays re-encodes within the budget.
         record["output"] = raw[-keep:].decode("utf-8", errors="ignore")
     return record
+
+
+def _tail_from_file(path: Path, keep: int) -> tuple[str, int]:
+    """The last ``keep`` bytes of ``path`` (decoded) and its total size; ``("", size)`` when
+    the file is not readable. Reading with a seek bounds what an enormous run loads into
+    memory -- the size still says a run was cut."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - keep))
+            return fh.read(keep).decode("utf-8", errors="replace"), size
+    except OSError:
+        return "", 0
 
 
 def _first_load() -> str:
