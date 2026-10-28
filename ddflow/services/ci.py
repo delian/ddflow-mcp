@@ -242,7 +242,10 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
     # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
     # selected-tests plan), so merge the two like the earlier tripwire run did; with no
     # assignment the environment's own SKIP reaches pre-commit as it is.
-    merged = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
+    ids = lead["ids"] if lead else ""
+    if len(ids) >= 2 and ids[0] == ids[-1] and ids[0] in "\"'":
+        ids = ids[1:-1]  # one balanced quote layer: `SKIP='lint'` still skips `lint`
+    merged = f'SKIP="${{SKIP:+$SKIP,}}{ids}" ' if ids else ""
     # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
     # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
     return merged + run.replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
