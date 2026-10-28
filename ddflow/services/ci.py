@@ -243,6 +243,22 @@ def _shell_active(c: str, value: list[str]) -> bool:
     return c in "$`" or (c == "~" and (not value or value[-1] == ":"))
 
 
+def _sub_end(quote: str, c: str, command: str, i: int, n: int) -> int:
+    """The index just past a rounded `$( ... )` opened at ``i`` -- one shell word-part the
+    scan must cross whole -- or -1 when ``c`` is not one (a `$` inside single quotes is
+    literal, not a substitution) or the parens never balance."""
+    if quote == "'" or c != "$" or i + 1 >= n or command[i + 1] != "(":
+        return -1
+    depth, i = 1, i + 2
+    while i < n and depth:
+        if command[i] == "(":
+            depth += 1
+        elif command[i] == ")":
+            depth -= 1
+        i += 1
+    return i if depth == 0 else -1
+
+
 def _leading_skip(command: str) -> tuple[str | None, str, str]:
     """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
     -- the value the shell would resolve it to (`'a b'` -> `a b`), the value's source text
@@ -264,6 +280,10 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
             if got:
                 value.append(got)
             i += 1
+        elif (end := _sub_end(quote, c, command, i, n)) >= 0:
+            activity = True  # the whole substitution is one verbatim word-span
+            i = end
+            continue
         elif quote and c == quote:
             quote = ""
         elif quote:
