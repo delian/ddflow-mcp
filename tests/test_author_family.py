@@ -165,6 +165,7 @@ def test_a_configured_family_wins_over_a_session_model_record(repo, monkeypatch)
     assert data.get("author_family") == "deepseek", data
     assert data.get("model_source") == "config", data
     assert "author_model" not in data, "the session's model id must not reach the log"
+    assert "model" not in data, "no model id may reach the event under any key"
 
 
 # -- gate record: the author-family refusal reads the configured family too ------------
