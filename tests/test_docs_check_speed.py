@@ -119,6 +119,19 @@ def test_the_in_process_knob_accepts_a_single_string():
     assert by_tree.ran and by_tree.returncode == 0 and "--repo" in by_tree.stdout
 
 
+def test_a_duck_shaped_stdinno_standin_cannot_sink_the_render_with_AttributeError():
+    import io
+
+    #: an embedder's write/flush-only sys.stdout stand-in has NO `isatty`/`fileno` of its
+    #: own: `_RoutedTo` must still answer both (not-a-tty; fileno unsupported) instead of
+    #: raising -- an AttributeError here would mark every in-process chain could-not-run.
+    duck = type("DuckStream", (), {"write": lambda self, text: len(text), "flush": lambda self: None})()
+    stand = H._RoutedTo(duck, io.StringIO(), 0)
+    assert stand.isatty() is False
+    with pytest.raises(OSError):
+        stand.fileno()
+
+
 def test_the_first_chain_of_a_fresh_process_is_cached_too():
     was = H._HERE._built
     H._HERE._built = None  # a fresh process: the versioned memo does not exist yet
@@ -144,7 +157,9 @@ def test_one_in_process_command_cannot_blanket_the_others(monkeypatch):
     idx = H.HelpIndex(run, ["ddflow", "ddflowx"])
     #: the broken command notes ITSELF (never some joined "ddflow ddflowx" key), and
     #: ddflow's own chains are still judged on their own -- however THEY ended
-    assert idx.unavailable.get("ddflowx") == "could not walk: no registry here"
+    assert idx.unavailable.get("ddflowx") == (
+        "registry failed to build, mentions spawn through the runner: no registry here"
+    )
     assert "ddflow ddflowx" not in idx.unavailable
     assert idx._cache
 

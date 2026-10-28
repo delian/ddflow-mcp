@@ -325,10 +325,13 @@ class HelpIndex:
             try:
                 chains = list(_HERE.chains(cmd))
             except SystemExit as exc:  # a registry that exits while building: not a crash either
-                self.unavailable[cmd] = f"could not walk: exited {exc.code}"
+                #: the EAGER cache holds nothing for it, but the runner still answers its
+                #: mentions lazily (a registry only THIS process cannot build spawns: `owns`
+                #: is False then), so the note says BOTH, never a bare could-not-run.
+                self.unavailable[cmd] = f"registry failed to build, mentions spawn through the runner: exited {exc.code}"
                 continue
             except Exception as exc:  # a registry that cannot build is "could not run", not a crash
-                self.unavailable[cmd] = f"could not walk: {exc}"
+                self.unavailable[cmd] = f"registry failed to build, mentions spawn through the runner: {exc}"
                 continue
             for chain in chains:
                 walked += 1
