@@ -250,10 +250,19 @@ def _sub_end(quote: str, c: str, command: str, i: int, n: int) -> int:
     if quote == "'" or c != "$" or i + 1 >= n or command[i + 1] != "(":
         return -1
     depth, i = 1, i + 2
+    inner = ""  # quotes inside the substitution are its own: parens inside them are text
     while i < n and depth:
-        if command[i] == "(":
+        c = command[i]
+        if inner:
+            if c == inner:
+                inner = ""
+        elif c in "\"'":
+            inner = c
+        elif c == "\\" and i + 1 < n:
+            i += 1  # the escaped char inside the substitution is text, not a paren
+        elif c == "(":
             depth += 1
-        elif command[i] == ")":
+        elif c == ")":
             depth -= 1
         i += 1
     return i if depth == 0 else -1
