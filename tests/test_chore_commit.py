@@ -17,9 +17,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
+from ddflow.services import chore as CO
 
 
 @pytest.fixture(autouse=True)
@@ -248,8 +250,13 @@ def test_the_item_completed_event_records_why_no_reviewer_was_needed(proj):
     assert isinstance(chore, dict), chore
     assert "standing approval" in chore["note"]
     # Structured so the covering approval is verifiable from the event alone: the note
-    # truncates the digest to 12 chars; the fields keep the whole of it (DX-chore-commit).
-    assert chore["approved_by"] and chore["digest"] and chore["paths"]
+    # truncates the digest to 12 chars; the fields keep the whole of it (DX-chore-commit) --
+    # the FULL list digest `chore approve` covers, not the truncated note value, and the
+    # paths actually judged (roborev review of DX-chore-completed-event: any truthy digest
+    # or paths would pass the old "and" line).
+    assert chore["approved_by"]
+    assert chore["digest"] == CO.approval_digest(Config()) and len(chore["digest"]) > 12
+    assert ".mailmap" in chore["paths"] and chore["paths"]
 
 
 def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
