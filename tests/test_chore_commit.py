@@ -279,7 +279,18 @@ def test_complete_outputs_the_chore_exemption(proj):
     """`complete`'s own output prints the exemption, not just the log: a chore completed
     item over MCP is told why no reviewer was needed."""
     _approve(proj)
-    run_cli(proj, "task", "add", "CH", "--title", "mailmap chore", "--globs", ".mailmap", "--tags", "chore")
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "CH",
+        "--title",
+        "mailmap chore",
+        "--globs",
+        ".mailmap",
+        "--tags",
+        "chore",
+    )
     run_cli(proj, "claim", "CH")
     wt = proj / ".ddflow" / "worktrees" / "CH"
     (wt / ".mailmap").write_text("A <a@x> <b@x>\n")
