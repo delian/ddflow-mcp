@@ -10,6 +10,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from ddflow.services import roborev as RR
 
 #: The fake roborev: `list --json` cats `$FAKE_STATUS_FILE` (the test rewrites it between
@@ -19,7 +21,8 @@ from ddflow.services import roborev as RR
 FAKE = r"""#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
 case "$1" in
-  list) cat "$FAKE_STATUS_FILE"
+  list) if [ "${FAKE_RAW_SET:-0}" = 1 ]; then printf '%s' "$FAKE_LIST_RAW"; exit "${FAKE_LIST_EXIT:-0}"; fi
+        cat "$FAKE_STATUS_FILE"
         grep -q '"status": "done"' "$FAKE_STATUS_FILE" && echo done-served >> "$FAKE_LOG"
         exit 0 ;;
   wait) exit "${FAKE_WAIT_EXIT:-0}" ;;
@@ -219,3 +222,25 @@ def test_a_job_without_a_readable_status_is_unchecked_not_ended(tmp_path, monkey
     out = RR.wait_job(repo, 7, 30)
     assert out.review is None and out.live is False
     assert "no readable status" in out.note and "ended " not in out.note
+
+
+@pytest.mark.parametrize(
+    ("raw", "exit", "needle"),
+    [
+        ("", 0, "no JSON"),  # exit 0 and nothing printed: never an empty job list
+        ("not json", 0, "no JSON"),  # unparsable output
+        ("{}", 0, "no job list"),  # parseable but not a list
+        ("[9]", 0, "no job records"),  # a list of non-records
+        ("null", 0, "hold no job 7"),  # the one fine 'this repository has no jobs'
+        ("oops", 1, "could not be read"),  # the ask itself failed
+    ],
+)
+def test_an_unreadable_list_read_is_said_so_never_an_empty_job_list(
+    tmp_path, monkeypatch, raw, exit, needle
+):
+    repo, _ = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_LIST_RAW", raw)
+    monkeypatch.setenv("FAKE_RAW_SET", "1")
+    monkeypatch.setenv("FAKE_LIST_EXIT", str(exit))
+    out = RR.wait_job(repo, 7, 0)
+    assert out.review is None and out.live is False and needle in out.note

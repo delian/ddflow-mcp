@@ -367,7 +367,10 @@ def main(argv: list | None = None) -> int:
     if out.note:
         print(f"roborev: {out.note}")
     if out.review is not None:
-        print(f"reviewer: {out.review.reviewer} (the model roborev ran job {out.review.job} with)")
+        print(
+            f"reviewer: {out.review.reviewer} (the reviewer roborev ran job {out.review.job} "
+            f"with: its model when it records one, else its agent)"
+        )
     if out.text:
         print(out.text)
     elif out.review is not None:
