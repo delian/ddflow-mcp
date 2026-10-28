@@ -1,12 +1,12 @@
 """The default CI command does not run commit-time tripwires over every tracked file
-(ci-default-all-files-fails-tripwire-hooks).
+(ci-default-all-files-fails-tripwire-hooks); since Bf333cb2f5d the whole default run checks
+the diff the CI is about (the branch against its base, or the range a merge added).
 
 A hook with `language: fail` and a `files:` pattern is a tripwire: it fires when a changed
-path matches. `pre-commit run --all-files` runs it over the whole tree and so fails whenever the
-frozen paths exist at all -- merge-time CI red by construction (run_nemo_run's
-frozen-workflow-files failed `ci on master` on every merge). The default command now runs the
-tripwires on the DIFF the CI is about (the branch against its base, or the range a merge
-added) and everything else over all files.
+path matches. `pre-commit run --all-files` ran it over the whole tree and so failed whenever
+the frozen paths exist at all -- merge-time CI red by construction (run_nemo_run's
+frozen-workflow-files failed `ci on master` on every merge), and any other hook over every
+file failed on errors the pushed change did not make.
 """
 
 from __future__ import annotations
@@ -205,10 +205,9 @@ def test_comments_and_blank_lines_inside_a_stage_list_do_not_end_it(tmp_path):
     assert CI.tripwire_ids(tmp_path) == ["frozen-workflow-files"]
 
 
-def test_the_commands_own_skip_applies_to_the_tripwire_runs_too(tmp_path, repo):
+def test_the_commands_own_skip_applies_to_the_diff_scoped_run_too(tmp_path, repo):
     default = _project(repo)
-    cmd = CI.with_tripwires_on_the_diff(
-        "SKIP=frozen-workflow-files " + CI.DEFAULT_COMMAND, repo, default
-    )
-    named = cmd.split("|| rc=1; ", 1)[1]  # the run on the diff, after the all-files one
-    assert named.startswith('SKIP="${SKIP:+$SKIP,}frozen-workflow-files" pre-commit run'), cmd
+    cmd = CI.scope_to_diff("SKIP=frozen-workflow-files " + CI.DEFAULT_COMMAND, repo, default)
+    assert " --all-files" not in cmd
+    assert " --from-ref " in cmd and " --to-ref HEAD" in cmd
+    assert cmd.startswith("SKIP=frozen-workflow-files "), cmd
