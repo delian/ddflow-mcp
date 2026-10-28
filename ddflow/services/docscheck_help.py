@@ -37,8 +37,9 @@ _parser = None
 
 #: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
 #: runs could capture each other's output: every run takes the lock, and that overlap
-#: serializes. What it does NOT cover is a concurrent thread writing to the real
-#: stdout/stderr; the docs check is single-threaded, so none does during a walk.
+#: serializes. It is a plain non-reentrant lock: a same-thread reentry from inside the
+#: parse would self-deadlock, and no path reenters today; other threads writing to the
+#: real stdout/stderr are untouched, and the docs check is single-threaded.
 _capture_lock = threading.Lock()
 
 
@@ -50,22 +51,23 @@ def in_process(verbs: list[str]) -> P.Captured:
     tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
     global _parser
     with _capture_lock:  # serializes redirect+parse: a run answers from its own buffers
-        if _parser is None:
-            from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
-
-            _parser = build_parser()
         out, err = io.StringIO(), io.StringIO()
         try:
+            if _parser is None:
+                from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
+
+                _parser = build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 _parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
-            #: a non-int code (argparse never raises one -- ``--help`` is 0, ``error()``
-            #: 2 -- so this branch is a guard, not a path): it is folded into neither a
-            #: success-0 nor an inconsistent "ran with no returncode"; the walk reads it
-            #: exactly like a tool that could not run (standards jobs 3705-3707).
+            #: a non-int code (argparse never raises one, so this branch is a guard, not
+            #: a path): folded into neither a success-0 nor an inconsistent "ran with no
+            #: returncode"; the walk reads it as a tool that could not run (jobs 3705-3707).
             if isinstance(exc.code, int):
                 return P.Captured(exc.code, out.getvalue(), err.getvalue())
             return P.Captured(error=exc)
+        except Exception as exc:  # the import or the parse raised: "could not run", exactly
+            return P.Captured(error=exc)  # as the spawn path reads its own failures (job 3708)
         return P.Captured(0, out.getvalue(), err.getvalue())
 
 
