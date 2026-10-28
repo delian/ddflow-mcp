@@ -192,6 +192,7 @@ class WaitResult:
     note: str = ""
     text: str = ""
     live: bool = False
+    unjudged: bool = False  #: a verdict whose evidence could not be read: never a pass (exit 2)
 
 
 def _settled(rec: dict | None, job: int) -> WaitResult | None:
@@ -313,7 +314,7 @@ def _live(job: int, status: str, elapsed: float, where: Path | None = None) -> s
     or raise the bound."""
     rerun = f"`python -m ddflow.services.roborev wait --job {job}"
     if where is not None:
-        rerun += f" --repo {where}"
+        rerun += f' --repo "{where}"'  # quoted: a path with spaces must stay one argv token
     return (
         f"roborev job {job} is still {status} after {round(elapsed)}s "
         f"(running, not failed: it may still finish); {rerun}` again later, "
@@ -347,9 +348,14 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
                 f"({why}): the text below, if any, is unjudged"
             ),
             text=text,
+            unjudged=True,
         )
     if w.returncode == 1:
         return WaitResult(rv, f"roborev wait exited {w.returncode}", text)
+    if not text:
+        return WaitResult(
+            rv, "roborev wait exited 0 but the review body could not be read", "", unjudged=True
+        )
     return WaitResult(rv, "", text)
 
 
@@ -389,11 +395,11 @@ def main(argv: list | None = None) -> int:
         )
     if out.text:
         print(out.text)
-    elif out.review is not None:
+    elif out.review is not None and not out.unjudged:
         # the verdict is real (`roborev wait`'s exit on a done job); the BODY is the part
         # that could not be read -- a silently missing body must never look like a whole one.
         print("(the review body could not be read: `roborev show --job` brought no text)")
-    return 2 if out.review is None else (1 if out.note else 0)
+    return 2 if out.review is None or out.unjudged else (1 if out.note else 0)
 
 
 if __name__ == "__main__":

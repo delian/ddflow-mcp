@@ -275,12 +275,13 @@ def test_main_keeps_a_negative_wait_s_negative(tmp_path, monkeypatch):
     assert len(reads) == 1
 
 
-def test_main_says_when_a_clean_verdict_has_no_body(tmp_path, monkeypatch, capsys):
-    """A clean verdict whose BODY could not be read still exits 0, and says so: a missing
-    body must never look like a whole one."""
+def test_a_clean_verdict_whose_body_could_not_be_read_is_never_a_pass(
+    tmp_path, monkeypatch, capsys
+):
+    """A done job whose `show` could not be read is UNJUDGED evidence: exit 2, never a pass"""
     repo, _ = _setup(tmp_path, monkeypatch)
     (tmp_path / "status.json").write_text(DONE)
     monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
     monkeypatch.setattr(RR, "sleep", lambda s: None)
-    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "0"]) == 0
-    assert "review body could not be read" in capsys.readouterr().out
+    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "0"]) == 2
+    assert "body could not be read" in capsys.readouterr().out

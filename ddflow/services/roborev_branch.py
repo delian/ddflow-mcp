@@ -68,6 +68,8 @@ def _find_job(jobs: list, where: Path, sha: str, enqueue_out: str) -> int | None
         int(j["id"]) for j in jobs
         if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
+    # the newest covering record wins: a re-enqueue after a failed record gets a NEW id, and
+    # the list taken AFTER the enqueue contains it, so the stale record cannot beat it.
     return max(ids) if ids else None
 
 
@@ -174,12 +176,18 @@ def run(where: Path, base: str, wait_s: int) -> Result:
                     "unavailable", f"roborev could not enqueue the range review: {why}", sha=head
                 )
             job = _find_job(jobs, where, head, q.stdout + q.stderr)
-            if job is None and rfailed:
-                return Result(
-                    "unavailable",
-                    f"roborev's job list could not be read ({rfailed})",
-                    sha=head,
-                )
+            if job is None:
+                # the just-enqueued job POSTDATES the pre-enqueue read: one fresh read finds
+                # it (and its failure names itself; the pre-read's failure must not leak into
+                # a silent `named no job` misdiagnosis).
+                jobs, rfailed = _list(exe, where)
+                if rfailed:
+                    return Result(
+                        "unavailable",
+                        f"roborev's job list could not be read ({rfailed})",
+                        sha=head,
+                    )
+                job = _find_job(jobs, where, head, q.stdout + q.stderr)
     return _collect(exe, where, job, head, wait_s)
 
 
@@ -228,7 +236,7 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
             f"{out.note}{f' [{now}]' if now else ''}. {rerun}",
             job, head, pending_rerun=True,
         )  # fmt: skip
-    if out.review is None:
+    if out.review is None or out.unjudged:
         return Result("unavailable", out.note, job, head, out.text)
     missing = (
         ""
