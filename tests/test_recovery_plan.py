@@ -77,6 +77,16 @@ class TestExpiredLease:
         assert a.attempts == 2
         assert "ddflow block T1" in a.command
 
+    def test_actions_emitted_in_the_same_pass_count_toward_the_cap(self):
+        """Two rows for one item one under the cap: the second must not advertise a third
+        in-pass expiry (rubber-duck #7)."""
+        facts = _facts(
+            recoveries=[_row(salvageable=False), _row(salvageable=False)],
+            attempts={"T1": 1},
+        )
+        out = _one(facts)
+        assert [(a.cls, a.attempts) for a in out] == [(RP.SAFE_AUTO, 1), (RP.OPERATOR, 2)]
+
     def test_dirty_tree_is_propose_resume_with_the_exact_claim(self):
         (a,) = _one(_facts(recoveries=[_row(salvageable=True, unmerged=3)]))
         assert a.cls == RP.PROPOSE
@@ -225,9 +235,11 @@ def test_plan_flags_the_work_and_apply_never_touches_it(repo):
     assert any(r["cls"] == "propose" and "ddflow claim T1" in r["command"] for r in rows)
     rec = RP.recover(repo, all=True, apply=True, agent="op")
     assert rec.exit == 0, rec.reason
-    # The proposed claim was NOT performed: reported shown-only, the lease left alone.
-    assert all(
-        r["applied"] is False and "shown only" in r["note"] for r in rec.data["applied_rows"]
+    # The proposed claim must be REPORTED and NOT performed. The row has to be there:
+    # a silent empty report is not a report, and an executed proposal would show applied.
+    assert any(
+        r["item"] == "T1" and r["applied"] is False and "shown only" in r["note"]
+        for r in rec.data["applied_rows"]
     )
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and not lease.expired_at

@@ -119,13 +119,19 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
                 }
                 for a in actions
             ]
-        if kill_switch(repo, cfg):
-            return [
-                {"item": a.item, "applied": False, "note": "the kill switch is on: nothing ran"}
-                for a in actions
-            ]
-        for a in actions:
-            rows.append(_one_safe(repo, log, agent, a, L, MQ))
+        for i, a in enumerate(actions):
+            if kill_switch(repo, cfg):
+                # Re-read per action: the operator can pull the brake mid-pass and the
+                # remaining SAFE_AUTO must stop.
+                rows += [
+                    {"item": x.item, "applied": False, "note": "the kill switch was pulled mid-pass"}
+                    for x in actions[i:]
+                ]
+                break
+            try:
+                rows.append(_one_safe(repo, log, agent, a, L, MQ))
+            except Exception as e:  # one bad step must not sink the pass
+                rows.append({"item": a.item, "applied": False, "note": f"failed: {e!r}"})
     return rows
 
 

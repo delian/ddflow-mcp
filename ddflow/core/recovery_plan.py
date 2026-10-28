@@ -131,43 +131,46 @@ def _resume(r: dict[str, Any], attempts: int, limits: Limits) -> Action:
 
 def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
     out: list[Action] = []
+    # Actions emitted THIS pass count toward the cap too: two rows for one item must not
+    # advertise a second expiry in a single run.
+    spent: dict[str, int] = {}
     for r in facts.recoveries:
-        attempts = facts.attempts.get(r["item"], 0)
-        if r.get("kind") == "expired_lease" and r.get("salvageable") is False:
-            if attempts >= limits.max_attempts:
-                # On the cap the item becomes OPERATOR, whatever the tree measured: the
-                # expire-to-claim loop has run its course and only a person settles it.
-                out.append(
-                    Action(
-                        r["item"],
-                        OPERATOR,
-                        f"ddflow block {r['item']} --reason 'recovery attempt cap "
-                        f"({limits.max_attempts}) reached'",
-                        f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
-                        "only the operator settles it. <operator> settle, re-plan, or abandon",
-                        attempts,
-                        {"effect": "block", "cap": limits.max_attempts},
-                    )
+        attempts = facts.attempts.get(r["item"], 0) + spent.get(r["item"], 0)
+        if attempts >= limits.max_attempts:
+            out.append(
+                Action(
+                    r["item"],
+                    OPERATOR,
+                    f"ddflow block {r['item']} --reason 'recovery attempt cap "
+                    f"({limits.max_attempts}) reached'",
+                    f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
+                    "only the operator settles it. <operator> settle, re-plan, or abandon",
+                    attempts,
+                    {"effect": "block", "cap": limits.max_attempts},
                 )
-            else:
-                out.append(_expiry(r, attempts))
+            )
+        elif r.get("kind") == "expired_lease" and r.get("salvageable") is False:
+            out.append(_expiry(r, attempts))
         elif r.get("kind") == "expired_lease":
             out.append(_resume(r, attempts, limits))
         elif r.get("salvageable") is False:
             # A clean orphan / stale RUNNING item: nothing to lose, but taking it is
-            # the operator's or the next agent's call -- shown, never done.
+            # the operator's or the next agent's call -- shown, never done. The command
+            # is the verbatim executable one; the item is named in the reason.
             out.append(
                 Action(
                     r["item"],
                     PROPOSE,
-                    "ddflow cleanup --apply (its tree is clean and no lease is held)",
-                    r.get("advice") or "clean tree, no claim: cleanup is the whole remedy",
+                    "ddflow cleanup --apply",
+                    f"{r['item']}'s tree is clean and no lease is held; cleanups raise "
+                    + (r.get("advice") or "nothing else"),
                     attempts,
                     {"effect": "cleanup", "kind": r.get("kind"), "worktree": r.get("worktree", "")},
                 )
             )
         else:
             out.append(_resume(r, attempts, limits))
+        spent[r["item"]] = spent.get(r["item"], 0) + 1
     return out
 
 
