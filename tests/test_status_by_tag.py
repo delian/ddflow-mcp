@@ -138,7 +138,8 @@ def test_bounded_status_cuts_the_by_tag_values(project):
 def test_capped_and_blocked_items_land_in_their_buckets():
     # plan.capped holds IDS (core.schedule.Plan: list[str]) and Blocked.item is an id
     # string; the two must never be compared against item objects (critic lan-deepseek
-    # #1's read was wrong, and a silent held/blocked 0 would hide both).
+    # #1's read was wrong, and a silent held/blocked 0 would hide both). Blocker policy
+    # mirrors dep_status: DONE deps stay out of top_blockers, ABANDONED deps stay in.
     from types import SimpleNamespace
 
     from ddflow.api.reporting.overview import _by_tag_view
@@ -148,13 +149,19 @@ def test_capped_and_blocked_items_land_in_their_buckets():
     stuck = SimpleNamespace(
         id="T-stuck", kind="task", state="open", tags=["wave:0"], removed=False
     )
+    ab = SimpleNamespace(id="T-ab", kind="task", state="abandoned", tags=["wave:0"], removed=False)
+    stuck2 = SimpleNamespace(
+        id="T-stuck2", kind="task", state="open", tags=["wave:0"], removed=False
+    )
     p = SimpleNamespace(ready=[], running=[], review=[], capped=["T-held"], blocked=[
-        SimpleNamespace(item="T-stuck", reason="deps", waiting_on=["T-held", "T-done"])
+        SimpleNamespace(item="T-stuck", reason="deps", waiting_on=["T-held", "T-done"]),
+        SimpleNamespace(item="T-stuck2", reason="deps", waiting_on=["T-ab"]),
     ])
-    view = _by_tag_view("wave", [done, held, stuck], p)
+    view = _by_tag_view("wave", [done, held, stuck, ab, stuck2], p)
     w0 = view["values"][0]
     assert w0["states"]["held_by_cap"] == 1
-    assert w0["states"]["blocked"] == 1
-    assert w0["blocked_by"] == {"deps": 1}
+    assert w0["states"]["blocked"] == 2
+    assert w0["blocked_by"] == {"deps": 2}
     assert {"id": "T-held", "blocks": 1} in w0["top_blockers"]
     assert {"id": "T-done", "blocks": 1} not in w0["top_blockers"]  # done deps are not blockers
+    assert {"id": "T-ab", "blocks": 1} in w0["top_blockers"]  # abandoned deps still block
