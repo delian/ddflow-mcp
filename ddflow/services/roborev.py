@@ -223,38 +223,49 @@ def wait_job(
             )
         elapsed = monotonic() - started
         if elapsed >= wait_s:  # wait_s <= 0: this is the first check
-            return WaitResult(
-                live=True,
-                note=(
-                    f"roborev job {job} is still {status} after {round(elapsed)}s "
-                    f"(running, not failed: it may still finish); "
-                    f"`python -m ddflow.services.roborev wait --job {job}` again later, "
-                    f"or raise [gates].standards_wait_s"
-                ),
-            )
+            return WaitResult(live=True, note=_live(job, status, elapsed))
         print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
         if on_tick is not None:
-            on_tick()
-        sleep(min(_POLL_S, deadline - monotonic()) if wait_s > 0 else _POLL_S)
+            on_tick()  # the caller's lease keeper: a long wait outlives an unrenewed lease
+        left = (deadline - monotonic()) if wait_s > 0 else _POLL_S
+        if left <= 0:
+            # the progress print or the tick ate the rest of the bound: report the job LIVE
+            # now. `sleep` of a negative span raises, and an over-long tick must read as
+            # running, never crash the wait.
+            return WaitResult(live=True, note=_live(job, status, monotonic() - started))
+        sleep(min(_POLL_S, left))
+
+
+def _live(job: int, status: str, elapsed: float) -> str:
+    """Why the wait ends with the job still queued/running: it is RUNNING, never failed.
+    The one sure way forward: wait again once the queue drained, or raise the bound."""
+    return (
+        f"roborev job {job} is still {status} after {round(elapsed)}s "
+        f"(running, not failed: it may still finish); "
+        f"`python -m ddflow.services.roborev wait --job {job}` again later, "
+        f"or raise [gates].standards_wait_s"
+    )
 
 
 def _done(exe: str, where: Path, job: int, rec: dict) -> WaitResult:
     """The job is done, so its verdict IS readable: `roborev wait --job` exits 0 clean and 1
     on findings, and `roborev show --job` prints the review. A verdict that cannot be read
-    is unjudged, so its text (if any) is never presented as a clean pass."""
+    is unjudged, so its text (if any) is never presented as a clean pass or as findings: an
+    exit roborev never means by 1 (a signal, an unknown code) is unjudged too."""
     rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
     shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
-    if w.error is not None or w.timed_out:
+    if w.error is not None or w.timed_out or w.returncode not in (0, 1):
         return WaitResult(
             note=(
                 f"roborev job {job} is done but `roborev wait --job {job}` gave no verdict "
-                f"({w.error or 'timed out'}): the text below, if any, is unjudged"
+                f"({w.error or 'timed out' or f'exit {w.returncode}'}): the text below, if any, "
+                f"is unjudged"
             ),
             text=text,
         )
-    if w.returncode != 0:
+    if w.returncode == 1:
         return WaitResult(rv, f"roborev wait exited {w.returncode}", text)
     return WaitResult(rv, "", text)
 
