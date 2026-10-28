@@ -87,6 +87,16 @@ class TestExpiredLease:
         out = _one(facts)
         assert [(a.cls, a.attempts) for a in out] == [(RP.SAFE_AUTO, 1), (RP.OPERATOR, 2)]
 
+    def test_one_capped_line_per_item_whatever_the_arm(self):
+        """The second capped arm adds the item too: any row shape emits the capped line
+        once (rubber-duck #11)."""
+        facts = _facts(
+            recoveries=[_row(kind="stale_running", salvageable=True)] * 2,
+            attempts={"T1": 2},
+        )
+        out = _one(facts)
+        assert [(a.cls, a.attempts) for a in out] == [(RP.OPERATOR, 2)]
+
     def test_dirty_tree_is_propose_resume_with_the_exact_claim(self):
         (a,) = _one(_facts(recoveries=[_row(salvageable=True, unmerged=3)]))
         assert a.cls == RP.PROPOSE
