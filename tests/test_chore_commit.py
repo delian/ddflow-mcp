@@ -17,9 +17,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
+from ddflow.services import chore as CO
 
 
 @pytest.fixture(autouse=True)
@@ -231,3 +233,99 @@ def test_a_directory_argument_lands_the_chore_files_changed_in_it(proj):
     (proj / "app" / "x.py").write_text("x\n")
     code, out, err = run_cli(proj, "chore", "commit", "app", "-m", "code dir")
     assert code == 3 and "app/x.py" in out + err
+
+
+def test_the_item_completed_event_records_why_no_reviewer_was_needed(proj):
+    """The exemption lands on the item.completed event itself, so the durable record of a
+    completed chore names why no reviewer ran -- not only its gate.skipped events."""
+    _approve(proj)
+    (proj / ".mailmap").write_text("A <a@x> <b@x>\n")
+    code, out, err = run_cli(proj, "--json", "chore", "commit", ".mailmap", "-m", "mailmap")
+    assert code == 0, (out, err)
+    item = json.loads(out)["item"]
+    events = EventLog(proj, "probe").read_all()
+    done = [e for e in events if e.kind == "item.completed" and e.subject == item]
+    assert done, "no item.completed event for the chore"
+    chore = done[-1].data.get("chore")
+    assert isinstance(chore, dict), chore
+    assert "standing approval" in chore["note"]
+    # Structured so the covering approval is verifiable from the event alone: the note
+    # truncates the digest to 12 chars; the fields keep the whole of it (DX-chore-commit) --
+    # the FULL list digest `chore approve` covers, not the truncated note value, and the
+    # paths actually judged (roborev review of DX-chore-completed-event: any truthy digest
+    # or paths would pass the old "and" line).
+    assert chore["approved_by"]
+    assert chore["digest"] == CO.approval_digest(Config()) and len(chore["digest"]) > 12
+    assert ".mailmap" in chore["paths"] and chore["paths"]
+
+
+def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
+    """The conditional key stays OFF the record for a non-chore: a `chore` tag whose files
+    fall outside [chore].globs is an ordinary item, and its completion payload carries no
+    `chore` key (roborev review of DX-chore-completed-event: nothing covered the negative).
+
+    The refusal payload IS the payload under test: `complete` returns the same `base` dict
+    -- the one `_chore_base` fills -- in every refusal and in the success, so a change that
+    empties the guard is visible here; a fully-completed non-chore needs reviewer-passed
+    gates, which fixtures cannot run, and its three success shapes are what the positive
+    tests cover."""
+    _approve(proj)
+    code, out, err = run_cli(
+        proj,
+        "task",
+        "add",
+        "CH",
+        "--title",
+        "code change",
+        "--globs",
+        "code.py",
+        "--tags",
+        "chore",
+    )
+    assert code == 0, (out, err)
+    code, out, err = run_cli(proj, "--json", "complete", "CH")
+    assert code == 3, (out, err)
+    body = json.loads(out)
+    assert "chore" not in body, body
+
+
+def test_complete_outputs_the_chore_exemption(proj):
+    """`complete`'s own output prints the exemption, not just the log: a chore completed
+    item over MCP is told why no reviewer was needed."""
+    _approve(proj)
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "CH",
+        "--title",
+        "mailmap chore",
+        "--globs",
+        ".mailmap",
+        "--tags",
+        "chore",
+    )
+    run_cli(proj, "claim", "CH")
+    wt = proj / ".ddflow" / "worktrees" / "CH"
+    (wt / ".mailmap").write_text("A <a@x> <b@x>\n")
+    _git(wt, "add", ".mailmap")
+    _git(wt, "commit", "-qm", "mailmap")
+    for gate in (
+        "research",
+        "rules",
+        "implement",
+        "rubber_duck",
+        "critic",
+        "standards",
+        "unit_tests",
+        "bug_hunt",
+        "dedupe",
+    ):
+        code, _o, err = run_cli(proj, "gate", "skip", "CH", gate, "--reason", "chore")
+        assert code == 0, err
+    code, _o, err = run_cli(proj, "merge", "CH", "--model", "claude-x")
+    assert code == 0, err
+    code, out, err = run_cli(proj, "--json", "complete", "CH", "--model", "claude-x")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert "standing approval" in body.get("chore", "")
