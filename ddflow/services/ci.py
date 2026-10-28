@@ -239,15 +239,17 @@ def _escaped(quote: str, nxt: str) -> str | None:
 
 def _leading_skip(command: str) -> tuple[str | None, str, str]:
     """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
-    -- the value the shell would resolve it to (`'a b'` -> `a b`), its source text (empty
-    when it was parsed), and the untouched remainder, so the rest of the command (shell
-    text) is never re-tokenized. ``own`` is ``None`` when the value cannot be kept as a
-    literal: unbalanced quotes, or `$`/backtick expansions outside single quotes, which
-    the rebuild would have to reproduce, not guess at -- the command then runs exactly
-    as written."""
+    -- the value the shell would resolve it to (`'a b'` -> `a b`), the value's source text
+    (non-empty only when the value must stay verbatim), and the untouched remainder, so
+    the rest of the command (shell text) is never re-tokenized. ``own`` is ``None`` when
+    the value cannot be reproduced as a literal (`$`/backtick/**tilde** expansions the
+    rebuild would have to guess at, or unbalanced quotes); its ``verbatim`` text then
+    keeps the operator's own expansion semantics. A word whose END is uncertain is
+    returned whole (``verbatim=command``, nothing after)."""
     if not command.startswith("SKIP="):
         return None, "", command
     value: list[str] = []
+    activity = False  # the shell would expand part of this value: keep it verbatim
     quote = ""  # "'" or '"' inside it, "" outside
     i, n = len("SKIP="), len(command)
     while i < n:
@@ -260,19 +262,22 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
             quote = ""
         elif quote:
             if quote == '"' and c in "$`":
-                return None, command, ""  # an expansion: the WHOLE command runs as written
+                activity = True
             value.append(c)  # inside the quotes: everything else is literal text
-        elif c.isspace() or c in ";\n|&<>()":
-            break  # a word ends at whitespace or a shell operator (kept in the rest)
+        elif c in " \t\n" or c in ";\n|&<>()":
+            break  # a word ends at POSIX whitespace or a shell operator (kept in the rest)
         elif c in "\"'":
             quote = c
-        elif c in "$`":
-            return None, command, ""  # an expansion: the WHOLE command runs as written
+        elif c in "$`" or (c == "~" and (not value or value[-1] == ":")):
+            activity = True  # an expansion (tilde after `=` or `:`) the shell would perform
+            value.append(c)
         else:
             value.append(c)
         i += 1
-    if quote:
-        return None, command, ""  # unbalanced quotes: as written
+    if quote:  # unbalanced: the word's end is unknown
+        return None, command, ""
+    if activity:
+        return None, command[:i], command[i:]  # verbatim value text, run from its end
     return "".join(value), "", command[i:]
 
 
@@ -285,13 +290,13 @@ def _sh_single(word: str) -> str:
 def _scope_the_run(run: str, resolve: str) -> str:
     """``run`` with its own ` --all-files` replaced by the since..HEAD range -- when the
     run IS the default run phrase, give or take the shell operator the `SKIP=` word ended
-    at (`;`, `&&`). A run carrying anything beyond that phrase is shell text, not the
-    default one: it stays as written, uncorrupted, unscoped."""
+    at (`;`, `&&`) and POSIX whitespace around them. A run carrying anything beyond that
+    phrase is shell text, not the default one: it stays as written, uncorrupted."""
     at = run.find(DEFAULT_COMMAND)
     if at < 0:
         return run
     lead, tail = run[:at], run[at + len(DEFAULT_COMMAND) :]
-    if lead.strip() in ("", ";", "&&", "&") and not tail.strip():
+    if lead.strip(" \t\n") in ("", ";", "&&", "&") and not tail.strip(" \t\n"):
         return lead + f"{PRE_PUSH_RUN} --from-ref {resolve} --to-ref HEAD" + tail
     return run
 
@@ -307,19 +312,20 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
     if not resolve or " --all-files" not in command:
         return command
     own, verbatim, run = _leading_skip(command)
+    scoped = _scope_the_run(run, resolve)
+    if scoped == run:
+        return command  # nothing was actually scoped: leave the command exactly as written
     # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
     # selected-tests plan), so merge the two like the earlier tripwire run did; the merged
     # value is the env expansion plus the command's own list as a shell literal. `SKIP=''` is
-    # an explicit EMPTY override -- it keeps clearing the inherited SKIP. When the value is not
-    # certainly parseable its verbatim text stays (unmerged, its own expansion semantics); with
-    # no assignment the environment's own SKIP reaches pre-commit as it is.
+    # an explicit EMPTY override -- it keeps clearing the inherited SKIP. When the value was
+    # not parseable its verbatim text stays (unmerged, its own expansion semantics); with no
+    # assignment the environment's own SKIP reaches pre-commit as it is.
     if own is not None:
         merged = f'SKIP="${{SKIP:+$SKIP,}}"{_sh_single(own)}' if own else 'SKIP=""'
     else:
         merged = verbatim
-    # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
-    # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
-    return merged + _scope_the_run(run, resolve)
+    return merged + scoped
 
 
 def tool_missing(command: str) -> str:
