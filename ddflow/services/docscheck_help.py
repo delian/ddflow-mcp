@@ -76,10 +76,14 @@ def in_process(verbs: list[str]) -> P.Captured:
                 if factory is None:
                     # `ddflow.surfaces` binds the factory at import; a caller that reached
                     # this module without it (an embed that imports services directly) gets
-                    # the spawned walk instead -- slower, never wrong, never an invented
-                    # pass (rubber_duck #1 of fix-B66f6d0c93e).
+                    # the spawned walk instead -- slower, and THIS module's own repo is the
+                    # cwd, so the interpreter resolves the same `ddflow` package from its
+                    # own source, not from the caller's sys.path order (rubber_duck #2,
+                    # fix-B66f6d0c93e: a `./ddflow/__main__.py` shadow answered instead).
                     return P.capture(
-                        [sys.executable, "-m", "ddflow", *verbs, "--help"], timeout=60
+                        [sys.executable, "-m", "ddflow", *verbs, "--help"],
+                        timeout=60,
+                        cwd=Path(__file__).resolve().parents[2],
                     )
                 parser = _parser[0] = factory()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
