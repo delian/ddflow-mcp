@@ -47,6 +47,17 @@ def test_a_free_retry_of_a_partial_delta_round_charges_no_round(repo):
     assert rounds_used(it, "critic") == 1
 
 
+def test_a_free_retry_of_a_partial_full_round_charges_no_round(repo):
+    """SYMMETRIC: a full-kind `retry_of_partial` is a round of the partial one it retries,
+    so two full runs charge one round, not two."""
+    it = _item(
+        _run({"review_kind": "full", "status": "PARTIAL"}),
+        _run({"review_kind": "full", "status": "REVIEWED", "retry_of_partial": True}),
+    )
+    assert full_rounds(it, "critic") == 1
+    assert rounds_used(it, "critic") == 1
+
+
 def test_a_kept_copy_marked_only_by_an_empty_unavailable_deltas_charges_no_round(repo):
     """`unavailable_deltas` is a MARKER: an empty list still says 'kept copy', so the
     pre-`round_kept` era's re-emitted round is not counted twice."""
