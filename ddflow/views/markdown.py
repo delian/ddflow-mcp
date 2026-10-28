@@ -1185,11 +1185,13 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     cut the decisions, rules and lessons out. Cutting from the bottom remains only as
     the backstop.
     """
-    sections: list[tuple[str, list[str]]] = [
-        (name, []) for name in _SECTION_SHARE if name != "recovery"
-    ]
+    sections: list[tuple[str, list[str]]] = [(name, []) for name in _SECTION_SHARE]
+    # "recovery" leads _SECTION_SHARE but is no longer a trimmed section: the RESUME
+    # slice is reserved and never cut by the budget (DX-recover-brief-slice), so it
+    # leaves the budgeted set first (dict order is the literal order: recovery leads).
+    sections.pop(0)
     part = dict(sections)
-    reserved: list[str] = []  # the RESUME slice: never cut by the budget (DX-recover-brief-slice)
+    reserved: list[str] = []
     _brief_recovery(reserved, recovery or [], state=state, cfg=cfg)
     _brief_jobs(part["jobs"], state, item, agent)
     if item:
