@@ -34,9 +34,18 @@ repos:
         language: system
         entry: scripts/lint.sh
         types_or: [python, pyi]
+        stages: [pre-push]
 """
 
-SCRIPT = "#!/bin/sh\nif grep -q BAD \"$@\"; then exit 1; fi\nexit 0\n"
+SCRIPT = (
+    "#!/bin/sh\n"
+    "for f in \"$@\"; do\n"
+    "  grep -q BAD -- \"$f\" && exit 1\n"
+    "  s=$?\n"
+    "  [ \"$s\" -eq 1 ] || exit 2\n"
+    "done\n"
+    "exit 0\n"
+)
 
 
 def _project(repo):

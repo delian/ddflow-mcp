@@ -207,7 +207,10 @@ def test_comments_and_blank_lines_inside_a_stage_list_do_not_end_it(tmp_path):
 
 def test_the_commands_own_skip_applies_to_the_diff_scoped_run_too(tmp_path, repo):
     default = _project(repo)
-    cmd = CI.scope_to_diff("SKIP=frozen-workflow-files " + CI.DEFAULT_COMMAND, repo, default)
+    since = _git(repo, "rev-parse", default)
+    cmd = CI.scope_to_diff("SKIP=op-skip " + CI.DEFAULT_COMMAND, repo, default)
     assert " --all-files" not in cmd
-    assert " --from-ref " in cmd and " --to-ref HEAD" in cmd
-    assert cmd.startswith("SKIP=frozen-workflow-files "), cmd
+    # the caller's skip merges with the environment's (a bare assignment would drop it); the
+    # range is exactly since..HEAD, so it cannot silently lose the pushed tip
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}op-skip" pre-commit run --hook-stage pre-push '), cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
