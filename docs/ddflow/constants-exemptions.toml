@@ -139,11 +139,15 @@
 "ddflow/services/testidents.py:_PHRASE_CAP" = "testidents.phrase_cap"
 "ddflow/infra/worktree.py:STASH_RETRIES" = "worktree.stash_retries"
 "ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = "worktree.stash_retry_pause_s"
+"ddflow/api/plan.py:_DUPE_HUNT_MAX" = "plan.dupe_hunt_max"
 
 [exempt]
 "ddflow/surfaces/mcp_next.py:MAX_HINTS" = "the `next` field contract: at most 3 hints per result (research section 6), a token cap that a knob would only let one agent undo for all; `[mcp].next_hints` already picks 1 to 3"
 "ddflow/surfaces/mcp_next.py:MAX_BYTES" = "the `next` field contract: at most 400 bytes per result, the measured hint cost (research section 6); not a user tunable"
 "ddflow/surfaces/mcp_next.py:MAX_WHY" = "the `next` field contract: a `why` is one fixed clause of at most 80 characters; the templates in mcp_next.py are the content"
+"ddflow/surfaces/tools/_common.py:CLIENT_IDLE_ABORT_S" = "the MCP CLIENT aborts a tool call that has sent no frame for 1800 s (Bfc43dae5b9); ddflow mirrors the client's cutoff, it cannot tune the client's"
+"ddflow/surfaces/tools/_common.py:MCP_WAIT_SILENT_MAX_S" = "a token-less wait's cap strictly below CLIENT_IDLE_ABORT_S with headroom for a call already spent silent before its wait started (Bfc43dae5b9); derived safety margin, not a user tunable"
+
 "ddflow/mcpshim/clients.py:MAX_AGE_DAYS" = "how long an unverified `honours` row of the client table is trusted: a fixed window on the data's freshness (no caller can widen it), not a user tunable"
 "ddflow/mcpshim/probe_server.py:DEFAULT_DELAY_S" = "the default of the probe server's own --delay argument (how long delaybump waits before notifying); a test fixture's command-line default, set per run, outside ddflow's config"
 "ddflow/mcpshim/probe_server.py:SETTLE_S" = "a 20 ms pause that lets already-pipelined input reach the probe's log before it replies; a race mitigation inside a test fixture, not a tuning choice"
