@@ -224,15 +224,16 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
-def _leading_skip(command: str) -> tuple[str | None, str]:
-    """Split a leading shell ``SKIP=<word>`` off ``command``: the value the shell would
-    resolve it to (`'a b'` -> `a b`) and the untouched remainder, so the rest of the
-    command (shell text) is never re-tokenized. ``None`` when it does not start with
-    one; the same when the value is not *certain* -- unbalanced quotes, or `$`/backtick
-    expansions outside single quotes, which the rebuild would have to reproduce, not
-    guess at. A runner that cannot parse it runs it as written."""
+def _leading_skip(command: str) -> tuple[str | None, str, str]:
+    """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
+    -- the value the shell would resolve it to (`'a b'` -> `a b`), its source text (empty
+    when it was parsed), and the untouched remainder, so the rest of the command (shell
+    text) is never re-tokenized. ``own`` is ``None`` when the value cannot be kept as a
+    literal: unbalanced quotes, or `$`/backtick expansions outside single quotes, which
+    the rebuild would have to reproduce, not guess at -- its ``verbatim`` text then stays
+    the operator's shell's business."""
     if not command.startswith("SKIP="):
-        return None, command
+        return None, "", command
     value: list[str] = []
     active = False  # an expansion the ORIGINAL shell would perform
     quote = ""  # "'" or '"' inside it, "" outside
@@ -264,8 +265,11 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
             value.append(c)
         i += 1
     if quote or active:
-        return None, command
-    return "".join(value), command[i:]
+        # cannot reproduce it as a literal: the word's END is still known, so hand back
+        # its verbatim text (the assignment keeps its own expansion semantics) and the
+        # run from after the word -- the caller must not rewrite inside either part
+        return None, command[:i], command[i:]
+    return "".join(value), "", command[i:]
 
 
 def _sh_single(word: str) -> str:
@@ -298,19 +302,17 @@ def scope_to_diff(command: str, tree: Path, since: str) -> str:
     resolve = W.rev(tree, since) if since else ""
     if not resolve or " --all-files" not in command:
         return command
-    own, run = _leading_skip(command)
+    own, verbatim, run = _leading_skip(command)
     # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
     # selected-tests plan), so merge the two like the earlier tripwire run did; the merged
     # value is the env expansion plus the command's own list as a shell literal. `SKIP=''` is
     # an explicit EMPTY override -- it keeps clearing the inherited SKIP. When the value is not
-    # certainly parseable (`None`) the assignment runs as written, unmerged; with no assignment
-    # the environment's own SKIP reaches pre-commit as it is.
-    if own is None:
-        merged = ""
-    elif own:
-        merged = f'SKIP="${{SKIP:+$SKIP,}}"{_sh_single(own)}'
+    # certainly parseable its verbatim text stays (unmerged, its own expansion semantics); with
+    # no assignment the environment's own SKIP reaches pre-commit as it is.
+    if own is not None:
+        merged = f'SKIP="${{SKIP:+$SKIP,}}"{_sh_single(own)}' if own else 'SKIP=""'
     else:
-        merged = 'SKIP=""'
+        merged = verbatim
     # `--from-ref <commit> --to-ref HEAD` is pre-commit's three-dot there: in a merged tree
     # HEAD holds the base, so the range is exactly the pushed change, nothing the base brought.
     return merged + _scope_the_run(run, resolve)

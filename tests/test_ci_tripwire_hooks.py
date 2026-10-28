@@ -297,6 +297,17 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
     assert cmd.startswith("SKIP=$(echo --all-files) pre-commit run "), cmd
     assert cmd.count(" --all-files") == 1, cmd
     assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # even a verbatim value quoting the WHOLE default phrase is immune: the range lands
+    # on the run's phrase after the value's word, not the one quoted inside it
+    quoted_run = (
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ' + CI.DEFAULT_COMMAND
+    )
+    cmd = CI.scope_to_diff(quoted_run, repo, default)
+    assert cmd.startswith(
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" pre-commit run '
+    ), cmd
+    assert cmd.count(" --all-files") == 1, cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
 
 
 def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
