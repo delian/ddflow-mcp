@@ -237,6 +237,12 @@ def _escaped(quote: str, nxt: str) -> str | None:
     return None
 
 
+def _shell_active(c: str, value: list[str]) -> bool:
+    """Does the shell expand ``c`` in an unquoted value here? `$`, backtick, or a tilde
+    at the word's head / after a `:` (a PATH-style assignment value)."""
+    return c in "$`" or (c == "~" and (not value or value[-1] == ":"))
+
+
 def _leading_skip(command: str) -> tuple[str | None, str, str]:
     """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
     -- the value the shell would resolve it to (`'a b'` -> `a b`), the value's source text
@@ -268,8 +274,8 @@ def _leading_skip(command: str) -> tuple[str | None, str, str]:
             break  # a word ends at POSIX whitespace or a shell operator (kept in the rest)
         elif c in "\"'":
             quote = c
-        elif c in "$`" or (c == "~" and (not value or value[-1] == ":")):
-            activity = True  # an expansion (tilde after `=` or `:`) the shell would perform
+        elif _shell_active(c, value):
+            activity = True  # an expansion the shell would perform: keep the value verbatim
             value.append(c)
         else:
             value.append(c)
