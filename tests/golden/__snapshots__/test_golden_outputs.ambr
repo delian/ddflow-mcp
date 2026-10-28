@@ -3251,7 +3251,7 @@
       docs.command_timeout_s = 20   [default]
           Seconds one `--help` walk step, one count command or the `lint_command` may
           run before the check records it as not run (a note) instead of waiting.
-      
+  
     ''',
   )
 # ---
