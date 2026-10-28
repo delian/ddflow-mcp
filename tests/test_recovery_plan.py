@@ -235,12 +235,14 @@ def test_plan_flags_the_work_and_apply_never_touches_it(repo):
     assert any(r["cls"] == "propose" and "ddflow claim T1" in r["command"] for r in rows)
     rec = RP.recover(repo, all=True, apply=True, agent="op")
     assert rec.exit == 0, rec.reason
-    # The proposed claim must be REPORTED and NOT performed. The row has to be there:
-    # a silent empty report is not a report, and an executed proposal would show applied.
+    # The proposed claim must be REPORTED and NOT performed. The T1 row has to be
+    # there (a silent empty report is not a report), and NO row may report an applied
+    # step: a proposal executed by --apply is the one error this pass must not make.
+    rows = rec.data["applied_rows"]
     assert any(
-        r["item"] == "T1" and r["applied"] is False and "shown only" in r["note"]
-        for r in rec.data["applied_rows"]
+        r["item"] == "T1" and r["applied"] is False and "shown only" in r["note"] for r in rows
     )
+    assert all(r["applied"] is False for r in rows)
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and not lease.expired_at
 

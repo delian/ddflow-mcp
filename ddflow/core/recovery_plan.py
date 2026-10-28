@@ -99,18 +99,21 @@ def _expiry(r: dict[str, Any], attempts: int) -> Action:
     )
 
 
-def _resume(r: dict[str, Any], attempts: int, limits: Limits) -> Action:
-    if attempts >= limits.max_attempts:
-        return Action(
-            r["item"],
-            OPERATOR,
-            f"ddflow block {r['item']} --reason 'recovery attempt cap "
-            f"({limits.max_attempts}) reached'",
-            f"recovery was attempted {attempts} time(s), the cap is {limits.max_attempts}; "
-            "only the operator settles it. <operator> settle, re-plan, or abandon",
-            attempts,
-            {"effect": "block", "cap": limits.max_attempts},
-        )
+def _capped(item: str, attempts: int, limits: Limits) -> Action:
+    """The one OPERATOR action for the cap (roborev: it lived twice and drifted)."""
+    return Action(
+        item,
+        OPERATOR,
+        f"ddflow block {item} --reason 'recovery attempt cap "
+        f"({limits.max_attempts}) reached'",
+        f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
+        "only the operator settles it. <operator> settle, re-plan, or abandon",
+        attempts,
+        {"effect": "block", "cap": limits.max_attempts},
+    )
+
+
+def _resume(r: dict[str, Any], attempts: int) -> Action:
     force = ""
     if r.get("kind") == "expired_lease" and r.get("unmerged_commits", 0):
         force = " --force"
@@ -131,28 +134,22 @@ def _resume(r: dict[str, Any], attempts: int, limits: Limits) -> Action:
 
 def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
     out: list[Action] = []
-    # Actions emitted THIS pass count toward the cap too: two rows for one item must not
+    # The cap gates RESUME- and EXPIRY-shaped recoveries. A clean orphan is never
+    # capped: its cleanup loses nothing whatever the expire history, and describing it
+    # as a spent attempt would mislabel a machine-cleanable tree (roborev 9b01ab5).
+    # Actions emitted THIS pass count too, so repeated rows for one item cannot
     # advertise a second expiry in a single run.
     spent: dict[str, int] = {}
     for r in facts.recoveries:
         attempts = facts.attempts.get(r["item"], 0) + spent.get(r["item"], 0)
-        if attempts >= limits.max_attempts:
-            out.append(
-                Action(
-                    r["item"],
-                    OPERATOR,
-                    f"ddflow block {r['item']} --reason 'recovery attempt cap "
-                    f"({limits.max_attempts}) reached'",
-                    f"{attempts} recovery attempt(s), the cap is {limits.max_attempts}; "
-                    "only the operator settles it. <operator> settle, re-plan, or abandon",
-                    attempts,
-                    {"effect": "block", "cap": limits.max_attempts},
-                )
-            )
-        elif r.get("kind") == "expired_lease" and r.get("salvageable") is False:
-            out.append(_expiry(r, attempts))
-        elif r.get("kind") == "expired_lease":
-            out.append(_resume(r, attempts, limits))
+        if r.get("kind") == "expired_lease":
+            if attempts >= limits.max_attempts:
+                out.append(_capped(r["item"], attempts, limits))
+            elif r.get("salvageable") is False:
+                out.append(_expiry(r, attempts))
+            else:
+                out.append(_resume(r, attempts))
+            spent[r["item"]] = spent.get(r["item"], 0) + 1
         elif r.get("salvageable") is False:
             # A clean orphan / stale RUNNING item: nothing to lose, but taking it is
             # the operator's or the next agent's call -- shown, never done. The command
@@ -168,9 +165,11 @@ def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
                     {"effect": "cleanup", "kind": r.get("kind"), "worktree": r.get("worktree", "")},
                 )
             )
+        elif attempts >= limits.max_attempts:
+            out.append(_capped(r["item"], attempts, limits))
         else:
-            out.append(_resume(r, attempts, limits))
-        spent[r["item"]] = spent.get(r["item"], 0) + 1
+            out.append(_resume(r, attempts))
+            spent[r["item"]] = spent.get(r["item"], 0) + 1
     return out
 
 
