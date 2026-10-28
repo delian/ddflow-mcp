@@ -116,9 +116,11 @@ def test_the_last_prompt_of_the_lost_holder_is_in_the_slice(repo):
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert "**T1** (expired_lease, was crashed)" in text, text
-    assert 'last prompt: "finish the graph parser before lunch"' in text, text
-    # A prompt for ANOTHER item is that item's context, never borrowed for T1 (duck #8).
-    assert "launder the decoy socks" not in text, text
+    fact = [l for l in text.splitlines() if "last prompt:" in l]
+    assert fact and "graph parser before lunch" in fact[0], text
+    # A prompt with another item's id is that item's context, never borrowed for T1
+    # (critic: local to the T1 fact line, not a global absence claim).
+    assert "decoy" not in fact[0], text
     assert "NOT resumed: ddflow applies only safe actions" in text, text
     # The exact command for THIS entry's band is named (duck #9).
     assert "`ddflow release T1 --note salvaged`" in text, text
@@ -146,10 +148,14 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
     assert out.exit == 0, out.reason
     text = out.data["text"]
-    assert "**W4**" in text and "2 more holding work" in text, text
+    # The RESUME slice is the region between its heading and the pack's own H1: the cap
+    # assertions BEGIN and END there (critic: W* titles can appear outside the slice).
+    end = text.index("# ddflow brief")
+    region = text[text.index(RESUME) : end]
+    assert "**W4**" in region and "2 more holding work" in region, region
     # The cap is APPLIED, not just reported: exactly W0..W4 shown, the rest not (duck).
     for shown in (f"**W{i}**" for i in range(5)):
-        assert shown in text, text
-    assert "**W5**" not in text and "**W6**" not in text, text
+        assert shown in region, region
+    assert "**W5**" not in region and "**W6**" not in region, region
     # The RUNNING item nobody holds is still on the list beside seven holding trees.
     assert "**T1** (stale_running" in text, text
