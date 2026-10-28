@@ -273,7 +273,7 @@ def wait_job(
             # The two verdict asks SHARE the remaining bound (floored at _VERDICT_FLOOR_S):
             # even a hanging `wait`/`show` on a done job cannot run two whole ask timeouts,
             # and a healthy verdict that arrives just past the bound still gets a real ask.
-            allowance = _TIMEOUT_S if wait_s <= 0 else deadline - monotonic()
+            allowance = _TIMEOUT_S if wait_s <= 0 else min(_TIMEOUT_S, deadline - monotonic())
             return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
         elapsed = monotonic() - started
         if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
@@ -317,7 +317,7 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=cap)
     spent = monotonic() - t0
     shown = proc.capture(
-        [exe, "show", "--job", str(job)], cwd=where, timeout=max(_FLOOR_S, cap - spent)
+        [exe, "show", "--job", str(job)], cwd=where, timeout=max(_VERDICT_FLOOR_S, cap - spent)
     )
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.returncode not in (0, 1):
@@ -370,9 +370,9 @@ def main(argv: list | None = None) -> int:
         print(f"reviewer: {out.review.reviewer} (the model roborev ran job {out.review.job} with)")
     if out.text:
         print(out.text)
-    elif out.review is not None and not out.note:
-        # the clean verdict is real (`roborev wait` exited 0 on a done job); the BODY is the
-        # part that could not be read, and a silently missing body must never look like one.
+    elif out.review is not None:
+        # the verdict is real (`roborev wait`'s exit on a done job); the BODY is the part
+        # that could not be read -- a silently missing body must never look like a whole one.
         print("(the review body could not be read: `roborev show --job` brought no text)")
     return 2 if out.review is None else (1 if out.note else 0)
 
