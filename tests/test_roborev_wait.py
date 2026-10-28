@@ -94,11 +94,12 @@ def test_still_running_at_the_bound_says_running_not_failed(tmp_path, monkeypatc
 
 
 def test_zero_bound_reads_the_status_once_and_reports_it_live(tmp_path, monkeypatch):
-    repo, _ = _setup(tmp_path, monkeypatch)
+    repo, log = _setup(tmp_path, monkeypatch)
     _fake_clock(monkeypatch)
     out = RR.wait_job(repo, 7, 0)
     assert out.live is True and out.review is None
     assert "still queued" in out.note
+    assert len(log.read_text().splitlines()) == 1  # ONE status read: the report is that read's
 
 
 def test_a_failed_job_is_ended_failed_not_a_wait_and_never_a_review(tmp_path, monkeypatch):
