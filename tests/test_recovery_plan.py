@@ -155,10 +155,10 @@ class TestDeadRunsJobsQueue:
         assert _one(facts) == []
 
     def test_a_queue_entry_left_running_is_requeued(self):
-        (a,) = _one(_facts(queue=["T1", "T2"]))
-        assert a.cls == RP.SAFE_AUTO
-        assert a.evidence["effect"] == "requeue"
-        assert a.evidence["items"] == ["T1", "T2"]
+        out = _one(_facts(queue=["T1", "T2"]))
+        assert [(a.cls, a.item) for a in out] == [(RP.SAFE_AUTO, "T1"), (RP.SAFE_AUTO, "T2")]
+        assert all(a.evidence["effect"] == "requeue" for a in out)
+        assert out[0].evidence["items"] == ["T1"]
 
 
 class TestShape:
@@ -215,7 +215,7 @@ def _crashed_leaves_work(repo: Path, *, work: bool) -> str:
 
 
 def test_plan_flags_the_work_and_apply_never_touches_it(repo):
-    """Plan: PROPOSE with the exact claim. Apply: the dirty lease is still not expired."""
+    """Plan: PROPOSE with the exact claim. Apply: PROPOSE is shown, never done."""
     from ddflow.api import reporting as RP
 
     _crashed_leaves_work(repo, work=True)
@@ -225,6 +225,10 @@ def test_plan_flags_the_work_and_apply_never_touches_it(repo):
     assert any(r["cls"] == "propose" and "ddflow claim T1" in r["command"] for r in rows)
     rec = RP.recover(repo, all=True, apply=True, agent="op")
     assert rec.exit == 0, rec.reason
+    # The proposed claim was NOT performed: reported shown-only, the lease left alone.
+    assert all(
+        r["applied"] is False and "shown only" in r["note"] for r in rec.data["applied_rows"]
+    )
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and not lease.expired_at
 
@@ -236,7 +240,11 @@ def test_apply_records_a_clean_expiry_and_the_kill_switch_stops_apply_only(repo)
     (repo / ".ddflow" / "local").mkdir(parents=True, exist_ok=True)
     stop = repo / ".ddflow" / "local" / "recovery.stop"
     stop.write_text("operator pulled the emergency brake\n")
-    assert RP.recover(repo, all=True, apply=True, agent="op").exit == 3
+    refused = RP.recover(repo, all=True, apply=True, agent="op")
+    assert refused.exit == 3
+    # The switch did more than refuse: the SAFE_AUTO expiry itself did NOT land.
+    lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
+    assert lease is not None and not lease.expired_at
     # The plan is a dry run: the switch does not silence it.
     code, out, _ = run_cli(repo, "recover", "--all", "--plan", "--json")
     assert code == 0 and out

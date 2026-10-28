@@ -162,17 +162,27 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
                         }
                     )
                 elif effect == "requeue":
+                    # THIS entry only: a plan action may never requeue an entry the
+                    # plan did not name (the whole-list requeue is the integrator's own
+                    # standby, not this pass's).
                     with MQ.integrator(repo, agent=agent) as integrator:
-                        taken = MQ.requeue_orphans(repo) if integrator else None
+                        taken: list[str] = []
+                        if integrator:
+                            for e in MQ.entries(repo):
+                                if e.item == a.item and e.state == MQ.RUNNING:
+                                    e.state, e.started_at = MQ.QUEUED, 0.0
+                                    e.reason = "the recovery pass requeued it (integrator gone)"
+                                    MQ._write(repo, e)
+                                    taken.append(e.item)
                     rows.append(
                         {
-                            "item": "",
+                            "item": a.item,
                             "applied": bool(taken),
-                            "note": f"{len(taken)} queue entr{'y' if len(taken) == 1 else 'ies'} requeued"
+                            "note": f"{a.item} requeued"
                             if taken
-                            else "no running entries were orphaned"
+                            else f"{a.item} is not a running entry anymore"
                             if integrator
-                            else "the integrator lock is held; the next integrator run takes them",
+                            else "the integrator lock is held; the next integrator run takes it",
                         }
                     )
                 else:

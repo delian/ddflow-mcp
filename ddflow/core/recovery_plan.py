@@ -212,18 +212,19 @@ def _job_actions(rows: tuple[dict[str, Any], ...]) -> list[Action]:
 
 
 def _queue_actions(items: tuple[str, ...]) -> list[Action]:
-    if not items:
-        return []
+    # One action per entry: the apply re-checks THIS entry only, so a plan action can
+    # never requeue an entry the plan did not name.
     return [
         Action(
-            "",
+            e,
             SAFE_AUTO,
-            "requeue the orphaned entries (every integrator run does this anyway)",
-            "the integrator that owned these stopped while landing them; putting them "
-            f"back to QUEUED loses nothing: {', '.join(items)}",
+            "requeue the orphaned entry (every integrator run does this anyway)",
+            "the integrator that owned this stopped while landing it; putting it "
+            "back to QUEUED loses nothing",
             0,
-            {"effect": "requeue", "items": list(items)},
+            {"effect": "requeue", "items": [e]},
         )
+        for e in items
     ]
 
 
