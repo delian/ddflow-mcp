@@ -85,7 +85,9 @@ def recover(
     `apply` runs only SAFE_AUTO and refuses (exit 3) while the kill switch is on.
     """
 
-    why_items = "expired leases, orphan worktrees, dead gate runs, unended jobs, orphaned queue entries"
+    why_items = (
+        "expired leases, orphan worktrees, dead gate runs, unended jobs, orphaned queue entries"
+    )
     if not (all or plan):
         log, cfg, _ = _load(repo, agent)
         found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
@@ -117,7 +119,9 @@ def recover(
     recoveries = [r for r in L.scan(log, cfg, repo, state=st) if not item or r.item == item]
     dead = [plain(m) for m in RUN.dead_runs(repo, item)]
     jobs = [r for r in SR.job_rows(st, JOBS) if not item or r["item"] == item]
-    queue = [] if item else [e.item for e in MQ.entries(repo) if e.state == MQ.RUNNING]
+    queue = [
+        e.item for e in MQ.entries(repo) if e.state == MQ.RUNNING and (not item or e.item == item)
+    ]
     facts = RP.Facts(
         recoveries=tuple(plain(r) for r in recoveries),
         dead=tuple(dead),
@@ -140,9 +144,7 @@ def recover(
             "_render": {"plan": True, "actions": actions, "recoveries": recoveries},
         }
         if not actions:
-            return O.nothing(
-                "recover", f"Nothing to recover — no {why_items}.", **data
-            )
+            return O.nothing("recover", f"Nothing to recover — no {why_items}.", **data)
         return O.ok("recover", **data)
 
     if not (recoveries or dead or jobs or queue):
@@ -155,7 +157,7 @@ def recover(
             paused=True,
             plan_actions=[a.as_dict() for a in actions],
         )
-    applied_rows = SR.apply(repo, log, agent, actions) if apply else []
+    applied_rows = SR.apply(repo, log, agent, actions, cfg=cfg) if apply else []
     failures = [r for r in applied_rows if r["note"].startswith("failed:")]
     data: dict[str, Any] = {
         "found": [absolutise(repo, plain(r)) for r in recoveries],

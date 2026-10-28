@@ -94,13 +94,17 @@ def job_rows(st, jobs) -> list[dict]:
     return out
 
 
-def apply(repo: Path, log, agent: str, actions) -> list[dict]:
+def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
     """Run each SAFE_AUTO action, once, under the flock; PROPOSE/OPERATOR are shown only.
 
     Returns one row per action: ``applied`` True/False and what was recorded. An action
     whose precondition no longer holds (already expired, job already ended, the queue
     entry moved) is applied=False with its reason, never an error: folding twice is a
-    no-op by the doc's design, so re-applying is the expected and safe outcome."""
+    no-op by the doc's design, so re-applying is the expected and safe outcome.
+
+    The kill switch is read again under the flock, immediately before acting: the
+    operator can pull the brake after the caller's own pre-check, and the pointer check
+    is cheap enough to mean it."""
     from ..services import leases as L
     from ..services import mergequeue as MQ
 
@@ -113,6 +117,11 @@ def apply(repo: Path, log, agent: str, actions) -> list[dict]:
                     "applied": False,
                     "note": "another recovery pass holds the flock; nothing ran here",
                 }
+                for a in actions
+            ]
+        if kill_switch(repo, cfg):
+            return [
+                {"item": a.item, "applied": False, "note": "the kill switch is on: nothing ran"}
                 for a in actions
             ]
         for a in actions:
@@ -154,14 +163,15 @@ def apply(repo: Path, log, agent: str, actions) -> list[dict]:
                     )
                 elif effect == "requeue":
                     with MQ.integrator(repo, agent=agent) as integrator:
-                        taken = MQ.requeue_orphans(repo) if integrator else []
+                        taken = MQ.requeue_orphans(repo) if integrator else None
                     rows.append(
                         {
                             "item": "",
                             "applied": bool(taken),
-                            "note": f"{len(taken)} queue entr{'y' if len(taken) == 1 else 'ies'} "
-                            "requeued"
+                            "note": f"{len(taken)} queue entr{'y' if len(taken) == 1 else 'ies'} requeued"
                             if taken
+                            else "no running entries were orphaned"
+                            if integrator
                             else "the integrator lock is held; the next integrator run takes them",
                         }
                     )
