@@ -10,7 +10,7 @@ from typing import Any
 
 from ..config import Config
 from .docscheck import check_docs
-from ..surfaces.docscheck_help import command_runner
+from .docscheck_help import command_runner
 from .docscheck_types import Report
 
 

@@ -32,6 +32,14 @@ FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
+#: The built CLI parser this process ANSWERS from, and how it arrives. The parser itself
+#: is a surface-level object (its registry is assembled from `surfaces.commands`), and
+#: `services` may not reach up for it, so it is handed DOWN: `surfaces/__init__` binds a
+#: factory (the lazy `ddflow.surfaces.cli.build_parser`) at import, every ddflow process
+#: and test therefore has one registered before any docs check runs, and the binding is
+#: what keeps the services -> surfaces edge out of this layer (DX B66f6d0c93e).
+_parser_factory: list[Callable[[], ArgumentParser] | None] = [None]
+
 #: This process's own argparse root, built once, on first use: the CLI import drags in
 #: the whole surface, and one parser answers every chain of one walk. A one-element cell
 #: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
@@ -46,6 +54,13 @@ _parser: list[ArgumentParser | None] = [None]
 _capture_lock = threading.Lock()
 
 
+def bind_parser_factory(factory: Callable[[], ArgumentParser]) -> None:
+    """Register how this process builds its own CLI root: `ddflow.surfaces` binds the
+    lazy `build_parser` at import, so a docs check never spawns `ddflow <verb> --help`
+    for a chain this process can answer itself."""
+    _parser_factory[0] = factory
+
+
 def in_process(verbs: list[str]) -> P.Captured:
     """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
 
@@ -57,9 +72,15 @@ def in_process(verbs: list[str]) -> P.Captured:
         try:
             parser = _parser[0]
             if parser is None:
-                from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
-
-                parser = _parser[0] = build_parser()
+                factory = _parser_factory[0]
+                if factory is None:
+                    return P.Captured(
+                        error=RuntimeError(
+                            "no ddflow CLI parser is bound in this process "
+                            "(bind_parser_factory); the spawned walk would answer it"
+                        )
+                    )
+                parser = _parser[0] = factory()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
