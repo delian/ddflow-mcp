@@ -32,12 +32,13 @@ DONE = '[{"id": 7, "status": "done", "git_ref": "a..abcdef0", "agent": "kilo", "
 FAILED = '[{"id": 7, "status": "failed", "git_ref": "a..abcdef0", "agent": "kilo", "model": ""}]'
 
 
-def _fake_clock(monkeypatch) -> list[int]:
-    """`monotonic` that advances one second per call, so a wait of N seconds is N polls."""
+def _fake_clock(monkeypatch, step: float = 1.0) -> list[float]:
+    """`monotonic` that advances ``step`` per call, so a wait of N seconds IS N/step-ish
+    calls; a small step lets a test live through several polls inside one bound."""
     ticks = [0.0]
 
     def mono() -> float:
-        ticks.append(ticks[-1] + 1.0)
+        ticks.append(ticks[-1] + step)
         return ticks[-1]
 
     monkeypatch.setattr(RR, "monotonic", mono)
@@ -179,9 +180,10 @@ def test_the_trap_primitives_are_never_called_while_the_list_says_queued(tmp_pat
     """A live job is only ever LISTED: `wait`/`show` fires after the list said done, so their
     'no review found' wording can never classify a running job."""
     repo, log = _setup(tmp_path, monkeypatch)
-    clock = _fake_clock(monkeypatch)
-    out = RR.wait_job(repo, 7, 3)  # still queued when the (fake) 3s bound runs out
+    _fake_clock(monkeypatch, 0.3)
+    out = RR.wait_job(repo, 7, 3)  # still queued when the 3s bound runs out
     assert out.live is True
     calls = log.read_text().splitlines()
     assert calls and all(c.startswith("list") for c in calls)
-    assert len(clock) >= 3  # it really polled to the bound
+    reads = len(calls)
+    assert reads >= 2  # it really polled through the bound, never once
