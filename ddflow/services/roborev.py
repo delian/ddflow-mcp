@@ -59,6 +59,11 @@ _UNFINISHED = ("queued", "running")
 
 #: Seconds between two `wait_job` polls of `roborev list --json`.
 _POLL_S = 5.0
+#: The smallest cap an ask ever runs with: honouring a bound whose remainder is near zero
+#: must not become an INSTANT timeout of a healthy ask (which would read as unjudged); the
+#: floor's price is that one hung ask can run this long past the bound, never two whole
+#: ask timeouts.
+_FLOOR_S = 0.05
 
 
 def _covers(git_ref: str, sha: str) -> bool:
@@ -128,9 +133,14 @@ def _read_list(exe: str, where: Path, timeout: float = _TIMEOUT_S) -> tuple[list
         jobs = json.loads(p.stdout or "[]")
     except ValueError:
         return [], "roborev list returned no JSON"
-    if isinstance(jobs, list):  # `null` for a repository roborev has no jobs for
-        return [j for j in jobs if isinstance(j, dict)], ""
-    return [], ""
+    if jobs is None:  # `null` for a repository roborev has no jobs for
+        return [], ""
+    if not isinstance(jobs, list):
+        return [], f"roborev list returned no job list ({str(jobs)[:80]})"
+    cleaned = [j for j in jobs if isinstance(j, dict)]
+    if not cleaned and jobs:
+        return [], "roborev list returned no job records"
+    return cleaned, ""
 
 
 def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
@@ -208,7 +218,7 @@ def wait_job(
             # The read after this check is a whole ask in itself, so checking only after it
             # would overshoot the bound by one slow read.
             return WaitResult(live=True, note=_live(job, live_state, monotonic() - started))
-        cap = _TIMEOUT_S if wait_s <= 0 else max(1.0, min(_TIMEOUT_S, deadline - monotonic()))
+        cap = _TIMEOUT_S if wait_s <= 0 else max(_FLOOR_S, min(_TIMEOUT_S, deadline - monotonic()))
         jobs, failed = _read_list(exe, where, cap)
         if failed:
             return WaitResult(
@@ -227,10 +237,11 @@ def wait_job(
         if status == "done":
             if on_tick is not None:
                 on_tick()  # the verdict asks below can outlive the bound: renew the lease first
-            # The two verdict asks SHARE the remaining bound (each floored at 1.0, so a held
-            # `wait`/`show` on a done job cannot run past it twice: never up to 2*_TIMEOUT_S).
+            # The two verdict asks SHARE the remaining bound, floored at _FLOOR_S: even a
+            # hanging `wait`/`show` on a done job cannot run past the bound by more than
+            # twice the floor, never by two whole ask timeouts.
             allowance = (deadline - monotonic()) if wait_s > 0 else _TIMEOUT_S
-            return _done(exe, where, job, rec, max(1.0, allowance))
+            return _done(exe, where, job, rec, allowance)
         if status not in _UNFINISHED:
             return WaitResult(
                 note=(
@@ -270,14 +281,15 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
     on findings, and `roborev show --job` prints the review. A verdict that cannot be read
     is unjudged, so its text (if any) is never presented as a clean pass or as findings: an
     exit roborev never means by 1 (a signal, an unknown code) is unjudged too. The two asks
-    share the one ``timeout`` allowance: `show` gets the tail after `wait` (floored at 0.5s),
-    so a done job whose verdict asks both hang cannot run two whole allowances."""
+    share the one ``timeout`` allowance: `show` gets the tail after `wait` (floored at
+    ``_FLOOR_S``), so a done job whose verdict asks both hang cannot run two allowances."""
     rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
+    cap = max(_FLOOR_S, timeout)
     t0 = monotonic()
-    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=max(1.0, timeout))
+    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=cap)
     spent = monotonic() - t0
     shown = proc.capture(
-        [exe, "show", "--job", str(job)], cwd=where, timeout=max(0.5, timeout - spent)
+        [exe, "show", "--job", str(job)], cwd=where, timeout=max(_FLOOR_S, cap - spent)
     )
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.timed_out or w.returncode not in (0, 1):

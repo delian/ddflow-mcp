@@ -100,7 +100,9 @@ def test_zero_bound_reads_the_status_once_and_reports_it_live(tmp_path, monkeypa
     out = RR.wait_job(repo, 7, 0)
     assert out.live is True and out.review is None
     assert "still queued" in out.note
-    assert len(log.read_text().splitlines()) == 1  # ONE status read: the report is that read's
+    calls = log.read_text().splitlines()
+    assert len(calls) == 1  # ONE request: the status read the verdict reports
+    assert calls[0].startswith("list --json")  # ... and it is the LIST read, nothing else
 
 
 def test_a_failed_job_is_ended_failed_not_a_wait_and_never_a_review(tmp_path, monkeypatch):
@@ -172,8 +174,11 @@ def test_a_bound_elapsed_between_polls_returns_live_without_another_read(tmp_pat
         clock.append(clock[-1] + 100.0)
 
     monkeypatch.setattr(RR, "sleep", leap_past_deadline)
-    _ = RR.wait_job(repo, 7, 5)
-    assert len(log.read_text().splitlines()) == 1  # the one read before the bound ran out
+    out = RR.wait_job(repo, 7, 5)
+    calls = log.read_text().splitlines()
+    assert len(calls) == 1  # the one read before the bound ran out
+    assert calls[0].startswith("list --json")
+    assert out.live is True and out.review is None and "still queued" in out.note
 
 
 def test_the_trap_primitives_are_never_called_while_the_list_says_queued(tmp_path, monkeypatch):
