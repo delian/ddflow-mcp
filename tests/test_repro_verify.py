@@ -129,6 +129,21 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
     assert bad_bug.reproduced == "no"
 
 
+def test_an_unconfirmed_bugs_own_item_is_not_offered_before_confirmed_work(proj):
+    # The reading's leak: the bug's OWN item -- a non-feature task it was filed against,
+    # with no fix task -- must be excluded too, not only its fix_task.
+    run_cli(proj, "phase", "add", "P1", "--title", "Core")
+    run_cli(proj, "task", "add", "P1.CARRY", "--phase", "P1", "--globs", "carry/*")
+    _, carry = _file(
+        proj, summary="carrier", item="P1.CARRY", no_task=True,
+        repro_cmd=python("import sys; sys.exit(0)"),
+    )
+    assert carry.item == "P1.CARRY" and carry.reproduced == "no"
+    ids = bug_items(state(proj), Config.load(proj))
+    assert "P1.CARRY" in {i.id for i in state(proj).items.values()}  # the scenario really had it
+    assert "P1.CARRY" not in ids and carry.fix_task == ""
+
+
 def test_the_line_runs_through_the_shell_env_prefix_and_all(proj):
     # `X=val cmd` is the SHELL's syntax: run as bare argv, no run reaches an exit code and
     # the sighting is lost; through the shell the variable is set and the run answers.
@@ -159,3 +174,15 @@ def test_the_output_tail_is_cut_at_bytes_not_characters(proj):
     run = _run(proj, bug)
     assert run.get("output_truncated") is True
     assert len(run["output"].encode("utf-8")) <= 3
+
+
+def test_each_runs_output_is_bounded_before_the_tail_is_cut(proj):
+    # The tail budget must bound MEMORY too, not only the record: each run's output is
+    # pre-cut when it lands, and the joined tail still ends with the last run's bytes.
+    _config(proj, "[bugs]\nrepro_runs = 3\nrepro_tail_bytes = 8\n")
+    _bid, bug = _file(
+        proj, repro_cmd=python("import sys; print('run-marker'); sys.exit(0)")
+    )
+    run = _run(proj, bug)
+    assert run["output_truncated"] is True
+    assert run["output"] == "-marker\n"  # the joined tail, 'run' cut by the byte budget

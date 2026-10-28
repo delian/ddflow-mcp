@@ -259,7 +259,7 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                 repo,
                 cfg,
                 st,
-                log,
+                log.read_all() if hasattr(log, "read_all") else log,
                 bug=bid,
                 item=given.get("item", ""),
                 agent=given.get("agent", ""),

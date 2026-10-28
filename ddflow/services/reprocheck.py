@@ -60,9 +60,11 @@ def _run_at(
     or a glob behave as the saw it did, and a timeout kills the line's process group. A
     run cut off (timed out, could not start) never yields an exit code: it is not part of
     the verdict, it is counted as ``unreached`` -- without runs that answered, the record
-    is ``unavailable``, never reproduced. The joined output's byte-cut tail is the
-    record's single ``output``."""
+    is ``unavailable``, never reproduced. Each run's output is pre-cut to the tail budget
+    right after the run, so a command that prints gigabytes cannot accumulate them in
+    memory; the joined output's byte-cut tail is the record's single ``output``."""
     load_start = _first_load()
+    keep = max(0, int(tail_bytes))
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
         if s.path is None:
             return {
@@ -78,8 +80,8 @@ def _run_at(
                 unreached += 1
                 continue
             codes.append(int(shot.code))
-            if shot.out:
-                out.append(shot.out)
+            if shot.out and keep:
+                out.append(shot.out[-keep:])
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
         record: dict[str, Any] = {
@@ -101,7 +103,6 @@ def _run_at(
     if unreached:
         record["unreached"] = unreached
     text = "\n".join(out)
-    keep = max(0, int(tail_bytes))
     if text and keep:
         raw = text.encode("utf-8", errors="replace")
         record["output_truncated"] = len(raw) > keep
