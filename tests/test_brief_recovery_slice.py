@@ -145,7 +145,9 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert "**W4**" in text and "2 more holding work" in text, text
-    # The cap is APPLIED, not just reported: the sixth and seventh are not shown (duck).
+    # The cap is APPLIED, not just reported: exactly W0..W4 shown, the rest not (duck).
+    for shown in (f"**W{i}**" for i in range(5)):
+        assert shown in text, text
     assert "**W5**" not in text and "**W6**" not in text, text
     # The RUNNING item nobody holds is still on the list beside seven holding trees.
     assert "**T1** (stale_running" in text, text

@@ -38,8 +38,10 @@ def test_the_session_start_output_opens_with_the_resume_block(repo):
     first = re.search(r"^## ", text, re.M)
     assert first is not None, text
     assert text[first.start() :].startswith(RESUME), text
+    # The interrupted item is IN the leading block: before the pack's own H1 and before
+    # anything new (duck #4/#7).
+    assert text.index("**T1** (stale_running") < text.index("# ddflow brief"), text
     assert text.index(RESUME) < text.index("# ddflow brief"), text
-    # The interrupted item is IN the leading block, before anything new (duck #10).
     assert text.index("**T1** (stale_running") < text.index("## Suggested next"), text
     assert "**T1** (stale_running" in text, text
 
