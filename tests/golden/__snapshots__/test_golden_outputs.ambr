@@ -1782,6 +1782,15 @@
           The commit count past which `behind` fires; at or below it the check is
           silent. Must be >= 1 -- 0 or a negative number is refused as invalid rather
           than read as 'off', which is the `behind` knob's job.
+      enforce.machine_local_keys = []   [default]
+          Extra dotted keys whose `config KEY VALUE` writes default to the machine-
+          local layer, added to the shipped classification
+          (services.configwrite.MACHINE_LOCAL_KEYS: the parallelism knobs -- this
+          machine's worker count is not the next machine's). A write of such a key
+          lands in the git-ignored `.ddflow/local/config.toml` unless it goes there
+          anyway; `--local` says the same thing out loud, and a committed value is
+          written by editing `.ddflow/config.toml` by hand. Keyed as plain dotted keys
+          like the shipped table; a refusal names the first entry that is not one.
       loops.max_claims_per_item = 3   [default]
           How many times an item may be claimed and given up WITHOUT completing before
           it is reported as thrashing. Expiries (crash recovery) are excluded — only
