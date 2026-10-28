@@ -231,3 +231,39 @@ def test_a_directory_argument_lands_the_chore_files_changed_in_it(proj):
     (proj / "app" / "x.py").write_text("x\n")
     code, out, err = run_cli(proj, "chore", "commit", "app", "-m", "code dir")
     assert code == 3 and "app/x.py" in out + err
+
+
+def test_the_item_completed_event_records_why_no_reviewer_was_needed(proj):
+    """The exemption lands on the item.completed event itself, so the durable record of a
+    completed chore names why no reviewer ran -- not only its gate.skipped events."""
+    _approve(proj)
+    (proj / ".mailmap").write_text("A <a@x> <b@x>\n")
+    code, out, err = run_cli(proj, "--json", "chore", "commit", ".mailmap", "-m", "mailmap")
+    assert code == 0, (out, err)
+    item = json.loads(out)["item"]
+    events = EventLog(proj, "probe").read_all()
+    done = [e for e in events if e.kind == "item.completed" and e.subject == item]
+    assert done, "no item.completed event for the chore"
+    assert "standing approval" in done[-1].data.get("chore", "")
+
+
+def test_complete_outputs_the_chore_exemption(proj):
+    """`complete`'s own output prints the exemption, not just the log: a chore completed
+    item over MCP is told why no reviewer was needed."""
+    _approve(proj)
+    run_cli(proj, "task", "add", "CH", "--title", "mailmap chore", "--globs", ".mailmap", "--tags", "chore")
+    run_cli(proj, "claim", "CH")
+    wt = proj / ".ddflow" / "worktrees" / "CH"
+    (wt / ".mailmap").write_text("A <a@x> <b@x>\n")
+    _git(wt, "add", ".mailmap")
+    _git(wt, "commit", "-qm", "mailmap")
+    for gate in ("research", "rules", "implement", "rubber_duck", "critic",
+                 "standards", "unit_tests", "bug_hunt", "dedupe"):
+        code, _o, err = run_cli(proj, "gate", "skip", "CH", gate, "--reason", "chore")
+        assert code == 0, err
+    code, _o, err = run_cli(proj, "merge", "CH", "--model", "claude-x")
+    assert code == 0, err
+    code, out, err = run_cli(proj, "--json", "complete", "CH", "--model", "claude-x")
+    assert code == 0, (out, err)
+    body = json.loads(out)
+    assert "standing approval" in body.get("chore", "")
