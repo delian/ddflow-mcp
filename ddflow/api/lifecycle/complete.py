@@ -14,6 +14,7 @@ from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
 from ...core.stuck import stuck_edges_to
 from ...services import approval as AP
+from ...services import chore as CO
 from ...services import ci as CI
 from ...services import cleanup as CL
 from ...services import completion as CM
@@ -239,6 +240,10 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
 
     refiled = refile_reported(log, cfg, item, CM.reported_against(st, item, cfg))
     waiting = _waiters(repo, item)  # before the release: see `release`
+    # The verdict kept only the note; the EVENT's structured record needs the exemption's
+    # fields. Re-derived from the same inputs the verdict just judged (same moment), so it
+    # cannot drift from `v.chore` -- and it stays None when the item is not a chore.
+    excused = CO.exemption(st, cfg, it, CM.changed_paths(repo, it))[0] if v.chore else None
 
     log.append(
         "item.completed",
@@ -260,8 +265,21 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
             # Optional: why no reviewer was needed (a chore's exemption, services.chore);
-            # the gate.skipped events carry the same text. Absent = not a chore.
-            **({"chore": v.chore} if v.chore else {}),
+            # structured -- note + approver + FULL approval digest + paths -- so the covering
+            # approval is verifiable from the event alone (the note truncates the digest);
+            # `note` is the same text its gate.skipped events carry. Absent = not a chore.
+            **(
+                {
+                    "chore": {
+                        "note": v.chore,
+                        "approved_by": excused.approved_by,
+                        "digest": excused.digest,
+                        "paths": list(excused.paths),
+                    }
+                }
+                if excused
+                else {}
+            ),
             # Optional, additive (no new event kind): the gates the ACTUAL diff excused,
             # {gate: why}, so a required gate that did not run is accounted for on the
             # durable record (B-na-required-gate). Absent = none excused.
