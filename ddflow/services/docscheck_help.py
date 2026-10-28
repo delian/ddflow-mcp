@@ -55,16 +55,18 @@ def in_process(verbs: list[str]) -> P.Captured:
 
             _parser = build_parser()
         out, err = io.StringIO(), io.StringIO()
-        code: int | None = 0
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 _parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
             #: a non-int code (argparse never raises one -- ``--help`` is 0, ``error()``
-            #: 2 -- so this branch is a guard, not a path): None reads "did not finish",
-            #: never a success folded into 0 (standards roborev job 3705).
-            code = exc.code if isinstance(exc.code, int) else None
-    return P.Captured(code, out.getvalue(), err.getvalue())
+            #: 2 -- so this branch is a guard, not a path): it is folded into neither a
+            #: success-0 nor an inconsistent "ran with no returncode"; the walk reads it
+            #: exactly like a tool that could not run (standards jobs 3705-3707).
+            if isinstance(exc.code, int):
+                return P.Captured(exc.code, out.getvalue(), err.getvalue())
+            return P.Captured(error=exc)
+        return P.Captured(0, out.getvalue(), err.getvalue())
 
 
 def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
