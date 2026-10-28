@@ -1274,7 +1274,7 @@
 # ---
 # name: test_help[ddflow hooks run]
   '''
-  usage: ddflow hooks run [-h] [--harness HARNESS] [event]
+  usage: ddflow hooks run [-h] [--harness HARNESS] [--dry-run] [event]
   
   positional arguments:
     event              the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact,
@@ -1284,6 +1284,7 @@
     -h, --help         show this help message and exit
     --harness HARNESS  the agent whose hook dialect the call speaks (a descriptor id; default
                        claude)
+    --dry-run          compute and print what the hook would do, and write no event
   
   '''
 # ---
@@ -1888,16 +1889,32 @@
   
   '''
 # ---
+# name: test_help[ddflow plan lint]
+  '''
+  usage: ddflow plan lint [-h] [--since SINCE] [--phase PHASE] [--fix]
+  
+  options:
+    -h, --help     show this help message and exit
+    --since SINCE  Only live work filed on or after this ISO date (default: the whole open queue).
+    --phase PHASE  Only live work under this phase id (default: the whole open queue).
+    --fix          Apply the high-confidence fixes: rule-forced ordering edges, stale-needs
+                   removals, priority bands.
+  
+  '''
+# ---
 # name: test_help[ddflow plan]
   '''
-  usage: ddflow plan [-h] {check,apply,confirm} ...
+  usage: ddflow plan [-h] {check,apply,confirm,lint} ...
   
   positional arguments:
-    {check,apply,confirm}
+    {check,apply,confirm,lint}
       check               check a proposed plan before filing it (globs, cycles, collisions)
       apply               file a checked plan as PROPOSED tasks, in one step (dry run unless
                           --apply)
       confirm             the operator confirms a plan: its proposed tasks become ready
+      lint                lint the live queue: overlaps without an ordering edge, missing globs,
+                          stale needs, duplicates, DX/fix at default priority (--fix applies the
+                          high-confidence ones)
   
   options:
     -h, --help            show this help message and exit
@@ -3200,7 +3217,8 @@
       chore               commit or approve chore files (no reviewer)
       grant               record or list the operator's grants (extra review rounds)
       approvals           approval requests for operator-gated commands (a person answers)
-      plan                check, file (proposed) and confirm a plan
+      plan                check a proposed plan, filed it PROPOSED, confirm it, or lint the whole
+                          open queue
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
@@ -3440,6 +3458,7 @@
     'ddflow plan apply',
     'ddflow plan check',
     'ddflow plan confirm',
+    'ddflow plan lint',
     'ddflow pr',
     'ddflow pr status',
     'ddflow pr sync',
