@@ -29,6 +29,9 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -61,33 +64,38 @@ def _run_at(
     or a glob behave as the saw it did, and a timeout kills the line's process group. A
     run cut off (timed out, could not start) never yields an exit code: it is not part of
     the verdict, it is counted as ``unreached`` -- without runs that answered, the record
-    is ``unavailable``, never reproduced. Each run's output lands in a file INSIDE the
-    scratch tree (the shell's own redirect; /dev/null when nothing is kept), never in
-    this process's buffer, and only the tail bytes are read BACK -- a command that prints
-    gigabytes writes them to a tree that is deleted with the checkout instead of
-    accumulating them in memory. The joined tails' byte-cut tail is the record's single
-    ``output``."""
+    is ``unavailable``, never reproduced. The line runs wrapped in a subshell whose WHOLE
+    output is redirected to a tail file (``( line\n) > file 2>&1``): compound lines the
+    shell supports -- ``a && b``, ``;``, a trailing comment -- all write there, none of
+    it reaches this process's buffer. The tail file lives in a throwaway dir OUTSIDE the
+    checkout, so the file itself never changes the tree the command is reproducing, and
+    only its tail bytes are read back. The joined tails' byte-cut tail is the record's
+    single ``output``."""
     load_start = _first_load()
     keep = max(0, int(tail_bytes))
-    with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
-        if s.path is None:
-            return {
-                "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
-                "load": load_start,
-            }
-        codes: list[int] = []
-        out: list[str] = []
-        bigger = False
-        unreached = 0
-        for i in range(count):
-            code, tailed, size = _one_run(s.path, i, line, keep, timeout_s)
-            if code is None:
-                unreached += 1
-                continue
-            codes.append(code)
-            if tailed:
-                out.append(tailed)
-            bigger = bigger or size > keep
+    tails = Path(tempfile.mkdtemp(prefix="ddflow-repro-"))
+    try:
+        with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
+            if s.path is None:
+                return {
+                    "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
+                    "load": load_start,
+                }
+            codes: list[int] = []
+            out: list[str] = []
+            bigger = False
+            unreached = 0
+            for i in range(count):
+                code, tailed, size = _one_run(s.path, tails / f"{i}.out", line, keep, timeout_s)
+                if code is None:
+                    unreached += 1
+                    continue
+                codes.append(code)
+                if tailed:
+                    out.append(tailed)
+                bigger = bigger or size > keep
+    finally:
+        shutil.rmtree(tails, ignore_errors=True)
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
         record: dict[str, Any] = {
@@ -120,18 +128,14 @@ def _run_at(
 
 
 def _one_run(
-    scratch: Path, i: int, line: str, keep: int, timeout_s: float
+    scratch: Path, tail_file: Path, line: str, keep: int, timeout_s: float
 ) -> tuple[int | None, str, int]:
     """One run of ``line`` in the scratch tree: its exit code (None when it reached none),
-    the tail bytes of its output file, and that file's size. The redirect IS the bound:
-    the command's output goes to the file (or /dev/null), never to this process's buffer."""
-    if keep:
-        tail_file = scratch / f".ddflow-repro-{i}.out"
-        dest = f" > {shlex.quote(str(tail_file))} 2>&1"
-    else:
-        tail_file = scratch / f".ddflow-repro-{i}.out"
-        dest = " > /dev/null 2>&1"
-    shot = P.run_shell(f"{line}{dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
+    the tail bytes of its output file, and that file's size. The run is a subshell with
+    the WHOLE line redirecting to ``tail_file`` (outside the checkout; /dev/null when
+    nothing is kept), so every command the line runs writes there and nowhere else."""
+    dest = f" > {shlex.quote(str(tail_file))} 2>&1" if keep else " > /dev/null 2>&1"
+    shot = P.run_shell(f"( {line}\n){dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
     if shot.could_not_run or shot.timed_out or shot.code is None:
         return None, "", 0
     if not keep:

@@ -79,7 +79,10 @@ def test_bug_carries_a_bundle_with_the_facts(proj, monkeypatch):
     assert run["command"] == "uv run pytest tests/test_x.py"
     # DX-bug-repro-verify: the command is run AT FILING, in a scratch checkout of the
     # recorded sha; what the runs answered is recorded with it (never "given, not executed").
-    assert run["executed"] is True and run["reproduced"] in ("yes", "no")
+    # tests/test_x.py does not exist in the recorded sha: pytest exits non-zero, so the
+    # verdict is deterministic -- an always-"no" runner would fail this once the field
+    # could only answer the run.
+    assert run["executed"] is True and run["at"] == head and run["reproduced"] == "yes"
     assert logblobs.problems(proj, EventLog(proj, "r").read_all()) == []
 
 
