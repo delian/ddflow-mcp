@@ -26,7 +26,7 @@ case "$1" in
         grep -q '"status": "done"' "$FAKE_STATUS_FILE" && echo done-served >> "$FAKE_LOG"
         exit 0 ;;
   wait) exit "${FAKE_WAIT_EXIT:-0}" ;;
-  show) echo "${FAKE_SHOW_TEXT:-Review for job 7: no issues}" ;;
+  show) [ -n "$FAKE_SHOW_FAIL" ] && exit 1; echo "${FAKE_SHOW_TEXT:-Review for job 7: no issues}" ;;
 esac
 """
 
@@ -273,3 +273,14 @@ def test_main_keeps_a_negative_wait_s_negative(tmp_path, monkeypatch):
     assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "-5"]) == 0
     reads = [c for c in log.read_text().splitlines() if c.startswith("list")]
     assert len(reads) == 1
+
+
+def test_main_says_when_a_clean_verdict_has_no_body(tmp_path, monkeypatch, capsys):
+    """A clean verdict whose BODY could not be read still exits 0, and says so: a missing
+    body must never look like a whole one."""
+    repo, _ = _setup(tmp_path, monkeypatch)
+    (tmp_path / "status.json").write_text(DONE)
+    monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
+    monkeypatch.setattr(RR, "sleep", lambda s: None)
+    assert RR.main(["--job", "7", "--repo", str(repo), "--wait-s", "0"]) == 0
+    assert "review body could not be read" in capsys.readouterr().out
