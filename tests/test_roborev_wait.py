@@ -32,18 +32,25 @@ DONE = '[{"id": 7, "status": "done", "git_ref": "a..abcdef0", "agent": "kilo", "
 FAILED = '[{"id": 7, "status": "failed", "git_ref": "a..abcdef0", "agent": "kilo", "model": ""}]'
 
 
-def _fake_clock(monkeypatch, step: float = 1.0) -> list[float]:
+def _fake_clock(monkeypatch, step: float = 1.0) -> tuple[list[float], list[float]]:
     """`monotonic` that advances ``step`` per call, so a wait of N seconds IS N/step-ish
-    calls; a small step lets a test live through several polls inside one bound."""
+    calls; a small step lets a test live through several polls inside one bound. The sleep
+    stub RECORDS every requested span and refuses a negative one (a negative sleep raises
+    in production too), so a poll can never sneak an out-of-bound nap past a test."""
     ticks = [0.0]
+    sleeps: list[float] = []
 
     def mono() -> float:
         ticks.append(ticks[-1] + step)
         return ticks[-1]
 
+    def _sleep(s: float) -> None:
+        assert s >= 0, f"sleep({s}) of a negative span past the bound"
+        sleeps.append(s)
+
     monkeypatch.setattr(RR, "monotonic", mono)
-    monkeypatch.setattr(RR, "sleep", lambda s: None)
-    return ticks
+    monkeypatch.setattr(RR, "sleep", _sleep)
+    return ticks, sleeps
 
 
 def _setup(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
@@ -133,7 +140,7 @@ def test_a_tick_that_overshoots_the_bound_ends_live_never_a_negative_sleep(tmp_p
     """A slow lease renewal that eats the rest of the bound must return the LIVE verdict; a
     negative sleep span would raise and lose the wait's answer."""
     repo, _ = _setup(tmp_path, monkeypatch)
-    clock = _fake_clock(monkeypatch)
+    clock, _sleeps = _fake_clock(monkeypatch)
     start = [None]
 
     def slow_tick() -> None:
@@ -168,10 +175,12 @@ def test_a_bound_elapsed_between_polls_returns_live_without_another_read(tmp_pat
     `_TIMEOUT_S`: the sleep ends at the deadline, and the next thing asked must be the bound
     answer, never one more (up to 30s) list."""
     repo, log = _setup(tmp_path, monkeypatch)
-    clock = _fake_clock(monkeypatch)
+    clock, _ = _fake_clock(monkeypatch)  # clock is the ticks list the nap elapses on
+    sleeps: list[float] = []
 
     def leap_past_deadline(s: float) -> None:
-        clock.append(clock[-1] + 100.0)
+        sleeps.append(s)
+        clock.append(clock[-1] + 100.0)  # the slept span elapses, flying past the bound
 
     monkeypatch.setattr(RR, "sleep", leap_past_deadline)
     out = RR.wait_job(repo, 7, 5)
@@ -179,16 +188,18 @@ def test_a_bound_elapsed_between_polls_returns_live_without_another_read(tmp_pat
     assert len(calls) == 1  # the one read before the bound ran out
     assert calls[0].startswith("list --json")
     assert out.live is True and out.review is None and "still queued" in out.note
+    assert sleeps and all(0 <= s <= 5 for s in sleeps)  # the nap sat inside the 5s bound
 
 
 def test_the_trap_primitives_are_never_called_while_the_list_says_queued(tmp_path, monkeypatch):
     """A live job is only ever LISTED: `wait`/`show` fires after the list said done, so their
     'no review found' wording can never classify a running job."""
     repo, log = _setup(tmp_path, monkeypatch)
-    _fake_clock(monkeypatch, 0.3)
+    _, sleeps = _fake_clock(monkeypatch, 0.3)
     out = RR.wait_job(repo, 7, 3)  # still queued when the 3s bound runs out
     assert out.live is True
     calls = log.read_text().splitlines()
     assert calls and all(c.startswith("list") for c in calls)
     reads = len(calls)
     assert reads >= 2  # it really polled through the bound, never once
+    assert sleeps and all(0 <= s <= 3 for s in sleeps)  # every nap inside the 3s bound
