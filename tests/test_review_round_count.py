@@ -81,6 +81,7 @@ def test_a_pre_status_era_declared_outcome_charges_a_delta_round_too(repo):
     # the FULL shape charges too: the era rule is one pair, not a delta-only rule
     it = _item(_run({"review_kind": "full"}, outcome="reviewed"))
     assert full_rounds(it, "critic") == 1
+    assert rounds_used(it, "critic") == 1
     # an outcome-less or unavailable-era record charges nothing, delta or full
     it = _item(
         _run({"review_kind": "delta"}, outcome="unavailable"),
