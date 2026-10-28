@@ -72,14 +72,15 @@ def _list_verb(a, c: Ctx, item: str) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     read_gate = out.data.get("gate", "")  # the gate, or comma-joined gates, the listing read
-    if "," in read_gate:  # per-finding numbers are per gate: naming one would mislead
+    if "," in read_gate:  # per-finding numbers are per gate: naming just one would misdirect
         triage_line = (
             f"  ddflow review triage {item} --gate <its gate> --finding N "
             '--refuted|--confirmed --probe "..."'
         )
     else:
+        # a listing that succeeds read at least one gate, so `read_gate` is never empty
         triage_line = (
-            f"  ddflow review triage {item} --gate {read_gate or 'G'} --finding N "
+            f"  ddflow review triage {item} --gate {read_gate} --finding N "
             '--refuted|--confirmed --probe "..."'
         )
     recipe = f"\nrecord a verdict:\n{triage_line}"
