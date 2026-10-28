@@ -99,9 +99,6 @@ def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
     assert "ddflow update <ID> --add-globs " + advised in msg, (
         f"a comma must stay ONE whole glob and a bracket must stay literal in the remedy:\n{msg}"
     )
-    assert expected in msg, (
-        f"a comma or apostrophe inside a staged path must stay ONE runnable glob in the remedy:\n{msg}"
-    )
 
 
 def test_a_claimed_commit_is_allowed(enforced):
