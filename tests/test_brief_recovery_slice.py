@@ -57,6 +57,9 @@ def test_the_reserved_slice_survives_a_budget_that_trims_the_rest(repo):
     assert "**T1** (stale_running" in text, text
     assert "`ddflow claim T1` to resume" in text, text
     assert text.index(RESUME) < text.index("cut to fit session.brief_max_tokens")
+    # The ENTRY survives the cut the same way the heading does: nothing may cut in
+    # between them (duck #7).
+    assert text.index("**T1** (stale_running") < text.index("cut to fit session.brief_max_tokens")
 
 
 def test_each_entry_says_what_was_interrupted_and_that_ddflow_has_not_resumed(repo):
@@ -86,6 +89,11 @@ def test_the_last_prompt_of_the_lost_holder_is_in_the_slice(repo):
         "S1",
         {"text": "finish the graph parser before lunch", "item": "T1"},
     )
+    crashed.append(
+        "session.prompt",
+        "S1",
+        {"text": "launder the decoy socks instead", "item": "T9"},
+    )
     claim = LC.claim(repo, "T1", agent="crashed")
     assert claim.exit == 0, claim.reason
     wt = Path(claim.data["worktree"])
@@ -106,8 +114,12 @@ def test_the_last_prompt_of_the_lost_holder_is_in_the_slice(repo):
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert "**T1** (expired_lease, was crashed)" in text, text
-    assert "finish the graph parser before lunch" in text, text
+    assert 'last prompt: "finish the graph parser before lunch"' in text, text
+    # A prompt for ANOTHER item is that item's context, never borrowed for T1 (duck #8).
+    assert "launder the decoy socks" not in text, text
     assert "NOT resumed: ddflow applies only safe actions" in text, text
+    # The exact command for THIS entry's band is named (duck #9).
+    assert "`ddflow release T1 --note salvaged`" in text, text
 
 
 def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
@@ -133,5 +145,7 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     assert out.exit == 0, out.reason
     text = out.data["text"]
     assert "**W4**" in text and "2 more holding work" in text, text
+    # The cap is APPLIED, not just reported: the sixth and seventh are not shown (duck).
+    assert "**W5**" not in text and "**W6**" not in text, text
     # The RUNNING item nobody holds is still on the list beside seven holding trees.
     assert "**T1** (stale_running" in text, text
