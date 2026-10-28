@@ -244,7 +244,24 @@ def test_the_item_completed_event_records_why_no_reviewer_was_needed(proj):
     events = EventLog(proj, "probe").read_all()
     done = [e for e in events if e.kind == "item.completed" and e.subject == item]
     assert done, "no item.completed event for the chore"
-    assert "standing approval" in done[-1].data.get("chore", "")
+    chore = done[-1].data.get("chore")
+    assert isinstance(chore, dict), chore
+    assert "standing approval" in chore["note"]
+    # Structured so the covering approval is verifiable from the event alone: the note
+    # truncates the digest to 12 chars; the fields keep the whole of it (DX-chore-commit).
+    assert chore["approved_by"] and chore["digest"] and chore["paths"]
+
+
+def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
+    """The conditional key stays OFF the record for a non-chore: a `chore` tag whose files
+    fall outside [chore].globs is an ordinary item, and its completion payload carries no
+    `chore` key (roborev review of DX-chore-completed-event: nothing covered the negative)."""
+    _approve(proj)
+    run_cli(proj, "task", "add", "CH", "--title", "code change", "--globs", "code.py", "--tags", "chore")
+    code, out, err = run_cli(proj, "--json", "complete", "CH")
+    assert code == 3, (out, err)
+    body = json.loads(out)
+    assert "chore" not in body, body
 
 
 def test_complete_outputs_the_chore_exemption(proj):
