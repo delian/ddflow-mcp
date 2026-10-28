@@ -255,11 +255,10 @@ def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
         repo,
         default,
     )
-    # the flag the RUN takes carries the range; the quoted file argument keeps its text
-    assert "pre-commit run --hook-stage pre-push --from-ref {sha} --to-ref HEAD --files".format(
-        sha=since
-    ) in cmd, cmd
-    assert cmd.endswith("--files ' --all-files'"), cmd
+    # a run WITH extra arguments is shell text beyond the default phrase: it stays as
+    # written (its own --all-files kept), never half-rewritten
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\'; pre-commit run '), cmd
+    assert cmd.endswith("--hook-stage pre-push --all-files --files ' --all-files'"), cmd
     # a run not shaped like the default phrase is never re-scoped at all -- a quoted
     # argument that merely contains --all-files keeps its text (the SKIP= prefix is
     # rebuilt as it would be anywhere: merged, quotes re-emitted)
@@ -270,6 +269,9 @@ def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
     )
     assert odd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\' pre-commit run '), odd
     assert odd.endswith("--hook-stage pre-push --files ' --all-files' --all-files"), odd
+    # but a run that IS the default phrase takes the range exactly there
+    plain = CI.scope_to_diff("SKIP=op-skip " + CI.DEFAULT_COMMAND, repo, default)
+    assert plain.endswith(f" --from-ref {since} --to-ref HEAD"), plain
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
@@ -285,29 +287,17 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
     default = _project(repo)
     since = _git(repo, "rev-parse", default)
     for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP ", "SKIP=$(echo lint) "):
-        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
-        # the assignment keeps the operator's own expansion semantics, unmerged -- the
-        # rebuild must not guess at expansions -- only the run is scoped to the diff
-        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
-        assert " --all-files" not in cmd
-        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
-    # the range lands on the RUN's --all-files: an earlier one inside an unparsed
-    # substitution value is the operator's and stays theirs
-    cmd = CI.scope_to_diff("SKIP=$(echo --all-files) " + CI.DEFAULT_COMMAND, repo, default)
-    assert cmd.startswith("SKIP=$(echo --all-files) pre-commit run "), cmd
-    assert cmd.count(" --all-files") == 1, cmd
-    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
-    # even a verbatim value quoting the WHOLE default phrase is immune: the range lands
-    # on the run's phrase after the value's word, not the one quoted inside it
-    quoted_run = (
-        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ' + CI.DEFAULT_COMMAND
-    )
-    cmd = CI.scope_to_diff(quoted_run, repo, default)
-    assert cmd.startswith(
-        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" pre-commit run '
-    ), cmd
-    assert cmd.count(" --all-files") == 1, cmd
-    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+        # the assignment keeps the operator's own expansion semantics -- the rebuild must
+        # not guess at expansions, so the WHOLE command runs exactly as written
+        assert CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default) == prefix + CI.DEFAULT_COMMAND
+    # the same for a value that merely CONTAINS a stray --all-files or the whole phrase
+    for prefix in (
+        "SKIP=$(echo --all-files) ",
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ',
+    ):
+        source = prefix + CI.DEFAULT_COMMAND
+        got = CI.scope_to_diff(source, repo, default)
+        assert got == source, got
 
 
 def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
@@ -315,7 +305,7 @@ def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_
     since = _git(repo, "rev-parse", default)
     cmd = CI.scope_to_diff("SKIP=lint; " + CI.DEFAULT_COMMAND, repo, default)
     # the `;` ends the assignment exactly where the shell ends it, so the run after it
-    # is still the scoped pre-commit command, not a chunk of the value
+    # is still the default phrase -- which is what takes the range
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\'; pre-commit run --hook-stage pre-push '), cmd
     assert " --all-files" not in cmd
     assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
