@@ -192,6 +192,40 @@ class WaitResult:
     live: bool = False
 
 
+def _settled(rec: dict | None, job: int) -> WaitResult | None:
+    """The dead-end answers one list read can give for a job record -- vanished (the list no
+    longer has it), no readable status, or ended failed/canceled. ``None`` when the job is
+    still queued/running: the wait goes on."""
+    if rec is None:
+        return WaitResult(
+            note=(
+                f"roborev's last {_LIMIT} jobs hold no job {job} in this repository: the "
+                f"review for it was never written (an older job may just be past the "
+                f"{_LIMIT}-job list window; 'no review found' would be the very same words); "
+                f"re-run `roborev review <sha of the branch head>` to enqueue it, then wait "
+                f"again"
+            )
+        )
+    status = str(rec.get("status") or "")
+    if not status:
+        # no readable status is its own bucket: it MAY still be running -- an unknown
+        # status must not read as an ended job ordered to re-enqueue.
+        return WaitResult(
+            note=(
+                f"roborev job {job} has no readable status in its record: it may still be "
+                f"running, but nothing says so; the reviewer is unchecked -- wait again"
+            )
+        )
+    if status in _UNFINISHED or status == "done":
+        return None  # still live, or done -- the caller's done path (wait_job) takes the job
+    return WaitResult(
+        note=(
+            f"roborev job {job} ended {status}: it will never carry a review; re-run "
+            f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
+        )
+    )
+
+
 def wait_job(
     where: Path,
     job: int,
@@ -230,26 +264,9 @@ def wait_job(
                 note=f"roborev's job list could not be read ({failed}): job {job} is unchecked"
             )
         rec = next((j for j in jobs if _job_id(j) == job), None)
-        if rec is None:
-            return WaitResult(
-                note=(
-                    f"roborev's last {_LIMIT} jobs hold no job {job} in this repository: the "
-                    f"review for it was never written (an older job may just be past the "
-                    f"{_LIMIT}-job list window; 'no review found' would be the very same "
-                    f"words); re-run `roborev review <sha of the branch head>` to enqueue it, "
-                    f"then wait again"
-                )
-            )
+        if settled := _settled(rec, job):
+            return settled
         status = str(rec.get("status") or "")
-        if not status:
-            # no readable status is its own bucket: it MAY still be running -- an unknown
-            # status must not read as an ended job ordered to re-enqueue.
-            return WaitResult(
-                note=(
-                    f"roborev job {job} has no readable status in its record: it may still be "
-                    f"running, but nothing says so; the reviewer is unchecked -- wait again"
-                )
-            )
         if status == "done":
             if on_tick is not None:
                 on_tick()  # the verdict asks below can outlive the bound: renew the lease first
@@ -258,13 +275,6 @@ def wait_job(
             # and a healthy verdict that arrives just past the bound still gets a real ask.
             allowance = _TIMEOUT_S if wait_s <= 0 else deadline - monotonic()
             return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
-        if status not in _UNFINISHED:
-            return WaitResult(
-                note=(
-                    f"roborev job {job} ended {status}: it will never carry a review; re-run "
-                    f"`roborev review <sha of the branch head>`; the reviewer is unchecked"
-                )
-            )
         elapsed = monotonic() - started
         if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
             return WaitResult(live=True, note=_live(job, status, elapsed, where))
