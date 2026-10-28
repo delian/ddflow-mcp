@@ -18,6 +18,21 @@ def _runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
+def _reviewed(r) -> bool:
+    """One run IS a round: it reached a reviewer with a `status` verdict, or -- the
+    pre-status era, carried into a re-claim or hand record -- it carries a declared
+    outcome without one. Unavailable, errored and refused records charge nothing, and
+    neither does a run with no outcome at all (full and delta rules alike)."""
+    if r.evidence.get("status") in ("REVIEWED", "PARTIAL"):
+        return True
+    return r.evidence.get("status") is None and r.outcome not in (
+        None,
+        "unavailable",
+        "error",
+        "refused",
+    )
+
+
 def kept_copy(run) -> bool:
     """A record `api.review._keep_reviewed_round` re-emitted over an outage: a copy of an
     earlier round, no round of its own (B435bbddb18). Copies written before `round_kept`
@@ -39,27 +54,16 @@ def full_rounds(it, gate: str) -> int:
     `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
     must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
     count: a refused round, an errored one, an interrupted one that recorded nothing
-    and a `--chunk` re-run are not. A run whose record names a verdict it did not
-    reach (`status` UNAVAILABLE/ERROR) charged a round it never delivered; a dead
-    run's record says `unavailable`, so a full-shaped run recorded unavailable
-    charges nothing (Bfdcb5c177c). One whose record carries NO `status` at all and
-    some outcome is a declared round (a full record of the era before `status`
-    evidence carried into a re-claim or hand record): it still counts, or a
-    re-record would silently hand the budget back. The same era's refused and
-    errored full records have no verdict either and this contract excludes them
-    there too (rubber_duck finding #1): outcomes without a verdict charge nothing.
+    and a `--chunk` re-run are not (`_reviewed`); a run whose record names a verdict
+    it did not reach (`status` UNAVAILABLE/ERROR) charged a round it never delivered.
+    A kept copy, a settled pass, a free fix round and the free retry of a partial
+    round are rounds of another run, not their own.
     """
     return sum(
         1
         for r in _runs(it, gate)
         if r.evidence.get("review_kind") == "full"
-        and (
-            r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-            or (
-                r.evidence.get("status") is None
-                and r.outcome not in (None, "unavailable", "error", "refused")
-            )
-        )
+        and _reviewed(r)
         and not kept_copy(r)
         and not settled_pass(r)
         and not r.evidence.get("fix_round")
@@ -69,13 +73,13 @@ def full_rounds(it, gate: str) -> int:
 
 def delta_rounds(it, gate: str) -> int:
     """Delta rechecks already recorded for ``it``'s ``gate`` (counted from its history,
-    like `full_rounds`): only ones that reached a reviewer and are a round of their own
-    (a free retry of a partial round is no round, exactly as for full rounds)."""
+    like `full_rounds`): only ones that reached a reviewer and are a round of their
+    own, with the same pre-status-era declared-outcome rule full rounds get."""
     return sum(
         1
         for r in _runs(it, gate)
         if r.evidence.get("review_kind") == "delta"
-        and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+        and _reviewed(r)
         and not kept_copy(r)
         and not settled_pass(r)
         and not r.evidence.get("fix_round")
