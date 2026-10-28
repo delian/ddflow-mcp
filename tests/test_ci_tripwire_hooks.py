@@ -250,27 +250,15 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
 def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
     default = _project(repo)
     since = _git(repo, "rev-parse", default)
-    cmd = CI.scope_to_diff(
-        "SKIP=lint; pre-commit run --hook-stage pre-push --all-files --files ' --all-files'",
-        repo,
-        default,
-    )
-    # a run WITH extra arguments is shell text beyond the default phrase: it stays as
-    # written (its own --all-files kept), never half-rewritten
-    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\'; pre-commit run '), cmd
-    assert cmd.endswith("--hook-stage pre-push --all-files --files ' --all-files'"), cmd
-    # a run not shaped like the default phrase is never re-scoped at all -- a quoted
-    # argument that merely contains --all-files keeps its text (the SKIP= prefix is
-    # rebuilt as it would be anywhere: merged, quotes re-emitted)
-    odd = CI.scope_to_diff(
-        "SKIP=lint pre-commit run --hook-stage pre-push --files ' --all-files' --all-files",
-        repo,
-        default,
-    )
-    assert odd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\' pre-commit run '), odd
-    assert odd.endswith("--hook-stage pre-push --files ' --all-files' --all-files"), odd
-    # but a run that IS the default phrase takes the range exactly there
+    # a run WITH extra arguments is shell text beyond the default phrase: the whole
+    # command runs exactly as written, never half-rewritten
+    source = "SKIP=lint; pre-commit run --hook-stage pre-push --all-files --files ' --all-files'"
+    assert CI.scope_to_diff(source, repo, default) == source
+    odd = "SKIP=lint pre-commit run --hook-stage pre-push --files ' --all-files' --all-files"
+    assert CI.scope_to_diff(odd, repo, default) == odd
+    # but a run that IS the default phrase takes the range exactly there, --all-files gone
     plain = CI.scope_to_diff("SKIP=op-skip " + CI.DEFAULT_COMMAND, repo, default)
+    assert " --all-files" not in plain
     assert plain.endswith(f" --from-ref {since} --to-ref HEAD"), plain
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
@@ -286,18 +274,26 @@ def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
 def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
     default = _project(repo)
     since = _git(repo, "rev-parse", default)
-    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP ", "SKIP=$(echo lint) "):
-        # the assignment keeps the operator's own expansion semantics -- the rebuild must
-        # not guess at expansions, so the WHOLE command runs exactly as written
-        assert CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default) == prefix + CI.DEFAULT_COMMAND
-    # the same for a value that merely CONTAINS a stray --all-files or the whole phrase
-    for prefix in (
-        "SKIP=$(echo --all-files) ",
-        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ',
-    ):
+    # an expansion's own text keeps its own shell semantics and is never merged into --
+    # but the bare default run after it is still scoped to the diff (a `$(` value, whose
+    # word is inseparable, leaves the whole command as written)
+    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP "):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
+        assert " --all-files" not in cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    for prefix in ("SKIP=$(echo lint) ", "SKIP=$(echo --all-files) "):
         source = prefix + CI.DEFAULT_COMMAND
-        got = CI.scope_to_diff(source, repo, default)
-        assert got == source, got
+        assert CI.scope_to_diff(source, repo, default) == source
+    quoted_run = (
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ' + CI.DEFAULT_COMMAND
+    )
+    cmd = CI.scope_to_diff(quoted_run, repo, default)
+    assert cmd.startswith(
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" pre-commit run '
+    ), cmd
+    assert cmd.count(" --all-files") == 1, cmd
+    assert cmd.endswith(f" --to-ref HEAD"), cmd
 
 
 def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
