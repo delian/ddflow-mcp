@@ -239,30 +239,21 @@ def _leading_skip(command: str) -> tuple[str | None, str]:
     i, n = len("SKIP="), len(command)
     while i < n:
         c = command[i]
-        if quote == "'":
-            if c == "'":
-                quote = ""
-            else:  # single quotes: everything literal, nothing active
-                value.append(c)
-        elif quote == '"':
-            if c == '"':
-                quote = ""
-            elif c == "\\" and i + 1 < n and command[i + 1] in '$`"\\':
-                # the shell's own double-quote escapes: the escaped char is a literal,
-                # so a `\$` is never an expansion
-                value.append(command[i + 1])
-                i += 1
-            elif c in "$`":
-                active = True
-                value.append(c)
-            else:
-                value.append(c)
+        if quote and c == quote:
+            quote = ""
+        elif quote == '"' and c == "\\" and i + 1 < n and command[i + 1] in '$`"\\':
+            # the shell's own double-quote escapes: the escaped char is a literal,
+            # so a `\$` is never an expansion
+            value.append(command[i + 1])
+            i += 1
+        elif quote:
+            value.append(c)  # inside the quotes: everything else is literal text
         elif c.isspace():
             break
         elif c in "\"'":
             quote = c
         elif c in "$`":
-            active = True
+            active = True  # an expansion the ORIGINAL shell would perform
             value.append(c)
         elif c == "\\" and i + 1 < n:
             value.append(command[i + 1])
