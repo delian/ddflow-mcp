@@ -14,7 +14,6 @@ from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
 from ...core.stuck import stuck_edges_to
 from ...services import approval as AP
-from ...services import chore as CO
 from ...services import ci as CI
 from ...services import cleanup as CL
 from ...services import completion as CM
@@ -32,7 +31,7 @@ from .. import jobs as JB
 from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
-from ._common import _require
+from ._common import _chore_base, _chore_event, _require
 from .heartbeat import _commit_events, _waiters
 from .planning import plan_for
 
@@ -189,9 +188,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
         "warnings": v.warnings,
         "blockers": v.blockers,
         "bugs_closed": closed,
-        # Optional: why no reviewer was needed (a chore's exemption, services.chore).
-        # In the base rather than the event only: both surfaces are told, like the gaps.
-        **({"chore": v.chore} if v.chore else {}),
+        **_chore_base(v),
     }
     force, stamp, denied = _override_by_approval(
         log, cfg, item, v, hard, force, approval, agent, base
@@ -240,10 +237,6 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
 
     refiled = refile_reported(log, cfg, item, CM.reported_against(st, item, cfg))
     waiting = _waiters(repo, item)  # before the release: see `release`
-    # The verdict kept only the note; the EVENT's structured record needs the exemption's
-    # fields. Re-derived from the same inputs the verdict just judged (same moment), so it
-    # cannot drift from `v.chore` -- and it stays None when the item is not a chore.
-    excused = CO.exemption(st, cfg, it, CM.changed_paths(repo, it))[0] if v.chore else None
 
     log.append(
         "item.completed",
@@ -264,22 +257,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
-            # Optional: why no reviewer was needed (a chore's exemption, services.chore);
-            # structured -- note + approver + FULL approval digest + paths -- so the covering
-            # approval is verifiable from the event alone (the note truncates the digest);
-            # `note` is the same text its gate.skipped events carry. Absent = not a chore.
-            **(
-                {
-                    "chore": {
-                        "note": v.chore,
-                        "approved_by": excused.approved_by,
-                        "digest": excused.digest,
-                        "paths": list(excused.paths),
-                    }
-                }
-                if excused
-                else {}
-            ),
+            **_chore_event(v, st, cfg, it, repo),
             # Optional, additive (no new event kind): the gates the ACTUAL diff excused,
             # {gate: why}, so a required gate that did not run is accounted for on the
             # durable record (B-na-required-gate). Absent = none excused.
