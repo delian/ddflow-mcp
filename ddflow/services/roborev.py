@@ -59,11 +59,13 @@ _UNFINISHED = ("queued", "running")
 
 #: Seconds between two `wait_job` polls of `roborev list --json`.
 _POLL_S = 5.0
-#: The smallest cap an ask ever runs with: honouring a bound whose remainder is near zero
-#: must not become an INSTANT timeout of a healthy ask (which would read as unjudged); the
-#: floor's price is that one hung ask can run this long past the bound, never two whole
-#: ask timeouts.
+#: The smallest cap a list READ ever runs with: honouring a bound whose remainder is near
+#: zero must not become an instant timeout of a healthy read.
 _FLOOR_S = 0.05
+#: The floor the done-job VERDICT asks run with instead: a real subprocess spawn + daemon
+#: round-trip fits in it, so a verdict that arrives a moment past the bound still reads
+#: truthfully instead of 'unjudged' on a 50ms cap.
+_VERDICT_FLOOR_S = 1.0
 
 
 def _covers(git_ref: str, sha: str) -> bool:
@@ -239,14 +241,23 @@ def wait_job(
                 )
             )
         status = str(rec.get("status") or "")
+        if not status:
+            # no readable status is its own bucket: it MAY still be running -- an unknown
+            # status must not read as an ended job ordered to re-enqueue.
+            return WaitResult(
+                note=(
+                    f"roborev job {job} has no readable status in its record: it may still be "
+                    f"running, but nothing says so; the reviewer is unchecked -- wait again"
+                )
+            )
         if status == "done":
             if on_tick is not None:
                 on_tick()  # the verdict asks below can outlive the bound: renew the lease first
-            # The two verdict asks SHARE the remaining bound, floored at _FLOOR_S: even a
-            # hanging `wait`/`show` on a done job cannot run past the bound by more than
-            # twice the floor, never by two whole ask timeouts.
-            allowance = (deadline - monotonic()) if wait_s > 0 else _TIMEOUT_S
-            return _done(exe, where, job, rec, allowance)
+            # The two verdict asks SHARE the remaining bound (floored at _VERDICT_FLOOR_S):
+            # even a hanging `wait`/`show` on a done job cannot run two whole ask timeouts,
+            # and a healthy verdict that arrives just past the bound still gets a real ask.
+            allowance = _TIMEOUT_S if wait_s <= 0 else deadline - monotonic()
+            return _done(exe, where, job, rec, max(_VERDICT_FLOOR_S, allowance))
         if status not in _UNFINISHED:
             return WaitResult(
                 note=(
@@ -289,10 +300,9 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
     on findings, and `roborev show --job` prints the review. A verdict that cannot be read
     is unjudged, so its text (if any) is never presented as a clean pass or as findings: an
     exit roborev never means by 1 (a signal, an unknown code) is unjudged too. The two asks
-    share the one ``timeout`` allowance: `show` gets the tail after `wait` (floored at
-    ``_FLOOR_S``), so a done job whose verdict asks both hang cannot run two allowances."""
+    share the one ``timeout`` allowance: `show` gets the tail after `wait`."""
     rv = Review(job=job, agent=str(rec.get("agent") or ""), model=str(rec.get("model") or ""))
-    cap = max(_FLOOR_S, timeout)
+    cap = timeout
     t0 = monotonic()
     w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=cap)
     spent = monotonic() - t0
@@ -300,10 +310,10 @@ def _done(exe: str, where: Path, job: int, rec: dict, timeout: float = _TIMEOUT_
         [exe, "show", "--job", str(job)], cwd=where, timeout=max(_FLOOR_S, cap - spent)
     )
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
-    if w.error is not None or w.timed_out or w.returncode not in (0, 1):
+    if w.error is not None or w.returncode not in (0, 1):
         # `why` names the REAL trouble. A timeout IS an error (`Captured.timed_out` is
-        # exactly `isinstance(error, TimeoutExpired)`), so `str(w.error)` already says it;
-        # the exit code is the fallback.
+        # exactly `isinstance(error, TimeoutExpired)`, subsumed by the first term), so
+        # `str(w.error)` already says it; the exit code is the fallback.
         why = str(w.error) if w.error is not None else f"exit {w.returncode}"
         return WaitResult(
             note=(

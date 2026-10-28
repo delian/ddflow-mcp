@@ -208,3 +208,14 @@ def test_the_trap_primitives_are_never_called_while_the_list_says_queued(tmp_pat
     reads = len(calls)
     assert reads >= 2  # it really polled through the bound, never once
     assert sleeps and all(0 <= s <= 3 for s in sleeps)  # every nap inside the 3s bound
+
+
+def test_a_job_without_a_readable_status_is_unchecked_not_ended(tmp_path, monkeypatch):
+    """An absent status is NOT an ended job: 'ended' would order a re-enqueue over a job that
+    may still be running -- the exact live/dead blur this module exists to end."""
+    repo, _ = _setup(tmp_path, monkeypatch)
+    (tmp_path / "status.json").write_text('[{"id": 7, "git_ref": "a..abcdef0", "agent": "kilo"}]')
+    monkeypatch.setattr(RR, "sleep", lambda s: None)
+    out = RR.wait_job(repo, 7, 30)
+    assert out.review is None and out.live is False
+    assert "no readable status" in out.note and "ended " not in out.note
