@@ -208,3 +208,17 @@ def test_gate_record_refuses_the_configured_family_without_a_session_model(repo,
     assert code == OK, out + err
     rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
     assert rec.evidence["model"] == "qwen-3-flash"
+
+
+def test_complete_surfaces_the_author_family_to_the_caller(repo, monkeypatch):
+    """roborev standards (medium): the --json surface carries `author_family` (projected
+    through the declared payload), not a dangling `model_source` with no identity key."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "deepseek")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1", "--json")
+    assert code == OK, f"{out}{err}"
+    assert '"author_family"' in out and '"deepseek"' in out, out
