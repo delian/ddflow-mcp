@@ -181,6 +181,22 @@ def test_an_unknown_mode_is_refused_not_degraded_to_basic(proj):
     assert "unavailable" in out["repro"] and "ref" not in out["repro"]
 
 
+def test_a_check_that_raises_degrades_the_evidence_not_the_filing(proj, monkeypatch):
+    # Filing must never fail for want of evidence: the repro RUN is inside the same
+    # guard as the bundle, so a check that raises returns an unavailable link instead
+    # of propagating (the round's finding: RC.check lived outside the try).
+    from ddflow.config import Config
+
+    def boom(*_a, **_k):
+        raise ValueError("no checkout: probe")
+
+    monkeypatch.setattr(RB.RC, "check", boom)
+    out = RB.attach(
+        proj, Config.load(proj), state(proj), EventLog(proj, "a1"), "B1", repro_cmd="true"
+    )
+    assert "unavailable" in out["repro"] and "no checkout" in out["repro"]["unavailable"]
+
+
 def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
     _, bug = _file(proj, repro_capture="basic")
     got = _bundle(proj, bug)

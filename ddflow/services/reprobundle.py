@@ -243,17 +243,19 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
     for want of evidence: a bundle that cannot be built or stored is linked as
     ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
     ``given``: item, agent, test, repro_cmd, capture."""
-    run = given.get("check")
-    if run is None and given.get("repro_cmd", ""):
-        run = RC.check(
-            repo,
-            F.tree(repo).get("tree_sha", ""),
-            given.get("repro_cmd", ""),
-            int(cfg.bugs.repro_runs),
-            float(cfg.bugs.repro_test_timeout_s),
-            int(cfg.bugs.repro_tail_bytes),
-        )
     try:
+        run = given.get("check")
+        if run is None and given.get("repro_cmd", ""):
+            # THE run also lives under the guard: a knob that cannot be coerced or a
+            # checkout that cannot be made must fail the EVIDENCE, not the filing.
+            run = RC.check(
+                repo,
+                F.tree(repo).get("tree_sha", ""),
+                given.get("repro_cmd", ""),
+                int(cfg.bugs.repro_runs),
+                float(cfg.bugs.repro_test_timeout_s),
+                int(cfg.bugs.repro_tail_bytes),
+            )
         try:
             bundle = build(
                 repo,
