@@ -1095,16 +1095,16 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     if not G.is_reviewer_gate(gate, gdef):
         return ""
 
-    author = _session_model(st, log.agent_id) or cfg.agent.family
+    author = cfg.agent.family or _session_model(st, log.agent_id)
     if not author:
         return ""
     fam = _family_of_name_or_value(model, cfg)
     if not fam or fam != _family_of_name_or_value(author, cfg):
         return ""
     declared = (
-        f"the model {log.agent_id} declared at `session start`"
-        if _session_model(st, log.agent_id)
-        else f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
+        f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
+        if cfg.agent.family
+        else f"the model {log.agent_id} declared at `session start`"
     )
     return (
         f"--model {model!r} is the author's own family ({fam}, {declared}), and --model on "

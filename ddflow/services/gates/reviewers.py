@@ -145,16 +145,21 @@ def reviewer_independence(
     it = state.items.get(item_id)
     if not it:
         return False, f"no such item {item_id}"
-    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
-    # have written the diff, so a reviewer must sit outside all of them.
-    routed = router_set(author_model, cfg.agent.routers)
     # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
     # 'ALIBABA' are one family (B-fam-case). A bare family name is an identity of its
     # own: `[agent].family` / DDFLOW_AGENT_FAMILY says "the AUTHOR is this family" with
     # no model id to record (DX-author-family), so it must not resolve to "" and read as
-    # an unrecognised model.
+    # an unrecognised model, and it is judged BEFORE the router map: a router key
+    # spelling the family would otherwise hijack that identity, and an empty entry would
+    # misdiagnose the family as a router.
+    bare_family = family_name_of(author_model, cfg.agent.families)
+    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
+    # have written the diff, so a reviewer must sit outside all of them. A family is
+    # EXACT and case-blind (`family_name_of`); a router matches by substring and is
+    # consulted only when the author is no configured family.
+    routed = None if bare_family else router_set(author_model, cfg.agent.routers)
     author_fam = (
-        (family_name_of(author_model, cfg.agent.families) or family_of(author_model, cfg)).strip().lower()
+        (bare_family or family_of(author_model, cfg)).strip().lower()
         if routed is None
         else ""
     )
@@ -182,7 +187,7 @@ def reviewer_independence(
             f"model that routes across providers, to [agent].routers with the families "
             f"it draws on), pass `--model` with a name the map recognises, or pass a "
             f"family name value of [agent].families (`[agent].family` / "
-            f"DDFLOW_AGENT_FAMILY` does the same): the family is the author then, with "
+            f"`DDFLOW_AGENT_FAMILY` does the same): the family is the author then, with "
             f"no model id recorded."
         )
     # `router_set` returns its members stripped and lowercased, so the router side is

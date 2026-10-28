@@ -86,6 +86,18 @@ def test_a_same_family_reviewer_of_a_bare_family_author_does_not_pass(log, cfg, 
     assert "same as the author" in why, why
 
 
+def test_a_bare_family_author_is_not_taken_for_a_router_of_that_name(log, cfg, gd):
+    """A router key spelling a configured FAMILY must not hijack the family identity, and
+    an EMPTY entry of that name must not misdiagnose the family as a router (qwen #2)."""
+    cfg.agent.routers = {"deepseek": ["anthropic"]}
+    ok, why = _independence_for(log, cfg, gd, "deepseek", _deepseek_review())
+    assert not ok, why
+    assert "same as the author" in why, why  # the family, not the router misdiagnosis
+    cfg.agent.routers = {"deepseek": []}
+    ok, why = _independence_for(log, cfg, gd, "deepseek", _alibaba_review())
+    assert ok, why  # an independent reviewer passes; the old code refused "router, set unknown"
+
+
 def test_configured_sequences_canonicalise_case_across_legs(log, cfg, gd):
     """Critic canon: a configured VALUE 'DeepSeek' and a needle ANSWER 'deepseek' are one
     family however they were spelled, on the value leg (`family_name_of`) and the model
@@ -100,9 +112,10 @@ def test_configured_sequences_canonicalise_case_across_legs(log, cfg, gd):
 # -- complete records the family only ------------------------------------------------
 
 
-def _done(repo, author_flag):
+def _done(repo, author_flag, monkeypatch):
     """Complete T1 (a deepseek-family author's task, gemini reviewer) and return the
     completion event's data."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
     run_cli(repo, "init")
     error, _ = write_config(repo, [("agent.family", "deepseek")])
     assert error == "", error
@@ -116,24 +129,49 @@ def _done(repo, author_flag):
     return events[-1].data
 
 
-def test_complete_with_a_configured_family_records_the_family_only(repo):
-    data = _done(repo, ())
+def test_complete_with_a_configured_family_records_the_family_only(repo, monkeypatch):
+    data = _done(repo, (), monkeypatch)
     assert data.get("author_family") == "deepseek", data
     assert data.get("model_source") == "config", data
     assert "author_model" not in data, "the log must keep the family, not a model id"
+    assert "model" not in data, "no model id may reach the event under any key"
 
 
-def test_complete_accepts_a_bare_family_after_model_and_records_it_only(repo):
-    data = _done(repo, ("--model", "alibaba"))
+def test_complete_accepts_a_bare_family_after_model_and_records_it_only(repo, monkeypatch):
+    data = _done(repo, ("--model", "alibaba"), monkeypatch)
     assert data.get("author_family") == "alibaba", data
     assert data.get("model_source") == "flag", data
-    assert "author_model" not in data, data
+    assert "author_model" not in data, "the log must keep the family, not a model id"
+    assert "model" not in data, "no model id may reach the event under any key"
+
+
+def test_a_configured_family_wins_over_a_session_model_record(repo, monkeypatch):
+    """The completion author-family refusals above exercised no session record: a
+    session-declared model id must not reach the log while the harness configured a
+    family -- the family is the author then (qwen #1, deepseek #2)."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "deepseek")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    code, out, err = run_cli(
+        repo, "session", "start", "--model", "deepseek-chat", agent="impl"
+    )
+    assert code == OK, out + err
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1", agent="impl")
+    assert code == OK, f"{out}{err}"
+    data = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"][-1].data
+    assert data.get("author_family") == "deepseek", data
+    assert data.get("model_source") == "config", data
+    assert "author_model" not in data, "the session's model id must not reach the log"
 
 
 # -- gate record: the author-family refusal reads the configured family too ------------
 
 
-def test_gate_record_refuses_the_configured_family_without_a_session_model(repo):
+def test_gate_record_refuses_the_configured_family_without_a_session_model(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
     run_cli(repo, "init")
     error, written = write_config(repo, [("agent.family", "deepseek")])
     assert error == "", written
