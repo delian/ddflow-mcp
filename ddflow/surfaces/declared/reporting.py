@@ -11,7 +11,46 @@ from __future__ import annotations
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ..argtypes import _positive_int
 from ..registry import Command, Param, by_tool
+from ..render import emit_json
 from ..tools._common import _api
+
+def _status_handler(a, c):
+    """`cmd_status` with the `--by-tag` mode: the same sections plus the per-value one.
+
+    `cmd_status` in `surfaces/commands/reporting.py` stays this command's own handler for
+    the default mode, so that unchanged. With `--by-tag` the same sections print from ONE
+    `status` call (which folded the log once, B-gap-log-scale) followed by the per-value
+    lines the API put in `_render['by_tag_lines']` — so the two never disagree (B37).
+    """
+    from ...views.progress import status_tasks_note
+    from ..commands.reporting import _queue_lines, _recorded_line, _warning_lines, cmd_status
+
+    by = getattr(a, "by_tag", "") or ""
+    if not by:
+        return cmd_status(a, c)
+    out = _api().status(c.repo, agent=c.requested_agent, full=True, by_tag=by)
+    if c.json:
+        emit_json(out.body())
+        return out.exit
+    d = out.data
+    r = d["_render"]
+    lines = [
+        f"# {r['repo']}",
+        "",
+        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
+        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
+        "",
+        status_tasks_note(),
+        "",
+        *_queue_lines(r),
+        *_recorded_line(r),
+        *_warning_lines(r),
+        *(r.get("by_tag_lines") or []),
+        *(["", r["release"]] if r.get("release") else []),
+    ]
+    print("\n".join(lines))
+    return out.exit
+
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -231,10 +270,31 @@ COMMANDS: tuple[Command, ...] = (
             "which, what is in flight and who holds it, what is ready to start, what is "
             "blocked, how many agent-hours and commits went in, and whether anything is "
             "looping or waiting to be recovered. This is the tool for 'what is the "
-            "status of this project?' and 'what has been completed?'."
+            "status of this project?' and 'what has been completed?'. With ``by_tag`` "
+            "(the ``--by-tag KEY`` flag): per-value counts for the KEY label namespace "
+            "too — done/running/ready/review/blocked/abandoned per ``wave:N`` or "
+            "``track:fix`` value, and per value what blocks it."
         ),
-        params=(),
-        call=lambda repo, a, agent: _api().status(repo, agent=agent),
+        handler=_status_handler,
+        params=(
+            Param(
+                "by_tag",
+                help=(
+                    "Also group the live items by this label namespace (KEY or KEY:*): per "
+                    "value the done/running/ready/review/blocked/abandoned/open counts, the "
+                    "buckets the plan puts them in, and the open dependencies blocking the "
+                    "most items (e.g. 'wave' or 'track')."
+                ),
+                default="",
+                cli_help=(
+                    "also print per-value counts for this label namespace, e.g. wave or "
+                    "track, with the top blockers per value"
+                ),
+            ),
+        ),
+        call=lambda repo, a, agent: _api().status(
+            repo, agent=agent, by_tag=a.get("by_tag", "") or ""
+        ),
         # The whole object. `_render` is stripped by `Outcome.body`.
         payload="",
     ),
