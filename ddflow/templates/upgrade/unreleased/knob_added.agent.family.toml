@@ -4,5 +4,5 @@
 kind = "knob_added"
 key = "agent.family"
 new = "\"\""
-why = "The author model's pretraining family, so `complete` never needs a model id written into this repository's log: `[agent].family` (or DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in place of `--model <author m..."
+why = "The author model's pretraining family: `complete` and `gate record` accept it in place of `--model <author model>`, and the completion event stores the family only, never a model id (DX-author-family)."
 impact = "additive"
