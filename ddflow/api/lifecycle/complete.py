@@ -32,24 +32,9 @@ from .._base import _load
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
 from ._common import _chore_base, _chore_event, _require
+from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _waiters
 from .planning import plan_for
-
-
-def _session_model(st: State, agent: str) -> str:
-    """The model `agent` declared on its most recent OPEN session, or "" (one definition,
-    `leases.open_session_model`, shared with what `recover` advises)."""
-    return L.open_session_model(st, agent)
-
-
-def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
-    """(model, source) judged against for reviewer independence: `--model`, else the model
-    the agent's LATEST session declared (open or ended -- the record, not its liveness) --
-    said out loud and recorded. B-complete-requires-model-even-when-recorded."""
-    if model:
-        return model, "flag"
-    found = _session_model(st, agent)
-    return (found, "session") if found else ("", "")
 
 
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
@@ -154,7 +139,12 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
-    model, model_source = _author_model(st, log.agent_id, model)
+    model, model_source = _author_model(st, log.agent_id, model, cfg)
+    recorded, family_only = _recorded_identity(model, model_source, cfg)
+    # ONE builder for both outlets -- the caller-facing `base` dict and the durable
+    # event spread the SAME dict, so the two cannot drift apart (they once re-derived
+    # the key and value each on their own; roborev flagged the drift class).
+    author_identity = _author_event_identity(recorded, model_source, family_only)
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
@@ -176,8 +166,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
-        "author_model": model,
-        "model_source": model_source,
+        **author_identity,
         "independence": v.independence,
         # BOTH surfaces, always. This used to print only in human mode, so an agent over
         # MCP -- which is always JSON -- completed the item and was never told a gate had
@@ -252,8 +241,10 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             **({"umbrella": umbrella} if umbrella else {}),
             # Optional (B-complete-requires-model-even-when-recorded): the author model
             # this judged against, and where it came from. The flag path has no session
-            # record to carry the id, so the event names both for any known source.
-            **({"author_model": model, "model_source": model_source} if model else {}),
+            # record to carry the id, so the event names both for any known source. A
+            # family-only author ([agent].family, a bare family after --model) records
+            # `author_family` instead: the family only, never a model id (DX-author-family).
+            **author_identity,
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
