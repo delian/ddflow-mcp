@@ -249,7 +249,7 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
 def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
     default = _project(repo)
     since = _git(repo, "rev-parse", default)
-    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP "):
+    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP ", "SKIP=$(echo lint) "):
         cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
         # the assignment keeps the operator's own expansion semantics, unmerged -- the
         # rebuild must not guess at expansions -- only the run is scoped to the diff
