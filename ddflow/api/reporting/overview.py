@@ -346,12 +346,17 @@ def _by_tag_bucket(
                             if dep not in done_ids:
                                 blockers[dep] = blockers.get(dep, 0) + 1
     tops = sorted(blockers.items(), key=lambda kv: (-kv[1], kv[0]))[:BY_TAG_TOP_BLOCKERS]
-    return {
+    row = {
         "tag": tag,
         "states": states,
         "blocked_by": dict(sorted(reasons.items())),
         "top_blockers": [{"id": dep, "blocks": n} for dep, n in tops],
     }
+    if len(blockers) > BY_TAG_TOP_BLOCKERS:
+        # Bounded like the other status lists (Bd6aa9ffde9), and never silently: the cut
+        # is named here the way `truncated` names the top panel's cuts.
+        row["blockers_cut"] = len(blockers) - BY_TAG_TOP_BLOCKERS
+    return row
 
 
 def _by_tag_view(key: str, items: list[Any], p) -> dict[str, Any]:
@@ -425,6 +430,8 @@ def _by_tag_lines(view: dict[str, Any]) -> list[str]:
             lines.append(f"    blocked by: {reasons}")
         if v["top_blockers"]:
             tops = ", ".join(f"{t['id']} ({t['blocks']})" for t in v["top_blockers"])
+            if v.get("blockers_cut"):
+                tops += f", {v['blockers_cut']} more"
             lines.append(f"    top blockers: {tops}")
     return lines
 
