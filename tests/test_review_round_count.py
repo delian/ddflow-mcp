@@ -86,6 +86,17 @@ def test_a_pre_status_era_declared_outcome_charges_a_delta_round_too(repo):
     assert rounds_used(it, "critic") == 0
 
 
+def test_a_carried_status_verdict_under_an_unavailable_outcome_charges_nothing(repo):
+    """`status` REVIEWED can be carried evidence; the run's OUTCOME is what became of it.
+    An unavailable, errored or refused record charges no round, status or not."""
+    it = _item(
+        _run({"review_kind": "full", "status": "REVIEWED"}, outcome="unavailable"),
+        _run({"review_kind": "delta", "status": "REVIEWED"}, outcome="error"),
+        _run({"review_kind": "full", "status": "PARTIAL"}, outcome="refused"),
+    )
+    assert rounds_used(it, "critic") == 0
+
+
 def _setup(repo: Path, tmp_path: Path) -> None:
     """A captured project whose command reviewer flags one `FINDME` finding, with the
     SHIPPED round cap (2): the cap the three views must count against."""

@@ -19,18 +19,17 @@ def _runs(it, gate: str) -> list:
 
 
 def _reviewed(r) -> bool:
-    """One run IS a round: it reached a reviewer with a `status` verdict, or -- the
-    pre-status era, carried into a re-claim or hand record -- it carries a declared
-    outcome without one. Unavailable, errored and refused records charge nothing, and
-    neither does a run with no outcome at all (full and delta rules alike)."""
-    if r.evidence.get("status") in ("REVIEWED", "PARTIAL"):
-        return True
-    return r.evidence.get("status") is None and r.outcome not in (
-        None,
-        "unavailable",
-        "error",
-        "refused",
-    )
+    """One run IS a round: it reached a reviewer with a `status` verdict and delivered an
+    outcome that could BE the review's (an unavailable, errored or refused outcome is by
+    definition not it -- the record `status` was carried in, the outcome is what became
+    of the run), or -- the pre-status era, carried into a re-claim or hand record -- it
+    carries a declared outcome without a `status` and that outcome is none of those.
+    A run with no outcome at all charges nothing (full and delta rules alike)."""
+    reached = r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+    stale_status = r.evidence.get("status") is None
+    if not reached and not stale_status:
+        return False
+    return r.outcome not in (None, "unavailable", "error", "refused")
 
 
 def kept_copy(run) -> bool:
