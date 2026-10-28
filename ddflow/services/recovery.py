@@ -128,10 +128,7 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
                     if i
                     else "the kill switch is on: nothing ran"
                 )
-                rows += [
-                    {"item": x.item, "applied": False, "note": note}
-                    for x in actions[i:]
-                ]
+                rows += [{"item": x.item, "applied": False, "note": note} for x in actions[i:]]
                 break
             try:
                 rows.append(_one_safe(repo, log, agent, a, L, MQ))
@@ -168,7 +165,11 @@ def _one_safe(repo, log, agent, a, L, MQ) -> dict:
         return {"item": a.item, "applied": out.exit == 0, "note": out.reason}
     if a.evidence.get("effect") == "requeue":
         return _requeue(repo, agent, a, MQ)
-    return {"item": a.item, "applied": False, "note": f"unknown effect {a.evidence.get('effect')!r}"}
+    return {
+        "item": a.item,
+        "applied": False,
+        "note": f"unknown effect {a.evidence.get('effect')!r}",
+    }
 
 
 def _requeue(repo, agent, a, MQ) -> dict:
