@@ -180,3 +180,28 @@ def test_capped_and_blocked_items_land_in_their_buckets():
     assert {"id": "T-held", "blocks": 1} in w0["top_blockers"]
     assert {"id": "T-done", "blocks": 1} not in w0["top_blockers"]  # done deps are not blockers
     assert {"id": "T-ab", "blocks": 1} in w0["top_blockers"]  # abandoned deps still block
+    assert "blockers_cut" not in w0  # two blockers fit within BY_TAG_TOP_BLOCKERS
+
+
+def test_top_blocker_cut_is_named_not_silent():
+    # More blocking deps than BY_TAG_TOP_BLOCKERS: the list is bounded (Bd6aa9ffde9) and
+    # the cut is NAMED, the way `truncated` names the top panel's cuts (bug_hunt:
+    # silently dropped buckets).
+    from types import SimpleNamespace
+
+    from ddflow.api.reporting.overview import BY_TAG_TOP_BLOCKERS, _by_tag_view
+
+    members = SimpleNamespace(
+        id="T-many", kind="task", state="open", tags=["wave:3"], removed=False
+    )
+    waiting_on = [f"T-d{i}" for i in range(BY_TAG_TOP_BLOCKERS + 2)]
+    p = SimpleNamespace(
+        ready=[],
+        running=[],
+        review=[],
+        capped=[],
+        blocked=[SimpleNamespace(item="T-many", reason="deps", waiting_on=waiting_on)],
+    )
+    w3 = _by_tag_view("wave", [members], p)["values"][0]
+    assert w3["blockers_cut"] == 2
+    assert len(w3["top_blockers"]) == BY_TAG_TOP_BLOCKERS
