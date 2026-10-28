@@ -620,7 +620,7 @@ def _brief_recovery(
             f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in band[:_RECOVERY_SHOWN]
         ]
         if state is not None:
-            out += [_resume_line(state, cfg, r) for r in band[:_RECOVERY_SHOWN]]
+            out += [_resume_line(state, cfg, r, what) for r in band[:_RECOVERY_SHOWN]]
         if len(band) > _RECOVERY_SHOWN:
             more = len(band) - _RECOVERY_SHOWN
             out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
@@ -671,28 +671,29 @@ def _gate_facts(state: State, cfg: Config, item: str) -> str:
     return " · ".join(facts)
 
 
-def _resume_line(state: State, cfg: Config, r) -> str:
+def _resume_line(state: State, cfg: Config, r, what: str) -> str:
     """One indented line per entry: ddflow has NOT resumed it (its safe pass records, it
     never takes over a tree that may hold work: D-orphan-recovery), and what the item
-    still owes. `r.advice` already says the exact command."""
+    still owes. `r.advice` already says the exact command. The status is keyed to the
+    BAND the entry renders in (the same `recovery_band` truth the line above shows), so
+    the words can never contradict the line they sit under whatever the raw flags say
+    (duck #4/#5: a held entry cannot be described as unheld, and vice versa)."""
     bits = _gate_facts(state, cfg, r.item) if cfg is not None else ""
     prompt = _last_prompt_of(state, r)
     if prompt:
         bits = (
             (bits + ' · last prompt: "' + prompt + '"') if bits else 'last prompt: "' + prompt + '"'
         )
-    if r.kind == "stale_running":
+    if what == _UNHELD:
         # Nobody holds the RUNNING item RIGHT NOW (the schedule's own predicate): the
-        # "was <holder>" above names the lost holder, "now" says no claim is live (duck #6).
+        # "was <holder>" above names the lost holder, "now" says no claim is live.
         status = "NOT resumed: nobody holds it now — the claim command above takes it over"
-    elif r.salvageable:
-        status = "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
-    elif r.salvageable is None:
+    elif what == _UNMEASURED:
         status = (
             "NOT resumed: COULD NOT MEASURE — treat it as holding work until one answer decides"
         )
     else:
-        status = "NOT resumed: nobody holds it now — the claim command above takes it over"
+        status = "NOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides"
     return status + (" · " + bits if bits else "")
 
 
