@@ -140,11 +140,11 @@ def test_a_tick_that_overshoots_the_bound_ends_live_never_a_negative_sleep(tmp_p
     """A slow lease renewal that eats the rest of the bound must return the LIVE verdict; a
     negative sleep span would raise and lose the wait's answer."""
     repo, _ = _setup(tmp_path, monkeypatch)
-    clock, _sleeps = _fake_clock(monkeypatch)
-    start = [None]
+    clock, _ = _fake_clock(monkeypatch)
+    ticked = [0]
 
     def slow_tick() -> None:
-        start.append(1)
+        ticked[0] += 1
         for _ in range(60):
             clock.append(clock[-1] + 1.0)  # the renewal consumes the remaining budget
 
@@ -157,6 +157,9 @@ def test_a_tick_that_overshoots_the_bound_ends_live_never_a_negative_sleep(tmp_p
     monkeypatch.setattr(RR, "monotonic", lambda: clock.append(clock[-1] + 1.0) or clock[-1])
     out = RR.wait_job(repo, 7, 10, on_tick=slow_tick)
     assert out.live is True and "still queued" in out.note and "not failed" in out.note
+    # the lease keeper really RAN each poll and its slow renewal really ate the bound: the
+    # clock's jump is the tick's 60-step advance, never the 1-step poll steps alone
+    assert ticked[0] >= 1 and clock[-1] > 60
 
 
 def test_a_job_the_list_no_longer_has_is_vanished_distinct_from_running(tmp_path, monkeypatch):
