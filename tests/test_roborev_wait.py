@@ -97,12 +97,50 @@ def test_zero_bound_reads_the_status_once_and_reports_it_live(tmp_path, monkeypa
 
 
 def test_a_failed_job_is_ended_failed_not_a_wait_and_never_a_review(tmp_path, monkeypatch):
-    repo, _ = _setup(tmp_path, monkeypatch)
+    repo, log = _setup(tmp_path, monkeypatch)
     (tmp_path / "status.json").write_text(FAILED)
     _fake_clock(monkeypatch)
     out = RR.wait_job(repo, 7, 30)
     assert out.review is None and out.live is False
     assert "ended failed" in out.note and "re-run" in out.note
+    calls = log.read_text().splitlines()
+    # an ended job is only ever LISTED: `roborev wait --job` of a failed job is exactly the
+    # call that can block or print 'no review found', so it must not be made for one
+    assert calls and all(c.startswith("list") for c in calls)
+
+
+def test_a_done_job_whose_wait_exits_oddly_is_unjudged_not_findings(tmp_path, monkeypatch):
+    """roborev wait exits 0 pass / 1 fail, nothing else: a code it never means (a signal, an
+    unknown exit) is a verdict nobody gave, so the text is unjudged, never findings."""
+    repo, _ = _setup(tmp_path, monkeypatch)
+    (tmp_path / "status.json").write_text(DONE)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "2")
+    _fake_clock(monkeypatch)
+    out = RR.wait_job(repo, 7, 30)
+    assert out.review is None and "unjudged" in out.note
+
+
+def test_a_tick_that_overshoots_the_bound_ends_live_never_a_negative_sleep(tmp_path, monkeypatch):
+    """A slow lease renewal that eats the rest of the bound must return the LIVE verdict; a
+    negative sleep span would raise and lose the wait's answer."""
+    repo, _ = _setup(tmp_path, monkeypatch)
+    clock = _fake_clock(monkeypatch)
+    start = [None]
+
+    def slow_tick() -> None:
+        start.append(1)
+        for _ in range(60):
+            clock.append(clock[-1] + 1.0)  # the renewal consumes the remaining budget
+
+    def no_negative_sleep(s: float) -> None:
+        assert s >= 0, f"sleep({s}) of a negative span past the bound"
+        for _ in range(60):
+            pass
+
+    monkeypatch.setattr(RR, "sleep", no_negative_sleep)
+    monkeypatch.setattr(RR, "monotonic", lambda: clock.append(clock[-1] + 1.0) or clock[-1])
+    out = RR.wait_job(repo, 7, 10, on_tick=slow_tick)
+    assert out.live is True and "still queued" in out.note and "not failed" in out.note
 
 
 def test_a_job_the_list_no_longer_has_is_vanished_distinct_from_running(tmp_path, monkeypatch):
