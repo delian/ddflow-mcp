@@ -117,7 +117,9 @@ def _read_list(exe: str, where: Path) -> tuple[list, str]:
     empty, never as a guess about a status it could not fetch."""
     p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=_TIMEOUT_S)
     if p.error is not None:
-        return [], p.error
+        return [], str(
+            p.error
+        ) or "an unspeakable error"  # truthy either way: `failed` doubles as the returned note
     if p.returncode != 0:
         why = (p.stderr or p.stdout).strip().splitlines()[-1:] or [f"exit {p.returncode}"]
         return [], why[0][:160]
@@ -196,7 +198,15 @@ def wait_job(
         return WaitResult(note=f"roborev is not on PATH; job {job} is unchecked")
     started = monotonic()
     deadline = started + max(0, wait_s)
+    live_state = (
+        "queued or running"  # the last status read (the bound-check reads it between polls)
+    )
     while True:
+        if wait_s > 0 and monotonic() >= deadline:
+            # the bound lapsed since the last read, which named the job live: say so NOW.
+            # The read after this check is a whole `_TIMEOUT_S` in itself, so checking only
+            # after it would overshoot the bound by one slow ask.
+            return WaitResult(live=True, note=_live(job, live_state, monotonic() - started))
         jobs, failed = _read_list(exe, where)
         if failed:
             return WaitResult(
@@ -222,7 +232,7 @@ def wait_job(
                 )
             )
         elapsed = monotonic() - started
-        if elapsed >= wait_s:  # wait_s <= 0: this is the first check
+        if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
             return WaitResult(live=True, note=_live(job, status, elapsed))
         print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
         if on_tick is not None:
@@ -233,6 +243,7 @@ def wait_job(
             # now. `sleep` of a negative span raises, and an over-long tick must read as
             # running, never crash the wait.
             return WaitResult(live=True, note=_live(job, status, monotonic() - started))
+        live_state = status
         sleep(min(_POLL_S, left))
 
 
@@ -257,11 +268,19 @@ def _done(exe: str, where: Path, job: int, rec: dict) -> WaitResult:
     shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=_TIMEOUT_S)
     text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
     if w.error is not None or w.timed_out or w.returncode not in (0, 1):
+        # `why` names the REAL trouble: a short-circuit chain over error/timed_out/exit
+        # cannot (`'timed out'` is truthy and would shadow the exit code forever).
+        why = (
+            f"{w.error}"
+            if w.error is not None
+            else "timed out"
+            if w.timed_out
+            else f"exit {w.returncode}"
+        )
         return WaitResult(
             note=(
                 f"roborev job {job} is done but `roborev wait --job {job}` gave no verdict "
-                f"({w.error or 'timed out' or f'exit {w.returncode}'}): the text below, if any, "
-                f"is unjudged"
+                f"({why}): the text below, if any, is unjudged"
             ),
             text=text,
         )
