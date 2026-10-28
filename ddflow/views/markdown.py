@@ -631,9 +631,9 @@ def _brief_recovery(
 
 
 def _last_prompt_of(state: State, rec) -> str:
-    """The interrupted holder's last recorded prompt, the one that names this item when
-    any does (its sessions may serve several items), clipped to one line; "" when the
-    holder recorded none. The brief must hand a fresh agent the context the crash lost."""
+    """The interrupted holder's last recorded prompt that NAMES THIS ITEM (a prompt on
+    another item is that item's context, never borrowed here: duck #1), clipped to one
+    line; "" when the holder recorded none for it."""
     holder = rec.holder if rec.holder and rec.holder != "(none)" else ""
     if not holder:
         return ""
@@ -642,10 +642,9 @@ def _last_prompt_of(state: State, rec) -> str:
         for s in sorted(state.sessions.values(), key=lambda s: s.started_at)
         if s.agent == holder
         for p in s.prompts
+        if p.get("item") == rec.item
     ]
-    pick = next((p for p in reversed(prompts) if p.get("item") == rec.item), None)
-    if pick is None and prompts:
-        pick = prompts[-1]
+    pick = prompts[-1] if prompts else None
     if not pick:
         return ""
     text = " ".join((pick.get("text") or "").split())

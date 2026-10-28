@@ -32,9 +32,9 @@ def test_the_session_start_output_opens_with_the_resume_block(repo):
     log.append("item.started", "T1", {})  # RUNNING with nobody on it: interrupted
     code, out, err = run_cli(repo, "hooks", "session-start")
     assert code == 0, err
-    text = out + "\n" + err
-    # The FIRST section the output names is the RESUME block -- nothing may preamble it
-    # (duck #4): an interrupted session must see recoverable work in its first lines.
+    # The hook's DELIVERED text is its stdout: the first section it names is the RESUME
+    # block (duck #4) -- a preamble flushed elsewhere does not count as delivery.
+    text = out
     first = re.search(r"^## ", text, re.M)
     assert first is not None, text
     assert text[first.start() :].startswith(RESUME), text
