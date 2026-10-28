@@ -238,6 +238,12 @@ def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_
     # ...inside double quotes a `\\` pair is ONE backslash, kept as the shell keeps it...
     cmd = CI.scope_to_diff('SKIP="a\\\\b" ' + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'a\\b\' pre-commit run '), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # ...and a `\<newline>` is a line continuation the shell removes entirely
+    cmd = CI.scope_to_diff('SKIP="foo\\\nbar" ' + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'foobar\' pre-commit run '), cmd
+    assert " --all-files" not in cmd
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
@@ -259,3 +265,20 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
         assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
         assert " --all-files" not in cmd
         assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # the range lands on the RUN's --all-files: an earlier one inside an unparsed
+    # substitution value is the operator's and stays theirs
+    cmd = CI.scope_to_diff("SKIP=$(echo --all-files) " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith("SKIP=$(echo --all-files) pre-commit run "), cmd
+    assert cmd.count(" --all-files") == 1, cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    cmd = CI.scope_to_diff("SKIP=lint; " + CI.DEFAULT_COMMAND, repo, default)
+    # the `;` ends the assignment exactly where the shell ends it, so the run after it
+    # is still the scoped pre-commit command, not a chunk of the value
+    assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\'; pre-commit run --hook-stage pre-push '), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
