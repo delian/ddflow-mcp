@@ -80,21 +80,14 @@ def _run_at(
         bigger = False
         unreached = 0
         for i in range(count):
-            dest = (
-                f" > {shlex.quote(str(tail := s.path / f'.ddflow-repro-{i}.out'))} 2>&1"
-                if keep
-                else " > /dev/null 2>&1"
-            )
-            shot = P.run_shell(f"{line}{dest}", timeout_s=timeout_s, cwd=s.path, merge_stderr=True)
-            if shot.could_not_run or shot.timed_out or shot.code is None:
+            code, tailed, size = _one_run(s.path, i, line, keep, timeout_s)
+            if code is None:
                 unreached += 1
                 continue
-            codes.append(int(shot.code))
-            if keep:
-                tailed, size = _tail_from_file(tail, keep)
-                if tailed:
-                    out.append(tailed)
-                bigger = bigger or size > keep
+            codes.append(code)
+            if tailed:
+                out.append(tailed)
+            bigger = bigger or size > keep
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
         record: dict[str, Any] = {
@@ -124,6 +117,27 @@ def _run_at(
         # fully stored): what stays re-encodes within the budget.
         record["output"] = raw[-keep:].decode("utf-8", errors="ignore")
     return record
+
+
+def _one_run(
+    scratch: Path, i: int, line: str, keep: int, timeout_s: float
+) -> tuple[int | None, str, int]:
+    """One run of ``line`` in the scratch tree: its exit code (None when it reached none),
+    the tail bytes of its output file, and that file's size. The redirect IS the bound:
+    the command's output goes to the file (or /dev/null), never to this process's buffer."""
+    if keep:
+        tail_file = scratch / f".ddflow-repro-{i}.out"
+        dest = f" > {shlex.quote(str(tail_file))} 2>&1"
+    else:
+        tail_file = scratch / f".ddflow-repro-{i}.out"
+        dest = " > /dev/null 2>&1"
+    shot = P.run_shell(f"{line}{dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
+    if shot.could_not_run or shot.timed_out or shot.code is None:
+        return None, "", 0
+    if not keep:
+        return int(shot.code), "", 0
+    tailed, size = _tail_from_file(tail_file, keep)
+    return int(shot.code), tailed, size
 
 
 def _tail_from_file(path: Path, keep: int) -> tuple[str, int]:
