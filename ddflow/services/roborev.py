@@ -237,7 +237,8 @@ def wait_job(
     every ``_POLL_S`` -- never `roborev wait`/`show`, whose 'no review found' for an
     unfinished job is the wording of a job that never existed. The poll's own words rule:
     queued/running = still running (a progress line, then keep waiting, ticking ``on_tick``
-    -- the caller's lease keeper -- each poll); done = the finished review (its verdict read
+    -- the hook a lease-holding host (the gate-run parent) plugs its keeper into -- each
+    poll); done = the finished review (its verdict read
     with `roborev wait --job` and its text with `roborev show --job`, both truthful once
     done); failed/canceled = ended (re-enqueue); no longer listed = vanished (re-enqueue);
     the bound with the job still live = ``live``. ``wait_s`` <= 0 polls once and returns."""
@@ -269,7 +270,7 @@ def wait_job(
         status = str(rec.get("status") or "")
         if status == "done":
             if on_tick is not None:
-                on_tick()  # the verdict asks below can outlive the bound: renew the lease first
+                on_tick()  # a lease-holding host renews before the verdict asks below
             # The two verdict asks SHARE the remaining bound (floored at _VERDICT_FLOOR_S):
             # even a hanging `wait`/`show` on a done job cannot run two whole ask timeouts,
             # and a healthy verdict that arrives just past the bound still gets a real ask.
@@ -280,7 +281,7 @@ def wait_job(
             return WaitResult(live=True, note=_live(job, status, elapsed, where))
         print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
         if on_tick is not None:
-            on_tick()  # the caller's lease keeper: a long wait outlives an unrenewed lease
+            on_tick()  # the caller's lease-keeper hook: a long wait outlives an unrenewed lease
         left = (deadline - monotonic()) if wait_s > 0 else _POLL_S
         if left <= 0:
             # the progress print or the tick ate the rest of the bound: report the job LIVE

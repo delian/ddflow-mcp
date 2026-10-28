@@ -98,18 +98,6 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
     return max(ids) if ids else None  # type: ignore[type-var]
 
 
-def _reviewer(exe: str, where: Path, job: int) -> str:
-    """The agent roborev ACTUALLY ran job ``job`` with (its model when it records one, as
-    `roborev.Review.reviewer`), "" when the job record cannot be read."""
-    for j in _list(exe, where)[0]:
-        if RR._job_id(j) == job:
-            # the same name `roborev.Review.reviewer` judges the family by
-            return RR.Review(
-                job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")
-            ).reviewer
-    return ""
-
-
 def _secs(a: str, b: str) -> float | None:
     try:
         fa = clock.parse_ts(a)
@@ -148,14 +136,6 @@ def _workers(exe: str, where: Path) -> int:
     p = proc.capture([exe, "status"], cwd=where, timeout=RR._TIMEOUT_S)
     m = re.search(r"Workers:\s*\d+/(\d+)", p.stdout or "")
     return int(m.group(1)) if m else 1
-
-
-def _job_status(exe: str, where: Path, job: int) -> str:
-    """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
-    for j in _list(exe, where)[0]:
-        if str(j.get("id")) == str(job):
-            return str(j.get("status") or "")
-    return ""
 
 
 @contextlib.contextmanager
@@ -229,7 +209,8 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
         )
     # The ONE truthful waiter: `roborev wait --job` of an unfinished job cannot tell live
     # from gone, so the gate's wait is `roborev.wait_job` (the poll of the job list),
-    # mapped onto this module's Result.
+    # mapped onto this module's Result. No on_tick: this runs as the gate command's child,
+    # and its parent (the gate runner) already renews the lease on its own side.
     out = RR.wait_job(where, job, wait_s)
     if out.live:
         now = queue_position(_list(exe, where)[0], job, _workers(exe, where))
