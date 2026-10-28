@@ -255,9 +255,15 @@ def test_the_item_completed_event_records_why_no_reviewer_was_needed(proj):
 def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
     """The conditional key stays OFF the record for a non-chore: a `chore` tag whose files
     fall outside [chore].globs is an ordinary item, and its completion payload carries no
-    `chore` key (roborev review of DX-chore-completed-event: nothing covered the negative)."""
+    `chore` key (roborev review of DX-chore-completed-event: nothing covered the negative).
+
+    The refusal payload IS the payload under test: `complete` returns the same `base` dict
+    -- the one `_chore_base` fills -- in every refusal and in the success, so a change that
+    empties the guard is visible here; a fully-completed non-chore needs reviewer-passed
+    gates, which fixtures cannot run, and its three success shapes are what the positive
+    tests cover."""
     _approve(proj)
-    run_cli(
+    code, out, err = run_cli(
         proj,
         "task",
         "add",
@@ -269,6 +275,7 @@ def test_a_chore_tag_once_outside_the_globs_records_no_exemption(proj):
         "--tags",
         "chore",
     )
+    assert code == 0, (out, err)
     code, out, err = run_cli(proj, "--json", "complete", "CH")
     assert code == 3, (out, err)
     body = json.loads(out)
