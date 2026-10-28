@@ -220,7 +220,7 @@ def wait_job(
             # the bound lapsed since the last read, which named the job live: say so NOW.
             # The read after this check is a whole ask in itself, so checking only after it
             # would overshoot the bound by one slow read.
-            return WaitResult(live=True, note=_live(job, live_state, monotonic() - started))
+            return WaitResult(live=True, note=_live(job, live_state, monotonic() - started, where))
         cap = _TIMEOUT_S if wait_s <= 0 else max(_FLOOR_S, min(_TIMEOUT_S, deadline - monotonic()))
         jobs, failed = _read_list(exe, where, cap)
         if failed:
@@ -254,7 +254,7 @@ def wait_job(
             )
         elapsed = monotonic() - started
         if elapsed >= wait_s:  # wait_s <= 0: this is the read's own bound running out
-            return WaitResult(live=True, note=_live(job, status, elapsed))
+            return WaitResult(live=True, note=_live(job, status, elapsed, where))
         print(f"roborev job {job}: still {status} after {round(elapsed)}s", file=sys.stderr)
         if on_tick is not None:
             on_tick()  # the caller's lease keeper: a long wait outlives an unrenewed lease
@@ -263,18 +263,21 @@ def wait_job(
             # the progress print or the tick ate the rest of the bound: report the job LIVE
             # now. `sleep` of a negative span raises, and an over-long tick must read as
             # running, never crash the wait.
-            return WaitResult(live=True, note=_live(job, status, monotonic() - started))
+            return WaitResult(live=True, note=_live(job, status, monotonic() - started, where))
         live_state = status
         sleep(min(_POLL_S, left))
 
 
-def _live(job: int, status: str, elapsed: float) -> str:
+def _live(job: int, status: str, elapsed: float, where: Path | None = None) -> str:
     """Why the wait ends with the job still queued/running: it is RUNNING, never failed.
-    The one sure way forward: wait again once the queue drained, or raise the bound."""
+    The one sure way forward: wait again (from the same repository) once the queue drained,
+    or raise the bound."""
+    rerun = f"`python -m ddflow.services.roborev wait --job {job}"
+    if where is not None:
+        rerun += f" --repo {where}"
     return (
         f"roborev job {job} is still {status} after {round(elapsed)}s "
-        f"(running, not failed: it may still finish); "
-        f"`python -m ddflow.services.roborev wait --job {job}` again later, "
+        f"(running, not failed: it may still finish); {rerun}` again later, "
         f"or raise [gates].standards_wait_s"
     )
 
@@ -331,6 +334,8 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--wait-s", type=int, default=None)
     ap.add_argument("--repo", default=".")
     a = ap.parse_args(argv)
+    if a.wait not in (None, "wait"):
+        ap.error(f"unknown command {a.wait!r} -- this entry point only knows `wait`")
     where = Path(a.repo).resolve()
     if a.wait_s is None or a.wait_s < 0:
         # Imported here, not at the top (deferred: this module loads to READ a review too).
