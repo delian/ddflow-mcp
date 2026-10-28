@@ -43,17 +43,20 @@ def _session_model(st: State, agent: str) -> str:
 
 
 def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:
-    """(model, source) judged against for reviewer independence: `--model`, else the model
-    the agent's LATEST session declared (open or ended -- the record, not its liveness) --
-    said out loud and recorded (B-complete-requires-model-even-when-recorded), else the
-    `[agent].family` the harness configured (DX-author-family): a family name, so no
-    model id is written to the log."""
+    """(model, source) judged against for reviewer independence: `--model`, else the
+    `[agent].family` the harness configured (DX-author-family): the family is declared
+    ONCE and speaks OVER a session's model record, so a model id never reaches the log
+    while a family is configured -- else the model the agent's LATEST session declared
+    (open or ended -- the record, not its liveness), said out loud and recorded
+    (B-complete-requires-model-even-when-recorded)."""
     if model:
         return model, "flag"
+    if cfg.agent.family:
+        return cfg.agent.family, "config"
     found = _session_model(st, agent)
     if found:
         return found, "session"
-    return (cfg.agent.family, "config") if cfg.agent.family else ("", "")
+    return ("", "")
 
 
 def _author_event_identity(model: str, model_source: str, family_only: bool) -> dict[str, str]:
