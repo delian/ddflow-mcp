@@ -293,7 +293,7 @@ def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
         'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" pre-commit run '
     ), cmd
     assert cmd.count(" --all-files") == 1, cmd
-    assert cmd.endswith(f" --to-ref HEAD"), cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
 
 
 def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
