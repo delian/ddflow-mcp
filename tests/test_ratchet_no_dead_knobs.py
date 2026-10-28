@@ -38,6 +38,13 @@ KNOWN_UNREAD: dict[str, str] = {
     "prompts.session_brief_header": "read dynamically via dataclasses.fields in _prompt_overrides",
     "prompts.agent_brief": "read dynamically via dataclasses.fields in overrides_from",
     "prompts.agent_report": "read dynamically via dataclasses.fields in overrides_from",
+    # Read by NAME, not as an attribute: api/setup.classify_machine_local_keys pulls
+    # `getattr(enforce, "machine_local_keys", None)` and services/configwrite matches the
+    # snake-cased key text against it, so no source line spells `.enforce.machine_local_keys`.
+    "enforce.machine_local_keys": (
+        "read dynamically: api/setup.classify_machine_local_keys getattr()s it by name and "
+        "services/configwrite matches it as a key text (DX-machine-local-keys)"
+    ),
 }
 
 
