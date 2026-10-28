@@ -125,9 +125,11 @@ def test_the_docs_check_walk_replays_ddflow_and_still_spawns_other_tools(tmp_pat
     rep = D.check_docs(
         tmp_path, runner=H.command_runner(tmp_path, 60), commands=["ddflow", "nix"]
     )
-    #: the whole walk, argv for argv: the one nix chain ran, and NOTHING ddflow-shaped --
-    #: spelled bare, path-spelt, `ddflow.exe` or `… -m ddflow` -- spawned for the mention.
-    assert spawned_calls == [["nix", "run", "--help"]]
+    #: the whole walk, argv for argv: it descends from the root verb, so `nix --help`
+    #: spawns FIRST and -- the capture always times out -- the deeper `nix run --help` is
+    #: never reached (the walk must not guess it). NOTHING ddflow-shaped -- spelled bare,
+    #: path-spelt, `ddflow.exe` or `… -m ddflow` -- spawned for the mention.
+    assert spawned_calls == [["nix", "--help"]]
     assert not rep.findings, rep.findings
     assert [n.kind for n in rep.notes] == ["help"]  # the spawn for `nix`, still taken
 
