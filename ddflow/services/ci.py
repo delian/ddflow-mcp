@@ -276,12 +276,15 @@ def _sh_single(word: str) -> str:
 
 def _scope_the_run(run: str, resolve: str) -> str:
     """``run`` with its own ` --all-files` replaced by the since..HEAD range. The range
-    lands on the FIRST ` --all-files` at or after ``pre-commit run`` -- the flag the RUN
-    takes -- not on an earlier literal a verbatim `SKIP=` value kept or a later one the
-    operator quoted (a file argument, a comment); a run without the flag is untouched."""
-    at = run.find("pre-commit run")
-    if at >= 0 and " --all-files" in run[at:]:
-        return run[:at] + run[at:].replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
+    only ever lands on the DEFAULT run phrase -- `pre-commit run --hook-stage pre-push
+    --all-files` -- the one token sequence whose last part IS the run's flag; a literal
+    ` --all-files` elsewhere (a verbatim `SKIP=` value, an earlier or later quoted file
+    argument, a comment) is never mistaken for it, and a run without the phrase is left
+    as written, uncorrupted."""
+    if DEFAULT_COMMAND in run:
+        return run.replace(
+            DEFAULT_COMMAND, f"{PRE_PUSH_RUN} --from-ref {resolve} --to-ref HEAD", 1
+        )
     return run
 
 

@@ -260,6 +260,16 @@ def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
         sha=since
     ) in cmd, cmd
     assert cmd.endswith("--files ' --all-files'"), cmd
+    # a run not shaped like the default phrase is never re-scoped at all -- a quoted
+    # argument that merely contains --all-files keeps its text (the SKIP= prefix is
+    # rebuilt as it would be anywhere: merged, quotes re-emitted)
+    odd = CI.scope_to_diff(
+        "SKIP=lint pre-commit run --hook-stage pre-push --files ' --all-files' --all-files",
+        repo,
+        default,
+    )
+    assert odd.startswith('SKIP="${SKIP:+$SKIP,}"\'lint\' pre-commit run '), odd
+    assert odd.endswith("--hook-stage pre-push --files ' --all-files' --all-files"), odd
     # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
     cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
     assert cmd.startswith('SKIP="${SKIP:+$SKIP,}"\'$(echo pwn)\' pre-commit run '), cmd
