@@ -276,10 +276,13 @@ def _sh_single(word: str) -> str:
 
 def _scope_the_run(run: str, resolve: str) -> str:
     """``run`` with its own ` --all-files` replaced by the since..HEAD range. The range
-    goes on the LAST occurrence -- a leading `SKIP=` value left in place (an
-    unparseable one) may itself contain an earlier ` --all-files` nothing must change."""
-    head, _, tail = run.rpartition(" --all-files")
-    return head + f" --from-ref {resolve} --to-ref HEAD" + tail
+    lands on the FIRST ` --all-files` at or after ``pre-commit run`` -- the flag the RUN
+    takes -- not on an earlier literal a verbatim `SKIP=` value kept or a later one the
+    operator quoted (a file argument, a comment); a run without the flag is untouched."""
+    at = run.find("pre-commit run")
+    if at >= 0 and " --all-files" in run[at:]:
+        return run[:at] + run[at:].replace(" --all-files", f" --from-ref {resolve} --to-ref HEAD", 1)
+    return run
 
 
 def scope_to_diff(command: str, tree: Path, since: str) -> str:
