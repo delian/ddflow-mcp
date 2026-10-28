@@ -42,14 +42,18 @@ def _session_model(st: State, agent: str) -> str:
     return L.open_session_model(st, agent)
 
 
-def _author_model(st: State, agent: str, model: str) -> tuple[str, str]:
+def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:
     """(model, source) judged against for reviewer independence: `--model`, else the model
     the agent's LATEST session declared (open or ended -- the record, not its liveness) --
-    said out loud and recorded. B-complete-requires-model-even-when-recorded."""
+    said out loud and recorded (B-complete-requires-model-even-when-recorded), else the
+    `[agent].family` the harness configured (DX-author-family): a family name, so no
+    model id is written to the log."""
     if model:
         return model, "flag"
     found = _session_model(st, agent)
-    return (found, "session") if found else ("", "")
+    if found:
+        return found, "session"
+    return (cfg.agent.family, "config") if cfg.agent.family else ("", "")
 
 
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
@@ -154,7 +158,11 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
-    model, model_source = _author_model(st, log.agent_id, model)
+    model, model_source = _author_model(st, log.agent_id, model, cfg)
+    # `[agent].family` / DDFLOW_AGENT_FAMILY / a bare family after `--model`: the author
+    # is a FAMILY, recorded as the family only -- a model id never reaches the log where
+    # a name was not given (DX-author-family).
+    family_only = bool(G.family_name_of(model, cfg.agent.families))
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
@@ -176,7 +184,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
-        "author_model": model,
+        "author_family" if family_only else "author_model": model,
         "model_source": model_source,
         "independence": v.independence,
         # BOTH surfaces, always. This used to print only in human mode, so an agent over
@@ -251,8 +259,11 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             **({"umbrella": umbrella} if umbrella else {}),
             # Optional (B-complete-requires-model-even-when-recorded): the author model
             # this judged against, and where it came from. The flag path has no session
-            # record to carry the id, so the event names both for any known source.
-            **({"author_model": model, "model_source": model_source} if model else {}),
+            # record to carry the id, so the event names both for any known source. A
+            # family-only author ([agent].family, a bare family after --model) records
+            # `author_family` instead: the family only, never a model id (DX-author-family).
+            **({"author_model": model, "model_source": model_source} if model and not family_only else {}),
+            **({"author_family": model, "model_source": model_source} if family_only else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
