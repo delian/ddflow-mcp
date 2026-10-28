@@ -180,7 +180,9 @@ def test_a_bound_elapsed_between_polls_returns_live_without_another_read(tmp_pat
 
     def leap_past_deadline(s: float) -> None:
         sleeps.append(s)
-        clock.append(clock[-1] + 100.0)  # the slept span elapses, flying past the bound
+        # the nap ELAPSES what was asked: with s = the whole remaining bound the clock lands
+        # on the deadline, which is exactly the branch under test (the read must not happen)
+        clock.append(clock[-1] + s)
 
     monkeypatch.setattr(RR, "sleep", leap_past_deadline)
     out = RR.wait_job(repo, 7, 5)
