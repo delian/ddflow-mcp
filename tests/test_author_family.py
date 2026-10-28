@@ -186,6 +186,25 @@ def test_a_non_canonical_configured_family_recorded_as_its_family_value(repo, mo
     assert "model" not in data
 
 
+def test_an_unrecognised_configured_family_is_recorded_verbatim_only(repo, monkeypatch):
+    """roborev standards (low): a configured family the map does not know is recorded
+    VERBATIM as `author_family` -- the operator's declaration, never a model name --
+    past the force it takes (independence refuses it otherwise)."""
+    monkeypatch.delenv("DDFLOW_AGENT_FAMILY", raising=False)
+    run_cli(repo, "init")
+    error, _ = write_config(repo, [("agent.family", "myorg-x")])
+    assert error == "", error
+    run_cli(repo, "task", "add", "T1", "--title", "add a")
+    pass_pipeline(repo, "T1", reviewer=_CROSS_FAMILY_REVIEWER)
+    code, out, err = run_cli(repo, "complete", "T1", "--force")
+    assert code == OK, f"{out}{err}"
+    data = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"][-1].data
+    assert data.get("author_family") == "myorg-x", data
+    assert data.get("model_source") == "config", data
+    assert "author_model" not in data
+    assert "model" not in data
+
+
 # -- gate record: the author-family refusal reads the configured family too ------------
 
 
