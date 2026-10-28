@@ -1154,7 +1154,14 @@ def _assemble(
     if len(text) + (len(note) if trimmed else 0) > cap:
         # The backstop cuts the BODY only: the head and the reserved RESUME slice hold.
         room = max(0, cap - len(prefix_text) - 1 - len(note))
-        body = body[:room].rsplit("\n", 1)[0] if body else ""
+        cut = body[:room].rsplit("\n", 1)[0] if body and room else ""
+        if len(prefix_text) + (len("\n" + cut) if cut else 0) + len(note) > cap:
+            # The note will not be appended anyway: give its room to the body (cut from
+            # the UNCUT body), never to the slice -- the note must not starve sections
+            # that fit without it.
+            room = max(0, cap - len(prefix_text) - 1)
+            cut = body[:room].rsplit("\n", 1)[0] if body and room else ""
+        body = cut
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
