@@ -195,7 +195,7 @@ class WaitResult:
 def _settled(rec: dict | None, job: int) -> WaitResult | None:
     """The dead-end answers one list read can give for a job record -- vanished (the list no
     longer has it), no readable status, or ended failed/canceled. ``None`` when the job is
-    still queued/running: the wait goes on."""
+    still queued/running (the wait goes on), or done (the caller's verdict path takes it)."""
     if rec is None:
         return WaitResult(
             note=(
