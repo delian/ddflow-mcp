@@ -83,6 +83,8 @@ def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
         return argv[1:-1]
     if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
+        #: the walk itself never spells this (its argv start at a bare verb name): the
+        #: branch is for a programmatic runner that spells it; pinned by the test below.
         return argv[3:-1]
     return None
 
