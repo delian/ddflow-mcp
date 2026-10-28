@@ -96,10 +96,14 @@ def machine_local_layer(extra: set[str], dotted: str) -> str:
 
 
 def machine_local_tables(extra: set[str], names: set[str]) -> bool:
-    """Whether EVERY top-level table ``names`` names is machine-local (classified or
-    extended). Used to default an appended TOML document that only configures this
-    machine's reviewers or companions to the local layer."""
-    return bool(names) and names <= set(MACHINE_LOCAL_KEYS) | extra
+    """Whether EVERY top-level table ``names`` names is machine-local: classified (with a
+    non-empty layer, the value-as-layer rule) or extended by `[enforce].machine_local_keys`.
+    Used to default an appended TOML document that only configures this machine's
+    reviewers or companions to the local layer."""
+    return bool(names) and all(
+        (name in MACHINE_LOCAL_KEYS and bool(MACHINE_LOCAL_KEYS[name])) or name in extra
+        for name in names
+    )
 
 
 def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") -> Path:
