@@ -2179,12 +2179,14 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan]
   
   options:
     -h, --help   show this help message and exit
     --item ITEM
     --apply
+    --all
+    --plan
   
   '''
 # ---
@@ -2765,10 +2767,12 @@
 # ---
 # name: test_help[ddflow status]
   '''
-  usage: ddflow status [-h]
+  usage: ddflow status [-h] [--by-tag BY_TAG]
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
+    --by-tag BY_TAG  also print per-value counts for this label namespace, e.g. wave or track, with
+                     the top blockers per value
   
   '''
 # ---
@@ -3259,7 +3263,7 @@
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
       replay              reconstruct the decision history from the log
-      recover             find crashed agents' work (exit 2 = nothing)
+      recover             find crashed agents' work; --all --plan triages it (exit 2 = nothing)
       progress            work actually done, aggregated from the log
       loops               circular references and runtime loops (exit 2 = none)
       cleanup             classify ddflow worktrees/branches; --apply lands the safe ones
