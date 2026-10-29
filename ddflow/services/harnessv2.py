@@ -146,6 +146,24 @@ def parse_reserved(table: Any, where: str) -> Reserved:
     return Reserved(none=none, values=values)
 
 
+def check_table(table: Any, name: str, where: str) -> None:
+    """Checks on the RAW table of a v2 section, where "was a value given" is known exactly
+    (a falsy value such as ``subagent_depth = 0`` is still a fact)."""
+    if not isinstance(table, dict):
+        return  # _build names the wrong type
+    keys = set(table) - {"none"}
+    if not table:
+        raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
+    if "none" in table and table["none"] is True and keys:
+        raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
+    if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
+        if table.get("mechanism", "none") == "none":
+            raise DescriptorError(
+                f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
+                " other than none"
+            )
+
+
 def validate_reserved(reserved: dict[str, Reserved], where: str) -> None:
     for name, sec in reserved.items():
         if sec.none == bool(sec.values):  # both set, or neither
@@ -162,10 +180,6 @@ def validate(sections: dict[str, Any], where: str) -> None:
     if cont and cont.mechanism and cont.mechanism not in CONTINUATION_MECHANISMS:
         raise DescriptorError(
             f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"
-        )
-    if cont and (cont.cap or cont.goal_command or cont.loop_guard) and not cont.mechanism:
-        raise DescriptorError(
-            f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
         )
     head = sections.get("headless")
     if head and head.autonomy:
