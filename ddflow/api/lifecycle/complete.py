@@ -135,7 +135,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             "item.completed",
             f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
             f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
-            f"fixed <bug> --regression-test ...`.",
+            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
             id=item,
             bugs_closed=[],
         )
@@ -296,7 +296,7 @@ def _close_bugs(
         out = bug_fixed(
             repo,
             bid,
-            regression_test=[t for t in tests if t.strip()],
+            regression_test=tests if any(t.strip() for t in tests) else [],
             mutation=mutation,
             lint_exempt=lint_exempt,
             agent=agent,
