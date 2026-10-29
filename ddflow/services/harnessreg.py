@@ -278,6 +278,21 @@ def _validate_hooks(hk: Hooks, where: str) -> None:
         raise DescriptorError(f"{where}: a {hk.style!r} hook style needs file, normalizer, emitter")
 
 
+def _validate_surfaces(h: Harness, where: str) -> None:
+    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env", *V2_SECTIONS):
+        sec = getattr(h, name)
+        if sec is None:
+            continue
+        has_values = any(v for k, v in vars(sec).items() if k != "none")
+        none = getattr(sec, "none", False)  # [env] has no verified-absence form
+        if none and has_values:
+            raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
+        if not none and not has_values:
+            # An empty table is neither a fact nor a verified absence; leave the section out
+            # (NOT VERIFIED) or say `none = true`.
+            raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
+
+
 def _validate(h: Harness, where: str) -> None:
     if h.mcp.shape not in SHAPES:
         raise DescriptorError(f"{where}: mcp.shape {h.mcp.shape!r} is not one of {sorted(SHAPES)}")
@@ -293,22 +308,9 @@ def _validate(h: Harness, where: str) -> None:
         _validate_instructions(h.instructions, where)
     if h.hooks is not None:
         _validate_hooks(h.hooks, where)
-    for rname, rsec in h.reserved.items():
-        if rsec.none == bool(rsec.values):  # both set, or neither
-            raise DescriptorError(f"{where}: [{rname}] needs exactly one of none = true or values")
+    harnessv2.validate_reserved(h.reserved, where)
     harnessv2.validate({n: getattr(h, n) for n in V2_SECTIONS if getattr(h, n)}, where)
-    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env", *V2_SECTIONS):
-        sec = getattr(h, name)
-        if sec is None:
-            continue
-        has_values = any(v for k, v in vars(sec).items() if k != "none")
-        none = getattr(sec, "none", False)  # [env] has no verified-absence form
-        if none and has_values:
-            raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
-        if not none and not has_values:
-            # An empty table is neither a fact nor a verified absence; leave the section out
-            # (NOT VERIFIED) or say `none = true`.
-            raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
+    _validate_surfaces(h, where)
 
 
 def parse(text: str, name: str) -> Harness:
