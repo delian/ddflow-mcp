@@ -85,6 +85,10 @@ def _run_at(
             out: list[bytes] = []
             bigger = False
             unreached = 0
+            # The first-run's .git/config snapshot: reset --hard + clean -xdfq wipe the
+            # WORKING tree, not the config a run wrote into .git/config -- restoring the
+            # snapshot brings that back too, so later runs see the checkout the first did.
+            pristine_cfg = (s.path / ".git" / "config").read_bytes()
             for _ in range(count):
                 # Reset BEFORE each run: a forgetful-but-stateful line (a marker it left)
                 # must not bleed into the next run's answer -- every run sees the
@@ -92,6 +96,7 @@ def _run_at(
                 # guarantee: with no fresh checkout there is no run to read.
                 reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
                 cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
+                (s.path / ".git" / "config").write_bytes(pristine_cfg)
                 if reset.code != 0 or cleaned.code != 0:
                     unreached += 1
                     continue

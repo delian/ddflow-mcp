@@ -44,7 +44,7 @@ def python(source: str) -> str:
     """A repro command line that runs ``source`` with THIS interpreter (github-safe split).
     The snippet is shell-QUOTED: an embedded double quote or shell-active char in it must
     not end the -c word for the shell."""
-    return f'"{sys.executable}" -c {shlex.quote(source)}'
+    return f'{shlex.quote(sys.executable)} -c {shlex.quote(source)}'
 
 
 def _file(repo: Path, **kw):
