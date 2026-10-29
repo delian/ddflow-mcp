@@ -149,6 +149,9 @@ def test_a_bug_with_no_repro_evidence_is_not_demoted_like_a_failed_repro(proj):
     ids = bug_items(state(proj), Config.load(proj))
     assert ok_bug.fix_task in ids  # the confirmed control
     assert quiet_bug.fix_task in ids  # no evidence: offered, not demoted
+    code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
+    rows = {r["id"]: r for r in json.loads(out)["rows"]}
+    assert rows[quiet_id]["state"] == "open"  # no evidence is "open", never "unconfirmed"
 
 
 def test_a_sighting_whose_run_count_advances_and_failure_count_cannot_folds_nothing(proj):
