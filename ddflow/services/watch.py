@@ -11,13 +11,13 @@ where this one stopped and no line is read twice or skipped.
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import content_digest
 from . import jobs as J
 
 KINDS = ("job", "file", "pid", "gate")
@@ -94,7 +94,7 @@ def problem(t: Target) -> str:
 
 def _sig(data: bytes, upto: int) -> str:
     """A digest of the first (at most 64) bytes of ``data[:upto]``."""
-    return hashlib.sha1(data[: min(64, upto)]).hexdigest()[:12]
+    return content_digest(data[: min(64, upto)], length=12)
 
 
 def scan_file(t: Target) -> str | None:
