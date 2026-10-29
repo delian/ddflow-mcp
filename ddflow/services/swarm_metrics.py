@@ -255,32 +255,6 @@ def compare(before: dict, after: dict) -> dict:
     }
 
 
-def for_repo(
-    repo,
-    *,
-    phase: str = "",
-    since: float | None = None,
-    until: float | None = None,
-    now: float | None = None,
-    agent: str = "",
-) -> dict:
-    """``baseline`` over a project's own log."""
-    import time
-
-    from ..api._base import _load
-
-    log, cfg, st = _load(repo, agent)
-    return baseline(
-        log.read_all(),
-        st,
-        cfg,
-        time.time() if now is None else now,
-        phase=phase,
-        since=since,
-        until=until,
-    )
-
-
 def provider(ctx: Context) -> list[dict]:
     """A ``metrics.register`` provider: the baseline's headline rows for ``ddflow metrics``."""
     merged = _merged(ctx, None)
