@@ -141,6 +141,18 @@ def behaviour_neutral(tree: Path, base: str, changed: list[str]) -> bool:
     return True
 
 
+def _hub_answer(tree: Path, base: str, changed: list[str], hubs: dict, prior_full: str) -> tuple[bool, str]:
+    """(neutral, whole-suite reason) for a changed hub: True when the change is
+    import-order/format-only so no test can observe it (bug B0bdd3b9a39), else the reason
+    running only the importers would lose recall."""
+    touched = TR.hubs_touched(changed, hubs)
+    if not touched:
+        return False, prior_full
+    if behaviour_neutral(tree, base, changed):
+        return True, prior_full
+    return False, prior_full or f"a hub module changed: {', '.join(touched)}"
+
+
 def _named(stem: str, test_name: str) -> bool:
     """``stem`` as a whole word of ``test_name`` (a plural allowed): `cli` names
     `test_cli_parity` and not `test_client`."""
@@ -286,11 +298,7 @@ def select(  # noqa: PLR0913 -- the knobs and the stand-ins for git's answers
     hubs = graph.hubs(hub_importers)
     walked = TR.reach(graph, changed, hubs, max_hops)
     sel.cut_at = sorted(walked.cut_at)
-    if touched := TR.hubs_touched(changed, hubs):
-        if behaviour_neutral(tree, base, changed):
-            sel.neutral = True  # a lint/format fix: the hub reaches nothing it can break
-        else:
-            sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
+    sel.neutral, sel.full = _hub_answer(tree, base, changed, hubs, sel.full)
     for t, (why, hops) in walked.files.items():
         if t in tests:
             pick(t, why, RANK_DIRECT if hops == 1 else RANK_TWO_HOP)

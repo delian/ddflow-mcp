@@ -166,7 +166,7 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     sel = select(tree, base, changed=changed, **limits(cfg))
     if sel is None:
         return Plan("full", f"git could not say what changed since {base}")
-    if sel.full and not sel.neutral:
+    if sel.full:
         return Plan("full", f"{sel.full}: only the whole suite keeps recall")
     paths = [t.path for t in sel.tests]
     if not paths:  # the whole suite holds the always-run guards too
