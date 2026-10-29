@@ -1067,10 +1067,10 @@ def parse(text: str) -> tuple[list[Finding], bool]:
             severity=m.group(1).upper(),
             location=(m.group(2) or "").strip(),
             title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
-            #: A reviewer may write only a location -- `FINDING MEDIUM y.py:1` with no
-            #: paragraph. Derive the finding's text from the location so it is never
-            #: recorded with empty text (location only) that a triage cannot answer
-            #: (B-review-finding-empty-text).
+            #: The finding's text is the reviewer's paragraph. A reviewer may write only
+            #: a location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still
+            #: names the spot the author must answer, so its text is derived from the
+            #: location and the finding is never recorded empty (B-review-finding-empty-text).
             detail=(m.group(3) or "").strip() or (m.group(2) or "").strip(),
         )
         for m in _FINDING_RE.finditer(text or "")
