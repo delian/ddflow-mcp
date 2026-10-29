@@ -2806,5 +2806,21 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_watch": {
+  "command": "watch",
+  "schema": "watch@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "watch@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }
