@@ -150,10 +150,10 @@ def test_validate_reports_a_missing_unknown_row_and_a_non_table_family():
 
 def test_facts_of_both_tables_are_validated_and_sources_must_be_a_table():
     doc = {
-        "family": {"unknown": {}},
+        "family": {"claude": {"t": {"v": 1, "s": "documented", "src": "x", "d": "2026-01-01"}}},
         "harness": {"h": {"k": {"v": 1, "s": "bogus", "src": "x", "d": "2026-01-01"}}},
     }
-    assert len(CF.facts(doc)) == 1
+    assert [f[:3] for f in CF.facts(doc)] == [("family", "claude", "t"), ("harness", "h", "k")]
     base = {"context_harnesses.toml": {"harness": {}}}
     bad = {
         "context_families.toml": {
@@ -165,3 +165,17 @@ def test_facts_of_both_tables_are_validated_and_sources_must_be_a_table():
         **base,
     }
     assert any("sources is not a table" in p for p in CF.validate(bad))
+
+
+def test_scalar_family_and_empty_sources_do_not_crash_or_misreport():
+    base = {"context_harnesses.toml": {"harness": {}}}
+    assert any(
+        "family is not a table" in p
+        for p in CF.validate({"context_families.toml": {"family": 5}, **base})
+    )
+    assert not any(
+        "sources" in p
+        for p in CF.validate(
+            {"context_families.toml": {"family": {"unknown": {}}, "sources": {}}, **base}
+        )
+    )

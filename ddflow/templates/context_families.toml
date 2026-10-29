@@ -14,6 +14,7 @@
 #   [context].facts_max_age_days is reported by doctor.
 # Scope: a family row describes the vendor's own API. The same model served by a third party
 # (Model Studio, a router, a local server) can differ; routes belong to DRV-model-catalog.
+# Facts that depend on a mode (Qwen: explicit vs implicit cache) describe the mode named in their note.
 # Prices move: they are data with a date, never code. Absolute prices belong to
 # DRV-model-catalog; this table keeps only ratios and structure. The `unknown` family has no
 # facts on purpose: a model that matches no family never borrows a neighbour's numbers.
