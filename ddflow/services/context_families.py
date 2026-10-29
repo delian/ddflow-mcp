@@ -40,14 +40,14 @@ def is_fact(node: Any) -> bool:
 def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     """Every `(table, row, key, fact)` of one parsed file."""
     out = []
-    table = "family" if "family" in doc else "harness"
-    rows = doc.get(table, {})
-    for row, body in sorted(rows.items() if isinstance(rows, dict) else []):
-        if not isinstance(body, dict):
-            continue
-        for key, node in sorted(body.items()):
-            if is_fact(node):
-                out.append((table, row, key, node))
+    for table in ("family", "harness"):
+        rows = doc.get(table, {})
+        for row, body in sorted(rows.items() if isinstance(rows, dict) else []):
+            if not isinstance(body, dict):
+                continue
+            for key, node in sorted(body.items()):
+                if is_fact(node):
+                    out.append((table, row, key, node))
     return out
 
 
@@ -88,11 +88,15 @@ def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
 def _fact_problems(name: str, doc: dict[str, Any]) -> list[str]:
     """Status, source, date and value rules for each fact of one file."""
     out = []
+    sources = doc.get("sources", {})
+    sources = sources if isinstance(sources, dict) else {}
+    if "sources" in doc and not sources:
+        out.append(f"{name}: sources is not a table")
     for table, row, key, f in facts(doc):  # facts() skips non-table rows (see _shape_problems)
         at = f"{name}: {table}.{row}.{key}"
         if f["s"] not in STATUSES:
             out.append(f"{at}: status {f['s']!r} is not one of {STATUSES}")
-        if f.get("src") not in doc.get("sources", {}):
+        if not isinstance(f.get("src"), str) or f["src"] not in sources:
             out.append(f"{at}: source {f.get('src')!r} is not in [sources]")
         try:
             clock.parse_date(str(f.get("d")))

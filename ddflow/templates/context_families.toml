@@ -40,7 +40,7 @@ read_mult = { v = 0.1, s = "documented", src = "cache-note", d = "2026-10-23", e
 write_mult = { v = { "5m" = 1.25, "1h" = 2.0 }, s = "documented", src = "cache-note", d = "2026-10-23" }
 min_tokens = { v = 4096, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5.5" = 512, "opus-5.5" = 512, "haiku-5.5" = 512 }, note = "512 on Sonnet/Opus/Haiku 5.5; 1024-4096 on older models (4096 is the safe upper bound). Substring keys are guesses at model ids" }
 window = { v = 200000, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5" = 1000000, "haiku-5.5" = 1000000, "fable" = 1000000 }, note = "1M on Sonnet 5+, Haiku 5.5, Fable; older models 200K. Substring keys are guesses at model ids" }
-compaction_kind = { v = "client_summary", s = "documented", src = "claude-hooks", d = "2026-10-29", note = "Claude Code summarises the conversation; PreCompact/PostCompact hooks exist" }
+compaction_kind = { v = "server_summary", s = "documented", src = "cache-note", d = "2026-10-23", note = "Anthropic API offers server-side compaction and context editing (cache-note section 5); client summarisation by Claude Code is a harness fact, see context_harnesses.toml" }
 
 [family.openai]
 cache_kind = { v = "automatic", s = "documented", src = "openai-cache", d = "2026-10-29" }
