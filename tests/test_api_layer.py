@@ -303,6 +303,7 @@ def test_the_reason_is_its_OWN_content_block_never_a_prefix():
 MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_loops": (["loops"], {}),
     "ddflow_health": (["health"], {}),
+    "ddflow_watch": (["watch", "--pid", "999999"], {"pid": 999999}),
     "ddflow_docs": (["docs", "check"], {"verb": "check"}),
     "ddflow_record": (["record", "risk", "list"], {"args": ["risk", "list"]}),
     "ddflow_progress": (["progress"], {}),
