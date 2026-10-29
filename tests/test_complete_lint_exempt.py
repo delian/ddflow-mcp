@@ -50,3 +50,11 @@ def test_complete_cli_takes_lint_exempt(repo):
     assert state(repo).bugs["Bci-ruff-2"].resolution == "fixed"
     (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
     assert fixed.data["regression_verify"]["reason"] == "formatted"
+
+
+def test_blank_regression_test_beside_lint_exempt_is_not_a_refusal(repo):
+    item = _seed(repo, "Bci-ruff-3", LINT)
+    out = LC.complete(
+        repo, item, model="claude-opus-5", regression_test=[""], lint_exempt="formatted", agent="a"
+    )
+    assert out.exit == 0, out.reason

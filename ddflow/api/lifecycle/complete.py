@@ -296,9 +296,9 @@ def _close_bugs(
         out = bug_fixed(
             repo,
             bid,
-            regression_test=tests if any(t.strip() for t in tests) else [],
+            regression_test=tests,
             mutation=mutation,
-            lint_exempt=lint_exempt,
+            lint_exempt=lint_exempt.strip(),
             agent=agent,
         )
         if out.exit != O.OK:
