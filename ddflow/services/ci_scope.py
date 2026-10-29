@@ -1,7 +1,8 @@
 """Which tests an item's `ci run` takes (D-test-economy-r2): the affected ones, or the whole suite.
 
-The default pre-push command is `pre-commit run --hook-stage pre-push --all-files`, whose
-`tests` hook runs the whole suite (about 12000 tests). For ONE item the run skips that hook
+The default pre-push command is `pre-commit run --hook-stage pre-push`, run over the diff the
+check is about (the branch against its base; `scope_to_diff` in `services.ci`), whose `tests`
+hook runs the whole suite (about 12000 tests). For ONE item the run skips that hook
 and runs the tests its change reaches instead -- the same selector the unit_tests gate and
 `ddflow tests --item` use (`testselect`), with the same hub cut, budget and whole-suite
 fallbacks. The whole suite stays for `--full`, the merge queue integrator (a batch) and every
