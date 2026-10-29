@@ -1964,6 +1964,114 @@
           is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      govern.quota_mark_1 = 0.4   [default]
+          Quota fraction (default 0.4) at which new work is capped at `tier_cap_1` and
+          `effort_cap_1`. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.quota_mark_2 = 0.6   [default]
+          Quota fraction (default 0.6) at which mechanical work is capped at
+          `tier_cap_2` (other work at `tier_cap_2_other`) and effort at
+          `effort_cap_2`. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.quota_mark_3 = 0.8   [default]
+          Quota fraction (default 0.8) at which the governor pauses and asks
+          (D-quotas: refuse new work, pause items, resume at the reset). 1.0 uses
+          everything. Marks are fractions of the allowance (0 to 1); a reading AT a
+          mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.context_mark_1 = 0.6   [default]
+          Context fraction (default 0.6) at which the session plans a checkpoint.
+          Marks are fractions of the allowance (0 to 1); a reading AT a mark steps the
+          ladder up at once, and it steps down only after falling `hysteresis` under
+          the mark and `cooldown_s` since the ladder last moved. A mark set out of
+          order is sorted.
+      govern.context_mark_2 = 0.75   [default]
+          Context fraction (default 0.75) at which the session writes the handoff.
+          Marks are fractions of the allowance (0 to 1); a reading AT a mark steps the
+          ladder up at once, and it steps down only after falling `hysteresis` under
+          the mark and `cooldown_s` since the ladder last moved. A mark set out of
+          order is sorted.
+      govern.context_mark_3 = 0.85   [default]
+          Context fraction (default 0.85) at which the session compacts or restarts at
+          the next safe point. Marks are fractions of the allowance (0 to 1); a
+          reading AT a mark steps the ladder up at once, and it steps down only after
+          falling `hysteresis` under the mark and `cooldown_s` since the ladder last
+          moved. A mark set out of order is sorted.
+      govern.context_mark_4 = 0.95   [default]
+          Context fraction (default 0.95) at which the session makes an emergency
+          checkpoint. Marks are fractions of the allowance (0 to 1); a reading AT a
+          mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.hysteresis = 0.05   [default]
+          How far under a mark a reading must fall before its ladder steps down
+          (default 0.05), so a reading hovering at a mark does not flap.
+      govern.cooldown_s = 300   [default]
+          Seconds a ladder must have been still before it steps down (default 300).
+          Stepping up is never delayed.
+      govern.tier_cap_1 = 'balanced'   [default]
+          The highest model tier new work may use at the first quota (or load) mark:
+          fast | balanced | deep. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'fast', the strictest (an
+          unknown tier caps work at the cheapest one); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      govern.tier_cap_2 = 'fast'   [default]
+          The highest tier MECHANICAL work may use at the second mark: fast | balanced
+          | deep. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'fast', the strictest (an unknown tier caps work
+          at the cheapest one); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      govern.tier_cap_2_other = 'balanced'   [default]
+          The highest tier work that is not mechanical may use at the second mark (it
+          is held back by `effort_cap_2` instead): fast | balanced | deep. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'fast', the strictest (an unknown tier caps work at the
+          cheapest one); `config --set`, `ddflow_configure` and the environment refuse
+          it, and so does loading ddflow's own source tree, where the file and the
+          code are one commit.
+      govern.effort_cap_1 = 'medium'   [default]
+          The highest effort at the first mark: low | medium | high. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'low', the strictest (an unknown effort caps work at the lowest); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.effort_cap_2 = 'low'   [default]
+          The highest effort at the second mark: low | medium | high. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'low', the strictest (an unknown effort caps work at the lowest); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.reviewer_floor_tier = 'balanced'   [default]
+          The tier a reviewer never drops below, whatever the ladder says, so
+          independence and review quality hold: fast | balanced | deep. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'balanced', the strictest (an unknown floor keeps
+          reviewers at the balanced tier); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
+      govern.effort_floor = 'low'   [default]
+          The effort no work drops below: low | medium | high. An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'medium', the strictest (an unknown floor keeps medium effort); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.deep_floor = True   [default]
+          A task tagged deep (architecture, security) is never downshifted (default
+          true).
+      govern.load_governs = True   [default]
+          Whether host load (the `[schedule.signals]` marks, read as flowcontrol reads
+          them) also caps the tier: over a signal's high mark counts as the first
+          mark, at its critical mark as the second (default true).
       metrics.min_samples = 10   [default]
           Fewest samples a metrics figure may rest on. Under it the figure is reported
           unavailable (n/a, with its sample count), never as a number, and a view with
