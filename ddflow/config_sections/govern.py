@@ -114,13 +114,13 @@ class GovernConfig:
         "balanced",
         doc="The tier a reviewer never drops below, whatever the ladder says, so independence and review quality hold: fast | balanced | deep.",
         choices=TIER_CHOICES,
-        strictest=("balanced", "an unknown floor keeps reviewers at the balanced tier"),
+        strictest=("deep", "an unknown floor keeps reviewers at the highest tier"),
     )
     effort_floor: str = knob(
         "low",
         doc="The effort no work drops below: low | medium | high.",
         choices=EFFORT_CHOICES,
-        strictest=("medium", "an unknown floor keeps medium effort"),
+        strictest=("high", "an unknown floor keeps the highest effort"),
     )
     deep_floor: bool = knob(
         True,

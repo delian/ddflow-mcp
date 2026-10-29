@@ -165,3 +165,31 @@ def test_govern_config_defaults_match_params_and_fallbacks_are_strict():
     assert g.params_from_config(cfg) == g.Params(load_thresholds=g.Params().load_thresholds)
     assert KNOB_STRICTEST["govern.tier_cap_1"][0] == "fast"
     assert KNOB_STRICTEST["govern.effort_cap_2"][0] == "low"
+
+
+def test_one_unavailable_subject_blocks_a_step_down():
+    hi = d({"a": 0.9, "b": 0.9}, now=0)
+    assert hi.action == g.PAUSE_AND_ASK
+    r = d({"a": None, "b": 0.0}, last=hi, now=10_000)
+    assert r.quota.level == 3 and r.action == g.PAUSE_AND_ASK
+    assert d({"a": 0.0, "b": 0.0}, last=hi, now=10_000).quota.level == 0
+
+
+def test_one_unavailable_load_signal_blocks_a_step_down():
+    hi = d(load={"memory_pressure": 0.96}, now=0)
+    assert hi.load.level == 2
+    r = d(load={"memory_pressure": None, "disk_pressure": 0.0}, last=hi, now=10_000)
+    assert r.load.level == 2
+    assert d(load={}, last=hi, now=10_000).load.level == 2  # nothing sampled holds
+
+
+def test_deep_task_is_never_downshifted_in_effort_either():
+    r = d({"a": 0.65}, req=g.Request(tier="deep", effort="high"))
+    assert (r.tier, r.effort, r.action) == ("deep", "high", g.CONTINUE)
+    r = d({"a": 0.65}, req=g.Request(tier="deep", effort="high"), params=g.Params(deep_floor=False))
+    assert r.action == g.DOWNSHIFT
+
+
+def test_floor_knobs_fall_back_to_the_highest_value():
+    assert KNOB_STRICTEST["govern.reviewer_floor_tier"][0] == "deep"
+    assert KNOB_STRICTEST["govern.effort_floor"][0] == "high"

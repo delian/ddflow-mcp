@@ -111,10 +111,12 @@ def step(
     now: float,
     hysteresis: float,
     cooldown_s: float,
+    blind: bool = False,
 ) -> Ladder:
     """The ladder's level for ``value``: up at once on reaching a mark; down only when the
     value is under the mark it left minus ``hysteresis`` and the ladder has been still for
-    ``cooldown_s``. ``None`` holds. Monotone in ``value`` for a fixed ``last``."""
+    ``cooldown_s``. ``None`` holds, and so does ``blind`` (some reading that could still be
+    high is unavailable) against a step down. Monotone in ``value`` for a fixed ``last``."""
     prev = last or Ladder(0, now)
     if value is None:
         return prev
@@ -126,7 +128,7 @@ def step(
     down = prev.level
     while down > 0 and value < marks[down - 1] - hysteresis:
         down -= 1
-    if down < prev.level and now - prev.at >= cooldown_s:
+    if down < prev.level and not blind and now - prev.at >= cooldown_s:
         return Ladder(down, now)
     return prev
 
@@ -147,11 +149,13 @@ def _load_step(
         else:
             lvl = 0
         cand = max(cand, lvl)
-    if all(load.get(n) is None for n in p.load_thresholds):
+    seen = [n for n in p.load_thresholds if n in load]
+    blind = any(load[n] is None for n in seen)
+    if not seen or all(load[n] is None for n in seen):
         return prev  # blind: holds, never zero
     if cand > prev.level:
         return Ladder(cand, now)
-    if cand < prev.level and now - prev.at >= p.cooldown_s:
+    if cand < prev.level and not blind and now - prev.at >= p.cooldown_s:
         return Ladder(cand, now)
     return prev
 
@@ -161,9 +165,11 @@ def _floors(req: Request, p: Params) -> tuple[int, int]:
     tier = 0
     if req.role == "reviewer":
         tier = _rank(TIERS, p.reviewer_floor_tier, 1)
+    effort = _rank(EFFORTS, p.effort_floor, 0)
     if p.deep_floor and req.tier == "deep":
         tier = _rank(TIERS, "deep", 2)
-    return tier, _rank(EFFORTS, p.effort_floor, 0)
+        effort = max(effort, _rank(EFFORTS, req.effort, 2))  # never downshifted, in effort too
+    return tier, effort
 
 
 def decide(
@@ -186,6 +192,7 @@ def decide(
         now,
         p.hysteresis,
         p.cooldown_s,
+        blind=any(v is None for v in quota.values()),
     )
     c = step(context, p.context(), last.context if last else None, now, p.hysteresis, p.cooldown_s)
     ld = _load_step(load, p, last.load if last else None, now) if p.load_governs else Ladder(0, now)
