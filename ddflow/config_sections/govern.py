@@ -67,7 +67,7 @@ class GovernConfig:
     )
     quota_mark_3: float = _mark(
         0.8,
-        "Quota fraction (default 0.8) at which the governor pauses and asks (D-quotas: refuse new work, pause items, resume at the reset). 1.0 uses everything.",
+        "Quota fraction (default 0.8) at which the governor pauses and asks (D-quotas-governor: refuse new work, pause items, resume at the reset). 1.0 uses everything.",
     )
     context_mark_1: float = _mark(
         0.6, "Context fraction (default 0.6) at which the session plans a checkpoint."
