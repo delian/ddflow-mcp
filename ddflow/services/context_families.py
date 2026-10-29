@@ -25,7 +25,6 @@ UNKNOWN = "unknown"
 DEFAULT_MAX_AGE_DAYS = 90
 _SHOWN = 5  # stale facts named in one doctor note
 _FILES = ("context_families.toml", "context_harnesses.toml")
-_TABLES = {"context_families.toml": "family", "context_harnesses.toml": "harness"}
 
 
 def load(templates: Path | None = None) -> dict[str, dict[str, Any]]:

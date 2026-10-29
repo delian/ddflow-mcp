@@ -3,7 +3,7 @@
 Task CC-inventory (phase P-context-compaction), agent impl-cc-inventory, 2026-10-29. One record per UNVERIFIED line of
 [context-compaction.md](context-compaction.md) section 11. Data lives in `ddflow/templates/context_families.toml` and
 `context_harnesses.toml` (fact shape: value, status, source, date). Statuses: **documented** = vendor page read on the date
-(not run), **verified** = a probe executed on this machine, **open** = not resolved. No probe below is `verified`: every
+(not run), **verified** = a probe executed on this machine, **open** = not resolved (in the toml tables a lead we could not confirm is `unverified`, and a documented absence is `none`). No probe below is `verified`: every
 answer comes from reading vendor pages with WebFetch, which is a lower grade than running the client. A live run is listed as
 the next step where it matters.
 
