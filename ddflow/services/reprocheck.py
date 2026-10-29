@@ -81,6 +81,16 @@ def _run_at(
                     "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
                     "load": load_start,
                 }
+            # A checkout whose .git/config cannot be read as a regular file (a linked
+            # worktree's .git is a FILE) is no scratch we can prime: unavailable, never
+            # a raise out of a filing (the finally below removes the tails dir).
+            try:
+                pristine_cfg = (s.path / ".git" / "config").read_bytes()
+            except OSError:
+                return {
+                    "unavailable": "the scratch checkout's .git/config is not readable",
+                    "load": load_start,
+                }
             codes: list[int] = []
             out: list[bytes] = []
             bigger = False

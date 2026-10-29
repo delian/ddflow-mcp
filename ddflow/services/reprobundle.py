@@ -245,9 +245,10 @@ def _countable(value: Any) -> int | None:
     there -- a fractional count truncates to NOTHING, never to an integer."""
     if isinstance(value, str):
         try:
-            return int(value)
+            n = int(value)
         except (TypeError, ValueError):
             return None
+        return n if n >= 0 else None
     if isinstance(value, int):
         return value if value >= 0 else None
     try:
