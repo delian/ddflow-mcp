@@ -338,6 +338,13 @@ class Item:
     #: port applies elsewhere.
     landed_before: str = ""
     landed_after: str = ""
+    #: The item's own paths inside its landed range, recorded with
+    #: `update --landed-paths <globs>` for work that landed inside a MIXED commit
+    #: (B738d7bbeab): `changed_paths` reports only these, so a commit that also changed
+    #: code does not force the full task pipeline on a docs-only item. Each glob was
+    #: verified inside the item's declared globs and inside the range's changed files.
+    landed_paths: list[str] = field(default_factory=list, metadata={"omit_empty": True})
+
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
     fixes: list[str] = field(default_factory=list)
@@ -997,6 +1004,14 @@ class State:
     #: {"digest", "user", "host", "human", "note", "token_hash", "used_at", "agent", "at"}.
     #: What runs is approved only when its digest is one approved here.
     approvals: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: ask id -> the folded ask (`ask.*` events, folded by `core.handlers.asks`; read it
+    #: through `asks_of`, never directly). Declared here (SE-state-asks-field) instead of
+    #: setdefault'd beside the declared fields: the ask rows belong to the record shape,
+    #: so field-walking state users see them, and an instance restored without `__init__`
+    #: (a pre-field pickle) still gets the dict lazily from `asks_of`. The rows hold
+    #: person-supplied text, so any full-state export redacts it leaf-wise like every
+    #: other field.
+    asks: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: item id -> the newest `lease.waiting` record of an agent refused the files it asked for
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.

@@ -71,6 +71,11 @@ class ItemEdit:
     #: for work merged outside `ddflow merge` (B9eb92adafe). Verified, then recorded as the
     #: item's landed range.
     landed: str | None = None
+    #: The item's own paths inside the landing (glob patterns), for work that landed inside
+    #: a MIXED commit (B738d7bbeab): each verified inside the item's declared globs and
+    #: inside ``--landed``'s changed files, then recorded; `changed_paths` reports only
+    #: those. May be recorded alone later, against the range already on record.
+    landed_paths: list[str] | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -78,29 +83,44 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
 
     That sentence is the whole reason this function exists. Over argv the two collapse
     into one empty string, and the surface had to carry a `clearable` flag to tell them
-    apart — a distinction the type system expresses for free.
+     apart — a distinction the type system expresses for free.
     """
     log, cfg, st = _load(repo, agent)
-    it = st.items.get(item)
-    if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
-    fields = plan_edit(cfg, st, it, edit)
-    if isinstance(fields, O.Outcome):
-        if not (edit.landed is not None and fields.exit == O.NOTHING):
-            return fields
-        fields = {}
-    if edit.landed is not None:
-        # Checked against the globs this same edit leaves the item with.
-        landed = _landed_fields(
-            repo, cfg, replace(it, globs=fields.get("globs", it.globs)), edit.landed
-        )
-        if isinstance(landed, O.Outcome):
-            return landed
-        fields.update(landed)
-    if edit.worktree is not None:
-        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
-    return _record_update(log, cfg, it, fields, queue=edit.queue)
+    # Planned from a fold taken INSIDE the lock (B518cb79124): `plan_edit`'s coordination
+    # checks -- a line move for claimed or forked work, a parent move under a claimed
+    # item, a dependency cycle -- must judge the log as it is when the edit appends. A
+    # concurrent claim or move between the caller's snapshot and the append is refused
+    # here instead of recorded against a state that no longer is.
+    with log.transaction():
+        st = L._fold(log)
+        it = st.items.get(item)
+        if it is None or it.removed:
+            gone = " (it was removed from the queue)" if it is not None else ""
+            return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+        fields = plan_edit(cfg, st, it, edit)
+        if isinstance(fields, O.Outcome):
+            if not (
+                (edit.landed is not None or edit.landed_paths is not None)
+                and fields.exit == O.NOTHING
+            ):
+                return fields
+            fields = {}
+        if edit.landed is not None or edit.landed_paths is not None:
+            # Checked against the globs this same edit leaves the item with.
+            it2 = replace(it, globs=fields.get("globs", it.globs))
+        if edit.landed is not None:
+            landed = _landed_fields(repo, cfg, it2, edit.landed)
+            if isinstance(landed, O.Outcome):
+                return landed
+            fields.update(landed)
+        if edit.landed_paths is not None:
+            restriction = _landed_paths_fields(repo, cfg, it2, edit.landed_paths, fields)
+            if isinstance(restriction, O.Outcome):
+                return restriction
+            fields.update(restriction)
+        if edit.worktree is not None:
+            return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
+        return _record_update(log, cfg, it, fields, queue=edit.queue)
 
 
 def _landed_fields(repo: Path, cfg, it, spec: str) -> dict[str, Any] | O.Outcome:
@@ -115,6 +135,41 @@ def _landed_fields(repo: Path, cfg, it, spec: str) -> dict[str, Any] | O.Outcome
     if bad:
         return O.failed("item.updated", f"{it.id}: --landed {spec}: {bad}", id=it.id)
     return {"landed_before": got[0], "landed_after": got[1]}
+
+
+def _landed_paths_fields(
+    repo: Path, cfg, it, paths: list[str], fields: dict[str, Any]
+) -> dict[str, Any] | O.Outcome:
+    """``landed_paths`` for ``--landed-paths``, verified against the item's landed range --
+    the one ``--landed`` records in the same update, or the one already on record -- or the
+    refusal. Recordable AGAIN to correct a wrong restriction (re-verified the same way),
+    and cleared with an empty value (roborev: a one-way restriction poisons the
+    pipeline forever)."""
+    before = fields.get("landed_before") or it.landed_before
+    after = fields.get("landed_after") or it.landed_after
+    if not before or not after:
+        return O.refused(
+            "item.updated",
+            f"{it.id}: --landed-paths needs a landing to restrict: record one with "
+            "`ddflow update <id> --landed <sha>`, or pass both together",
+            id=it.id,
+        )
+    paths = [p for p in paths if p]
+    if not paths:
+        if not it.landed_paths:
+            return O.nothing("item.updated", f"{it.id} has no path restriction to clear", id=it.id)
+        # Empty = clear: a recorded restriction can always be taken back.
+        return {"landed_paths": []}
+    if paths == it.landed_paths:
+        return O.nothing(
+            "item.updated", f"{it.id} already restricts its landing to those paths", id=it.id
+        )
+    bad = LD.check_paths(repo, it, before, after, paths)
+    if bad:
+        return O.failed(
+            "item.updated", f"{it.id}: --landed-paths {', '.join(paths)}: {bad}", id=it.id
+        )
+    return {"landed_paths": paths}
 
 
 def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:

@@ -175,7 +175,7 @@ def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, 
 
     monkeypatch.setattr(CI, "_execute", execute)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))  # never the host-wide lock
-    for full in (False, True):
-        CI._run_locked(cfg(), tmp_path, "ref", tmp_path, "cmd", None, 60, None, {}, full)
+    for full, cmd in ((False, "cmd"), (True, CI.DEFAULT_COMMAND)):  # its verdict travels intact
+        CI._run_locked(cfg(), CI._holder(tmp_path, "ref"), tmp_path, cmd, None, 60, None, {}, full)
     assert [kw["holding_suite"] for kw in seen] == [False, True]
     assert all("local" not in kw for kw in seen)

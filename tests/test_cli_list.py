@@ -31,6 +31,17 @@ def test_list_is_a_command_and_matches_task_list(repo):
     assert json.loads(out) == json.loads(out2)
 
 
+def test_bare_list_lists_tasks_not_a_usage_error(repo):
+    """B3581842213: `ddflow list` alone must not die with 'required arguments: kind';
+
+    it lists tasks, exactly what `ddflow list task` shows."""
+    _seed(repo)
+    code, out, err = run_cli(repo, "list")
+    assert code == 0, (out, err)
+    code2, out2, _ = run_cli(repo, "list", "task")
+    assert code2 == 0 and out == out2
+
+
 def test_list_rows_carry_needs_and_globs(repo):
     _seed(repo)
     code, out, err = run_cli(repo, "list", "task", "--json")
@@ -63,3 +74,58 @@ def test_list_refusal_under_json_carries_a_body(repo):
     code, out, _ = run_cli(repo, "list", "task", "--item", "T1", "--json")
     body = json.loads(out)
     assert code == 3 and "--item" in body["reason"] and body["schema"] == "list@1"
+
+
+def _seed_bugs_severities(repo):
+    """Filing order monotone against severity: newest-first would reverse it, severity
+    order does not, so the two are told apart without knowing the minted ids."""
+    run_cli(repo, "init")
+    for summary, sev in (("boom crit", "critical"), ("boom mid", "medium"), ("boom none", "")):
+        args = ["bug", "found", "--summary", summary, "--no-task"]
+        if sev:
+            args += ["--severity", sev]
+        code, out, err = run_cli(repo, *args)
+        assert code == 0, (out, err)
+
+
+def test_bug_list_sort_severity_orders_severity_first(repo):
+    """`bug list --sort severity`: critical first. Without the flag the default order
+    stays newest-change-first, which this deliberately differs from."""
+    _seed_bugs_severities(repo)
+    code, out, err = run_cli(repo, "list", "bug", "--all", "--sort", "severity", "--json")
+    assert code == 0, (out, err)
+    rows = json.loads(out)["rows"]
+    assert [r["severity"] for r in rows] == ["critical", "medium", ""]
+    code2, out2, _ = run_cli(repo, "list", "bug", "--all", "--json")
+    assert code2 == 0
+    assert [r["severity"] for r in json.loads(out2)["rows"]] == ["", "medium", "critical"]
+
+
+def test_bug_list_sort_severity_edges_in_text(repo):
+    """The fix-task edge and its dependency edges are on the generic `list bug` line,
+    not only in the JSON rows (the modified `cmd_list`, not the `bug list` alias)."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "dep one")
+    run_cli(repo, "task", "add", "fix-B1", "--title", "fix carrier", "--needs", "T1")
+    code, out, err = run_cli(
+        repo,
+        "bug",
+        "found",
+        "--id",
+        "B1",
+        "--summary",
+        "bound broken",
+        "--severity",
+        "high",
+        "--item",
+        "fix-B1",
+    )
+    assert code == 0, (out, err)
+    code, out, _ = run_cli(repo, "list", "bug", "--all")
+    assert code == 0 and "fix fix-B1" in out and "needs: T1" in out and "high" in out
+
+
+def test_list_refuses_sort_for_kinds_that_do_not_take_it(repo):
+    _seed(repo)
+    code, _, err = run_cli(repo, "list", "task", "--sort", "severity")
+    assert code == 3 and "--sort" in err

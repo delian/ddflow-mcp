@@ -250,6 +250,7 @@ def _pins_regenerate(a, c: Ctx) -> int:
         verb=a.document,
         target=a.target or "",
         agent=c.requested_agent,
+        approval=getattr(a, "approval", "") or "",
         on_progress=lambda line: print(line, file=sys.stderr, flush=True),
     )
     if c.json:

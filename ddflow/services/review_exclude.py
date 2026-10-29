@@ -12,11 +12,34 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..config_sections.review import GENERATED_EXCLUDE_DEFAULTS
 from ..core import globs, unidiff
 from . import pins
 
 #: How many excluded paths the one-line summary names.
 NAMED = 5
+
+#: Canonical dependency-lock artifacts, matched like the generated defaults: the lockfile
+#: class the completion waiver recognizes (B-lockfile-only-item-cannot-complete). Kept
+#: apart from `GENERATED_EXCLUDE_DEFAULTS` -- these are what a lockfile-only change IS,
+#: not what `[review].exclude_globs` ships as its default, so recognizing them never
+#: changes what a default config leaves out of a review. `uv.lock` is NOT listed here:
+#: it lives in the shipped defaults, which `excluded_outright` unions with this list.
+LOCKFILES = [
+    "poetry.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+    "go.sum",
+    "Pipfile.lock",
+    "pdm.lock",
+    "Gemfile.lock",
+    "composer.lock",
+    "mix.lock",
+    "flake.lock",
+    "gradle.lockfile",
+]
 
 
 @dataclass
@@ -38,7 +61,11 @@ class Excluded:
         )
 
     def empty_note(self) -> str:
-        return f" after leaving out {len(self.files)} excluded file(s)" if self.files else ""
+        if not self.files:
+            return ""
+        names = ", ".join(p for p, _n in self.files[:NAMED])
+        more = f" and {len(self.files) - NAMED} more" if len(self.files) > NAMED else ""
+        return f" after leaving out {len(self.files)} excluded file(s): {names}{more}"
 
     def evidence(self) -> dict[str, Any]:
         return {
@@ -81,6 +108,30 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
 
+def excluded_outright(cfg: Any, repo: Path, paths: list[str]) -> bool:
+    """Is every path of ``paths`` (non-empty) the GENERATED class? -- the shipped
+    generated patterns (`GENERATED_EXCLUDE_DEFAULTS`: lockfiles, golden snapshots,
+    transcripts), a canonical dependency-lock artifact (`LOCKFILES`), or a file
+    `pins.toml` owns (regenerated, never read). A project's OWN exclusion pattern (a
+    privacy exclusion like `*.pem`) that swallows the whole diff is deliberately NOT the
+    class: hiding content from reviewers never waives the reviewer-independence rule. The
+    REVIEW RUN's own behavior (tag-scoped or ad-hoc exclusions the config does not carry)
+    is left to the reviewer-independence rule and the recorded gate outcomes -- this
+    predicate is only the class membership the completion waiver reads, guarded by
+    `reviewer_ran` (B-lockfile-only-item-cannot-complete)."""
+    if not paths:
+        return False
+    _pats, pinned = patterns(cfg, repo)
+    return all(
+        any(
+            globs.match(p, g, bare_any_depth=True)
+            for g in (*GENERATED_EXCLUDE_DEFAULTS, *LOCKFILES)
+        )
+        or _hit(p, [], pinned)
+        for p in paths
+    )
+
+
 def filter_diff(
     diff: str, pats: list[str], pinned: list[str] | None = None
 ) -> tuple[str, Excluded]:
@@ -105,7 +156,12 @@ def filter_diff(
 
 def apply(diff, cfg, repo, say, evidence, tags=None, exclude="", include_pinned=False):
     """(diff, evidence, gone): the diff reviewers get, the evidence with what was left out,
-    and the exclusions; one line says so when anything was."""
+    and the exclusions; one line says so when anything was.
+
+    The exclusion is NEVER relaxed to keep a review possible: a diff it empties entirely
+    is still dropped (its content may be a secret the project excluded, not noise), and
+    the caller records the review UNAVAILABLE naming the files (B-lockfile-only-item-
+    cannot-complete)."""
     if not diff.strip():
         return diff, evidence, Excluded()
     kept, gone = filter_diff(diff, *patterns(cfg, repo, tags, exclude, include_pinned))

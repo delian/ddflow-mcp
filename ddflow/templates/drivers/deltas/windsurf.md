@@ -6,8 +6,10 @@ Only the items below differ.
 1. **Now Devin Desktop.** Windsurf was acquired by Cognition and its documentation now
    redirects to Devin Desktop. The `devin` target covers the Devin CLI, which does have a
    project file; this delta covers the editor.
-2. **Iteration is operator-driven.** Cascade runs one request to completion. Print
-   `ddflow next` and `ddflow cadence` at the end of each turn.
+2. **Iteration.** Cascade runs one request to completion: keep going inside it —
+   claim, run the gates, merge — then re-read `ddflow next` for the next claim. At the
+   end of each turn print `ddflow next` and `ddflow cadence`; that print is the handoff
+   to the next request.
 3. **Subagents.** None with worktree isolation. Open a second window or run another agent
    in a terminal; ddflow's leases coordinate processes.
 4. **Asking the operator.** Ask in Cascade and stop.

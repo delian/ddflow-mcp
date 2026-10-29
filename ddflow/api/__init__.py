@@ -152,7 +152,7 @@ from .operations import (
     precommit,
     relevant_tests,
 )
-from .plan import plan_apply, plan_check, plan_confirm
+from .plan import plan_apply, plan_check, plan_confirm, plan_lint
 from .records import record_resource_listing, record_resource_read
 from .report import item_report, show_report
 from .reporting import (
@@ -316,6 +316,7 @@ __all__ = [
     "plan_apply",
     "plan_check",
     "plan_confirm",
+    "plan_lint",
     "pr_status",
     "pr_sync",
     "pr_threads",

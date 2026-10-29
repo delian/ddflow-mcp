@@ -231,6 +231,23 @@ def test_merge_into_a_branch_checked_out_elsewhere_is_refused(repo):
     assert not _git(wt_other, "status", "--porcelain")
 
 
+def test_merge_over_a_dirty_target_refuses_not_fails(repo):
+    """git refuses to merge over a locally-modified file that the merge would overwrite.
+    That is a dirty tree, not a judgement on the branch: the result is GIT_REFUSED with
+    attempted=False, so the merge gate does not record a failed merge (B90939a78dc)."""
+    cfg = Config()
+    _commit(repo, "f.py", "base\n", "feat: base f")
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "f.py", "branch\n", "feat: change f")
+    (repo / "f.py").write_text("local edit\n")  # the primary's f.py, uncommitted
+    r = W.merge(repo, cfg, wt, message="merge T1")
+    assert r.code == W.GIT_REFUSED, r.err
+    assert not r.attempted, "a dirty tree is not a failed merge of the branch"
+    assert "f.py" in (r.err or r.out)
+    assert "overwritten" in (r.err or r.out)
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+
+
 def test_trunk_version_cut_tags_and_counts_from_the_tag(repo):
     run_cli(repo, "init")
     _git(repo, "add", ".ddflow")
