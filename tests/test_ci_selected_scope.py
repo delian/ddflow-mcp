@@ -135,7 +135,9 @@ def test_a_comment_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(p
     assert "behaviour-neutral" in res.scope["why"], res.scope["why"]
     (call,) = _calls(stubs, "pytest")
     ran = sorted(t for t in call.split() if t.startswith("tests/"))
-    assert ran == ["tests/test_h1.py", "tests/test_h2.py"], call  # the worked files, never the whole `tests/` dir
+    assert ran == ["tests/test_h1.py", "tests/test_h2.py"], (
+        call
+    )  # the worked files, never the whole `tests/` dir
     assert _calls(stubs, "precommit") == ["SKIP=tests,scenarios"]
 
 
