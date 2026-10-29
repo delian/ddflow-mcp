@@ -34,6 +34,8 @@ from pathlib import Path
 from typing import Any, get_type_hints
 
 from ..core.registry import Registry
+from . import harnessv2
+from .harnessv2 import RESERVED_SECTIONS, V2_SECTIONS, DescriptorError, Reserved
 from .mcpconfig import (
     SHAPE_COPILOT,
     SHAPE_CORDIS_PATCH,
@@ -82,10 +84,6 @@ SHAPES = frozenset(
         SHAPE_NONE,
     }
 )
-
-
-class DescriptorError(ValueError):
-    """A descriptor that is malformed; the message names the file and the field."""
 
 
 @dataclass(frozen=True)
@@ -192,6 +190,15 @@ class Harness:
     subagents: Subagents | None = None
     env: Env | None = None
     worktrees: Worktrees | None = None
+    #: Descriptor v2 (harnessv2): None = NOT VERIFIED, ``none = true`` = documented absent.
+    detect: harnessv2.Detect | None = None
+    headless: harnessv2.Headless | None = None
+    continuation: harnessv2.Continuation | None = None
+    meters: harnessv2.Meters | None = None
+    caps: harnessv2.Caps | None = None
+    autonomy: harnessv2.Autonomy | None = None
+    telemetry: harnessv2.Telemetry | None = None
+    reserved: dict[str, Reserved] = field(default_factory=dict)  #: RESERVED_SECTIONS present
 
 
 def _check_type(value: Any, hint: Any, where: str) -> Any:
@@ -238,6 +245,7 @@ _SECTIONS: dict[str, type] = {
     "subagents": Subagents,
     "env": Env,
     "worktrees": Worktrees,
+    **V2_SECTIONS,
 }
 
 
@@ -285,7 +293,11 @@ def _validate(h: Harness, where: str) -> None:
         _validate_instructions(h.instructions, where)
     if h.hooks is not None:
         _validate_hooks(h.hooks, where)
-    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env"):
+    for rname, rsec in h.reserved.items():
+        if rsec.none == bool(rsec.values):  # both set, or neither
+            raise DescriptorError(f"{where}: [{rname}] needs exactly one of none = true or values")
+    harnessv2.validate({n: getattr(h, n) for n in V2_SECTIONS if getattr(h, n)}, where)
+    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env", *V2_SECTIONS):
         sec = getattr(h, name)
         if sec is None:
             continue
@@ -313,6 +325,11 @@ def parse(text: str, name: str) -> Harness:
     for key, cls in _SECTIONS.items():
         if key in raw:
             sections[key] = _build(cls, raw.pop(key), f"{where}[{key}]")
+    reserved = {
+        key: harnessv2.parse_reserved(raw.pop(key), f"{where}[{key}]")
+        for key in RESERVED_SECTIONS
+        if key in raw
+    }
     if raw:
         raise DescriptorError(f"{where}: unknown top-level key(s) {', '.join(sorted(raw))}")
     for key, want in (("id", str), ("rank", int), ("family", str), ("delta", str), ("title", str)):
@@ -321,7 +338,7 @@ def parse(text: str, name: str) -> Harness:
                 continue
             raise DescriptorError(f"{where}: missing top-level key {key!r}")
         _check_type(top[key], want, f"{where}.{key}")
-    h = Harness(**top, mcp=mcp, verified=verified, **sections)
+    h = Harness(**top, mcp=mcp, verified=verified, reserved=reserved, **sections)
     if h.id != name:
         raise DescriptorError(f"{where}: id {h.id!r} must equal the file name {name!r}")
     _validate(h, where)
