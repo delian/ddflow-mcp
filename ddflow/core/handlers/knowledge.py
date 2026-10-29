@@ -130,12 +130,16 @@ def _merge_sighted(bug, ev) -> None:
     if runs is None or failures is None:
         return  # a sighting missing a count is not a whole sighting (runs or failures);
         # folding runs alone would pair a run count with a stale failure count
+    if not isinstance(runs, (int, str)) or not isinstance(failures, (int, str)):
+        return  # a float count is not a whole count: fold nothing, never truncate 1.5 to 1
     try:
         new_runs = int(runs)
         new_failures = int(failures)
     except (TypeError, ValueError, OverflowError):
         return  # a persisted sighting whose counts cannot count folds nothing -- atomic:
         # a run count must not advance ahead of a failure count that could not count
+    if new_runs < 0 or new_failures < 0:
+        return  # a negative count folds nothing
     bug.repro_runs = new_runs
     bug.repro_failures = new_failures
 
