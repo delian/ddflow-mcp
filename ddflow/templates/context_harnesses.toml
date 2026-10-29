@@ -1,0 +1,93 @@
+# Per-harness context capabilities for the compaction advisor (CC-inventory).
+# Same fact shape as context_families.toml ({v, s, src, d, note?}; absent = left out).
+# One row per ddflow/harnesses/*.toml id; a row without facts is an explicit unknown.
+# Not here, by design: descriptors (harnesses/*.toml are not edited) and transcript usage
+# fields ([transcripts] stays with B-am-harness-probe). Window/threshold units differ per
+# client (tokens, ratio, percent): see docs/ddflow/research/compact-window-per-agent.md.
+# Clients in that note without a ddflow descriptor (Roo, Amp, Grok CLI, Pi) have no row.
+
+[meta]
+schema = 1
+
+[sources]
+window-note = { path = "docs/ddflow/research/compact-window-per-agent.md", note = "table of 2026-10-23 (vendor docs, source or local --help)" }
+token-note = { path = "docs/ddflow/research/agent-token-features.md", note = "TTL knobs, 2026-10-23" }
+claude-hooks = { url = "https://code.claude.com/docs/en/hooks" }
+codex-config = { url = "https://learn.chatgpt.com/docs/config-file/config-reference" }
+
+[harness.claude]
+compact_cmd = { v = "/compact", s = "documented", src = "claude-hooks", d = "2026-10-29", note = "also /autocompact" }
+window_knob = { v = "env CLAUDE_CODE_AUTO_COMPACT_WINDOW (tokens 100000-1000000)", s = "documented", src = "window-note", d = "2026-10-23", note = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (percent) lowers only" }
+ttl_env = { v = "CLAUDE_CODE_PROMPT_CACHE_TTL, CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL", s = "documented", src = "token-note", d = "2026-10-23", note = "5m or 1h; ENABLE_PROMPT_CACHING_1H, FORCE_PROMPT_CACHING_5M" }
+context_events = { v = ["SessionStart", "SubagentStart", "UserPromptSubmit", "UserPromptExpansion", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Stop", "SubagentStop", "PostModelSwitch"], s = "documented", src = "claude-hooks", d = "2026-10-29", note = "events whose additionalContext reaches the model; PreCompact and PostCompact are not among them" }
+subagent_hooks = { v = true, s = "documented", src = "claude-hooks", d = "2026-10-29", note = "settings hooks fire inside subagents; input carries agent_id and agent_type" }
+precompact_fields = { v = ["trigger", "custom_instructions"], s = "documented", src = "claude-hooks", d = "2026-10-29", note = "plus common fields; PreCompact can block (exit 2 or decision block)" }
+postcompact_fields = { v = ["trigger", "compact_summary"], s = "documented", src = "claude-hooks", d = "2026-10-29", note = "no decision control" }
+
+[harness.codex]
+window_knob = { v = "config model_auto_compact_token_limit (tokens; -c key=value)", s = "documented", src = "codex-config", d = "2026-10-29", note = "unset uses model defaults; compact_prompt overrides the compaction prompt" }
+
+[harness.copilot]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { s = "none", src = "window-note", d = "2026-10-23", note = "fixed: auto at about 80 percent, pause near 95" }
+
+[harness.cursor]
+note = "compaction threshold not found (looked 2026-10-23); only a maxMode switch"
+
+[harness.gemini]
+compact_cmd = { v = "/compress", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "settings model.compressionThreshold (fraction, default 0.5)", s = "documented", src = "window-note", d = "2026-10-23" }
+
+[harness.kimi]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "config loop_control.compaction_trigger_ratio (0.5-0.99, default 0.85)", s = "documented", src = "window-note", d = "2026-10-23", note = "reserved_context_size too; whichever fires first" }
+
+[harness.qwen]
+compact_cmd = { v = "/compress", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "settings context.autoCompactThreshold (0-1, default 0.85)", s = "documented", src = "window-note", d = "2026-10-23" }
+
+[harness.goose]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "env GOOSE_AUTO_COMPACT_THRESHOLD (0-1, default 0.8)", s = "documented", src = "window-note", d = "2026-10-23", note = "GOOSE_AUTO_COMPACT_TOKEN_LIMIT too; smaller of the two" }
+ttl_env = { v = "GOOSE_CACHE_TTL", s = "documented", src = "token-note", d = "2026-10-23", note = "Anthropic only; headless runs always 5m" }
+
+[harness.kilo]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "config compaction.threshold_percent (1-100); inline KILO_CONFIG_CONTENT", s = "documented", src = "window-note", d = "2026-10-23" }
+
+[harness.opencode]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "config compaction.reserved (tokens); inline OPENCODE_CONFIG_CONTENT", s = "documented", src = "window-note", d = "2026-10-23", note = "no percent threshold documented; a model without limit.context is never auto-compacted" }
+
+[harness.aider]
+window_knob = { s = "none", src = "window-note", d = "2026-10-23", note = "no whole-context compaction; chat history summarised above --max-chat-history-tokens" }
+
+[harness.cline]
+compact_cmd = { v = "/smol", s = "documented", src = "window-note", d = "2026-10-23" }
+window_knob = { v = "flag --compaction agentic|basic|off", s = "documented", src = "window-note", d = "2026-10-23", note = "mode only; threshold not found" }
+
+[harness.dsh]
+compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+
+[harness.windsurf]
+note = "nothing found 2026-10-23"
+
+# Rows with no facts: an explicit unknown, not an omission.
+[harness.antigravity]
+note = "unknown"
+[harness.cody]
+note = "unknown"
+[harness.devin]
+note = "unknown"
+[harness.glm]
+note = "unknown"
+[harness.openhands]
+note = "unknown; a condenser exists (research/openhands.md) but no knob was read"
+[harness.qodo]
+note = "unknown"
+[harness.replit]
+note = "unknown"
+[harness.tabnine]
+note = "unknown"
+[harness.vscode]
+note = "unknown; see copilot for the Copilot extension"
