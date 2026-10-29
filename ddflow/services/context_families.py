@@ -23,6 +23,7 @@ READABLE = ("verified", "documented")
 UNKNOWN = "unknown"
 #: Fallback for `[context].facts_max_age_days` until that knob is wired (CC-inventory-wire).
 DEFAULT_MAX_AGE_DAYS = 90
+_SHOWN = 5  # stale facts named in one doctor note
 _FILES = ("context_families.toml", "context_harnesses.toml")
 _TABLES = {"context_families.toml": "family", "context_harnesses.toml": "harness"}
 
@@ -68,7 +69,9 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
     rows = data["context_harnesses.toml"].get("harness", {})
     for hid in harness_ids or []:
         if hid not in rows:
-            problems.append(f"context_harnesses.toml: harness {hid!r} has no row (add one, even empty)")
+            problems.append(
+                f"context_harnesses.toml: harness {hid!r} has no row (add one, even empty)"
+            )
     if UNKNOWN not in data["context_families.toml"].get("family", {}):
         problems.append("context_families.toml: family 'unknown' is missing")
     return problems
@@ -88,7 +91,9 @@ def family_row(data: dict[str, dict[str, Any]], family: str) -> dict[str, Any]:
 
 
 def stale(
-    data: dict[str, dict[str, Any]], today: date | None = None, max_age_days: int = DEFAULT_MAX_AGE_DAYS
+    data: dict[str, dict[str, Any]],
+    today: date | None = None,
+    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
 ) -> list[str]:
     """`table.row.key (N days old)` for each fact older than `max_age_days`."""
     today = today or date.today()
@@ -109,5 +114,9 @@ def doctor_notes(max_age_days: int = DEFAULT_MAX_AGE_DAYS, today: date | None = 
     old = stale(load(), today, max_age_days)
     if not old:
         return []
-    shown = ", ".join(old[:5]) + (f" and {len(old) - 5} more" if len(old) > 5 else "")
-    return [f"context facts older than {max_age_days} days: {shown} (re-read the source, update `d`)"]
+    shown = ", ".join(old[:_SHOWN]) + (
+        f" and {len(old) - _SHOWN} more" if len(old) > _SHOWN else ""
+    )
+    return [
+        f"context facts older than {max_age_days} days: {shown} (re-read the source, update `d`)"
+    ]
