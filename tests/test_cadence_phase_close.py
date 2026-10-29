@@ -33,7 +33,20 @@ def _two_phases(repo):
     _ok(run_cli(repo, "init"))
     for p in ("P0", "P1"):
         _ok(run_cli(repo, "phase", "add", p, "--title", p))
-        _ok(run_cli(repo, "task", "add", f"{p}.T1", "--phase", p, "--globs", f"{p.lower()}/*"))
+        _ok(
+            run_cli(
+                repo,
+                "task",
+                "add",
+                f"{p}.T1",
+                "--title",
+                "task item",
+                "--phase",
+                p,
+                "--globs",
+                f"{p.lower()}/*",
+            )
+        )
     _ok(run_cli(repo, "claim", "P0.T1", "--no-worktree"))
     _ok(finish(repo, "P0.T1"))
     pass_pipeline(repo, "P0")
@@ -62,7 +75,9 @@ def test_a_recorded_skip_with_a_reason_clears_it(repo):
 
 def test_a_task_completion_never_asks_about_cadences(repo):
     _two_phases(repo)
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "z/*")
+    run_cli(
+        repo, "task", "add", "P1.T2", "--title", "P1.T2 fixture", "--phase", "P1", "--globs", "z/*"
+    )
     run_cli(repo, "claim", "P1.T2", "--no-worktree")
     assert finish(repo, "P1.T2")[0] == OK
 

@@ -89,7 +89,18 @@ def test_a_new_task_can_depend_on_the_one_being_worked(repo):
     _proj(repo)
     run_cli(repo, "claim", "P1.T1", "--no-worktree")
     run_cli(
-        repo, "task", "add", "P1.T2", "--phase", "P1", "--needs", "P1.T1", "--globs", "src/after/*"
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+        "--globs",
+        "src/after/*",
     )
     data = json.loads(run_cli(repo, "--json", "next", "--phase", "P1")[1])
     blocked = {b["item"]: b for b in data["blocked"]}
@@ -124,7 +135,18 @@ def test_sub_tasks_are_offered_by_the_scheduler(repo):
     """Filtering candidates on DIRECT parentage excluded them entirely: a task split
     into two left both halves unreachable while the queue looked empty."""
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     ready = [
         r["id"] for r in json.loads(run_cli(repo, "--json", "next", "--phase", "P1")[1])["ready"]
     ]
@@ -133,8 +155,30 @@ def test_sub_tasks_are_offered_by_the_scheduler(repo):
 
 def test_independent_sub_tasks_are_offered_together(repo):
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "P1.T1b", "--parent", "P1.T1", "--globs", "src/b.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1b",
+        "--title",
+        "P1.T1b fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/b.py",
+    )
     ready = sorted(
         r["id"] for r in json.loads(run_cli(repo, "--json", "next", "--phase", "P1")[1])["ready"]
     )
@@ -143,12 +187,25 @@ def test_independent_sub_tasks_are_offered_together(repo):
 
 def test_dependent_sub_tasks_serialise(repo):
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(
         repo,
         "task",
         "add",
         "P1.T1b",
+        "--title",
+        "P1.T1b fixture",
         "--parent",
         "P1.T1",
         "--globs",
@@ -164,7 +221,18 @@ def test_dependent_sub_tasks_serialise(repo):
 def test_a_parent_with_open_children_is_not_offered_as_ready(repo):
     """An umbrella is not something to claim — its children are."""
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     data = json.loads(run_cli(repo, "--json", "next", "--phase", "P1")[1])
     assert "P1.T1" not in [r["id"] for r in data["ready"]]
     umbrella = {b["item"]: b for b in data["blocked"]}["P1.T1"]
@@ -173,14 +241,36 @@ def test_a_parent_with_open_children_is_not_offered_as_ready(repo):
 
 def test_a_parent_cannot_complete_while_a_child_is_open(repo):
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     code, _, err = _finish(repo, "P1.T1")
     assert code == REFUSED and "sub-task(s) unfinished" in err and "P1.T1a" in err
 
 
 def test_a_parent_completes_once_its_children_do(repo):
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "claim", "P1.T1a", "--no-worktree")
     assert _finish(repo, "P1.T1a")[0] == OK
     # It closed itself with the last child, its gates rolled up (Bd37a921536): finishing it
@@ -192,7 +282,18 @@ def test_a_parent_completes_once_its_children_do(repo):
 
 def test_an_abandoned_child_does_not_hold_its_parent_open(repo):
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "abandon", "P1.T1a", "--reason", "not needed")
     assert _finish(repo, "P1.T1")[0] == OK
 
@@ -200,8 +301,30 @@ def test_an_abandoned_child_does_not_hold_its_parent_open(repo):
 def test_a_phase_counts_sub_tasks_nested_any_depth_below_it(repo):
     """Otherwise a phase closes while work three levels down is still open."""
     _proj(repo)
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "P1.T1a1", "--parent", "P1.T1a", "--globs", "src/a1.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "src/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a1",
+        "--title",
+        "P1.T1a1 fixture",
+        "--parent",
+        "P1.T1a",
+        "--globs",
+        "src/a1.py",
+    )
     for g in (
         "tasks",
         "unit_tests",
@@ -293,12 +416,32 @@ def test_giving_a_claimed_task_its_first_child_releases_its_lease(repo):
     two paths into the condition it guards.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/entry.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/entry.py",
+    )
     assert run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")[0] == OK
 
     code, out, err = run_cli(
-        repo, "task", "add", "P1.T1.a", "--parent", "P1.T1", "--globs", "core/entry.py"
+        repo,
+        "task",
+        "add",
+        "P1.T1.a",
+        "--title",
+        "P1.T1.a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "core/entry.py",
     )
     assert code == OK, err
     assert "umbrella" in out.lower(), f"and it must say what it did and why: {out}"
@@ -320,8 +463,19 @@ def test_adding_a_task_to_a_claimed_PHASE_does_not_release_the_phase(repo):
     they typed another task into the plan.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
     run_cli(repo, "claim", "P1", "--no-worktree", agent="alpha")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/a.py",
+    )
     shown = json.loads(run_cli(repo, "--json", "show", "P1")[1])
     assert shown["lease"], "a phase's claim survives its tasks being written"

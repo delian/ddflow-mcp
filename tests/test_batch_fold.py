@@ -11,8 +11,27 @@ from helpers import items_of as _items
 def _setup(repo):
     run_cli(repo, "init")
     for t in ("A", "B", "C"):
-        assert run_cli(repo, "task", "add", t, "--globs", f"{t}.py", "--body", f"body {t}")[0] == 0
-    assert run_cli(repo, "task", "add", "D", "--globs", "d.py", "--needs", "B")[0] == 0
+        assert (
+            run_cli(
+                repo,
+                "task",
+                "add",
+                t,
+                "--title",
+                "task item",
+                "--globs",
+                f"{t}.py",
+                "--body",
+                f"body {t}",
+            )[0]
+            == 0
+        )
+    assert (
+        run_cli(
+            repo, "task", "add", "D", "--title", "D fixture", "--globs", "d.py", "--needs", "B"
+        )[0]
+        == 0
+    )
 
 
 def _batch(repo, edits, *more):

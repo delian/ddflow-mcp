@@ -41,8 +41,8 @@ def _item(repo: Path, iid: str):
 def _setup(repo: Path) -> tuple[Server, Path]:
     run_cli(repo, "init")
     tree = _parent_tree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     return Server(repo, called_from=tree), tree
 
 

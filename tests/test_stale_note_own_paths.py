@@ -25,7 +25,7 @@ def adopted(repo: Path) -> Path:
     (repo / "a.py").write_text("a = 1\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     EventLog(repo, "agent-x").append(
         "gate.passed",
         "T1",

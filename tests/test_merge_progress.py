@@ -29,7 +29,7 @@ def _landing(repo, monkeypatch) -> None:
     (repo / "c.txt").write_text("base\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "c.txt")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "c.txt")
     code, out, err = run_cli(repo, "--json", "claim", "T1", agent="alpha")
     assert code == OK, out + err
     tree = Path(json.loads(out)["worktree"])

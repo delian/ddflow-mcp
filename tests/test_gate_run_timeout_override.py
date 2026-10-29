@@ -22,7 +22,7 @@ def _slow_gate(repo: Path, seconds: int = 3, limit: int = 1) -> None:
         f'[gate.unit_tests]\ncommand = "sleep {seconds}; echo done"\ncwd = "repo"\n'
         f"timeout_s = {limit}\n"
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree")
 
 

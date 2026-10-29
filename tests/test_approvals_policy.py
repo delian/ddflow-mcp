@@ -33,7 +33,7 @@ def _a_person(monkeypatch):
 @pytest.fixture
 def proj(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py")
     for _ in range(3):
         assert run_cli(repo, "gate", "record", "T1", "critic", "--outcome", "unavailable",
                        "--reason", "reviewer down")[0] == 0  # fmt: skip

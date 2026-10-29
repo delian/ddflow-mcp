@@ -41,7 +41,7 @@ def _lease_globs(repo: Path, item: str) -> list[str]:
 
 def test_a_repeated_globs_flag_claims_every_value_and_says_so(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     flags = [x for p in ("src/a.py", "src/b.py,src/c.py", "docs/d.md") for x in ("--globs", p)]
     code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", *flags, agent=HOLDER)
     assert code == O.OK, err
@@ -53,10 +53,14 @@ def test_a_repeated_globs_flag_claims_every_value_and_says_so(repo):
 
 def test_a_repeated_globs_flag_on_add_update_and_split_keeps_every_value(repo):
     run_cli(repo, "init")
-    code, _o, err = run_cli(repo, "task", "add", "T1", "--globs", "a.py", "--globs", "b.py")
+    code, _o, err = run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py", "--globs", "b.py"
+    )
     assert code == O.OK, err
     assert sorted(_items(repo)["T1"].globs) == ["a.py", "b.py"]
-    code, _o, err = run_cli(repo, "phase", "add", "P1", "--globs", "p.py", "--globs", "q.py")
+    code, _o, err = run_cli(
+        repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p.py", "--globs", "q.py"
+    )
     assert code == O.OK, err
     assert sorted(_items(repo)["P1"].globs) == ["p.py", "q.py"]
     code, _o, err = run_cli(repo, "update", "T1", "--globs", "c.py", "--globs", "d.py")
@@ -71,7 +75,7 @@ def test_a_repeated_globs_flag_on_add_update_and_split_keeps_every_value(repo):
 
 def test_a_json_array_is_read_whole_by_claim_and_update(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     raw = json.dumps(["src/speaker.py", "config/speaker.py"])
     out = A.claim(repo, "T1", globs=raw, no_worktree=True, agent=HOLDER)  # as MCP sends it
     assert out.ok, out.reason
@@ -83,7 +87,7 @@ def test_a_json_array_is_read_whole_by_claim_and_update(repo):
 
 def test_update_globs_names_what_it_dropped(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py,b.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     code, out, err = run_cli(repo, "update", "T1", "--globs", "b.py,c.py", agent=HOLDER)
     assert code == O.OK, err
@@ -96,7 +100,7 @@ def test_update_globs_names_what_it_dropped(repo):
 
 def test_show_prints_the_lease_globs(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert A.claim(repo, "T1", globs="a.py,z.py", no_worktree=True, agent=HOLDER).ok
     code, out, err = run_cli(repo, "show", "T1")
     assert code == O.OK, err
@@ -106,8 +110,8 @@ def test_show_prints_the_lease_globs(repo):
 
 def test_wait_judges_the_globs_the_claim_will_take(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "docs/RESEARCH.md")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "docs/RESEARCH.md")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/b.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=OTHER).ok
     out = A.wait(repo, item="T2", globs="src/b.py,docs/RESEARCH.md", timeout_s=0, agent=HOLDER)
     assert out.exit != O.OK, "READY, yet the claim with these globs is refused"
@@ -130,7 +134,7 @@ def test_a_revived_lease_catches_up_resources_and_keeps_a_claimed_override(repo,
     cfg.write_text(re.sub(r"(?m)^\[lease\]$", "[lease]\ngrace_s = 0", cfg.read_text(), count=1))
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "ddflow"], check=True)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
     code, out, err = run_cli(
         repo, "claim", "T1", "--no-worktree", "--resources", "gpu:1", agent=HOLDER
@@ -151,8 +155,8 @@ def test_the_mcp_wait_tool_takes_the_claims_globs(repo):
     from ddflow.surfaces.mcp import TOOLS
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "docs/RESEARCH.md")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "docs/RESEARCH.md")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/b.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=OTHER).ok
     args = {"item": "T2", "globs": '["src/b.py", "docs/RESEARCH.md"]', "timeout": 0}
     out = TOOLS["ddflow_wait"]["api"](repo, args, HOLDER)
@@ -161,7 +165,7 @@ def test_the_mcp_wait_tool_takes_the_claims_globs(repo):
 
 def test_a_comma_inside_a_json_array_glob_survives_update_as_it_does_claim(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     raw = json.dumps(["**/*.{py,pyi}"])
     code, _o, err = run_cli(repo, "update", "T1", "--globs", raw)
     assert code == O.OK, err
@@ -170,7 +174,7 @@ def test_a_comma_inside_a_json_array_glob_survives_update_as_it_does_claim(repo)
 
 def test_wait_refuses_globs_without_an_item(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     out = A.wait(repo, globs="a.py", timeout_s=0, agent=HOLDER)
     assert out.exit == O.FAIL and "item" in out.reason
 
@@ -179,7 +183,7 @@ def test_the_mcp_update_tool_reads_a_json_array_whole(repo):
     from ddflow.surfaces.mcp import TOOLS
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     out = TOOLS["ddflow_update"]["api"](repo, {"id": "T1", "globs": '["**/*.{py,pyi}"]'}, "")
     assert out.ok, out.reason
     assert _items(repo)["T1"].globs == ["**/*.{py,pyi}"]

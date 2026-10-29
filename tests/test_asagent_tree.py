@@ -117,7 +117,18 @@ def _work_there(repo: Path, tree: Path) -> str:
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
     before = {e.id for e in EventLog(repo).read_all()}
     p = subprocess.run(
-        [sys.executable, "-m", "ddflow", "task", "add", "PARENT", "--globs", "p.py"],
+        [
+            sys.executable,
+            "-m",
+            "ddflow",
+            "task",
+            "add",
+            "PARENT",
+            "--title",
+            "PARENT fixture",
+            "--globs",
+            "p.py",
+        ],
         cwd=tree,
         env=env,
         capture_output=True,
@@ -134,7 +145,7 @@ def _cli_setup(repo: Path) -> Path:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = _parent_tree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "b.py")
     return tree
 
 
@@ -174,7 +185,7 @@ def test_a_declared_parent_identity_still_owns_its_tree(repo):
     identity derived from its tree, so inference from the log called the tree nobody's.
     Its adoption (worktree.adopted, author = the declared identity) records the owner."""
     tree = _cli_setup(repo)
-    run_cli(repo, "task", "add", "T0", "--globs", "c.py")
+    run_cli(repo, "task", "add", "T0", "--title", "T0 fixture", "--globs", "c.py")
     code, out, err = run_cli(tree, "claim", "T0", agent="parent")
     assert code == OK, out + err
     assert _item(repo, "T0").adopted
@@ -200,7 +211,7 @@ def _cli_no_worktree(repo: Path) -> Path:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     tree = _parent_tree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "b.py")
     _work_there(repo, tree)
     code, out, err = run_cli(tree, "claim", "T1", "--no-worktree", agent="sub-1")
     assert code == OK, out + err

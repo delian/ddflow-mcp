@@ -531,7 +531,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     in the queue is REFUSED; ``readd`` lets a removed one come back. A phase that reads
     like an existing record is refused until ``answer`` says what it is (``_dedupe``).
     """
-    bad = IT.bad_id(item) or GS.problem(GS.parse(globs))
+    bad = IT.bad_id(item) or IT.bad_title(title) or GS.problem(GS.parse(globs))
     if bad:
         return O.failed("phase.added", bad, id=item)
     log, cfg, st = _load(repo, agent)
@@ -704,7 +704,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         resources=_csv_none_when_empty(resources),
         kind=_kind_field(kind),
     )
-    bad = IT.problem_of(base)
+    bad = IT.problem_of_add(base, title)
     if bad:
         return O.failed("task.added", bad, id=item)
     log, cfg, st = _load(repo, agent)

@@ -345,7 +345,7 @@ def test_stale_evidence_reports_a_same_file_re_edit(repo):
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "tracked.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "tracked.py")
     tracked = repo / "tracked.py"
     tracked.write_text("original\n")
     _run_git(repo, "add", "tracked.py")
@@ -402,7 +402,7 @@ def test_ddflows_OWN_bookkeeping_does_not_move_the_fingerprint(repo):
     from ddflow.services.gates import tree_fingerprint
 
     before = tree_fingerprint(repo)
-    run_cli(repo, "task", "add", "FPT1", "--globs", "fp.py")
+    run_cli(repo, "task", "add", "FPT1", "--title", "FPT1 fixture", "--globs", "fp.py")
     run_cli(repo, "lesson", "add", "--title", "wrote several events")
     assert tree_fingerprint(repo) == before, (
         "ddflow writing its own events changed the fingerprint of the project's source"
@@ -465,7 +465,7 @@ def test_completing_warns_when_a_passing_gate_ran_on_a_different_tree(repo):
         '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
     )
     run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree")
     assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == OK
     run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
@@ -483,7 +483,7 @@ def test_it_stays_quiet_when_nothing_moved(repo):
         '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
     )
     run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree")
     run_cli(repo, "gate", "run", "T1", "unit_tests")
     run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
@@ -527,7 +527,7 @@ def test_the_diff_stat_ignores_ddflows_own_events(repo):
     from ddflow.services.gates import diff_stat
 
     before = diff_stat(repo)
-    run_cli(repo, "task", "add", "DS1", "--globs", "ds.py")
+    run_cli(repo, "task", "add", "DS1", "--title", "DS1 fixture", "--globs", "ds.py")
     run_cli(repo, "lesson", "add", "--title", "several more events")
     assert diff_stat(repo) == before
 
@@ -557,7 +557,7 @@ def test_an_AGENT_gate_records_which_tree_and_how_much_too(repo):
     from ddflow.core.model import fold
     from ddflow.infra.log import EventLog
 
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     (repo / "a.py").write_text("a\nb\nc\nd\n")
     run_cli(
         repo,
@@ -585,7 +585,7 @@ def test_a_SKIP_records_no_magnitude(repo):
     from ddflow.core.model import fold
     from ddflow.infra.log import EventLog
 
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "gate", "skip", "T1", "rubber_duck", "--reason", "no code changed")
     ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["rubber_duck"].evidence
     assert "diff_stat" not in ev, ev
