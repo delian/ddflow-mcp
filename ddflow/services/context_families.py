@@ -89,8 +89,8 @@ def _fact_problems(name: str, doc: dict[str, Any]) -> list[str]:
     """Status, source, date and value rules for each fact of one file."""
     out = []
     sources = doc.get("sources", {})
-    sources = sources if isinstance(sources, dict) else {}
-    if "sources" in doc and not sources:
+    if not isinstance(sources, dict):
+        sources = {}
         out.append(f"{name}: sources is not a table")
     for table, row, key, f in facts(doc):  # facts() skips non-table rows (see _shape_problems)
         at = f"{name}: {table}.{row}.{key}"
@@ -119,7 +119,8 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
                 f"context_harnesses.toml: harness {hid!r} has no row (add one, even empty)"
             )
     unknown = family_row(data, UNKNOWN)
-    if not unknown and UNKNOWN not in data["context_families.toml"].get("family", {}):
+    family_rows = data["context_families.toml"].get("family", {})
+    if not unknown and not (isinstance(family_rows, dict) and UNKNOWN in family_rows):
         problems.append("context_families.toml: family 'unknown' is missing")
     elif not isinstance(unknown, dict):
         problems.append("context_families.toml: family 'unknown' is missing or not a table")
