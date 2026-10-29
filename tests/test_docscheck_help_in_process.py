@@ -61,6 +61,33 @@ def test_the_in_process_help_flags_match_the_spawned_walk():
         ), chain
 
 
+def test_a_parser_built_before_an_in_process_run():
+    """A factory bound while the parser cache is already warm is the factory that
+    answers: re-binding must discard the cached parser a PREVIOUS factory built, or a
+    monkeypatched registry silently keeps answering from the old one (critic #1:
+    `bind_parser_factory` left `_parser[0]` stale, so the new factory was ignored)."""
+    first, second = [], []
+
+    def f1():
+        first.append(1)
+        from ddflow.surfaces.cli import build_parser  # the real build: nothing fake to fake
+
+        return build_parser()
+
+    def f2():
+        second.append(1)
+        from ddflow.surfaces.cli import build_parser
+
+        return build_parser()
+
+    H.bind_parser_factory(f1)
+    assert H.in_process(["gate"]).ran
+    assert first and not second  # warm: the first factory built and answered
+    H.bind_parser_factory(f2)
+    H.in_process(["gate"])
+    assert second, "a re-bound factory must rebuild instead of answering from the old parser"
+
+
 def test_every_way_of_spelling_this_ddflow_is_replayed_not_spawned(monkeypatch):
     spawned_calls = []
 
