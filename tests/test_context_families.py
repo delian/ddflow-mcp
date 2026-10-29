@@ -146,3 +146,22 @@ def test_validate_reports_a_missing_unknown_row_and_a_non_table_family():
     assert any("'unknown' is missing" in p for p in gone)
     bad = CF.validate({"context_families.toml": {"family": "x", "sources": {}}, **base})
     assert any("family is not a table" in p for p in bad)
+
+
+def test_facts_of_both_tables_are_validated_and_sources_must_be_a_table():
+    doc = {
+        "family": {"unknown": {}},
+        "harness": {"h": {"k": {"v": 1, "s": "bogus", "src": "x", "d": "2026-01-01"}}},
+    }
+    assert len(CF.facts(doc)) == 1
+    base = {"context_harnesses.toml": {"harness": {}}}
+    bad = {
+        "context_families.toml": {
+            "family": {
+                "unknown": {"a": {"v": 1, "s": "documented", "src": "x", "d": "2026-01-01"}}
+            },
+            "sources": "x",
+        },
+        **base,
+    }
+    assert any("sources is not a table" in p for p in CF.validate(bad))
