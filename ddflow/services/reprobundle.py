@@ -74,29 +74,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         # told ddflow to run is the record of what was filed (never silently replaced).
         # `executed` defaults in either branch: a check without the key means the run
         # happened, no check means it was recorded as given.
-        check_dict = dict(check) if check is not None else {}
-        # An UNAVAILABLE or no-run check never really executed: executed defaults True
-        # only for a record that carries a real yes/no with runs behind it.
-        r = _countable(check_dict["runs"]) if "runs" in check_dict else 0
-        real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
-        canonical = {
-            "executed": real,
-            "reproduced": check_dict.get("reproduced") if real else None,
-            "runs": r,
-            "failures": _countable(check_dict["failures"])
-            if real and "failures" in check_dict
-            else (0 if real else None),
-        }
-        extra = {
-            k: v
-            for k, v in check_dict.items()
-            if k not in ("executed", "reproduced", "runs", "failures")
-        }
-        out["repro_cmd"] = {
-            **extra,
-            **canonical,
-            "command": repro_cmd,  # the filed command wins any key the check carried
-        }
+        out["repro_cmd"] = _canonical_cmd(repro_cmd, check)
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
         out["machine"] = machine if machine is not None else F.machine(repo)
@@ -142,6 +120,35 @@ def _shrink(node: Any) -> bool:
             del node[last]
         return True
     return False
+
+
+def _canonical_cmd(repro_cmd: str, check: dict[str, Any] | None) -> dict[str, Any]:
+    """The recorded ``repro_cmd`` section: the filed command (last, wins any key), the
+    evidence keys a check carried, and the four measurement keys CANONICAL: executed True
+    only for a record with a real yes/no verdict and a whole runs count behind it, and a
+    non-real run records no verdict and no failure count -- a no-run check cannot ride
+    out carrying a 'yes'."""
+    check_dict = dict(check) if check is not None else {}
+    r = _countable(check_dict["runs"]) if "runs" in check_dict else 0
+    real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
+    canonical = {
+        "executed": real,
+        "reproduced": check_dict.get("reproduced") if real else None,
+        "runs": r,
+        "failures": _countable(check_dict["failures"])
+        if real and "failures" in check_dict
+        else (0 if real else None),
+    }
+    extra = {
+        k: v
+        for k, v in check_dict.items()
+        if k not in ("executed", "reproduced", "runs", "failures")
+    }
+    return {
+        **extra,
+        **canonical,
+        "command": repro_cmd,
+    }
 
 
 def _cap(bundle: dict[str, Any], limit: int) -> dict[str, Any]:
