@@ -81,11 +81,11 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
         canonical = {
             "executed": real,
-            "reproduced": check_dict.get("reproduced")
-            if check_dict.get("reproduced") in ("yes", "no")
-            else None,
+            "reproduced": check_dict.get("reproduced") if real else None,
             "runs": r,
-            "failures": _countable(check_dict["failures"]) if "failures" in check_dict else 0,
+            "failures": _countable(check_dict["failures"])
+            if real and "failures" in check_dict
+            else (0 if real else None),
         }
         extra = {
             k: v
@@ -268,7 +268,7 @@ def _countable(value: Any) -> int | None:
         n = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if math.isnan(n) or n < 0 or not n.is_integer():
+    if not math.isfinite(n) or n < 0 or not n.is_integer():
         return None
     return int(n)
 
