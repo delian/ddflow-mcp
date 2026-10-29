@@ -91,41 +91,28 @@ def is_test_file(path: str) -> bool:
     return bool(_TEST_FILE.search(path))
 
 
-def _import_sig(node: ast.AST) -> str:
-    """A position- and order-free signature of one import statement: the names inside a
-    `from … import …` are sorted, so an isort reorder ({from . import a, b} ↔ {from . import b,
-    a}) is one signature, and the caller sorts the statement list, so reordered statements are
-    one list. A name's order cannot change what Python binds, only the order it binds it in."""
-    names = repr(sorted((a.name, a.asname) for a in node.names))
-    if isinstance(node, ast.Import):
-        return f"Import({names})"
-    return f"ImportFrom(module={node.module!r}, level={node.level!r}, names={names})"
-
-
 def _signature(source: str) -> str | None:
-    """A string equal for two sources that differ only in import ORDERING, whitespace or
-    comments — changes pytest's outcome cannot observe. ``None`` when the source cannot be
-    parsed (never "neutral" on a parse failure: what could not be read stays uncharted)."""
+    """The whole module AST with positions stripped: comments, blank lines and whitespace are
+    already gone, so two sources share a signature exactly when they differ ONLY in those — a
+    format/comment change pytest's runtime cannot observe. Import statements are part of the
+    body like any other: reordering two imports is a DIFFERENT signature, because Python runs
+    them in order and an import's side effect (a star import, a registration, a circular
+    import) is observable (roborev finding on bug B0bdd3b9a39). ``None`` when the source
+    cannot be parsed ("neutral" is never claimed on a parse failure: what could not be read
+    stays uncharted)."""
     try:
         mod = ast.parse(source)
     except (SyntaxError, ValueError, TypeError):
         return None
-    imports = sorted(
-        _import_sig(n) for n in mod.body if isinstance(n, (ast.Import, ast.ImportFrom))
-    )
-    rest = [
-        ast.dump(n, include_attributes=False)
-        for n in mod.body
-        if not isinstance(n, (ast.Import, ast.ImportFrom))
-    ]
-    return repr((imports, rest))
+    return ast.dump(mod, include_attributes=False)
 
 
 def behaviour_neutral(tree: Path, base: str, changed: list[str]) -> bool:
-    """Whether every changed ``.py`` file differs from ``base`` only in import ordering,
-    whitespace or comments (a lint/format fix). No test can fail on such a change, so the
-    whole-suite fallback for a changed hub is needless (bug B0bdd3b9a39). Non-Python changes
-    are not judged — they are not what puts a hub on the whole-suite path."""
+    """Whether every changed ``.py`` file differs from ``base`` only in whitespace or comments
+    (a format/comment-only fix). No test can fail on such a change, so the whole-suite fallback
+    for a changed hub is needless (bug B0bdd3b9a39). An import REORDER is not neutral: imports
+    are run in order and their side effects are observable. Non-Python changes are not judged —
+    they are not what puts a hub on the whole-suite path."""
     py = [c for c in changed if c.endswith(".py")]
     if not py:
         return False
