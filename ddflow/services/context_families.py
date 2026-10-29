@@ -19,7 +19,7 @@ from typing import Any
 from ..core import clock
 from ..infra import paths
 
-FACT_KEYS = ("v", "s", "src", "d", "note", "exc")
+FACT_KEYS = ("v", "s", "src", "d", "note", "exc", "only")
 STATUSES = ("verified", "documented", "unverified", "none")
 READABLE = ("verified", "documented")
 UNKNOWN = "unknown"
@@ -41,7 +41,8 @@ def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     """Every `(table, row, key, fact)` of one parsed file."""
     out = []
     table = "family" if "family" in doc else "harness"
-    for row, body in sorted(doc.get(table, {}).items()):
+    rows = doc.get(table, {})
+    for row, body in sorted(rows.items() if isinstance(rows, dict) else []):
         if not isinstance(body, dict):
             continue
         for key, node in sorted(body.items()):
@@ -50,11 +51,28 @@ def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     return out
 
 
+def _field_problems(at: str, f: dict[str, Any]) -> list[str]:
+    """Unknown fields and wrong types of `exc` / `only`; empty keys would match every model."""
+    out = []
+    if set(f) - set(FACT_KEYS):
+        out.append(f"{at} has unknown field(s) {sorted(set(f) - set(FACT_KEYS))}")
+    exc, only = f.get("exc", {}), f.get("only", [])
+    if not isinstance(exc, dict) or not all(k for k in exc):
+        out.append(f"{at}: exc must be a table of non-empty model substrings")
+    if not isinstance(only, list) or not all(isinstance(k, str) and k for k in only):
+        out.append(f"{at}: only must be a list of non-empty model substrings")
+    return out
+
+
 def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
     """Row entries that are not facts (silently ignored otherwise) or carry unknown fields."""
     out = []
     for table in ("family", "harness"):
-        for row, body in doc.get(table, {}).items():
+        rows = doc.get(table, {})
+        if not isinstance(rows, dict):
+            out.append(f"{name}: {table} is not a table")
+            continue
+        for row, body in rows.items():
             if not isinstance(body, dict):
                 out.append(f"{name}: {table}.{row} is not a table")
                 continue
@@ -62,8 +80,8 @@ def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
                 at = f"{name}: {table}.{row}.{key}"
                 if key != "note" and not is_fact(node):
                     out.append(f"{at} is not a fact (no `s`) and would be ignored")
-                elif is_fact(node) and set(node) - set(FACT_KEYS):
-                    out.append(f"{at} has unknown field(s) {sorted(set(node) - set(FACT_KEYS))}")
+                elif is_fact(node):
+                    out += _field_problems(at, node)
     return out
 
 
@@ -96,9 +114,10 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
             problems.append(
                 f"context_harnesses.toml: harness {hid!r} has no row (add one, even empty)"
             )
-    if UNKNOWN not in data["context_families.toml"].get("family", {}):
-        problems.append("context_families.toml: family 'unknown' is missing")
-    elif any(is_fact(v) for v in family_row(data, UNKNOWN).values()):
+    unknown = data["context_families.toml"].get("family", {}).get(UNKNOWN)
+    if not isinstance(unknown, dict):
+        problems.append("context_families.toml: family 'unknown' is missing or not a table")
+    elif any(is_fact(v) for v in unknown.values()):
         problems.append(
             "context_families.toml: family 'unknown' must have no facts (no neighbour borrowing)"
         )
@@ -108,10 +127,13 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
 def usable(fact: dict[str, Any] | None, model: str = "") -> Any:
     """The fact's value if it may be believed, else None.
 
-    With `model`, the fact's `exc` applies: the longest key found in the model name wins."""
+    `only` scopes the fact to models whose name contains one of its substrings (no model
+    name, or no match: not usable). `exc` then overrides `v` for the longest matching key."""
     if not is_fact(fact) or fact["s"] not in READABLE:
         return None
-    hits = [k for k in fact.get("exc", {}) if model and k in model]
+    if "only" in fact and not any(k and k in model for k in fact["only"]):
+        return None
+    hits = [k for k in fact.get("exc", {}) if k and k in model]
     return fact["exc"][max(hits, key=len)] if hits else fact.get("v")
 
 

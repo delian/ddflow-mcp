@@ -5,6 +5,8 @@
 #   s = verified (we ran a probe) | documented (vendor docs/source read) | unverified (a claim
 #       we could not confirm; `v` is kept only as a lead and is NEVER read as true) | none
 #       (the source documents the thing is absent; `v` ignored).
+#   only = [model-name substrings]: the fact holds for those models alone (a scoped fact read
+#   without a matching model name is not usable);
 #   exc = {model-name substring = value} for models that differ from v (longest substring wins);
 #   per-model detail beyond that belongs to DRV-model-catalog.
 #   A fact that is not listed is "left out": nothing is known, nothing is assumed.
@@ -34,16 +36,16 @@ cache_kind = { v = "explicit", s = "documented", src = "cache-note", d = "2026-1
 ttl = { v = ["5m", "1h"], s = "documented", src = "cache-note", d = "2026-10-23" }
 read_mult = { v = 0.1, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5.5" = 0.05, "opus-5.5" = 0.05 }, note = "0.05 on Sonnet 5.5 and Opus 5.5" }
 write_mult = { v = { "5m" = 1.25, "1h" = 2.0 }, s = "documented", src = "cache-note", d = "2026-10-23" }
-min_tokens = { v = 512, s = "documented", src = "cache-note", d = "2026-10-23", note = "Sonnet/Opus/Haiku 5.5; 1024-4096 on older models" }
-window = { v = 1000000, s = "documented", src = "cache-note", d = "2026-10-23", note = "1M on Sonnet 5+, Haiku 5.5, Fable; older models 200K" }
+min_tokens = { v = 4096, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5.5" = 512, "opus-5.5" = 512, "haiku-5.5" = 512 }, note = "512 on Sonnet/Opus/Haiku 5.5; 1024-4096 on older models (4096 is the safe upper bound). Substring keys are guesses at model ids" }
+window = { v = 200000, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5" = 1000000, "haiku-5.5" = 1000000, "fable" = 1000000 }, note = "1M on Sonnet 5+, Haiku 5.5, Fable; older models 200K. Substring keys are guesses at model ids" }
 compaction_kind = { v = "client_summary", s = "documented", src = "claude-hooks", d = "2026-10-29", note = "Claude Code summarises the conversation; PreCompact/PostCompact hooks exist" }
 
 [family.openai]
 cache_kind = { v = "automatic", s = "documented", src = "openai-cache", d = "2026-10-29" }
-ttl = { v = ["30m", "12h"], s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+: prompt_cache_options.ttl, default 30m. Earlier: prompt_cache_retention in_memory (5-10 min, up to 1 h) or 24h; GPT-5.5 24h only" }
-read_mult = { v = 0.1, s = "documented", src = "openai-cache", d = "2026-10-29", exc = { "gpt-6.1-sol" = 0.05, "gpt-6.1-terra" = 0.05 }, note = "GPT-5.6+; 0.05 on GPT-6.1 Sol and Terra. Earlier models: model-dependent, multiplier not stated" }
-write_mult = { v = { "30m" = 1.25, "12h" = 2.5 }, s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+ only; earlier models have no write fee (cache-note, 2026-10-23)" }
-min_tokens = { v = 1024, s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+ visible input tokens; earlier models: no fixed number stated" }
+ttl = { v = ["30m", "12h"], s = "documented", src = "openai-cache", d = "2026-10-29", only = ["gpt-5.6", "gpt-6"], note = "GPT-5.6+: prompt_cache_options.ttl, default 30m. Earlier: prompt_cache_retention in_memory (5-10 min, up to 1 h) or 24h; GPT-5.5 24h only" }
+read_mult = { v = 0.1, s = "documented", src = "openai-cache", d = "2026-10-29", only = ["gpt-5.6", "gpt-6"], exc = { "gpt-6.1-sol" = 0.05, "gpt-6.1-terra" = 0.05 }, note = "GPT-5.6+; 0.05 on GPT-6.1 Sol and Terra. Earlier models: model-dependent, multiplier not stated" }
+write_mult = { v = { "30m" = 1.25, "12h" = 2.5 }, s = "documented", src = "openai-cache", d = "2026-10-29", only = ["gpt-5.6", "gpt-6"], note = "GPT-5.6+ only; earlier models have no write fee (cache-note, 2026-10-23)" }
+min_tokens = { v = 1024, s = "documented", src = "openai-cache", d = "2026-10-29", only = ["gpt-5.6", "gpt-6"], note = "GPT-5.6+ visible input tokens; earlier models: no fixed number stated" }
 window = { v = 1000000, s = "unverified", src = "cache-note", d = "2026-10-23", note = "'up to ~1M (GPT-5.5)' from a blog; not read in vendor docs" }
 compaction_kind = { v = "server_opaque", s = "documented", src = "cache-note", d = "2026-10-23", note = "encrypted compaction item ddflow cannot read; Codex also keeps its own summary (unverified)" }
 
@@ -65,7 +67,7 @@ cache_kind = { v = "automatic", s = "documented", src = "kimi-pricing", d = "202
 ttl = { v = ["5m", "1h"], s = "documented", src = "kimi-pricing", d = "2026-10-29", note = "default 5 min; K3 models bill writes by TTL (5m or 1h)" }
 read_mult = { s = "unverified", src = "kimi-pricing", d = "2026-10-29", note = "the price table did not load; ratio not known" }
 write_mult = { s = "unverified", src = "kimi-pricing", d = "2026-10-29", note = "page says K3 bills writes by TTL AND that cached input is billed only at the hit price with no extra write charge: contradictory, probe the price table" }
-window = { v = 1048576, s = "documented", src = "kimi-pricing", d = "2026-10-29", note = "K3 series; K2 series 262144 (K2 closed to new users 2026-10-31, retirement planned end of 2026-12)" }
+window = { v = 1048576, s = "documented", src = "kimi-pricing", d = "2026-10-29", exc = { "k2" = 262144 }, note = "K3 series; K2 series 262144 (K2 closed to new users 2026-10-31, retirement planned end of 2026-12)" }
 
 [family.qwen]
 cache_kind = { v = "explicit", s = "documented", src = "cache-note", d = "2026-10-23", note = "Model Studio: explicit cache_control (5 min TTL, create 1.25x, hit 0.1x) or implicit (create 1.0x, hit ~0.2x, TTL indeterminate); applies via Alibaba Model Studio only" }
@@ -81,7 +83,7 @@ min_tokens = { v = 512, s = "documented", src = "cache-note", d = "2026-10-23", 
 [family.local]
 # Self-hosted endpoints (vLLM, llama.cpp, Ollama...). The model behind one is of any other
 # family; caching belongs to the SERVER and its flags, not to the model; only vLLM was read.
-cache_kind = { v = "automatic", s = "documented", src = "vllm-apc", d = "2026-10-29", note = "vLLM ONLY, once enabled: automatic prefix caching: reuses KV for matching prefixes, cuts prefill time only; the page states no default (enable_prefix_caching=True enables it) and no TTL. llama.cpp and Ollama: not read" }
+cache_kind = { v = "automatic", s = "unverified", src = "vllm-apc", d = "2026-10-29", note = "lead only: vLLM APC is automatic once enabled, but depends on the server and its flag (page states no default); llama.cpp and Ollama not read. Automatic prefix caching: reuses KV for matching prefixes, cuts prefill time only; the page states no default (enable_prefix_caching=True enables it) and no TTL. llama.cpp and Ollama: not read" }
 
 [family.unknown]
 note = "A model that matches no family has no facts. Never resolved by neighbour."

@@ -112,3 +112,28 @@ def test_a_row_that_is_not_a_table_is_reported_not_a_crash():
     data = CF.load()
     data["context_families.toml"]["family"]["claude"] = "explicit"
     assert any("claude is not a table" in p for p in CF.validate(data))
+
+
+def test_scoped_and_older_model_values():
+    fam = CF.load()["context_families.toml"]["family"]
+    assert CF.usable(fam["openai"]["write_mult"]) is None  # scoped to 5.6+: needs a model name
+    assert CF.usable(fam["openai"]["write_mult"], "gpt-4o") is None
+    assert CF.usable(fam["openai"]["write_mult"], "gpt-5.6-mini") == {"30m": 1.25, "12h": 2.5}
+    assert CF.usable(fam["claude"]["window"], "claude-3-5-sonnet") == 200000
+    assert CF.usable(fam["claude"]["window"], "claude-sonnet-5.5") == 1000000
+    assert CF.usable(fam["claude"]["min_tokens"], "claude-opus-5.5") == 512
+    assert CF.usable(fam["kimi"]["window"], "kimi-k2") == 262144
+    assert CF.usable(fam["local"]["cache_kind"], "llama3") is None  # a lead, not a fact
+
+
+def test_validate_survives_malformed_tables_and_bad_exceptions():
+    data = CF.load()
+    data["context_families.toml"]["family"]["unknown"] = "x"
+    assert any("unknown" in p for p in CF.validate(data))
+    data = CF.load()
+    data["context_harnesses.toml"]["harness"] = "oops"
+    assert any("harness is not a table" in p for p in CF.validate(data))
+    data = CF.load()
+    data["context_families.toml"]["family"]["claude"]["ttl"]["exc"] = {"": "x"}
+    data["context_families.toml"]["family"]["claude"]["window"]["exc"] = ["sonnet"]
+    assert len([p for p in CF.validate(data) if "exc must be" in p]) == 2
