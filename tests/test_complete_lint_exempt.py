@@ -11,6 +11,7 @@ from conftest import pass_pipeline, run_cli
 from helpers import state_as_reader as state
 
 from ddflow.api import lifecycle as LC
+from ddflow.infra.log import EventLog
 
 LINT = "merge CI check failed: ruff format --check (CI: Lint)"
 
@@ -29,12 +30,14 @@ def test_complete_closes_a_lint_bug_with_lint_exempt(repo):
     assert out.exit == 0, out.reason
     assert out.data["bugs_closed"] == ["Bci-ruff-1"]
     assert state(repo).bugs["Bci-ruff-1"].resolution == "fixed"
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verify"]["reason"] == "formatted"
 
 
 def test_complete_refuses_lint_exempt_for_a_non_lint_bug(repo):
     item = _seed(repo, "Bplain", "an ordinary bug")
     out = LC.complete(repo, item, model="claude-opus-5", lint_exempt="x", agent="a")
-    assert out.exit == 3, out.reason
+    assert out.exit == 3 and "--lint-exempt" in out.reason, out.reason
     assert state(repo).bugs["Bplain"].open
 
 

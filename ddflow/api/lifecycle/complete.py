@@ -287,11 +287,16 @@ def _close_bugs(
     repo, item, pending, closed, tests, mutation, lint_exempt, agent
 ) -> O.Outcome | None:
     """Close each pending bug through `bug_fixed` (the same refusals); the failure, else None."""
+    flag = (
+        "--lint-exempt"
+        if lint_exempt.strip() and not any(t.strip() for t in tests)
+        else "--regression-test"
+    )
     for bid in pending:
         out = bug_fixed(
             repo,
             bid,
-            regression_test=tests,
+            regression_test=[t for t in tests if t.strip()],
             mutation=mutation,
             lint_exempt=lint_exempt,
             agent=agent,
@@ -301,7 +306,7 @@ def _close_bugs(
                 kind="item.completed",
                 data={"id": item, "bug": bid, "bugs_closed": closed},
                 exit=out.exit,
-                reason=f"--regression-test: bug {bid} not closed: {out.reason}",
+                reason=f"{flag}: bug {bid} not closed: {out.reason}",
             )
         closed.append(bid)
     return None
