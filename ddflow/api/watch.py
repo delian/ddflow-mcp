@@ -98,6 +98,24 @@ def _refuse_elsewhere(st, t: W.Target) -> O.Outcome | None:
     return None
 
 
+def _sane(timeout: float, poll: float) -> bool:
+    return math.isfinite(timeout) and math.isfinite(poll) and timeout >= 0 and poll > 0
+
+
+def _report(
+    t: W.Target, started: float, missed: list[str], extra: dict[str, Any]
+) -> dict[str, Any]:
+    """The wire body of a finished or timed-out watch."""
+    return {
+        "watching": t.kind,
+        "target": t.job or t.file or t.gate or t.pid,
+        "waited_s": round(time.monotonic() - started),
+        "token": W.encode(t),
+        "unrenewed": missed,
+        **extra,
+    }
+
+
 def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
     repo: Path,
     *,
@@ -124,7 +142,7 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
         return O.failed("watch", bad)
     timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
     poll = WT.POLL_S if poll_s is None else float(poll_s)
-    if not (math.isfinite(timeout) and math.isfinite(poll)) or timeout < 0 or poll <= 0:
+    if not _sane(timeout, poll):
         return O.failed(
             "watch", "timeout must be a finite number >= 0 and poll a finite number > 0 seconds"
         )
@@ -141,14 +159,7 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
     deadline = started + min(timeout, float(WAIT_MAX_S))
 
     def done(extra: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "watching": t.kind,
-            "target": t.job or t.file or t.gate or t.pid,
-            "waited_s": round(time.monotonic() - started),
-            "token": W.encode(t),
-            "unrenewed": missed,
-            **extra,
-        }
+        return _report(t, started, missed, extra)
 
     seen_mark, checked = None, started
     renew()  # a lease close to expiry is renewed before the first sleep, not after it
