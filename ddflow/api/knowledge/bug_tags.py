@@ -67,7 +67,8 @@ def set_tags(repo: Path, bug: str, tags: list[str], *, agent: str = "") -> O.Out
     refused = _refusal(bug, tags)
     if refused is not None:  # an Outcome is falsy when it is not ok: test for None
         return refused
-    return _apply(repo, bug, lambda _held: tags, agent=agent)
+    # the derived wave:* tags the bug holds stay: only the scheduler rewrites them
+    return _apply(repo, bug, lambda held: [*reserved(held), *tags], agent=agent)
 
 
 def bug_tag(
@@ -83,7 +84,7 @@ def bug_tag(
     add_l, rem_l = GS.parse(add), GS.parse(remove)
     if not add_l and not rem_l:
         return O.failed("bug.tagged", "give --add and/or --remove: there is nothing to change.")
-    refused = _refusal(bug, add_l)
+    refused = _refusal(bug, [*add_l, *rem_l])
     if refused is not None:
         return refused
     return _apply(
