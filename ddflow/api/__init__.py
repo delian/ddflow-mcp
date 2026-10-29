@@ -94,6 +94,8 @@ from .items import (
     update,
 )
 from .jobs import job_add, job_end, job_list, job_run
+from .watch import watch as watch_target
+from .watch import watch_summary
 from .knowledge import (
     Finding as ResearchFinding,
 )
@@ -386,6 +388,8 @@ __all__ = [
     "view_list",
     "view_read",
     "wait_item",
+    "watch_target",
+    "watch_summary",
     "workflow_drop",
     "workflow_gate",
     "workflow_overview",

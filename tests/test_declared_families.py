@@ -64,7 +64,7 @@ def test_alias_table_is_generated_and_covers_every_non_hot_tool():
     assert table["ddflow_gate_record"] == ("ddflow_gate", "record")
     assert len(F.ALIASES) == len(table)
     assert all(F.FAMILIES[fam].members[act] == old for old, (fam, act) in table.items())
-    assert len(table) == 114
+    assert len(table) == 115
 
 
 def test_a_declared_family_and_action_win_over_the_legacy_placement():
