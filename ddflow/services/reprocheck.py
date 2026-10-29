@@ -92,11 +92,16 @@ def _run_at(
             for _ in range(count):
                 # Reset BEFORE each run: a forgetful-but-stateful line (a marker it left)
                 # must not bleed into the next run's answer -- every run sees the
-                # recorded sha as the checkout made it. A reset that FAILED breaks that
-                # guarantee: with no fresh checkout there is no run to read.
+                # recorded sha as the checkout made it. The pristine config is restored
+                # and a stale lock dropped BEFORE the reset: a run that poisoned the
+                # config or left a lock must not corrupt the reset itself. A reset that
+                # FAILED breaks the guarantee: with no fresh checkout there is no run to
+                # read.
+                for lock in ("index.lock", "HEAD.lock"):
+                    (s.path / ".git" / lock).unlink(missing_ok=True)
+                (s.path / ".git" / "config").write_bytes(pristine_cfg)
                 reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
                 cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
-                (s.path / ".git" / "config").write_bytes(pristine_cfg)
                 if reset.code != 0 or cleaned.code != 0:
                     unreached += 1
                     continue
