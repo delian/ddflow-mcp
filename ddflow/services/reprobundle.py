@@ -77,11 +77,24 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         check_dict = dict(check) if check is not None else {}
         # An UNAVAILABLE or no-run check never really executed: executed defaults True
         # only for a record that carries a real yes/no with runs behind it.
-        r = _countable(check_dict.get("runs", 0) or 0)
+        r = _countable(check_dict["runs"]) if "runs" in check_dict else 0
         real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
-        check_dict["executed"] = real  # assigned, not defaulted: a lying executed:True loses
+        canonical = {
+            "executed": real,
+            "reproduced": check_dict.get("reproduced")
+            if check_dict.get("reproduced") in ("yes", "no")
+            else None,
+            "runs": r,
+            "failures": _countable(check_dict["failures"]) if "failures" in check_dict else 0,
+        }
+        extra = {
+            k: v
+            for k, v in check_dict.items()
+            if k not in ("executed", "reproduced", "runs", "failures")
+        }
         out["repro_cmd"] = {
-            **check_dict,
+            **extra,
+            **canonical,
             "command": repro_cmd,  # the filed command wins any key the check carried
         }
     if mode == "full":
@@ -271,8 +284,8 @@ def sighting(run: Any) -> dict[str, Any]:
         return {}
     if run.get("reproduced") not in ("yes", "no"):
         return {}
-    runs = _countable(run.get("runs", 0) or 0)
-    failures = _countable(run.get("failures", 0) or 0)
+    runs = _countable(run.get("runs", 0))
+    failures = _countable(run.get("failures", 0))
     if runs is None or failures is None or runs <= 0 or failures > runs:
         return {}
     if run.get("reproduced") == "yes" and failures <= 0:
