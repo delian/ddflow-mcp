@@ -61,8 +61,8 @@ def test_unknown_model_resolves_to_unknown_with_no_facts():
 
 def test_old_facts_make_doctor_note_them():
     data = CF.load()
-    assert CF.stale(data, date(2026, 10, 29), 90) == []
-    old = CF.stale(data, date(2027, 2, 1), 90)
+    assert CF.stale(data, 90, date(2026, 10, 29)) == []
+    old = CF.stale(data, 90, date(2027, 2, 1))
     assert any(s.startswith("family.claude.ttl") for s in old)
     notes = CF.doctor_notes(90, date(2027, 2, 1))
     assert len(notes) == 1 and "older than 90 days" in notes[0]

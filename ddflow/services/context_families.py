@@ -22,8 +22,6 @@ from ..infra import paths
 STATUSES = ("verified", "documented", "unverified", "none")
 READABLE = ("verified", "documented")
 UNKNOWN = "unknown"
-#: Fallback for `[context].facts_max_age_days` until that knob is wired (CC-inventory-wire).
-DEFAULT_MAX_AGE_DAYS = 90
 _SHOWN = 5  # stale facts named in one doctor note
 _FILES = ("context_families.toml", "context_harnesses.toml")
 
@@ -96,8 +94,8 @@ def family_row(data: dict[str, dict[str, Any]], family: str) -> dict[str, Any]:
 
 def stale(
     data: dict[str, dict[str, Any]],
+    max_age_days: int,
     today: date | None = None,
-    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
 ) -> list[str]:
     """`table.row.key (N days old)` for each fact older than `max_age_days`."""
     today = today or date.today()
@@ -113,9 +111,9 @@ def stale(
     return out
 
 
-def doctor_notes(max_age_days: int = DEFAULT_MAX_AGE_DAYS, today: date | None = None) -> list[str]:
+def doctor_notes(max_age_days: int, today: date | None = None) -> list[str]:
     """One doctor note naming the stale facts, or none."""
-    old = stale(load(), today, max_age_days)
+    old = stale(load(), max_age_days, today)
     if not old:
         return []
     shown = ", ".join(old[:_SHOWN]) + (
