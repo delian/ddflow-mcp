@@ -154,11 +154,16 @@ def _prime_scratch(scratch: Path, sha: str, pristine_cfg: bytes) -> bool:
     reset land on the tree that the clean freed. Any filesystem surprise the line left
     degrades to False -- the run is unreached, the filing never crashes on it."""
     try:
+        # The git dir is real before ANY path under it is trusted: a symlink planted
+        # there would reroute the pristine write and the resets onto the operator's tree.
+        git_dir = scratch / ".git"
+        if git_dir.is_symlink():
+            return False
         for lock in ("index.lock", "HEAD.lock"):
-            (scratch / ".git" / lock).unlink(missing_ok=True)
-        cfg_path = scratch / ".git" / "config"
+            (git_dir / lock).unlink(missing_ok=True)
+        cfg_path = git_dir / "config"
         for _ in range(4):
-            staged = scratch / ".git" / f".pristine-{secrets.token_hex(6)}"
+            staged = git_dir / f".pristine-{secrets.token_hex(6)}"
             try:
                 fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
             except FileExistsError:

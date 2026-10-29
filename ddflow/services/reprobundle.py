@@ -78,7 +78,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         # only for a record that carries a real yes/no with runs behind it.
         r = _countable(check_dict.get("runs", 0) or 0)
         real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
-        check_dict.setdefault("executed", real)
+        check_dict["executed"] = real  # assigned, not defaulted: a lying executed:True loses
         out["repro_cmd"] = {
             **check_dict,
             "command": repro_cmd,  # the filed command wins any key the check carried
@@ -238,7 +238,13 @@ def mode_problem(capture: str) -> str:
 
 
 def _countable(value: Any) -> int | None:
-    """``value`` as a whole, finite count, or None when it cannot count anything."""
+    """``value`` as a whole, finite count, or None when it cannot count anything.
+    Integers stay exact (int first); only values that are genuinely float pass the
+    float route, so 10**20 and 10**20 + 1 never collapse to one float."""
+    try:
+        return int(value)  # ints and digit strings: exact, never float-collapsed
+    except (TypeError, ValueError):
+        pass
     try:
         n = float(value)
     except (TypeError, ValueError, OverflowError):
@@ -265,6 +271,8 @@ def sighting(run: Any) -> dict[str, Any]:
         return {}
     if run.get("reproduced") == "yes" and failures <= 0:
         return {}
+    if run.get("reproduced") == "no" and failures > 0:
+        return {}  # 'no' says no run failed: a failing count contradicts the verdict
     return {k: run[k] for k in ("reproduced", "runs", "failures") if k in run}
 
 
