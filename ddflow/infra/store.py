@@ -458,15 +458,20 @@ class Store:
             con.execute("COMMIT")
         finally:
             con.close()
-        # Publish atomically: readers see either the old index or the new one, never
-        # a half-built one. WAL sidecars are removed first so the replaced file is
-        # self-contained.
+        self._publish(tmp)
+        return state
+
+    def _publish(self, tmp: Path) -> None:
+        """Publish `tmp` over the index atomically: readers see either the old index or
+        the new one, never a half-built one. WAL sidecars are removed first so the
+        replaced file is self-contained. The one swap both writers (`_build_into` and
+        `_reconcile`) end with, each into a fresh file, never the live one -- the
+        snapshot contract ``StoreIndex``'s read-only connection depends on."""
         for suf in ("-wal", "-shm"):
             tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
             self.path.with_name(self.path.name + suf).unlink(missing_ok=True)
         tmp.replace(self.path)
         self._collect_stale_indexes()
-        return state
 
     def _incremental_enabled(self) -> bool:
         """The knob (r-everything-configurable): may the rebuild reconcile the index with
@@ -548,37 +553,58 @@ class Store:
     def _reconcile(
         self, state: State, events: list, fingerprint, marks: dict[str, tuple[int, str]]
     ) -> State:
-        """Bring the EXISTING index current for the appended deltas, in one transaction:
-        the one projector (`_project`) resolves what every row is -- never a second
-        implementation of `fold` -- and only the rows the tail changed are written. A
-        count that disagrees after the writes aborts the transaction, which the caller
-        answers with a full rebuild."""
-        con = self.connect()
+        """Bring a COPY of the existing index current for the appended deltas, in one
+        transaction, then swap the copy over the index like `_build_into` does. The one
+        projector (`_project`) resolves what every row is -- never a second implementation
+        of `fold` -- and only the rows the tail changed are written. The copy in between is
+        a raw SQLite backup (pages, not row re-inserts), so the incremental saving
+        survives. The swap IS the point: the live index is never edited in place, which is
+        the snapshot contract ``StoreIndex``'s read-only connection depends on -- an
+        in-place reconcile handed a reader opened before the rebuild postings whose doc
+        indices outrange the docs list it read at open (Bba4a45036a). A count that
+        disagrees after the writes aborts the transaction, which the caller answers with a
+        full rebuild."""
+        tmp = self.path.with_name(
+            f"{self.path.name}-rebuilding.{os.getpid()}.{secrets.token_hex(4)}"
+        )
         try:
+            with closing(self.connect()) as src:
+                dst = sqlite3.connect(tmp, isolation_level=None)
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            dst = sqlite3.connect(tmp, isolation_level=None)
+            dst.row_factory = sqlite3.Row
             try:
-                con.execute("BEGIN IMMEDIATE")
-                _reconcile_tables(con, _project(state), self.fts, self.trigram)
-                records = similar_records(state)
-                # The identity as well as the digested text: an id that changed under
-                # content the digest cannot see (a rename kept title and body) must still
-                # touch the rows, or a stale id survives a change that "sameness" missed.
-                if [
-                    tuple(r)
-                    for r in con.execute(
-                        "select kind, item, id, digest from similar_docs order by ord"
-                    )
-                ] != [
-                    (r["kind"], r["item"], r["id"], textsim.digest(r["title"], r["body"]))
-                    for r in records
-                ]:
-                    _insert_similar(con, records, clear=True)
-                self._write_meta(con, len(events), fingerprint, marks)
-                con.execute("COMMIT")
-            except BaseException:
-                con.execute("ROLLBACK")
-                raise
+                try:
+                    dst.execute("BEGIN IMMEDIATE")
+                    _reconcile_tables(dst, _project(state), self.fts, self.trigram)
+                    records = similar_records(state)
+                    # The identity as well as the digested text: an id that changed under
+                    # content the digest cannot see (a rename kept title and body) must still
+                    # touch the rows, or a stale id survives a change that "sameness" missed.
+                    if [
+                        tuple(r)
+                        for r in dst.execute(
+                            "select kind, item, id, digest from similar_docs order by ord"
+                        )
+                    ] != [
+                        (r["kind"], r["item"], r["id"], textsim.digest(r["title"], r["body"]))
+                        for r in records
+                    ]:
+                        _insert_similar(dst, records, clear=True)
+                    self._write_meta(dst, len(events), fingerprint, marks)
+                    dst.execute("COMMIT")
+                except BaseException:
+                    dst.execute("ROLLBACK")
+                    raise
+            finally:
+                dst.close()
+            self._publish(tmp)
         finally:
-            con.close()
+            for suf in ("", "-wal", "-shm"):
+                tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
         return state
 
     def _write_meta(
