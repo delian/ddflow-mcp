@@ -73,7 +73,7 @@ def _ask_hint(agent: str) -> str:
     )
 
 
-def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
+def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
@@ -87,6 +87,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
     approval: str = "",
+    lint_exempt: str = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
@@ -98,6 +99,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     The rule-set lives in `services.completion`. This decides only what to DO with the
     verdict, and records the override when one is taken — an unrecorded `--force` is a
     pipeline that was never really enforced.
+
+    ``lint_exempt`` (Be5610bf732) is the same close as `bug fixed --lint-exempt`: the reason a
+    CI-filed lint bug has no test; it goes through `bug_fixed`, so the same refusals apply.
 
     ``regression_test`` closes the open bugs this item was filed to fix (its `fixes`,
     `CM.open_bugs_of`; never a bug merely reported against it, B7bdcc6b212) through `bug_fixed` -- the same refusals: a test must be named and
@@ -124,14 +128,14 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
-    closing = [t for t in tests if t.strip()]
+    closing = [t for t in tests if t.strip()] or [lint_exempt.strip()] * bool(lint_exempt.strip())
     pending = CM.open_bugs_of(st, item, cfg)
     if closing and not pending:
         return O.refused(
             "item.completed",
-            f"--regression-test: {item} is not the fix task of any open bug, so there is "
+            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
             f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
-            f"fixed <bug> --regression-test ...`.",
+            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
             id=item,
             bugs_closed=[],
         )
@@ -210,16 +214,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     if closing:
         # Only now, with the completion going through: a refusal above closed nothing.
 
-        for bid in pending:
-            out = bug_fixed(repo, bid, regression_test=tests, mutation=mutation, agent=agent)
-            if out.exit != O.OK:
-                return O.Outcome(
-                    kind="item.completed",
-                    data={"id": item, "bug": bid, "bugs_closed": closed},
-                    exit=out.exit,
-                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
-                )
-            closed.append(bid)
+        failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
+        if failed is not None:
+            return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks
     # of their own and the item still completable, never stranded on a done task.
@@ -284,6 +281,35 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _close_bugs(
+    repo, item, pending, closed, tests, mutation, lint_exempt, agent
+) -> O.Outcome | None:
+    """Close each pending bug through `bug_fixed` (the same refusals); the failure, else None."""
+    flag = (
+        "--lint-exempt"
+        if lint_exempt.strip() and not any(t.strip() for t in tests)
+        else "--regression-test"
+    )
+    for bid in pending:
+        out = bug_fixed(
+            repo,
+            bid,
+            regression_test=tests,
+            mutation=mutation,
+            lint_exempt=lint_exempt.strip(),
+            agent=agent,
+        )
+        if out.exit != O.OK:
+            return O.Outcome(
+                kind="item.completed",
+                data={"id": item, "bug": bid, "bugs_closed": closed},
+                exit=out.exit,
+                reason=f"{flag}: bug {bid} not closed: {out.reason}",
+            )
+        closed.append(bid)
+    return None
 
 
 def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:

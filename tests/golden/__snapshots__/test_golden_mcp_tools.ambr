@@ -251,6 +251,10 @@
           "type": "string",
           "description": "Fix task: the test guarding its bug(s); closes them."
          },
+         "lint_exempt": {
+          "type": "string",
+          "description": "Fix task of a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test. As `bug fixed lint_exempt`; instead of regression_test."
+         },
          "mutation": {
           "type": "string",
           "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
