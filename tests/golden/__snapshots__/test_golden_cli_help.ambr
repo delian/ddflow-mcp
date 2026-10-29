@@ -617,7 +617,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -636,6 +636,9 @@
     --regression-test REGRESSION_TEST
                           for a fix task: the test that now guards the bug(s) it fixes; closes them
                           (as `bug fixed` would) and completes. Repeat for several.
+    --lint-exempt LINT_EXEMPT
+                          close the CI-filed lint bug this fix task fixes (no test to write) with
+                          this reason, recorded, instead of --regression-test
     --mutation-file MUTATION_FILE
                           fix confined to test files: the changed test file the mutation edits (with
                           --mutation-old/--mutation-new); ddflow applies it and the test must fail
