@@ -67,12 +67,13 @@ def test_list_filters_by_tag_on_both_forms(repo):
         assert body["rows"][0]["tags"] == ["security"]
 
 
-def test_bug_show_prints_tags(repo):
+def test_bug_show_carries_tags(repo):
+    """`show` of a bug carries its tags (the text line is fix-Bc930562bd1-show-line)."""
     run_cli(repo, "init")
     _found(repo, "B1", "--tags", "security")
-    code, out, err = run_cli(repo, "bug", "show", "B1")
+    code, out, err = run_cli(repo, "--json", "bug", "show", "B1")
     assert code == 0, (out, err)
-    assert "security" in out
+    assert json.loads(out)["tags"] == ["security"]
 
 
 def test_get_set_pair_is_the_carrier(repo):
