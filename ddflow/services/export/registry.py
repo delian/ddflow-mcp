@@ -6,6 +6,8 @@ See the package docstring (``ddflow.services.export``) for the plug-in contract.
 from __future__ import annotations
 
 import ctypes
+import functools
+import importlib
 import re
 import textwrap
 import threading
@@ -14,9 +16,6 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
-import jinja2
-from jinja2.sandbox import SandboxedEnvironment
-
 from ...core.digest import content_digest
 from ...core.registry import Registry, UnknownName
 from ...core.version import running as running_version
@@ -24,7 +23,7 @@ from ...infra.paths import templates_dir
 from ..prompts import Template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, one_line, truncate
 from .query import EXIT_REFUSED, ExportError, Query
-from .region_marks import DOC_KEY, region
+from .region_marks import DOC_KEY, jinja_region
 
 #: How a kind is written to its target (the writer, B-export-write, implements these).
 WHOLE = "whole"  # the file is entirely generated
@@ -310,8 +309,8 @@ def _indent(value: object, width: int = 4, first: bool = False, blank: bool = Fa
     return "".join(out)
 
 
-class _Sandbox(SandboxedEnvironment):
-    """Jinja's sandbox, plus ceilings on the operators and filters that allocate by size."""
+class _Limits:
+    """Ceilings (mixed into Jinja's sandbox, first) on the operators and filters that allocate by size."""
 
     intercepted_binops = frozenset({"*", "**", "%"})
 
@@ -356,10 +355,22 @@ class _Sandbox(SandboxedEnvironment):
         return super().wrap_str_format(value)
 
 
-def _environment() -> SandboxedEnvironment:
+@functools.cache
+def _sandbox_class() -> type:
+    """Jinja's sandbox with the ceilings above, built on first use: jinja2 is a heavy import
+    and the MCP engine (and `scripts/bump.sh`, which has no jinja2) imports this module
+    without rendering."""
+    SandboxedEnvironment = importlib.import_module("jinja2.sandbox").SandboxedEnvironment
+
+    return type("_Sandbox", (_Limits, SandboxedEnvironment), {})
+
+
+def _environment() -> Any:
+    jinja2 = importlib.import_module("jinja2")
+
     # bandit B701: Markdown, never HTML; escaping would corrupt the output. The sandbox is
     # the point: a template may come from a cloned repository.
-    env = _Sandbox(  # nosec B701
+    env = _sandbox_class()(  # nosec B701
         undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
     )
     env.globals.pop("lipsum", None)  # backed by `random`: a template must be deterministic
@@ -368,11 +379,11 @@ def _environment() -> SandboxedEnvironment:
     env.filters["center"] = _center  # the built-ins allocate `width` bytes unchecked
     env.filters["indent"] = _indent
     env.filters["format"] = _format
-    env.globals["region"] = region  # {% call region("name") %}: a named region's markers
+    env.globals["region"] = jinja_region()  # {% call region("name") %}: a named region's markers
     return env
 
 
-def _render_capped(env: SandboxedEnvironment, text: str, ctx: dict[str, Any]) -> str:
+def _render_capped(env: Any, text: str, ctx: dict[str, Any]) -> str:
     """Render, stopping with an error once the output passes ``MAX_OUTPUT_BYTES``."""
     out: list[str] = []
     size = 0
@@ -453,6 +464,8 @@ def render(
         ) from None
     ctx["schema_version"] = schema_version
     ctx[DOC_KEY] = doc
+    jinja2 = importlib.import_module("jinja2")
+
     try:
         env = _environment()
         return normalize(_run_limited(lambda: _render_capped(env, text, ctx), timeout_s))

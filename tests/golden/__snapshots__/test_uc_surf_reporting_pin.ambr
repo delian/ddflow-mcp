@@ -638,6 +638,8 @@
       
       1/3 tasks complete across 1 phase(s); 0.0 agent-hours, 0 commit(s).
       
+      Task counts: this headline counts every task record (abandoned tasks and fix tasks included); the `Progress:` block after a completion counts live work items only, so the two totals can differ
+      
       Completed:
         [x] T1           Tokenizer
       
@@ -980,7 +982,10 @@
             "tags": [],
             "item": "T1",
             "regression_tests": [],
-            "lesson": ""
+            "lesson": "",
+            "severity": "",
+            "fix_task": "",
+            "needs": []
           }
         ],
         "total": 1,
@@ -1016,7 +1021,10 @@
             "tags": [],
             "item": "T1",
             "regression_tests": [],
-            "lesson": ""
+            "lesson": "",
+            "severity": "",
+            "fix_task": "",
+            "needs": []
           }
         ],
         "total": 1,
@@ -1055,7 +1063,10 @@
             "tags": [],
             "item": "T1",
             "regression_tests": [],
-            "lesson": ""
+            "lesson": "",
+            "severity": "",
+            "fix_task": "",
+            "needs": []
           }
         ],
         "total": 1,

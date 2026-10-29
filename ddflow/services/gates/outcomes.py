@@ -17,7 +17,6 @@ from .. import gate_accept as GA
 from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from ..docsonly import pipeline_by_diff
-from ..metrics.queued import _why_notes
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -32,7 +31,9 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
+from .rounds import delta_rounds, full_rounds
 from .stale_why import StaleNote, _differing_note
+from .status_notes import _why_notes
 
 
 @dataclass
@@ -62,7 +63,8 @@ class GateStatus:
     local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
     #: gate -> "skipped after a failed run" for a skip that replaced a failure.
     after_failure: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
-    #: gate -> its recorded reason, for an `unavailable` or `partial` outcome (B305db5608b).
+    #: gate -> its recorded reason when `unavailable` or `partial` (B305db5608b), else how
+    #: long its recorded run queued before it ran (`queued Xm of Ym elapsed`).
     why: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
@@ -159,12 +161,17 @@ def untriaged_note(it, gate: str) -> str:
 
 
 def rounds_line(it, gate: str) -> str:
-    """ "1 full round, 2 delta rounds" from the gate's recorded `ddflow review`, or ""."""
-    rec = it.gates.get(gate)
-    ev = (rec.evidence or {}) if rec else {}
-    if "review_kind" not in ev:
+    """ "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed, or "".
+
+    Counted from the gate's HISTORY via `services.gates.rounds`, the same fold the
+    review budget and `review triage` count (DX-review-round-count): the current
+    record alone resets when a later delta, hand record or re-claim replaces its
+    evidence, so `gate status` could say '1 full round' where `review triage` says
+    '2 of 2 rounds' for the same gate."""
+    if it is None:
         return ""
-    full, delta = int(ev.get("rounds") or 0), int(ev.get("delta_rounds") or 0)
+    full = full_rounds(it, gate)
+    delta = delta_rounds(it, gate)
     if not full and not delta:
         return ""
 

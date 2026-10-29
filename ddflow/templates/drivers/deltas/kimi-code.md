@@ -3,7 +3,8 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** Run ONE task, then print `ddflow next` and
+1. **Iteration.** One request runs to completion of its task. Across invocations run
+   ONE task, then print `ddflow next` and
    `ddflow cadence` — that output is the handoff to the next invocation.
 2. **Subagents.** Kimi Code has sub-agents; give each its own claimed item, never two
    tasks to one session expecting isolation.

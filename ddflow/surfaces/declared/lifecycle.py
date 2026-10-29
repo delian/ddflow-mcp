@@ -301,7 +301,7 @@ COMMANDS: tuple[Command, ...] = (
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
-            timeout_s=_wait_timeout(a),
+            timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
             agent=agent,
@@ -726,6 +726,9 @@ COMMANDS: tuple[Command, ...] = (
         payload=(
             "id",
             "sha",
+            "author_model",
+            "author_family",
+            "model_source",
             "independence",
             "forced",
             "coverage_gaps",
@@ -737,6 +740,8 @@ COMMANDS: tuple[Command, ...] = (
             "refuted_passes",
             "worktree_removed",
             "kept_reason",
+            # Optional: a chore's exemption (no key when not a chore).
+            "chore",
         ),
         cli=CliPolicy(
             shown=(OK,),

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...config import csv_list
+from ...config import Config, csv_list
 from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
 from ...services.adopt import AGENT_TARGETS
@@ -37,21 +37,51 @@ def _AGENT_KEYS() -> list[str]:
 
 #: `ddflow_wait` over MCP: shorter than the CLI's default, because the client -- not
 #: ddflow -- decides when a tool call has hung, and a timed-out call is a lost answer.
-#: Capped for the same reason, at the cap the CLI's wait has too; an agent that wants longer
-#: calls again.
+#: A client aborts a tool call that sent no frame for CLIENT_IDLE_ABORT_S seconds
+#: (Bfc43dae5b9); a wait whose call CAN send `notifications/progress` (a conformant
+#: `_meta.progressToken` and `[mcp].progress_s` on: the heartbeat, B7b3b4cf483) may hold
+#: the answer for the full CLI cap, because every beat resets the idle timer. A wait
+#: that CANNOT sends by definition nothing until its answer -- its first and last
+#: frame -- so its cap must sit strictly below the cutoff. Headroom inside the cutoff
+#: covers the time a call already spent silent waiting for a worker before its wait
+#: started. The CLI keeps WAIT_MAX_S: its own wait says its progress lines.
+CLIENT_IDLE_ABORT_S = 1800
 MCP_WAIT_DEFAULT_S = 300
-MCP_WAIT_MAX_S = WAIT_MAX_S  # one cap for both surfaces: core.clock
+MCP_WAIT_MAX_S = WAIT_MAX_S  # progress beats reset the client's timer: the full CLI cap
+MCP_WAIT_SILENT_MAX_S = 1200.0  # below CLIENT_IDLE_ABORT_S, with headroom for a late start
 
 
-def _wait_timeout(a: dict[str, Any]) -> float:
+def _wait_timeout(a: dict[str, Any], repo: Any = None) -> float:
     """`timeout` as given (0 included -- it means "ask, do not sleep"), else the MCP
-    default; never above the cap."""
+    default; never above the cap. Which cap that is depends on whether the call that
+    contains this wait can send progress while it runs: see MCP_WAIT_MAX_S."""
     t = a.get("timeout")
     t = MCP_WAIT_DEFAULT_S if t is None else t
+    cap = MCP_WAIT_MAX_S if _progress_will_flow(a, repo) else MCP_WAIT_SILENT_MAX_S
     try:
-        return min(float(t), float(MCP_WAIT_MAX_S))
+        return min(float(t), float(cap))
     except OverflowError:  # a JSON integer past a double's range is far past the cap
-        return float(MCP_WAIT_MAX_S)
+        return float(cap)
+
+
+def _progress_will_flow(a: dict[str, Any], repo: Any = None) -> bool:
+    """Whether the serving call's heartbeat sends `notifications/progress` for the wait,
+    as `mcp_heartbeat.heartbeat` decides: a string-or-number `_meta.progressToken` (the
+    sender needs one to write to) AND `[mcp].progress_s` STRICTLY between 0 and
+    `CLIENT_IDLE_ABORT_S` -- the first beat must land before the client aborts, or the
+    call is silent for the abort's purposes either way (a beat scheduled at or past
+    the cutoff, e.g. progress_s = 2400, arrives too late to reset anything)."""
+    meta = a.get("_meta")
+    token = meta.get("progressToken") if isinstance(meta, dict) else None
+    if isinstance(token, bool) or not isinstance(token, (str, int, float)):
+        return False
+    if repo is not None:
+        try:
+            s = float(Config.load(repo).mcp.progress_s)
+        except Exception:
+            s = 20.0  # as mcp_heartbeat reads a broken config: its beats run at 20 s
+        return 0 < s < CLIENT_IDLE_ABORT_S
+    return token is not None  # no repo to ask, the token alone: the caller checked
 
 
 def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:

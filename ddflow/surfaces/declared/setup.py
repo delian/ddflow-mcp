@@ -66,6 +66,12 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="write --set/--append-toml to the git-ignored .ddflow/local/config.toml: this machine's endpoints, hosts, key variables and sizing, never committed",
             ),
+            Param(
+                "approval",
+                help="With key and value: an agent's route: 'request' files an operator approval, an approval id applies the edit.",
+                default="",
+                cli_help="with --set KEY VALUE: an agent's route (`request` files an operator approval to answer anywhere, an approval id applies and records it); a person configures directly",
+            ),
         ),
     ),
     Command(

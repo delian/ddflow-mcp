@@ -7,8 +7,11 @@ Only the items below differ.
    here: `ddflow brief`, `ddflow next`, `ddflow claim`, `ddflow gate run`,
    `ddflow complete`. That is the complete surface — the CLI is primary and every MCP
    tool maps onto it.
-2. **Iteration is operator-driven.** Run one task per Aider session. Because Aider edits
-   and commits directly, claim the item BEFORE you start it: `ddflow claim <id>`.
+2. **Iteration.** Within one Aider session run one claimed task to completion; Aider
+   edits and commits directly, so claim BEFORE you start: `ddflow claim <id>`. End the
+   session by printing the next `ddflow next` + `ddflow cadence` output — across
+   sessions that print is the handoff, and the operator's loop is what repeats it.
+   Aider itself has no loop or parallel worker, so keep it out of waves.
 3. **Subagents.** None. Parallelism means a second Aider process on a different item; the
    lease keeps them apart.
 4. **Asking the operator.** Stop and ask in the chat.

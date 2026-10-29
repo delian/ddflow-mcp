@@ -2857,7 +2857,9 @@ author's family. Now a `--model` in the author's family on `rubber_duck`/`critic
 (exit 3, naming `--reviewer-model`); `--reviewer-model <m>` (MCP `reviewer_model`) is the
 explicit spelling for a reviewer that really is of that family. The author is the model the
 agent declared at `session start --model`; with none declared there is nothing to compare
-and the record stands. `standards` is covered too, since it counts toward independence.
+and the record stands (`complete` says which it used: the `--model` flag or the agent's
+session — `author_model`/`model_source` in the result and on the `item.completed` event).
+`standards` is covered too, since it counts toward independence.
 
 Which gates are reviewer gates comes from their definitions: `rubber_duck`, `critic` and
 `standards`, plus every gate declaring `reviewer = "different_family"` — the built-in
@@ -3152,8 +3154,11 @@ whole). A glob mangled by quoting is refused with the form every surface reads. 
 names what it dropped, and `show` prints the lease's globs beside the item's. `--resources`
 works the same way. `ddflow wait --item X --globs ..` judges the claim you are about to make
 rather than the stored globs, so READY means that claim will not be refused. One `wait` blocks
-for at most 1800 seconds, on the CLI as over MCP: a longer `--timeout` is shortened (and says so
-on stderr), and you call again to wait longer.
+for at most 1800 seconds on the CLI. Over MCP it is at most 1800 seconds when the call can
+send progress (a `_meta.progressToken` and `[mcp].progress_s` on: each beat resets the client's
+idle timer), and at most 1200 when it cannot — below the 1800 s a client gives a silent tool
+call before aborting it (Bfc43dae5b9); a longer `--timeout` is shortened (and says so on
+stderr), and you call again to wait longer.
 
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
@@ -6454,7 +6459,10 @@ part that matters.
   and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
   `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
   refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
-  salvaged`, `claim`). Another agent's live lease is never accepted. When
+  salvaged`, `claim`). Paths ANOTHER agent's live lease covers are never accepted: each
+  lapsed lease is judged path by path, so one whose globs overlap a live lease still
+  vouches for the staged paths nobody holds (a merge of main stays committable), while the
+  held paths keep the STOP. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted

@@ -1,0 +1,32 @@
+<!-- ddflow:begin drivers/deltas/opencode ddflow=0.2.9 fmt=1 sha=e255f67d96e5 -->
+# Delta: opencode
+
+The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
+Only the items below differ.
+
+1. **Iteration.** One request runs to completion, multi-step inside it. Keep going inside
+   that request: `ddflow next` → claim one item — and hand the work to a sub-agent
+   (opencode v1 config agents in `opencode.json` `$`-agents; zen agents at
+   `~/.config/opencode/agent/*.md`) where the surface runs several. Nothing persists
+   between requests, so across requests the handoff is the printed `ddflow next` +
+   `ddflow cadence` at the turn's end.
+2. **Subagents.** opencode supports agents/modes; each should claim its own item.
+3. **Asking the operator.** Ask and stop.
+4. **File references.** Plain repository-relative paths.
+5. **Where the rules live.** `AGENTS.md`.
+
+## MCP registration
+
+Written automatically into `opencode.json` at the project root. **opencode's shape is its
+own** — `command` is ONE array that includes the arguments, the transport is named, and
+`enabled` is explicit:
+
+```json
+{ "mcp": { "ddflow": {
+    "type": "local", "command": ["uvx", "ddflow-mcp"], "enabled": true } } }
+```
+
+Handing opencode the `{"command": "uvx", "args": [...]}` form used by most other agents
+produces valid JSON that starts nothing, which is why this file is generated rather than
+copied from another agent's.
+<!-- ddflow:end drivers/deltas/opencode -->

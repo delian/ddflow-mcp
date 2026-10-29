@@ -10,9 +10,8 @@ from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.events import is_older
-from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
-from ...core.schedule import is_external, stale_package_globs, unpickable
+from ...core.schedule import is_external, unpickable
 from ...core.stuck import stuck_edges
 from ...core.tier import unknown_tier_notes
 from ...infra import container as CT
@@ -29,6 +28,7 @@ from ...services import external as EX
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
+from ...services import leasebreak as LBR
 from ...services import leases as L
 from ...services import logblobs as LB
 from ...services import pins_merge as PM
@@ -63,29 +63,120 @@ from .records import _contest_problems
 from .recovery_notes import _recovery_findings
 from .waitcycles import wait_cycles, wait_findings, wait_order
 
+_stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
-def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
+
+def recover(
+    repo: Path,
+    *,
+    item: str = "",
+    apply: bool = False,
+    all: bool = False,
+    plan: bool = False,
+    agent: str = "",
+) -> O.Outcome:
     """Crashed agents' leases and orphaned worktrees. Exit 2 when there is nothing.
 
     A worktree with uncommitted changes is reported and never touched, whatever `apply`
     says — the whole value of the sweep is that it does not destroy the work it found.
+
+    With `all` or `plan` this is the recovery plan (DX-recovery-plan): the pure triage
+    in `core.recovery_plan` runs over the lease sweep AND the orphaned gate-run markers,
+    the unended jobs and the queue entries a dead integrator left running. `plan` is the
+    dry run (per item: SAFE_AUTO/PROPOSE/OPERATOR, the evidence, the exact commands);
+    `apply` runs only SAFE_AUTO and refuses (exit 3) while the kill switch is on.
     """
 
-    log, cfg, _ = _load(repo, agent)
-    found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
-    # Every entry that may hold work, as the brief bands them: a tree git could not
-    # measure and a RUNNING item nobody holds count too (B3f8c406fea, Be0d308babd).
-    salvageable = [r for r in found if may_hold_work(r)]
+    why_items = (
+        "expired leases, orphan worktrees, dead gate runs, unended jobs, orphaned queue entries"
+    )
+    if not (all or plan):
+        log, cfg, _ = _load(repo, agent)
+        found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
+        # Every entry that may hold work, as the brief bands them: a tree git could not
+        # measure and a RUNNING item nobody holds count too (B3f8c406fea, Be0d308babd).
+        salvageable = [r for r in found if may_hold_work(r)]
+        data: dict[str, Any] = {
+            "found": [absolutise(repo, plain(r)) for r in found],
+            "count": len(found),
+            "salvageable": len(salvageable),
+            "applied": apply,
+            "_render": {"found": found, "salvageable": salvageable},
+        }
+        if not found:
+            return O.nothing(
+                "recover", "Nothing to recover — no expired leases, no orphan worktrees.", **data
+            )
+        return O.ok("recover", **data)
+
+    import time
+
+    from ...core import recovery_plan as RP
+    from ...services import jobs as JOBS
+    from ...services import mergequeue as MQ
+    from ...services import recovery as SR
+    from ...services.gates import running as RUN
+
+    log, cfg, st = _load(repo, agent)
+    recoveries = [r for r in L.scan(log, cfg, repo, state=st) if not item or r.item == item]
+    dead = [plain(m) for m in RUN.dead_runs(repo, item)]
+    jobs = [r for r in SR.job_rows(st, JOBS) if not item or r["item"] == item]
+    queue = [
+        e.item for e in MQ.entries(repo) if e.state == MQ.RUNNING and (not item or e.item == item)
+    ]
+    facts = RP.Facts(
+        recoveries=tuple(plain(r) for r in recoveries),
+        dead=tuple(dead),
+        jobs=tuple(jobs),
+        queue=tuple(queue),
+        attempts=SR.attempt_counts(log),
+        kill_switch=SR.kill_switch(repo, cfg),
+    )
+    actions = RP.triage(facts, time.time(), RP.Limits())
+    salvageable = [r for r in recoveries if may_hold_work(r)]
+
+    if plan:
+        data = {
+            "found": [a.as_dict() for a in actions],
+            "count": len(actions),
+            "classes": {c: sum(1 for a in actions if a.cls == c) for c in RP.CLASSES},
+            "salvageable": len(salvageable),
+            "applied": False,
+            "paused": facts.kill_switch,
+            "_render": {"plan": True, "actions": actions, "recoveries": recoveries},
+        }
+        if not actions:
+            return O.nothing("recover", f"Nothing to recover — no {why_items}.", **data)
+        return O.ok("recover", **data)
+
+    if not (recoveries or dead or jobs or queue):
+        return O.nothing("recover", f"Nothing to recover — no {why_items}.")
+    if apply and facts.kill_switch:
+        return O.refused(
+            "recover",
+            "the recovery kill switch is on (`.ddflow/local/recovery.stop`); nothing ran. "
+            "The plan stays visible: `ddflow recover --all --plan`.",
+            paused=True,
+            plan_actions=[a.as_dict() for a in actions],
+        )
+    applied_rows = SR.apply(repo, log, agent, actions, cfg=cfg) if apply else []
+    failures = [r for r in applied_rows if r["note"].startswith("failed:")]
     data: dict[str, Any] = {
-        "found": [absolutise(repo, plain(r)) for r in found],
-        "count": len(found),
+        "found": [absolutise(repo, plain(r)) for r in recoveries],
+        "count": len(recoveries),
         "salvageable": len(salvageable),
         "applied": apply,
-        "_render": {"found": found, "salvageable": salvageable},
+        "plan_actions": [a.as_dict() for a in actions],
+        "applied_rows": applied_rows,
+        "paused": facts.kill_switch,
+        "_render": {"found": recoveries, "salvageable": salvageable, "applied_rows": applied_rows},
     }
-    if not found:
-        return O.nothing(
-            "recover", "Nothing to recover — no expired leases, no orphan worktrees.", **data
+    if failures:
+        return O.failed(
+            "recover",
+            f"{len(failures)} recovery step(s) failed while applying: "
+            + "; ".join(f"{r['item']}: {r['note']}" for r in failures[:4]),
+            **data,
         )
     return O.ok("recover", **data)
 
@@ -117,30 +208,6 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 )
             elif dep not in st.external:
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
-
-
-def _stale_glob_notes(repo: Path, st) -> list[str]:
-    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
-    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
-    Each is named with the corrected glob and the command that applies it."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
-        return []
-    tracked = W.git_paths(repo, "ls-files")
-    if tracked is None:  # "could not tell" is said, never read as "nothing stale"
-        return ["stale task globs not checked: git could not list the tracked files"]
-    notes = []
-    for it in live:
-        stale = stale_package_globs(it.globs, tracked)
-        if not stale:
-            continue
-        fixed = dict(stale)
-        globs = ",".join(fixed.get(g, g) for g in it.globs)
-        notes.append(
-            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
-            f"its lease covers none of those files. `ddflow update {it.id} --globs {globs}`"
-        )
-    return notes
 
 
 def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
@@ -450,6 +517,7 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     data: dict[str, Any] = {
         "problems": problems,

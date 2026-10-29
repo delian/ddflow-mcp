@@ -206,6 +206,11 @@ def register(s: argparse._SubParsersAction) -> None:
         default="claude",
         help="the agent whose hook dialect the call speaks (a descriptor id; default claude)",
     )
+    hkr.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="compute and print what the hook would do, and write no event",
+    )
     hkr.set_defaults(fn=cmd_hooks)
 
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(

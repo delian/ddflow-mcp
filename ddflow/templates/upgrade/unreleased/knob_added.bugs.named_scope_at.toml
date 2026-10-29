@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.named_scope_at"
+new = "20"
+why = "How many files a bug's text may name (a `path/name.ext` token in its summary) before the fix task's default globs fall back to the inherited item globs."
+impact = "additive"

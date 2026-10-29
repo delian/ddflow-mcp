@@ -111,7 +111,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "gate recorded partial, not accepted",
         "accept the partial outcome",
-        "ddflow approve <id> <gate>",
+        "ddflow approve <id> <gate> --approval ID",
         APPROVAL_ASK,
         "the item",
         ("approve.partial",),
@@ -123,7 +123,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "pipeline complete except a refused gate; the hook refuses an agent's --force",
         "approve the forced completion",
-        "ddflow complete <id> --approval <ask>",
+        "ddflow complete <id> --approval request|ID",
         APPROVAL_ASK,
         "the item and dependants",
         ("complete.force",),
@@ -159,7 +159,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "export document selection changed, not acknowledged",
         "acknowledge the selection",
-        "ddflow export ack <document>",
+        "ddflow export ack --approval ID",
         APPROVAL_ASK,
         "none",
         ("export.ack",),
@@ -276,6 +276,8 @@ EXEMPT_SITES: dict[str, str] = {
     "export.lock": "an immediate act by a person; nothing pends in State",
     "export.unlock": "an immediate act by a person; nothing pends in State",
     "claim.force": "an immediate act by a person; nothing pends in State",
+    "config.set": "a pending request for it is an 'approval' entry; nothing else pends in State",
+    "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
 }
 
 
