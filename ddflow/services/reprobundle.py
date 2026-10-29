@@ -11,6 +11,7 @@ prints it. `[bugs] repro_capture = off` stores nothing.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -253,7 +254,7 @@ def _countable(value: Any) -> int | None:
         n = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if n != n or n < 0 or not n.is_integer():
+    if math.isnan(n) or n < 0 or not n.is_integer():
         return None
     return int(n)
 
