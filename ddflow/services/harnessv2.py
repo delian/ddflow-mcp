@@ -157,7 +157,7 @@ def check_table(table: Any, name: str, where: str) -> None:
     if "none" in table and table["none"] is True and keys:
         raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
     if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
-        if table.get("mechanism", "none") == "none":
+        if table.get("mechanism", "none") in ("none", ""):
             raise DescriptorError(
                 f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
                 " other than none"
@@ -177,6 +177,12 @@ def validate(sections: dict[str, Any], where: str) -> None:
             if type(v) is int and v < 0:
                 raise DescriptorError(f"{where}: [{name}].{k} must not be negative")
     cont = sections.get("continuation")
+    if cont and (cont.cap or cont.goal_command or cont.loop_guard):
+        if cont.mechanism in ("", "none"):
+            raise DescriptorError(
+                f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
+                " other than none"
+            )
     if cont and cont.mechanism and cont.mechanism not in CONTINUATION_MECHANISMS:
         raise DescriptorError(
             f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"

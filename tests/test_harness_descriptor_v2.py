@@ -62,6 +62,9 @@ cmd = "acme -p hi"
     )
     assert h.detect.client_names == ("acme-cli",)
     assert h.headless.exit_codes == {"1": "error"} and h.caps.mcp_tools == 128
+    assert h.meters.context == "statusline"
+    assert h.telemetry.transcript_path == "~/.acme/t.jsonl"
+    assert h.autonomy.profiles == {"yolo": "--yes"} and h.detect.env == ("ACME_SESSION",)
     assert h.continuation.cap == 5 and h.reserved["spawn"].none
     assert h.reserved["test"].values == {"cmd": "acme -p hi"}
 
@@ -85,6 +88,7 @@ def test_none_is_documented_absence_and_absent_is_not_verified():
         ("[caps]\nnone = true\nsubagent_depth = 0\n", "none = true and also"),
         ("[continuation]\nmechanism = 'none'\ncap = 10\n", "need a mechanism"),
         ("[continuation]\ncap = 0\n", "need a mechanism"),
+        ("[continuation]\nmechanism = ''\ncap = 3\n", "need a mechanism"),
         ("[caps]\nnone = true\nmcp_tools = 3\n", "none = true and also"),
         ("[continuation]\nmechanism = 'magic'\n", "continuation.mechanism"),
         ("[continuation]\ncap = 3\n", "need a mechanism"),
@@ -98,3 +102,12 @@ def test_none_is_documented_absence_and_absent_is_not_verified():
 def test_strict_errors_name_the_key(extra, needle):
     with pytest.raises(DescriptorError, match=needle):
         p(extra)
+
+
+def test_validate_rejects_built_record_with_none_mechanism():
+    from ddflow.services import harnessv2
+
+    with pytest.raises(DescriptorError, match="need a mechanism"):
+        harnessv2.validate(
+            {"continuation": harnessv2.Continuation(mechanism="none", cap=10)}, "x.toml"
+        )
