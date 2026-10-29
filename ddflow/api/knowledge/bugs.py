@@ -18,7 +18,7 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
-from . import bug_tags as BT
+from .bug_tags import found_tags
 from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
 
 BUG_SCOPES = ("project", "ddflow")
@@ -76,7 +76,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
-    tag_list, bad_tags = BT.found_tags(tags)
+    tag_list, bad_tags = found_tags(tags)
     if bad_tags:
         return O.failed("bug.found", bad_tags)
     log, cfg, st = _load(repo, agent)

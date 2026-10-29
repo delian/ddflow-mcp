@@ -88,8 +88,9 @@ def test_research_add_still_requires_its_fields(proj):
 
 
 def test_a_filter_the_kind_cannot_honour_is_not_offered(proj):
-    code, _, err = run_cli(proj, "bug", "list", "--tag", "x")
-    assert code != 0 and "--tag" in err
+    # bugs take --tag since Bc930562bd1; a bug has no leaseholder, so --owner stays refused
+    code, _, err = run_cli(proj, "bug", "list", "--owner", "x")
+    assert code != 0 and "--owner" in err
 
 
 @pytest.mark.parametrize("kind", ["task", "phase", "bug", "research"])
