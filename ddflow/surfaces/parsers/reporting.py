@@ -16,11 +16,54 @@ from ..commands.reporting import (
     cmd_replay,
     cmd_show,
     render_rebuild,
-    render_recover,
+)
+from ..commands.reporting import (
+    render_recover as _render_recover,
 )
 from ..declared.reporting import COMMANDS
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
+
+
+def render_recover(out, a) -> str:
+    """`recover`'s prose. The plan (`--all --plan`) is rendered here; the plain sweep
+    keeps the handler's prose word for word (the uc-surface tests pin it)."""
+    if out.data.get("_render", {}).get("plan"):
+        return _render_plan(out)
+    return _render_recover(out, a)
+
+
+def _render_plan(out) -> str:
+    actions = out.data["_render"]["actions"]
+    if not actions and not out.data.get("paused"):
+        return ""
+    lines = []
+    if not actions:
+        # A paused-but-empty plan must say so: the operator cannot tell the brake is
+        # on from silence.
+        lines.append(
+            "recovery plan: nothing to action. PAUSED: the kill switch is on -- "
+            "`ddflow recover --all --apply` refuses."
+        )
+        return "\n".join(lines)
+    if out.data.get("paused"):
+        lines.append(
+            f"recovery plan: {len(actions)} action(s). PAUSED: the kill switch is on, so "
+            "`ddflow recover --all --apply` refuses and nothing will run.\n"
+        )
+    else:
+        lines.append(f"recovery plan: {len(actions)} action(s).\n")
+    for a in actions:
+        lines.append(f"  [{a.cls.upper():9}] {a.item}  attempts {a.attempts}")
+        lines.append(f"       {a.reason}")
+        lines.append(f"       {a.command}")
+    lines.append("")
+    if not out.data.get("paused"):
+        lines.append(
+            "Nothing here runs PROPOSE or OPERATOR: `ddflow recover --all --apply` performs "
+            "only SAFE_AUTO."
+        )
+    return "\n".join(lines)
 
 
 def register(s: argparse._SubParsersAction) -> None:

@@ -29,7 +29,9 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import difflib
+import glob
 import itertools
+import json
 import os
 import re
 import shlex
@@ -1535,6 +1537,17 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _add_globs_arg(paths: list[str]) -> str:
+    """The already-shell-quoted `--add-globs` VALUE for the advice: ONE JSON array,
+    each staged path `glob.escape`d, wrapped by `shlex.quote`. Every other notation
+    splits on commas (`globspec.parse`), so a staged path holding a comma would be
+    printed as a command that ADDS DIFFERENT globs; JSON keeps each path whole,
+    `glob.escape` keeps metacharacters literal (a staged `src/a[b].py` must not
+    become a class matching `src/ab.py`), and `shlex.quote` keeps the printed
+    command copy-runnable (rubber_duck/critic rounds on DX-hook-suggests-add-globs)."""
+    return shlex.quote(json.dumps([glob.escape(p) for p in paths]))
+
+
 def _uncovered_message(
     cfg: Config,
     state,
@@ -1557,10 +1570,12 @@ def _uncovered_message(
     if len(uncovered) > MAX_LISTED_PATHS:
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
+    widen = _add_globs_arg(uncovered)
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
         lines += [
-            "These paths belong to another item YOU hold, bound to a tree of its own: commit",
-            "them there, or widen THIS item's claim (`ddflow update <ID> --globs '...'`).",
+            f"These paths belong to another item YOU hold, bound to a tree of its own: "
+            f"commit them there, or widen THIS item's claim "
+            f"(`ddflow update <ID> --add-globs {widen}`).",
             "",
         ]
     elif stolen:
@@ -1590,8 +1605,9 @@ def _uncovered_message(
         if lapsed
         else "Fix by claiming the work, or by widening the claim you already hold:",
         "    ddflow next                     # what may be started",
-        "    ddflow claim <ID> --globs '...' # lease it and get a worktree",
-        "    ddflow update <ID> --globs '...'# widen an existing claim",
+        "    ddflow claim <ID>                # lease it and get a worktree",
+        f"    ddflow update <ID> --add-globs {widen}  # add THESE paths;"
+        " --globs would replace the list",
         "",
         f'Policy is [enforce].commit_without_lease = "{mode}" in .ddflow/config.toml.',
     ]
