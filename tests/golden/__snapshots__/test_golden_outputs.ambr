@@ -2054,14 +2054,14 @@
           The tier a reviewer never drops below, whatever the ladder says, so
           independence and review quality hold: fast | balanced | deep. An
           unrecognised value in a config file is warned about, reported by `doctor`
-          and falls back to 'balanced', the strictest (an unknown floor keeps
-          reviewers at the balanced tier); `config --set`, `ddflow_configure` and the
-          environment refuse it, and so does loading ddflow's own source tree, where
-          the file and the code are one commit.
+          and falls back to 'deep', the strictest (an unknown floor keeps reviewers at
+          the highest tier); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
       govern.effort_floor = 'low'   [default]
           The effort no work drops below: low | medium | high. An unrecognised value
           in a config file is warned about, reported by `doctor` and falls back to
-          'medium', the strictest (an unknown floor keeps medium effort); `config
+          'high', the strictest (an unknown floor keeps the highest effort); `config
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
