@@ -2,7 +2,7 @@
 
 `test_no_agent_literals` is an exact-match ratchet: it sees `"claude"` and not
 `"run prompt --harness claude"`. This module counts the second kind (research
-driver-architecture 2.4: 163 more constants). It does not fail on growth, it reports, and a
+driver-architecture 2.4 counted 163 incl. model names; this counter's id-only count is 149). It does not fail on growth, it reports, and a
 ceiling (`SUBSTRING_CEILING`) only stops a silent jump; lower it as sites move into descriptors.
 The inventory (docs/ddflow/research/driver-inventory.md) is checked against the exact ratchet.
 """
