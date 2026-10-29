@@ -75,7 +75,9 @@ def _rows() -> dict[str, tuple[int, str, str]]:
     """file -> (sites, class, descriptor field) from the inventory's first table."""
     rows = {}
     for line in DOC.read_text("utf-8").splitlines():
-        m = re.match(r"\|\s*`(ddflow/[^`]+)`\s*\|\s*(\d+)\s*\|\s*([\w-]+)\s*\|\s*([^|]+?)\s*\|", line)
+        m = re.match(
+            r"\|\s*`(ddflow/[^`]+)`\s*\|\s*(\d+)\s*\|\s*([\w-]+)\s*\|\s*([^|]+?)\s*\|", line
+        )
         if m:
             rows[m[1]] = (int(m[2]), m[3], m[4])
     return rows
