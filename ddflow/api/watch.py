@@ -69,7 +69,7 @@ def _target(token, job, file, until, pid, gate, heartbeat) -> tuple[W.Target | N
         t = W.decode(token)
         if t is None:
             return None, "that is not a watch token"
-        if job or file or pid or gate:
+        if job or file or until or pid or gate or heartbeat:
             return None, "a token already names its target: give it alone"
     else:
         t = W.Target(
@@ -163,7 +163,8 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
                 f"goes on from here.",
                 **done({"matched": False, "timed_out": True}),
             )
-        time.sleep(min(poll, left))
+        # Never sleep past a renewal: a long poll would let the lease lapse mid-wait.
+        time.sleep(min(poll, left, max(1.0, cfg.lease.heartbeat_s / 2)))
         renew()
         # Only a gate (or a job whose record may change) is judged on the folded log.
         if t.gate or t.job:

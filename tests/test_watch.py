@@ -99,7 +99,7 @@ def test_the_leases_are_renewed_while_waiting(proj, tmp_path, monkeypatch):
     from ddflow.services import leasekeep as LK
 
     calls = []
-    monkeypatch.setattr(LK, "throttled", lambda renew, *_a: lambda: (calls.append(1), renew()))
+    monkeypatch.setattr(LK, "throttled", lambda renew, *_a: lambda: calls.append(1) or renew())
     f = tmp_path / "y.log"
     f.write_text("")
     out = _watch(proj, file=str(f), until="never", heartbeat="T1", timeout_s=0.3)
@@ -128,6 +128,33 @@ def test_a_lease_not_held_is_named_as_unrenewed(proj, tmp_path):
 def test_an_unwatchable_request_is_refused_with_a_reason(proj, kw):
     out = _watch(proj, **kw)
     assert out.exit == 1 and out.reason
+
+
+def test_a_rewritten_file_is_read_again_from_the_start(proj, tmp_path):
+    f = tmp_path / "r.log"
+    f.write_text("aaaa\nbbbb\n")
+    t = W.Target(file=str(f), until="zzz")
+    assert W.scan_file(t) is None and t.offset == 10
+    f.write_text("PASS\nFAIL\n")  # same size, new content
+    t.until = "PASS"
+    assert W.scan_file(t) == "PASS"
+
+
+def test_a_token_with_extra_facets_or_junk_is_refused(proj, tmp_path):
+    f = tmp_path / "t.log"
+    f.write_text("")
+    tok = _watch(proj, file=str(f), until="x", timeout_s=0).data["token"]
+    assert _watch(proj, token=tok, until="y").exit == 1
+    assert _watch(proj, token=tok, heartbeat="T1").exit == 1
+    assert W.decode("W10") is None  # base64url of "[]"
+    assert _watch(proj, pid=4, until="x").exit == 1
+
+
+def test_a_timed_out_cli_watch_prints_its_token(proj, tmp_path):
+    f = tmp_path / "c.log"
+    f.write_text("")
+    code, out, _ = run_cli(proj, "watch", "--file", str(f), "--until", "x", "--timeout", "0")
+    assert code == 2 and "token " in out
 
 
 def test_a_token_round_trips():
