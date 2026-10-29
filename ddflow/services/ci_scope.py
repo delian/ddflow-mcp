@@ -180,7 +180,7 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     cut = [t.path for t in sel.cut]
     why = f"{len(paths)} test file(s) its change reaches"
     if sel.neutral:
-        why += " (the change is import-order/format-only: behaviour-neutral)"
+        why += " (the change is whitespace/comment-only: behaviour-neutral)"
     if cut:
         why += f", {len(cut)} cut at the budget"
     if always:
