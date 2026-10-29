@@ -19,6 +19,7 @@ from typing import Any
 from ..core import clock
 from ..infra import paths
 
+FACT_KEYS = ("v", "s", "src", "d", "note")
 STATUSES = ("verified", "documented", "unverified", "none")
 READABLE = ("verified", "documented")
 UNKNOWN = "unknown"
@@ -52,6 +53,16 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
     problems: list[str] = []
     for name, doc in data.items():
         sources = doc.get("sources", {})
+        for table in ("family", "harness"):
+            for row, body in doc.get(table, {}).items():
+                for key, node in body.items():
+                    if key != "note" and not is_fact(node):
+                        problems.append(
+                            f"{name}: {table}.{row}.{key} is not a fact (no `s`) and would be ignored"
+                        )
+                    elif is_fact(node) and set(node) - set(FACT_KEYS):
+                        extra = sorted(set(node) - set(FACT_KEYS))
+                        problems.append(f"{name}: {table}.{row}.{key} has unknown field(s) {extra}")
         for table, row, key, f in facts(doc):
             at = f"{name}: {table}.{row}.{key}"
             if f["s"] not in STATUSES:
