@@ -23,8 +23,9 @@ def test_every_harness_id_has_a_row():
 
 def test_a_missing_harness_row_is_reported():
     data = CF.load()
-    del data["context_harnesses.toml"]["harness"]["cody"]
-    assert any("'cody' has no row" in p for p in CF.validate(data, IDS))
+    gone = IDS[0]
+    del data["context_harnesses.toml"]["harness"][gone]
+    assert any(f"{gone!r} has no row" in p for p in CF.validate(data, IDS))
 
 
 def test_every_listed_family_exists_with_provenance():
@@ -65,7 +66,7 @@ def test_old_facts_make_doctor_note_them():
     old = CF.stale(data, 90, date(2027, 2, 1))
     assert any(s.startswith("family.claude.ttl") for s in old)
     notes = CF.doctor_notes(90, date(2027, 2, 1))
-    assert len(notes) == 1 and "older than 90 days" in notes[0]
+    assert len(notes) == 1 and "older than 90 days" in notes[0] and "family.claude.ttl" in notes[0]
     assert CF.doctor_notes(90, date(2026, 10, 29)) == []
 
 
@@ -97,3 +98,17 @@ def test_a_malformed_or_misspelt_fact_is_not_silently_dropped():
     problems = CF.validate(data)
     assert any("claude.ttl is not a fact" in p for p in problems)
     assert any("claude.window has unknown field" in p for p in problems)
+
+
+def test_model_exceptions_override_the_family_value():
+    fam = CF.load()["context_families.toml"]["family"]
+    assert CF.usable(fam["claude"]["read_mult"], "claude-sonnet-5.5") == 0.05
+    assert CF.usable(fam["claude"]["read_mult"], "claude-haiku-5.5") == 0.1
+    assert CF.usable(fam["deepseek"]["read_mult"], "deepseek-v4-pro") == 0.033
+    assert CF.usable(fam["kimi"]["read_mult"], "kimi-k3") is None  # unverified stays unread
+
+
+def test_a_row_that_is_not_a_table_is_reported_not_a_crash():
+    data = CF.load()
+    data["context_families.toml"]["family"]["claude"] = "explicit"
+    assert any("claude is not a table" in p for p in CF.validate(data))
