@@ -127,7 +127,7 @@ def test_a_comment_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(p
             "tests/test_h2.py": "import pkg.hub\n\ndef test_h2():\n    pass\n",
         },
     )
-    _branch(project, {"pkg/hub.py": "from pkg import mod\n\nfrom pkg import other\n"})
+    _branch(project, {"pkg/hub.py": "from pkg import mod\n\nfrom pkg import other  # touched\n"})
     cfg = Config.load(project)
     cfg.gates.unit_tests_hub_importers = 1
     res = CI.run(project, cfg, base="main", for_item=True)
