@@ -142,6 +142,16 @@ def test_a_rewritten_file_is_read_again_from_the_start(proj, tmp_path):
     assert W.scan_file(t) == "PASS"
 
 
+def test_a_longer_rewrite_with_the_same_header_is_read_again(proj, tmp_path):
+    f = tmp_path / "h.log"
+    header = "H" * 64 + "\n"
+    f.write_text(header + "tail\n")
+    t = W.Target(file=str(f), until="^MATCH")
+    assert W.scan_file(t) is None
+    f.write_text(header + "MATCH new\n" + "x" * 30 + "\n")  # longer, same first 64 bytes
+    assert W.scan_file(t) == "MATCH new"
+
+
 def test_a_token_with_extra_facets_or_junk_is_refused(proj, tmp_path):
     f = tmp_path / "t.log"
     f.write_text("")

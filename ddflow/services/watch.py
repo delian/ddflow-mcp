@@ -33,7 +33,7 @@ class Target:
     pid: int = 0
     gate: str = ""  # "ITEM:GATE"
     offset: int = 0  # file: bytes already read
-    sig: str = ""  # file: digest of the first bytes read, to tell a rewrite from an append
+    sig: str = ""  # file: digest of the bytes already read, to tell a rewrite from an append
     start: str = ""  # pid: its start time when first seen
     heartbeat: list[str] = field(default_factory=list)
 
@@ -93,8 +93,8 @@ def problem(t: Target) -> str:
 
 
 def _sig(data: bytes, upto: int) -> str:
-    """A digest of the first (at most 64) bytes of ``data[:upto]``."""
-    return content_digest(data[: min(64, upto)], length=12)
+    """A digest of everything already read, ``data[:upto]``: an append keeps it, a rewrite does not."""
+    return content_digest(data[:upto], length=12)
 
 
 def scan_file(t: Target) -> str | None:
@@ -103,13 +103,12 @@ def scan_file(t: Target) -> str | None:
     ``t.offset`` moves past what was read: past the matching line, or past every complete
     line scanned. A half-written last line is left for the next pass, so a pattern is never
     judged against a line that is still being written. A file that shrank was rewritten:
-    it is read again from the start. (Header and size are all a rewrite is judged by: one that keeps
-    the first 64 bytes and is at least as long cannot be told from an append.)"""
+    it is read again from the start."""
     try:
         data = Path(t.file).read_bytes()
     except OSError:
         return None
-    # A shrunk file, or one whose first bytes are no longer the ones read, was rewritten.
+    # A shrunk file, or one whose already-read bytes changed, was rewritten.
     if len(data) < t.offset or (t.offset and _sig(data, t.offset) != t.sig):
         t.offset = 0
     pat = re.compile(t.until)
