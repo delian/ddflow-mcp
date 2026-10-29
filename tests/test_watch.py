@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import subprocess
 import sys
 import threading
@@ -147,10 +148,12 @@ def test_a_token_with_extra_facets_or_junk_is_refused(proj, tmp_path):
     tok = _watch(proj, file=str(f), until="x", timeout_s=0).data["token"]
     assert _watch(proj, token=tok, until="y").exit == 1
     assert _watch(proj, token=tok, heartbeat="T1").exit == 1
+    assert W.decode(base64.urlsafe_b64encode(b'{"offset":-1}').decode()) is None
     assert W.decode("W10") is None  # base64url of "[]"
     assert W.decode(base64.urlsafe_b64encode(b'{"pid":"-1"}').decode()) is None  # wrong-typed field
-    assert _watch(proj, pid=4, timeout_s=float("nan")).exit == 1
-    assert _watch(proj, pid=4, until="x").exit == 1
+    me = os.getpid()
+    assert _watch(proj, pid=me, timeout_s=float("nan")).exit == 1
+    assert _watch(proj, pid=me, until="x", timeout_s=0).exit == 1
 
 
 def test_a_timed_out_cli_watch_prints_its_token(proj, tmp_path):

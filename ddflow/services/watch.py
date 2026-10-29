@@ -60,7 +60,7 @@ def decode(token: str) -> Target | None:
         ints = (t.offset, t.pid)
         strs = (t.job, t.file, t.until, t.gate, t.sig, t.start)
         if not (
-            all(type(i) is int for i in ints)
+            all(type(i) is int and i >= 0 for i in ints)
             and all(isinstance(x, str) for x in strs)
             and isinstance(t.heartbeat, list)
             and all(isinstance(h, str) for h in t.heartbeat)
