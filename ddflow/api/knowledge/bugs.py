@@ -76,9 +76,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
-    tag_list = GS.parse(tags)  # the tag arithmetic items use; `wave:*` is reserved
-    if BT.reserved(tag_list):
-        return O.failed("bug.found", f"{', '.join(BT.reserved(tag_list))}: wave:* is reserved.")
+    tag_list, bad_tags = BT.found_tags(tags)
+    if bad_tags:
+        return O.failed("bug.found", bad_tags)
     log, cfg, st = _load(repo, agent)
     minted = IDS.mint(cfg, st, "bug", events=log.read_all, given=id, hash_parts=(summary, item))
     bid = minted.id
@@ -96,11 +96,10 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         return chk.refusal
     # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
     # id) does not turn it back to `project`; `--scope project` says it and does.
-    extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
+    said = (("title", title), ("severity", severity), ("scope", scope), ("tags", tag_list))
+    extra = {k: v for k, v in said if v}
     if globs:
         extra["globs"] = GS.parse(globs)
-    if tag_list:
-        extra["tags"] = tag_list
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
