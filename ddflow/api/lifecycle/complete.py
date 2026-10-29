@@ -73,7 +73,7 @@ def _ask_hint(agent: str) -> str:
     )
 
 
-def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
+def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
@@ -128,7 +128,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
-    closing = [t for t in tests if t.strip()] or ([lint_exempt] if lint_exempt.strip() else [])
+    closing = [t for t in tests if t.strip()] or [lint_exempt.strip()] * bool(lint_exempt.strip())
     pending = CM.open_bugs_of(st, item, cfg)
     if closing and not pending:
         return O.refused(
@@ -214,23 +214,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     if closing:
         # Only now, with the completion going through: a refusal above closed nothing.
 
-        for bid in pending:
-            out = bug_fixed(
-                repo,
-                bid,
-                regression_test=tests,
-                mutation=mutation,
-                lint_exempt=lint_exempt,
-                agent=agent,
-            )
-            if out.exit != O.OK:
-                return O.Outcome(
-                    kind="item.completed",
-                    data={"id": item, "bug": bid, "bugs_closed": closed},
-                    exit=out.exit,
-                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
-                )
-            closed.append(bid)
+        failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
+        if failed is not None:
+            return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks
     # of their own and the item still completable, never stranded on a done task.
@@ -295,6 +281,30 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _close_bugs(
+    repo, item, pending, closed, tests, mutation, lint_exempt, agent
+) -> O.Outcome | None:
+    """Close each pending bug through `bug_fixed` (the same refusals); the failure, else None."""
+    for bid in pending:
+        out = bug_fixed(
+            repo,
+            bid,
+            regression_test=tests,
+            mutation=mutation,
+            lint_exempt=lint_exempt,
+            agent=agent,
+        )
+        if out.exit != O.OK:
+            return O.Outcome(
+                kind="item.completed",
+                data={"id": item, "bug": bid, "bugs_closed": closed},
+                exit=out.exit,
+                reason=f"--regression-test: bug {bid} not closed: {out.reason}",
+            )
+        closed.append(bid)
+    return None
 
 
 def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
