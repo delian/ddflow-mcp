@@ -48,33 +48,43 @@ def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     return out
 
 
+def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
+    """Row entries that are not facts (silently ignored otherwise) or carry unknown fields."""
+    out = []
+    for table in ("family", "harness"):
+        for row, body in doc.get(table, {}).items():
+            for key, node in body.items():
+                at = f"{name}: {table}.{row}.{key}"
+                if key != "note" and not is_fact(node):
+                    out.append(f"{at} is not a fact (no `s`) and would be ignored")
+                elif is_fact(node) and set(node) - set(FACT_KEYS):
+                    out.append(f"{at} has unknown field(s) {sorted(set(node) - set(FACT_KEYS))}")
+    return out
+
+
+def _fact_problems(name: str, doc: dict[str, Any]) -> list[str]:
+    """Status, source, date and value rules for each fact of one file."""
+    out = []
+    for table, row, key, f in facts(doc):
+        at = f"{name}: {table}.{row}.{key}"
+        if f["s"] not in STATUSES:
+            out.append(f"{at}: status {f['s']!r} is not one of {STATUSES}")
+        if f.get("src") not in doc.get("sources", {}):
+            out.append(f"{at}: source {f.get('src')!r} is not in [sources]")
+        try:
+            clock.parse_date(str(f.get("d")))
+        except ValueError:
+            out.append(f"{at}: date {f.get('d')!r} is not ISO")
+        if f["s"] in READABLE and "v" not in f:
+            out.append(f"{at}: status {f['s']} needs a value")
+    return out
+
+
 def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = None) -> list[str]:
     """Problems, one string each; empty means the tables are well formed."""
     problems: list[str] = []
     for name, doc in data.items():
-        sources = doc.get("sources", {})
-        for table in ("family", "harness"):
-            for row, body in doc.get(table, {}).items():
-                for key, node in body.items():
-                    if key != "note" and not is_fact(node):
-                        problems.append(
-                            f"{name}: {table}.{row}.{key} is not a fact (no `s`) and would be ignored"
-                        )
-                    elif is_fact(node) and set(node) - set(FACT_KEYS):
-                        extra = sorted(set(node) - set(FACT_KEYS))
-                        problems.append(f"{name}: {table}.{row}.{key} has unknown field(s) {extra}")
-        for table, row, key, f in facts(doc):
-            at = f"{name}: {table}.{row}.{key}"
-            if f["s"] not in STATUSES:
-                problems.append(f"{at}: status {f['s']!r} is not one of {STATUSES}")
-            if f.get("src") not in sources:
-                problems.append(f"{at}: source {f.get('src')!r} is not in [sources]")
-            try:
-                clock.parse_date(str(f.get("d")))
-            except ValueError:
-                problems.append(f"{at}: date {f.get('d')!r} is not ISO")
-            if f["s"] in READABLE and "v" not in f:
-                problems.append(f"{at}: status {f['s']} needs a value")
+        problems += _shape_problems(name, doc) + _fact_problems(name, doc)
     rows = data["context_harnesses.toml"].get("harness", {})
     for hid in harness_ids or []:
         if hid not in rows:
