@@ -2598,11 +2598,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
     _log_started(log, it, item, gate)
     results = []
+    say(_BACKGROUND_HINT)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
-        if r is revs[0]:
-            say(_BACKGROUND_HINT)
         res = RV.review(
             r,
             diff,
