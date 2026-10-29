@@ -125,7 +125,17 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     tests, regression_test = _named_tests(regression_test)
     if lint_exempt:
         return _lint_exempt_close(
-            repo, log, cfg, st, item, lint_exempt, tests, entry, mutation, verify_reason, landed
+            repo,
+            log,
+            cfg,
+            st,
+            item,
+            lint_exempt=lint_exempt,
+            tests=tests,
+            entry=entry,
+            mutation=mutation,
+            verify_reason=verify_reason,
+            landed=landed,
         )
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
@@ -310,12 +320,13 @@ def _record_fixed(
         return _end_fix_task_landed(log, item, landing[0]) if landing else {}
 
 
-def _lint_exempt_close(
+def _lint_exempt_close(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     repo: Path,
     log,
     cfg,
     st,
     item: str,
+    *,
     lint_exempt: str,
     tests: list[str],
     entry: dict[str, Any],
