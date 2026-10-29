@@ -1065,7 +1065,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1099,7 +1099,7 @@
          },
          "limit": {
           "type": "integer",
-          "description": "Rows returned, most effort first (default 25; 0 = all)."
+          "description": "Items listed per wave in the text view (default 10; 0 = all)."
          },
          "by_tag": {
           "type": "string",
@@ -1187,7 +1187,7 @@
          },
          "check": {
           "type": "boolean",
-          "description": "regenerate: list stale pins only."
+          "description": "Exit 1 when any wave:N stamp is stale."
          },
          "only": {
           "type": "string",
@@ -1241,6 +1241,10 @@
           "type": "string",
           "description": "check: a git base; report only the extracted surface added since it."
          },
+         "stamp": {
+          "type": "boolean",
+          "description": "Write the derived wave:N tags."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -1257,7 +1261,8 @@
            "lanes",
            "metrics",
            "health",
-           "docs"
+           "docs",
+           "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }

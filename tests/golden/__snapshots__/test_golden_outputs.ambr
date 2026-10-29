@@ -2450,6 +2450,15 @@
           file is named like an existing sibling (or exists under that name
           elsewhere). It is a warning, never a refusal: the claim is made and the plan
           check keeps its exit code. `false`: no such check.
+      waves.auto_stamp = True   [default]
+          Keep the derived `wave:N` tags (wave 0 = no open prerequisite, task-level or
+          inherited; wave N = 1 + the highest wave among open prerequisites) current
+          by DEFAULT: after a command that changed the graph (a task or phase added, a
+          `needs` change, a completion, an abandonment, a removal, a reopen) ddflow
+          restamps, in one transaction, ONLY the open items whose wave changed --
+          never the whole queue per event. A hand edit of `wave:*` is overwritten on
+          the next restamp. `false`: nothing is stamped on its own; `ddflow waves
+          --stamp` still does it on request and `--check` reports what is stale.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate
