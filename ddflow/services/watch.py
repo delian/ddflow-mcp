@@ -103,7 +103,8 @@ def scan_file(t: Target) -> str | None:
     ``t.offset`` moves past what was read: past the matching line, or past every complete
     line scanned. A half-written last line is left for the next pass, so a pattern is never
     judged against a line that is still being written. A file that shrank was rewritten:
-    it is read again from the start."""
+    it is read again from the start. (Header and size are all a rewrite is judged by: one that keeps
+    the first 64 bytes and is at least as long cannot be told from an append.)"""
     try:
         data = Path(t.file).read_bytes()
     except OSError:
