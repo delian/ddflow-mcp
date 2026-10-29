@@ -19,6 +19,7 @@ command form; it exits 0 reviewed clean, 1 findings, 2 still running / could not
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import sys
@@ -367,8 +368,6 @@ def main(argv: list | None = None) -> int:
     poll of one enqueued job. `--wait-s` defaults to `[gates].standards_wait_s`; 0 (or a
     negative, which `wait_job` reads as <= 0) polls once. Exit 0 reviewed clean, 1 findings,
     2 still running at the bound / ended without a review / could not tell (never a pass)."""
-    import argparse
-
     ap = argparse.ArgumentParser(prog="roborev", description=__doc__.partition("\n")[0])
     ap.add_argument(
         "wait", nargs="?"
