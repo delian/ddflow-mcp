@@ -3109,6 +3109,25 @@
   
   '''
 # ---
+# name: test_help[ddflow watch]
+  '''
+  usage: ddflow watch [-h] [--job JOB] [--file FILE] [--until UNTIL] [--pid PID] [--gate GATE] [--heartbeat HEARTBEAT] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL]
+  
+  options:
+    -h, --help            show this help message and exit
+    --job JOB             a job id: done when it is over; prints its exit status
+    --file FILE           a file; with --until
+    --until UNTIL         with --file: regex a complete line must match
+    --pid PID             a process id: done when it is gone
+    --gate GATE           ITEM:GATE: done when the gate has an outcome
+    --heartbeat HEARTBEAT
+                          items whose leases to renew, comma-separated (default: all you hold)
+    --token TOKEN         resume a timed-out watch: give only this
+    --timeout TIMEOUT     seconds to wait (default 600; 0 looks once)
+    --poll POLL           seconds between probes
+  
+  '''
+# ---
 # name: test_help[ddflow waves]
   '''
   usage: ddflow waves [-h] [--stamp]
@@ -3198,13 +3217,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -3259,7 +3278,7 @@
       record              records of a data-declared kind: `record <kind> <verb> [id] [--set
                           field=value]`
       replay              reconstruct the decision history from the log
-      recover             find crashed agents' work (exit 2 = nothing)
+      recover             find crashed agents' work; --all --plan triages it (exit 2 = nothing)
       progress            work actually done, aggregated from the log
       loops               circular references and runtime loops (exit 2 = none)
       cleanup             classify ddflow worktrees/branches; --apply lands the safe ones
@@ -3317,6 +3336,8 @@
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
+      watch               wait for a job, a file line, a process or a gate, renewing your leases;
+                          exit 2 = not yet (resume with the token)
       waves               report that `--stamp` is not implemented and name the interim wave-
                           stamping mechanism (LB-waves ships it)
   
@@ -3531,6 +3552,7 @@
     'ddflow version lint',
     'ddflow version show',
     'ddflow wait',
+    'ddflow watch',
     'ddflow waves',
     'ddflow workflow',
     'ddflow workflow drop',
