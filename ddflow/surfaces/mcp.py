@@ -426,6 +426,13 @@ def _outcome_result(
     return result
 
 
+def _waves_auto() -> Any:
+    """`api.waves_auto`, imported on first use for the same reason as `_identity`."""
+    from ..api import waves_auto  # deferred: the api package reaches jinja2
+
+    return waves_auto
+
+
 def _identity() -> Any:
     """`api.identity`, imported on first use: a module-level import would pull the whole api
     layer (and its jinja2) into `import ddflow.surfaces.mcp`, which `scripts/bump.sh` runs
@@ -720,8 +727,12 @@ class Server:
         return per_call or self.agent, per_call, args, bad
 
     def _invoke(self, spec, args, agent, per_call, params):
-        with _identity().via_mcp():
+        with _identity().via_mcp(), self._stamped(agent):
             return self._invoke_marked(spec, args, agent, per_call, params)
+
+    def _stamped(self, agent):
+        """Stamping `wave:N` by default (`[waves].auto_stamp`) after a call that wrote."""
+        return _waves_auto().scope_for(self.repo, agent)
 
     def _invoke_marked(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""

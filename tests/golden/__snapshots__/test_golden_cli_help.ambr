@@ -3134,11 +3134,13 @@
 # ---
 # name: test_help[ddflow waves]
   '''
-  usage: ddflow waves [-h] [--stamp]
+  usage: ddflow waves [-h] [--stamp] [--check] [--limit LIMIT]
   
   options:
-    -h, --help  show this help message and exit
-    --stamp     write derived wave:N labels (not implemented yet; LB-waves ships it).
+    -h, --help     show this help message and exit
+    --stamp        Write the derived wave:N tags.
+    --check        Exit 1 when any wave:N stamp is stale.
+    --limit LIMIT  Items listed per wave in the text view (default 10; 0 = all).
   
   '''
 # ---
@@ -3342,8 +3344,8 @@
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
                           exit 2 = not yet (resume with the token)
-      waves               report that `--stamp` is not implemented and name the interim wave-
-                          stamping mechanism (LB-waves ships it)
+      waves               print the dependency waves; --stamp writes the derived wave:N tags,
+                          --check exits 1 when they are stale
   
   options:
     -h, --help            show this help message and exit
