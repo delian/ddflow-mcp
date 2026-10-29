@@ -149,25 +149,34 @@ def _prime_scratch(scratch: Path, sha: str, pristine_cfg: bytes) -> bool:
     NODE itself -- a symlink left at .git/config is replaced with the pristine regular
     file, its target never written -- and the STAGING name is unpredictable and opened
     O_NOFOLLOW|O_EXCL, so a planted symlink or FIFO at a guessed staging path can
-    neither redirect nor block the write."""
-    for lock in ("index.lock", "HEAD.lock"):
-        (scratch / ".git" / lock).unlink(missing_ok=True)
-    cfg_path = scratch / ".git" / "config"
-    for _ in range(4):
-        staged = scratch / ".git" / f".pristine-{secrets.token_hex(6)}"
-        try:
-            fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            continue
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(pristine_cfg)
-        break
-    else:
+    neither redirect nor block the write. An untracked directory squatting a tracked
+    path can fail a reset: cleaning first (and once more after a failed reset) lets the
+    reset land on the tree that the clean freed. Any filesystem surprise the line left
+    degrades to False -- the run is unreached, the filing never crashes on it."""
+    try:
+        for lock in ("index.lock", "HEAD.lock"):
+            (scratch / ".git" / lock).unlink(missing_ok=True)
+        cfg_path = scratch / ".git" / "config"
+        for _ in range(4):
+            staged = scratch / ".git" / f".pristine-{secrets.token_hex(6)}"
+            try:
+                fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                continue
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(pristine_cfg)
+            break
+        else:
+            return False
+        os.replace(staged, cfg_path)
+        cleaned = P.capture(["git", "clean", "-xdfq"], cwd=scratch, timeout=60.0)
+        reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
+        if reset.code != 0:
+            cleaned = P.capture(["git", "clean", "-xdfq"], cwd=scratch, timeout=60.0)
+            reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
+        return reset.code == 0 and cleaned.code == 0
+    except OSError:
         return False
-    os.replace(staged, cfg_path)
-    reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
-    cleaned = P.capture(["git", "clean", "-xdfq"], cwd=scratch, timeout=60.0)
-    return reset.code == 0 and cleaned.code == 0
 
 
 def _one_run(

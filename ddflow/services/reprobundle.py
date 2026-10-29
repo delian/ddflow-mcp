@@ -76,10 +76,8 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         check_dict = dict(check) if check is not None else {}
         # An UNAVAILABLE or no-run check never really executed: executed defaults True
         # only for a record that carries a real yes/no with runs behind it.
-        real = (
-            check_dict.get("reproduced") in ("yes", "no")
-            and int(check_dict.get("runs", 0) or 0) > 0
-        )
+        r = _countable(check_dict.get("runs", 0) or 0)
+        real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
         check_dict.setdefault("executed", real)
         out["repro_cmd"] = {
             **check_dict,
@@ -239,22 +237,33 @@ def mode_problem(capture: str) -> str:
     return "" if not capture or capture in MODES else f"repro_capture must be one of {MODES}"
 
 
+def _countable(value: Any) -> int | None:
+    """``value`` as a whole, finite count, or None when it cannot count anything."""
+    try:
+        n = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not n.is_integer() or n < 0:
+        return None
+    return int(n)
+
+
 def sighting(run: Any) -> dict[str, Any]:
     """The part of a run's record the bug's EVENT keeps beside the bundle link
     (DX-bug-repro-verify): the verdict the fold folds, nothing the blob already has. A run
     that reached no exit code (nothing to say) gives {}: a record with no RUNS behind it,
-    a verdict that is not yes/no, a 'yes' with no failing run, or a runs value that cannot
-    count is not a sighting, wherever it came from."""
+    a verdict that is not yes/no, a 'yes' with no failing run behind it, or counts that
+    cannot count (fractional, negative, overflowing, failures beyond runs) is not a
+    sighting, wherever it came from."""
     if not isinstance(run, dict) or "reproduced" not in run:
         return {}
     if run.get("reproduced") not in ("yes", "no"):
         return {}
-    try:
-        runs = int(run.get("runs", 0) or 0)
-        failures = int(run.get("failures", 0) or 0)
-    except (TypeError, ValueError):
+    runs = _countable(run.get("runs", 0) or 0)
+    failures = _countable(run.get("failures", 0) or 0)
+    if runs is None or failures is None or runs <= 0 or failures > runs:
         return {}
-    if runs <= 0 or (run.get("reproduced") == "yes" and failures <= 0):
+    if run.get("reproduced") == "yes" and failures <= 0:
         return {}
     return {k: run[k] for k in ("reproduced", "runs", "failures") if k in run}
 
