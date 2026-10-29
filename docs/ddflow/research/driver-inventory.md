@@ -1,6 +1,6 @@
 # Driver inventory: agent-name sites in code
 
-Checked by `tests/test_agent_literals_substring.py` against `BASELINE` in
+Checked by `test_the_inventory_matches_the_ratchet_baseline` in `tests/test_agent_literals_substring.py` (file set and per-file counts) against `BASELINE` in
 `tests/test_no_agent_literals.py` (same files, same counts). Source: driver-architecture.md
 section 2.4 (110 exact sites in 21 files; 65 data, 26 compat, 9 model-axis, 10 driver).
 No behaviour changes here: the table names where each site goes, the moves are later items.
@@ -30,7 +30,7 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 | `ddflow/services/mcpconfig.py` | 2 | driver | `[mcp] shape` |
 | `ddflow/services/leanagents.py` | 1 | driver | `[subagents] template set` |
 | `ddflow/services/importer_harness.py` | 1 | driver | `[memory] store` |
-| `ddflow/services/harness.py` | 1 | driver | removed by B-hx-onboard-generic |
+| `ddflow/services/harness.py` | 1 | driver | `[instructions] file` (site deleted by B-hx-onboard-generic) |
 | `ddflow/core/bookkeeping.py` | 1 | driver | `[worktrees] dir` |
 
 Totals: data 65, compat 26, model-axis 9, driver 10 (110).
@@ -39,6 +39,6 @@ Totals: data 65, compat 26, model-axis 9, driver 10 (110).
 
 The exact ratchet misses constants that merely contain a name (`"run prompt --harness claude"`).
 `test_agent_literals_substring.py` counts them (case-insensitive, ids of 4+ characters;
-`MIN_ID_LEN`) and prints the total; a ceiling `SUBSTRING_CEILING` only stops a silent jump.
+`MIN_ID_LEN`) and prints the total; a ceiling `SUBSTRING_CEILING` (160, margin over 149, above the research figure only in that it counted models too) only stops a silent jump.
 Today: 149 constants in 42 files (clients.py 22, review.py 14, parsers/workflow.py 14,
 adopt.py 10). The research's 163 also counted model names. Lower the ceiling as sites move.
