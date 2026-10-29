@@ -56,7 +56,17 @@ def decode(token: str) -> Target | None:
         if not isinstance(d, dict):
             return None
         known = Target.__dataclass_fields__
-        return Target(**{k: v for k, v in d.items() if k in known})
+        t = Target(**{k: v for k, v in d.items() if k in known})
+        ints = (t.offset, t.pid)
+        strs = (t.job, t.file, t.until, t.gate, t.sig, t.start)
+        if not (
+            all(type(i) is int for i in ints)
+            and all(isinstance(x, str) for x in strs)
+            and isinstance(t.heartbeat, list)
+            and all(isinstance(h, str) for h in t.heartbeat)
+        ):
+            return None
+        return t
     except (ValueError, TypeError, AttributeError):
         return None
 
