@@ -137,6 +137,7 @@ def test_provider_rows_withheld_under_min_samples():
     try:
         st = fold(list(log.events), strict=False)
         rows = M.run(log.events, st, Config(), NOW, view="summary").metrics["providers"]
-        assert rows and all(r["value"] is None and "samples" in r["unavailable"] for r in rows)
+        mine = [r for r in rows if r["metric"].startswith("swarm.")]
+        assert mine and all(r["value"] is None and "samples" in r["unavailable"] for r in mine)
     finally:
         M.unregister("swarm-thin")
