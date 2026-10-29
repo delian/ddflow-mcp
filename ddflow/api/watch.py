@@ -173,7 +173,11 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
             if mark != seen_mark or time.monotonic() - checked >= WT.RECHECK_S:
                 seen_mark, checked = mark, time.monotonic()
                 log, cfg, st = _load(repo, agent)
-                renew, missed = _pacer(log, cfg, st, t.heartbeat)
+                gone = _refuse_elsewhere(st, t)
+                if gone is not None:
+                    return gone
+                renew, again = _pacer(log, cfg, st, t.heartbeat)
+                missed = sorted({*missed, *again})
 
 
 def watch_summary(d: dict[str, Any]) -> str:
