@@ -992,6 +992,14 @@ def _table_delim(cells: list[str]) -> bool:
     return bool(cells) and all(c.strip() == "" or re.fullmatch(r":?-+:?", c.strip()) for c in cells)
 
 
+def _col(tbl: list[str], cols: dict[str, int], key: str) -> str:
+    """The cell of column ``key``, or "" -- a GFM row may leave trailing cells off (the
+    closing pipe and the empty cells before it), so a data row with no globs cell is read
+    as having none rather than as an index past the row."""
+    i = cols.get(key)
+    return tbl[i] if i is not None and i < len(tbl) else ""
+
+
 def _table_task(
     tbl: list[str], table_cols: dict[str, int], rel: str, n: int, taken: set[str]
 ) -> Found | None:
@@ -1000,8 +1008,8 @@ def _table_task(
     it exactly, where checkbox prose only shapes one); needs and globs are the columns
     that say so, so a title's own pipe -- written escaped -- stays IN the title instead of
     renumbering the columns (B-sx-tasks-pipe-split-titles)."""
-    tid = tbl[table_cols["id"]].strip() if "id" in table_cols else ""
-    title = _clean_title(tbl[table_cols["title"]]) if "title" in table_cols else ""
+    tid = _col(tbl, table_cols, "id").strip()
+    title = _clean_title(_col(tbl, table_cols, "title"))
     if not tid or not title:
         return None
     tsk = Found(
@@ -1010,28 +1018,12 @@ def _table_task(
         title=title,
         source=f"{rel}:{n}",
         body="",
-        globs=_parse_globs(tbl[table_cols["globs"]]) if "globs" in table_cols else [],
+        globs=_parse_globs(_col(tbl, table_cols, "globs")),
         extra={"id_from_source": True, "from_table": True},
     )
-    if "needs" in table_cols:
-        tsk.needs = _parse_needs(tbl[table_cols["needs"]])
+    if _col(tbl, table_cols, "needs"):
+        tsk.needs = _parse_needs(_col(tbl, table_cols, "needs"))
     return tsk
-
-
-def _table_row(
-    line: str, table_cols: dict[str, int], rel: str, n: int, taken: set[str]
-) -> tuple[Found | None, dict[str, int]]:
-    """Step one markdown table line: ``("the header's columns",)`` when it is one, or the
-    task a data row becomes, else ``(None, cols)``. The whole decision lives here so
-    ``scan_todos`` keeps its complexity budget -- several branches inline pushed it past
-    its lint ratchet while teaching the loop nothing it had lost."""
-    tbl = _table_cells(line)
-    cols = _table_columns(line)
-    if "id" in cols or "title" in cols:
-        return None, cols
-    if table_cols and tbl and not _table_delim(tbl):
-        return _table_task(tbl, table_cols, rel, n, taken), table_cols
-    return None, table_cols
 
 
 def _scan_task_tables(
@@ -1039,20 +1031,35 @@ def _scan_task_tables(
 ) -> list[Found]:
     """The tasks of every ``| Id | Title | Needs | Globs |`` table in ``lines``, in order.
 
-    Task tables are a scan apart rather than more branches of ``scan_todos``: a checklist
-    groups its boxes under a heading, a task TABLE names each of its own id, needs and
-    globs, and reading a row inside the checklist loop pushed that function past its
-    lint ratchet for no added meaning. Kept in file order, so the id stays in ``taken``
-    beside the checkboxes that may share its name."""
+    A header is a row that names an id/title column AND is followed by a delimiter row --
+    the GFM rule that separates a header from a data row whose cell merely reads "id"
+    (a header alone is data to a reader that mis-labels it). Task tables are a scan apart
+    rather than more branches of ``scan_todos``; reading a row inside the checklist loop
+    pushed that function past its lint ratchet for no added meaning. Kept in file order,
+    so the id stays in ``taken`` beside the checkboxes that may share its name."""
     out: list[Found] = []
     cols: dict[str, int] = {}
-    for n, line in enumerate(lines, 1):
-        if fenced[n - 1] or not line.lstrip().startswith("|"):
+    i = 0
+    while i < len(lines):
+        if fenced[i] or not lines[i].lstrip().startswith("|"):
             cols = {}
+            i += 1
             continue
-        tsk, cols = _table_row(line, cols, rel, n, taken)
-        if tsk is not None:
-            out.append(tsk)
+        header = _table_columns(lines[i])
+        if (
+            ("id" in header or "title" in header)
+            and i + 1 < len(lines)
+            and _table_delim(_table_cells(lines[i + 1]))
+        ):
+            cols = header
+            i += 2  # step past the header and its delimiter row
+            continue
+        tbl = _table_cells(lines[i])
+        if cols and tbl and not _table_delim(tbl):
+            tsk = _table_task(tbl, cols, rel, i + 1, taken)
+            if tsk is not None:
+                out.append(tsk)
+        i += 1
     return out
 
 
