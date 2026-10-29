@@ -39,6 +39,6 @@ Totals: data 65, compat 26, model-axis 9, driver 10 (110).
 
 The exact ratchet misses constants that merely contain a name (`"run prompt --harness claude"`).
 `test_agent_literals_substring.py` counts them (case-insensitive, ids of 4+ characters;
-`MIN_ID_LEN`) and prints the total; a ceiling `SUBSTRING_CEILING` (160, margin over 149, above the research figure only in that it counted models too) only stops a silent jump.
+`MIN_ID_LEN`) and prints the total; a ceiling `SUBSTRING_CEILING` (160: a margin over today's 149; the research's 163 is not the bound because it also counted model names) only stops a silent jump.
 Today: 149 constants in 42 files (clients.py 22, review.py 14, parsers/workflow.py 14,
 adopt.py 10). The research's 163 also counted model names. Lower the ceiling as sites move.
