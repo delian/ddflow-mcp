@@ -124,23 +124,8 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
     if lint_exempt:
-        takes_no = {"a mutation": mutation, "--verify-reason": verify_reason}
-        landing = None
-        if landed.strip():
-            landing, why = _landing(repo, cfg, landed)
-            if why:
-                return O.refused("bug.fixed", f"--landed: {why}", id=item)
-        return _close_lint_exempt(
-            log,
-            cfg,
-            st,
-            item,
-            lint_exempt,
-            tests,
-            entry,
-            takes_no=[n for n, v in takes_no.items() if v],
-            landing=landing,
-            record=_record_fixed,
+        return _lint_exempt_close(
+            repo, log, cfg, st, item, lint_exempt, tests, entry, mutation, verify_reason, landed
         )
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
@@ -323,6 +308,43 @@ def _record_fixed(
     with log.transaction():
         log.append("bug.fixed", item, {**payload, **({"landed": landing[0]} if landing else {})})
         return _end_fix_task_landed(log, item, landing[0]) if landing else {}
+
+
+def _lint_exempt_close(
+    repo: Path,
+    log,
+    cfg,
+    st,
+    item: str,
+    lint_exempt: str,
+    tests: list[str],
+    entry: dict[str, Any],
+    mutation: dict[str, str] | None,
+    verify_reason: str,
+    landed: str,
+) -> O.Outcome:
+    """The lint-exempt branch of `bug_fixed`, folded out so that function stays under the
+    grade-D complexity ratchet (Bab0c83b80c). `--landed` is allowed here: the exemption
+    waives the regression test, not the commit reference, so the record can name the
+    commit that holds the fix."""
+    takes_no = {"a mutation": mutation, "--verify-reason": verify_reason}
+    landing = None
+    if landed.strip():
+        landing, why = _landing(repo, cfg, landed)
+        if why:
+            return O.refused("bug.fixed", f"--landed: {why}", id=item)
+    return _close_lint_exempt(
+        log,
+        cfg,
+        st,
+        item,
+        lint_exempt,
+        tests,
+        entry,
+        takes_no=[n for n, v in takes_no.items() if v],
+        landing=landing,
+        record=_record_fixed,
+    )
 
 
 def _landing(repo: Path, cfg, ref: str) -> tuple[tuple[str, str] | None, str]:
