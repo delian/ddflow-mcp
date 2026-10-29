@@ -239,17 +239,21 @@ def mode_problem(capture: str) -> str:
 
 def _countable(value: Any) -> int | None:
     """``value`` as a whole, finite count, or None when it cannot count anything.
-    Integers stay exact (int first); only values that are genuinely float pass the
-    float route, so 10**20 and 10**20 + 1 never collapse to one float."""
-    try:
-        return int(value)  # ints and digit strings: exact, never float-collapsed
-    except (TypeError, ValueError):
-        pass
+    Strings and integers stay exact (int() first on those types, where an exact answer
+    exists); anything else goes through float and must be a whole non-negative number
+    there -- a fractional count truncates to NOTHING, never to an integer."""
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, int):
+        return value
     try:
         n = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if not n.is_integer() or n < 0:
+    if n != n or n < 0 or not n.is_integer():
         return None
     return int(n)
 
