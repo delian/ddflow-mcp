@@ -1070,15 +1070,18 @@ def parse(text: str) -> tuple[list[Finding], bool]:
         #: the spot the author must answer, so its text is derived from the location and
         #: a location-only finding is never recorded empty (B-review-finding-empty-text).
         detail = (m.group(3) or "").strip() or location
+        title = location or " ".join(detail.split())[:80]
         if not detail:
-            #: No location and no paragraph: the block names nothing, so it is not a
-            #: finding at all and is not recorded.
-            continue
+            #: The reviewer declared a finding but named no location and no paragraph.
+            #: It is still a finding -- recorded with a marker, not dropped, so the gate
+            #: stays failed (fail-closed) instead of reading a finding as a clean review.
+            title = "(unnamed finding)"
+            detail = "(reviewer raised a finding but named nothing)"
         findings.append(
             Finding(
                 severity=m.group(1).upper(),
                 location=location,
-                title=location or " ".join(detail.split())[:80],
+                title=title,
                 detail=detail,
             )
         )
