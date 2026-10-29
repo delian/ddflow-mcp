@@ -28,7 +28,7 @@ from ...services.approvals.canon import Canon
 from ...services.export import refresh as RF
 from ...services.gates import failed_review as GO
 from .. import jobs as JB
-from .._base import _load
+from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
 from ._common import _chore_base, _chore_event, _require
@@ -117,7 +117,12 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             entry = parse_changelog(changelog)
         except ValueError as e:
             return O.failed("item.completed", str(e), id=item)
-    log, cfg, st = _load(repo, agent)
+    # `_load_fresh`, never `_load`: a completion judges the item's CURRENT kind and
+    # pipeline, and `_load` returns a scope-cached fold -- the MCP handshake's read burst
+    # folds the log once and reuses it, so a `ddflow update --kind doc` appended since then
+    # is invisible to it and the old pipeline (unit_tests) still blocks (Bf0a1039f9f). The
+    # CLI is a fresh process every time and never hit this; the in-process MCP server did.
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.completed", cfg.lease.grace_s, log.clone_id(create=False))
     # B2809f4213b: a contested claim is settled by `resolve`, not by finishing
     refusal = (
@@ -410,7 +415,7 @@ def abandon(
     as settled, so an item you decided against stops holding its phase open — which it
     otherwise does forever, since nothing else can ever finish it.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.abandoned", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -495,7 +500,7 @@ def remove(
     replay`, which is what keeps the record honest about work that was planned and then
     dropped.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.removed", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -553,7 +558,7 @@ def block(
     out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
     deliberate form -- the B12/B14 data fix was one.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.blocked", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -589,7 +594,7 @@ def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     caller should see, not a success that wrote no event.
     """
 
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.unblocked", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
