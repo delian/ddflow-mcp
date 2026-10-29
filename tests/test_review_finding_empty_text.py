@@ -54,8 +54,7 @@ def test_a_block_that_names_nothing_is_kept_as_a_marked_finding_not_dropped():
 def test_a_location_only_finding_is_recorded_with_its_location_as_text(repo, tmp_path):
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
-        "#!/bin/sh\ncat >/dev/null\n"
-        "printf 'FINDING MEDIUM y.py:1\\n\\nSTATUS: FINDINGS 1\\n'\n"
+        "#!/bin/sh\ncat >/dev/null\nprintf 'FINDING MEDIUM y.py:1\\n\\nSTATUS: FINDINGS 1\\n'\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
