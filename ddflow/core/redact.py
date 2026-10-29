@@ -564,6 +564,8 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("bug.found", "key"): "a dedupe key",
     ("bug.found", "repro"): "the link to a stored bundle: its blob reference, size and mode",
     ("bug.found", "scope"): "a scope word",
+    ("bug.tagged", "add"): "the tags added: label words",
+    ("bug.tagged", "remove"): "the tags removed: label words",
     ("bug.found", "severity"): "a severity word",
     ("ci.result", "status"): "a status word",
     ("ddflow.seen", "version"): "a version",
