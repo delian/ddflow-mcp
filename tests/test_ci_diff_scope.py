@@ -39,10 +39,10 @@ repos:
 
 SCRIPT = (
     "#!/bin/sh\n"
-    "for f in \"$@\"; do\n"
-    "  grep -q BAD -- \"$f\" && exit 1\n"
+    'for f in "$@"; do\n'
+    '  grep -q BAD -- "$f" && exit 1\n'
     "  s=$?\n"
-    "  [ \"$s\" -eq 1 ] || exit 2\n"
+    '  [ "$s" -eq 1 ] || exit 2\n'
     "done\n"
     "exit 0\n"
 )
