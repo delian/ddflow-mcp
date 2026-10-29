@@ -151,6 +151,7 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
         }
 
     seen_mark, checked = None, started
+    renew()  # a lease close to expiry is renewed before the first sleep, not after it
     while True:
         found = _probe(t, st)
         if found is not None:
