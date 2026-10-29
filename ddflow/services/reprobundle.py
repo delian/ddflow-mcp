@@ -238,8 +238,11 @@ def mode_problem(capture: str) -> str:
 def sighting(run: Any) -> dict[str, Any]:
     """The part of a run's record the bug's EVENT keeps beside the bundle link
     (DX-bug-repro-verify): the verdict the fold folds, nothing the blob already has. A run
-    that reached no exit code (nothing to say) gives {}: an unavailable run is no sighting."""
+    that reached no exit code (nothing to say) gives {}: a record with no RUNS behind it
+    or a verdict that is not yes/no is not a sighting, wherever it came from."""
     if not isinstance(run, dict) or "reproduced" not in run:
+        return {}
+    if run.get("reproduced") not in ("yes", "no") or int(run.get("runs", 0)) <= 0:
         return {}
     return {k: run[k] for k in ("reproduced", "runs", "failures") if k in run}
 

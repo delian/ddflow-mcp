@@ -99,7 +99,12 @@ def _run_at(
                 # read.
                 for lock in ("index.lock", "HEAD.lock"):
                     (s.path / ".git" / lock).unlink(missing_ok=True)
-                (s.path / ".git" / "config").write_bytes(pristine_cfg)
+                # os.replace swaps the NODE itself: a run that left a symlink at .git/config
+                # is replaced with the pristine regular file, its target never written.
+                cfg_path = s.path / ".git" / "config"
+                staged = cfg_path.parent / ".ddflow-pristine-cfg"
+                staged.write_bytes(pristine_cfg)
+                os.replace(staged, cfg_path)
                 reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
                 cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
                 if reset.code != 0 or cleaned.code != 0:

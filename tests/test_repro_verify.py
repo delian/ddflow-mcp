@@ -44,7 +44,7 @@ def python(source: str) -> str:
     """A repro command line that runs ``source`` with THIS interpreter (github-safe split).
     The snippet is shell-QUOTED: an embedded double quote or shell-active char in it must
     not end the -c word for the shell."""
-    return f'{shlex.quote(sys.executable)} -c {shlex.quote(source)}'
+    return f"{shlex.quote(sys.executable)} -c {shlex.quote(source)}"
 
 
 def _file(repo: Path, **kw):
@@ -140,9 +140,12 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
 
 def test_an_unconfirmed_bugs_own_item_is_not_offered_before_confirmed_work(proj):
     # The reading's leak: the bug's OWN item -- a non-feature task it was filed against,
-    # with no fix task -- must be excluded too, not only its fix_task.
+    # with no fix task -- must be excluded too, not only its fix_task. The CONTROL: the
+    # sibling plain item a CONFIRMED bug names IS promoted, so the exclusion below is
+    # demonstrably the unconfirmed record's doing, not a bug_items coincidence.
     run_cli(proj, "phase", "add", "P1", "--title", "Core")
     run_cli(proj, "task", "add", "P1.CARRY", "--phase", "P1", "--globs", "carry/*")
+    run_cli(proj, "task", "add", "P1.CARRY2", "--phase", "P1", "--globs", "carry2/*")
     _, carry = _file(
         proj,
         summary="carrier",
@@ -150,9 +153,17 @@ def test_an_unconfirmed_bugs_own_item_is_not_offered_before_confirmed_work(proj)
         no_task=True,
         repro_cmd=python("import sys; sys.exit(0)"),
     )
+    _, promo = _file(
+        proj,
+        summary="promoted",
+        item="P1.CARRY2",
+        no_task=True,
+        repro_cmd=python("import sys; sys.exit(1)"),
+    )
     assert carry.item == "P1.CARRY" and carry.reproduced == "no"
+    assert promo.item == "P1.CARRY2" and promo.reproduced == "yes"  # the confirmed control
     ids = bug_items(state(proj), Config.load(proj))
-    assert "P1.CARRY" in {i.id for i in state(proj).items.values()}  # the scenario really had it
+    assert "P1.CARRY2" in ids  # confirmed promotion works: the exclusion below is meaningful
     assert "P1.CARRY" not in ids and carry.fix_task == ""
 
 
