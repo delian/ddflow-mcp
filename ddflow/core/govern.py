@@ -10,7 +10,9 @@ way ``core.flowcontrol.fold_limit`` does, and reuses its ``Sample`` and ``Thresh
 Ladders step on marks (a reading AT a mark steps up). A step up is immediate; a step down
 needs the reading to fall ``hysteresis`` below the mark it left AND ``cooldown_s`` since
 the ladder last moved, so a reading hovering at a mark does not flap. A reading that is
-unavailable (``None``) holds the ladder where it is; it is never read as zero.
+unavailable (``None``) holds the ladder where it is; it is never read as zero. A signal
+the caller leaves out of ``load`` is simply not measured, not unavailable: the caller names
+what it samples (``None`` is how it says a sampled signal could not be read).
 
 * quota ladder (marks 0.4/0.6/0.8): 1 caps new work at the balanced tier and medium
   effort; 2 caps mechanical work at fast and other work at low effort; 3 pauses and asks.

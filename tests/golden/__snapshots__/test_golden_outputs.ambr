@@ -1979,9 +1979,9 @@
           mark set out of order is sorted.
       govern.quota_mark_3 = 0.8   [default]
           Quota fraction (default 0.8) at which the governor pauses and asks
-          (D-quotas: refuse new work, pause items, resume at the reset). 1.0 uses
-          everything. Marks are fractions of the allowance (0 to 1); a reading AT a
-          mark steps the ladder up at once, and it steps down only after falling
+          (D-quotas-governor: refuse new work, pause items, resume at the reset). 1.0
+          uses everything. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
           `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
           mark set out of order is sorted.
       govern.context_mark_1 = 0.6   [default]
