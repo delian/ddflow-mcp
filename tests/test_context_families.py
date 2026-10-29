@@ -66,7 +66,8 @@ def test_old_facts_make_doctor_note_them():
     old = CF.stale(data, 90, date(2027, 2, 1))
     assert any(s.startswith("family.claude.ttl") for s in old)
     notes = CF.doctor_notes(90, date(2027, 2, 1))
-    assert len(notes) == 1 and "older than 90 days" in notes[0] and "family.claude.ttl" in notes[0]
+    assert len(notes) == 1 and "older than 90 days" in notes[0]
+    assert "family.claude.ttl" in notes[0]
     assert CF.doctor_notes(90, date(2026, 10, 29)) == []
 
 
@@ -137,3 +138,11 @@ def test_validate_survives_malformed_tables_and_bad_exceptions():
     data["context_families.toml"]["family"]["claude"]["ttl"]["exc"] = {"": "x"}
     data["context_families.toml"]["family"]["claude"]["window"]["exc"] = ["sonnet"]
     assert len([p for p in CF.validate(data) if "exc must be" in p]) == 2
+
+
+def test_validate_reports_a_missing_unknown_row_and_a_non_table_family():
+    base = {"context_harnesses.toml": {"harness": {}, "sources": {}}}
+    gone = CF.validate({"context_families.toml": {"family": {}, "sources": {}}, **base})
+    assert any("'unknown' is missing" in p for p in gone)
+    bad = CF.validate({"context_families.toml": {"family": "x", "sources": {}}, **base})
+    assert any("family is not a table" in p for p in bad)

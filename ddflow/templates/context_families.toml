@@ -12,6 +12,8 @@
 #   A fact that is not listed is "left out": nothing is known, nothing is assumed.
 #   src = a key of [sources]; d = ISO date the source was read. A fact older than
 #   [context].facts_max_age_days is reported by doctor.
+# Scope: a family row describes the vendor's own API. The same model served by a third party
+# (Model Studio, a router, a local server) can differ; routes belong to DRV-model-catalog.
 # Prices move: they are data with a date, never code. Absolute prices belong to
 # DRV-model-catalog; this table keeps only ratios and structure. The `unknown` family has no
 # facts on purpose: a model that matches no family never borrows a neighbour's numbers.
@@ -52,7 +54,7 @@ compaction_kind = { v = "server_opaque", s = "documented", src = "cache-note", d
 [family.gemini]
 cache_kind = { v = "automatic", s = "documented", src = "cache-note", d = "2026-10-23", note = "implicit; explicit objects on 3.x/2.5 only, not Gemini 4" }
 read_mult = { v = 0.1, s = "documented", src = "cache-note", d = "2026-10-23" }
-min_tokens = { v = 2048, s = "documented", src = "cache-note", d = "2026-10-23", note = "2048-4096 depending on model" }
+min_tokens = { v = 4096, s = "documented", src = "cache-note", d = "2026-10-23", note = "2048-4096 depending on model; 4096 is the safe upper bound" }
 
 [family.deepseek]
 cache_kind = { v = "automatic", s = "documented", src = "deepseek-cache", d = "2026-10-29", note = "disk cache on by default, prefix units" }
@@ -64,7 +66,7 @@ window = { v = 1000000, s = "documented", src = "deepseek-pricing", d = "2026-10
 
 [family.kimi]
 cache_kind = { v = "automatic", s = "documented", src = "kimi-pricing", d = "2026-10-29", note = "'automatically enables' context caching billing for repeated prefixes" }
-ttl = { v = ["5m", "1h"], s = "documented", src = "kimi-pricing", d = "2026-10-29", note = "default 5 min; K3 models bill writes by TTL (5m or 1h)" }
+ttl = { v = ["5m", "1h"], s = "documented", src = "kimi-pricing", d = "2026-10-29", exc = { "k2" = ["5m"] }, note = "default 5 min; K3 models bill writes by TTL (5m or 1h)" }
 read_mult = { s = "unverified", src = "kimi-pricing", d = "2026-10-29", note = "the price table did not load; ratio not known" }
 write_mult = { s = "unverified", src = "kimi-pricing", d = "2026-10-29", note = "page says K3 bills writes by TTL AND that cached input is billed only at the hit price with no extra write charge: contradictory, probe the price table" }
 window = { v = 1048576, s = "documented", src = "kimi-pricing", d = "2026-10-29", exc = { "k2" = 262144 }, note = "K3 series; K2 series 262144 (K2 closed to new users 2026-10-31, retirement planned end of 2026-12)" }
@@ -78,7 +80,7 @@ min_tokens = { v = 1024, s = "documented", src = "cache-note", d = "2026-10-23" 
 
 [family.glm]
 cache_kind = { v = "explicit", s = "unverified", src = "cache-note", d = "2026-10-23", note = "only seen as Zhipu-deployed GLM on Model Studio (min 512 tokens); the direct Zhipu API was not read" }
-min_tokens = { v = 512, s = "documented", src = "cache-note", d = "2026-10-23", note = "Zhipu-deployed GLM on Model Studio only" }
+min_tokens = { v = 512, s = "unverified", src = "cache-note", d = "2026-10-23", note = "lead: documented only for Zhipu-deployed GLM on Model Studio; the direct Zhipu API was not read" }
 
 [family.local]
 # Self-hosted endpoints (vLLM, llama.cpp, Ollama...). The model behind one is of any other
