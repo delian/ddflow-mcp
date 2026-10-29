@@ -1644,6 +1644,10 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 
 #: How much of one previous finding a re-review quotes: enough to recognise it, not the
 #: whole essay a reviewer may have written.
+_BACKGROUND_HINT = (
+    "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "
+    "kills it -- run `ddflow review` in the background and read its output when it ends."
+)
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300
 _DELTA_CAVEAT = (
@@ -1692,7 +1696,10 @@ def _with_previous_findings(
         "An earlier review of this item reported the findings below. For each: if the "
         "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
         "refuted by its probe), do not report it again; report it only if it still holds, "
-        "saying why the fix or the probe does not answer it. Then look for NEW issues in "
+        "saying why the fix or the probe does not answer it. Do not restate a finding from "
+        "memory: check each previous finding against the current code, and do not carry it over "
+        "when the code it cites is gone or the change answers it; if the same defect "
+        "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
         "the whole diff -- these are not the only places to look.",
         "",
     ]
@@ -2591,6 +2598,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
     _log_started(log, it, item, gate)
     results = []
+    say(_BACKGROUND_HINT)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
