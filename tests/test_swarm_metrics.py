@@ -41,7 +41,9 @@ def test_dependent_chain_weights_cycle_time():
         log.complete("a1", tid, t + n * H)
         log.release("a1", tid, t + n * H + 1)
         t += n * H + 10
-    assert _run(log)["unavailable"]["throughput"].startswith("3 merged items")  # under min_samples
+    thin = _run(log)  # under min_samples
+    assert thin["unavailable"]["throughput"].startswith("3 merged items")
+    assert thin["critical_path"]["length"] is None and thin["critical_path"]["slack_s"] is None
     cfg = Config()
     cfg.metrics.min_samples = 1
     cp = _run(log, cfg)["critical_path"]
@@ -124,3 +126,17 @@ def test_provider_registers_with_the_shared_service():
         assert rows["swarm.merged_per_hour"]["value"] > 0
     finally:
         M.unregister("swarm-test")
+
+
+def test_provider_rows_withheld_under_min_samples():
+    log = Log()
+    log.task("A", "a.py")
+    log.claim("a1", "A", T0, "a.py")
+    log.complete("a1", "A", T0 + H)
+    M.register("swarm-thin", S.provider, replace=True)
+    try:
+        st = fold(list(log.events), strict=False)
+        rows = M.run(log.events, st, Config(), NOW, view="summary").metrics["providers"]
+        assert rows and all(r["value"] is None and "samples" in r["unavailable"] for r in rows)
+    finally:
+        M.unregister("swarm-thin")

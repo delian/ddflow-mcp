@@ -167,7 +167,14 @@ def _cost(events: Sequence[Event], facts: Facts, items: set[str], now: float, mi
     }
 
 
-def _path(ctx: Context, merged: list[Span], wall: float | None, phase: str) -> dict:
+def _path(ctx: Context, merged: list[Span], wall: float | None, phase: str, thin: bool) -> dict:
+    open_length = len(
+        critical_path(ctx.facts.state, phase, ctx.cfg)
+    )  # of unfinished work: no sample rule
+    if thin:  # the merged chain rests on too few items to be a figure
+        return dict.fromkeys(
+            ("merged_chain", "length", "duration_s", "wall_s", "slack_s", "parallelism")
+        ) | {"open_length": open_length}
     chain, chain_s = _chain(ctx, merged)
     cycles = sum(s.cycle_s or 0.0 for s in merged)
     return {
@@ -177,7 +184,7 @@ def _path(ctx: Context, merged: list[Span], wall: float | None, phase: str) -> d
         "wall_s": wall,
         "slack_s": wall - chain_s if wall is not None and chain else None,
         "parallelism": cycles / wall if wall else None,
-        "open_length": len(critical_path(ctx.facts.state, phase, ctx.cfg)),
+        "open_length": open_length,
     }
 
 
@@ -224,7 +231,7 @@ def baseline(
         "throughput": {"per_hour": per_hour, "wall_s": wall},
         "rework": rw,
         "cost": cost,
-        "critical_path": _path(ctx, merged, wall, phase),
+        "critical_path": _path(ctx, merged, wall, phase, thin),
         "unavailable": unavailable,
     }
 
