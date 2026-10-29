@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..infra import paths
 
 STATUSES = ("verified", "documented", "unverified", "none")
@@ -60,7 +61,7 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
             if f.get("src") not in sources:
                 problems.append(f"{at}: source {f.get('src')!r} is not in [sources]")
             try:
-                date.fromisoformat(str(f.get("d")))
+                clock.parse_date(str(f.get("d")))
             except ValueError:
                 problems.append(f"{at}: date {f.get('d')!r} is not ISO")
             if f["s"] in READABLE and "v" not in f:
@@ -73,6 +74,10 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
             )
     if UNKNOWN not in data["context_families.toml"].get("family", {}):
         problems.append("context_families.toml: family 'unknown' is missing")
+    elif any(is_fact(v) for v in family_row(data, UNKNOWN).values()):
+        problems.append(
+            "context_families.toml: family 'unknown' must have no facts (no neighbour borrowing)"
+        )
     return problems
 
 
@@ -100,7 +105,7 @@ def stale(
     for doc in data.values():
         for table, row, key, f in facts(doc):
             try:
-                age = (today - date.fromisoformat(str(f.get("d")))).days
+                age = (today - clock.parse_date(str(f.get("d")))).days
             except ValueError:
                 continue
             if age > max_age_days:

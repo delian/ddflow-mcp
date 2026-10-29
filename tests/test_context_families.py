@@ -72,3 +72,14 @@ def test_old_facts_make_doctor_note_them():
 def test_data_files_stay_small():
     for name in CF._FILES:
         assert (paths.templates_dir() / name).stat().st_size < 20_000
+
+
+def test_unknown_family_carrying_a_fact_is_a_problem():
+    data = CF.load()
+    data["context_families.toml"]["family"]["unknown"]["ttl"] = {
+        "v": 1,
+        "s": "documented",
+        "src": "cache-note",
+        "d": "2026-10-29",
+    }
+    assert any("no neighbour" in p for p in CF.validate(data))
