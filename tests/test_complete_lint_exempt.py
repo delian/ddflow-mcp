@@ -48,3 +48,5 @@ def test_complete_cli_takes_lint_exempt(repo):
     )
     assert code == 0, err
     assert state(repo).bugs["Bci-ruff-2"].resolution == "fixed"
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verify"]["reason"] == "formatted"
