@@ -987,9 +987,11 @@ def _table_columns(row: str) -> dict[str, int]:
 
 
 def _table_delim(cells: list[str]) -> bool:
-    """A GFM delimiter row's cells are only ``-`` and ``:`` (``:---``), so a data row is
-    told from how the table says a column may align."""
-    return bool(cells) and all(c.strip() == "" or re.fullmatch(r":?-+:?", c.strip()) for c in cells)
+    """A GFM delimiter row's cells are only ``-`` and ``:`` (``:---``), at least one of
+    them, so a data row is told from how the table says a column may align and a blank
+    line is a row END, not a delimiter (its cells are all empty)."""
+    ones = [c.strip() for c in cells if c.strip()]
+    return bool(ones) and all(re.fullmatch(r":?-+:?", c) for c in ones)
 
 
 def _col(tbl: list[str], cols: dict[str, int], key: str) -> str:
