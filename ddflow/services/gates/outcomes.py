@@ -31,6 +31,7 @@ from .evidence import (
 )
 from .failed_gate import skipped_after_failure
 from .kinds import DiffPaths, bare, evidence_problems, kind_pipeline, not_applicable
+from .rounds import delta_rounds, full_rounds
 from .stale_why import StaleNote, _differing_note
 from .status_notes import _why_notes
 
@@ -160,12 +161,17 @@ def untriaged_note(it, gate: str) -> str:
 
 
 def rounds_line(it, gate: str) -> str:
-    """ "1 full round, 2 delta rounds" from the gate's recorded `ddflow review`, or ""."""
-    rec = it.gates.get(gate)
-    ev = (rec.evidence or {}) if rec else {}
-    if "review_kind" not in ev:
+    """ "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed, or "".
+
+    Counted from the gate's HISTORY via `services.gates.rounds`, the same fold the
+    review budget and `review triage` count (DX-review-round-count): the current
+    record alone resets when a later delta, hand record or re-claim replaces its
+    evidence, so `gate status` could say '1 full round' where `review triage` says
+    '2 of 2 rounds' for the same gate."""
+    if it is None:
         return ""
-    full, delta = int(ev.get("rounds") or 0), int(ev.get("delta_rounds") or 0)
+    full = full_rounds(it, gate)
+    delta = delta_rounds(it, gate)
     if not full and not delta:
         return ""
 

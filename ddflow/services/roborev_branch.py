@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
 import re
 import shlex
 import shutil
@@ -58,12 +57,22 @@ def _git(where: Path, *argv: str) -> str:
     return r.out.strip() if r.code == 0 else ""
 
 
-def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
+def _pluck_job_id(enqueue_out: str) -> int | None:
+    """The id the enqueue's own WORDS printed (`Enqueued job N ...`), None when they named no
+    job (the only case a list read may decide it)."""
     m = re.search(r"\bjob\s*[#:=]?\s*(\d+)\b", enqueue_out, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
+    return int(m.group(1)) if m else None
+
+
+def _find_job(jobs: list, where: Path, sha: str, enqueue_out: str) -> int | None:
+    """The enqueued job's id: the enqueue's own words first, else the newest list record
+    covering ``sha`` among ``jobs``. The newest covering record wins: a re-enqueue after a
+    failed record gets a NEW id and a POST-enqueue list contains it, so a stale failed
+    record cannot beat it."""
+    if (m := _pluck_job_id(enqueue_out)) is not None:
+        return m
     ids = [
-        int(j["id"]) for j in _list(exe, where)
+        int(j["id"]) for j in jobs
         if RR._covers(str(j.get("git_ref") or ""), sha) and "id" in j
     ]  # fmt: skip
     return max(ids) if ids else None
@@ -72,15 +81,11 @@ def _find_job(exe: str, where: Path, sha: str, enqueue_out: str) -> int | None:
 _LIVE = ("queued", "running")
 
 
-def _list(exe: str, where: Path, limit: int = 100) -> list[dict]:
-    p = proc.capture(
-        [exe, "list", "--json", "--limit", str(limit)], cwd=where, timeout=RR._TIMEOUT_S
-    )
-    try:
-        jobs = json.loads(p.stdout or "[]") or []
-    except ValueError:
-        return []
-    return [j for j in jobs if isinstance(j, dict)] if isinstance(jobs, list) else []
+def _list(exe: str, where: Path) -> tuple[list[dict], str]:
+    """(the jobs, the read's failure note): ONE reader for the whole wait surface
+    (`roborev._read_list`), so an ask that failed or printed no usable JSON comes back as a
+    NOTE here too -- it never collapses to `[]`, which says "no jobs in this repository"."""
+    return RR._read_list(exe, where)
 
 
 def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
@@ -101,18 +106,6 @@ def _reusable_job(jobs: list[dict], sha: str, mb: str) -> int | None:
             continue  # a single commit, or a range from elsewhere, is not the branch review
         ids.append(RR._job_id(j))
     return max(ids) if ids else None  # type: ignore[type-var]
-
-
-def _reviewer(exe: str, where: Path, job: int) -> str:
-    """The agent roborev ACTUALLY ran job ``job`` with (its model when it records one, as
-    `roborev.Review.reviewer`), "" when the job record cannot be read."""
-    for j in _list(exe, where):
-        if RR._job_id(j) == job:
-            # the same name `roborev.Review.reviewer` judges the family by
-            return RR.Review(
-                job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")
-            ).reviewer
-    return ""
 
 
 def _secs(a: str, b: str) -> float | None:
@@ -155,14 +148,6 @@ def _workers(exe: str, where: Path) -> int:
     return int(m.group(1)) if m else 1
 
 
-def _job_status(exe: str, where: Path, job: int) -> str:
-    """The roborev job's own status (`done`, `failed`, ...), "" when it cannot be read."""
-    for j in _list(exe, where):
-        if str(j.get("id")) == str(job):
-            return str(j.get("status") or "")
-    return ""
-
-
 @contextlib.contextmanager
 def _enqueue_lock(where: Path):
     """Serialise the list-then-enqueue of concurrent callers on one machine and repo."""
@@ -182,7 +167,12 @@ def run(where: Path, base: str, wait_s: int) -> Result:
     if mb == head:
         return Result("unavailable", f"the branch has no commit ahead of {base!r}", sha=head)
     with _enqueue_lock(where):  # list + enqueue is one step, or two callers both enqueue
-        job = _reusable_job(_list(exe, where), head, mb)
+        jobs, rfailed = _list(exe, where)
+        if rfailed:
+            return Result(
+                "unavailable", f"roborev's job list could not be read ({rfailed})", sha=head
+            )
+        job = _reusable_job(jobs, head, mb)
         if job is None:
             q = proc.capture([exe, "review", "--since", mb], cwd=where, timeout=RR._TIMEOUT_S)
             if q.error is not None or q.returncode != 0:
@@ -190,7 +180,19 @@ def run(where: Path, base: str, wait_s: int) -> Result:
                 return Result(
                     "unavailable", f"roborev could not enqueue the range review: {why}", sha=head
                 )
-            job = _find_job(exe, where, head, q.stdout + q.stderr)
+            job = _pluck_job_id(q.stdout + q.stderr)
+            if job is None:
+                # the enqueue named no id in words: only a POST-enqueue list knows it. The
+                # PRE-enqueue list must NOT answer here -- a stale failed record for the same
+                # head would beat the just-enqueued job (a confirmed finding).
+                jobs, rfailed = _list(exe, where)
+                if rfailed:
+                    return Result(
+                        "unavailable",
+                        f"roborev's job list could not be read ({rfailed})",
+                        sha=head,
+                    )
+                job = _find_job(jobs, where, head, q.stdout + q.stderr)
     return _collect(exe, where, job, head, wait_s)
 
 
@@ -200,7 +202,10 @@ def run_job(where: Path, job: int, wait_s: int) -> Result:
     exe = shutil.which("roborev")
     if not exe:
         return Result("unavailable", "roborev is not on PATH", job=job)
-    me = next((j for j in _list(exe, where) if RR._job_id(j) == job), None)
+    jobs, failed = _list(exe, where)
+    if failed:
+        return Result("unavailable", f"roborev's job list could not be read ({failed})", job=job)
+    me = next((j for j in jobs if RR._job_id(j) == job), None)
     if me is None:
         return Result("unavailable", f"roborev has no job {job} in this repository", job=job)
     sha = str(me.get("git_ref") or "").rsplit("..", 1)[-1]
@@ -210,7 +215,8 @@ def run_job(where: Path, job: int, wait_s: int) -> Result:
 def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> Result:
     if job is None:
         return Result("unavailable", "roborev enqueued the review but named no job", sha=head)
-    where_in_queue = queue_position(_list(exe, where), job, _workers(exe, where))
+    jobs, _read_failed = _list(exe, where)
+    where_in_queue = queue_position(jobs, job, _workers(exe, where))
     if where_in_queue:
         print(f"roborev job {job}: {where_in_queue}", file=sys.stderr)
     suffix = f" [{where_in_queue}]" if where_in_queue else ""
@@ -223,36 +229,33 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
             head,
             pending_rerun=True,
         )
-    w = proc.capture([exe, "wait", "--job", str(job)], cwd=where, timeout=wait_s)
-    if w.timed_out:
-        now = queue_position(_list(exe, where), job, _workers(exe, where))
+    # The ONE truthful waiter: `roborev wait --job` of an unfinished job cannot tell live
+    # from gone, so the gate's wait is `roborev.wait_job` (the poll of the job list),
+    # mapped onto this module's Result. No on_tick: this runs as the gate command's child,
+    # and its parent (the gate runner) already renews the lease on its own side.
+    out = RR.wait_job(where, job, wait_s)
+    if out.live:
+        now = queue_position(_list(exe, where)[0], job, _workers(exe, where))
         return Result(
             "unavailable",
-            f"roborev job {job} gave no result in {wait_s}s (the host is loaded?)"
-            f"{f' [{now}]' if now else ''}; it is still queued or running: "
-            f"`roborev wait --job {job}`, or raise [gates].standards_wait_s. {rerun}",
+            f"{out.note}{f' [{now}]' if now else ''}. {rerun}",
             job, head, pending_rerun=True,
         )  # fmt: skip
-    shown = proc.capture([exe, "show", "--job", str(job)], cwd=where, timeout=RR._TIMEOUT_S)
-    text = shown.stdout if shown.error is None and shown.returncode == 0 else ""
-    if w.returncode == 0:
-        return Result("clean", job=job, sha=head, text=text, reviewer=_reviewer(exe, where, job))
-    # `roborev wait` exits 1 on a FAIL verdict AND on a job error: the job's status tells which.
-    status = _job_status(exe, where, job)
-    if status == "done":
-        return Result(
-            "findings",
-            f"roborev wait exited {w.returncode}",
-            job,
-            head,
-            text,
-            reviewer=_reviewer(exe, where, job),
-        )
+    if out.review is None or out.unjudged:
+        return Result("unavailable", out.note, job, head, out.text)
+    missing = (
+        ""
+        if out.text
+        else "(the review body could not be read: `roborev show --job` brought no text)"
+    )
     return Result(
-        "unavailable",
-        f"roborev job {job} ended {status or 'in an unknown state (its status could not be read; the text below, if any, is unjudged)'} with no review (wait exit {w.returncode})",
-        job, head, text,
-    )  # fmt: skip
+        "clean" if not out.note else "findings",
+        out.note or missing,
+        job,
+        head,
+        out.text,
+        reviewer=out.review.reviewer,
+    )
 
 
 def _findings_summary(text: str) -> str:
