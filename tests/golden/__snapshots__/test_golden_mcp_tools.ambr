@@ -1101,6 +1101,10 @@
           "type": "integer",
           "description": "Rows returned, most effort first (default 25; 0 = all)."
          },
+         "by_tag": {
+          "type": "string",
+          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the done/running/ready/review/blocked/abandoned/open counts, the buckets the plan puts them in, and the open dependencies blocking the most items (e.g. 'wave' or 'track')."
+         },
          "out": {
           "type": "string",
           "description": "Directory for the generated views (default: docs/ddflow)."
