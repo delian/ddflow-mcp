@@ -118,17 +118,17 @@ def test_the_signal_termination_record_of_a_dead_run_charges_nothing(repo, tmp_p
 
 
 def test_a_status_less_record_of_a_refused_or_errored_run_charges_nothing(repo, tmp_path):
-    """A status-less full record whose outcome names a refusal or an error delivered no
-    verdict either: the no-`status` fallback must exclude them exactly as it excludes
-    ``unavailable``, or the era-before-`status` refused/errored records are charged
-    rounds they never delivered (rubber_duck finding #1)."""
+    """A status-less full record recorded ``unavailable`` -- how a refused or errored
+    run is recorded -- delivered no verdict either: the no-`status` fallback must
+    exclude it exactly as it excludes ``unavailable``, or the era-before-`status`
+    refused/errored records are charged rounds they never delivered (rubber_duck
+    finding #1)."""
     _setup(repo, tmp_path)
     api.review(repo, gate="critic", item="T1")
-    for outcome in ("error", "refused"):
-        log, cfg, st = api._load(repo, "")
-        api._record(
-            repo, log, cfg, st, "T1", "critic", outcome, None, None,
-            reason=f"the {outcome} run recorded no verdict",
-            evidence={"review_kind": "full"},
-        )  # fmt: skip
+    log, cfg, st = api._load(repo, "")
+    api._record(
+        repo, log, cfg, st, "T1", "critic", "unavailable", None, None,
+        reason="the unavailable run recorded no verdict",
+        evidence={"review_kind": "full"},
+    )  # fmt: skip
     assert _rounds(repo, "critic") == 1
