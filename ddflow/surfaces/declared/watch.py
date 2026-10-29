@@ -15,7 +15,7 @@ from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_time
 def _text(out, a) -> str:
     d = out.data
     if out.exit:
-        return out.reason
+        return f"{out.reason}\ntoken {d['token']}" if "token" in d else out.reason
     return f"{_api().watch_summary(d)}\ntoken {d['token']}"
 
 

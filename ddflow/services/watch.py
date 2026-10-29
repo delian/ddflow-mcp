@@ -11,6 +11,7 @@ where this one stopped and no line is read twice or skipped.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ class Target:
     pid: int = 0
     gate: str = ""  # "ITEM:GATE"
     offset: int = 0  # file: bytes already read
+    sig: str = ""  # file: digest of the first bytes read, to tell a rewrite from an append
     start: str = ""  # pid: its start time when first seen
     heartbeat: list[str] = field(default_factory=list)
 
@@ -51,9 +53,11 @@ def decode(token: str) -> Target | None:
     try:
         raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
         d = json.loads(raw)
+        if not isinstance(d, dict):
+            return None
         known = Target.__dataclass_fields__
         return Target(**{k: v for k, v in d.items() if k in known})
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return None
 
 
@@ -64,6 +68,8 @@ def problem(t: Target) -> str:
         return "name exactly one of --job, --file (with --until), --pid or --gate ITEM:GATE"
     if t.file and not t.until:
         return "--file needs --until REGEX: the line to wait for"
+    if t.until and not t.file:
+        return "--until belongs with --file"
     if t.until:
         try:
             re.compile(t.until)
@@ -74,6 +80,11 @@ def problem(t: Target) -> str:
     if t.gate and (":" not in t.gate or not all(t.gate.partition(":")[::2])):
         return "--gate takes ITEM:GATE"
     return ""
+
+
+def _sig(data: bytes, upto: int) -> str:
+    """A digest of the first (at most 64) bytes of ``data[:upto]``."""
+    return hashlib.sha1(data[: min(64, upto)]).hexdigest()[:12]
 
 
 def scan_file(t: Target) -> str | None:
@@ -87,7 +98,8 @@ def scan_file(t: Target) -> str | None:
         data = Path(t.file).read_bytes()
     except OSError:
         return None
-    if len(data) < t.offset:
+    # A shrunk file, or one whose first bytes are no longer the ones read, was rewritten.
+    if len(data) < t.offset or (t.offset and _sig(data, t.offset) != t.sig):
         t.offset = 0
     pat = re.compile(t.until)
     pos = t.offset
@@ -98,9 +110,9 @@ def scan_file(t: Target) -> str | None:
         line = data[pos:end].decode("utf-8", "replace").rstrip("\r")
         pos = end + 1
         if pat.search(line):
-            t.offset = pos
+            t.offset, t.sig = pos, _sig(data, pos)
             return line
-    t.offset = pos
+    t.offset, t.sig = pos, _sig(data, pos)
     return None
 
 
