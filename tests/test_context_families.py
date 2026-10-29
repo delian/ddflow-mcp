@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
+from ddflow.infra import paths
 from ddflow.services import context_families as CF
 
-HARNESSES = Path(CF.__file__).resolve().parents[1] / "harnesses"
+HARNESSES = paths.package_dir() / "harnesses"
 IDS = sorted(p.stem for p in HARNESSES.glob("*.toml"))
 FAMILIES = ("claude", "openai", "gemini", "deepseek", "kimi", "qwen", "glm", "unknown")
 
@@ -71,4 +71,4 @@ def test_old_facts_make_doctor_note_them():
 
 def test_data_files_stay_small():
     for name in CF._FILES:
-        assert (Path(CF.__file__).resolve().parents[1] / "templates" / name).stat().st_size < 20_000
+        assert (paths.templates_dir() / name).stat().st_size < 20_000
