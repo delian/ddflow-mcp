@@ -577,7 +577,7 @@ class Bug:
     #: The counts of the last sighting that ran (`bug.found` `sighted` runs/failures):
     #: how many runs reached an exit code and how many of them failed.
     repro_runs: int = 0
-    repro_failures: int = 0
+    repro_failures: int | None = None  # None: not recorded; "yes" repro folded needs it said
     #: How many `bug.found` sightings the bug has (every `bug.found` event counts, run
     #: or not): 1 is the filing, 2 makes a second sighting, which reads confirmed-open
     #: even while every run so far exited 0 (DX-bug-repro-verify, "until a second

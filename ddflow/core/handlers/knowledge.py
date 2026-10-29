@@ -128,7 +128,7 @@ def _merge_sighted(bug, ev) -> None:
     if sig.get("runs") is not None:
         try:
             bug.repro_runs = int(sig.get("runs") or 0)
-            if "failures" in sig:
+            if sig.get("failures") is not None:
                 bug.repro_failures = int(sig.get("failures") or 0)
         except (TypeError, ValueError, OverflowError):
             pass  # a persisted sighting whose counts cannot count folds nothing
