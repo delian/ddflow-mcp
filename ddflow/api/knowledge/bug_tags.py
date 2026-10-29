@@ -29,6 +29,13 @@ def reserved(tags) -> list[str]:
     return [t for t in tags if t.startswith(RESERVED_PREFIXES)]
 
 
+def found_tags(raw) -> tuple[list[str], str]:
+    """``(tags, problem)`` for `bug found --tags`: the parsed list, or why it is refused."""
+    tags = GS.parse(raw)
+    bad = reserved(tags)
+    return tags, (f"{', '.join(bad)}: the wave:* tags are derived and reserved." if bad else "")
+
+
 def _apply(repo: Path, bug: str, change, *, agent: str, add=(), remove=()) -> O.Outcome:
     """``change(held)`` -> the new list, decided under the log lock from the log as it is."""
     log, _cfg, _st = _load(repo, agent)
