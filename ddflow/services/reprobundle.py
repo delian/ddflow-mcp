@@ -126,7 +126,7 @@ def _tree_sha_safely(repo: Path) -> str:
     """The tree sha the repro would run at, or "": a tree that cannot be read degrades
     the evidence, never the run (check answers 'unavailable' to an empty sha)."""
     try:
-        return (F.tree(repo) or {}).get("tree_sha", "")
+        return (F.tree(repo) or {}).get("tree_sha") or ""
     except Exception:
         return ""
 

@@ -138,6 +138,40 @@ def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj)
     assert bad_bug.reproduced == "no"
 
 
+def test_a_bug_with_no_repro_evidence_is_not_demoted_like_a_failed_repro(proj):
+    # A bug filed WITHOUT --repro-cmd leaves `reproduced == ""` (no run happened), not
+    # "no" (a repro command RAN and did not fail). No evidence is not the demotion
+    # "no" carries: such a bug is still offered, only a demonstrated non-failing repro
+    # is unconfirmed. The CONTROL file first (confirmed) proves the offer is real.
+    ok_id, ok_bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
+    quiet_id, quiet_bug = _file(proj, summary="no repro evidence")
+    assert quiet_bug.reproduced == "" and quiet_bug.sightings == 1
+    ids = bug_items(state(proj), Config.load(proj))
+    assert ok_bug.fix_task in ids  # the confirmed control
+    assert quiet_bug.fix_task in ids  # no evidence: offered, not demoted
+
+
+def test_a_sighting_whose_run_count_advances_and_failure_count_cannot_folds_nothing(proj):
+    from ddflow.core.handlers import knowledge as handlers_knowledge
+
+    # An unparseable failures count must not advance the run count first: the fold is
+    # atomic -- both counts count, or NEITHER does, so a three-run sighting is never
+    # paired with a stale failure count.
+    class Ev:
+        def __init__(self, data):
+            self.data = data
+            self.ts = ""
+
+    from ddflow.core.records import Bug
+
+    b = Bug(id="probe")
+    b.repro_failures = 5
+    handlers_knowledge._merge_sighted(
+        b, Ev({"sighted": {"reproduced": "yes", "runs": 1, "failures": "boom"}})
+    )
+    assert b.repro_runs == 0 and b.repro_failures == 5
+
+
 def test_an_unconfirmed_bugs_own_item_is_not_offered_before_confirmed_work(proj):
     # The reading's leak: the bug's OWN item -- a non-feature task it was filed against,
     # with no fix task -- must be excluded too, not only its fix_task. The CONTROL: the
