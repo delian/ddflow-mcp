@@ -133,22 +133,26 @@ def step(
     return prev
 
 
+def _signal_level(v: float, t: Threshold, held: bool) -> int:
+    """One load signal's level: critical 2, over its high mark (or still over the low mark
+    while ``held`` at 1 or more: the hysteresis band) 1, else 0."""
+    if t.critical is not None and v >= t.critical:
+        return 2
+    return 1 if v > t.high or (held and v > t.low) else 0
+
+
 def _load_step(
     load: Mapping[str, float | None], p: Params, last: Ladder | None, now: float
 ) -> Ladder:
     prev = last or Ladder(0, now)
-    cand = 0
-    for name, t in p.load_thresholds.items():
-        v = load.get(name)
-        if v is None:
-            continue
-        if t.critical is not None and v >= t.critical:
-            lvl = 2
-        elif v > t.high or (prev.level >= 1 and v > t.low):
-            lvl = 1
-        else:
-            lvl = 0
-        cand = max(cand, lvl)
+    cand = max(
+        (
+            _signal_level(v, t, prev.level >= 1)
+            for name, t in p.load_thresholds.items()
+            if (v := load.get(name)) is not None
+        ),
+        default=0,
+    )
     seen = [n for n in p.load_thresholds if n in load]
     blind = any(load[n] is None for n in seen)
     if not seen or all(load[n] is None for n in seen):
