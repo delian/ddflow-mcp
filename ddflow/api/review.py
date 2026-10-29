@@ -1697,8 +1697,9 @@ def _with_previous_findings(
         "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
         "refuted by its probe), do not report it again; report it only if it still holds, "
         "saying why the fix or the probe does not answer it. Do not restate a finding from "
-        "memory: check each previous finding against the current code, and where the code "
-        "it cites changed or is gone, do not carry it over. Then look for NEW issues in "
+        "memory: check each previous finding against the current code, and do not carry it over "
+        "when the code it cites is gone or the change answers it; if the same defect "
+        "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
         "the whole diff -- these are not the only places to look.",
         "",
     ]

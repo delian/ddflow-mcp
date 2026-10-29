@@ -129,7 +129,7 @@ def test_re_review_prompt_asks_for_each_prior_finding_to_be_checked(repo, tmp_pa
     _commit(repo, "x.py", "x = 1  # FINDME\ny = 3\n")
     text = _prompts_of(prompts, lambda: _review(repo, full=True))
     assert "check each previous finding against the current code" in text
-    assert "do not carry it over" in text
+    assert "do not carry it over" in text and "still stands" in text
 
 
 def test_review_says_a_foreground_run_can_be_cut_and_to_use_background(repo, tmp_path):
