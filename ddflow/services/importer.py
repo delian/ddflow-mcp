@@ -948,6 +948,123 @@ def _parse_needs(text: str) -> list[str]:
     return out
 
 
+def _table_cells(row: str) -> list[str]:
+    """The cells of a GFM table row: borders off, split on pipes that are not escaped,
+    and `\\|` unescaped back to the pipe it was written as.
+
+    A `|` is a column separator to every GFM reader, so a title is written with a
+    literal pipe escaped (```ddflow seed plan\\|apply```, exactly what ``_cell`` in
+    ``views/markdown`` writes) and a raw one is a column break. A bare
+    ``line.split("|")`` here sends the title up to its first pipe and reads the
+    leftover columns as globs -- titles cut and needs becoming globs that the
+    conflict check then compares against real paths (B-sx-tasks-pipe-split-titles).
+    """
+    body = row.strip()
+    if body.startswith("|"):
+        body = body[1:]
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    return [c.replace("\\|", "|") for c in re.split(r"(?<!\\)\|", body)]
+
+
+#: The fields a task table declares, by the header word. An id and a title column are
+#: what marks a row as a task table rather than prose; ``needs`` and ``globs`` are the
+#: two a task carries. Unknown words are left out rather than guessed at.
+_TABLE_FIELDS = ("id", "title", "needs", "globs")
+_TABLE_HEAD = re.compile(r"[*_`\s]+")
+
+
+def _table_columns(row: str) -> dict[str, int]:
+    """``{field: index}`` of a task table's header row, or ``{}`` when the row names no
+    id/title column (a heading table of graphs, a bug table...). Deliberately only the
+    four words above: every alias the scanner guesses about is a wrong column later."""
+    out: dict[str, int] = {}
+    for i, cell in enumerate(_table_cells(row)):
+        name = _TABLE_HEAD.sub("", cell).lower()
+        if name in _TABLE_FIELDS and name not in out:
+            out[name] = i
+    return out
+
+
+def _table_delim(cells: list[str]) -> bool:
+    """A GFM delimiter row's cells are only ``-`` and ``:`` (``:---``), at least one of
+    them, so a data row is told from how the table says a column may align and a blank
+    line is a row END, not a delimiter (its cells are all empty)."""
+    ones = [c.strip() for c in cells if c.strip()]
+    return bool(ones) and all(re.fullmatch(r":?-+:?", c) for c in ones)
+
+
+def _col(tbl: list[str], cols: dict[str, int], key: str) -> str:
+    """The cell of column ``key``, or "" -- a GFM row may leave trailing cells off (the
+    closing pipe and the empty cells before it), so a data row with no globs cell is read
+    as having none rather than as an index past the row."""
+    i = cols.get(key)
+    return tbl[i] if i is not None and i < len(tbl) else ""
+
+
+def _table_task(
+    tbl: list[str], table_cols: dict[str, int], rel: str, n: int, taken: set[str]
+) -> Found | None:
+    """The task a ``| Id | Title | Needs | Globs |`` row becomes, or None for a row with no
+    id and title to import. The Id cell is the id verbatim (a table that names an id says
+    it exactly, where checkbox prose only shapes one); needs and globs are the columns
+    that say so, so a title's own pipe -- written escaped -- stays IN the title instead of
+    renumbering the columns (B-sx-tasks-pipe-split-titles)."""
+    tid = _col(tbl, table_cols, "id").strip()
+    title = _clean_title(_col(tbl, table_cols, "title"))
+    if not tid or not title:
+        return None
+    tsk = Found(
+        kind="task",
+        ident=_unique(tid, "", taken),
+        title=title,
+        source=f"{rel}:{n}",
+        body="",
+        globs=_parse_globs(_col(tbl, table_cols, "globs")),
+        extra={"id_from_source": True, "from_table": True},
+    )
+    if _col(tbl, table_cols, "needs"):
+        tsk.needs = _parse_needs(_col(tbl, table_cols, "needs"))
+    return tsk
+
+
+def _scan_task_tables(
+    lines: list[str], fenced: list[bool], rel: str, taken: set[str]
+) -> list[Found]:
+    """The tasks of every ``| Id | Title | Needs | Globs |`` table in ``lines``, in order.
+
+    A header is a row that names an id/title column AND is followed by a delimiter row --
+    the GFM rule that separates a header from a data row whose cell merely reads "id"
+    (a header alone is data to a reader that mis-labels it). Task tables are a scan apart
+    rather than more branches of ``scan_todos``; reading a row inside the checklist loop
+    pushed that function past its lint ratchet for no added meaning. Kept in file order,
+    so the id stays in ``taken`` beside the checkboxes that may share its name."""
+    out: list[Found] = []
+    cols: dict[str, int] = {}
+    i = 0
+    while i < len(lines):
+        if fenced[i] or not lines[i].lstrip().startswith("|"):
+            cols = {}
+            i += 1
+            continue
+        header = _table_columns(lines[i])
+        if (
+            ("id" in header or "title" in header)
+            and i + 1 < len(lines)
+            and _table_delim(_table_cells(lines[i + 1]))
+        ):
+            cols = header
+            i += 2  # step past the header and its delimiter row
+            continue
+        tbl = _table_cells(lines[i])
+        if cols and tbl and not _table_delim(tbl):
+            tsk = _table_task(tbl, cols, rel, i + 1, taken)
+            if tsk is not None:
+                out.append(tsk)
+        i += 1
+    return out
+
+
 def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
     """`preferred` if it is free, else `fallback`, else `fallback-2`, `-3`, ...
 
@@ -1178,6 +1295,7 @@ def scan_todos(
             )
             found.append(anchor)
             prose.append((anchor, paragraph))
+        found.extend(_scan_task_tables(lines, fenced, rel, taken))
         if len(found) == before:
             empty.append(rel)
     _adopt_child_prefix(found, taken)
