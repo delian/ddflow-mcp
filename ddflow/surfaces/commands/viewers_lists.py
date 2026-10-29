@@ -105,6 +105,8 @@ def _line(kind: str, r: dict[str, Any]) -> str:
         marks = []
         if r.get("severity"):
             marks.append(r["severity"])
+        if r.get("tags"):
+            marks.append(f"tags: {', '.join(r['tags'])}")
         if r.get("lesson"):
             marks.append(f"lesson {r['lesson']}")
         fix = r.get("fix_task") or ""
