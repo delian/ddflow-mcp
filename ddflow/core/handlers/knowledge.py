@@ -125,9 +125,12 @@ def _merge_sighted(bug, ev) -> None:
         bug.reproduced = "yes"
     elif sig.get("reproduced") == "no" and bug.reproduced != "yes":
         bug.reproduced = "no"
-    if sig.get("runs"):
-        bug.repro_runs = int(sig.get("runs") or 0)
-        bug.repro_failures = int(sig.get("failures") or 0)
+    if sig.get("runs") is not None:
+        try:
+            bug.repro_runs = int(sig.get("runs") or 0)
+            bug.repro_failures = int(sig.get("failures") or 0)
+        except (TypeError, ValueError, OverflowError):
+            pass  # a persisted sighting whose counts cannot count folds nothing
 
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:

@@ -122,6 +122,15 @@ def _shrink(node: Any) -> bool:
     return False
 
 
+def _tree_sha_safely(repo: Path) -> str:
+    """The tree sha the repro would run at, or "": a tree that cannot be read degrades
+    the evidence, never the run (check answers 'unavailable' to an empty sha)."""
+    try:
+        return (F.tree(repo) or {}).get("tree_sha", "")
+    except Exception:
+        return ""
+
+
 def _canonical_cmd(repro_cmd: str, check: dict[str, Any] | None) -> dict[str, Any]:
     """The recorded ``repro_cmd`` section: the filed command (last, wins any key), the
     evidence keys a check carried, and the four measurement keys CANONICAL: executed True
@@ -137,7 +146,7 @@ def _canonical_cmd(repro_cmd: str, check: dict[str, Any] | None) -> dict[str, An
         "runs": r,
         "failures": _countable(check_dict["failures"])
         if real and "failures" in check_dict
-        else (0 if real else None),
+        else (0 if real and check_dict.get("reproduced") == "no" else None),
     }
     extra = {
         k: v
@@ -335,7 +344,7 @@ def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any)
                     machine = {"unavailable": "machine facts could not be collected"}
             run = RC.check(
                 repo,
-                F.tree(repo).get("tree_sha", ""),
+                _tree_sha_safely(repo),
                 given.get("repro_cmd", ""),
                 int(cfg.bugs.repro_runs),
                 float(cfg.bugs.repro_test_timeout_s),
