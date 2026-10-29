@@ -81,12 +81,13 @@ def _run_at(
                     "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
                     "load": load_start,
                 }
+            pristine_gitfile = _gitfile_bytes(s.path)
             codes: list[int] = []
             out: list[bytes] = []
             bigger = False
             unreached = 0
             for _ in range(count):
-                if not _prime_scratch(s.path, sha):
+                if pristine_gitfile is None or not _prime_scratch(s.path, sha, pristine_gitfile):
                     unreached += 1
                     continue
                 # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
@@ -136,27 +137,27 @@ def _run_at(
     return record
 
 
-def _prime_scratch(scratch: Path, sha: str) -> bool:
+def _prime_scratch(scratch: Path, sha: str, pristine: bytes) -> bool:
     """Reset the scratch checkout to ``sha`` BEFORE one run; False when the reset could
     not be guaranteed (with no fresh checkout there is no run to read).
 
     The scratch is a LINKED worktree (`git worktree add`): its ``.git`` is a FILE -- the
-    gitdir pointer -- never a directory, so nothing under ``.git`` is read or written
-    here, and its per-tree metadata dir is resolved through git, never guessed. A stale
-    index lock a killed earlier run left is dropped first (a lock makes every later
-    reset refuse, so dropping it BEFORE the reset is what lets the reset land), then
-    ``git clean -xdfq -f`` removes ignored files AND nested repositories a stateful run
-    left (git skips a nested ``.git`` directory on one ``-f``), and ``git reset --hard
-    sha`` returns the tree to the recorded commit. An untracked directory squatting a
-    tracked path can fail a reset: cleaning first (and once more after a failed reset)
-    lets the reset land on the tree the clean freed. Any filesystem surprise the line
-    left degrades to False -- the run is unreached, the filing never crashes on it."""
+    gitdir pointer -- never a directory, so the pointer is restored from ``pristine``
+    (the bytes read fresh after ``worktree add``) FIRST, before any git command runs: a
+    run that overwrote the pointer must not steer the reset onto another repository's
+    git dir, and a poisoned pointer brokenly resolved would be one that corrupts the
+    operator's tree. ``git clean -xdfq -f`` then removes ignored files AND nested
+    repositories a stateful run left (git skips a nested ``.git`` directory on one
+    ``-f``), and ``git reset --hard sha`` returns the tree to the recorded commit. An
+    untracked directory squatting a tracked path can fail a reset: cleaning first (and
+    once more after a failed reset) lets the reset land on the tree the clean freed.
+    Any filesystem surprise the line left degrades to False -- the run is unreached,
+    the filing never crashes on it."""
     try:
-        git_dir = _git_dir(scratch)
-        if git_dir is None:
+        gitfile = scratch / ".git"
+        if gitfile.is_symlink():
             return False
-        for lock in ("index.lock", "HEAD.lock"):
-            (git_dir / lock).unlink(missing_ok=True)
+        _write_gitfile(gitfile, pristine)
         cleaned = P.capture(["git", "clean", "-xdfq", "-f"], cwd=scratch, timeout=60.0)
         reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
         if reset.returncode != 0:
@@ -167,17 +168,36 @@ def _prime_scratch(scratch: Path, sha: str) -> bool:
         return False
 
 
-def _git_dir(scratch: Path) -> Path | None:
-    """The scratch's ABSOLUTE git dir (a linked worktree's per-tree metadata dir), the one
-    git resolves from the ``.git`` FILE, or None when git cannot name one (a poisoned
-    gitdir pointer). The path stays out of the checkout: a symlink planted at the git
-    dir would rope a write onto the operator's tree, so nothing is ever written to it."""
-    r = P.capture(
-        ["git", "-C", str(scratch), "rev-parse", "--absolute-git-dir"], timeout=30.0
-    )
-    if r.returncode != 0 or not (r.stdout or "").strip():
+def _gitfile_bytes(scratch: Path) -> bytes | None:
+    """The scratch's ``.git`` gitdir-pointer bytes, fresh from ``git worktree add`` (so
+    they are pristine, the pointer belonged to THIS scratch's own metadata dir), or None
+    when the file is not a plain file to read (a symlink planted there is never written
+    through). Restoring these bytes is what returns a pointer the run overwrote."""
+    try:
+        gitfile = scratch / ".git"
+        if gitfile.is_symlink() or not gitfile.is_file():
+            return None
+        return gitfile.read_bytes()
+    except OSError:
         return None
-    return Path((r.stdout or "").strip())
+
+
+def _write_gitfile(gitfile: Path, pristine: bytes) -> None:
+    """Write ``pristine`` back onto the ``.git`` gitdir pointer atomically: staged at an
+    unpredictable name and ``os.replace``d, so a symlink planted where the pointer goes
+    is swapped whole (its target is never written) and a poisoned pointer cannot
+    survive to the reset that follows."""
+    for _ in range(4):
+        staged = gitfile.parent / f".pristine-{secrets.token_hex(6)}"
+        try:
+            fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            continue
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(pristine)
+        os.replace(staged, gitfile)
+        return
+    raise OSError("could not stage the pristine gitfile")
 
 
 def _one_run(

@@ -125,21 +125,19 @@ def _merge_sighted(bug, ev) -> None:
         bug.reproduced = "yes"
     elif sig.get("reproduced") == "no" and bug.reproduced != "yes":
         bug.reproduced = "no"
-    if sig.get("runs") is not None:
-        try:
-            new_runs = int(sig.get("runs") or 0)
-            if sig.get("failures") is not None:
-                new_failures = int(sig.get("failures") or 0)
-            else:
-                new_failures = None
-        except (TypeError, ValueError, OverflowError):
-            pass  # a persisted sighting whose counts cannot count folds nothing
-        else:
-            # Both counts count or NEITHER folds: a run count must not advance ahead of
-            # a failure count that could not count -- atomic, not one field then the other.
-            bug.repro_runs = new_runs
-            if new_failures is not None:
-                bug.repro_failures = new_failures
+    runs = sig.get("runs")
+    failures = sig.get("failures")
+    if runs is None or failures is None:
+        return  # a sighting missing a count is not a whole sighting (runs or failures);
+        # folding runs alone would pair a run count with a stale failure count
+    try:
+        new_runs = int(runs)
+        new_failures = int(failures)
+    except (TypeError, ValueError, OverflowError):
+        return  # a persisted sighting whose counts cannot count folds nothing -- atomic:
+        # a run count must not advance ahead of a failure count that could not count
+    bug.repro_runs = new_runs
+    bug.repro_failures = new_failures
 
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:
