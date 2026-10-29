@@ -56,3 +56,12 @@ def test_a_table_row_may_leave_the_globs_cell_off(repo):
     assert t.title == "t"
     assert t.globs == []
     assert t.needs == ["P.2"]
+
+
+def test_a_blank_line_ends_a_table_instead_of_reading_as_its_delimiter_row(repo):
+    # The delimiter row is only the cells made of '-'/':'. A blank line has none, and it
+    # must end the table rather than stand in for that delimiter row (a header followed by
+    # a blank line marks no table, and a pipe line after it is prose, not a task).
+    no_delim = "## T\n\n| Id | Title |\n\n| X | Task |\n"
+    t = _tasks(repo, no_delim)
+    assert "X" not in t, "a header with no delimiter row is not a table, so no task imports"
