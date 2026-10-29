@@ -242,7 +242,8 @@ def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatc
     run = _run(proj, bug)
     line, kw = calls[0]
     assert line.lstrip().startswith("(") and " > " in line and " 2>&1" in line
-    target = Path(line.split(" > ", 1)[1].split(" 2>&1", 1)[0].strip("'\""))
+    target = Path(line.split(" > ", 1)[1].split(" 2>&1", 1)[0].strip())
+    target = Path(str(target).strip("'\""))
     anchored = target if target.is_absolute() else Path(kw["cwd"]) / target
     here = Path(kw["cwd"]).resolve()
     assert not anchored.resolve().is_relative_to(here)  # the tail file lives OUTSIDE the checkout

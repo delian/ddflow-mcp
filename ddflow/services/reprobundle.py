@@ -249,7 +249,7 @@ def _countable(value: Any) -> int | None:
         except (TypeError, ValueError):
             return None
     if isinstance(value, int):
-        return value
+        return value if value >= 0 else None
     try:
         n = float(value)
     except (TypeError, ValueError, OverflowError):
