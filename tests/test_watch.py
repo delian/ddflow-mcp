@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import subprocess
 import sys
 import threading
@@ -147,6 +148,8 @@ def test_a_token_with_extra_facets_or_junk_is_refused(proj, tmp_path):
     assert _watch(proj, token=tok, until="y").exit == 1
     assert _watch(proj, token=tok, heartbeat="T1").exit == 1
     assert W.decode("W10") is None  # base64url of "[]"
+    assert W.decode(base64.urlsafe_b64encode(b'{"pid":"-1"}').decode()) is None  # wrong-typed field
+    assert _watch(proj, pid=4, timeout_s=float("nan")).exit == 1
     assert _watch(proj, pid=4, until="x").exit == 1
 
 
