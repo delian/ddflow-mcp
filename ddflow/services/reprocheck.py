@@ -95,10 +95,6 @@ def _run_at(
             out: list[bytes] = []
             bigger = False
             unreached = 0
-            # The first-run's .git/config snapshot: reset --hard + clean -xdfq wipe the
-            # WORKING tree, not the config a run wrote into .git/config -- restoring the
-            # snapshot brings that back too, so later runs see the checkout the first did.
-            pristine_cfg = (s.path / ".git" / "config").read_bytes()
             for _ in range(count):
                 if not _prime_scratch(s.path, sha, pristine_cfg):
                     unreached += 1
