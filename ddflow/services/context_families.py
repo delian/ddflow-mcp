@@ -114,7 +114,7 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
             problems.append(
                 f"context_harnesses.toml: harness {hid!r} has no row (add one, even empty)"
             )
-    unknown = data["context_families.toml"].get("family", {}).get(UNKNOWN)
+    unknown = family_row(data, UNKNOWN)
     if not isinstance(unknown, dict):
         problems.append("context_families.toml: family 'unknown' is missing or not a table")
     elif any(is_fact(v) for v in unknown.values()):
@@ -139,8 +139,8 @@ def usable(fact: dict[str, Any] | None, model: str = "") -> Any:
 
 def family_row(data: dict[str, dict[str, Any]], family: str) -> dict[str, Any]:
     """The row for a family id; any id not in the table resolves to `unknown`."""
-    rows = data["context_families.toml"]["family"]
-    return rows.get(family) or rows[UNKNOWN]
+    rows = data["context_families.toml"].get("family", {})
+    return rows.get(family) or rows.get(UNKNOWN) or {}
 
 
 def stale(
