@@ -42,10 +42,10 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     agent: str = "",
     test: str = "",
     repro_cmd: str = "",
-    check: dict[str, Any] | None = None,
-    machine: dict[str, Any] | None = None,
     mode: str = "",
     now: float = 0.0,
+    check: dict[str, Any] | None = None,
+    machine: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """The bundle for ``bug`` at ``mode`` (default `[bugs] repro_capture`), redacted and
     capped, or None when the mode is `off`."""
