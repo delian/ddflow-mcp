@@ -91,6 +91,56 @@ def is_test_file(path: str) -> bool:
     return bool(_TEST_FILE.search(path))
 
 
+def _import_sig(node: ast.AST) -> str:
+    """A position- and order-free signature of one import statement: the names inside a
+    `from … import …` are sorted, so an isort reorder ({from . import a, b} ↔ {from . import b,
+    a}) is one signature, and the caller sorts the statement list, so reordered statements are
+    one list. A name's order cannot change what Python binds, only the order it binds it in."""
+    names = repr(sorted((a.name, a.asname) for a in node.names))
+    if isinstance(node, ast.Import):
+        return f"Import({names})"
+    return f"ImportFrom(module={node.module!r}, level={node.level!r}, names={names})"
+
+
+def _signature(source: str) -> str | None:
+    """A string equal for two sources that differ only in import ORDERING, whitespace or
+    comments — changes pytest's outcome cannot observe. ``None`` when the source cannot be
+    parsed (never "neutral" on a parse failure: what could not be read stays uncharted)."""
+    try:
+        mod = ast.parse(source)
+    except (SyntaxError, ValueError, TypeError):
+        return None
+    imports = sorted(
+        _import_sig(n) for n in mod.body if isinstance(n, (ast.Import, ast.ImportFrom))
+    )
+    rest = [
+        ast.dump(n, include_attributes=False)
+        for n in mod.body
+        if not isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    return repr((imports, rest))
+
+
+def behaviour_neutral(tree: Path, base: str, changed: list[str]) -> bool:
+    """Whether every changed ``.py`` file differs from ``base`` only in import ordering,
+    whitespace or comments (a lint/format fix). No test can fail on such a change, so the
+    whole-suite fallback for a changed hub is needless (bug B0bdd3b9a39). Non-Python changes
+    are not judged — they are not what puts a hub on the whole-suite path."""
+    py = [c for c in changed if c.endswith(".py")]
+    if not py:
+        return False
+    for path in py:
+        base_blob = GIT.run(tree, "show", f"{base}:{path}")
+        ours = _read(tree / path)
+        if not base_blob.ok or not ours:
+            return False
+        ours_sig = _signature(ours)
+        base_sig = _signature(base_blob.out)
+        if not ours_sig or not base_sig or ours_sig != base_sig:
+            return False
+    return True
+
+
 def _named(stem: str, test_name: str) -> bool:
     """``stem`` as a whole word of ``test_name`` (a plural allowed): `cli` names
     `test_cli_parity` and not `test_client`."""
@@ -117,6 +167,10 @@ class Selection:
     cut: list[Selected] = field(default_factory=list)  #: over the budget, not selected
     cut_at: list[str] = field(default_factory=list)  #: hubs the import walk did not pass
     full: str = ""  #: why only the whole suite is safe (a hub or test infrastructure changed)
+    #: Every changed ``.py`` file differs from its base only by import ordering, whitespace
+    #: or comments: no test's outcome can change, so the whole-suite fallback is needless
+    #: (a lint fix to a hub, bug B0bdd3b9a39).
+    neutral: bool = False
 
 
 def changed_files(tree: Path, base: str) -> list[str] | None:
@@ -233,7 +287,10 @@ def select(  # noqa: PLR0913 -- the knobs and the stand-ins for git's answers
     walked = TR.reach(graph, changed, hubs, max_hops)
     sel.cut_at = sorted(walked.cut_at)
     if touched := TR.hubs_touched(changed, hubs):
-        sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
+        if behaviour_neutral(tree, base, changed):
+            sel.neutral = True  # a lint/format fix: the hub reaches nothing it can break
+        else:
+            sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
     for t, (why, hops) in walked.files.items():
         if t in tests:
             pick(t, why, RANK_DIRECT if hops == 1 else RANK_TWO_HOP)

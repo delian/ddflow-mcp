@@ -193,7 +193,7 @@ def _selected(
         return Scope(
             "full", f"{kind}, but git could not say what changed since {base}", changed_lines=lines
         )
-    if sel.full:
+    if sel.full and not sel.neutral:
         return Scope(
             "full",
             f"{kind}, but {sel.full}: only the whole suite keeps recall",

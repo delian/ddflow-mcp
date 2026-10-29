@@ -114,6 +114,47 @@ def test_the_knob_full_and_a_call_not_for_an_item_run_the_whole_suite(project, s
     assert not _calls(stubs, "pytest")
 
 
+def test_a_lint_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(project, stubs):
+    """Bug B0bdd3b9a39: a lint fix to a hub (an import reorder) scoped the whole suite, so a
+    trivial fix cleared its ci gate only after a ~12-minute run over a red main. The change
+    cannot affect a test's outcome, so the affected tests and the non-test hooks are the whole
+    truth."""
+    _write(
+        project,
+        {
+            "pkg/hub.py": "from pkg import mod\nfrom pkg import other\n",
+            "tests/test_h1.py": "import pkg.hub\n\ndef test_h1():\n    pass\n",
+            "tests/test_h2.py": "import pkg.hub\n\ndef test_h2():\n    pass\n",
+        },
+    )
+    _branch(project, {"pkg/hub.py": "from pkg import other\nfrom pkg import mod\n"})
+    cfg = Config.load(project)
+    cfg.gates.unit_tests_hub_importers = 1
+    res = CI.run(project, cfg, base="main", for_item=True)
+    assert res.scope["scope"] == "selected", res.scope
+    assert "behaviour-neutral" in res.scope["why"], res.scope["why"]
+    (call,) = _calls(stubs, "pytest")
+    assert "test_h1.py" in call and "test_h2.py" in call and "tests/ " not in call
+    assert _calls(stubs, "precommit") == ["SKIP=tests,scenarios"]
+
+
+def test_a_real_code_change_to_a_hub_still_runs_the_whole_suite(project, stubs):
+    _write(
+        project,
+        {
+            "pkg/hub.py": "from pkg import mod\nV = mod.A\n",
+            "tests/test_h1.py": "import pkg.hub\n\ndef test_h1():\n    assert pkg.hub.V\n",
+            "tests/test_h2.py": "import pkg.hub\n\ndef test_h2():\n    pass\n",
+        },
+    )
+    _branch(project, {"pkg/hub.py": "from pkg import mod\nV = mod.A + 1\n"})
+    cfg = Config.load(project)
+    cfg.gates.unit_tests_hub_importers = 1
+    res = CI.run(project, cfg, base="main", for_item=True)
+    assert res.scope["scope"] == "full" and "hub" in res.scope["why"]
+    assert not _calls(stubs, "pytest")
+
+
 def test_a_hub_or_suite_configuration_change_falls_back_to_the_whole_suite(project, stubs):
     cfg = Config.load(project)
     cfg.gates.unit_tests_hub_importers = 2
