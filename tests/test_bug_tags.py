@@ -40,7 +40,8 @@ def test_tag_adds_and_removes_on_open_and_closed_bug(repo):
     code, out, err = run_cli(repo, "bug", "tag", "B1", "--add", "b,ns:c", "--remove", "a")
     assert code == 0, (out, err)
     assert _tags(repo, "B1") == ["b", "ns:c"]
-    run_cli(repo, "bug", "invalid", "B1", "--reason", "nope")
+    assert run_cli(repo, "bug", "invalid", "B1", "--reason", "nope")[0] == 0
+    assert not _load(repo)[2].bugs["B1"].open
     code, out, err = run_cli(repo, "bug", "tag", "B1", "--add", "late")
     assert code == 0, (out, err)
     assert _tags(repo, "B1") == ["b", "ns:c", "late"]
