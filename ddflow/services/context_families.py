@@ -19,7 +19,7 @@ from typing import Any
 from ..core import clock
 from ..infra import paths
 
-FACT_KEYS = ("v", "s", "src", "d", "note")
+FACT_KEYS = ("v", "s", "src", "d", "note", "exc")
 STATUSES = ("verified", "documented", "unverified", "none")
 READABLE = ("verified", "documented")
 UNKNOWN = "unknown"
@@ -42,6 +42,8 @@ def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     out = []
     table = "family" if "family" in doc else "harness"
     for row, body in sorted(doc.get(table, {}).items()):
+        if not isinstance(body, dict):
+            continue
         for key, node in sorted(body.items()):
             if is_fact(node):
                 out.append((table, row, key, node))
@@ -53,6 +55,9 @@ def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
     out = []
     for table in ("family", "harness"):
         for row, body in doc.get(table, {}).items():
+            if not isinstance(body, dict):
+                out.append(f"{name}: {table}.{row} is not a table")
+                continue
             for key, node in body.items():
                 at = f"{name}: {table}.{row}.{key}"
                 if key != "note" and not is_fact(node):
@@ -65,7 +70,7 @@ def _shape_problems(name: str, doc: dict[str, Any]) -> list[str]:
 def _fact_problems(name: str, doc: dict[str, Any]) -> list[str]:
     """Status, source, date and value rules for each fact of one file."""
     out = []
-    for table, row, key, f in facts(doc):
+    for table, row, key, f in facts(doc):  # facts() skips non-table rows (see _shape_problems)
         at = f"{name}: {table}.{row}.{key}"
         if f["s"] not in STATUSES:
             out.append(f"{at}: status {f['s']!r} is not one of {STATUSES}")
@@ -100,11 +105,14 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
     return problems
 
 
-def usable(fact: dict[str, Any] | None) -> Any:
-    """The fact's value if it may be believed, else None."""
+def usable(fact: dict[str, Any] | None, model: str = "") -> Any:
+    """The fact's value if it may be believed, else None.
+
+    With `model`, the fact's `exc` applies: the longest key found in the model name wins."""
     if not is_fact(fact) or fact["s"] not in READABLE:
         return None
-    return fact.get("v")
+    hits = [k for k in fact.get("exc", {}) if model and k in model]
+    return fact["exc"][max(hits, key=len)] if hits else fact.get("v")
 
 
 def family_row(data: dict[str, dict[str, Any]], family: str) -> dict[str, Any]:

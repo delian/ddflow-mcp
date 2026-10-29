@@ -1,9 +1,12 @@
 # Model-family cache and window facts for the context-compaction advisor (CC-inventory).
 #
-# Every fact is {v, s, src, d, note?}:
+# Every fact is {s, src, d} plus v (required when s is verified or documented; optional for
+# unverified/none) plus optional note and exc:
 #   s = verified (we ran a probe) | documented (vendor docs/source read) | unverified (a claim
 #       we could not confirm; `v` is kept only as a lead and is NEVER read as true) | none
 #       (the source documents the thing is absent; `v` ignored).
+#   exc = {model-name substring = value} for models that differ from v (longest substring wins);
+#   per-model detail beyond that belongs to DRV-model-catalog.
 #   A fact that is not listed is "left out": nothing is known, nothing is assumed.
 #   src = a key of [sources]; d = ISO date the source was read. A fact older than
 #   [context].facts_max_age_days is reported by doctor.
@@ -29,7 +32,7 @@ vllm-apc = { url = "https://docs.vllm.ai/en/latest/features/automatic_prefix_cac
 [family.claude]
 cache_kind = { v = "explicit", s = "documented", src = "cache-note", d = "2026-10-23", note = "breakpoints (up to 4) or automatic" }
 ttl = { v = ["5m", "1h"], s = "documented", src = "cache-note", d = "2026-10-23" }
-read_mult = { v = 0.1, s = "documented", src = "cache-note", d = "2026-10-23", note = "0.05 on Sonnet 5.5 and Opus 5.5" }
+read_mult = { v = 0.1, s = "documented", src = "cache-note", d = "2026-10-23", exc = { "sonnet-5.5" = 0.05, "opus-5.5" = 0.05 }, note = "0.05 on Sonnet 5.5 and Opus 5.5" }
 write_mult = { v = { "5m" = 1.25, "1h" = 2.0 }, s = "documented", src = "cache-note", d = "2026-10-23" }
 min_tokens = { v = 512, s = "documented", src = "cache-note", d = "2026-10-23", note = "Sonnet/Opus/Haiku 5.5; 1024-4096 on older models" }
 window = { v = 1000000, s = "documented", src = "cache-note", d = "2026-10-23", note = "1M on Sonnet 5+, Haiku 5.5, Fable; older models 200K" }
@@ -38,7 +41,7 @@ compaction_kind = { v = "client_summary", s = "documented", src = "claude-hooks"
 [family.openai]
 cache_kind = { v = "automatic", s = "documented", src = "openai-cache", d = "2026-10-29" }
 ttl = { v = ["30m", "12h"], s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+: prompt_cache_options.ttl, default 30m. Earlier: prompt_cache_retention in_memory (5-10 min, up to 1 h) or 24h; GPT-5.5 24h only" }
-read_mult = { v = 0.1, s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+; 0.05 on GPT-6.1 Sol and Terra. Earlier models: model-dependent, multiplier not stated" }
+read_mult = { v = 0.1, s = "documented", src = "openai-cache", d = "2026-10-29", exc = { "gpt-6.1-sol" = 0.05, "gpt-6.1-terra" = 0.05 }, note = "GPT-5.6+; 0.05 on GPT-6.1 Sol and Terra. Earlier models: model-dependent, multiplier not stated" }
 write_mult = { v = { "30m" = 1.25, "12h" = 2.5 }, s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+ only; earlier models have no write fee (cache-note, 2026-10-23)" }
 min_tokens = { v = 1024, s = "documented", src = "openai-cache", d = "2026-10-29", note = "GPT-5.6+ visible input tokens; earlier models: no fixed number stated" }
 window = { v = 1000000, s = "unverified", src = "cache-note", d = "2026-10-23", note = "'up to ~1M (GPT-5.5)' from a blog; not read in vendor docs" }
@@ -51,8 +54,8 @@ min_tokens = { v = 2048, s = "documented", src = "cache-note", d = "2026-10-23",
 
 [family.deepseek]
 cache_kind = { v = "automatic", s = "documented", src = "deepseek-cache", d = "2026-10-29", note = "disk cache on by default, prefix units" }
-ttl = { v = "hours to days, best effort", s = "documented", src = "deepseek-cache", d = "2026-10-29", note = "'automatically cleared, usually within a few hours to a few days'; no fixed duration" }
-read_mult = { v = 0.02, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "deepseek-flash hit $0.003 vs miss $0.15 per M off-peak; deepseek-v4-pro $0.022 vs $0.66 = 0.033. Peak hours are double, same ratio" }
+ttl = { v = [], s = "documented", src = "deepseek-cache", d = "2026-10-29", note = "no selectable TTL: 'automatically cleared, usually within a few hours to a few days', best effort" }
+read_mult = { v = 0.02, s = "documented", src = "deepseek-pricing", d = "2026-10-29", exc = { "v4-pro" = 0.033 }, note = "deepseek-flash hit $0.003 vs miss $0.15 per M off-peak; deepseek-v4-pro $0.022 vs $0.66 = 0.033. Peak hours are double, same ratio" }
 write_mult = { v = 1.0, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "no separate cache-write price is listed; a miss is billed at the miss rate" }
 window = { v = 1000000, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "both deepseek-flash and deepseek-v4-pro; max output 384K" }
 # min_tokens: the kv_cache page does not state one (left out, not guessed).
@@ -77,9 +80,8 @@ min_tokens = { v = 512, s = "documented", src = "cache-note", d = "2026-10-23", 
 
 [family.local]
 # Self-hosted endpoints (vLLM, llama.cpp, Ollama...). The model behind one is of any other
-# family; caching belongs to the SERVER and its flags, not to the model.
-cache_kind = { v = "server_prefix", s = "documented", src = "vllm-apc", d = "2026-10-29", note = "vLLM automatic prefix caching: reuses KV for matching prefixes, cuts prefill time only; the page states no default (enable_prefix_caching=True enables it) and no TTL. llama.cpp and Ollama: not read" }
-read_mult = { s = "none", src = "vllm-apc", d = "2026-10-29", note = "no per-token price: a saving is time, not money" }
+# family; caching belongs to the SERVER and its flags, not to the model; only vLLM was read.
+cache_kind = { v = "automatic", s = "documented", src = "vllm-apc", d = "2026-10-29", note = "vLLM ONLY, once enabled: automatic prefix caching: reuses KV for matching prefixes, cuts prefill time only; the page states no default (enable_prefix_caching=True enables it) and no TTL. llama.cpp and Ollama: not read" }
 
 [family.unknown]
 note = "A model that matches no family has no facts. Never resolved by neighbour."
