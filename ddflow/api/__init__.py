@@ -94,8 +94,6 @@ from .items import (
     update,
 )
 from .jobs import job_add, job_end, job_list, job_run
-from .watch import watch as watch_target
-from .watch import watch_summary
 from .knowledge import (
     Finding as ResearchFinding,
 )
@@ -213,6 +211,8 @@ from .setup import setup as adopt_project
 from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
+from .watch import watch as watch_target
+from .watch import watch_summary
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -388,8 +388,8 @@ __all__ = [
     "view_list",
     "view_read",
     "wait_item",
-    "watch_target",
     "watch_summary",
+    "watch_target",
     "workflow_drop",
     "workflow_gate",
     "workflow_overview",
