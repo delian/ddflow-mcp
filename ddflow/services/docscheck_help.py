@@ -59,6 +59,7 @@ def bind_parser_factory(factory: Callable[[], ArgumentParser]) -> None:
     lazy `build_parser` at import, so a docs check never spawns `ddflow <verb> --help`
     for a chain this process can answer itself."""
     _parser_factory[0] = factory
+    _parser[0] = None  # a parser built from a PREVIOUS factory must not answer for this one
 
 
 def in_process(verbs: list[str]) -> P.Captured:
