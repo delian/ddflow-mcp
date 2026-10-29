@@ -83,3 +83,17 @@ def test_unknown_family_carrying_a_fact_is_a_problem():
         "d": "2026-10-29",
     }
     assert any("no neighbour" in p for p in CF.validate(data))
+
+
+def test_a_malformed_or_misspelt_fact_is_not_silently_dropped():
+    data = CF.load()
+    fam = data["context_families.toml"]["family"]["claude"]
+    fam["ttl"] = {
+        "v": ["5m"],
+        "src": "cache-note",
+        "d": "2026-10-23",
+    }  # no status: would be invisible
+    fam["window"]["sorce"] = "typo"
+    problems = CF.validate(data)
+    assert any("claude.ttl is not a fact" in p for p in problems)
+    assert any("claude.window has unknown field" in p for p in problems)
