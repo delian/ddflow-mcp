@@ -146,6 +146,41 @@ def _chain(ctx: Context, merged: list[Span]) -> tuple[list[str], float]:
     return top[1], top[0]
 
 
+def _wall(merged: list[Span]) -> tuple[float | None, float | None, float | None]:
+    """(start, end, wall seconds): first claim to last completion of the merged items."""
+    claimed = [s.first_claim for s in merged if s.first_claim is not None]
+    start = min(claimed) if claimed else None
+    end = max((s.completed_at or 0.0) for s in merged) if merged else None
+    ok = start is not None and end is not None and end > start
+    return start, end, (end - start if ok else None)  # type: ignore[operator]
+
+
+def _cost(events: Sequence[Event], facts: Facts, items: set[str], now: float, minimum: int) -> dict:
+    n = len(items)
+    agent_h = (_held_s(facts, items, now) + _review_s(facts, items)) / HOUR
+    usd, usd_events = _cost_usd(events, items)
+    return {
+        "usd_total": usd if usd_events else None,
+        "usd_per_item": usd / n if usd_events and n >= minimum else None,
+        "agent_hours_per_item": agent_h / n if n >= minimum else None,
+        "events_with_cost": usd_events,
+    }
+
+
+def _path(ctx: Context, merged: list[Span], wall: float | None, phase: str) -> dict:
+    chain, chain_s = _chain(ctx, merged)
+    cycles = sum(s.cycle_s or 0.0 for s in merged)
+    return {
+        "merged_chain": chain,
+        "length": len(chain),
+        "duration_s": chain_s if chain else None,
+        "wall_s": wall,
+        "slack_s": wall - chain_s if wall is not None and chain else None,
+        "parallelism": cycles / wall if wall else None,
+        "open_length": len(critical_path(ctx.facts.state, phase, ctx.cfg)),
+    }
+
+
 def baseline(
     events: Sequence[Event],
     state: State,
@@ -163,55 +198,33 @@ def baseline(
     merged = _merged(ctx, until)
     minimum = max(int(cfg.metrics.min_samples), 1)
     n = len(merged)
-    items = {s.item for s in merged}
-    unavailable: dict[str, str] = {}
-    thin = f"{n} merged items, need {minimum}"
-
-    claimed = [s.first_claim for s in merged if s.first_claim is not None]
-    start = min(claimed) if claimed else None
-    end = max((s.completed_at or 0.0) for s in merged) if merged else None
-    wall = end - start if start is not None and end is not None and end > start else None
-    per_hour = n / (wall / HOUR) if wall and n >= minimum else None
-    if per_hour is None:
-        unavailable["throughput"] = thin if n < minimum else "no elapsed time in the window"
-
+    thin = n < minimum
+    why = f"{n} merged items, need {minimum}"
+    start, end, wall = _wall(merged)
     rw = _rework(ctx, merged, bug_window_s)
-    if n < minimum:
+    cost = _cost(events, facts, {s.item for s in merged}, now, minimum)
+    per_hour = n / (wall / HOUR) if wall and not thin else None
+    unavailable = {
+        k: v
+        for k, v in {
+            "throughput": why if thin else "" if per_hour else "no elapsed time in the window",
+            "rework": why if thin else "",
+            "cost": why if thin else "",
+            "cost_usd": ""
+            if cost["events_with_cost"]
+            else "no event carries cost_usd; agent_hours_per_item is the proxy",
+        }.items()
+        if v
+    }
+    if thin:
         rw["rate"] = rw["review_rework_rate"] = None
-        unavailable["rework"] = thin
-
-    held = _held_s(facts, items, now)
-    agent_h = (held + _review_s(facts, items)) / HOUR
-    usd, usd_events = _cost_usd(events, items)
-    cost = {
-        "usd_total": usd if usd_events else None,
-        "usd_per_item": usd / n if usd_events and n >= minimum else None,
-        "agent_hours_per_item": agent_h / n if n >= minimum else None,
-        "events_with_cost": usd_events,
-    }
-    if not usd_events:
-        unavailable["cost_usd"] = "no event carries cost_usd; agent_hours_per_item is the proxy"
-    if n < minimum:
-        unavailable["cost"] = thin
-
-    chain, chain_s = _chain(ctx, merged)
-    cycles = sum(s.cycle_s or 0.0 for s in merged)
-    cp = {
-        "merged_chain": chain,
-        "length": len(chain),
-        "duration_s": chain_s if chain else None,
-        "wall_s": wall,
-        "slack_s": wall - chain_s if wall is not None and chain else None,
-        "parallelism": cycles / wall if wall else None,
-        "open_length": len(critical_path(state, phase, cfg)),
-    }
     return {
         "window": {"phase": phase, "since": since, "until": until, "start": start, "end": end},
         "merged": n,
         "throughput": {"per_hour": per_hour, "wall_s": wall},
         "rework": rw,
         "cost": cost,
-        "critical_path": cp,
+        "critical_path": _path(ctx, merged, wall, phase),
         "unavailable": unavailable,
     }
 
