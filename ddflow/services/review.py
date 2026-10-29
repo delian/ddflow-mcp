@@ -1062,19 +1062,26 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
 def parse(text: str) -> tuple[list[Finding], bool]:
     """(findings, on_contract). Off contract means no STATUS: block at all."""
     status = _STATUS_RE.search(text or "")
-    findings = [
-        Finding(
-            severity=m.group(1).upper(),
-            location=(m.group(2) or "").strip(),
-            title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
-            #: The finding's text is the reviewer's paragraph. A reviewer may write only
-            #: a location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still
-            #: names the spot the author must answer, so its text is derived from the
-            #: location and the finding is never recorded empty (B-review-finding-empty-text).
-            detail=(m.group(3) or "").strip() or (m.group(2) or "").strip(),
+    findings = []
+    for m in _FINDING_RE.finditer(text or ""):
+        location = (m.group(2) or "").strip()
+        #: The finding's text is the reviewer's paragraph. A reviewer may write only a
+        #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
+        #: the spot the author must answer, so its text is derived from the location and
+        #: a location-only finding is never recorded empty (B-review-finding-empty-text).
+        detail = (m.group(3) or "").strip() or location
+        if not detail:
+            #: No location and no paragraph: the block names nothing, so it is not a
+            #: finding at all and is not recorded.
+            continue
+        findings.append(
+            Finding(
+                severity=m.group(1).upper(),
+                location=location,
+                title=location or " ".join(detail.split())[:80],
+                detail=detail,
+            )
         )
-        for m in _FINDING_RE.finditer(text or "")
-    ]
     return findings, status is not None
 
 
