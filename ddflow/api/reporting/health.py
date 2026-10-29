@@ -10,9 +10,8 @@ from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.events import is_older
-from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
-from ...core.schedule import is_external, stale_package_globs, unpickable
+from ...core.schedule import is_external, unpickable
 from ...core.stuck import stuck_edges
 from ...core.tier import unknown_tier_notes
 from ...infra import container as CT
@@ -29,6 +28,7 @@ from ...services import external as EX
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
+from ...services import leasebreak as LBR
 from ...services import leases as L
 from ...services import logblobs as LB
 from ...services import pins_merge as PM
@@ -62,6 +62,8 @@ from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (r
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
 from .waitcycles import wait_cycles, wait_findings, wait_order
+
+_stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
@@ -117,30 +119,6 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 )
             elif dep not in st.external:
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
-
-
-def _stale_glob_notes(repo: Path, st) -> list[str]:
-    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
-    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
-    Each is named with the corrected glob and the command that applies it."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
-        return []
-    tracked = W.git_paths(repo, "ls-files")
-    if tracked is None:  # "could not tell" is said, never read as "nothing stale"
-        return ["stale task globs not checked: git could not list the tracked files"]
-    notes = []
-    for it in live:
-        stale = stale_package_globs(it.globs, tracked)
-        if not stale:
-            continue
-        fixed = dict(stale)
-        globs = ",".join(fixed.get(g, g) for g in it.globs)
-        notes.append(
-            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
-            f"its lease covers none of those files. `ddflow update {it.id} --globs {globs}`"
-        )
-    return notes
 
 
 def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
@@ -450,6 +428,7 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     data: dict[str, Any] = {
         "problems": problems,
