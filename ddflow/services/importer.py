@@ -948,6 +948,114 @@ def _parse_needs(text: str) -> list[str]:
     return out
 
 
+def _table_cells(row: str) -> list[str]:
+    """The cells of a GFM table row: borders off, split on pipes that are not escaped,
+    and `\\|` unescaped back to the pipe it was written as.
+
+    A `|` is a column separator to every GFM reader, so a title is written with a
+    literal pipe escaped (```ddflow seed plan\\|apply```, exactly what ``_cell`` in
+    ``views/markdown`` writes) and a raw one is a column break. A bare
+    ``line.split("|")`` here sends the title up to its first pipe and reads the
+    leftover columns as globs -- titles cut and needs becoming globs that the
+    conflict check then compares against real paths (B-sx-tasks-pipe-split-titles).
+    """
+    body = row.strip()
+    if body.startswith("|"):
+        body = body[1:]
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    return [c.replace("\\|", "|") for c in re.split(r"(?<!\\)\|", body)]
+
+
+#: The fields a task table declares, by the header word. An id and a title column are
+#: what marks a row as a task table rather than prose; ``needs`` and ``globs`` are the
+#: two a task carries. Unknown words are left out rather than guessed at.
+_TABLE_FIELDS = ("id", "title", "needs", "globs")
+_TABLE_HEAD = re.compile(r"[*_`\s]+")
+
+
+def _table_columns(row: str) -> dict[str, int]:
+    """``{field: index}`` of a task table's header row, or ``{}`` when the row names no
+    id/title column (a heading table of graphs, a bug table...). Deliberately only the
+    four words above: every alias the scanner guesses about is a wrong column later."""
+    out: dict[str, int] = {}
+    for i, cell in enumerate(_table_cells(row)):
+        name = _TABLE_HEAD.sub("", cell).lower()
+        if name in _TABLE_FIELDS and name not in out:
+            out[name] = i
+    return out
+
+
+def _table_delim(cells: list[str]) -> bool:
+    """A GFM delimiter row's cells are only ``-`` and ``:`` (``:---``), so a data row is
+    told from how the table says a column may align."""
+    return bool(cells) and all(c.strip() == "" or re.fullmatch(r":?-+:?", c.strip()) for c in cells)
+
+
+def _table_task(
+    tbl: list[str], table_cols: dict[str, int], rel: str, n: int, taken: set[str]
+) -> Found | None:
+    """The task a ``| Id | Title | Needs | Globs |`` row becomes, or None for a row with no
+    id and title to import. The Id cell is the id verbatim (a table that names an id says
+    it exactly, where checkbox prose only shapes one); needs and globs are the columns
+    that say so, so a title's own pipe -- written escaped -- stays IN the title instead of
+    renumbering the columns (B-sx-tasks-pipe-split-titles)."""
+    tid = tbl[table_cols["id"]].strip() if "id" in table_cols else ""
+    title = _clean_title(tbl[table_cols["title"]]) if "title" in table_cols else ""
+    if not tid or not title:
+        return None
+    tsk = Found(
+        kind="task",
+        ident=_unique(tid, "", taken),
+        title=title,
+        source=f"{rel}:{n}",
+        body="",
+        globs=_parse_globs(tbl[table_cols["globs"]]) if "globs" in table_cols else [],
+        extra={"id_from_source": True, "from_table": True},
+    )
+    if "needs" in table_cols:
+        tsk.needs = _parse_needs(tbl[table_cols["needs"]])
+    return tsk
+
+
+def _table_row(
+    line: str, table_cols: dict[str, int], rel: str, n: int, taken: set[str]
+) -> tuple[Found | None, dict[str, int]]:
+    """Step one markdown table line: ``("the header's columns",)`` when it is one, or the
+    task a data row becomes, else ``(None, cols)``. The whole decision lives here so
+    ``scan_todos`` keeps its complexity budget -- several branches inline pushed it past
+    its lint ratchet while teaching the loop nothing it had lost."""
+    tbl = _table_cells(line)
+    cols = _table_columns(line)
+    if "id" in cols or "title" in cols:
+        return None, cols
+    if table_cols and tbl and not _table_delim(tbl):
+        return _table_task(tbl, table_cols, rel, n, taken), table_cols
+    return None, table_cols
+
+
+def _scan_task_tables(
+    lines: list[str], fenced: list[bool], rel: str, taken: set[str]
+) -> list[Found]:
+    """The tasks of every ``| Id | Title | Needs | Globs |`` table in ``lines``, in order.
+
+    Task tables are a scan apart rather than more branches of ``scan_todos``: a checklist
+    groups its boxes under a heading, a task TABLE names each of its own id, needs and
+    globs, and reading a row inside the checklist loop pushed that function past its
+    lint ratchet for no added meaning. Kept in file order, so the id stays in ``taken``
+    beside the checkboxes that may share its name."""
+    out: list[Found] = []
+    cols: dict[str, int] = {}
+    for n, line in enumerate(lines, 1):
+        if fenced[n - 1] or not line.lstrip().startswith("|"):
+            cols = {}
+            continue
+        tsk, cols = _table_row(line, cols, rel, n, taken)
+        if tsk is not None:
+            out.append(tsk)
+    return out
+
+
 def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
     """`preferred` if it is free, else `fallback`, else `fallback-2`, `-3`, ...
 
@@ -1178,6 +1286,7 @@ def scan_todos(
             )
             found.append(anchor)
             prose.append((anchor, paragraph))
+        found.extend(_scan_task_tables(lines, fenced, rel, taken))
         if len(found) == before:
             empty.append(rel)
     _adopt_child_prefix(found, taken)
