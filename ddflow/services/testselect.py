@@ -128,7 +128,9 @@ def behaviour_neutral(tree: Path, base: str, changed: list[str]) -> bool:
     return True
 
 
-def _hub_answer(tree: Path, base: str, changed: list[str], hubs: dict, prior_full: str) -> tuple[bool, str]:
+def _hub_answer(
+    tree: Path, base: str, changed: list[str], hubs: dict, prior_full: str
+) -> tuple[bool, str]:
     """(neutral, whole-suite reason) for a changed hub: True when the change is
     import-order/format-only so no test can observe it (bug B0bdd3b9a39), else the reason
     running only the importers would lose recall."""
