@@ -79,7 +79,7 @@ from .failed_gate import (  # noqa: F401
     skipped_after_failure,
 )
 from .failed_review import failed_review_blockers, unresolved_review_failure  # noqa: F401
-from .hand_approve import approve  # noqa: F401
+from .hand_approve import approve, record  # noqa: F401
 from .handrecord import hand_record  # noqa: F401
 from .kinds import (  # noqa: F401
     BOILERPLATE,
@@ -120,7 +120,6 @@ from .outcomes import (  # noqa: F401
     is_triageable,
     local_command_notes,
     on_refutation,
-    record,
     refuted_line,
     refuted_passes,
     rounds_line,
