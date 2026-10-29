@@ -101,9 +101,26 @@ def _run_at(
                     (s.path / ".git" / lock).unlink(missing_ok=True)
                 # os.replace swaps the NODE itself: a run that left a symlink at .git/config
                 # is replaced with the pristine regular file, its target never written.
+                # The STAGING name is unpredictable and opened O_NOFOLLOW|O_EXCL, so a
+                # planted symlink or FIFO at a guessed staging path can neither redirect
+                # nor block the write.
                 cfg_path = s.path / ".git" / "config"
-                staged = cfg_path.parent / ".ddflow-pristine-cfg"
-                staged.write_bytes(pristine_cfg)
+                for _ in range(4):
+                    staged = s.path / ".git" / f".pristine-{secrets.token_hex(6)}"
+                    try:
+                        fd = os.open(
+                            staged,
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                            0o644,
+                        )
+                    except FileExistsError:
+                        continue
+                    with os.fdopen(fd, "wb") as fh:
+                        fh.write(pristine_cfg)
+                    break
+                else:
+                    unreached += 1
+                    continue
                 os.replace(staged, cfg_path)
                 reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
                 cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
