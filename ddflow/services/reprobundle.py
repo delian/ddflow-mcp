@@ -279,7 +279,8 @@ def sighting(run: Any) -> dict[str, Any]:
         return {}
     if run.get("reproduced") == "no" and failures > 0:
         return {}  # 'no' says no run failed: a failing count contradicts the verdict
-    return {k: run[k] for k in ("reproduced", "runs", "failures") if k in run}
+    # Canonical: the PARSED counts go out, never the raw non-count the caller put in.
+    return {"reproduced": run.get("reproduced"), "runs": runs, "failures": failures}
 
 
 def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any) -> dict[str, Any]:
