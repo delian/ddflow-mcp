@@ -42,7 +42,7 @@ def _two_gate_setup(repo: Path, tmp_path: Path) -> None:
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(
         cfg.read_text()
-        + f'\n[[reviewer]]\nname = "duck"\nkind = "command"\ncommand = "{cli}"'
+        + f'\n[[reviewer]]\nname = "duck"\nkind = "command"\ncommand = "{cli}"\n'
         + 'model = "gemini-2.5-pro"\ngates = ["rubber_duck"]\nhedge = 1\n'
     )
 

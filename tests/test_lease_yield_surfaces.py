@@ -10,6 +10,8 @@ idle")."""
 from __future__ import annotations
 
 import json
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -52,16 +54,47 @@ def _setup(repo) -> None:
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent=A)[0] == 0
 
 
+def _idle_line(text: str, item: str) -> str:
+    """The rendered yield line for ``item``, "" when absent. Bound to the yield_text
+    signature sentence, on purpose: "T1" and "no progress for" appearing anywhere in the
+    whole output, or on a health line, would pass while the yield surface stayed missing
+    (review findings)."""
+    for ln in text.splitlines():
+        if "no progress for" in ln and f"waits for the files {item} holds" in ln:
+            return ln
+    return ""
+
+
 def test_doctor_and_status_list_a_yield_requested_lease_with_its_idle_time(repo):
     _setup(repo)
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
     _backdate(repo, "T1", AGO)  # idle AGO s >= hold_max_s: asked AND breakable
     code, out, err = run_cli(repo, "doctor", agent=A)
     assert code in (0, 1)
-    text = out + err
-    assert "T1" in text and "no progress for" in text  # listed, with the idle time
-    assert "can now be broken" in text  # breakable is shown too (hold_max_s reached)
+    line = _idle_line(out + err, "T1")
+    assert line and clock.fmt_age(AGO) in line  # listed, with the idle time
+    assert "can now be broken" in line  # breakable shown too (hold_max_s reached)
     code, out, err = run_cli(repo, "status", agent=A)
     assert code in (0, 1)
-    text = out + err
-    assert "T1" in text and "no progress for" in text  # same lease, same idle time
+    assert "Yield requested:" in out + err  # the section exists
+    line = _idle_line(out + err, "T1")
+    assert line and clock.fmt_age(AGO) in line  # same lease, same idle time
+    assert "can now be broken" in line  # breakable shown in status too
+
+
+def test_doctor_quotes_the_remedy_for_a_stale_package_glob(repo):
+    """The moved stale_glob_notes note is copy-pastable: the corrected globs are ONE
+    shell-quoted argument. The space form forces quoting -- a plain 'stale p/' without
+    quotes is two words, so the shlex.quote rendering is what the pin demands."""
+    assert run_cli(repo, "init", agent=A)[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "S1", "--title", "S1", "--globs", "stale p.py", agent=A)[0]
+        == 0
+    )
+    (repo / "stale p").mkdir(parents=True)
+    (repo / "stale p" / "__init__.py").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    code, out, err = run_cli(repo, "doctor", agent=A)
+    assert code in (0, 1)
+    note = next(ln for ln in (out + err).splitlines() if "now the package" in ln)
+    assert f"`ddflow update S1 --globs {shlex.quote('stale p/')}`" in note

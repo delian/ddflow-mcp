@@ -48,6 +48,7 @@ from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before th
     DEDUPE_ON_MATCH,
     DedupeConfig,
 )
+from .config_sections.digest import DigestConfig
 from .config_sections.docs import (  # noqa: F401
     DOCS_LINK_MODES,
     EXTRACT_KINDS,
@@ -229,6 +230,7 @@ class Config:
     plan: PlanConfig = field(default_factory=PlanConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
+    digest: DigestConfig = field(default_factory=DigestConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
     approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)

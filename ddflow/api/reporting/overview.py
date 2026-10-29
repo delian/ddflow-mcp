@@ -14,6 +14,7 @@ from ...core.model import fold
 from ...core.plain import plain
 from ...infra.log import EventLog
 from ...services import gates as G
+from ...services import leasebreak as LBR
 from ...services import leases as L
 from ...services import upgrade_check as UC
 from ...services import waiting as WG
@@ -215,6 +216,20 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
     waits = WG.rows(st, cfg, time.time())
     if waits:
         data["waiting"] = waits  # who is refused which files, and by whom (no polling)
+    # DX-lease-yield-doctor-status: the operator must see a contended, idle lease too, not
+    # only the holder's brief/heartbeat. Wire body carries the facts; the human view the text.
+    yield_vs = LBR.verdicts(st, cfg, events, time.time(), LBR.tree_activity(log.root))
+    if yield_vs:
+        data["yield_requested"] = [
+            {
+                "item": v.item,
+                "holder": v.holder,
+                "idle_s": round(v.idle_s, 1),
+                "waiters": list(v.waiters),
+                "breakable": v.breakable,
+            }
+            for v in yield_vs
+        ]
     health = health_lines(log, st, cfg, repo, wait_cycles(st, cfg))
     if health:
         data["health"] = health  # stalled / locked / runaway lanes (`ddflow health`)
@@ -276,6 +291,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "contested": contested,
         "waiting": [WG.line(w) for w in waits],
+        "yields": [LBR.yield_text(v) for v in yield_vs],
         "stranded": [x["text"] for x in stranded],
         "health": health,
         "recoverable": rec,

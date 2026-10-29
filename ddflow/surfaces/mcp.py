@@ -1479,6 +1479,7 @@ OFFLOADED = frozenset(
         "ddflow_review",
         "ddflow_verify",
         "ddflow_wait",
+        "ddflow_watch",
     }
 )
 

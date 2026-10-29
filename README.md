@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=1e4509de3554 -->
-<details><summary>All 90 commands</summary>
+<!-- ddflow:begin README/commands sha=26edc8267b50 -->
+<details><summary>All 91 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -635,6 +635,7 @@ needs a line written by hand here.
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
+| `ddflow watch` | wait for a job, a file line, a process or a gate, renewing your leases; exit 2 = not yet (resume with the… |
 | `ddflow waves` | report that `--stamp` is not implemented and name the interim wave-stamping mechanism (LB-waves ships it) |
 
 </details>
@@ -1102,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 407 knobs.
+cadences, and the rest of the 411 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5297,7 +5298,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 407): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 411): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5578,7 +5579,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=039ca3b598b7 -->
+<!-- ddflow:begin README/tools sha=617b994f81ff -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5600,11 +5601,11 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
 - `ddflow_session` (4 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`)
-- `ddflow_lease` (5 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`)
+- `ddflow_lease` (6 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `watch` (was `ddflow_watch`)
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 123 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
+<details><summary>All 124 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 43 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5659,6 +5660,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Doing the work | `ddflow_sync` | standard | Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with… |
+| Doing the work | `ddflow_watch` | all | Wait for ONE thing and return what happened, renewing your leases meanwhile: a job (job: exit status), a… |
 | Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
 | Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
@@ -5866,7 +5868,7 @@ declared once and persists — see
 
 ## Configuration
 
-407 knobs across 42 sections, every one documented in place and listed, with its default
+411 knobs across 43 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5933,8 +5935,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ef672766a845 -->
-<details><summary>All 407 knobs across 42 sections</summary>
+<!-- ddflow:begin README/knobs sha=11ca9717ea22 -->
+<details><summary>All 411 knobs across 43 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6248,6 +6250,10 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.keep_history` | `50` |  |
 | `chore.globs` | (long: see `ddflow config --explain`) |  |
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
+| `digest.escalate_after` | `"1h, 24h"` |  |
+| `digest.escalate_after_red_main` | `"6h"` |  |
+| `digest.text_chars` | `400` |  |
+| `digest.spotcheck_min` | `1` |  |
 | `grants.max_count` | `3` |  |
 | `grants.ttl_h` | `48` |  |
 | `approvals.use_ttl_s` | `3600` |  |
