@@ -146,6 +146,12 @@ def parse_reserved(table: Any, where: str) -> Reserved:
     return Reserved(none=none, values=values)
 
 
+def validate_reserved(reserved: dict[str, Reserved], where: str) -> None:
+    for name, sec in reserved.items():
+        if sec.none == bool(sec.values):  # both set, or neither
+            raise DescriptorError(f"{where}: [{name}] needs exactly one of none = true or values")
+
+
 def validate(sections: dict[str, Any], where: str) -> None:
     """Cross-field checks for the v2 sections present in ``sections`` (name -> record)."""
     for name, sec in sections.items():
