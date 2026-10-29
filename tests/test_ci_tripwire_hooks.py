@@ -103,7 +103,7 @@ def test_merge_passes_the_range_it_added_to_the_after_merge_check(repo, monkeypa
 
     M = importlib.import_module("ddflow.api.lifecycle.merge")
     default = _project(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "ok.txt")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "ok.txt")
     code, out, err = run_cli(repo, "claim", "T1", agent="alpha")
     assert code == 0, out + err
     import json

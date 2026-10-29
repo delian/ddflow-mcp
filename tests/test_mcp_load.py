@@ -343,7 +343,7 @@ def test_readers_are_not_blocked_by_writers(repo):
     'the tool got slow', which nobody debugs to a lock."""
     run_cli(repo, "init")
     for i in range(20):
-        run_cli(repo, "task", "add", f"SEED{i}", "--globs", f"s{i}.py")
+        run_cli(repo, "task", "add", f"SEED{i}", "--title", "task item", "--globs", f"s{i}.py")
 
     jobs = [(str(repo), f"w-{i}", LOAD_CALLS) for i in range(LOAD_AGENTS // 2)]
     jobs += [(str(repo), LOAD_CALLS)] * (LOAD_AGENTS // 2)  # readers
@@ -373,7 +373,7 @@ def test_a_read_modify_write_loop_under_contention_loses_nothing(repo):
     lesson written must be present: a lost one means an append raced another."""
     run_cli(repo, "init")
     for i in range(10):
-        run_cli(repo, "task", "add", f"T{i}", "--globs", f"t{i}.py")
+        run_cli(repo, "task", "add", f"T{i}", "--title", "task item", "--globs", f"t{i}.py")
 
     n = max(2, LOAD_AGENTS // 3)
     per = 5
@@ -424,12 +424,12 @@ def test_read_latency_grows_no_worse_than_linearly_with_the_log(repo):
     """
     run_cli(repo, "init")
     for i in range(50):
-        run_cli(repo, "task", "add", f"A{i}", "--globs", f"a{i}.py")
+        run_cli(repo, "task", "add", f"A{i}", "--title", "task item", "--globs", f"a{i}.py")
     small = _time_read(repo)
     small_n = len(EventLog(repo).read_all())
 
     for i in range(450):
-        run_cli(repo, "task", "add", f"B{i}", "--globs", f"b{i}.py")
+        run_cli(repo, "task", "add", f"B{i}", "--title", "task item", "--globs", f"b{i}.py")
     big = _time_read(repo)
     big_n = len(EventLog(repo).read_all())
 
@@ -453,7 +453,7 @@ def test_the_cost_of_a_read_is_reported_so_a_regression_is_visible(repo, capsys)
     """
     run_cli(repo, "init")
     for i in range(200):
-        run_cli(repo, "task", "add", f"T{i}", "--globs", f"t{i}.py")
+        run_cli(repo, "task", "add", f"T{i}", "--title", "task item", "--globs", f"t{i}.py")
     n = len(EventLog(repo).read_all())
     per_read = _time_read(repo, n=10)
     with capsys.disabled():

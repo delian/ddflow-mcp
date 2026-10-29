@@ -137,8 +137,19 @@ def _workers(pid: int, proc: Path = Path("/proc")) -> list[int]:
 def _held(repo: Path) -> Path:
     """A task another agent holds, so `ddflow_wait` on it is a call that takes its time."""
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "--agent", "holder", "claim", "P1.T1", "--no-worktree")
     return repo
 
@@ -211,8 +222,19 @@ def test_a_client_that_goes_away_does_not_lose_the_run(repo):
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "sleep 2"\ncwd = "repo"\n'
     )
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "--agent", "offload-test", "claim", "P1.T1", "--no-worktree")
     # The client's stderr pipe goes with the client: a worker that inherited it would be
     # writing into a broken pipe for the rest of the run.

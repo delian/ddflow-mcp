@@ -75,7 +75,7 @@ def test_a_completion_that_holds_is_not_reopened_without_force_and_a_reason(repo
 
 def test_reopen_of_an_item_that_is_not_done_is_nothing_to_do(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert verify(repo, "T1", reopen=True).exit == O.NOTHING
 
 
