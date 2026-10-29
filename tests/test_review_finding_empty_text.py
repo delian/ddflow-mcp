@@ -42,6 +42,12 @@ def test_parse_derives_text_for_a_finding_with_location_only():
     assert f.title == "y.py:1"
 
 
+def test_a_block_with_neither_location_nor_paragraph_is_not_a_finding():
+    findings, on_contract = RV.parse("FINDING MEDIUM\n\nSTATUS: FINDINGS 1")
+    assert on_contract
+    assert findings == [], "a block that names nothing is not a finding and is not recorded"
+
+
 def test_a_location_only_finding_is_recorded_with_its_location_as_text(repo, tmp_path):
     cli = tmp_path / "fake-reviewer"
     cli.write_text("#!/bin/sh\ncat >/dev/null\nprintf 'FINDING MEDIUM y.py:1\\n\\nSTATUS: FINDINGS 1\\n'\n")
