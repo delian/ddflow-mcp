@@ -18,6 +18,7 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
+from . import bug_tags as BT
 from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
 
 BUG_SCOPES = ("project", "ddflow")
@@ -54,6 +55,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     test: str = "",
     repro_cmd: str = "",
     repro_capture: str = "",
+    tags: str | list[str] = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
     says what it is; a bug a task will fix is filed against it (``item``), which answers
@@ -74,6 +76,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
+    tag_list = GS.parse(tags)  # the tag arithmetic items use; `wave:*` is reserved
+    if BT.reserved(tag_list):
+        return O.failed("bug.found", f"{', '.join(BT.reserved(tag_list))}: wave:* is reserved.")
     log, cfg, st = _load(repo, agent)
     minted = IDS.mint(cfg, st, "bug", events=log.read_all, given=id, hash_parts=(summary, item))
     bid = minted.id
@@ -94,6 +99,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
     if globs:
         extra["globs"] = GS.parse(globs)
+    if tag_list:
+        extra["tags"] = tag_list
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
