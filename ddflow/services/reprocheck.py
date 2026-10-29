@@ -90,41 +90,7 @@ def _run_at(
             # snapshot brings that back too, so later runs see the checkout the first did.
             pristine_cfg = (s.path / ".git" / "config").read_bytes()
             for _ in range(count):
-                # Reset BEFORE each run: a forgetful-but-stateful line (a marker it left)
-                # must not bleed into the next run's answer -- every run sees the
-                # recorded sha as the checkout made it. The pristine config is restored
-                # and a stale lock dropped BEFORE the reset: a run that poisoned the
-                # config or left a lock must not corrupt the reset itself. A reset that
-                # FAILED breaks the guarantee: with no fresh checkout there is no run to
-                # read.
-                for lock in ("index.lock", "HEAD.lock"):
-                    (s.path / ".git" / lock).unlink(missing_ok=True)
-                # os.replace swaps the NODE itself: a run that left a symlink at .git/config
-                # is replaced with the pristine regular file, its target never written.
-                # The STAGING name is unpredictable and opened O_NOFOLLOW|O_EXCL, so a
-                # planted symlink or FIFO at a guessed staging path can neither redirect
-                # nor block the write.
-                cfg_path = s.path / ".git" / "config"
-                for _ in range(4):
-                    staged = s.path / ".git" / f".pristine-{secrets.token_hex(6)}"
-                    try:
-                        fd = os.open(
-                            staged,
-                            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                            0o644,
-                        )
-                    except FileExistsError:
-                        continue
-                    with os.fdopen(fd, "wb") as fh:
-                        fh.write(pristine_cfg)
-                    break
-                else:
-                    unreached += 1
-                    continue
-                os.replace(staged, cfg_path)
-                reset = P.capture(["git", "reset", "--hard", sha], cwd=s.path, timeout=60.0)
-                cleaned = P.capture(["git", "clean", "-xdfq"], cwd=s.path, timeout=60.0)
-                if reset.code != 0 or cleaned.code != 0:
+                if not _prime_scratch(s.path, sha, pristine_cfg):
                     unreached += 1
                     continue
                 # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
@@ -172,6 +138,36 @@ def _run_at(
         # a rendering of the kept byte, not extra bytes stored.
         record["output"] = joined[-keep:].decode("utf-8", errors="replace")
     return record
+
+
+def _prime_scratch(scratch: Path, sha: str, pristine_cfg: bytes) -> bool:
+    """Reset the scratch checkout to ``sha`` BEFORE one run; False when the reset could
+    not be guaranteed (with no fresh checkout there is no run to read).
+
+    A stale lock is dropped and the pristine config written FIRST: a run that poisoned
+    the config or left a lock must not corrupt the reset itself. os.replace swaps the
+    NODE itself -- a symlink left at .git/config is replaced with the pristine regular
+    file, its target never written -- and the STAGING name is unpredictable and opened
+    O_NOFOLLOW|O_EXCL, so a planted symlink or FIFO at a guessed staging path can
+    neither redirect nor block the write."""
+    for lock in ("index.lock", "HEAD.lock"):
+        (scratch / ".git" / lock).unlink(missing_ok=True)
+    cfg_path = scratch / ".git" / "config"
+    for _ in range(4):
+        staged = scratch / ".git" / f".pristine-{secrets.token_hex(6)}"
+        try:
+            fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            continue
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(pristine_cfg)
+        break
+    else:
+        return False
+    os.replace(staged, cfg_path)
+    reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
+    cleaned = P.capture(["git", "clean", "-xdfq"], cwd=scratch, timeout=60.0)
+    return reset.code == 0 and cleaned.code == 0
 
 
 def _one_run(
