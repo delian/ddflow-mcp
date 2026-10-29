@@ -85,6 +85,28 @@ def test_get_set_pair_is_the_carrier(repo):
 
 
 def test_old_log_without_tags_replays_unchanged(repo):
+    """A `bug.found` written before tags existed (no `tags` key) folds to []."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import Event
+
+    run_cli(repo, "init")
+    old = Event(
+        kind="bug.found",
+        subject="Bold",
+        data={"item": "", "summary": "old bug"},
+        agent="a",
+        lamport=1,
+        ts="2026-01-01T00:00:01Z",
+    )
+    old = Event(**{**old.__dict__, "id": old.compute_id()})
+    assert fold([old], strict=False).bugs["Bold"].tags == []
+
+
+def test_derived_wave_tags_are_neither_set_nor_removed_by_hand(repo):
     run_cli(repo, "init")
     _found(repo, "B1")
-    assert _tags(repo, "B1") == []
+    log = _load(repo)[0]
+    log.append("bug.tagged", "B1", {"tags": ["wave:2", "a"]})  # as `waves --stamp` would
+    assert run_cli(repo, "bug", "tag", "B1", "--remove", "wave:2")[0] == 3
+    assert BT.set_tags(repo, "B1", ["b"]).ok
+    assert _tags(repo, "B1") == ["wave:2", "b"]
