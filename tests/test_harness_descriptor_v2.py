@@ -66,6 +66,10 @@ cmd = "acme -p hi"
     assert h.reserved["test"].values == {"cmd": "acme -p hi"}
 
 
+def test_falsy_value_is_still_a_fact():
+    assert p("[caps]\nsubagent_depth = 0\n").caps.subagent_depth == 0
+
+
 def test_none_is_documented_absence_and_absent_is_not_verified():
     h = p("[continuation]\nnone = true\n")
     assert h.continuation.none is True and h.caps is None
@@ -78,6 +82,9 @@ def test_none_is_documented_absence_and_absent_is_not_verified():
         ("[caps]\nmcp_tools = '3'\n", "expected int"),
         ("[caps]\nmcp_tools = -1\n", "negative"),
         ("[caps]\n", "empty"),
+        ("[caps]\nnone = true\nsubagent_depth = 0\n", "none = true and also"),
+        ("[continuation]\nmechanism = 'none'\ncap = 10\n", "need a mechanism"),
+        ("[continuation]\ncap = 0\n", "need a mechanism"),
         ("[caps]\nnone = true\nmcp_tools = 3\n", "none = true and also"),
         ("[continuation]\nmechanism = 'magic'\n", "continuation.mechanism"),
         ("[continuation]\ncap = 3\n", "need a mechanism"),

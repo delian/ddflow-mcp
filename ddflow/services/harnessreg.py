@@ -279,7 +279,7 @@ def _validate_hooks(hk: Hooks, where: str) -> None:
 
 
 def _validate_surfaces(h: Harness, where: str) -> None:
-    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env", *V2_SECTIONS):
+    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env"):
         sec = getattr(h, name)
         if sec is None:
             continue
@@ -326,6 +326,8 @@ def parse(text: str, name: str) -> Harness:
     sections = {}
     for key, cls in _SECTIONS.items():
         if key in raw:
+            if key in V2_SECTIONS:
+                harnessv2.check_table(raw[key], key, where)
             sections[key] = _build(cls, raw.pop(key), f"{where}[{key}]")
     reserved = {
         key: harnessv2.parse_reserved(raw.pop(key), f"{where}[{key}]")
