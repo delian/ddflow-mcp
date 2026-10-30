@@ -20,8 +20,8 @@ import ddflow.api.review as A
 import ddflow.api.review_findings as RS
 import ddflow.api.review_settle as ST
 
-from ...api import surf_setup as SS
 from ...api import jobs as AJ
+from ...api import surf_setup as SS
 from ...api._base import _load
 from ...config import csv_list
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
