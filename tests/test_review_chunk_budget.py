@@ -86,3 +86,12 @@ def test_a_cap_above_the_reserve_still_reviews_a_small_chunk(monkeypatch):
     monkeypatch.setattr(R, "_race", lambda *a, **k: (sent.extend(a[2]), [("STATUS: NO FINDINGS", "")] * len(a[2]))[1])
     res = review(rev, _files("a"), "i")
     assert res.status == REVIEWED, res.reason
+
+
+def test_a_small_chunk_cap_does_not_trip_the_under_sized_refusal(monkeypatch):
+    """A per-chunk `chunk_max_tokens` window below the reserve must not read as an
+    under-sized reviewer: the refusal checks the reviewer's declared max_tokens."""
+    rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=32000, hedge=1)
+    monkeypatch.setattr(R, "_race", lambda *a, **k: [("STATUS: NO FINDINGS", "")] * len(a[2]))
+    res = review(rev, _files("a"), "i", chunk_max_tokens=1500)
+    assert res.status == REVIEWED, res.reason
