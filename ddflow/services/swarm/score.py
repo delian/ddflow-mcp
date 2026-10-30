@@ -103,6 +103,48 @@ def est_cost(item: Item, lane: Lane) -> float | None:
     return (item.est_in * (lane.price_in or 0.0) + item.est_out * (lane.price_out or 0.0)) / MTOK
 
 
+def _state_refusals(item: Item, world: World, w: Weights) -> list[str]:
+    out: list[str] = []
+    open_needs = sorted(n for n in item.needs if n not in world.done)
+    if open_needs:
+        out.append("open needs: " + ", ".join(open_needs))
+    for lv in world.live:
+        if lv.item != item.id and any(overlap(a, b) for a in item.globs for b in lv.globs):
+            out.append(f"globs overlap the live lease on {lv.item}")
+    if len({lv.item for lv in world.live}) >= w.max_lanes:
+        out.append(f"swarm at max_lanes ({w.max_lanes})")
+    if item.attempts > w.hedge_max:
+        out.append(f"hedge cap: {item.attempts} attempts, hedge_max {w.hedge_max}")
+    return out
+
+
+def _lane_refusals(item: Item, lane: Lane, world: World, w: Weights) -> list[str]:
+    out: list[str] = []
+    if lane.live >= lane.cap:
+        out.append(f"lane {lane.name} at its cap ({lane.cap})")
+    if sum(lv.family == lane.family for lv in world.live) >= w.family_cap:
+        out.append(f"family {lane.family or '(unknown)'} at family_cap ({w.family_cap})")
+    if lane.kinds and item.kind not in lane.kinds:
+        out.append(f"lane does not take kind {item.kind}")
+    need = w.default_min_trust if item.min_trust is None else item.min_trust
+    if lane.trust < need:
+        out.append(f"trust tier {lane.trust} below the required {need}")
+    if lane.window is not None and item.est_in + item.est_out > lane.window:
+        out.append(f"estimate {item.est_in + item.est_out} tokens exceeds window {lane.window}")
+    return out
+
+
+def _independence(lane: Lane, world: World, role: str, author_family: str) -> list[str]:
+    if role == "reviewer":
+        if not lane.family or not author_family or lane.family == author_family:
+            return ["reviewer family must differ from the author's (independence)"]
+    elif world.reviewer_families is not None and not any(
+        f and f != lane.family for f in world.reviewer_families
+    ):
+        return ["no reviewer family differs from the author's (independence)"]
+    return []
+
+
 def refusals(
     item: Item,
     lane: Lane,
@@ -113,36 +155,11 @@ def refusals(
     author_family: str = "",
 ) -> list[str]:
     """Every hard constraint ``lane`` fails for ``item``; empty means eligible."""
-    out: list[str] = []
-    open_needs = sorted(n for n in item.needs if n not in world.done)
-    if open_needs:
-        out.append("open needs: " + ", ".join(open_needs))
-    for lv in world.live:
-        if lv.item != item.id and any(overlap(a, b) for a in item.globs for b in lv.globs):
-            out.append(f"globs overlap the live lease on {lv.item}")
-    if len({lv.item for lv in world.live}) >= w.max_lanes:
-        out.append(f"swarm at max_lanes ({w.max_lanes})")
-    if lane.live >= lane.cap:
-        out.append(f"lane {lane.name} at its cap ({lane.cap})")
-    if sum(lv.family == lane.family for lv in world.live) >= w.family_cap:
-        out.append(f"family {lane.family or '(unknown)'} at family_cap ({w.family_cap})")
-    if item.attempts > w.hedge_max:
-        out.append(f"hedge cap: {item.attempts} attempts, hedge_max {w.hedge_max}")
-    if lane.kinds and item.kind not in lane.kinds:
-        out.append(f"lane does not take kind {item.kind}")
-    need = w.default_min_trust if item.min_trust is None else item.min_trust
-    if lane.trust < need:
-        out.append(f"trust tier {lane.trust} below the required {need}")
-    if lane.window is not None and item.est_in + item.est_out > lane.window:
-        out.append(f"estimate {item.est_in + item.est_out} tokens exceeds window {lane.window}")
-    if role == "reviewer":
-        if not lane.family or not author_family or lane.family == author_family:
-            out.append("reviewer family must differ from the author's (independence)")
-    elif world.reviewer_families is not None and not any(
-        f and f != lane.family for f in world.reviewer_families
-    ):
-        out.append("no reviewer family differs from the author's (independence)")
-    return out
+    return [
+        *_state_refusals(item, world, w),
+        *_lane_refusals(item, lane, world, w),
+        *_independence(lane, world, role, author_family),
+    ]
 
 
 def _terms(item: Item, lane: Lane, world: World, w: Weights) -> tuple[dict[str, float], list[str]]:
