@@ -132,8 +132,8 @@ def _original(worktree: Path, d: Path) -> Path:
         value = shared.out.strip() if shared.ok else ""
         if value and (base / value).resolve() != d.resolve():
             return (base / value).resolve()
-    c = G.run(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    common = Path(c.out.strip()) if c.ok and c.out.strip() else base / ".git"
+    c = G.run(worktree, "rev-parse", "--git-common-dir")  # relative to the worktree's top
+    common = (base / c.out.strip()).resolve() if c.ok and c.out.strip() else base / ".git"
     return common / "hooks"
 
 
@@ -181,8 +181,13 @@ def _had_prior(d: Path) -> bool:
 
 
 def installed(worktree: Path) -> bool:
+    """Whether the worktree's own core.hooksPath selects the lane directory (any spelling)."""
     r = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
-    return r.ok and r.out.strip() == str(hook_dir(worktree))
+    if not (r.ok and r.out.strip()):
+        return False
+    top = G.run(worktree, "rev-parse", "--show-toplevel", timeout=P.TIMEOUTS["probe"])
+    base = Path(top.out.strip()) if top.ok and top.out.strip() else Path(worktree)
+    return (base / r.out.strip()).resolve() == hook_dir(worktree).resolve()
 
 
 def uninstall(worktree: Path) -> str:
