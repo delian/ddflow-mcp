@@ -6,37 +6,40 @@ descriptor says ``emit = "json_context"`` instead of an agent's name.
 
 from __future__ import annotations
 
-from ..hookio import EMITTERS
+from ..hookio import (
+    EMITTERS,
+    _antigravity,
+    _cline,
+    _copilot,
+    _cursor,
+    _json_context,
+    _plain,
+    _silent,
+)
 from .safety import EngineError
 
-#: variant -> the shipped emitter id that implements it
+#: variant -> the hookio function that prints it (one definition, r-reuse-core)
 _IMPL = {
-    "plain": "claude",
-    "json_context": "gemini",
-    "copilot": "copilot",
-    "cursor": "cursor",
-    "cline": "cline",
-    "antigravity": "antigravity",
-    "silent": "cascade",
+    "plain": _plain,
+    "json_context": _json_context,
+    "additional_context": _copilot,
+    "additional_context_snake": _cursor,
+    "context_modification": _cline,
+    "empty_json": _antigravity,
+    "silent": _silent,
 }
 VARIANTS = frozenset(_IMPL)
-#: shipped emitter id -> variant (the compatibility reading of today's ``[hooks] emitter``)
-_LEGACY = {
-    "claude": "plain",
-    "codex": "plain",
-    "gemini": "json_context",
-    "vscode": "json_context",
-    "goose": "silent",
-    **{v: k for k, v in _IMPL.items() if k not in ("plain", "json_context")},
-}
 
 
 def variant_for(emitter: str) -> str:
-    """The variant a descriptor's emitter id means; a variant name is its own."""
+    """The variant a descriptor's ``[hooks] emitter`` id means (an id's function decides, so no
+    agent is named here); a variant name is its own."""
     if emitter in VARIANTS:
         return emitter
-    if emitter in _LEGACY:
-        return _LEGACY[emitter]
+    fn = EMITTERS.get(emitter)
+    for name, impl in _IMPL.items():
+        if impl is fn:
+            return name
     raise EngineError(f"unknown emitter {emitter!r}; variants: {sorted(VARIANTS)}")
 
 
@@ -44,4 +47,4 @@ def render(variant: str, event: str, text: str, inject: bool, native: str = "") 
     """The exact stdout for ``text`` under ``variant``; ``EngineError`` for a name outside the set."""
     if variant not in VARIANTS:
         raise EngineError(f"unknown emit variant {variant!r}; closed list: {sorted(VARIANTS)}")
-    return EMITTERS[_IMPL[variant]](event, text, inject, native)
+    return _IMPL[variant](event, text, inject, native)

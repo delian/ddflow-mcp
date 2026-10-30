@@ -110,37 +110,33 @@ def test_fieldmap_deep_and_nonobject_input_is_empty_not_a_crash():
 
 
 # --- E2 emit ----------------------------------------------------------------------------
-@pytest.mark.parametrize("variant", sorted(emit.VARIANTS))
+LEGACY = {  # variant -> the shipped emitter id that prints the same
+    "plain": "claude",
+    "json_context": "gemini",
+    "additional_context": "copilot",
+    "additional_context_snake": "cursor",
+    "context_modification": "cline",
+    "empty_json": "antigravity",
+    "silent": "cascade",
+}
+
+
+@pytest.mark.parametrize("variant", sorted(LEGACY))
 def test_emit_variants_equal_the_shipped_emitters(variant):
-    legacy = {
-        "plain": "claude",
-        "json_context": "gemini",
-        "copilot": "copilot",
-        "cursor": "cursor",
-        "cline": "cline",
-        "antigravity": "antigravity",
-        "silent": "cascade",
-    }[variant]
     for inject in (True, False):
         for text in ("ctx", ""):
             assert emit.render(variant, "prompt", text, inject, "BeforeAgent") == hookio.EMITTERS[
-                legacy
+                LEGACY[variant]
             ]("prompt", text, inject, "BeforeAgent")
+    assert emit.variant_for(LEGACY[variant]) == variant
 
 
 def test_emit_is_closed():
-    assert set(emit.VARIANTS) == {
-        "plain",
-        "json_context",
-        "copilot",
-        "cursor",
-        "cline",
-        "antigravity",
-        "silent",
-    }
+    assert set(emit.VARIANTS) == set(LEGACY)
     with pytest.raises(EngineError):
         emit.render("rm -rf", "prompt", "x", True, "")
-    assert emit.variant_for("claude") == "plain" and emit.variant_for("cascade") == "silent"
+    with pytest.raises(EngineError):
+        emit.variant_for("nonesuch")
 
 
 # --- E3 mcp_shape -----------------------------------------------------------------------
