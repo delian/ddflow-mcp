@@ -55,7 +55,10 @@ class Message:
     id: str = ""
 
     def wire(self) -> dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if k != "to"}
+        # The id is a file name from disk: shown cleaned, kept raw only for `take`.
+        return {
+            k: (clean(v, 120)[0] if k == "id" else v) for k, v in asdict(self).items() if k != "to"
+        }
 
 
 def _dir(repo: Path, agent: str) -> Path:
@@ -159,7 +162,7 @@ def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     got = pending(repo, agent, ttl_s=ttl_s)
     for m in got:
         with contextlib.suppress(OSError):
-            (_dir(repo, agent) / f"{safe_filename(m.id, repl='_')}.json").unlink()
+            (_dir(repo, agent) / f"{m.id}.json").unlink()
     return got
 
 
