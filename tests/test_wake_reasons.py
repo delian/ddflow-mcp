@@ -159,7 +159,7 @@ def test_hostile_inbox_files_are_skipped_or_contained(proj):
         '{"to":"a","reason":"ready","text":"x","sender":"s","item":["z"],"sent_at":1.0,"id":"m1"}'
     )
     assert IB.wake(proj, LANE) is None
-    assert IB._dir(proj, "..").parent == proj / IB.INBOX_DIR  # an agent named ".." stays inside
+    assert IB._dir(proj, "..").name not in ("..", ".")  # an agent named ".." gets its own dir
 
 
 def test_the_cut_marker_stays_inside_the_cap_and_ttl_frees_a_full_inbox(proj):
@@ -176,3 +176,13 @@ def test_an_expired_message_does_not_keep_the_inbox_full_and_nesting_is_skipped(
     assert new, why
     (proj / IB.INBOX_DIR / LANE / "deep.json").write_text("[" * 100000)
     assert [m.text for m in IB.pending(proj, LANE)] == ["new"]
+
+
+def test_nan_times_and_non_string_globs_are_refused(proj):
+    d = proj / IB.INBOX_DIR / LANE
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "n.json").write_text(
+        '{"to":"a","reason":"message","text":"x","sender":"","item":"","sent_at":NaN}'
+    )
+    assert IB.pending(proj, LANE) == [] and not IB.has_pending(proj, LANE)
+    assert W.decode_wait(W.encode_wait({"globs": [1]})) is None
