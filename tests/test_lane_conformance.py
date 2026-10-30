@@ -203,6 +203,7 @@ def test_report_round_trips_and_admits_by_level():
     assert cf.Report.from_data(json.loads(json.dumps(r.to_data()))) == r
     assert cf.admits(r, 1, P, now=101.0) and cf.admits(r, "launch", P, now=101.0)
     assert not cf.admits(r, "claim", P, now=101.0)
+    assert not cf.admits(r, -1, P, now=101.0) and not cf.admits(r, 99, P, now=101.0)
     assert not cf.admits(None, 0, P) and not cf.admits(r, "hook_fire", P, now=101.0)
     old = cf.Params(max_age_s=10, tools=TOOLS)
     assert not cf.admits(r, 1, old, now=200.0) and cf.admits(r, 1, old, now=105.0)
@@ -241,7 +242,7 @@ def test_params_come_from_config():
 def test_accuracy_knob_is_validated(bad):
     from ddflow.config_sections.swarm import _share
 
-    assert _share(bad) != ""  # a message naming what is expected
+    assert "between 0 and 1" in _share(bad)
     assert _share(0.5) == ""
 
 
@@ -252,3 +253,20 @@ def test_collection_waits_for_successful_lease_calls():
     assert not cf._shown(o, P)
     o.calls += [{"name": n} for n in ("claim", "heartbeat", "gate")]
     assert cf._shown(o, P)
+
+
+def test_gate_with_another_action_does_not_end_collection():
+    o = cf.Observed(started=True)
+    o.calls = [{"name": n} for n in ("claim", "heartbeat", "show", "show")]
+    o.calls.append({"name": "gate", "action": "list"})
+    assert not cf._shown(o, P)
+
+
+def test_malformed_lane_entry_survives_a_save(tmp_path):
+    cio.save(tmp_path, cf.Report("a", 1, (), 1.0))
+    raw = json.loads(cio.path_for(tmp_path).read_text())
+    raw["lanes"]["broken"] = {"nonsense": True}
+    cio.path_for(tmp_path).write_text(json.dumps(raw))
+    cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
+    assert "broken" in json.loads(cio.path_for(tmp_path).read_text())["lanes"]
+    assert set(cio.load_all(tmp_path)) == {"a", "c"}
