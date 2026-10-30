@@ -114,7 +114,7 @@ class Observed:
     start_status: str = UNAVAILABLE  #: the Result status that said so: unavailable | failed
     tool_events: bool = False  #: the lane can report tool calls at all
     calls: list[dict[str, Any]] = field(default_factory=list)  #: tool event fields, in order
-    stopped_clean: bool | None = None  #: stop returned ok
+    stopped_clean: bool | None = None  #: stop returned ok; None = not confirmed
     hook: bool | None = None
     hook_note: str = ""
     lease_stop: bool | None = None
@@ -123,10 +123,13 @@ class Observed:
 
 def norm_tool(name: str) -> str:
     n = str(name).strip().lower()
-    for p in _PREFIXES:  # `mcp__ddflow__ddflow_claim`: both prefixes, in order
-        if n.startswith(p):
-            n = n[len(p) :]
-    return n
+    while True:  # `mcp__ddflow__ddflow_claim` carries two prefixes
+        for p in _PREFIXES:
+            if n.startswith(p):
+                n = n[len(p) :]
+                break
+        else:
+            return n
 
 
 def _ok(call: dict[str, Any]) -> bool:
@@ -188,6 +191,8 @@ def grade(lane: str, o: Observed, p: Params, now: float | None = None) -> Report
         launch = Outcome("launch", FAILED, "no `started` event")
     elif o.stopped_clean is False:
         launch = Outcome("launch", FAILED, "the lane did not stop cleanly")
+    elif o.stopped_clean is None:
+        launch = Outcome("launch", UNAVAILABLE, "a clean stop was not confirmed")
     else:
         launch = Outcome("launch", PASSED, "started and stopped")
     outcomes = (
@@ -296,7 +301,8 @@ def observe(
         else:
             _lease_phase(driver, h, revoke, o, p)
     finally:
-        o.stopped_clean = driver.stop(h).status != "failed"
+        stop = driver.stop(h)
+        o.stopped_clean = None if stop.status == "unavailable" else stop.ok
     return o
 
 
@@ -318,6 +324,8 @@ def admits(report: Report | None, needed: int | str, p: Params, now: float | Non
     No report, a lower level or an expired run (``max_age_s``) is no."""
     if report is None:
         return False
+    if isinstance(needed, str) and needed not in LEVEL_NAMES:
+        return False  # an unknown level name admits nothing
     need = LEVEL_NAMES.index(needed) if isinstance(needed, str) else int(needed)
     if p.max_age_s and (time.time() if now is None else now) - report.at > p.max_age_s:
         return False

@@ -159,28 +159,42 @@ def test_lane_that_ended_before_revocation_proves_nothing(tmp_path):
     assert statuses(r)["lease_stop"] == cf.UNAVAILABLE and r.level == 5
 
 
-def grade_calls(names, **kw):
+def grade_calls(*calls):
     o = cf.Observed(started=True, stopped_clean=True, tool_events=True, hook=True, lease_stop=True)
-    o.calls = [{"name": n, **kw} for n in names]
+    o.calls = [{"name": c} if isinstance(c, str) else c for c in calls]
     return cf.grade("x", o, P)
 
 
+LEAD = ["claim", "heartbeat", {"name": "gate", "action": "record"}]
+
+
 def test_accuracy_threshold_and_minimum_calls():
-    base = ["claim", "heartbeat", "gate", "brief", "show"]
-    assert statuses(grade_calls(base))["tool_accuracy"] == cf.PASSED
-    assert statuses(grade_calls(base[:4]))["tool_accuracy"] == cf.UNAVAILABLE
-    bad = grade_calls(base + ["bash"] * 2)  # 5 of 7
+    base = [*LEAD, "brief", "show"]
+    assert statuses(grade_calls(*base))["tool_accuracy"] == cf.PASSED
+    assert grade_calls(*base).level == 7
+    assert statuses(grade_calls(*base[:4]))["tool_accuracy"] == cf.UNAVAILABLE
+    assert statuses(grade_calls())["tool_accuracy"] == cf.UNAVAILABLE
+    bad = grade_calls(*base, "bash", "bash")  # 5 of 7
     assert statuses(bad)["tool_accuracy"] == cf.FAILED and bad.level == 6
-    assert grade_calls(["claim", "heartbeat", "gate"] + ["bash"] * 2).level == 6
+    assert grade_calls(*LEAD, "bash", "bash").level == 6
 
 
 def test_gate_call_for_another_action_is_not_a_record():
-    r = grade_calls(["claim", "heartbeat"], action="list")
-    assert statuses(r)["gate_record"] == cf.FAILED
+    listing = {"name": "gate", "action": "list"}
+    r = grade_calls("claim", "heartbeat", listing)
+    assert statuses(r)["gate_record"] == cf.FAILED and r.level == 3
+    assert grade_calls("claim", "heartbeat", {"name": "gate", "action": "record"}).level == 6
+
+
+def test_unconfirmed_stop_is_not_a_launch_pass():
+    r = cf.grade("x", cf.Observed(started=True), P)
+    assert r.level == 0 and statuses(r)["launch"] == cf.UNAVAILABLE
+    r = cf.grade("x", cf.Observed(started=True, stopped_clean=False), P)
+    assert statuses(r)["launch"] == cf.FAILED
 
 
 def test_tool_name_prefixes_are_ignored():
-    for n in ("mcp__ddflow__ddflow_claim", "ddflow_claim", "CLAIM"):
+    for n in ("mcp__ddflow__ddflow_claim", "ddflow_claim", "CLAIM", "ddflow.ddflow_claim"):
         assert cf.norm_tool(n) == "claim"
 
 
@@ -189,7 +203,7 @@ def test_report_round_trips_and_admits_by_level():
     assert cf.Report.from_data(json.loads(json.dumps(r.to_data()))) == r
     assert cf.admits(r, 1, P, now=101.0) and cf.admits(r, "launch", P, now=101.0)
     assert not cf.admits(r, "claim", P, now=101.0)
-    assert not cf.admits(None, 0, P)
+    assert not cf.admits(None, 0, P) and not cf.admits(r, "hook_fire", P, now=101.0)
     old = cf.Params(max_age_s=10, tools=TOOLS)
     assert not cf.admits(r, 1, old, now=200.0) and cf.admits(r, 1, old, now=105.0)
 
@@ -201,8 +215,21 @@ def test_store_replaces_a_lane_and_survives_garbage(tmp_path):
     cio.save(tmp_path, cf.Report("b", 1, (), 2.0))
     cio.save(tmp_path, cf.Report("a", 3, (), 3.0))
     assert cio.load(tmp_path, "a").level == 3 and cio.load(tmp_path, "b").level == 1
+    cio.path_for(tmp_path).write_text('{"schema": "lane-levels@2", "lanes": {}}')
+    assert cio.load(tmp_path, "a") is None
+    with pytest.raises(ValueError):
+        cio.save(tmp_path, a)  # a newer file is not clobbered
+    assert "@2" in cio.path_for(tmp_path).read_text()
     cio.path_for(tmp_path).write_text("{not json")
     assert cio.load(tmp_path, "a") is None
+
+
+def test_concurrent_saves_keep_every_lane(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(8) as ex:
+        list(ex.map(lambda i: cio.save(tmp_path, cf.Report(f"l{i}", 1, (), 1.0)), range(16)))
+    assert len(cio.load_all(tmp_path)) == 16
 
 
 def test_params_come_from_config():
