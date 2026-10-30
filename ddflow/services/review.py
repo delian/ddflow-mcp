@@ -746,9 +746,22 @@ def _chunk_budget(rev: Reviewer) -> int:
     the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
     below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
     always budget left to write the verdict in. A reviewer too small to leave a reserve is
-    refused in ``_preflight`` before a chunk is ever sized.
+    refused at the top of ``review()`` before a chunk is ever sized.
     """
     return min(rev.max_chunk_chars, max(1, rev.max_tokens - VERDICT_RESERVE_TOKENS))
+
+
+def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
+    """The budget ``review()`` sends after ``chunk_max_tokens`` lowers the request window.
+
+    `_rerun_scope` must compare a recorded cut against the SAME number the reviewing run
+    computed: the reporter's own reduction of its output window is part of that cut, or a
+    ``--chunk`` re-review of a run under ``[review].chunk_max_tokens`` is falsely refused as
+    a changed cut.
+    """
+    if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
+        rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
+    return _chunk_budget(rev)
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
