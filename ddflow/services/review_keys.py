@@ -192,7 +192,7 @@ def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
         p = Path(path)
         if not p.is_file():
             continue
-        if p.resolve().parent == local and not _tracked(root, p):
+        if p.resolve().parent == local and not _tracked(root, p.resolve()):
             continue
         for n, raw in enumerate(read_toml(p).get("reviewer") or [], 1):
             if isinstance(raw, dict) and "api_key_file" in raw:
