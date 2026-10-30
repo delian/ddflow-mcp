@@ -20,6 +20,7 @@ def _isolated_git(monkeypatch, tmp_path):
         "GIT_INDEX_FILE",
         "GIT_OBJECT_DIRECTORY",
         "GIT_CONFIG_COUNT",
+        "GIT_COMMON_DIR",
     ):
         monkeypatch.delenv(var, raising=False)
 
