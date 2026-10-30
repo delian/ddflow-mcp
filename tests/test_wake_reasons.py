@@ -135,7 +135,7 @@ def test_watch_returns_early_on_a_message_and_keeps_its_token(proj, tmp_path):
 
 
 def test_the_cli_sends_a_message(proj):
-    code, out, err = run_cli(
+    code, _out, err = run_cli(
         proj, "session", "message", "--to", LANE, "--reason", "ready", "--text", "go on"
     )
     assert code == 0, err
