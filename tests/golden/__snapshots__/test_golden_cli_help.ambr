@@ -1147,6 +1147,17 @@
   
   '''
 # ---
+# name: test_help[ddflow harness facts]
+  '''
+  usage: ddflow harness facts [-h] [--agent AGENT] [--unverified]
+  
+  options:
+    -h, --help     show this help message and exit
+    --agent AGENT  one agent (default: all)
+    --unverified   only leads, and sections left out
+  
+  '''
+# ---
 # name: test_help[ddflow harness list]
   '''
   usage: ddflow harness list [-h]
@@ -1170,16 +1181,17 @@
 # ---
 # name: test_help[ddflow harness]
   '''
-  usage: ddflow harness [-h] {list,show,doctor} ...
+  usage: ddflow harness [-h] {list,show,doctor,facts} ...
   
   positional arguments:
-    {list,show,doctor}
-      list              every agent and whether this project is adopted for it
-      show              per event the ladder level in effect, and per feature the support
-      doctor            drift, missing hooks and dangling commands (exit 1 = findings)
+    {list,show,doctor,facts}
+      list                every agent and whether this project is adopted for it
+      show                per event the ladder level in effect, and per feature the support
+      doctor              drift, missing hooks and dangling commands (exit 1 = findings)
+      facts               every descriptor value with its status, source, tool version and date
   
   options:
-    -h, --help          show this help message and exit
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -3155,11 +3167,13 @@
 # ---
 # name: test_help[ddflow waves]
   '''
-  usage: ddflow waves [-h] [--stamp]
+  usage: ddflow waves [-h] [--stamp] [--check] [--limit LIMIT]
   
   options:
-    -h, --help  show this help message and exit
-    --stamp     write derived wave:N labels (not implemented yet; LB-waves ships it).
+    -h, --help     show this help message and exit
+    --stamp        Write the derived wave:N tags.
+    --check        Exit 1 when any wave:N stamp is stale.
+    --limit LIMIT  Items listed per wave in the text view (default 10; 0 = all).
   
   '''
 # ---
@@ -3363,8 +3377,8 @@
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
                           exit 2 = not yet (resume with the token)
-      waves               report that `--stamp` is not implemented and name the interim wave-
-                          stamping mechanism (LB-waves ships it)
+      waves               print the dependency waves; --stamp writes the derived wave:N tags,
+                          --check exits 1 when they are stale
   
   options:
     -h, --help            show this help message and exit
@@ -3454,6 +3468,7 @@
     'ddflow grant list',
     'ddflow harness',
     'ddflow harness doctor',
+    'ddflow harness facts',
     'ddflow harness list',
     'ddflow harness show',
     'ddflow health',
