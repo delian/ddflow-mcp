@@ -106,7 +106,6 @@
 "ddflow/services/skills.py:MAX_FILES" = "skills.max_files"
 "ddflow/services/skills.py:BODY_HEAD_CHARS" = "skills.body_head_chars"
 "ddflow/services/swarm/ledger.py:BUG_WINDOW_S" = "swarm.bug_window_s"
-"ddflow/services/swarm_metrics.py:BUG_WINDOW_S" = "swarm.bug_window_s"
 "ddflow/services/swarm/ledger.py:EXPLORE_MIN_N" = "swarm.explore_min_n"
 "ddflow/services/ticks.py:PASS_BUDGET_S" = "ticks.pass_budget_s"
 "ddflow/services/upgrade_dryrun.py:TIMEOUT_S" = "upgrade_dryrun.timeout_s"
