@@ -44,10 +44,10 @@ def _tag_events(repo) -> int:
 def _chain(repo):
     """A (free) <- B <- C, plus E (free)."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--globs", "a.py")
-    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
-    run_cli(repo, "task", "add", "C", "--globs", "c.py", "--needs", "B")
-    run_cli(repo, "task", "add", "E", "--globs", "e.py")
+    run_cli(repo, "task", "add", "A", "--globs", "a.py", "--title", "A")
+    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A", "--title", "B")
+    run_cli(repo, "task", "add", "C", "--globs", "c.py", "--needs", "B", "--title", "C")
+    run_cli(repo, "task", "add", "E", "--globs", "e.py", "--title", "E")
 
 
 def _manual(repo):
@@ -91,20 +91,20 @@ def test_a_hand_edit_is_overwritten_and_only_that_item_is_written(repo):
 def test_a_phase_level_need_is_inherited(repo):
     _manual(repo)
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1")
-    run_cli(repo, "phase", "add", "P2", "--needs", "P1")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "t1.py")
-    run_cli(repo, "task", "add", "T2", "--phase", "P2", "--globs", "t2.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1")
+    run_cli(repo, "phase", "add", "P2", "--needs", "P1", "--title", "P2")
+    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "t1.py", "--title", "T1")
+    run_cli(repo, "task", "add", "T2", "--phase", "P2", "--globs", "t2.py", "--title", "T2")
     got = json.loads(run_cli(repo, "waves", "--json")[1])["waves"]
     assert got["0"] == ["T1"] and got["1"] == ["T2"]
 
 
 def test_stamping_is_the_default_and_incremental(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--globs", "a.py")
-    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
+    run_cli(repo, "task", "add", "A", "--globs", "a.py", "--title", "A")
+    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A", "--title", "B")
     assert _waves(repo) == {"A": "wave:0", "B": "wave:1"}
-    run_cli(repo, "task", "add", "C", "--globs", "c.py", "--needs", "B")
+    run_cli(repo, "task", "add", "C", "--globs", "c.py", "--needs", "B", "--title", "C")
     assert _waves(repo)["C"] == "wave:2"
     before = _tag_events(repo)
     run_cli(repo, "abandon", "A", "--reason", "x")  # B becomes free, C moves with it
