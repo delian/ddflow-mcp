@@ -28,11 +28,10 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
         on = not _STAMPING.get() and bool(cfg.waves.auto_stamp)
         before = log.mark() if on else None
     except Exception:  # noqa: BLE001 -- stamping must never break the command it follows
-        on = False
-    if not on:
-        yield
-        return
+        on, before = False, None
     yield
+    if not on:
+        return
     try:
         if log.mark() != before:
             _token = _STAMPING.set(True)
