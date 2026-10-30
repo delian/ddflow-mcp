@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.endpoint_slots"
+new = "1"
+why = "Capacity of local endpoints and GPUs (SW-capacity): a local model is never oversubscribed."
+impact = "additive"
