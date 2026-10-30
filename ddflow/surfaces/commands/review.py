@@ -204,9 +204,10 @@ def _detach(a, c: Ctx) -> int:
     from ...api import jobs as AJ
 
     argv = list(getattr(a, "_argv", []))
-    if "--detach" in argv:
-        # Only the FLAG: a positional `--detach` past `--` (an item by that name) stays.
-        argv.remove("--detach")
+    # Only the FLAG: argparse consumed it before any `--`; a positional `--detach` past `--`
+    # (an item by that name) is not the flag and stays.
+    cut = argv.index("--") if "--" in argv else len(argv)
+    argv = [x for x in argv[:cut] if x != "--detach"] + argv[cut:]
     if not argv:
         print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
         return FAIL
