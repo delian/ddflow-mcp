@@ -144,3 +144,24 @@ def test_the_cli_sends_a_message(proj):
 
 def test_a_foreign_token_is_refused(proj):
     assert _wait(proj, token="not-a-token").exit == 1
+
+
+def test_a_wait_token_without_globs_resumes(proj):
+    out = _wait(proj, item="T2", timeout_s=0)
+    again = _wait(proj, token=out.data["wake"]["token"], timeout_s=0)
+    assert again.data["item"] == "T2"
+
+
+def test_hostile_inbox_files_are_skipped_or_contained(proj):
+    d = proj / IB.INBOX_DIR / LANE
+    d.mkdir(parents=True)
+    (d / "bad.json").write_text(
+        '{"to":"a","reason":"ready","text":"x","sender":"s","item":["z"],"sent_at":1.0,"id":"m1"}'
+    )
+    assert IB.wake(proj, LANE) is None
+    assert IB._dir(proj, "..").parent == proj / IB.INBOX_DIR  # an agent named ".." stays inside
+
+
+def test_the_cut_marker_stays_inside_the_cap_and_ttl_frees_a_full_inbox(proj):
+    msg, _ = IB.send(proj, LANE, "x" * 50, max_chars=10)
+    assert msg and len(msg.text) == 10 and msg.text.endswith("[cut]")
