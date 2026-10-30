@@ -102,8 +102,19 @@ def candidates_in(source: str, path: str) -> list[Candidate]:
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             targets, value = [node.target], node.value
         else:
-            if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-                scope.pop(node.target.id, None)  # mutated: no longer the folded constant
+            # A non-assignment statement can still rebind a name the scan cannot fold
+            # (an AugAssign, a for target, `del`): drop it so later arithmetic never
+            # folds a stale value.
+            if isinstance(node, ast.AugAssign):
+                bound = _target_names(node.target)
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                bound = _target_names(node.target)
+            elif isinstance(node, ast.Delete):
+                bound = [n for t in node.targets for n in _target_names(t)]
+            else:
+                bound = []
+            for name in bound:
+                scope.pop(name, None)
             continue
         number = _number(value, scope)
         if number is None:

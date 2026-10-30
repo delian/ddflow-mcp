@@ -94,7 +94,14 @@ def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> No
 
 
 def test_detector_folds_no_stale_value_through_unpacking(tmp_path: Path) -> None:
-    src = "HOUR = 3600\nHOUR, MIN = get_pair()\nA_WINDOW_S = 7 * 24 * HOUR\n"
+    src = (
+        "HOUR = 3600\n"
+        "HOUR, MIN = get_pair()\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+        "for HOUR in [1]:\n"
+        "    pass\n"
+        "B_WINDOW_S = 7 * 24 * HOUR\n"
+    )
     assert _plant(tmp_path, src).unclassified == []
 
 
