@@ -134,3 +134,28 @@ def test_malformed_route_row_is_unavailable_and_old_file_mode_is_tightened(tmp_p
     old.chmod(0o644)
     E.write_private(ep, "kilo", tmp_path / "h")
     assert stat.S_IMODE(old.stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    "url", ["https://h/v1?api_key=sk-1", "https://h/v1#x", "https://h", "http://h:8000/v1/"]
+)
+def test_url_with_query_or_fragment_is_refused(tmp_path, url):
+    t = EXAMPLE.read_text().replace("http://ENDPOINT-HOST:8000/v1", url)
+    r = E.resolve(_cat(tmp_path, t), "lan-vllm", require_tools=False)
+    assert isinstance(r, Result) == ("?" in url or "#" in url)
+
+
+def test_env_name_with_newline_is_refused(tmp_path):
+    t = EXAMPLE.read_text().replace('"LAN_ENDPOINT_KEY"', '"LAN_ENDPOINT_KEY\\n"')
+    r = E.resolve(_cat(tmp_path, t), "lan-vllm", require_tools=False)
+    assert isinstance(r, Result) and "NAME" in r.detail
+
+
+def test_unverified_harness_is_refused_unless_allowed(tmp_path):
+    cat = _verified(tmp_path)
+    r = E.prepare(cat, "lan-vllm", "opencode", tmp_path / "o")
+    assert isinstance(r, Result) and "unverified" in r.detail and not (tmp_path / "o").exists()
+    assert isinstance(
+        E.prepare(cat, "lan-vllm", "opencode", tmp_path / "o", allow_unverified_harness=True),
+        E.Prepared,
+    )

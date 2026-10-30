@@ -26,7 +26,9 @@ from ...infra import paths
 from .. import facts, modelreg
 from ..lane_driver import Result, unavailable
 
-_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+#: scheme://host[:port][/path]: no userinfo, query, fragment or whitespace anywhere
+_URL = re.compile(r"https?://[^/@?#\s]+(/[^@?#\s]*)?")
 _DATA = "harness-provider.toml"
 _FACT_KEYS = ("window", "max_output", "tool_call", "streaming", "concurrency")
 #: A provider id inside the lane's config: fixed prefix, so it never shadows a built-in one.
@@ -85,11 +87,13 @@ def _route_basics(
         return unavailable(f"route {route!r} is not an OpenAI-compatible endpoint")
     url, key = str(v.get("base_url") or ""), str(v.get("api_key_env") or "")
     served = model or str(v.get("model") or "")
-    if not re.match(r"^https?://[^/@\s]+(/|$)", url):
-        return unavailable(f"route {route!r}: base_url missing or carries credentials")
+    if not _URL.fullmatch(url):
+        return unavailable(
+            f"route {route!r}: base_url missing, or carries credentials, a query or a fragment"
+        )
     if not served:
         return unavailable(f"route {route!r}: no served model id (set endpoint.model)")
-    if key and not _ENV_NAME.match(key):
+    if key and not _ENV_NAME.fullmatch(key):
         return unavailable(f"route {route!r}: api_key_env must be a variable NAME, not a value")
     return url, key, served
 
@@ -211,11 +215,21 @@ def prepare(
     model: str = "",
     *,
     require_tools: bool = True,
+    allow_unverified_harness: bool = False,
 ) -> Prepared | Result:
-    """Resolve the route and write its private provider block under ``home`` in one call."""
+    """Resolve the route and write its private provider block under ``home`` in one call.
+    A harness whose custom-provider support is not verified or documented (opencode, until it
+    is installed and read) is refused unless ``allow_unverified_harness``."""
     bad = data_problems()
     if bad:
         return unavailable(f"harness provider data is malformed: {bad[0]}")
+    lay = layout(harness) or {}
+    support = lay.get("custom_provider") or {}
+    if support.get("s") not in facts.READABLE and not allow_unverified_harness:
+        return unavailable(
+            f"{harness!r}: custom OpenAI-compatible provider support is "
+            f"{support.get('s', 'not recorded')}; read it with the installed {harness} first"
+        )
     ep = resolve(cat, route, model, require_tools=require_tools)
     if isinstance(ep, Result):
         return ep
