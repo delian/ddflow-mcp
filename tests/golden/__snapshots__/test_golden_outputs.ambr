@@ -1886,6 +1886,15 @@
           process, besides its own private home and the key names its launch spec
           lists. Everything else is dropped, so the operator's credentials and
           settings do not reach the lane.
+      lanes.endpoint_slots = 1   [default]
+          Lanes a local endpoint serves at once when its route declares no
+          `concurrency` fact and `[schedule] resources` names no capacity for it (pool
+          `ep-<route>`). The scheduler never plans more lanes than this on one
+          endpoint, and a launched lane takes one flock slot of it.
+      lanes.slot_wait_s = 600   [default]
+          Seconds a launched lane waits for a free endpoint or GPU slot before giving
+          up with a report (it holds no lease while it waits and starts no daemon). 0
+          tries each slot once.
       health.mode = 'propose'   [default]
           What the watchdog does about a lane it finds unhealthy: 'off' inspects
           nothing in the periodic pass; 'propose' (default) reports each finding with
