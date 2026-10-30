@@ -154,3 +154,15 @@ def test_wait_succeeds_when_slot_frees(tmp_path: Path) -> None:
 
     with C.acquire(pools, 30, tmp_path, sleep=sleep, poll_s=0.01) as held:
         assert held.slots == {"ep-local": (0,)} and len(naps) == 1
+
+
+def test_settings_read_the_lanes_knobs() -> None:
+    from ddflow.config import Config
+
+    cfg = Config()
+    cfg.lanes.endpoint_slots, cfg.lanes.slot_wait_s = 3, 7
+    st = C.Settings.from_config(cfg)
+    assert (st.default_slots, st.wait_s) == (3, 7)
+    assert (
+        C.Settings.from_config(Config()) == C.Settings()
+    )  # the dataclass defaults match the knobs
