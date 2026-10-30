@@ -1086,9 +1086,9 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     except (urllib.error.URLError, OSError) as exc:
         return "", review_keys.scrub(f"unreachable: {exc}", key)
     except http.client.HTTPException as exc:
-        return "", _cut_off(exc)
+        return "", review_keys.scrub(_cut_off(exc), key)
     except (ValueError, json.JSONDecodeError) as exc:
-        return "", f"bad response body: {exc}"
+        return "", review_keys.scrub(f"bad response body: {exc}", key)
     try:
         choice = body["choices"][0]
         msg = choice["message"]
