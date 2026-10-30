@@ -133,11 +133,16 @@ def refusals(heads: Sequence[Headroom]) -> list[str]:
     return out
 
 
+def _lane_share(h: Headroom) -> float:
+    """Share of a pool's lane capacity that is free, counted in lanes of ``need`` slots."""
+    lanes = h.limit // max(1, h.need)
+    return (h.free // max(1, h.need)) / lanes if lanes else 0.0
+
+
 def headroom_term(heads: Sequence[Headroom]) -> float:
-    """SW-headroom's figure in [0, 1]: the smallest free share among the pools (0 when full)."""
-    if not heads:
-        return 1.0
-    return min(max(0.0, (h.free - h.need + 1) / h.limit) if h.limit else 0.0 for h in heads)
+    """SW-headroom's figure in [0, 1]: the smallest free share of lanes among the pools
+    (1 idle, 0 when no further lane fits)."""
+    return min((_lane_share(h) for h in heads), default=1.0)
 
 
 def slot_dir() -> Path:

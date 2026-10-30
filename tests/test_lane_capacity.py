@@ -206,3 +206,10 @@ def test_waiting_lane_holds_nothing_between_sweeps(tmp_path: Path) -> None:
 def test_a_very_long_route_still_gives_a_short_distinct_stem() -> None:
     a, b = C.endpoint_pool("_" * 64), C.endpoint_pool("_" * 65)
     assert a != b and max(len(a), len(b)) < 200
+
+
+def test_headroom_counts_lanes_not_slots() -> None:
+    pools = (C.Pool("gpu", 4, 2),)  # room for two lanes of two slots
+    assert C.headroom_term(C.view(pools, {})) == 1.0
+    assert C.headroom_term(C.view(pools, {"gpu": 2})) == 0.5
+    assert C.headroom_term(C.view(pools, {"gpu": 3})) == 0.0  # one slot left fits no lane
