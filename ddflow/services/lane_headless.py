@@ -13,6 +13,7 @@ import contextlib
 import os
 import secrets
 import shutil
+import subprocess
 import tempfile
 import threading
 from collections import deque
@@ -121,6 +122,50 @@ def _write_stdin(popen, text: str) -> None:
         popen.stdin.close()
 
 
+def _caps(base: frozenset[str], spec: LaunchSpec) -> frozenset[str]:
+    """What THIS lane can do: no resume without a resume flag, no usage or tool events
+    without a stream rule that emits them."""
+    caps = set(base)
+    if not spec.resume:
+        caps.discard("resume")
+    emits = {rule.emit for rule in spec.stream_rules}
+    for cap, ev in (("usage", "usage"), ("tool_events", "tool")):
+        if ev not in emits:
+            caps.discard(cap)
+    return frozenset(caps)
+
+
+def _prepare(spec: LaunchSpec, private: list[Path]):
+    """(rendered argv, child env, placeholder values) or a failed Result. Directories made
+    here are appended to ``private`` so the caller can remove them on failure."""
+    try:
+        home = spec.home
+        if home is None:
+            home = Path(tempfile.mkdtemp(prefix="ddflow-lane-"))
+            private.append(home)
+        else:
+            home.mkdir(parents=True, exist_ok=True)
+        home.chmod(0o700)
+        values = dict(spec.values)
+        if spec.prompt and "{prompt_file}" in spec.argv:
+            pf = home / "prompt.txt"
+            pf.write_text(spec.prompt, encoding="utf-8")
+            pf.chmod(0o600)
+            values["prompt_file"] = str(pf)
+        r = render_argv.render(spec.argv, values, env=dict(spec.env), environ=os.environ)
+    except (EngineError, OSError) as e:
+        return failed(f"cannot prepare the launch: {e}")
+    if r.missing:
+        return failed(f"key environment variable(s) not set: {', '.join(r.missing)}")
+    env = {n: os.environ[n] for n in spec.pass_env if n in os.environ}
+    env["HOME"] = str(home)
+    if spec.home_env:
+        env[spec.home_env] = str(home)
+    env.update(spec.fixed_env)
+    env.update(r.env)
+    return r, env, values
+
+
 class ProcessHeadless:
     """``Lane`` for a child process. One instance serves any number of lanes."""
 
@@ -132,36 +177,13 @@ class ProcessHeadless:
         if spec.scope == "systemd" and not shutil.which("systemd-run"):
             return unavailable("scope=systemd needs systemd-run on PATH; not falling back")
         private: list[Path] = []
-        try:
-            home = spec.home
-            if home is None:
-                home = Path(tempfile.mkdtemp(prefix="ddflow-lane-"))
-                private.append(home)
-            else:
-                home.mkdir(parents=True, exist_ok=True)
-            home.chmod(0o700)
-            values = dict(spec.values)
-            if spec.prompt and "{prompt_file}" in spec.argv:
-                pf = home / "prompt.txt"
-                pf.write_text(spec.prompt, encoding="utf-8")
-                pf.chmod(0o600)
-                values["prompt_file"] = str(pf)
-            r = render_argv.render(spec.argv, values, env=dict(spec.env), environ=os.environ)
-        except (EngineError, OSError) as e:
+        prep = _prepare(spec, private)
+        if isinstance(prep, Result):
             self._rm(private)
-            return failed(f"cannot prepare the launch: {e}")
-        if r.missing:
-            self._rm(private)
-            return failed(f"key environment variable(s) not set: {', '.join(r.missing)}")
-        env = {n: os.environ[n] for n in spec.pass_env if n in os.environ}
-        env["HOME"] = str(home)
-        if spec.home_env:
-            env[spec.home_env] = str(home)
-        env.update(spec.fixed_env)
-        env.update(r.env)
+            return prep
+        r, env, values = prep
         run_id = f"{spec.name}-{secrets.token_hex(3)}"
-        argv = list(r.argv)
-        unit = ""
+        argv, unit = list(r.argv), ""
         if spec.scope == "systemd":
             unit = f"ddflow-lane-{run_id}"
             argv = [
@@ -179,19 +201,13 @@ class ProcessHeadless:
         except (OSError, ValueError) as e:
             self._rm(private)
             return failed(f"cannot start {argv[0]}: {e}")
-        caps = set(self.capabilities)
-        if not spec.resume:
-            caps.discard("resume")
-        emits = {rule.emit for rule in spec.stream_rules}
-        for cap, ev in (("usage", "usage"), ("tool_events", "tool")):
-            if ev not in emits:
-                caps.discard(cap)
+        secret_values = tuple(v for v in r.env.values() if len(v) >= SECRET_MIN)
         run = _Run(
             run_id,
             spec,
             p,
-            frozenset(caps),
-            secrets=tuple(v for v in r.env.values() if len(v) >= SECRET_MIN),
+            _caps(self.capabilities, spec),
+            secrets=secret_values,
             private=private,
             unit=unit,
         )
@@ -200,8 +216,7 @@ class ProcessHeadless:
             t.start()
             run.threads.append(t)
         if spec.prompt and "prompt_file" not in values:
-            t = threading.Thread(target=_write_stdin, args=(p, spec.prompt), daemon=True)
-            t.start()
+            threading.Thread(target=_write_stdin, args=(p, spec.prompt), daemon=True).start()
         else:
             with contextlib.suppress(OSError):
                 p.stdin.close()
@@ -239,13 +254,13 @@ class ProcessHeadless:
             proc.kill_group(p, 15)
             try:
                 p.wait(timeout=max(0.0, grace))
-            except Exception:  # TimeoutExpired: ask was not enough
+            except subprocess.TimeoutExpired:  # asking was not enough
                 pass
         # the group may outlive its leader: always finish with a group kill, then reap
         proc.kill_group(p)
         proc.stop_group(p, reap_s=proc.TIMEOUTS["drain"])
         if h.unit:
-            with contextlib.suppress(OSError, Exception):
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
                 proc.run(
                     ["systemctl", "--user", "stop", f"{h.unit}.scope"],
                     capture_output=True,
