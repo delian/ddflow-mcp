@@ -241,4 +241,14 @@ def test_params_come_from_config():
 def test_accuracy_knob_is_validated(bad):
     from ddflow.config_sections.swarm import _share
 
-    assert _share(bad)
+    assert _share(bad) != ""  # a message naming what is expected
+    assert _share(0.5) == ""
+
+
+def test_collection_waits_for_successful_lease_calls():
+    o = cf.Observed(started=True)
+    o.calls = [{"name": n, "ok": False} for n in ("claim", "heartbeat", "gate")]
+    o.calls += [{"name": "show"}, {"name": "show"}]
+    assert not cf._shown(o, P)
+    o.calls += [{"name": n} for n in ("claim", "heartbeat", "gate")]
+    assert cf._shown(o, P)

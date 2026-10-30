@@ -230,7 +230,7 @@ def _record(o: Observed, ev: LaneEvent) -> None:
 
 def _shown(o: Observed, p: Params) -> bool:
     """Enough seen: the lease actions were called and the accuracy sample is full."""
-    names = {norm_tool(c.get("name", "")) for c in o.calls}
+    names = {norm_tool(c.get("name", "")) for c in o.calls if _ok(c)}
     return (
         bool(o.started) and {"claim", "heartbeat", "gate"} <= names and len(o.calls) >= p.min_calls
     )
