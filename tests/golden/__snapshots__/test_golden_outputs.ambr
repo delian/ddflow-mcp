@@ -480,6 +480,20 @@
           waiter must say so (`ddflow claim --break`), so breaking another agent's
           lease is always a deliberate, attributed act. On: any plain claim of a
           contended, idle lease breaks it.
+      lease.inbox_max_chars = 2000   [default]
+          Longest message a lane's inbox (`ddflow session message`) keeps, in
+          characters; the rest is cut and marked. Messages are untrusted text shown to
+          an agent, so the cap is a bound on what a sender can put in front of it.
+      lease.inbox_max_pending = 50   [default]
+          Most undelivered messages a lane's inbox holds; a further send is refused
+          rather than dropping an older one.
+      lease.inbox_ttl_s = 86400   [default]
+          Seconds an undelivered inbox message stays before it is dropped, so a lane
+          that never reads cannot keep an inbox forever. 0 keeps them until read.
+      lease.wait_cap_s = 1800   [default]
+          Longest one `wait` or `watch` call sleeps unless the caller names `--max-s`;
+          a longer ask is cut and the caller is told to resume with the token. Below
+          the client's idle abort, so a bounded wait is never killed silently.
       lease.reclaim_policy = 'report'   [default]
           'report' (default) never steals an expired lease — it names the worktree so
           a human can rescue in-flight work. 'auto' reclaims it. 'report' exists
