@@ -1622,9 +1622,10 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return problem
 
     stripped = strip_hunk_context(diff)
-    chunks = split_diff(stripped, _chunk_budget(rev))
+    chunk_budget = _chunk_budget(rev)
+    chunks = split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
-    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), _chunk_budget(rev)
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
