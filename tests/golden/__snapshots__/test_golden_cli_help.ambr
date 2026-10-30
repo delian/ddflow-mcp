@@ -1147,6 +1147,17 @@
   
   '''
 # ---
+# name: test_help[ddflow harness facts]
+  '''
+  usage: ddflow harness facts [-h] [--agent AGENT] [--unverified]
+  
+  options:
+    -h, --help     show this help message and exit
+    --agent AGENT  one agent (default: all)
+    --unverified   only leads, and sections left out
+  
+  '''
+# ---
 # name: test_help[ddflow harness list]
   '''
   usage: ddflow harness list [-h]
@@ -1170,16 +1181,17 @@
 # ---
 # name: test_help[ddflow harness]
   '''
-  usage: ddflow harness [-h] {list,show,doctor} ...
+  usage: ddflow harness [-h] {list,show,doctor,facts} ...
   
   positional arguments:
-    {list,show,doctor}
-      list              every agent and whether this project is adopted for it
-      show              per event the ladder level in effect, and per feature the support
-      doctor            drift, missing hooks and dangling commands (exit 1 = findings)
+    {list,show,doctor,facts}
+      list                every agent and whether this project is adopted for it
+      show                per event the ladder level in effect, and per feature the support
+      doctor              drift, missing hooks and dangling commands (exit 1 = findings)
+      facts               every descriptor value with its status, source, tool version and date
   
   options:
-    -h, --help          show this help message and exit
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -3456,6 +3468,7 @@
     'ddflow grant list',
     'ddflow harness',
     'ddflow harness doctor',
+    'ddflow harness facts',
     'ddflow harness list',
     'ddflow harness show',
     'ddflow health',
