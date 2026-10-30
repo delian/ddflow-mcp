@@ -30,20 +30,26 @@ def _files(*lines: str) -> str:
     )
 
 
+def _sent_diff(user: str) -> str:
+    """The raw diff a rendered request carries, between the review_user fences."""
+    head, _, tail = user.partition("```diff\n")
+    if not tail:
+        return user
+    body = tail if (idx := tail.rfind("\n```")) < 0 else tail[:idx]
+    return body
+
+
 def test_a_chunk_is_split_to_fit_the_reviewers_output_cap(monkeypatch):
     """A diff larger than the reviewer's (verdict-reserved) output cap is SPLIT into chunks
-    each within that cap and each sent on its own -- not one chunk too large that
+    each within that cap and each sent on its own request -- not one chunk too large that
     truncates mid-thought and wastes a round."""
     rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=8000, hedge=1)
     diff = _files(*[f"line {n:03d}" for n in range(100)])
-    sent: list[str] = []  # the requests actually handed to the reviewer
-    split_with: list[tuple[int, list[int]]] = []
+    sent: list[str] = []  # the rendered requests actually handed to the reviewer
     real_split = R.split_diff
 
     def recording_split(piece, max_chars):
-        parts = real_split(piece, max_chars)
-        split_with.append((max_chars, [len(p) for p in parts]))
-        return parts
+        return real_split(piece, max_chars)
 
     def race(reviewer, system, users, started, **kw):
         sent.extend(users)
@@ -57,20 +63,22 @@ def test_a_chunk_is_split_to_fit_the_reviewers_output_cap(monkeypatch):
     budget = R._chunk_budget(rev)
     assert budget == rev.max_tokens - R.VERDICT_RESERVE_TOKENS, "the chunk budget uses the output cap"
     assert res.max_chunk_chars == budget
-    (used, sizes) = split_with[0]
-    assert used == budget, "the dispatch split with the output-cap budget, not max_chunk_chars"
-    assert len(sizes) == res.chunks_total > 1, "the over-budget diff was split, not sent whole"
-    assert max(sizes) <= budget, "no chunk is cut larger than the accepted budget"
-    assert len(sent) == res.chunks_total, "each chunk went out as its own request"
+    sent_diffs = [_sent_diff(u) for u in sent]
+    assert len(sent) == res.chunks_total > 1, "the over-budget diff was split, and every piece was sent"
+    assert max(len(d) for d in sent_diffs) <= budget, "no chunk is sent larger than the accepted budget"
     assert res.status == REVIEWED, res.reason
 
 
 def test_an_undersized_output_cap_keeps_the_quality_bound():
     """A quality bound that already leaves the verdict room is kept; only a cap that would
-    outgrow the output budget is shrunk below ``max_tokens`` to reserve the verdict."""
+    outgrow the output budget is shrunk below ``max_tokens`` to reserve the verdict. An
+    output cap too small to hold the reserve is left alone, not shrunk to one chunk per
+    line."""
     # the default reviewer keeps its quality bound (the reserve is already inside it)
     assert R._chunk_budget(Reviewer(name="r", max_tokens=32000, max_chunk_chars=30000)) == 30000
     # a small output cap is shrunk below max_tokens to leave the verdict room
     assert R._chunk_budget(Reviewer(name="r", max_tokens=8000, max_chunk_chars=30000)) == 6000
     # the quality bound below the reserved output cap is kept
     assert R._chunk_budget(Reviewer(name="r", max_tokens=100000, max_chunk_chars=120)) == 120
+    # an output cap too small to hold the reserve is not shrunk to one chunk per line
+    assert R._chunk_budget(Reviewer(name="r", max_tokens=1000, max_chunk_chars=30000)) == 30000
