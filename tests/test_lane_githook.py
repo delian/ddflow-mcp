@@ -47,6 +47,12 @@ def lane(tmp_path):
     return main, wt
 
 
+def unset(wt):
+    """The worktree has no core.hooksPath of its own (git exits 1: not found, not an error)."""
+    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
+    return got.returncode == 1 and got.stdout == ""
+
+
 def commit(wt, name="x.txt"):
     (wt / name).write_text("x")
     sh(wt, "git", "add", name)
@@ -68,12 +74,15 @@ def test_install_is_lane_private_and_removable(lane):
     assert d.is_dir() and "/.git/worktrees/" in str(d)
     # the primary checkout's hooks setting is untouched, and no tracked file was written
     assert sh(main, "git", "config", "--local", "--get", "core.hooksPath", check=False).stdout == ""
+    assert sh(main, "git", "config", "--global", "--list", check=False).stdout == ""
+    assert (
+        sh(main, "git", "config", "--worktree", "--get", "core.hooksPath", check=False).stdout == ""
+    )
     assert sh(wt, "git", "status", "--porcelain").stdout == ""
     GH.install(wt)  # idempotent
     assert "removed" in GH.uninstall(wt)
     assert not GH.installed(wt) and not d.exists()
-    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
-    assert got.stdout == ""
+    assert unset(wt)
     assert GH.uninstall(wt) == "no lane hook installed"
 
 
@@ -210,13 +219,11 @@ def test_install_twice_then_uninstall_unsets_and_a_missing_dir_still_restores(la
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     GH.uninstall(wt)
-    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
-    assert got.stdout == ""
+    assert unset(wt)
     GH.install(wt)
     shutil.rmtree(GH.hook_dir(wt))
     assert "removed" in GH.uninstall(wt) and not GH.installed(wt)
-    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
-    assert got.stdout == ""
+    assert unset(wt)
 
 
 def test_reinstall_follows_a_changed_shared_hooks_path(lane, tmp_path):
@@ -273,8 +280,7 @@ def test_installed_and_uninstall_accept_an_equivalent_spelling(lane, tmp_path):
     sh(wt, "git", "config", "--worktree", "core.hooksPath", str(d) + "/")
     assert GH.installed(wt)
     GH.uninstall(wt)
-    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
-    assert got.stdout == ""
+    assert unset(wt)
 
 
 def test_merge_commit_does_not_run_the_projects_pre_commit_when_it_has_a_merge_hook(lane, tmp_path):
