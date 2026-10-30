@@ -66,7 +66,6 @@ def memory_add(
         # always-present `tags: []` made correcting a fact by `--id` wipe its tags
         # (cross-family critic).
         data["tags"] = csv_list(tags)
-    replaced = bool(id) and id in st.memories
     with log.transaction():
         minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
         prior_events, redacted_now = _prior_memory_state(log, mid)
@@ -86,6 +85,9 @@ def memory_add(
                     {"event": redacted.id, "reason": "superseded by a memory re-record"},
                 )
         DD.after_add(log, cfg, mid, chk)
+    # `replaced` is decided from the log read under the lock, not the pre-lock snapshot, so it is
+    # true exactly when a prior record was actually superseded -- even under a concurrent re-record.
+    replaced = bool(id) and bool(prior_events)
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
 
 
