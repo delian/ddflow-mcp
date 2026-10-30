@@ -90,7 +90,7 @@ def test_none_is_documented_absence_and_absent_is_not_verified():
         ("[continuation]\ncap = 0\n", "need a mechanism"),
         ("[continuation]\nmechanism = ''\n", "continuation.mechanism"),
         ("[detect]\nnone = false\n", "gives no values"),
-        ("[continuation]\nmechanism = ''\ncap = 3\n", "need a mechanism"),
+        ("[continuation]\nmechanism = ''\ncap = 3\n", "continuation.mechanism"),
         ("[caps]\nnone = true\nmcp_tools = 3\n", "none = true and also"),
         ("[continuation]\nmechanism = 'magic'\n", "continuation.mechanism"),
         ("[continuation]\ncap = 3\n", "need a mechanism"),
