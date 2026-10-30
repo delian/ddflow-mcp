@@ -90,8 +90,14 @@ def test_absent_section_listed_only_when_asked():
 def test_view_facts_table_filters(tmp_path):
     out = harness_view(tmp_path, what="facts", id="opencode")
     assert out.exit == 0 and "opencode" in out.data["message"]
-    assert all(r["agent"] == "opencode" for r in out.data["facts"])
+    assert out.data["facts"] and all(r["agent"] == "opencode" for r in out.data["facts"])
     un = harness_view(tmp_path, what="facts", unverified=True)
     assert un.data["facts"] and all(r["status"] == "unverified" for r in un.data["facts"])
     bad = harness_view(tmp_path, what="facts", id="nope")
     assert bad.exit != 0
+
+
+def test_table_cells_cannot_break_the_columns():
+    h = p(HEAD + OK.replace("https://x.example", "a|b"))
+    for line in harnessfacts.table(harnessfacts.rows(h)).splitlines():
+        assert line.count("|") == 8
