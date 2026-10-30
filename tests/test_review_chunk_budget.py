@@ -75,5 +75,6 @@ def test_an_undersized_output_cap_keeps_the_quality_bound():
     assert R._chunk_budget(Reviewer(name="r", max_tokens=8000, max_chunk_chars=30000)) == 6000
     # the quality bound below the reserved output cap is kept
     assert R._chunk_budget(Reviewer(name="r", max_tokens=100000, max_chunk_chars=120)) == 120
-    # an output cap that cannot hold the verdict reserve is not shrunk below zero
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=reserve, max_chunk_chars=30000)) == 30000
+    # an output cap that cannot hold the verdict reserve is capped at the cap alone, not
+    # shrunk to a useless one-character chunk and not left at the over-cap quality bound
+    assert R._chunk_budget(Reviewer(name="r", max_tokens=reserve, max_chunk_chars=30000)) == reserve
