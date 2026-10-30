@@ -80,3 +80,16 @@ def test_a_reviewed_code_file_that_changed_still_blocks_the_pass(repo, tmp_path)
     last = _settle(repo)
     assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
     assert "c.py" in last.data["text"]
+
+
+def test_ignorable_exempts_a_reviewed_doc_edit_not_a_deletion_or_code():
+    from ddflow.services.gates.reviewed_paths import ignorable
+
+    recorded = {"docs/notes.md": "100644 abc", "c.py": "100644 def"}
+    docs = ["docs/**", "**/*.md"]
+    # A reviewed doc edited is wording, so not new work.
+    assert ignorable("docs/notes.md", recorded, ["tests/**"], docs)
+    # A reviewed doc deleted (gone) is a change like any other: still new work.
+    assert not ignorable("docs/notes.md", recorded, ["tests/**"], docs, {"docs/notes.md"})
+    # A reviewed code file edited is never ignorable.
+    assert not ignorable("c.py", recorded, ["tests/**"], docs)
