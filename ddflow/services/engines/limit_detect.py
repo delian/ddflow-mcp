@@ -39,7 +39,7 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
     if not isinstance(codes, list) or not all(type(c) is int and 0 <= c <= EXIT_MAX for c in codes):
         raise EngineError("limit_detect.exit_codes: a list of integers 0..255")
     evs = t.get("stream_events", [])
-    if not isinstance(evs, list) or not all(e in EVENTS for e in evs):
+    if not isinstance(evs, list) or not all(isinstance(e, str) and e in EVENTS for e in evs):
         raise EngineError(f"limit_detect.stream_events: names from {list(EVENTS)}")
     msgs = t.get("messages", [])
     if not isinstance(msgs, list) or len(msgs) > limits.max_rules:

@@ -375,7 +375,7 @@ def test_transcript_map_paths_and_validation():
 
 # --- E8 probe ---------------------------------------------------------------------------
 def test_probe_runs_declared_safe_argv_and_stores_a_fact():
-    spec = probe.parse([[sys.executable, "--version"]])
+    spec = probe.parse([[sys.executable, "--version"]], allow_paths=True)
     facts = probe.run(spec, probe_id="py", now="2026-10-30")
     f = facts[0]
     assert (
@@ -405,7 +405,7 @@ def test_probe_missing_binary_is_unavailable_and_timeouts_are_bounded(tmp_path):
     slow = tmp_path / "slow"
     slow.write_text("#!/bin/sh\nsleep 5\n")
     slow.chmod(0o755)
-    spec = probe.parse([[str(slow), "--version"]])
+    spec = probe.parse([[str(slow), "--version"]], allow_paths=True)
     t = time.monotonic()
     f = probe.run(spec, probe_id="s", now="d", limits=Limits(probe_timeout_s=0.3))[0]
     assert f["status"] == "unavailable" and f["reason"] == "timeout" and time.monotonic() - t < 3
@@ -419,7 +419,7 @@ def test_probe_output_is_capped_and_env_is_scrubbed(tmp_path, monkeypatch):
     )
     s.chmod(0o755)
     f = probe.run(
-        probe.parse([[str(s), "--version"]]),
+        probe.parse([[str(s), "--version"]], allow_paths=True),
         probe_id="t",
         now="d",
         limits=Limits(probe_output_bytes=1000),
@@ -427,3 +427,62 @@ def test_probe_output_is_capped_and_env_is_scrubbed(tmp_path, monkeypatch):
     assert (
         f["tool_version"] == "1.2.3" and len(f["output"]) <= 1000 and "sk-leak" not in f["output"]
     )
+
+
+# --- findings of the first review, each with its reproduction ----------------------------
+def test_unsafe_optional_chains_and_wide_repeats_are_refused():
+    for pat in ("(a?){256}b", "a?" * 30 + "a" * 30, "a*a*a*b"):
+        with pytest.raises(EngineError):
+            safety.safe_regex(pat)
+    t = time.monotonic()
+    assert safety.search(safety.safe_regex("(ab){3}c?"), "a" * 5000) is None
+    assert time.monotonic() - t < 1
+
+
+def test_hostile_descriptor_values_are_engine_errors_not_crashes():
+    with pytest.raises(EngineError):
+        limit_detect.parse({"stream_events": [[]]})
+    with pytest.raises(EngineError):
+        stream_map.parse_rules([{"when": {"path": "a", "equals": "x"}, "emit": []}])
+    with pytest.raises(EngineError):
+        stream_map.parse_rules([{"when": {"path": "a", "exists": False}, "emit": "tool"}])
+
+
+def test_mcp_shape_refuses_nan_constants():
+    with pytest.raises(EngineError):
+        mcp_shape.render_json(
+            mcpconfig.SHAPE_MCP_SERVERS, "d", ENTRY, '{"mcpServers": {"o": {"args": [NaN]}}}'
+        )
+
+
+def test_render_argv_shell_check_is_separator_and_case_blind():
+    for bad in ("C:\\Windows\\System32\\cmd.exe", "C:/x/PowerShell.exe", "/bin/BASH", ""):
+        with pytest.raises(EngineError):
+            render_argv.render([bad, "x"], {})
+
+
+def test_transcript_path_cannot_climb_out_through_a_placeholder():
+    s = transcript_map.parse({**TSPEC, "path": "{home}../etc/passwd"})
+    with pytest.raises(EngineError):
+        transcript_map.resolve_path(s, home="/tmp/")
+
+
+def test_probe_programs_are_bare_names_and_output_is_read_capped(tmp_path):
+    with pytest.raises(EngineError):
+        probe.parse([["/tmp/x", "--version"]])
+    big = tmp_path / "big"
+    big.write_text("#!/bin/sh\nyes aaaaaaaaaaaaaaaa | head -c 200000000\n")
+    big.chmod(0o755)
+    t = time.monotonic()
+    f = probe.run(
+        probe.parse([[str(big), "--version"]], allow_paths=True),
+        probe_id="b",
+        now="d",
+        limits=Limits(probe_output_bytes=2000),
+    )[0]
+    assert len(f["output"]) == 2000 and time.monotonic() - t < 5
+
+
+def test_stream_map_checks_length_before_stripping():
+    r = stream_map.parse_rules(DSH_RULES)
+    assert stream_map.map_line(" " + "x" * 5000, r, Limits(max_line_chars=100)) is None
