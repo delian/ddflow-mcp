@@ -108,7 +108,7 @@ rpm = { v = 30, s = "verified", src = "op", d = "2026-10-30" }
 def test_committed_files_hold_no_keys_and_no_remote_local_address():
     data = M.data_dir()
     text = "".join(p.read_text() for p in data.glob("*.toml"))
-    assert not re.search(r"(sk-|Bearer )[A-Za-z0-9]{8,}", text)
+    assert not re.search(r"\b(sk-[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{16,})", text)
     cat = M.load()
     for rid, row in cat.route.items():
         if row.get("class") == "local":
