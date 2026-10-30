@@ -65,6 +65,14 @@ def test_the_set_is_closed_and_complete():
     )
 
 
+def test_every_engine_exposes_its_entry_points():
+    from ddflow.services.engines import ENTRY_POINTS
+
+    assert set(ENTRY_POINTS) == set(ENGINES)
+    for name, fns in ENTRY_POINTS.items():
+        assert all(callable(getattr(ENGINES[name], f)) for f in fns), name
+
+
 # --- E1 fieldmap ------------------------------------------------------------------------
 def test_fieldmap_matches_hookio_for_every_shipped_dialect():
     stdin = json.dumps(
