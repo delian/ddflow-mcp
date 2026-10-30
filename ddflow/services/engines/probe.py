@@ -131,7 +131,7 @@ def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dic
     facts = []
     for argv in argvs:
         fact: dict = {"argv": list(argv), "source": f"probe:{probe_id}", "retrieved": now}
-        if executable_missing(argv[0]):
+        if executable_missing(argv[0], env.get("PATH", os.defpath)):
             facts.append({**fact, "status": "unavailable", "reason": "not installed"})
             continue
         try:
