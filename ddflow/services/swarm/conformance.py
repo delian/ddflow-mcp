@@ -262,8 +262,7 @@ def _lease_phase(driver, h, revoke: Callable[[], None], o: Observed, p: Params) 
     after = 0
     while _alive(driver, h) and time.monotonic() < deadline:
         for ev in _collect(driver, h, 0.1, p.max_events, deadline):
-            _record(o, ev)
-            after += ev.event == "tool"
+            after += ev.event == "tool"  # not recorded: work after the revocation earns no level
     o.lease_stop = not _alive(driver, h)
     o.lease_note = (
         f"stopped within the wait ({after} tool call(s) after the revocation)"
@@ -280,7 +279,11 @@ def observe(
     hook_probe: Callable[[], bool | None] | None = None,
     revoke: Callable[[], None] | None = None,
 ) -> Observed:
-    """Start the lane (a stub agent on stub endpoints), collect its events, run the probes, stop it."""
+    """Start the lane (a stub agent on stub endpoints), collect its events, run the probes, stop it.
+
+    ``hook_probe`` is the caller's own check that the lane's pre-tool hook fires (it drives the
+    hook the way the lane's harness would, SW-lane-hooks); a probe that cannot run returns None.
+    Only events seen before the lease is revoked are graded."""
     o = Observed()
     h = driver.start(spec)
     if isinstance(h, Result):
