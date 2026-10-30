@@ -30,5 +30,5 @@ the next step where it matters.
 
 ## Not done, on purpose
 
-- Qwen/GLM direct vendor APIs, Gemini 4 explicit caching, and prices in absolute terms: not read; absolute prices belong to DRV-model-catalog.
+- Qwen/GLM direct vendor APIs, Gemini 4 explicit caching, and absolute prices other than the DeepSeek ones listed above: not read (they belong to DRV-model-catalog).
 - Live execution of any probe (rows 1, 2, 3, 6, 7 next steps).

@@ -113,6 +113,7 @@ def validate(data: dict[str, dict[str, Any]], harness_ids: list[str] | None = No
     for name, doc in data.items():
         problems += _shape_problems(name, doc) + _fact_problems(name, doc)
     rows = data["context_harnesses.toml"].get("harness", {})
+    rows = rows if isinstance(rows, dict) else {}
     for hid in harness_ids or []:
         if hid not in rows:
             problems.append(
@@ -149,7 +150,7 @@ def family_row(data: dict[str, dict[str, Any]], family: str) -> dict[str, Any]:
     rows = data["context_families.toml"].get("family", {})
     if not isinstance(rows, dict):
         return {}
-    return rows.get(family) or rows.get(UNKNOWN) or {}
+    return rows[family] if family in rows else rows.get(UNKNOWN, {})
 
 
 def stale(
