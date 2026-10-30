@@ -69,23 +69,22 @@ def memory_add(
     replaced = bool(id) and id in st.memories
     with log.transaction():
         minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
-        prior_events, redacted_now = _prior_memory_state(log, mid) if replaced else ([], set())
+        prior_events, redacted_now = _prior_memory_state(log, mid)
         log.append("memory.recorded", mid, data | IDS.key_field(minted))
-        for prior in prior_events:
-            # A re-record supersedes EVERY prior memory.recorded event for this id: redact them
-            # all, so a stale or private copy of an older text does not survive (bug
-            # B-memory-rerecord-keeps-old-text-in-log), each audited (D-event-log-redaction-forward).
-            # Skip an event only when its text is ALREADY the redaction marker and an audit names
-            # it, both read from the log NOW (inside the lock), so a concurrent re-record cannot
-            # make the "already audited" set stale and stack a duplicate audit.
-            if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in redacted_now:
-                continue
-            _original, redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
-            log.append(
-                "memory.redacted",
-                mid,
-                {"event": redacted.id, "reason": "superseded by a memory re-record"},
-            )
+        if id:  # a superseding add (an explicit --id): redact every prior event the LIVE log sees
+            for prior in prior_events:
+                # Redact each superseded memory.recorded event, so a stale or private copy of an
+                # older text does not survive (bug B-memory-rerecord-keeps-old-text-in-log), each
+                # audited (D-event-log-redaction-forward). Skip an event only when its text is
+                # ALREADY the redaction marker and an audit names it; both were read under the lock.
+                if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in redacted_now:
+                    continue
+                _original, redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
+                log.append(
+                    "memory.redacted",
+                    mid,
+                    {"event": redacted.id, "reason": "superseded by a memory re-record"},
+                )
         DD.after_add(log, cfg, mid, chk)
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
 
