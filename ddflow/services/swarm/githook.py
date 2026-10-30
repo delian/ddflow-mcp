@@ -40,8 +40,8 @@ MARKER = "# DDFLOW-LANE-HOOK v1 -- managed by ddflow swarm githook; remove with 
 #: Hooks git treats differently when present (a push-to-checkout that exits 0 is taken as
 #: having updated the tree; fsmonitor-watchman must answer): wrapped only if the project has one.
 PRESENCE_MATTERS = ("push-to-checkout", "fsmonitor-watchman")
-#: Hook git replaces with pre-commit when absent.
-FALLS_BACK = "pre-merge-commit"
+#: The hook git replaces with pre-commit when absent: the lane's lease check always runs.
+MERGE_HOOK = "pre-merge-commit"
 #: git's other client-side hook names; each gets a run-time wrapper to the project's hook.
 GIT_HOOKS = (
     "applypatch-msg", "pre-applypatch", "post-applypatch", "commit-msg", "prepare-commit-msg",
@@ -157,9 +157,14 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
         target = shlex.quote(str(original / name))
         if name in PRESENCE_MATTERS and not os.access(original / name, os.X_OK):
             continue  # git changes behaviour when such a hook EXISTS, even if it does nothing
-        # No pre-merge-commit hook: git runs pre-commit for a merge commit, so do the same.
-        fallback = f"exec {shlex.quote(str(d / 'pre-commit'))}" if name == FALLS_BACK else "exit 0"
-        body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\n{fallback}\n'
+        if name == MERGE_HOOK:
+            # git runs pre-commit for a merge commit only when there is NO pre-merge-commit
+            # hook; the lane runs it (lease check, then the project's pre-commit) first.
+            lane = shlex.quote(str(d / "pre-commit"))
+            body = f'#!/bin/sh\n{MARKER}\n{lane} "$@" || exit $?\n'
+            body += f'[ -x {target} ] && exec {target} "$@"\nexit 0\n'
+        else:
+            body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\nexit 0\n'
         _write_exec(d / name, body)
         known.add(name)
     for stale in d.iterdir():  # files an older version wrote; removed AFTER the new ones exist

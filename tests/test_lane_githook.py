@@ -33,12 +33,13 @@ def sh(cwd, *a, check=True):
 def lane(tmp_path):
     main = tmp_path / "main"
     main.mkdir()
-    sh(main, "git", "init", "-q", "-b", "main")
+    sh(main, "git", "init", "-q")
     sh(main, "git", "config", "user.email", "a@b.c")
     sh(main, "git", "config", "user.name", "a")
     (main / "a.txt").write_text("a")
     sh(main, "git", "add", ".")
     sh(main, "git", "commit", "-qm", "init")
+    sh(main, "git", "branch", "-M", "main")
     wt = tmp_path / "lane"
     sh(main, "git", "worktree", "add", "-q", "-b", "lane", str(wt))
     return main, wt
@@ -232,20 +233,35 @@ def test_reinstall_follows_a_changed_shared_hooks_path(lane, tmp_path):
     assert "NEW-HOOK" in commit(wt, "n.txt").stderr
 
 
-def test_merge_commit_hook_falls_back_to_the_lease_check_and_presence_hooks_are_not_invented(
-    lane, tmp_path
-):
+def test_merge_commit_runs_the_lease_check_even_with_a_project_hook(lane, tmp_path):
     main, wt = lane
+    hooks = main / ".git" / "hooks"
+    (hooks / "pre-merge-commit").write_text("#!/bin/sh\nexit 0\n")
+    (hooks / "pre-merge-commit").chmod(0o755)
     GH.install(wt, invocation=stub(tmp_path, "echo LEASE-CHECK >&2; exit 1"))
     d = GH.hook_dir(wt)
-    assert not (d / "push-to-checkout").exists() and not (d / "fsmonitor-watchman").exists()
-    r = sh(d, str(d / "pre-merge-commit"), check=False)  # absent project hook: lease check runs
+    r = sh(d, str(d / "pre-merge-commit"), check=False)
     assert r.returncode == 1 and "LEASE-CHECK" in r.stderr
-    hooks = main / ".git" / "hooks"
-    (hooks / "push-to-checkout").write_text("#!/bin/sh\nexit 0\n")
-    (hooks / "push-to-checkout").chmod(0o755)
+    (hooks / "pre-merge-commit").unlink()
+    r = sh(d, str(d / "pre-merge-commit"), check=False)  # no project hook: still the check
+    assert r.returncode == 1 and "LEASE-CHECK" in r.stderr
+
+
+def test_presence_sensitive_hooks_are_wrapped_only_when_the_project_has_one(lane, tmp_path):
+    main, wt = lane
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
-    assert (d / "push-to-checkout").exists()
+    d = GH.hook_dir(wt)
+    assert not (d / "push-to-checkout").exists() and not (d / "fsmonitor-watchman").exists()
+    hooks = main / ".git" / "hooks"
+    for name in ("push-to-checkout", "fsmonitor-watchman"):
+        (hooks / name).write_text("#!/bin/sh\nexit 0\n")
+        (hooks / name).chmod(0o755)
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert (d / "push-to-checkout").exists() and (d / "fsmonitor-watchman").exists()
+    for name in ("push-to-checkout", "fsmonitor-watchman"):
+        (hooks / name).unlink()
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert not (d / "push-to-checkout").exists()
 
 
 def test_installed_and_uninstall_accept_an_equivalent_spelling(lane, tmp_path):
