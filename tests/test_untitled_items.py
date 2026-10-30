@@ -35,10 +35,27 @@ def test_an_item_titled_with_its_own_id_is_noted(repo):
     assert "ddflow update" in note and "--title" in note, note
 
 
-def test_an_empty_title_is_noted(repo):
+def test_task_add_requires_a_title(repo):
+    """Bug Bbd67278144: an empty title filed a task whose every row showed only the id."""
     assert run_cli(repo, "init")[0] == 0
-    assert run_cli(repo, "task", "add", "T1")[0] == 0
-    assert "T1" in _untitled(repo), _notes(repo)
+    code, _out, err = run_cli(repo, "task", "add", "T1")
+    assert code != 0, err
+    assert "--title" in err, err
+
+
+def test_phase_add_requires_a_title(repo):
+    assert run_cli(repo, "init")[0] == 0
+    code, _out, err = run_cli(repo, "phase", "add", "P1")
+    assert code != 0, err
+    assert "--title" in err, err
+
+
+def test_a_blank_title_is_refused_and_names_update(repo):
+    assert run_cli(repo, "init")[0] == 0
+    code, _out, err = run_cli(repo, "task", "add", "T1", "--title", "   ")
+    assert code != 0, err
+    assert "--title" in err, err
+    assert "ddflow update" in err, err
 
 
 def test_a_real_title_is_not_noted(repo):

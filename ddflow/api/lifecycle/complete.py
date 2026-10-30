@@ -28,7 +28,7 @@ from ...services.approvals.canon import Canon
 from ...services.export import refresh as RF
 from ...services.gates import failed_review as GO
 from .. import jobs as JB
-from .._base import _load
+from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
 from ._common import _chore_base, _chore_event, _require
@@ -73,7 +73,7 @@ def _ask_hint(agent: str) -> str:
     )
 
 
-def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the verdict is one story
+def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
     *,
@@ -87,6 +87,7 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
     approval: str = "",
+    lint_exempt: str = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
@@ -98,6 +99,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     The rule-set lives in `services.completion`. This decides only what to DO with the
     verdict, and records the override when one is taken — an unrecorded `--force` is a
     pipeline that was never really enforced.
+
+    ``lint_exempt`` (Be5610bf732) is the same close as `bug fixed --lint-exempt`: the reason a
+    CI-filed lint bug has no test; it goes through `bug_fixed`, so the same refusals apply.
 
     ``regression_test`` closes the open bugs this item was filed to fix (its `fixes`,
     `CM.open_bugs_of`; never a bug merely reported against it, B7bdcc6b212) through `bug_fixed` -- the same refusals: a test must be named and
@@ -113,7 +117,12 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
             entry = parse_changelog(changelog)
         except ValueError as e:
             return O.failed("item.completed", str(e), id=item)
-    log, cfg, st = _load(repo, agent)
+    # `_load_fresh`, never `_load`: a completion judges the item's CURRENT kind and
+    # pipeline, and `_load` returns a scope-cached fold -- the MCP handshake's read burst
+    # folds the log once and reuses it, so a `ddflow update --kind doc` appended since then
+    # is invisible to it and the old pipeline (unit_tests) still blocks (Bf0a1039f9f). The
+    # CLI is a fresh process every time and never hit this; the in-process MCP server did.
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.completed", cfg.lease.grace_s, log.clone_id(create=False))
     # B2809f4213b: a contested claim is settled by `resolve`, not by finishing
     refusal = (
@@ -124,14 +133,14 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
-    closing = [t for t in tests if t.strip()]
+    closing = [t for t in tests if t.strip()] or [lint_exempt.strip()] * bool(lint_exempt.strip())
     pending = CM.open_bugs_of(st, item, cfg)
     if closing and not pending:
         return O.refused(
             "item.completed",
-            f"--regression-test: {item} is not the fix task of any open bug, so there is "
+            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
             f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
-            f"fixed <bug> --regression-test ...`.",
+            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
             id=item,
             bugs_closed=[],
         )
@@ -210,16 +219,9 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     if closing:
         # Only now, with the completion going through: a refusal above closed nothing.
 
-        for bid in pending:
-            out = bug_fixed(repo, bid, regression_test=tests, mutation=mutation, agent=agent)
-            if out.exit != O.OK:
-                return O.Outcome(
-                    kind="item.completed",
-                    data={"id": item, "bug": bid, "bugs_closed": closed},
-                    exit=out.exit,
-                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
-                )
-            closed.append(bid)
+        failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
+        if failed is not None:
+            return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks
     # of their own and the item still completable, never stranded on a done task.
@@ -284,6 +286,35 @@ def complete(  # noqa: PLR0913, C901 -- one keyword per completion facet; the ve
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _close_bugs(
+    repo, item, pending, closed, tests, mutation, lint_exempt, agent
+) -> O.Outcome | None:
+    """Close each pending bug through `bug_fixed` (the same refusals); the failure, else None."""
+    flag = (
+        "--lint-exempt"
+        if lint_exempt.strip() and not any(t.strip() for t in tests)
+        else "--regression-test"
+    )
+    for bid in pending:
+        out = bug_fixed(
+            repo,
+            bid,
+            regression_test=tests,
+            mutation=mutation,
+            lint_exempt=lint_exempt.strip(),
+            agent=agent,
+        )
+        if out.exit != O.OK:
+            return O.Outcome(
+                kind="item.completed",
+                data={"id": item, "bug": bid, "bugs_closed": closed},
+                exit=out.exit,
+                reason=f"{flag}: bug {bid} not closed: {out.reason}",
+            )
+        closed.append(bid)
+    return None
 
 
 def _phase_suite(repo: Path, cfg, log, st: State, it, agent: str) -> str:
@@ -384,7 +415,7 @@ def abandon(
     as settled, so an item you decided against stops holding its phase open — which it
     otherwise does forever, since nothing else can ever finish it.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.abandoned", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -469,7 +500,7 @@ def remove(
     replay`, which is what keeps the record honest about work that was planned and then
     dropped.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.removed", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -527,7 +558,7 @@ def block(
     out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
     deliberate form -- the B12/B14 data fix was one.
     """
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.blocked", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
@@ -563,7 +594,7 @@ def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     caller should see, not a success that wrote no event.
     """
 
-    log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load_fresh(repo, agent)
     it = _require(st, item, "item.unblocked", cfg.lease.grace_s, log.clone_id(create=False))
     if isinstance(it, O.Outcome):
         return it
