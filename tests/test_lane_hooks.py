@@ -284,3 +284,28 @@ def test_second_round_findings(tree, tmp_path):
     (home / LH.DIR_NAME / "claude-settings.json").unlink()
     (home / LH.DIR_NAME / LH.MANIFEST).write_text(json.dumps({"level": "prevent", "files": []}))
     assert LH.hook_probe(home)() is False
+
+
+def test_third_round_findings(tree, tmp_path):
+    repo, wt, home = tree
+    with pytest.raises(ValueError):
+        PL.render(["/bin/c"], True)
+    # a parent directory that is a symlink is refused too
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (home / LH.DIR_NAME).symlink_to(elsewhere)
+    with pytest.raises(OSError):
+        LH.prepare(repo, wt, home, "claude", "lane-7")
+    assert list(elsewhere.iterdir()) == []
+    (home / LH.DIR_NAME).unlink()
+    # the probe runs nothing the manifest points at outside the lane home
+    evil = tmp_path / "evil.mjs"
+    evil.write_text("process.exit(2)")
+    (home / LH.DIR_NAME).mkdir()
+    m = {"level": "prevent", "door": "plugin-home", "files": [str(evil)], "agent": "a",
+         "worktree": str(wt)}  # fmt: skip
+    (home / LH.DIR_NAME / LH.MANIFEST).write_text(json.dumps(m))
+    assert LH.hook_probe(home)() is False
+    del m["agent"], m["files"]
+    (home / LH.DIR_NAME / LH.MANIFEST).write_text(json.dumps(m))
+    assert LH.hook_probe(home)() is False  # missing keys: False, not a KeyError
