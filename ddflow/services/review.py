@@ -722,6 +722,24 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
     return packed
 
 
+def _chunk_budget(rev: Reviewer) -> int:
+    """The largest chunk ``rev`` can reason about within its declared output cap.
+
+    ``max_chunk_chars`` is a bound picked for review QUALITY, not a promise the model
+    answers a chunk that size: a reasoning model spends its ``max_tokens`` OUTPUT budget
+    thinking before it emits the verdict, and the thinking grows with the input. Measured
+    on Qwen3.8-Flash-Next (``Reviewer.max_tokens``): a 30 KB chunk needed 28 381 reasoning
+    tokens -- about one reasoning token per input character -- so a chunk of
+    ``max_chunk_chars`` characters can exhaust a SMALL ``max_tokens`` mid-thought and come
+    back ``TRUNCATED``, which ddflow records UNAVAILABLE and a review round is spent
+    (bug B9a2279db22: the qwen reviewer hit its 64k-token reasoning cap on ledger-sized
+    chunks). Cap the chunk at the output cap, so a reviewer whose ``max_tokens`` is below
+    ``max_chunk_chars`` has its chunk split to fit before it is ever sent; the lower of the
+    two wins, so raising one without the other can never send a chunk too large to answer.
+    """
+    return min(rev.max_chunk_chars, max(1, rev.max_tokens))
+
+
 #: A hunk header and whatever git appended after its closing ``@@``.
 _HUNK_CONTEXT_RE = re.compile(r"(?m)^(@{2,} [-+0-9, ]+ @{2,})[ \t][^\n]*$")
 
@@ -1592,9 +1610,9 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return problem
 
     stripped = strip_hunk_context(diff)
-    chunks = split_diff(stripped, rev.max_chunk_chars)
+    chunks = split_diff(stripped, _chunk_budget(rev))
     res.chunks_total = len(chunks)
-    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), _chunk_budget(rev)
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
