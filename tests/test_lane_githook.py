@@ -14,7 +14,13 @@ from ddflow.services.swarm import githook as GH
 def _isolated_git(monkeypatch, tmp_path):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
-    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"):
+    for var in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_CONFIG_COUNT",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
