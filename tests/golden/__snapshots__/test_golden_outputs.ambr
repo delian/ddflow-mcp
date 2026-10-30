@@ -2336,6 +2336,24 @@
       swarm.bug_window_s = 604800   [default]
           A bug filed this many seconds after an item completed still counts against
           the author in the quality ledger (default a week).
+      swarm.conformance_min_accuracy = 0.9   [default]
+          Share of a lane's tool calls in a conformance run that must be well formed
+          (a lean-core tool, no error) for the tool-call accuracy level to pass.
+      swarm.conformance_min_calls = 5   [default]
+          Fewest tool calls a conformance run must see before accuracy is judged;
+          fewer is `unavailable`, never passed.
+      swarm.conformance_idle_s = 5.0   [default]
+          Seconds of silence after which a conformance run stops collecting a lane's
+          events.
+      swarm.conformance_lease_wait_s = 10.0   [default]
+          Seconds a lane is given to stop after its lease is revoked in a conformance
+          run; a lane still working after that fails the lease level.
+      swarm.conformance_tools = ['brief', 'next', 'claim', 'heartbeat', 'show', 'help', 'identify', 'merge', 'complete', 'task', 'memory', 'gate', 'bug', 'session', 'rule', 'view']   [default]
+          The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes
+          are ignored) a lane's tool calls are judged against in a conformance run.
+      swarm.conformance_max_age_s = 2592000   [default]
+          A lane's conformance level older than this many seconds (default 30 days) no
+          longer admits it to items; it must be run again. Zero never expires.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
