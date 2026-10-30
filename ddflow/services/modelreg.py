@@ -102,6 +102,8 @@ def _fact_nodes(row: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             out.append((key, node))
         elif key == "served" and isinstance(node, dict):
             for served, tbl in node.items():
+                if not isinstance(tbl, dict):
+                    continue  # `_shape_problems` names it
                 out += [(f"served.{served}.{k}", n) for k, n in tbl.items() if facts.is_fact(n)]
     return out
 
@@ -114,8 +116,15 @@ def _shape_problems(cat: Catalog) -> list[str]:
     out = []
     for table, rid, row in _rows(cat):
         for key, node in row.items():
-            if key not in _PLAIN_KEYS and not facts.is_fact(node):
-                out.append(f"{table}.{rid}.{key} is not a fact (no `s`) and would be ignored")
+            at = f"{table}.{rid}.{key}"
+            if key in ("family", "class") and not isinstance(node, str):
+                out.append(f"{at} must be a string")
+            elif key == "served" and not (
+                isinstance(node, dict) and all(isinstance(v, dict) for v in node.values())
+            ):
+                out.append(f"{at} must be a table of tables (served model -> facts)")
+            elif key not in _PLAIN_KEYS and not facts.is_fact(node):
+                out.append(f"{at} is not a fact (no `s`) and would be ignored")
     for fid, row in cat.family.items():
         v = _identity(row)
         needles = v.get("needles")
@@ -132,11 +141,16 @@ def _shape_problems(cat: Catalog) -> list[str]:
 def _link_problems(cat: Catalog) -> list[str]:
     out = []
     for rid, row in cat.model.items():
-        if row.get("family") not in cat.family:
+        if not isinstance(row.get("family"), str) or row["family"] not in cat.family:
             out.append(f"model.{rid}: family {row.get('family')!r} is not in the catalog")
     for rid, row in cat.route.items():
         klass = row.get("class")
-        if klass and klass not in cat.cls and klass not in _PLAIN_CLASSES:
+        if (
+            isinstance(klass, str)
+            and klass
+            and klass not in cat.cls
+            and klass not in _PLAIN_CLASSES
+        ):
             out.append(f"route.{rid}: class {klass!r} has no [class] row")
     return out
 
@@ -209,7 +223,9 @@ def resolve(cat: Catalog, model: str) -> Resolved:
         for rid, row in cat.model.items():
             if rid.lower() == low:
                 fam = row.get("family")
-                if fam not in cat.family:  # a broken row is unknown, not a needle neighbour
+                if (
+                    not isinstance(fam, str) or fam not in cat.family
+                ):  # a broken row is unknown, not a needle neighbour
                     return Resolved(model, UNKNOWN, "", "unknown")
                 return Resolved(
                     model, fam, _identity(cat.family[fam]).get("vendor", ""), "model", rid
@@ -261,6 +277,8 @@ def read(
             node = node if facts.is_fact(node) else None
             if node is not None and node["s"] in facts.READABLE:
                 val = CF.usable(node, model)
+                if val is None:
+                    leads.append(f"cache-family: {key} is scoped to other models")
                 node = None if val is None else {**node, "v": val}
         else:
             node = _tier(row, key)

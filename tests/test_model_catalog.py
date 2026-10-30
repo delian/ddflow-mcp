@@ -108,6 +108,9 @@ rpm = { v = 30, s = "verified", src = "op", d = "2026-10-30" }
 def test_committed_files_hold_no_keys_and_no_remote_local_address():
     data = M.data_dir()
     text = "".join(p.read_text() for p in data.glob("*.toml"))
+    assert not re.search(
+        r'(?m)^\s*\w*(key|token|secret)\w*\s*=\s*"[^"]{8,}"', text.replace("_env", "")
+    )
     assert not re.search(r"\b(sk-[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{16,})", text)
     cat = M.load()
     for rid, row in cat.route.items():
@@ -178,3 +181,13 @@ def test_non_fact_values_and_bad_identity_are_problems():
     bad = " ".join(M.validate(cat))
     assert "model.deepseek-flash.window is not a fact" in bad
     assert "family.claude.identity" in bad
+
+
+def test_malformed_local_rows_are_problems_not_crashes():
+    cat = M.load()
+    cat.model["bad"] = {"family": {}}
+    cat.route["r"] = {"class": [], "served": {"model": "oops"}}
+    bad = M.validate(cat)
+    assert any("model.bad.family must be a string" in p for p in bad)
+    assert any("route.r.served must be a table of tables" in p for p in bad)
+    assert M.resolve(cat, "bad").family == M.UNKNOWN
