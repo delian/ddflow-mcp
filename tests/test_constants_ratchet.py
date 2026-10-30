@@ -112,6 +112,18 @@ def test_a_function_body_shadowing_a_name_does_not_hide_the_module_constant(tmp_
     ]
 
 
+def test_an_except_handler_rebinding_a_name_invalidates_it(tmp_path: Path) -> None:
+    src = (
+        "HOUR = 3600\n"
+        "try:\n"
+        "    1 / 0\n"
+        "except ZeroDivisionError:\n"
+        "    HOUR = 1\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+    )
+    assert _plant(tmp_path, src).unclassified == []
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"

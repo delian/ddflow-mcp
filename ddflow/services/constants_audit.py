@@ -115,13 +115,21 @@ def _bound_by(node: ast.AST) -> list[str]:
 
 def _rebindings(node: ast.stmt) -> list[str]:
     """Names a module-level statement rebinds, recursing into module-scope bodies
-    (if/for/with/try) but not into a function or class body (a separate scope)."""
+    (if/for/while/with/try, except handlers, match cases) but not into a function or
+    class body (a separate scope)."""
     names = _bound_by(node)
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         return names
+    stmts: list[ast.stmt] = []
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.stmt):
-            names += _rebindings(child)
+            stmts.append(child)
+    if isinstance(node, ast.Try):
+        stmts += [s for h in node.handlers for s in h.body]
+    if isinstance(node, ast.Match):
+        stmts += [s for c in node.cases for s in c.body]
+    for child in stmts:
+        names += _rebindings(child)
     return names
 
 
