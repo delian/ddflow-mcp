@@ -221,7 +221,9 @@ def test_status_says_a_ready_task_was_interrupted(repo):
     log.append("lease.acquired", "T1", {"holder": "ghost", "at": time.time() - 99999, "ttl_s": 60})
     log.append("item.started", "T1", {})
     out = api.status(repo)
-    assert out.data["ready_now"] == [{"id": "T1", "title": "T1 fixture", "interrupted": True}], out.data
+    assert out.data["ready_now"] == [{"id": "T1", "title": "T1 fixture", "interrupted": True}], (
+        out.data
+    )
     assert out.data["interrupted"] and out.data["interrupted"][0].startswith("T1"), out.data
     t = out.data["tasks"]
     assert t["ready"] == 1 and _buckets(t) + t["abandoned"] == t["total"] == 1, t
