@@ -61,6 +61,14 @@ def _refusal(bug: str, tags) -> O.Outcome | None:
     )
 
 
+def _keep_derived(tags: list[str], now: list[str]) -> list[str]:
+    """``tags`` in their order, with the derived tags the log holds NOW kept and any other
+    input derived tag dropped: the log as it is decides them, the input never writes one."""
+    held = reserved(now)
+    out = [t for t in tags if t in held or t not in reserved(tags)]
+    return [*out, *(t for t in held if t not in out)]
+
+
 def set_tags(repo: Path, bug: str, tags: list[str], *, agent: str = "") -> O.Outcome:
     """Make ``tags`` the tag list of ``bug`` (open or closed): one `bug.tagged` event."""
     tags = GS.parse(tags)
@@ -74,8 +82,7 @@ def set_tags(repo: Path, bug: str, tags: list[str], *, agent: str = "") -> O.Out
     return _apply(
         repo,
         bug,
-        # the log as it is NOW decides the derived tags: the input never writes one
-        lambda now: [*reserved(now), *(t for t in tags if t not in reserved(tags))],
+        lambda now: _keep_derived(tags, now),
         agent=agent,
     )
 
