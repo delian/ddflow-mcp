@@ -110,3 +110,12 @@ def test_doctor_flags_expired_and_out_of_range():
     lines = factdrift.report(found)
     assert any("a" in ln and "expired" in ln for ln in lines)
     assert factdrift.report([]) == []
+
+
+def test_pick_skips_fact_whose_version_cannot_be_checked():
+    doc = fact(s="documented", v="doc")
+    obs = fact(s="verified", v="obs", versions=">=1.0")
+    assert factdrift.pick([doc, obs], installed=None, today=TODAY).value == "doc"
+    got = factdrift.pick([obs], fallback="fb", installed=None, today=TODAY)
+    assert got.value == "fb" and "installed version unknown" in got.reason
+    assert factdrift.pick([doc, obs], installed="1.2", today=TODAY).value == "obs"
