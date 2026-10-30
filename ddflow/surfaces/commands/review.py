@@ -203,7 +203,10 @@ def _detach(a, c: Ctx) -> int:
     """
     from ...api import jobs as AJ
 
-    argv = [x for x in getattr(a, "_argv", []) if x != "--detach"]
+    argv = list(getattr(a, "_argv", []))
+    if "--detach" in argv:
+        # Only the FLAG: a positional `--detach` past `--` (an item by that name) stays.
+        argv.remove("--detach")
     if not argv:
         print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
         return FAIL
