@@ -284,3 +284,13 @@ def test_seventh_review_findings():
         stream_map.map_line("NaN", rules) is None
         and stream_map.map_line("-Infinity", rules) is None
     )
+
+
+def test_eighth_review_findings():
+    for kw in ({"env": []}, {"env": 0}, {"environ": ""}):
+        with pytest.raises(EngineError):
+            render_argv.render(["prog"], {}, **kw)
+    render_argv.render(["prog"], {}, env=None, environ=None)
+    for p in ("C:../x", "C:..", "D:..\\x"):
+        with pytest.raises(EngineError):
+            transcript_map.parse({"path": p, "format": "jsonl", "fields": {"role": "r"}})
