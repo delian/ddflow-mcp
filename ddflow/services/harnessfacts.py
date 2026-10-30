@@ -81,6 +81,14 @@ def _known(h: Any) -> set[str]:
     return known
 
 
+def _value(h: Any, key: str, present: dict[str, tuple[Any, bool]]) -> Any:
+    """The descriptor's value for `key` (None when it has none), falsy values included."""
+    if key in present:
+        return present[key][0]
+    sec, _, name = key.partition(".")
+    return getattr(getattr(h, sec, None), name, None) if name else None
+
+
 def validate(h: Any, where: str) -> None:
     """Each overlay entry names a fact of this descriptor and its status fits the value."""
     present = _present(h)
@@ -88,10 +96,12 @@ def validate(h: Any, where: str) -> None:
     for key, node in h.facts.items():
         if key not in known:
             raise DescriptorError(f"{where}: [facts] {key!r}: no such fact in this descriptor")
-        value, is_none = present.get(key, (None, False))
+        is_none = present.get(key, (None, False))[1]
         if node["s"] == "none" and not is_none:
             raise DescriptorError(f"{where}: [facts] {key!r}: status none needs none = true")
-        if node["s"] in facts.READABLE and is_none:
+        sec, _, name = key.partition(".")
+        absent = present.get(sec, (None, False))[1] and name  # the section says none = true
+        if node["s"] in facts.READABLE and (is_none or absent or _value(h, key, present) is None):
             raise DescriptorError(f"{where}: [facts] {key!r}: status {node['s']} needs a value")
 
 
@@ -114,9 +124,12 @@ def rows(h: Any, *, absent: bool = False) -> list[dict[str, str]]:
     have = _present(h)
     for key in h.facts:  # an overlay names a falsy value: it is a fact the author meant
         if key not in have and "." in key:
-            sec, _, name = key.partition(".")
-            val = getattr(getattr(h, sec, None), name, None)
-            have[key] = (val if val is not None else "", False)
+            if (
+                getattr(h, key.partition(".")[0], None) is not None
+                and not (have.get(key.partition(".")[0], (0, False))[1])
+            ):  # a section that says none = true has no values to name
+                val = _value(h, key, have)
+                have[key] = (val if val is not None else "", False)
     out = [
         _row(h, key, _show(value), "none" if is_none else "unverified", h.facts.get(key))
         for key, (value, is_none) in sorted(have.items())
