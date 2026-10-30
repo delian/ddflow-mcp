@@ -128,7 +128,7 @@ def table(rs: list[dict[str, str]]) -> str:
     head = "| agent | fact | value | status | source | date | version | note |"
 
     def cell(text: str) -> str:
-        return text.replace("|", "/")
+        return " ".join(text.replace("|", "/").split())
 
     body = [
         "| "
