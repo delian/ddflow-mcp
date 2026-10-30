@@ -29,9 +29,7 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
 import sys
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +37,7 @@ from typing import Any
 
 from ...infra import git as G
 from ...infra import proc as P
+from ...infra.fsio import replace_text, scratch_dir
 from .. import approval, harnessreg
 from ..lane_driver import Result, unavailable
 from . import githook
@@ -292,15 +291,11 @@ try {
 """
 
 
-def _fire(argv: list[str], agent: str, cwd: str, payload: dict[str, Any]) -> bool | None:
-    try:
-        r = P.run(
-            argv, input=json.dumps(payload), capture_output=True, text=True, timeout=60,
-            env={**os.environ, "DDFLOW_AGENT": agent}, check=False,
-        )  # fmt: skip
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None
-    return r.returncode == CK_REFUSE and "hook fired" in r.stderr
+def _fire(argv: list[str], agent: str, payload: dict[str, Any]) -> bool | None:
+    got = P.capture(
+        argv, timeout=60, input=json.dumps(payload), env={**os.environ, "DDFLOW_AGENT": agent}
+    )
+    return got.returncode == CK_REFUSE and "hook fired" in got.stderr if got.ran else None
 
 
 def _fire_plugin(m: dict[str, Any]) -> bool | None:
@@ -308,17 +303,14 @@ def _fire_plugin(m: dict[str, Any]) -> bool | None:
     files = m.get("files") or []
     if not node or not files:
         return None  # JS that was never run proves nothing
-    with tempfile.TemporaryDirectory(prefix="ddflow-hookprobe-") as tmp:
+    with scratch_dir("ddflow-hookprobe-") as tmp:
         copy = Path(tmp) / "plugin.mjs"  # node reads ESM by extension; kilo (bun) reads .js
-        copy.write_text(Path(files[0]).read_text("utf-8"), "utf-8")
+        replace_text(copy, Path(files[0]).read_text("utf-8"))
         script = Path(tmp) / "run.mjs"
-        script.write_text(_NODE, "utf-8")
+        replace_text(script, _NODE)
         argv = [node, str(script), copy.as_uri(), m["worktree"], f"{PROBE_DIR}/x"]
-        try:
-            r = P.run(argv, capture_output=True, text=True, timeout=60, check=False)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-    return r.returncode == CK_REFUSE and "hook fired" in r.stderr
+        got = P.capture(argv, timeout=60)
+    return got.returncode == CK_REFUSE and "hook fired" in got.stderr if got.ran else None
 
 
 def hook_probe(home: Path) -> Callable[[], bool | None]:
@@ -346,6 +338,6 @@ def hook_probe(home: Path) -> Callable[[], bool | None]:
         argv = shlex.split(cmd)  # exactly what the harness would run
         payload = {"tool_name": "Write", "tool_input": {"file_path": f"{PROBE_DIR}/x"},
                    "cwd": m["worktree"]}  # fmt: skip
-        return _fire(argv, str(m["agent"]), m["worktree"], payload)
+        return _fire(argv, str(m["agent"]), payload)
 
     return probe
