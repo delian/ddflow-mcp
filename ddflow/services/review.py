@@ -349,7 +349,8 @@ class ReviewResult:
     #: The chunks this run was asked for (`ddflow review --chunk`); empty = all.
     requested: list[int] = field(default_factory=list)
     #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
-    #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
+    #: was cut with (the EFFECTIVE budget `_chunk_budget`, not the `Reviewer.max_chunk_chars`
+    #: config). A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
     max_chunk_chars: int = 0
 
