@@ -62,6 +62,7 @@ def _present(h: Any) -> dict[str, tuple[Any, bool]]:
     for name, res in h.reserved.items():
         if res.none:
             out[name] = ("none", True)
+            continue
         for k, v in res.values.items():
             out[f"{name}.{k}"] = (v, False)
     return out
@@ -124,9 +125,17 @@ def rows(h: Any, *, absent: bool = False) -> list[dict[str, str]]:
 def table(rs: list[dict[str, str]]) -> str:
     """The rows as one markdown table."""
     head = "| agent | fact | value | status | source | date | version |"
+
+    def cell(text: str) -> str:
+        return text.replace("|", "/")
+
     body = [
-        f"| {r['agent']} | {r['fact']} | {r['value'].replace('|', '/')} | {r['status']} | "
-        f"{r['source']} | {r['date']} | {r['tool_version'] or '-'} |"
+        "| "
+        + " | ".join(
+            cell(r[k] or "-")
+            for k in ("agent", "fact", "value", "status", "source", "date", "tool_version")
+        )
+        + " |"
         for r in rs
     ]
     return "\n".join([head, "|" + "---|" * 7, *body])
