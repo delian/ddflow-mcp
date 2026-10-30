@@ -24,6 +24,7 @@ route name.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 import re
 import time
@@ -37,6 +38,8 @@ from .. import slots as SLOTS
 from .endpoint import Endpoint
 
 #: Pool name of an endpoint route: a plain file-name stem (a route is data, never a path).
+#: Longest route stem before it is cut to a head plus a digest (a lock-file name stays short).
+_STEM_MAX = 120
 _STEM = re.compile(r"[^A-Za-z0-9-]")
 
 
@@ -79,7 +82,12 @@ def endpoint_pool(route: str) -> str:
     """The pool name of an endpoint route (``ep-<route>``), safe as a lock-file stem and
     one-to-one: every character outside ``[A-Za-z0-9-]`` becomes ``_<hex>``, so ``a/b`` and
     ``a_b`` stay two pools."""
-    return "ep-" + _STEM.sub(lambda m: f"_{ord(m.group()):x}_", route)
+    stem = _STEM.sub(lambda m: f"_{ord(m.group()):x}_", route)
+    if (
+        len(stem) > _STEM_MAX
+    ):  # a file-name component is 255 bytes at most: keep the head, add a digest
+        stem = f"{stem[: _STEM_MAX - 17]}_{hashlib.sha256(route.encode()).hexdigest()[:16]}"
+    return "ep-" + stem
 
 
 def pools_for(
