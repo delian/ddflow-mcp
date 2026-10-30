@@ -69,15 +69,16 @@ def memory_add(
     replaced = bool(id) and id in st.memories
     with log.transaction():
         minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
-        prior_events = _prior_memory_events(log, mid) if replaced else []
+        prior_events, redacted_now = _prior_memory_state(log, mid) if replaced else ([], set())
         log.append("memory.recorded", mid, data | IDS.key_field(minted))
         for prior in prior_events:
             # A re-record supersedes EVERY prior memory.recorded event for this id: redact them
             # all, so a stale or private copy of an older text does not survive (bug
             # B-memory-rerecord-keeps-old-text-in-log), each audited (D-event-log-redaction-forward).
-            # Skip only an event whose text is ACTUALLY already the redaction marker AND audited:
-            # an audit without a real redaction (a tombstone-only event) must not be left.
-            if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in st.redacted_memory_events:
+            # Skip an event only when its text is ALREADY the redaction marker and an audit names
+            # it, both read from the log NOW (inside the lock), so a concurrent re-record cannot
+            # make the "already audited" set stale and stack a duplicate audit.
+            if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in redacted_now:
                 continue
             _original, redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
             log.append(
@@ -89,10 +90,19 @@ def memory_add(
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
 
 
-def _prior_memory_events(log, mid: str) -> list:
-    """Every `memory.recorded` event for `mid` before the re-record, oldest first: all are
-    superseded by the new text and are redacted."""
-    return [e for e in log.read_all() if e.kind == "memory.recorded" and e.subject == mid]
+def _prior_memory_state(log, mid: str) -> tuple[list, set[str]]:
+    """``memory.recorded`` events for ``mid`` (oldest first) and the event ids already audited
+    redacted, both read from the log NOW, so the set is fresh for the process holding the lock."""
+    mem_events: list = []
+    redacted: set[str] = set()
+    for e in log.read_all():
+        if e.subject != mid:
+            continue
+        if e.kind == "memory.recorded":
+            mem_events.append(e)
+        elif e.kind == "memory.redacted" and isinstance(e.data.get("event"), str):
+            redacted.add(e.data["event"])
+    return mem_events, redacted
 
 
 def _memory_row(m) -> dict[str, Any]:

@@ -1442,7 +1442,14 @@ class EventLog:
                                 os.fchown(fd, st.st_uid, st.st_gid)
                             os.fchmod(fd, st.st_mode & 0o7777)
                             fh.write("\n".join(lines) + "\n")
+                            fh.flush()
+                            os.fsync(fd)
                         os.replace(tmp, shard)
+                        dirfd = os.open(shard.parent, os.O_RDONLY)
+                        try:
+                            os.fsync(dirfd)
+                        finally:
+                            os.close(dirfd)
                     except BaseException:
                         with contextlib.suppress(OSError):
                             os.unlink(tmp)
