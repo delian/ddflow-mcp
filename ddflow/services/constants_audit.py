@@ -124,7 +124,7 @@ def _rebindings(node: ast.stmt) -> list[str]:
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.stmt):
             stmts.append(child)
-    if isinstance(node, ast.Try):
+    if isinstance(node, (ast.Try, ast.TryStar)):
         stmts += [s for h in node.handlers for s in h.body]
     if isinstance(node, ast.Match):
         stmts += [s for c in node.cases for s in c.body]
