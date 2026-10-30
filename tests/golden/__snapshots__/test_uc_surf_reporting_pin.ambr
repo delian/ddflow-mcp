@@ -1951,6 +1951,7 @@
         "scope": "project",
         "fix_task": "",
         "globs": [],
+        "tags": [],
         "upstream_url": "",
         "upstream_number": "",
         "upstream_delivery": "",

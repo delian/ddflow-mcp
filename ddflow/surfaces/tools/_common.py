@@ -164,6 +164,23 @@ def _reopening(a: dict[str, Any]) -> bool:
     return mode
 
 
+def _tagging(a: dict[str, Any]) -> bool:
+    """`ddflow_bug_fixed`'s tag mode (strict, as `_reopening`: the modes do opposite things)."""
+    mode = a.get("tag", False)
+    if not isinstance(mode, bool):
+        raise ValueError("tag must be true or false")
+    return mode
+
+
+def _bug_tag(repo, a: dict[str, Any], *, agent: str):
+    """`bug tag`, served by `ddflow_bug_fixed` with `tag`."""
+    from ...api.knowledge.bug_tags import bug_tag
+
+    return bug_tag(
+        repo, a["id"], add=a.get("add", "") or "", remove=a.get("remove", "") or "", agent=agent
+    )
+
+
 def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
     """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`. Evidence
     a reopen cannot record is refused (exit 3), not dropped; an empty one carries nothing."""
