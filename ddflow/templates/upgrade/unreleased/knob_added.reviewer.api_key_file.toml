@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "reviewer.api_key_file"
+new = '""'
+why = "A reviewer in .ddflow/local/reviewers.toml may read its key from a mode-600 file when the api_key_env variable is unset (DX-reviewer-key-file). Refused in committed config."
+impact = "additive"
