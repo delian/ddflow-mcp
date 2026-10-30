@@ -349,7 +349,8 @@ class ReviewResult:
     #: The chunks this run was asked for (`ddflow review --chunk`); empty = all.
     requested: list[int] = field(default_factory=list)
     #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
-    #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
+    #: was cut with (the EFFECTIVE budget `_chunk_budget`, not the `Reviewer.max_chunk_chars`
+    #: config). A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
     max_chunk_chars: int = 0
 
@@ -720,6 +721,37 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
         else:
             packed.append(piece)
     return packed
+
+
+def _chunk_budget(rev: Reviewer) -> int:
+    """The largest chunk ``rev`` can reason about within its declared output cap.
+
+    ``max_chunk_chars`` is a bound picked for review QUALITY, not a promise the model
+    answers a chunk that size: a reasoning model spends its ``max_tokens`` OUTPUT budget
+    thinking before it emits the verdict, and the thinking grows with the input. Measured
+    on Qwen3.8-Flash-Next (``Reviewer.max_tokens``): a 30 KB chunk needed 28 381 reasoning
+    tokens -- about one reasoning token per input character -- so a chunk near
+    ``max_chunk_chars`` can exhaust ``max_tokens`` mid-thought and come back ``TRUNCATED``,
+    which ddflow records UNAVAILABLE and a review round is spent (bug B9a2279db22: the qwen
+    reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
+    the output cap, so a reviewer whose ``max_tokens`` is below ``max_chunk_chars`` has its
+    chunk split to fit before it is ever sent, and a chunk can never outgrow the budget the
+    model has to reason about it.
+    """
+    return min(rev.max_chunk_chars, rev.max_tokens)
+
+
+def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
+    """The budget ``review()`` sends after ``chunk_max_tokens`` lowers the request window.
+
+    `_rerun_scope` must compare a recorded cut against the SAME number the reviewing run
+    computed: the reporter's own reduction of its output window is part of that cut, or a
+    ``--chunk`` re-review of a run under ``[review].chunk_max_tokens`` is falsely refused as
+    a changed cut.
+    """
+    if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
+        rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
+    return _chunk_budget(rev)
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
@@ -1592,9 +1624,10 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return problem
 
     stripped = strip_hunk_context(diff)
-    chunks = split_diff(stripped, rev.max_chunk_chars)
+    chunk_budget = _chunk_budget(rev)
+    chunks = split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
-    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
