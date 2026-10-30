@@ -7,7 +7,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import sys
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -157,21 +156,22 @@ def _rev(kind, tmp_path, **kw):
 
 def test_openai_reads_the_file(tmp_path, monkeypatch):
     seen = _capture(monkeypatch, {"choices": [{"message": {"content": "STATUS: NO FINDINGS"}}]})
-    text, err = RV._chat_openai(_rev("openai", tmp_path), "s", "u", 5)
+    _text, err = RV._chat_openai(_rev("openai", tmp_path), "s", "u", 5)
     assert not err and seen["headers"]["authorization"] == f"Bearer {FAKE}"
 
 
 def test_anthropic_reads_the_file(tmp_path, monkeypatch):
     seen = _capture(monkeypatch, {"content": [{"type": "text", "text": "STATUS: NO FINDINGS"}]})
-    text, err = RV._chat_anthropic(_rev("anthropic", tmp_path), "s", "u", 5)
+    _text, err = RV._chat_anthropic(_rev("anthropic", tmp_path), "s", "u", 5)
     assert not err and seen["headers"]["x-api-key"] == FAKE
 
 
 def test_gemini_reads_the_file(tmp_path, monkeypatch):
     body = {"candidates": [{"content": {"parts": [{"text": "STATUS: NO FINDINGS"}]}}]}
     seen = _capture(monkeypatch, body)
-    text, err = RV._chat_gemini(_rev("gemini", tmp_path), "s", "u", 5)
-    assert not err and f"key={FAKE}" in seen["url"]
+    _text, err = RV._chat_gemini(_rev("gemini", tmp_path), "s", "u", 5)
+    assert not err and seen["headers"]["x-goog-api-key"] == FAKE
+    assert FAKE not in seen["url"] and "key=" not in seen["url"]
 
 
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "gemini"])
@@ -245,3 +245,25 @@ def test_lane_endpoint_uses_the_same_helper(tmp_path, monkeypatch):
     assert EP.resolve_key(ep).value == FAKE
     assert FAKE not in repr(ep) and str(tmp_path) not in repr(ep)
     assert EP.launch_env(ep) == {ENV: ENV}  # names only; the value is never in a config
+
+
+def test_key_result_is_not_serialisable_to_a_dict(tmp_path):
+    import dataclasses
+    import pickle
+
+    got = RK.resolve_key("", str(_keyfile(tmp_path)))
+    assert not dataclasses.is_dataclass(got) and FAKE not in repr(got) + str(got)
+    with pytest.raises(TypeError):
+        pickle.dumps(got)
+
+
+def test_a_nul_byte_or_control_character_is_not_a_key(tmp_path):
+    got = RK.resolve_key("", str(_keyfile(tmp_path, text="ab\x00cd")))
+    assert not got.value and "printable" in got.reason
+
+
+def test_default_env_name_is_never_read_unless_configured(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "ambient")
+    rev = RV.Reviewer(name="g", kind="gemini")
+    got = rev.key_result("GEMINI_API_KEY")
+    assert not got.value and "GEMINI_API_KEY" in got.reason
