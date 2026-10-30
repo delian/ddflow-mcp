@@ -10,9 +10,11 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
+import threading
 
-from .render_argv import SHELLS
+from .render_argv import is_shell
 from .safety import DEFAULT, EngineError, Limits
 
 SAFE_ARGS = frozenset(
@@ -32,8 +34,14 @@ ENV_KEEP = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 _VERSION = re.compile(r"\d+(?:\.\d+){1,3}(?:-[0-9A-Za-z.]+)?")
 
 
-def parse(argvs: object, limits: Limits = DEFAULT, allowed: frozenset[str] = SAFE_ARGS):
-    """A list of argv lists, each ``[program, safe-switch...]``."""
+def parse(
+    argvs: object,
+    limits: Limits = DEFAULT,
+    allowed: frozenset[str] = SAFE_ARGS,
+    allow_paths: bool = False,
+):
+    """A list of argv lists, each ``[program, safe-switch...]``. ``program`` is a bare name found on
+    PATH unless ``allow_paths`` (a path can name a script, which is arbitrary code)."""
     if not isinstance(argvs, list) or len(argvs) > limits.max_rules:
         raise EngineError("probe: a short list of argv lists")
     out = []
@@ -44,8 +52,10 @@ def parse(argvs: object, limits: Limits = DEFAULT, allowed: frozenset[str] = SAF
             or not all(isinstance(a, str) and a and "\0" not in a for a in argv)
         ):
             raise EngineError(f"probe[{i}]: [program, switch...] of 2 to 4 strings")
-        if argv[0].rsplit("/", 1)[-1] in SHELLS:
-            raise EngineError(f"probe[{i}]: {argv[0]!r} is a shell")
+        if is_shell(argv[0]) or (not allow_paths and ("/" in argv[0] or "\\" in argv[0])):
+            raise EngineError(
+                f"probe[{i}]: {argv[0]!r} is a shell or a path (programs are bare names on PATH)"
+            )
         bad = [a for a in argv[1:] if a not in allowed]
         if bad:
             raise EngineError(
@@ -53,6 +63,43 @@ def parse(argvs: object, limits: Limits = DEFAULT, allowed: frozenset[str] = SAF
             )
         out.append(tuple(argv))
     return tuple(out)
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    """Kill the child and everything it started (they share its session), so a stuck grandchild
+    cannot keep the output pipe open."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        proc.kill()
+
+
+def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[int, str] | None:
+    """Run ``cmd`` reading at most ``probe_output_bytes`` (stderr merged); kill it past the cap
+    or the timeout. None on timeout. The cap bounds memory, not just what is kept."""
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+        start_new_session=True,
+    )
+    got: list[bytes] = []
+    reader = threading.Thread(
+        target=lambda: got.append(proc.stdout.read(limits.probe_output_bytes)), daemon=True
+    )
+    reader.start()
+    reader.join(limits.probe_timeout_s)
+    timed_out = reader.is_alive()
+    full = bool(got) and len(got[0]) >= limits.probe_output_bytes
+    if timed_out or full:  # past the cap or the time the child may still be writing
+        _kill_group(proc)
+    code = proc.wait()
+    proc.stdout.close()
+    if timed_out:
+        return None
+    return code, (got[0] if got else b"").decode("utf-8", "replace")
 
 
 def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dict]:
@@ -66,24 +113,17 @@ def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dic
             facts.append({**fact, "status": "unavailable", "reason": "not installed"})
             continue
         try:
-            p = subprocess.run(
-                [exe, *argv[1:]],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                env=env,
-                timeout=limits.probe_timeout_s,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            facts.append({**fact, "status": "unavailable", "reason": "timeout"})
-            continue
+            res = _run_capped([exe, *argv[1:]], env, limits)
         except OSError as exc:
             facts.append(
                 {**fact, "status": "unavailable", "reason": f"cannot run: {exc.strerror or exc}"}
             )
             continue
-        out = (p.stdout + p.stderr)[: limits.probe_output_bytes].decode("utf-8", "replace")
-        fact.update(status="verified", exit_code=p.returncode, output=out)
+        if res is None:
+            facts.append({**fact, "status": "unavailable", "reason": "timeout"})
+            continue
+        code, out = res
+        fact.update(status="verified", exit_code=code, output=out)
         m = _VERSION.search(out)
         if m:
             fact["tool_version"] = m.group(0)

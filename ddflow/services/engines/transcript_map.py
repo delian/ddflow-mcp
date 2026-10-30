@@ -70,7 +70,10 @@ def resolve_path(spec: Spec, *, home: str = "", dir: str = "", session: str = ""
             not vals[k].startswith("/") or "\0" in vals[k] or ".." in vals[k].split("/")
         ):
             raise EngineError(f"{k} must be an absolute path without '..'")
-    return _PH.sub(lambda m: vals[m.group(1)], spec.path)
+    out = _PH.sub(lambda m: vals[m.group(1)], spec.path)
+    if ".." in out.split("/"):
+        raise EngineError("the resolved transcript path has a '..' segment")
+    return out
 
 
 def _s(g: dict, key: str, limits: Limits) -> str:
@@ -81,7 +84,7 @@ def _s(g: dict, key: str, limits: Limits) -> str:
 def map_lines(lines, spec: Spec, limits: Limits = DEFAULT) -> list[Entry]:
     out: list[Entry] = []
     for line in lines:
-        if not line.strip() or len(line) > limits.max_line_chars:
+        if len(line) > limits.max_line_chars or not line.strip():
             continue
         try:
             raw = json.loads(line)

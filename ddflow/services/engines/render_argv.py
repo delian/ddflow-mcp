@@ -18,21 +18,7 @@ PLACEHOLDERS = frozenset(
     {"model", "session", "prompt_file", "dir", "effort", "max_turns", "mcp_config"}
 )
 SHELLS = frozenset(
-    {
-        "sh",
-        "bash",
-        "zsh",
-        "dash",
-        "fish",
-        "ksh",
-        "csh",
-        "tcsh",
-        "cmd",
-        "cmd.exe",
-        "powershell",
-        "pwsh",
-        "env",
-    }
+    {"sh", "bash", "zsh", "dash", "fish", "ksh", "csh", "tcsh", "cmd", "powershell", "pwsh", "env"}
 )
 _PH = re.compile(r"\{([a-z_]+)\}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
@@ -47,6 +33,12 @@ class Rendered:
     def describe(self) -> dict:
         """The argv and the env NAMES; values are never included."""
         return {"argv": list(self.argv), "env": sorted(self.env), "missing": list(self.missing)}
+
+
+def is_shell(program: str) -> bool:
+    """True for a shell or ``env`` by program name: either path separator, any case, ``.exe`` ignored."""
+    base = re.split(r"[\\/]", program)[-1].lower()
+    return base.removesuffix(".exe") in SHELLS
 
 
 def _lint(template: Sequence[str], limits: Limits) -> None:
@@ -67,7 +59,9 @@ def _lint(template: Sequence[str], limits: Limits) -> None:
                 )
             if i == 0:
                 raise EngineError("the executable cannot be a placeholder")
-    if template[0].rsplit("/", 1)[-1] in SHELLS:
+    if not template[0]:
+        raise EngineError("the executable is empty")
+    if is_shell(template[0]):
         raise EngineError(
             f"{template[0]!r} is a shell: launches are argv lists, never a shell line"
         )

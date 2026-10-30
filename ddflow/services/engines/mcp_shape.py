@@ -28,6 +28,10 @@ SERIALISERS: dict[str, str] = {
 }
 
 
+def _no_constant(name: str):
+    raise ValueError(f"{name} is not JSON")
+
+
 def container_path(shape: str) -> tuple[str, ...]:
     try:
         return CONTAINERS[shape]
@@ -47,7 +51,7 @@ def render_json(shape: str, name: str, launch: dict, existing: str = "") -> str:
     """``existing`` (the operator's file text, or empty) with server ``name`` placed; siblings kept."""
     container_path(shape)
     try:
-        data = json.loads(existing) if existing.strip() else {}
+        data = json.loads(existing, parse_constant=_no_constant) if existing.strip() else {}
     except (ValueError, RecursionError) as exc:
         raise EngineError(f"the existing file is not JSON: {exc}") from None
     if not isinstance(data, dict):
@@ -56,4 +60,4 @@ def render_json(shape: str, name: str, launch: dict, existing: str = "") -> str:
         mcpconfig.place_server(data, shape, name, launch)
     except mcpconfig.UnplaceableConfig as exc:
         raise EngineError(str(exc)) from None
-    return json.dumps(data, indent=2) + "\n"
+    return json.dumps(data, indent=2, allow_nan=False) + "\n"

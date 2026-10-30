@@ -45,8 +45,10 @@ def parse_rules(rules: object, limits: Limits = DEFAULT) -> tuple[Rule, ...]:
         w = f"stream rule {i}"
         r = expect_keys(raw_rule, {"when", "emit", "fields"}, w)
         when = expect_keys(r.get("when"), {"path", "equals", "regex", "exists"}, f"{w}.when")
-        if r.get("emit") not in EVENTS:
+        if not isinstance(r.get("emit"), str) or r["emit"] not in EVENTS:
             raise EngineError(f"{w}: emit must be one of {list(EVENTS)}")
+        if "exists" in when and when["exists"] is not True:
+            raise EngineError(f"{w}.when.exists: only true is meaningful")
         tests = [k for k in ("equals", "regex", "exists") if k in when]
         if len(tests) != 1:
             raise EngineError(f"{w}.when: exactly one of equals, regex, exists")
@@ -81,7 +83,7 @@ def _matches(rule: Rule, raw: dict, limits: Limits) -> bool:
 
 def map_line(line: str, rules: tuple[Rule, ...], limits: Limits = DEFAULT) -> Event | None:
     """The canonical event for one stream line, or None (no rule, or hostile input)."""
-    if not line.strip() or len(line) > limits.max_line_chars:
+    if len(line) > limits.max_line_chars or not line.strip():
         return None
     try:
         raw = json.loads(line)

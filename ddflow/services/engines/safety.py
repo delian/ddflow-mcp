@@ -25,8 +25,10 @@ class Limits:
     max_line_chars: int = 65536  #: a longer stream or transcript line is skipped
     max_value_chars: int = 8192  #: a longer extracted string is cut
     max_pattern_chars: int = 200
-    max_match_chars: int = 4096  #: the text a regex sees (the head of the input)
+    max_match_chars: int = 2048  #: the text a regex sees (the head of the input)
     max_repeat: int = 256  #: the largest explicit {m,n} bound
+    max_wide_repeats: int = 2  #: variable repeats (* + {m,n}) per pattern: bounds polynomial cost
+    max_optional: int = 8  #: ? and | per pattern: bounds 2^n cost
     max_path_parts: int = 16
     max_rules: int = 64
     max_argv: int = 128
@@ -68,35 +70,45 @@ def _children(op, av):
     return []
 
 
-def _ambiguous(sub) -> bool:
-    """True when ``sub`` holds a branch or a repeat that can run more than once."""
+def _variable(sub) -> bool:
+    """True when ``sub`` holds a branch or a repeat whose count is not fixed."""
     for op, av in sub:
-        if op is _c.BRANCH or (op in _REPEATS and av[1] > 1):
+        if op is _c.BRANCH or (op in _REPEATS and av[0] != av[1]):
             return True
-        if any(_ambiguous(c) for c in _children(op, av)):
+        if any(_variable(c) for c in _children(op, av)):
             return True
     return False
 
 
-def _audit(sub, limits: Limits) -> None:
+def _audit(sub, limits: Limits, tally: dict[str, int]) -> None:
     for op, av in sub:
         if op in (_c.GROUPREF, _c.GROUPREF_EXISTS):
             raise EngineError("back-references are not allowed")
+        if op is _c.BRANCH:
+            tally["narrow"] += 1
         if op in _REPEATS:
-            _lo, hi, body = av
+            lo, hi, body = av
             if hi != _c.MAXREPEAT and hi > limits.max_repeat:
                 raise EngineError(f"a repeat bound above {limits.max_repeat}")
-            if hi > 1 and _ambiguous(body):
+            if hi > 1 and _variable(body):
                 raise EngineError("a repeat of a repeat or branch can backtrack exponentially")
+            if lo != hi:
+                tally["wide" if hi > 1 else "narrow"] += 1
         for child in _children(op, av):
-            _audit(child, limits)
+            _audit(child, limits, tally)
 
 
 @lru_cache(maxsize=512)
-def _compile(pattern: str, max_pattern: int, max_repeat: int) -> re.Pattern[str]:
-    lim = Limits(max_pattern_chars=max_pattern, max_repeat=max_repeat)
+def _compile(pattern: str, limits: Limits) -> re.Pattern[str]:
+    tally = {"wide": 0, "narrow": 0}
     try:
-        _audit(_p.parse(pattern), lim)
+        _audit(_p.parse(pattern), limits, tally)
+        if tally["wide"] > limits.max_wide_repeats:
+            raise EngineError(
+                f"more than {limits.max_wide_repeats} variable-length repeats (* + {{m,n}})"
+            )
+        if tally["narrow"] > limits.max_optional:
+            raise EngineError(f"more than {limits.max_optional} optional parts (? and |)")
         return re.compile(pattern)
     except EngineError as exc:
         raise EngineError(f"unsafe pattern {pattern[:60]!r}: {exc}") from None
@@ -110,7 +122,7 @@ def safe_regex(pattern: object, limits: Limits = DEFAULT) -> re.Pattern[str]:
         raise EngineError("a pattern is a non-empty string")
     if len(pattern) > limits.max_pattern_chars:
         raise EngineError(f"pattern longer than {limits.max_pattern_chars} characters")
-    return _compile(pattern, limits.max_pattern_chars, limits.max_repeat)
+    return _compile(pattern, limits)
 
 
 def search(rx: re.Pattern[str], text: str, limits: Limits = DEFAULT) -> re.Match[str] | None:
