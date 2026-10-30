@@ -311,3 +311,9 @@ def test_ninth_review_findings():
     assert transcript_map.map_lines(['{"role": 1e999}'], spec) == []
     with pytest.raises(EngineError):
         transcript_map.parse({"path": "/" * 1_000_000, "format": "jsonl", "fields": {"role": "r"}})
+
+
+def test_resolve_path_bounds_its_inputs_before_splitting():
+    spec = transcript_map.parse({"path": "{home}/x", "format": "jsonl", "fields": {"role": "r"}})
+    with pytest.raises(EngineError):
+        transcript_map.resolve_path(spec, home="/" * 1_000_000)
