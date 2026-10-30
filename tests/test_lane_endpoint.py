@@ -58,7 +58,7 @@ def test_verified_route_renders_for_both_harnesses(tmp_path):
         assert doc["model"] == E.model_arg(ep)
 
 
-def test_key_by_name_only_and_keyless(tmp_path):
+def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
     t = EXAMPLE.read_text().replace(', api_key_env = "LAN_ENDPOINT_KEY"', "")
     ep = E.resolve(_cat(tmp_path, t.replace('s = "unverified"', 's = "verified"')), "lan-vllm")
     assert isinstance(ep, E.Endpoint) and E.launch_env(ep) == {}
@@ -66,6 +66,9 @@ def test_key_by_name_only_and_keyless(tmp_path):
     ep2 = E.resolve(_verified(tmp_path), "lan-vllm")
     assert E.launch_env(ep2) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
     assert "key_env='LAN_ENDPOINT_KEY'" in repr(ep2)
+    monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")
+    pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "hh")
+    assert "sk-sentinel-value" not in repr(pr) + pr.config.read_text() + repr(pr.env)
     assert "ENDPOINT-HOST" not in repr(ep2)
 
 
@@ -165,3 +168,11 @@ def test_non_string_endpoint_values_are_refused(tmp_path):
     t = EXAMPLE.read_text().replace('api_key_env = "LAN_ENDPOINT_KEY"', "api_key_env = true")
     r = E.resolve(_cat(tmp_path, t), "lan-vllm", require_tools=False)
     assert isinstance(r, Result) and "strings" in r.detail
+
+
+def test_harness_recorded_as_not_accepting_is_refused(tmp_path, monkeypatch):
+    real = E.layout("kilo")
+    bad = {**real, "custom_provider": {**real["custom_provider"], "v": False}}
+    monkeypatch.setattr(E, "layout", lambda h: bad)
+    r = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "x")
+    assert isinstance(r, Result) and "NOT accepting" in r.detail
