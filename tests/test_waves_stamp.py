@@ -31,6 +31,12 @@ def _waves(repo) -> dict[str, str]:
     }
 
 
+def _wave_tags(repo, iid) -> set[str]:
+    """The exact set of `wave:*` tags on one item: a hand edit could leave a stale one, so
+    the answer is a set, not the last tag (which would hide `wave:9` beside `wave:2`)."""
+    return {t for t in items_of(repo)[iid].tags if t.startswith("wave:")}
+
+
 def _tag_events(repo) -> int:
     return sum(1 for e in EventLog(repo, "probe").read_all() if e.kind == "task.updated")
 
@@ -78,7 +84,7 @@ def test_a_hand_edit_is_overwritten_and_only_that_item_is_written(repo):
     before = _tag_events(repo)
     assert run_cli(repo, "waves", "--check")[0] == 1
     run_cli(repo, "waves", "--stamp")
-    assert _waves(repo)["C"] == "wave:2"
+    assert _wave_tags(repo, "C") == {"wave:2"}, _wave_tags(repo, "C")
     assert _tag_events(repo) == before + 1
 
 

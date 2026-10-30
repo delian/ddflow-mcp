@@ -32,7 +32,7 @@ def prerequisites(state, cfg, live: dict) -> dict[str, list[str]]:
     for iid, it in live.items():
         deps = [d for _owner, d in inherited_deps(state, it, cfg)]
         deps += [c.id for c in state.children(iid) if not c.removed]
-        out[iid] = [d for d in dict.fromkeys(deps) if d in live and d != iid]
+        out[iid] = [d for d in dict.fromkeys(deps) if d in live]
     return out
 
 
@@ -84,4 +84,13 @@ def plan(state, cfg) -> Plan:
         if stale := [t for t in have if t not in want]:
             entry["remove_tags"] = stale
         edits.append(entry)
+    # A live phase is never stamped, so a hand-edited `wave:*` on one is stale (D-labels:
+    # the namespace is derived and reserved): remove it. A terminal item is left alone --
+    # a batch refuses to edit it, and its `wave:*` is history, not a stamp to keep current
+    # (Bf03dc5a256 review).
+    for iid, it in open_items(state).items():
+        if it.kind != "phase":
+            continue
+        if stale := stamped(it.tags):
+            edits.append({"id": iid, "remove_tags": stale})
     return Plan(waves, edits, sorted(i for i, w in waves.items() if w is None))

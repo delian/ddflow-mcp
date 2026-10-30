@@ -47,7 +47,7 @@ def report(repo: Path, args: dict, agent: str = "") -> O.Outcome:
         "cyclic": pl.cyclic,
         "stale": len(pl.edits),
         "stamped": 0,
-        "limit": int(args.get("limit") or 0),
+        "limit": max(0, int(args.get("limit") or 0)),
     }
     if check and pl.edits:
         return O.Outcome(
@@ -85,9 +85,14 @@ def text(out, a) -> str:
 
 # -- stamping by default (the around-a-command guard is services/waves_auto.py) ----------
 def restamp(repo: Path, agent: str = "") -> int:
-    """Stamp the stale items now; the number of tag events written."""
+    """Stamp the stale items now; the number of tag events written. ``0`` means nothing
+    was stale (or another transaction stamped it first); ``-1`` means the write failed or
+    was refused, deliberately NOT folded into ``0`` so a refused transaction is never
+    mistaken for an already-current queue (Bf03dc5a256 review finding)."""
     _log, cfg, st = _load(repo, agent)
     if not W.plan(st, cfg).edits:
         return 0
     out = batch.apply(repo, _entries(cfg), agent=agent, kind=KIND)
-    return len(out.data["edits"]) if out.exit == O.OK and out.data else 0
+    if out.exit == O.OK:
+        return len((out.data or {}).get("edits", []))
+    return 0 if out.exit == O.NOTHING else -1

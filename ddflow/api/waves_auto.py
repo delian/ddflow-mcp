@@ -7,23 +7,25 @@ shards (`EventLog.mark`); the queue is folded only when the command appended eve
 from __future__ import annotations
 
 import contextlib
+import contextvars
 from pathlib import Path
 
 from ..config import Config
 from ..services import identity as ID
 from . import waves
 
-#: Re-entrancy guard: the restamp's own tag events must not trigger another restamp.
-_STAMPING = False
+#: Re-entrancy guard: the restamp's own tag events must not trigger another restamp. A
+#: ContextVar, not a module flag, so two commands in flight in one process (an MCP server)
+#: do not see each other's restamp and skip their own (Bf03dc5a256 review finding).
+_STAMPING = contextvars.ContextVar("ddflow_waves_auto_stamping", default=False)
 
 
 @contextlib.contextmanager
 def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     """Around a command: when it appended events and the knob is on, restamp the items
     whose wave changed (only those: an unchanged graph writes no event). Never raises."""
-    global _STAMPING
     try:
-        on = not _STAMPING and bool(cfg.waves.auto_stamp)
+        on = not _STAMPING.get() and bool(cfg.waves.auto_stamp)
         before = log.mark() if on else None
     except Exception:  # noqa: BLE001 -- stamping must never break the command it follows
         on = False
@@ -33,11 +35,11 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     yield
     try:
         if log.mark() != before:
-            _STAMPING = True
+            _token = _STAMPING.set(True)
             try:
                 waves.restamp(repo, agent)
             finally:
-                _STAMPING = False
+                _STAMPING.reset(_token)
     except Exception:  # noqa: BLE001 -- the command's own result stands
         return
 
