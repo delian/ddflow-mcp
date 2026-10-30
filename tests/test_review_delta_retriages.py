@@ -122,7 +122,7 @@ def test_a_different_claim_at_the_same_place_is_not_carried(repo, tmp_path):
     findings in one file stay distinct, so an unrelated finding is not hidden."""
     wording = _setup(repo, tmp_path)
     assert _review(repo).exit == OK
-    api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
     wording.write_text("x.py:40|an unrelated new defect")
     (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
     _git(repo, "add", "-A")
