@@ -494,3 +494,26 @@ def test_probe_programs_are_bare_names_and_output_is_read_capped(tmp_path):
 def test_stream_map_checks_length_before_stripping():
     r = stream_map.parse_rules(DSH_RULES)
     assert stream_map.map_line(" " + "x" * 5000, r, Limits(max_line_chars=100)) is None
+
+
+def test_second_review_findings():
+    import itertools
+
+    for bad in (["plain"], 5, None):
+        with pytest.raises(EngineError):
+            emit.variant_for(bad)
+        with pytest.raises(EngineError):
+            emit.render(bad, "p", "x", True)
+    s = limit_detect.parse({"stream_events": ["limit"]})
+    assert (
+        limit_detect.detect(s, events=itertools.chain(["limit"], itertools.repeat("tool"))).by
+        == "stream_event"
+    )
+    with pytest.raises(EngineError):
+        render_argv.render(["prog", "A" * 9000], {})
+    with pytest.raises(EngineError):
+        render_argv.render(["prog"], {}, env={1: "FOO"}, environ={})
+    for pat in ("(?=a)", "(?=ab)", "(?!a*)b", "(?<=ab)c"):  # lookarounds audit without crashing
+        safety.safe_regex(pat)
+    with pytest.raises(EngineError):
+        safety.safe_regex("^" + "a*" * 98 + "b$")
