@@ -95,6 +95,7 @@ def test_transcript_path_cannot_climb_out_through_a_placeholder():
         transcript_map.resolve_path(s, home="/tmp/")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_probe_programs_are_bare_names_and_output_is_read_capped(tmp_path):
     with pytest.raises(EngineError):
         probe.parse([["/tmp/x", "--version"]])
@@ -147,6 +148,7 @@ def test_second_review_findings():
         safety.safe_regex("^" + "a*" * 98 + "b$")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_third_review_findings(tmp_path):
     with pytest.raises(EngineError):
         mcp_shape.render_json(mcpconfig.SHAPE_MCP_SERVERS, "d", ENTRY, '{"o": 1e999}')
@@ -168,6 +170,7 @@ def test_third_review_findings(tmp_path):
     assert len(f["output"]) <= 10
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_a_failed_spawn_leaks_no_descriptor():
     import os
 
@@ -186,6 +189,7 @@ def test_a_failed_spawn_leaks_no_descriptor():
         safety.safe_regex("(")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_fourth_review_findings(tmp_path):
     for sh in ("/bin/ash", "busybox", "/usr/bin/MKSH"):
         with pytest.raises(EngineError):
