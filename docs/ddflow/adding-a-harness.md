@@ -23,6 +23,11 @@ For every fact the descriptor says one of:
   `unknown`, and `ddflow harness show <id>` lists it under `not verified`. (`harness doctor` reports drift, not missing facts: a clean doctor is not evidence that anything was verified.) Writing `none` for something you did not
   check is the one wrong answer.
 
+Per-fact provenance goes in an optional `[facts."section.key"]` overlay with the shared
+record's fields: `s` (verified, documented, unverified, none), `src`, `d` (ISO date), and
+optional `ver` (tool version) and `note`. A value with no overlay reads as `unverified`.
+`ddflow harness facts [--agent X] [--unverified]` renders the table.
+
 Cite where each value came from in `[verified]`: `sources` (at least one URL), `date`, and
 `unverified = [...]` for the facts you could not check. A key the loader does not know is an
 error that names the key and the file.
