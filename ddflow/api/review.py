@@ -721,11 +721,14 @@ _LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
 def _design_point(location: str) -> str:
     """A finding's cited place with its churning line number dropped -- ``path:line`` ->
     ``path``, ``path:func`` kept whole -- so two rounds that cite the same file (and
-    function/symbol, when one is named) describe the same place. The line is what moves as
-    the diff grows (bug B-review-delta-retriages-same-point)."""
+    function/symbol, when one is named) describe the same place. A file-level citation with
+    no colon already names just the place, and is kept whole. The line is what moves as the
+    diff grows (bug B-review-delta-retriages-same-point)."""
     loc = " ".join(str(location or "").split()).strip()
-    if not loc or ":" not in loc:
+    if not loc:
         return ""
+    if ":" not in loc:
+        return loc
     path, _, anchor = loc.rpartition(":")
     anchor = anchor.strip()
     return path.strip() if _LINE_CITATION.match(anchor) else loc
