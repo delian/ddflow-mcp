@@ -193,6 +193,26 @@ def _imports_ddflow(python: str, root: str) -> bool:
     return done.ran and done.returncode == 0
 
 
+def running_from_linked_worktree_against(repo: Path | str) -> bool:
+    """True when the ddflow package NOW RUNNING lives inside a LINKED worktree whose
+    primary checkout is the primary checkout of ``repo``: the code under test, not the
+    installed code, run against the LIVE shared log it would otherwise write.
+
+    Every worktree of a clone shares one event log -- the primary checkout's, whether
+    the command said `--repo <primary>` or `--repo <that worktree>` (`worktree.repo_root`
+    maps both there). A command that runs the WORKTREE's code against ITS OWN primary
+    must not auto-stamp that shared log: an exercise of a feature in progress would
+    append its events to it (bug Bf4eaec64a6 wrote 1170 `wave:N` events there). A
+    command targeting some OTHER repository (a temp checkout, another project) writes
+    that repository's own log and is left alone. ``repo`` is compared by its OWN primary
+    checkout (`common_dir`), so a raw worktree path answers the same as its primary."""
+    primary = primary_checkout(package_parent())
+    if primary is None:
+        return False
+    target = common_dir(repo)
+    return target is not None and primary == target.parent
+
+
 def redirected_from() -> Path | None:
     """The linked worktree launch lines were redirected away from -- only when the
     redirect is the worktree one, never for an explicit `DDFLOW_LAUNCH_ROOT`."""
