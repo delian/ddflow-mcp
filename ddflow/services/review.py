@@ -1134,17 +1134,16 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
     elif not rev.base_url or not rev.model:
         res.status, res.reason = UNAVAILABLE, (f"reviewer {rev.name!r} has no base_url or model")
         return res
-    if rev.max_tokens < 2 * VERDICT_RESERVE_TOKENS:
-        # An output cap below two verdict reserves leaves less than a reserve of room for
-        # the reasoning a chunk needs (about one reasoning token per input character), so
-        # every chunk either outgrows the cap or shrinks to nothing. Such a reviewer is
-        # under-sized; the honest outcome is "reasoning cap exhausted", not a review that
-        # spends round after round truncating. Refuse before a single request (bug
-        # B9a2279db22).
+    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
+        # An output cap that cannot hold the verdict reserve alone leaves nothing for the
+        # reasoning a chunk needs, so no chunk survives (about one reasoning token per input
+        # character). Such a reviewer is under-sized; the honest outcome is "reasoning cap
+        # exhausted", not a review that spends round after round truncating. Refuse before a
+        # single request (bug B9a2279db22).
         res.status, res.reason = UNAVAILABLE, (
-            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, below "
-            f"{2 * VERDICT_RESERVE_TOKENS}: too small to reserve {VERDICT_RESERVE_TOKENS} "
-            f"tokens for the verdict after the reasoning. Raise [[reviewer]].max_tokens."
+            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, at or below the "
+            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
+            f"reasoning and the verdict. Raise [[reviewer]].max_tokens."
         )
         return res
     if not diff.strip():
