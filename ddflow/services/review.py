@@ -1063,7 +1063,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     }
 
     got = rev.key_result()
-    if rev.api_key_file and not got.value:
+    if not got.value and got.reason:
         return "", got.reason
     key = got.value
     req = urllib.request.Request(
