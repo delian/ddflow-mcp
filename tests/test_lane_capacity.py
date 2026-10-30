@@ -109,11 +109,19 @@ def test_dead_holder_frees_its_slot(tmp_path: Path) -> None:
 def test_wait_holds_no_lease_and_is_bounded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import ast
+
     import ddflow.services.lanes.capacity as mod
 
-    src = Path(mod.__file__).read_text()
-    for banned in ("lease", "events", "subprocess"):
-        assert banned not in src.split('"""', 2)[2].replace("# lease", "")
+    tree = ast.parse(Path(mod.__file__).read_text())
+    names = {
+        (n.module or "") + "." + a.name if isinstance(n, ast.ImportFrom) else a.name
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.Import, ast.ImportFrom))
+        for a in n.names
+    } | {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    for banned in ("lease", "events", "subprocess"):  # no lease, no log, no process started
+        assert not [x for x in names if banned in x], (banned, names)
     pools = (C.Pool("ep-local", 1),)
     t0 = time.monotonic()
     with S.Slots(tmp_path, "ep-local").hold(1):
