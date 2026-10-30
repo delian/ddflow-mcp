@@ -45,7 +45,7 @@ def parse_range(spec: str) -> list[tuple[str, tuple[int, ...]]]:
     clauses = []
     for part in spec.split(","):
         m = _CLAUSE.match(part.strip())
-        if not m or part.strip()[m.end():].strip():
+        if not m or part.strip()[m.end() :].strip():
             raise ValueError(f"cannot read range clause {part.strip()!r}")
         clauses.append((m.group(1) or "==", version_tuple(m.group(2))))
     return clauses
