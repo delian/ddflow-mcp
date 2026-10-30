@@ -24,6 +24,7 @@ def test_shipped_catalog_is_well_formed():
 
 
 def test_every_family_has_source_and_date():
+    # `local` (resolved by route class) and `unknown` (no facts, by design) are the only exempt rows.
     cat = M.load()
     for fid, row in cat.family.items():
         if fid in ("local", "unknown"):
@@ -205,3 +206,8 @@ def test_malformed_served_overlay_loads_and_is_reported():
     M._merge_row(base.route["vllm"], {"served": {"m": 1}})
     assert any("served" in p for p in M.validate(base))
     assert M.read(base, "m", "window", "vllm").value is None
+
+
+def test_a_row_that_is_not_a_table_is_reported(tmp_path):
+    cat = _cat('[model]\ndeepseek-flash = "paid"\n', tmp_path)
+    assert "model.deepseek-flash is not a table" in M.validate(cat)
