@@ -8,8 +8,8 @@ slots of it for as long as it runs.
   (``Lane.live``/``Lane.cap``, a refusal reason, a headroom term in [0, 1]). No I/O.
 * **Slot probe and hold** (`busy_counts`, `acquire`): the filesystem half, `slots.Slots` (one
   flock per slot, so a holder that dies frees its slot with the process; no second slot
-  implementation). Pools are taken in name order, so two lanes wanting the same two pools cannot
-  wait on each other.
+  implementation). A lane takes all its slots of all its pools or none in one sweep and holds nothing between
+  sweeps, so two lanes wanting the same pools cannot deadlock on each other.
 * **No lease while waiting** (r-lock-cycle-selfheal): nothing here reads or writes a lease or
   the event log, and nothing starts a daemon (D-daemons): the wait is a bounded poll of the
   caller's own process, ``timeout_s`` long.
@@ -26,7 +26,8 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-from collections.abc import Iterator, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -137,31 +138,53 @@ class Held:
     waited_s: float
 
 
+def _try_all(
+    stack: contextlib.ExitStack, pools: Sequence[Pool], d: Path
+) -> dict[str, tuple[int, ...]] | None:
+    """Every slot of every pool in one sweep, or nothing: on a miss the stack is unwound."""
+    got: dict[str, tuple[int, ...]] = {}
+    try:
+        for p in pools:
+            sl = SLOTS.Slots(d, p.name)
+            got[p.name] = tuple(
+                stack.enter_context(sl.try_hold(p.limit)).index for _ in range(p.need)
+            )
+    except SLOTS.SlotsTimeout:
+        stack.close()
+        return None
+    return got
+
+
 @contextlib.contextmanager
 def acquire(
     pools: Sequence[Pool],
     timeout_s: float | None,
     directory: Path | str | None = None,
     *,
-    slots_factory: type[SLOTS.Slots] = SLOTS.Slots,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    poll_s: float = SLOTS.POLL_S,
 ) -> Iterator[Held]:
-    """Hold every pool's ``need`` slots for the block; `SlotsTimeout` when one stays full for
-    ``timeout_s`` (0: one sweep, None: as long as it takes). A lane that gave up holds nothing:
-    the slots taken so far are released with the block that failed. The caller launches the lane
-    inside the block and its process lives as long as the slots are wanted."""
+    """Hold every pool's ``need`` slots for the block, all or none; `SlotsTimeout` when they
+    are not all free after ``timeout_s`` (0: one sweep, None: as long as it takes).
+
+    All-or-none: a sweep takes everything with a no-wait try and, on a miss, lets go of what it
+    took before it sleeps. A lane that held part of its set while waiting for the rest could
+    deadlock with another (two ``gpu:2`` lanes each holding one of two slots), and would be
+    holding while waiting (r-lock-cycle-selfheal). The price is no queue order among waiters.
+    The caller launches the lane inside the block; the slots live as long as the block."""
     d = Path(directory) if directory else slot_dir()
     d.mkdir(parents=True, exist_ok=True)
-    got: dict[str, tuple[int, ...]] = {}
-    waited = 0.0
+    ordered = sorted(pools, key=lambda x: x.name)
+    for p in ordered:
+        if p.need > p.limit:
+            raise SLOTS.SlotsTimeout(p.name, p.limit, 0.0)
+    start = clock()
+    deadline = None if timeout_s is None else start + max(0.0, timeout_s)
     with contextlib.ExitStack() as stack:
-        for p in sorted(pools, key=lambda x: x.name):
-            if p.need > p.limit:
-                raise SLOTS.SlotsTimeout(p.name, p.limit, 0.0)
-            sl = slots_factory(d, p.name)
-            idx = []
-            for _ in range(p.need):
-                slot = stack.enter_context(sl.hold(p.limit, timeout_s))
-                idx.append(slot.index)
-                waited += slot.waited_s
-            got[p.name] = tuple(idx)
-        yield Held(got, round(waited, 3))
+        while (got := _try_all(stack, ordered, d)) is None:
+            if deadline is not None and clock() >= deadline:
+                name = ordered[0].name if ordered else ""
+                raise SLOTS.SlotsTimeout(name, ordered[0].limit if ordered else 0, timeout_s or 0.0)
+            sleep(poll_s)
+        yield Held(got, round(clock() - start, 3))
