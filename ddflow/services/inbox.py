@@ -53,9 +53,9 @@ class Message:
     item: str = ""  #: the item it concerns, if any
     sent_at: float = 0.0
     id: str = ""
+    file: str = ""  #: the on-disk name, set on read; never shown
 
     def wire(self) -> dict[str, Any]:
-        # The id is a file name from disk: shown cleaned, kept raw only for `take`.
         return {
             k: (clean(v, 120)[0] if k == "id" else v) for k, v in asdict(self).items() if k != "to"
         }
@@ -136,7 +136,8 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
             ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
             ok = ok and math.isfinite(m.sent_at)
-            m.id = path.stem  # the file is the identity: a forged id cannot hide a message
+            m.file = path.name  # the file is the identity: a forged id cannot hide a message
+            m.id = clean(path.stem, 120)[0]
             # Whatever the file holds is read as untrusted, however it got there.
             if ok:
                 m.to, m.sender, m.item = (
@@ -162,7 +163,7 @@ def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     got = pending(repo, agent, ttl_s=ttl_s)
     for m in got:
         with contextlib.suppress(OSError):
-            (_dir(repo, agent) / f"{m.id}.json").unlink()
+            (_dir(repo, agent) / m.file).unlink()
     return got
 
 

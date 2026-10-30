@@ -210,5 +210,9 @@ def test_a_hostile_file_name_never_reaches_the_wire(proj):
         '{"to":"a","reason":"message","text":"x","sender":"","item":"","sent_at":1.0}'
     )
     (msg,) = IB.pending(proj, LANE)
-    assert "\x1b" not in msg.wire()["id"] and "\x1b" not in str(IB.view([msg]))
+    assert (
+        "\x1b" not in msg.id
+        and "\x1b" not in msg.wire()["id"]
+        and "\x1b" not in str(IB.view([msg]))
+    )
     assert IB.wake(proj, LANE) and IB.pending(proj, LANE) == []  # still deletable
