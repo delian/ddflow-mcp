@@ -83,8 +83,10 @@ def load(
     if local_dir is not None:
         docs.append((_read(local_dir / LOCAL_FILE), True))
     for doc, local in docs:
-        if isinstance(doc.get("sources"), dict):
-            cat.sources.update(doc["sources"])
+        if isinstance(doc.get("sources", {}), dict):
+            cat.sources.update(doc.get("sources", {}))
+        else:
+            cat.bad_rows.append("sources is not a table")
         for table, dest in zip(_TABLES, (cat.family, cat.model, cat.route, cat.cls), strict=True):
             rows = doc.get(table, {})
             if not isinstance(rows, dict):

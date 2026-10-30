@@ -229,3 +229,7 @@ def test_malformed_top_level_and_identity_do_not_crash(tmp_path):
 def test_falsy_non_table_top_level_value_is_reported(tmp_path):
     cat = _cat("family = []\n", tmp_path)
     assert "family is not a table of rows" in M.validate(cat)
+
+
+def test_non_table_sources_is_reported(tmp_path):
+    assert "sources is not a table" in M.validate(_cat("sources = 3\n", tmp_path))
