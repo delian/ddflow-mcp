@@ -138,11 +138,15 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     original = _original(worktree, d)
     cur = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
     had_prior = (cur.ok and cur.out.strip() != str(d)) or _had_prior(d)
+    old_raw = d / "prior_raw"
+    raw = cur.out.strip() if cur.ok and cur.out.strip() != str(d) else ""
+    raw = raw or (old_raw.read_text().strip() if old_raw.is_file() else "")
     d.mkdir(parents=True, exist_ok=True)
     for stale in d.iterdir():  # wrappers of hooks the project no longer has
         stale.unlink()
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
+    replace_text(old_raw, raw + "\n")  # the prior setting verbatim (may be relative)
     replace_text(d / "had_prior", ("1" if had_prior else "0") + "\n")
     for name in GIT_HOOKS:  # looked up at run time: a hook added or removed later is honoured
         target = shlex.quote(str(original / name))
@@ -175,11 +179,14 @@ def uninstall(worktree: Path) -> str:
     if not d.is_dir() and not installed(worktree):
         return "no lane hook installed"
     if installed(worktree):
-        saved = d / "original"
-        if _had_prior(d) and saved.is_file():  # the worktree had its own setting: put it back
-            G.run(worktree, "config", "--worktree", "core.hooksPath", saved.read_text().strip())
+        raw = d / "prior_raw"
+        value = raw.read_text().strip() if raw.is_file() else ""
+        if _had_prior(d) and value:  # the worktree had its own setting: put it back verbatim
+            r = G.run(worktree, "config", "--worktree", "core.hooksPath", value)
         else:
-            G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
+            r = G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
+        if not r.ok:  # keep the directory: deleting it under a live setting would skip every hook
+            raise RuntimeError(f"could not restore core.hooksPath: {r.err.strip()}")
     if d.is_dir():
         for f in d.iterdir():
             f.unlink()

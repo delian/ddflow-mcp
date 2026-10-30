@@ -163,8 +163,9 @@ def test_a_prior_relative_worktree_hooks_path_is_chained_and_restored(lane, tmp_
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     assert "MINE" in commit(wt).stderr
     GH.uninstall(wt)
-    assert sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath").stdout.strip() == str(
-        mine
+    assert (
+        sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath").stdout.strip()
+        == ".githooks"
     )
 
 
@@ -208,6 +209,8 @@ def test_install_twice_then_uninstall_unsets_and_a_missing_dir_still_restores(la
     GH.install(wt)
     shutil.rmtree(GH.hook_dir(wt))
     assert "removed" in GH.uninstall(wt) and not GH.installed(wt)
+    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
+    assert got.stdout == ""
 
 
 def test_reinstall_follows_a_changed_shared_hooks_path(lane, tmp_path):
