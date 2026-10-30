@@ -236,7 +236,9 @@ def test_fifth_review_findings(tmp_path):
         [{"when": {"path": "x", "exists": True}, "emit": "error", "fields": {"x": "x"}}]
     )
     assert stream_map.map_line('{"x": NaN}', rules) is None
-    assert stream_map.map_line('{"x": 1e999}', rules) == stream_map.Event("error", {})
+    assert (
+        stream_map.map_line('{"x": 1e999}', rules) is None
+    )  # an overflowing number is not JSON data: the line is skipped
     spec = transcript_map.parse(
         {"path": "{session}", "format": "jsonl", "fields": {"role": "role"}}
     )
@@ -294,3 +296,18 @@ def test_eighth_review_findings():
     for p in ("C:../x", "C:..", "D:..\\x"):
         with pytest.raises(EngineError):
             transcript_map.parse({"path": p, "format": "jsonl", "fields": {"role": "r"}})
+
+
+def test_ninth_review_findings():
+    render_argv.render(["./notashell:env", "x"], {})  # a colon is not a separator on POSIX
+    with pytest.raises(EngineError):
+        render_argv.render(["C:cmd.exe", "x"], {})
+    safety.safe_regex("(?=(?=a))")
+    rules = stream_map.parse_rules([{"when": {"path": "x", "exists": True}, "emit": "error"}])
+    assert stream_map.map_line('{"x": 1e999}', rules) is None
+    spec = transcript_map.parse(
+        {"path": "{session}", "format": "jsonl", "fields": {"role": "role"}}
+    )
+    assert transcript_map.map_lines(['{"role": 1e999}'], spec) == []
+    with pytest.raises(EngineError):
+        transcript_map.parse({"path": "/" * 1_000_000, "format": "jsonl", "fields": {"role": "r"}})

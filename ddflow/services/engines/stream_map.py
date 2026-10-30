@@ -21,6 +21,7 @@ from .safety import (
     check_path,
     clip,
     expect_keys,
+    finite_float,
     no_constant,
     safe_regex,
     search,
@@ -108,7 +109,7 @@ def map_line(line: str, rules: tuple[Rule, ...], limits: Limits = DEFAULT) -> Ev
     if len(line) > limits.max_line_chars or not line.strip():
         return None
     try:
-        raw = json.loads(line, parse_constant=no_constant)
+        raw = json.loads(line, parse_constant=no_constant, parse_float=finite_float)
     except (ValueError, RecursionError):
         return None
     if not isinstance(raw, dict):

@@ -12,8 +12,9 @@ import re
 from dataclasses import dataclass
 
 from ..hookio import _dig
-from .safety import DEFAULT, EngineError, Limits, check_path, expect_keys, no_constant
+from .safety import DEFAULT, EngineError, Limits, check_path, expect_keys, finite_float, no_constant
 
+MAX_PATH_CHARS = 4096  #: a longer template or resolved path is refused before it is split
 FIELDS = ("role", "text", "usage", "model", "ts")
 PLACEHOLDERS = ("home", "dir", "session")
 _PH = re.compile(r"\{([a-z_]+)\}")
@@ -40,7 +41,7 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
     if t.get("format") != "jsonl":
         raise EngineError("transcript.format: only 'jsonl' (flat) is an engine; others are drivers")
     path = t.get("path")
-    if not isinstance(path, str) or not path or "\0" in path:
+    if not isinstance(path, str) or not path or "\0" in path or len(path) > MAX_PATH_CHARS:
         raise EngineError("transcript.path: a non-empty template")
     if ".." in re.split(r"[\\/:]", path):
         raise EngineError("transcript.path: '..' is not allowed")
@@ -73,6 +74,8 @@ def resolve_path(spec: Spec, *, home: str = "", dir: str = "", session: str = ""
         ):
             raise EngineError(f"{k} must be an absolute path without '..'")
     out = _PH.sub(lambda m: vals[m.group(1)], spec.path)
+    if len(out) > MAX_PATH_CHARS:
+        raise EngineError("the resolved transcript path is too long")
     if ".." in re.split(r"[\\/:]", out):
         raise EngineError("the resolved transcript path has a '..' segment")
     return out
@@ -89,7 +92,7 @@ def map_lines(lines, spec: Spec, limits: Limits = DEFAULT) -> list[Entry]:
         if len(line) > limits.max_line_chars or not line.strip():
             continue
         try:
-            raw = json.loads(line, parse_constant=no_constant)
+            raw = json.loads(line, parse_constant=no_constant, parse_float=finite_float)
         except (ValueError, RecursionError):
             continue
         if not isinstance(raw, dict):
