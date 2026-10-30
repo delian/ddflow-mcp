@@ -7,7 +7,7 @@ schema = 1
 price_unit = "usd_per_mtok"
 
 [sources]
-deepseek-pricing = { url = "https://api-docs.deepseek.com/quick_start/pricing" }
+deepseek-pricing = { url = "https://api-docs.deepseek.com/quick_start/pricing", note = "page read by CC-inventory 2026-10-29; the numbers here are carried from its notes in context_families.toml, not re-read" }
 cache-families = { path = "ddflow/templates/context_families.toml", note = "numbers carried from the CC-inventory notes, read 2026-10-29" }
 ddflow-definition = { path = "ddflow/models/models.toml", note = "true by definition of a self-hosted route, not read from a vendor page" }
 
