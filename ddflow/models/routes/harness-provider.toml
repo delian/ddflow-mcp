@@ -1,0 +1,25 @@
+# Where each harness reads a PRIVATE provider block, and what was read about it (SW-local-endpoint).
+# `dir`/`file` are relative to the lane-private HOME (the lane sets HOME, so $HOME/.config/...
+# is the harness's global config). Facts are the shared record (value, status, source, date).
+
+[sources]
+kilo-cli-7-8-18 = { path = "kilo --help; kilo config check; kilo debug config", note = "read offline on this machine, scratch HOME, no endpoint called, no key used" }
+opencode-repo = { path = "https://github.com/anomalyco/opencode", note = "named by the opencode descriptor; the binary is not installed here" }
+
+[harness.kilo]
+dir = ".config/kilo"
+file = "kilo.json"
+schema = "https://app.kilo.ai/config.json"
+template = "harness/opencode/provider.json.j2"
+custom_provider = { v = true, s = "verified", src = "kilo-cli-7-8-18", d = "2026-10-30", ver = "7.8.18", probe = "kilo config check; kilo models <provider>", note = "a provider with npm @ai-sdk/openai-compatible and options.baseURL in the global config is accepted, listed by `kilo models`, and its models.<id>.limit and tool_call fields survive in `kilo debug config`" }
+env_refs_in_project_config = { v = false, s = "verified", src = "kilo-cli-7-8-18", d = "2026-10-30", ver = "7.8.18", note = "kilo.json in the PROJECT refuses {env:NAME} (ConfigInvalidError); the same file in the global config dir is accepted and the reference resolves. Hence the block lives in the lane home, never the project" }
+tool_calls_reliable = { v = false, s = "unverified", src = "kilo-cli-7-8-18", d = "2026-10-30", note = "needs a live probe against the chosen endpoint: operator consent; recorded unavailable until run" }
+
+[harness.opencode]
+dir = ".config/opencode"
+file = "opencode.json"
+schema = "https://opencode.ai/config.json"
+template = "harness/opencode/provider.json.j2"
+custom_provider = { v = true, s = "unverified", src = "opencode-repo", d = "2026-10-30", note = "opencode is not installed here; kilo is its fork and accepts the shape (see harness.kilo). Re-read with `opencode --version` and a config check once installed" }
+env_refs_in_project_config = { s = "unverified", src = "opencode-repo", d = "2026-10-30" }
+tool_calls_reliable = { v = false, s = "unverified", src = "opencode-repo", d = "2026-10-30", note = "needs the live probe" }
