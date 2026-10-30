@@ -142,8 +142,6 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     raw = cur.out.strip() if cur.ok and cur.out.strip() != str(d) else ""
     raw = raw or (old_raw.read_text().strip() if old_raw.is_file() else "")
     d.mkdir(parents=True, exist_ok=True)
-    for stale in d.iterdir():  # wrappers of hooks the project no longer has
-        stale.unlink()
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
     replace_text(old_raw, raw + "\n")  # the prior setting verbatim (may be relative)
@@ -152,6 +150,10 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
         target = shlex.quote(str(original / name))
         body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\nexit 0\n'
         _write_exec(d / name, body)
+    known = {"pre-commit", "original", "prior_raw", "had_prior", *GIT_HOOKS}
+    for stale in d.iterdir():  # files an older version wrote; removed AFTER the new ones exist
+        if stale.name not in known:
+            stale.unlink()
     G.run(worktree, "config", "extensions.worktreeConfig", "true")
     r = G.run(worktree, "config", "--worktree", "core.hooksPath", str(d))
     if not r.ok:
