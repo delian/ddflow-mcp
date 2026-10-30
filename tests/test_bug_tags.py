@@ -118,7 +118,10 @@ def test_set_get_round_trips_and_a_re_report_does_not_undo_a_removal(repo):
     _found(repo, "B1", "--tags", "security")
     _load(repo)[0].append("bug.tagged", "B1", {"tags": ["wave:2", "security"]})
     held = BT.get_tags(_load(repo)[2], "B1")
+    assert held == ["wave:2", "security"]
     assert BT.set_tags(repo, "B1", held).ok
+    assert _tags(repo, "B1") == ["wave:2", "security"]
     assert run_cli(repo, "bug", "tag", "B1", "--remove", "security")[0] == 0
+    assert _tags(repo, "B1") == ["wave:2"]
     _found(repo, "B1", "--tags", "security")  # an explicit-id re-report
     assert _tags(repo, "B1") == ["wave:2"]

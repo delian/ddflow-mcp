@@ -74,7 +74,8 @@ def set_tags(repo: Path, bug: str, tags: list[str], *, agent: str = "") -> O.Out
     return _apply(
         repo,
         bug,
-        lambda now: [*reserved(now), *(t for t in tags if t not in reserved(now))],
+        # the log as it is NOW decides the derived tags: the input never writes one
+        lambda now: [*reserved(now), *(t for t in tags if t not in reserved(tags))],
         agent=agent,
     )
 
