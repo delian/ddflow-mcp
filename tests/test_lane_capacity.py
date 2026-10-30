@@ -52,7 +52,7 @@ def test_view_figures_and_refusals() -> None:
 def test_need_above_limit_refused() -> None:
     h = C.view(C.pools_for(ep(), 1, {"gpu": 2}, ["gpu:4"]), {})
     assert any("needs 4" in r for r in C.refusals(h))
-    assert C.lane_figures(h)[1] == 1  # never a cap of zero
+    assert C.lane_figures(h)[1] == 0  # an impossible pool offers no lane
 
 
 def test_last_slot_goes_to_one_lane(tmp_path: Path) -> None:
