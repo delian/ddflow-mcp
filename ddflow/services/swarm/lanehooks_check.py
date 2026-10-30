@@ -73,6 +73,11 @@ def _mine(repo: Path, agent: str) -> tuple[list[str], list[str]]:
     return globs, list(shared_globs(cfg))
 
 
+def _self_managed(rel: str) -> bool:
+    """ddflow's own bookkeeping paths; a directory prefix matches only on its boundary."""
+    return any(rel.startswith(m) if m.endswith("/") else rel == m for m in SELF_MANAGED)
+
+
 def verdict(repo: Path, agent: str, paths: list[str], cwd: Path) -> tuple[int, str]:
     """(0, "") to allow; (REFUSE, reason) to refuse. Raises only on what fail-open covers."""
     rels = [(p, _relative(p, cwd)) for p in paths]
@@ -88,7 +93,7 @@ def verdict(repo: Path, agent: str, paths: list[str], cwd: Path) -> tuple[int, s
     for raw, rel in rels:
         if rel is None:
             bad.append(f"{raw} (outside the lane worktree)")
-        elif rel.startswith(SELF_MANAGED) or any(inside(rel, g) for g in (*mine, *shared)):
+        elif _self_managed(rel) or any(inside(rel, g) for g in (*mine, *shared)):
             continue
         else:
             bad.append(rel)

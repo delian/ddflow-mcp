@@ -252,9 +252,10 @@ def test_review_findings_hold(tree, tmp_path):
     LH.prepare(repo, wt, home, "claude", "lane-7")
     m = home / LH.DIR_NAME / LH.MANIFEST
     d = json.loads(m.read_text())
-    d["files"].append(str(victim))
+    d["files"].insert(0, str(victim))  # first: a partial cleanup would delete the rest
     m.write_text(json.dumps(d))
     assert "refused" in LH.remove(home) and victim.exists()
+    assert not (home / LH.DIR_NAME).exists()  # the legitimate files went, the victim stayed
     # a tracked hook path is refused (relative pathspec, absolute home under the repo)
     h2 = repo / ".ddflow" / "h2"
     (h2 / LH.DIR_NAME).mkdir(parents=True)
@@ -263,3 +264,23 @@ def test_review_findings_hold(tree, tmp_path):
     sh(repo, "git", "add", "-f", str(f))
     r = LH.prepare(repo, wt, h2, "claude", "lane-7")
     assert getattr(r, "status", "") == "unavailable" and "tracked" in r.detail
+
+
+def test_second_round_findings(tree, tmp_path):
+    repo, wt, home = tree
+    assert CK._self_managed(".ddflow/x") and CK._self_managed("AGENTS.md")
+    assert not CK._self_managed(".ddflow-evil/README.md") and not CK._self_managed("AGENTS.md.x")
+    with pytest.raises(ValueError):
+        PL.render("/bin/check", "lane-1")
+    # a symlink at a hook path is refused, its target untouched
+    target = tmp_path / "bashrc"
+    target.write_text("keep")
+    (home / LH.DIR_NAME).mkdir()
+    (home / LH.DIR_NAME / "claude-settings.json").symlink_to(target)
+    with pytest.raises(OSError):
+        LH.prepare(repo, wt, home, "claude", "lane-7")
+    assert target.read_text() == "keep"
+    # a malformed manifest makes the probe False, never a crash
+    (home / LH.DIR_NAME / "claude-settings.json").unlink()
+    (home / LH.DIR_NAME / LH.MANIFEST).write_text(json.dumps({"level": "prevent", "files": []}))
+    assert LH.hook_probe(home)() is False

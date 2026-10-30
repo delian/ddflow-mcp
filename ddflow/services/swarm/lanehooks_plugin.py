@@ -57,7 +57,12 @@ def digest() -> str:
 
 def render(argv: list[str], agent: str) -> str:
     """The plugin text for one lane: JSON literals substituted for the two placeholders."""
-    if not argv or not all(isinstance(x, str) for x in argv) or not agent:
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or not all(isinstance(x, str) for x in argv)
+        or not agent
+    ):
         raise ValueError("the plugin needs the check argv and the lane identity")
 
     # json.dumps output is a valid JS literal except U+2028/2029 in old engines: escape them.
