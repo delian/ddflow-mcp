@@ -10,6 +10,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...core.redact import SUPERSEDED_MARKER
 from ...services import searchcore as SC
 from .._base import _load
 from .lessons import _store
@@ -65,12 +66,34 @@ def memory_add(
         # always-present `tags: []` made correcting a fact by `--id` wipe its tags
         # (cross-family critic).
         data["tags"] = csv_list(tags)
+    replaced = bool(id) and id in st.memories
     with log.transaction():
         minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
+        prior = _latest_memory_event(log, mid) if replaced else None
         log.append("memory.recorded", mid, data | IDS.key_field(minted))
+        if prior is not None and prior.data.get("text") != text:
+            # A re-record supersedes the previous text: redact it from the committed log so a
+            # stale or private copy of the old fact does not survive (B-memory-rerecord-keeps-old-text-in-log),
+            # recording the auditable redaction (D-event-log-redaction-forward).
+            original, _redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
+            log.append(
+                "memory.redacted",
+                mid,
+                {"event": original.id, "reason": "superseded by a memory re-record"},
+            )
         DD.after_add(log, cfg, mid, chk)
-    replaced = bool(id) and id in st.memories
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
+
+
+def _latest_memory_event(log, mid: str):
+    """The newest `memory.recorded` event for `mid` (by Lamport clock), or None."""
+    best = None
+    for e in log.read_all():
+        if e.kind == "memory.recorded" and e.subject == mid and (
+            best is None or e.lamport > best.lamport
+        ):
+            best = e
+    return best
 
 
 def _memory_row(m) -> dict[str, Any]:

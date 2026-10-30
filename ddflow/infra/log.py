@@ -1375,6 +1375,66 @@ class EventLog:
                 self._redactor = red
         return R.redact_event_data(kind, data, red, lookup_network=self._lookup_net)
 
+    def redact_event_text(self, event_id: str, field: str, marker: str) -> tuple[Event, Event]:
+        """Redact one free-text field of an already-written event, in place.
+
+        The sanctioned redaction (D-event-log-redaction-forward): the sensitive or superseded
+        text leaves the shard, the event's content address is recomputed so `verify` still
+        holds (`id == compute_id` for every event), and the caller records the auditable
+        redaction event naming ``original.id``.
+
+        Returns ``(original, redacted)``: the event as written, and it with ``data[field]``
+        replaced by ``marker``. Raises ``KeyError`` when no event has that id. Call the
+        caller under the append lock.
+        """
+        original = self._find_event(event_id)
+        if original is None:
+            raise KeyError(f"no event {event_id!r}")
+        data = dict(original.data)
+        data[field] = marker
+        redacted = Event(
+            kind=original.kind,
+            subject=original.subject,
+            data=data,
+            agent=original.agent,
+            lamport=original.lamport,
+            ts=original.ts,
+            schema=original.schema,
+        )
+        redacted = Event(**{**redacted.__dict__, "id": redacted.compute_id()})
+        self._rewrite_line(event_id, redacted)
+        return original, redacted
+
+    def _find_event(self, event_id: str) -> Event | None:
+        for shard in self.shards():
+            for raw in shard.read_text(encoding="utf-8").splitlines():
+                try:
+                    got = json.loads(raw).get("id")
+                except (ValueError, TypeError, AttributeError):
+                    continue
+                if got == event_id:
+                    return Event.from_json(raw)
+        return None
+
+    def _rewrite_line(self, old_id: str, ev: Event) -> None:
+        """Replace the line whose event id is ``old_id`` with ``ev``'s canonical line,
+        atomically (a reader sees the whole old shard or the whole new one, never a cut)."""
+        line = ev.to_json()
+        for shard in self.shards():
+            lines = shard.read_text(encoding="utf-8").splitlines()
+            for i, raw in enumerate(lines):
+                try:
+                    got = json.loads(raw).get("id")
+                except (ValueError, TypeError, AttributeError):
+                    continue
+                if got == old_id:
+                    lines[i] = line
+                    tmp = shard.with_name(shard.name + ".redact")
+                    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                    os.replace(tmp, shard)
+                    return
+        raise KeyError(old_id)
+
     # -- the version stamp and the skew guard -----------------------------------------
     def _shard_meta(self) -> SMT.ShardMeta | None:
         """The per-clone shard facts (`infra.shardmeta`), or None where no cache is kept
