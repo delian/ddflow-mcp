@@ -1026,10 +1026,9 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     key = got.value
     if not key:
         return "", got.reason
-    url = (
-        f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
-        f"?key={urllib.parse.quote(key)}"
-    )
+    # The key goes in a header, never the URL: a URL is echoed by proxies, access logs and
+    # transport errors.
+    url = f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
     body, err = _post_json(
         url,
         {
@@ -1038,7 +1037,7 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
             "generationConfig": {**_temperature(rev), "maxOutputTokens": rev.max_tokens},
             **rev.extra_body,
         },
-        {},
+        {"x-goog-api-key": key},
         timeout_s,
     )
     if err:
@@ -1079,7 +1078,9 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         with _open(req, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
-        return "", review_keys.scrub(f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}", key)
+        return "", review_keys.scrub(
+            f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}", key
+        )
     except TimeoutError:
         return "", _no_answer_in_time(timeout_s)
     except (urllib.error.URLError, OSError) as exc:

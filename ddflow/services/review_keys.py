@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import os
 import stat
-from dataclasses import dataclass, field
 from pathlib import Path
 
 #: A safety bound on what is read from a key file (a real key is under a kilobyte); not a
@@ -30,16 +29,30 @@ from pathlib import Path
 MAX_KEY_FILE_BYTES = 16384
 
 
-@dataclass(frozen=True)
 class KeyResult:
-    """The key (``value``) or why there is none (``reason``). ``source`` is ``env`` or ``file``."""
+    """The key (``value``) or why there is none (``reason``). ``source`` is ``env`` or ``file``.
 
-    value: str = field(default="", repr=False)
-    reason: str = ""
-    source: str = ""
+    Deliberately NOT a dataclass: `dataclasses.asdict` and the generated `__eq__` and
+    `__repr__` would reach the value. Only ``.value`` does; `repr`, `str` and pickling
+    name the source alone."""
+
+    __slots__ = ("_value", "reason", "source")
+
+    def __init__(self, value: str = "", reason: str = "", source: str = "") -> None:
+        self._value, self.reason, self.source = value, reason, source
+
+    @property
+    def value(self) -> str:
+        return self._value
 
     def __bool__(self) -> bool:
-        return bool(self.value)
+        return bool(self._value)
+
+    def __repr__(self) -> str:
+        return f"KeyResult(source={self.source!r}, reason={self.reason!r}, value=<hidden>)"
+
+    def __reduce__(self):
+        raise TypeError("a KeyResult holds a secret and is not serialised")
 
 
 def _expand(path: str) -> Path:
@@ -64,7 +77,7 @@ def read_key_file(path: str) -> KeyResult:
     """The key in ``path``, or the reason it cannot be used. Never raises."""
     p = _expand(path)
     try:
-        fd = os.open(p, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        fd = os.open(p, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
     except FileNotFoundError:
         return KeyResult(reason=f"key file {p} does not exist")
     except OSError as exc:
@@ -83,9 +96,9 @@ def read_key_file(path: str) -> KeyResult:
     text = data.decode("utf-8", "replace").strip()
     if not text:
         return KeyResult(reason=f"key file {p} is empty")
-    if any(c.isspace() for c in text):
+    if not text.isprintable() or any(c.isspace() for c in text):
         return KeyResult(
-            reason=f"key file {p} holds more than one line or word; expected the key alone"
+            reason=f"key file {p} is not a single printable word; expected the key alone"
         )
     return KeyResult(value=text, source="file")
 
@@ -94,7 +107,7 @@ def resolve_key(env_name: str, key_file: str = "", default_env: str = "") -> Key
     """The environment variable ``env_name`` first, then ``key_file``. ``reason`` names what
     to set when neither gives a key (names and paths only), and is ``""`` when ``env_name``
     and ``key_file`` are both unset (a keyless endpoint) unless ``default_env`` is given."""
-    name = env_name or default_env
+    name = env_name
     if name and (val := os.environ.get(name, "")):
         return KeyResult(value=val, source="env")
     if key_file:
@@ -105,7 +118,7 @@ def resolve_key(env_name: str, key_file: str = "", default_env: str = "") -> Key
             reason=f"no API key: ${name} is not set and {got.reason}" if name else got.reason
         )
     if default_env:
-        return KeyResult(reason=f"no API key: set ${name} in the environment")
+        return KeyResult(reason=f"no API key: set ${env_name or default_env} in the environment")
     return KeyResult()
 
 
@@ -155,7 +168,7 @@ def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
                 )
 
 
-def key_hints(reviewers: "list[object]") -> list[str]:
+def key_hints(reviewers: list[object]) -> list[str]:
     """One line per enabled reviewer with neither its variable nor a readable key file:
     names and paths only. ``reviewers`` are `Reviewer` objects."""
     out = []
