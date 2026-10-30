@@ -62,6 +62,8 @@ def _forbidden(cfg: Config) -> bool:
                 continue  # the config loader skips a non-regular file too; opening a FIFO would hang
             data = read_toml(path)
         except FileNotFoundError:
+            if os.path.islink(path):
+                return True  # a dangling symlink is a layer that exists and cannot be read: fail closed
             continue  # no such layer (a missing parent directory is the same absence)
         except (OSError, ValueError):
             return True  # a layer that exists and cannot be read may be the one that forbids: fail closed

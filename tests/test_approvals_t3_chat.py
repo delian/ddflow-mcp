@@ -279,3 +279,12 @@ def test_a_fifo_layer_is_skipped_not_opened(log, tmp_path, repo):
     d.mkdir(parents=True, exist_ok=True)
     os.mkfifo(d / "config.toml")  # opening it for reading would block forever
     assert H.chat_t3(cfg)
+
+
+def test_a_dangling_symlink_layer_fails_closed(log, tmp_path, repo):
+    cfg = _cfg(tmp_path)
+    cfg.root = repo
+    d = repo / ".ddflow" / "local"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "config.toml").symlink_to(tmp_path / "nowhere.toml")
+    assert not H.chat_t3(cfg)
