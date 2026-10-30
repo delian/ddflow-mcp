@@ -121,7 +121,11 @@ def _bound_by(node: ast.AST) -> list[str]:
     if isinstance(node, ast.Import):
         return [a.asname or a.name.split(".")[0] for a in node.names]
     if isinstance(node, ast.ImportFrom):
-        return ["*"] if any(a.name == "*" for a in node.names) else [a.asname or a.name for a in node.names]
+        return (
+            ["*"]
+            if any(a.name == "*" for a in node.names)
+            else [a.asname or a.name for a in node.names]
+        )
     return []
 
 
