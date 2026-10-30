@@ -10,11 +10,10 @@ from __future__ import annotations
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ..registry import Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
+from .lifecycle_cli import wake_text
 
 
 def _text(out, a) -> str:
-    from .lifecycle_cli import wake_text  # the one rendering of a lane's fenced messages
-
     d = out.data
     msgs = (
         wake_text({"reason": d["wake"]["reason"], "messages": d["wake"]["messages"]})
