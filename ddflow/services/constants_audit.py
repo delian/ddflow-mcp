@@ -81,6 +81,17 @@ def _number(node: ast.expr | None, scope: dict[str, float] | None = None) -> flo
     return None
 
 
+def _target_names(target: ast.expr) -> list[str]:
+    """The plain names a target binds, unpacking nested tuples/lists/starred targets."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [n for elt in target.elts for n in _target_names(elt)]
+    if isinstance(target, ast.Starred):
+        return _target_names(target.value)
+    return []
+
+
 def candidates_in(source: str, path: str) -> list[Candidate]:
     """The candidates among ``source``'s module-level statements (not nested ones)."""
     out: list[Candidate] = []
@@ -97,8 +108,8 @@ def candidates_in(source: str, path: str) -> list[Candidate]:
         number = _number(value, scope)
         if number is None:
             for t in targets:  # a (re)binding we cannot fold must not leave a stale value
-                if isinstance(t, ast.Name):
-                    scope.pop(t.id, None)
+                for name in _target_names(t):
+                    scope.pop(name, None)
             continue
         for t in targets:
             if isinstance(t, ast.Name):  # later arithmetic may reference this one

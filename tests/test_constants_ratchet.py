@@ -93,6 +93,11 @@ def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> No
     assert _plant(tmp_path, src).unclassified == []
 
 
+def test_detector_folds_no_stale_value_through_unpacking(tmp_path: Path) -> None:
+    src = "HOUR = 3600\nHOUR, MIN = get_pair()\nA_WINDOW_S = 7 * 24 * HOUR\n"
+    assert _plant(tmp_path, src).unclassified == []
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"
