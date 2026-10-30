@@ -736,7 +736,7 @@ def _design_point(location: str) -> str:
     return path.strip() if _LINE_CITATION.match(anchor) else loc
 
 
-def _carry_delta_verdicts(log, it, gate: str, kept, mine) -> dict:
+def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
     """Carry the same gate's triage to a delta finding that re-raises an already-triaged
     design point under a new digest (bug B-review-delta-retriages-same-point).
 
@@ -787,6 +787,11 @@ def _carry_delta_verdicts(log, it, gate: str, kept, mine) -> dict:
             },
         )
         carried[digest] = t
+    if carried:
+        say(
+            f"carried the triage of {len(carried)} re-raised design point(s) to this delta's "
+            "findings (their line moved or was reworded, not triaged anew)"
+        )
     return carried
 
 
@@ -822,7 +827,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     if not kept:
         return 0
     have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
-    carried = _carry_delta_verdicts(log, it, gate, kept, mine)
+    carried = _carry_delta_verdicts(log, it, gate, kept, mine, say)
     for f in mine:
         if f.get("digest") not in have:
             kept.append(f)
@@ -839,19 +844,14 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"merged into the record of {it.id}.{gate} ({len(kept)} finding(s) in all): this "
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
-    if carried:
-        say(
-            f"carried the triage of {len(carried)} re-raised design point(s) to this delta's "
-            "findings (their line moved or was reworded, not triaged anew)"
-        )
     verdicts = it.triage.get(gate, {})
-    return sum(
+    untriaged = sum(
         1
         for f in kept
         if f.get("digest") not in gone
-        and f.get("digest") not in carried
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
+    return max(0, untriaged - len(carried))
 
 
 def _replaced_by_rerun(prior: dict[str, Any], again: set[int]) -> set[str]:
