@@ -112,30 +112,37 @@ def _fact_nodes(row: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 _PLAIN_KEYS = ("note", "family", "class", "served")
 
 
+def _row_problem(at: str, key: str, node: Any) -> str:
+    """What is wrong with one row value, or empty."""
+    if key in ("family", "class"):
+        return "" if isinstance(node, str) else f"{at} must be a string"
+    if key == "served":
+        ok = isinstance(node, dict) and all(isinstance(v, dict) for v in node.values())
+        return "" if ok else f"{at} must be a table of tables (served model -> facts)"
+    if key not in _PLAIN_KEYS and not facts.is_fact(node):
+        return f"{at} is not a fact (no `s`) and would be ignored"
+    return ""
+
+
+def _identity_problem(fid: str, row: dict[str, Any]) -> str:
+    v = _identity(row)
+    needles = v.get("needles")
+    if not facts.is_fact(row.get("identity")):
+        return ""
+    ok = isinstance(v.get("vendor"), str) and v["vendor"] and isinstance(needles, list)
+    if ok and all(isinstance(n, str) and n for n in needles):
+        return ""
+    return f"family.{fid}.identity: v needs a vendor string and a needles list"
+
+
 def _shape_problems(cat: Catalog) -> list[str]:
-    out = []
-    for table, rid, row in _rows(cat):
-        for key, node in row.items():
-            at = f"{table}.{rid}.{key}"
-            if key in ("family", "class") and not isinstance(node, str):
-                out.append(f"{at} must be a string")
-            elif key == "served" and not (
-                isinstance(node, dict) and all(isinstance(v, dict) for v in node.values())
-            ):
-                out.append(f"{at} must be a table of tables (served model -> facts)")
-            elif key not in _PLAIN_KEYS and not facts.is_fact(node):
-                out.append(f"{at} is not a fact (no `s`) and would be ignored")
-    for fid, row in cat.family.items():
-        v = _identity(row)
-        needles = v.get("needles")
-        if facts.is_fact(row.get("identity")) and not (
-            isinstance(v.get("vendor"), str)
-            and v["vendor"]
-            and isinstance(needles, list)
-            and all(isinstance(n, str) and n for n in needles)
-        ):
-            out.append(f"family.{fid}.identity: v needs a vendor string and a needles list")
-    return out
+    out = [
+        _row_problem(f"{table}.{rid}.{key}", key, node)
+        for table, rid, row in _rows(cat)
+        for key, node in row.items()
+    ]
+    out += [_identity_problem(fid, row) for fid, row in cat.family.items()]
+    return [p for p in out if p]
 
 
 def _link_problems(cat: Catalog) -> list[str]:
