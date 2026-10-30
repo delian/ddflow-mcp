@@ -21,5 +21,4 @@ file = "opencode.json"
 schema = "https://opencode.ai/config.json"
 template = "harness/opencode/provider.json.j2"
 custom_provider = { v = true, s = "unverified", src = "opencode-repo", d = "2026-10-30", note = "opencode is not installed here; kilo is its fork and accepts the shape (see harness.kilo). Re-read with `opencode --version` and a config check once installed" }
-env_refs_in_project_config = { s = "unverified", src = "opencode-repo", d = "2026-10-30" }
 tool_calls_reliable = { v = false, s = "unverified", src = "opencode-repo", d = "2026-10-30", note = "needs the live probe" }
