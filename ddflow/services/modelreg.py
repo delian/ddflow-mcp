@@ -50,6 +50,8 @@ class Catalog:
     context: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: ids that came from the local overlay (not committed)
     local_ids: set[str] = field(default_factory=set)
+    #: rows that are not tables, kept out of the tables but reported by `validate`
+    bad_rows: list[str] = field(default_factory=list)
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -84,7 +86,9 @@ def load(
         cat.sources.update(doc.get("sources", {}))
         for table, dest in zip(_TABLES, (cat.family, cat.model, cat.route, cat.cls), strict=True):
             for rid, row in (doc.get(table) or {}).items():
-                if isinstance(row, dict):
+                if not isinstance(row, dict):
+                    cat.bad_rows.append(f"{table}.{rid} is not a table")
+                else:
                     _merge_row(dest.setdefault(rid, {}), row)
                     if local:
                         cat.local_ids.add(f"{table}.{rid}")
@@ -186,7 +190,7 @@ def _family_problems(cat: Catalog) -> list[str]:
 
 def validate(cat: Catalog) -> list[str]:
     """Problems, one string each; empty means the catalog is well formed."""
-    out = []
+    out = list(cat.bad_rows)
     for table, rid, row in _rows(cat):
         for key, node in _fact_nodes(row):
             at = f"{table}.{rid}.{key}"
