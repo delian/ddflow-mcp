@@ -273,3 +273,14 @@ def test_sixth_review_findings():
         transcript_map.parse(
             {"path": "C:\\safe\\..\\x", "format": "jsonl", "fields": {"role": "r"}}
         )
+
+
+def test_seventh_review_findings():
+    for bad in ([1, 2], {"a": 1}, None):
+        with pytest.raises(EngineError):
+            stream_map.parse_rules([{"when": {"path": "x", "equals": bad}, "emit": "tool"}])
+    rules = stream_map.parse_rules([{"when": {"path": "x", "exists": True}, "emit": "tool"}])
+    assert (
+        stream_map.map_line("NaN", rules) is None
+        and stream_map.map_line("-Infinity", rules) is None
+    )
