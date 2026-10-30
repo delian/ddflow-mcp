@@ -172,7 +172,6 @@ def test_third_review_findings(tmp_path):
 
 @pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_a_failed_spawn_leaks_no_descriptor():
-    import os
 
     def fds():
         return len(os.listdir("/proc/self/fd"))
