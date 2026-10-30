@@ -26,7 +26,12 @@ VERB = "reviewers.approve_command"
 
 @pytest.fixture(autouse=True)
 def _a_person(monkeypatch):
-    for var in ("DDFLOW_AGENT", *AP.HARNESS_MARKERS):
+    for var in (
+        "DDFLOW_AGENT",
+        "DDFLOW_APPROVALS_FORBID_CHAT_FOR_T3",
+        "DDFLOW_APPROVALS_ACCEPT_CHAT_FOR_T3",
+        *AP.HARNESS_MARKERS,
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
