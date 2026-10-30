@@ -78,6 +78,9 @@ def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[in
     err_r, err_w = os.pipe()
     try:
         child = proc.spawn_stdio(cmd, env=env, stderr=err_w)
+    except BaseException:
+        os.close(err_r)  # no child: nothing will read it
+        raise
     finally:
         os.close(err_w)
     child.stdin.close()  # EOF at once: a probe never reads input
