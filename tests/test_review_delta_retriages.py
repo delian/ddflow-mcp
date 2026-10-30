@@ -37,10 +37,10 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
         f"w=$(cat '{wording}')\n"
-        'loc=${w%%|*}\n'
-        'det=${w#*|}\n'
+        "loc=${w%%|*}\n"
+        "det=${w#*|}\n"
         'case "$in" in '
-        "*FINDME*) printf 'FINDING HIGH %s\\n%s\\n\\nSTATUS: FINDINGS 1\\n' \"$loc\" \"$det\";; "
+        '*FINDME*) printf \'FINDING HIGH %s\\n%s\\n\\nSTATUS: FINDINGS 1\\n\' "$loc" "$det";; '
         '*) echo "STATUS: NO FINDINGS";; esac\n'
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
@@ -88,10 +88,14 @@ def test_the_same_claim_raised_again_at_a_shifted_line_inherits_the_refutation(r
     out = _review(repo)
     assert out.exit == OK and _ev(repo)["review_kind"] == "full", out.reason
     probe = "ran the suite: the limit is guarded on every path"
-    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe=probe).exit == OK
+    assert (
+        api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe=probe).exit == OK
+    )
 
     wording.write_text("x.py:40|the documented limit is falsy")
-    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
+    (repo / "x.py").write_text(
+        "def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     out = _review(repo, delta=True)
@@ -106,10 +110,15 @@ def test_a_confirmed_claim_raised_again_under_a_new_digest_is_not_re_triaged(rep
     wording = _setup(repo, tmp_path)
     assert _review(repo).exit == OK
     probe = "fixed it: the limit is now truthy and documented"
-    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe=probe).exit == OK
+    assert (
+        api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe=probe).exit
+        == OK
+    )
 
     wording.write_text("x.py:40|the documented limit is falsy")
-    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
+    (repo / "x.py").write_text(
+        "def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     assert _review(repo, delta=True).exit == OK
@@ -124,7 +133,9 @@ def test_a_different_claim_at_the_same_place_is_not_carried(repo, tmp_path):
     assert _review(repo).exit == OK
     assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
     wording.write_text("x.py:40|an unrelated new defect")
-    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
+    (repo / "x.py").write_text(
+        "def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     assert _review(repo, delta=True).exit == OK
