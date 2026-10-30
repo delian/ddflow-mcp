@@ -61,6 +61,7 @@ def render(argv: list[str], agent: str) -> str:
         not isinstance(argv, list)
         or not argv
         or not all(isinstance(x, str) for x in argv)
+        or not isinstance(agent, str)
         or not agent
     ):
         raise ValueError("the plugin needs the check argv and the lane identity")

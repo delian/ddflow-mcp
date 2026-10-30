@@ -203,8 +203,10 @@ def _tracked(repo: Path, files: list[Path]) -> bool:
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():  # never write through a link: it may point outside the lane home
-        raise OSError(f"{path} is a symbolic link")
+    if path.is_symlink() or path.parent.resolve() != path.parent.absolute().resolve():
+        raise OSError(f"{path} or a directory above it is a symbolic link")  # may leave the home
+    if path.parent.is_symlink():
+        raise OSError(f"{path.parent} is a symbolic link")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         os.fchmod(fh.fileno(), 0o600)
@@ -341,9 +343,15 @@ def hook_probe(home: Path) -> Callable[[], bool | None]:
         m = _manifest(home)
         if m is None or m.get("level") != PREVENT:
             return None  # a git hook is not a pre-tool hook: it never reaches the 'hook' level
-        for f in m.get("files", []):
-            if not Path(f).is_file():
-                return False  # written config gone: the hook cannot fire
+        root = home.resolve()
+        files = m.get("files")
+        if not isinstance(files, list) or not files or not all(isinstance(f, str) for f in files):
+            return False
+        for f in files:  # a manifest is data: only a file inside the lane home is ever run
+            if root not in Path(f).resolve().parents or not Path(f).is_file():
+                return False  # outside the home, or the written config is gone
+        if not all(isinstance(m.get(k), str) for k in ("agent", "worktree")):
+            return False
         if m.get("door") == "plugin-home":
             return _fire_plugin(m)
         try:
