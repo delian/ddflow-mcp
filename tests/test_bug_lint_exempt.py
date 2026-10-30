@@ -76,9 +76,19 @@ def test_the_cli_takes_lint_exempt(repo):
     assert fixed.data["regression_verify"]["reason"] == "ruff format applied"
 
 
-def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
+def test_a_bandit_static_security_scan_ci_bug_closes_via_lint_exempt(repo):
     _file(repo, "Bci-bandit-1", "merge CI check failed: bandit (CI: Static security scan)")
-    out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="no test")
+    out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="nosec added; static scan green")
+    assert out.exit == OK, out.reason
+    assert out.data["regression_verified"] == "exempt-lint"
+    assert fold(EventLog(repo).read_all()).bugs["Bci-bandit-1"].fixed_at
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verify"]["lint_check"] == "bandit (CI: Static security scan)"
+
+
+def test_a_non_lint_non_static_scan_ci_check_still_needs_its_test(repo):
+    _file(repo, "Bci-build-1", "merge CI check failed: the wheel builds (CI: Build)")
+    out = api.bug_fixed(repo, "Bci-build-1", lint_exempt="no test")
     assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason
 
 
