@@ -203,7 +203,9 @@ def _tracked(repo: Path, files: list[Path]) -> bool:
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if path.is_symlink():  # never write through a link: it may point outside the lane home
+        raise OSError(f"{path} is a symbolic link")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         os.fchmod(fh.fileno(), 0o600)
         fh.write(text)
@@ -344,8 +346,8 @@ def hook_probe(home: Path) -> Callable[[], bool | None]:
                 return False  # written config gone: the hook cannot fire
         if m.get("door") == "plugin-home":
             return _fire_plugin(m)
-        cfg = Path(m["files"][0])
         try:
+            cfg = Path(m["files"][0])
             cmd = json.loads(cfg.read_text("utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0][
                 "command"
             ]
