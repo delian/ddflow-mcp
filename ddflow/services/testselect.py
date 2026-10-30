@@ -91,6 +91,57 @@ def is_test_file(path: str) -> bool:
     return bool(_TEST_FILE.search(path))
 
 
+def _signature(source: str) -> str | None:
+    """The whole module AST with positions stripped: comments, blank lines and whitespace are
+    already gone, so two sources share a signature exactly when they differ ONLY in those — a
+    format/comment change pytest's runtime cannot observe. Import statements are part of the
+    body like any other: reordering two imports is a DIFFERENT signature, because Python runs
+    them in order and an import's side effect (a star import, a registration, a circular
+    import) is observable (roborev finding on bug B0bdd3b9a39). ``None`` when the source
+    cannot be parsed ("neutral" is never claimed on a parse failure: what could not be read
+    stays uncharted)."""
+    try:
+        mod = ast.parse(source)
+    except (SyntaxError, ValueError, TypeError):
+        return None
+    return ast.dump(mod, include_attributes=False)
+
+
+def behaviour_neutral(tree: Path, base: str, changed: list[str]) -> bool:
+    """Whether every changed ``.py`` file differs from ``base`` only in whitespace or comments
+    (a format/comment-only fix). No test can fail on such a change, so the whole-suite fallback
+    for a changed hub is needless (bug B0bdd3b9a39). An import REORDER is not neutral: imports
+    are run in order and their side effects are observable. Non-Python changes are not judged —
+    they are not what puts a hub on the whole-suite path."""
+    py = [c for c in changed if c.endswith(".py")]
+    if not py:
+        return False
+    for path in py:
+        base_blob = GIT.run(tree, "show", f"{base}:{path}")
+        ours = _read(tree / path)
+        if not base_blob.ok or not ours:
+            return False
+        ours_sig = _signature(ours)
+        base_sig = _signature(base_blob.out)
+        if not ours_sig or not base_sig or ours_sig != base_sig:
+            return False
+    return True
+
+
+def _hub_answer(
+    tree: Path, base: str, changed: list[str], hubs: dict, prior_full: str
+) -> tuple[bool, str]:
+    """(neutral, whole-suite reason) for a changed hub: True when the change is
+    whitespace/comment-only so no test observes it, else the reason running only the importers
+    would lose recall."""
+    touched = TR.hubs_touched(changed, hubs)
+    if not touched:
+        return False, prior_full
+    if behaviour_neutral(tree, base, changed):
+        return True, prior_full
+    return False, prior_full or f"a hub module changed: {', '.join(touched)}"
+
+
 def _named(stem: str, test_name: str) -> bool:
     """``stem`` as a whole word of ``test_name`` (a plural allowed): `cli` names
     `test_cli_parity` and not `test_client`."""
@@ -117,6 +168,10 @@ class Selection:
     cut: list[Selected] = field(default_factory=list)  #: over the budget, not selected
     cut_at: list[str] = field(default_factory=list)  #: hubs the import walk did not pass
     full: str = ""  #: why only the whole suite is safe (a hub or test infrastructure changed)
+    #: Every changed ``.py`` file differs from its base only by import ordering, whitespace
+    #: or comments: no test's outcome can change, so the whole-suite fallback is needless
+    #: (a lint fix to a hub, bug B0bdd3b9a39).
+    neutral: bool = False
 
 
 def changed_files(tree: Path, base: str) -> list[str] | None:
@@ -232,8 +287,7 @@ def select(  # noqa: PLR0913 -- the knobs and the stand-ins for git's answers
     hubs = graph.hubs(hub_importers)
     walked = TR.reach(graph, changed, hubs, max_hops)
     sel.cut_at = sorted(walked.cut_at)
-    if touched := TR.hubs_touched(changed, hubs):
-        sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
+    sel.neutral, sel.full = _hub_answer(tree, base, changed, hubs, sel.full)
     for t, (why, hops) in walked.files.items():
         if t in tests:
             pick(t, why, RANK_DIRECT if hops == 1 else RANK_TWO_HOP)

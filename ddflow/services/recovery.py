@@ -25,6 +25,8 @@ import importlib
 from pathlib import Path
 
 from ..infra import fsio
+from ..services import leases as L
+from ..services import mergequeue as MQ
 
 #: Marker file that stops `recover --apply` from running anything (plan stays dry).
 KILL_SWITCH = "recovery.stop"
@@ -105,9 +107,6 @@ def apply(repo: Path, log, agent: str, actions, cfg=None) -> list[dict]:
     The kill switch is read again under the flock, immediately before acting: the
     operator can pull the brake after the caller's own pre-check, and the pointer check
     is cheap enough to mean it."""
-    from ..services import leases as L
-    from ..services import mergequeue as MQ
-
     rows = []
     with pass_lock(repo) as lock:
         if not lock:
