@@ -64,6 +64,23 @@ def test_detector_folds_literal_arithmetic(tmp_path: Path) -> None:
     ]
 
 
+def test_detector_folds_symbolic_name_arithmetic(tmp_path: Path) -> None:
+    a = _plant(
+        tmp_path,
+        "HOUR = 3600.0\nA_WINDOW_S = 7 * 24 * HOUR\nB_LIMIT = HOUR * 2\n",
+    )
+    assert [(c.name, c.value) for c in a.unclassified] == [
+        ("A_WINDOW_S", 604800.0),
+        ("B_LIMIT", 7200.0),
+    ]
+
+
+def test_swarm_metrics_bug_window_is_seen_and_classified() -> None:
+    key = "ddflow/services/swarm_metrics.py:BUG_WINDOW_S"
+    knobs = {c.key: c.value for c in ca.audit(ROOT).knob}
+    assert knobs.get(key) == 604800.0
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"

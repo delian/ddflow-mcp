@@ -58,12 +58,16 @@ _FOLD = {
 }
 
 
-def _number(node: ast.expr | None) -> float | None:
+def _number(node: ast.expr | None, scope: dict[str, float] | None = None) -> float | None:
+    """Fold ``node`` to a number; a module-level name resolves against ``scope`` so that
+    symbolic arithmetic such as `7 * 24 * HOUR` (a Name operand, not a literal) is seen."""
+    if isinstance(node, ast.Name):
+        return scope.get(node.id) if scope is not None else None
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-        inner = _number(node.operand)
+        inner = _number(node.operand, scope)
         return None if inner is None else -inner
     if isinstance(node, ast.BinOp) and type(node.op) in _FOLD:
-        left, right = _number(node.left), _number(node.right)
+        left, right = _number(node.left, scope), _number(node.right, scope)
         if left is None or right is None:
             return None
         try:
@@ -80,6 +84,7 @@ def _number(node: ast.expr | None) -> float | None:
 def candidates_in(source: str, path: str) -> list[Candidate]:
     """The candidates among ``source``'s module-level statements (not nested ones)."""
     out: list[Candidate] = []
+    scope: dict[str, float] = {}  # module-level name -> folded value, in source order
     for node in ast.parse(source).body:
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
@@ -87,10 +92,12 @@ def candidates_in(source: str, path: str) -> list[Candidate]:
             targets, value = [node.target], node.value
         else:
             continue
-        number = _number(value)
+        number = _number(value, scope)
         if number is None:
             continue
         for t in targets:
+            if isinstance(t, ast.Name):  # later arithmetic may reference this one
+                scope[t.id] = number
             name = t.id if isinstance(t, ast.Name) else ""
             bare = name.lstrip("_")
             if bare and bare.isupper() and TUNABLE.search(bare):
