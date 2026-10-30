@@ -197,3 +197,11 @@ def test_loose_value_under_served_is_a_problem():
     cat = M.load()
     cat.route["vllm"]["served"] = {"m": {"window": 128000}}
     assert any("served" in p and "is not a fact" in p for p in M.validate(cat))
+
+
+def test_malformed_served_overlay_loads_and_is_reported():
+    base = M.load()
+    base.route["vllm"]["served"] = {"m": {"window": {"v": 1}}}
+    M._merge_row(base.route["vllm"], {"served": {"m": 1}})
+    assert any("served" in p for p in M.validate(base))
+    assert M.read(base, "m", "window", "vllm").value is None
