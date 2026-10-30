@@ -79,7 +79,7 @@ def test_an_unreachable_remote_refuses_instead_of_claiming_locally(clones):
 
 def test_local_is_the_default_and_touches_no_remote(repo, tmp_path):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent="agent-a").ok
 
 

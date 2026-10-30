@@ -75,6 +75,7 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
     FlowConfig,
 )
 from .config_sections.gates import GatesConfig
+from .config_sections.govern import GovernConfig
 from .config_sections.grants import GrantsConfig
 from .config_sections.health import HealthConfig
 from .config_sections.hooks import HooksConfig
@@ -223,6 +224,7 @@ class Config:
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     lanes: LanesConfig = field(default_factory=LanesConfig)
     health: HealthConfig = field(default_factory=HealthConfig)
+    govern: GovernConfig = field(default_factory=GovernConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)

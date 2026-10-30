@@ -392,7 +392,7 @@ def test_block_mode_makes_claim_refuse_a_looping_item(repo):
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "loops.on_detect", "block")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "T", "--phase", "P1", "--globs", "x/*")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--phase", "P1", "--globs", "x/*")
     for _ in range(4):
         run_cli(repo, "claim", "T", "--no-worktree")
         run_cli(repo, "release", "T", "--note", "gave up")
@@ -412,8 +412,8 @@ def test_loops_exits_two_when_there_is_nothing_wrong(repo):
 def test_doctor_surfaces_loops(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "A", "--phase", "P1", "--needs", "B")
-    run_cli(repo, "task", "add", "B", "--phase", "P1", "--needs", "A")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--needs", "B")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--phase", "P1", "--needs", "A")
     code, out, _ = run_cli(repo, "doctor")
     assert code == FAIL
     assert "dependency_cycle" in out
@@ -422,7 +422,7 @@ def test_doctor_surfaces_loops(repo):
 def test_progress_reports_real_work(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "T", "--phase", "P1", "--globs", "x/*")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--phase", "P1", "--globs", "x/*")
     run_cli(repo, "claim", "T", "--no-worktree")
     run_cli(repo, "gate", "record", "T", "unit_tests", "--outcome", "passed", "--evidence", "ok")
     rows = json.loads(run_cli(repo, "--json", "progress")[1])

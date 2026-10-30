@@ -51,8 +51,30 @@ def enforced(repo):
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "scaffold", "--no-verify"], check=True)
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/b.py",
+    )
     return repo
 
 
@@ -309,7 +331,18 @@ def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo, monke
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "scaffold", "--no-verify"], check=True)
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "claim", "P1.T1", "--no-worktree")
 
     (repo / "src" / "a.py").write_text("x = 2\n")
@@ -348,7 +381,18 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/*",
+    )
     wt = W.create(repo, cfg, "P1.T1")
     log = EventLog(repo, "some-other-identity")
     L.acquire(

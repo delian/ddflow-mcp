@@ -34,7 +34,7 @@ def _claimed(repo: Path, globs: str = "src/"):
     run_cli(repo, "init")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "init ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", globs)
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", globs)
     out = A.claim(repo, "T1", agent=ME)
     assert out.ok, out.reason
     return W.load_path(repo, _items(repo)["T1"].worktree)

@@ -55,7 +55,7 @@ def test_ddflow_merge_refusal_carries_the_hint(repo):
     _git(repo, "add", "-A")
     _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "readme", "--no-verify")
     run_cli(repo, "workflow", "pipeline", "task", "implement,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "README.md")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "README.md")
     code, _o, err = run_cli(repo, "claim", "T1")
     assert code == 0, err
     wt = repo / ".ddflow" / "worktrees" / "T1"

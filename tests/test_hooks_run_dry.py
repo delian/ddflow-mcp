@@ -127,7 +127,18 @@ def test_dry_run_session_start_does_not_record_external_observations(repo):
     run_cli(trainer, "task", "add", "132.D", "--title", "train-record type", "--globs", "t.py")
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text('[schedule]\nrepos = ["trainer=../trainer"]\n')
-    run_cli(repo, "task", "add", "GEN.1", "--needs", "trainer:132.D", "--globs", "g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "GEN.1",
+        "--title",
+        "GEN.1 fixture",
+        "--needs",
+        "trainer:132.D",
+        "--globs",
+        "g.py",
+    )
     before = _shards(repo)
     code, out, err = _run(
         repo, "hooks", "run", "session_start", "--harness", "claude", "--dry-run", stdin="{}"

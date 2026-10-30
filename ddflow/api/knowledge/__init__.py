@@ -29,6 +29,7 @@ from .bug_close import (  # noqa: F401
     could_not_run_text,
 )
 from .bug_repro import repro_lead  # noqa: F401
+from .bug_tags import bug_tag  # noqa: F401
 from .bug_void import bug_invalid  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,

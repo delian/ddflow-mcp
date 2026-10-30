@@ -554,6 +554,9 @@ class Bug:
     fix_task: str = ""
     #: `bug found --globs`: the files its fix touches, carried to the fix task and its claim.
     globs: list[str] = field(default_factory=list)
+    #: `bug found --tags` and `bug tag` (`bug.tagged`): plain strings, namespaced ones
+    #: (`ns:x`) included; an old event carries none and folds to []. `wave:*` is derived.
+    tags: list[str] = field(default_factory=list)
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
     upstream_url: str = ""

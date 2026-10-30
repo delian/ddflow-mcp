@@ -32,7 +32,7 @@ from ddflow.services import leases as L
 def _setup(repo: Path, cfg, holder: str = "owner", *, lease: bool = True) -> Path:
     """T1 claimed by ``holder`` with its own tree; ``src/new.py`` staged in that tree."""
     assert run_cli(repo, "init")[0] == 0
-    assert run_cli(repo, "task", "add", "T1", "--globs", "src/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/*")[0] == 0
     wt = W.create(repo, cfg, "T1")
     if lease:
         L.acquire(
@@ -208,7 +208,9 @@ def test_a_lapsed_lease_is_not_offered_for_paths_another_agent_now_holds(repo, c
     """Reviving the lapsed lease over a path someone else has since leased is the race
     the STOP text warns against, so only STOP is said for that path."""
     tree = _setup(repo, cfg)
-    assert run_cli(repo, "task", "add", "T2", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/new.py")[0] == 0
+    )
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
@@ -226,7 +228,10 @@ def test_a_lapsed_lease_straddling_another_agents_paths_is_not_offered(repo, cfg
     over the held paths is not offered a wholesale revival, which is the race the STOP
     text warns against."""
     tree = _setup(repo, cfg)
-    assert run_cli(repo, "task", "add", "T2", "--globs", "src/taken.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/taken.py")[0]
+        == 0
+    )
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
@@ -249,7 +254,7 @@ def test_a_lapsed_lease_item_can_commit_its_merge_of_main_despite_an_overlapping
     accepted for it and the merge can be concluded -- instead of refusing the committer a
     remedy that works (a heartbeat can only revive src/* over T2's live src/taken.py)."""
     assert run_cli(repo, "init")[0] == 0
-    assert run_cli(repo, "task", "add", "T1", "--globs", "src/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/*")[0] == 0
     wt = W.create(repo, cfg, "T1")
     L.acquire(
         EventLog(repo, "owner"),
@@ -275,7 +280,10 @@ def test_a_lapsed_lease_item_can_commit_its_merge_of_main_despite_an_overlapping
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
-    assert run_cli(repo, "task", "add", "T2", "--globs", "src/taken.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/taken.py")[0]
+        == 0
+    )
     L.acquire(EventLog(repo, "other"), cfg, "T2", holder="other", globs=["src/taken.py"])
     monkeypatch.chdir(wt.path)
     m = subprocess.run(

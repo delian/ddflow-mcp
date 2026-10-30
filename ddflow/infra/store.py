@@ -1535,24 +1535,3 @@ def _insert_similar(con, records: list[dict[str, str]], clear: bool = False) -> 
         "insert or replace into meta values('similar_n', ?), ('similar_version', ?)",
         (str(len(records)), str(textsim.VERSION)),
     )
-
-
-def _insert_bugs(con, state, fts: bool) -> None:
-    for bg in state.bugs.values():
-        if fts:
-            con.execute("insert into bugs_fts values(?,?,?)", (bg.id, bg.summary, bg.lesson))
-        con.execute(
-            "insert or replace into bugs values(?,?,?,?,?,?,?,?,?,?)",
-            (
-                bg.id,
-                bg.item,
-                bg.summary,
-                bg.found_at,
-                bg.fixed_at,
-                bg.regression_test,
-                bg.lesson,
-                bg.invalid_at,
-                bg.invalid_reason,
-                bg.evidence,
-            ),
-        )

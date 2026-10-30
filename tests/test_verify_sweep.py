@@ -25,12 +25,45 @@ def _project(repo):
     run_cli(repo, "init")
     _commit(repo, {"seed.txt": "s\n"}, "seed")
     run_cli(repo, "phase", "add", "P1", "--title", "p")
-    run_cli(repo, "task", "add", "T-GOOD", "--phase", "P1", "--globs", "good.py,tests/test_good.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T-GOOD",
+        "--title",
+        "T-GOOD fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "good.py,tests/test_good.py",
+    )
     good = _commit(repo, {"good.py": "1\n", "tests/test_good.py": "def test_g():\n    pass\n"})
     run_cli(repo, "complete", "T-GOOD", "--sha", good, "--force")
-    run_cli(repo, "task", "add", "T-FALSE", "--phase", "P1", "--globs", "missing/promised.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T-FALSE",
+        "--title",
+        "T-FALSE fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "missing/promised.py",
+    )
     run_cli(repo, "complete", "T-FALSE", "--sha", good, "--force")
-    run_cli(repo, "task", "add", "T-OPEN", "--phase", "P1", "--globs", "open.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T-OPEN",
+        "--title",
+        "T-OPEN fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "open.py",
+    )
 
 
 def test_the_sweep_ranks_the_false_completion_first_and_skips_open_tasks(repo):
@@ -54,7 +87,18 @@ def test_the_listing_is_bounded_by_limit(repo):
 def test_a_phase_scopes_the_sweep_and_an_unknown_phase_is_refused(repo):
     _project(repo)
     run_cli(repo, "phase", "add", "P2", "--title", "other")
-    run_cli(repo, "task", "add", "T-ELSE", "--phase", "P2", "--globs", "e.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T-ELSE",
+        "--title",
+        "T-ELSE fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "e.py",
+    )
     run_cli(repo, "complete", "T-ELSE", "--force")
     assert verify_sweep(repo, phase="P1").data["checked"] == 2
     assert verify_sweep(repo, phase="P2").data["checked"] == 1
@@ -75,7 +119,7 @@ def test_file_bugs_files_one_per_failing_completion_and_a_rerun_files_nothing_tw
 
 def test_nothing_done_is_nothing_to_verify(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert verify_sweep(repo).exit == O.NOTHING
 
 

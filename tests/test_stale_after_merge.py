@@ -33,7 +33,7 @@ def _claimed(repo: Path) -> Path:
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "claim", "T1")
     assert code == OK, out + err
     tree = Path(next(ln.split(":", 1)[1].strip() for ln in out.splitlines() if "worktree:" in ln))

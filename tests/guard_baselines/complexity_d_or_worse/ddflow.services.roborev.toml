@@ -1,0 +1,6 @@
+# Ratchet `complexity_d_or_worse` for ddflow.services.roborev (tests/test_architecture_guards.py).
+# `wait_job` (CC 22) is the shipped roborev wait (DX-roborev-wait-no-review): the poll-state
+# fan-out over queued/running/done/failed/canceled/vanished IS the feature, not branch debt.
+# Lower in the change that refactors it; delete the file at zero.
+# Never raise it.
+baseline = 1

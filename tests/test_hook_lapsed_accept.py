@@ -73,7 +73,9 @@ def test_another_agents_live_lease_still_refuses(repo, cfg, monkeypatch):
     cfg.enforce.commit_without_lease = "block"
     from conftest import run_cli
 
-    assert run_cli(repo, "task", "add", "T2", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/new.py")[0] == 0
+    )
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
     _lapse(monkeypatch, cfg)
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
