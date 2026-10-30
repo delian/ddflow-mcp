@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...config import Config
 from ...core.schedule import parse_resources
 from .. import slots as SLOTS
 from .endpoint import Endpoint
@@ -60,6 +61,18 @@ class Headroom:
     @property
     def fits(self) -> bool:
         return self.need <= self.free
+
+
+@dataclass(frozen=True)
+class Settings:
+    """The ``[lanes]`` knobs of this module as one value (the one reader of them)."""
+
+    default_slots: int = 1
+    wait_s: int = 600
+
+    @classmethod
+    def from_config(cls, cfg: Config) -> Settings:
+        return cls(cfg.lanes.endpoint_slots, cfg.lanes.slot_wait_s)
 
 
 def endpoint_pool(route: str) -> str:
