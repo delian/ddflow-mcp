@@ -2828,5 +2828,36 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_waves": {
+  "command": "waves",
+  "schema": "waves@1",
+  "shape": "object",
+  "payload": [
+   "waves",
+   "cyclic",
+   "stale",
+   "stamped"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "waves@1"
+    },
+    "waves": {},
+    "cyclic": {},
+    "stale": {},
+    "stamped": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }

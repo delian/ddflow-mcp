@@ -86,15 +86,11 @@ DECIDED 2026-10-23 by the operator (verbatim words are in the session log and in
 | TE-Q8 | Check the limit reset automatically and RESUME automatically (not wait for the operator); capped by `[spend].auto_resume`, max resumes per day, quiet; reported in the digest | D-TE-Q8 | NEW TE-auto-resume, TE-spend-resume (amended) |
 
 Wave convention for the tasks named in the Tasks column above: `wave:N` tags follow D-labels and
-D-wave-semantics (derived, priority-ordered, never hand-edited). The stamp writer is not a
-CLI yet: `ddflow waves` is a surface that reports the missing `--stamp` with the followable
-mechanism (bug B47acb25115) — the real `ddflow waves --stamp` arrives with LB-waves,
-and GR-wave-derived makes the tags derived values. Until then the followable mechanism is
-the roadmap-review restamp script `docs/ddflow/research/scripts/wave_stamp_accurate.py`
-(via `ddflow update --add-tags`/`--remove-tags`; `docs/ddflow/research/queue-review-2026-10-23.md`),
-which stamped every open task of the queue on 2026-10-23 except the 14 items in flight (not
-touched; the TE-* follow-ups filed after the review carried none until the next --apply).
-The gap is filed as bug B47acb25115.
+D-wave-semantics (derived, priority-ordered, never hand-edited). The stamp writer is
+`ddflow waves --stamp` (`--check` exits 1 when stamps are stale); stamping also runs by default
+after a graph change (knob `[waves].auto_stamp`, bug B47acb25115 / fix-Bf03dc5a256). The 2026-10-23
+roadmap-review script `docs/ddflow/research/scripts/wave_stamp_accurate.py` is superseded by it.
+
 
 Recorded tension (TE-Q8): a money decision the operator delegated; the proposal default was to wait. Bounded by the daily cap and the digest report.
 Honest limit (TE-Q2): window extension is a launch-time or rotation-time decision, a recommendation for the lead; larger windows cost more per call and per cache rewrite; ceiling knob, company floors tighten-only.
