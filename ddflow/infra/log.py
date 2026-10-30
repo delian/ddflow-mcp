@@ -1438,9 +1438,9 @@ class EventLog:
                     )
                     try:
                         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                            with contextlib.suppress(PermissionError):
-                                os.chown(fd, st.st_uid, st.st_gid)
-                            os.chmod(fd, st.st_mode & 0o7777)
+                            with contextlib.suppress(OSError):
+                                os.fchown(fd, st.st_uid, st.st_gid)
+                            os.fchmod(fd, st.st_mode & 0o7777)
                             fh.write("\n".join(lines) + "\n")
                         os.replace(tmp, shard)
                     except BaseException:
