@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, get_type_hints
 
 from ..core.registry import Registry
-from . import harnessv2
+from . import harnessfacts, harnessv2
 from .harnessv2 import RESERVED_SECTIONS, V2_SECTIONS, DescriptorError, Reserved
 from .mcpconfig import (
     SHAPE_COPILOT,
@@ -199,6 +199,8 @@ class Harness:
     autonomy: harnessv2.Autonomy | None = None
     telemetry: harnessv2.Telemetry | None = None
     reserved: dict[str, Reserved] = field(default_factory=dict)  #: RESERVED_SECTIONS present
+    facts: dict[str, dict[str, Any]] = field(default_factory=dict)  #: provenance (harnessfacts)
+    given: tuple[str, ...] = ()  #: `section.key` of every key the file wrote, even a zero
 
 
 def _check_type(value: Any, hint: Any, where: str) -> Any:
@@ -311,6 +313,7 @@ def _validate(h: Harness, where: str) -> None:
     harnessv2.validate_reserved(h.reserved, where)
     harnessv2.validate({n: getattr(h, n) for n in V2_SECTIONS if getattr(h, n)}, where)
     _validate_surfaces(h, where)
+    harnessfacts.validate(h, where)
 
 
 def parse(text: str, name: str) -> Harness:
@@ -323,6 +326,8 @@ def parse(text: str, name: str) -> Harness:
     top = {k: raw.pop(k) for k in ("id", "rank", "family", "delta", "title") if k in raw}
     mcp = _build(Mcp, raw.pop("mcp", None), f"{where}[mcp]")
     verified = _build(Verified, raw.pop("verified", None), f"{where}[verified]")
+    given = harnessfacts.given_keys(raw)
+    overlay = harnessfacts.parse_overlay(raw.pop("facts", {}), where)
     sections = {}
     for key, cls in _SECTIONS.items():
         if key in raw:
@@ -342,7 +347,9 @@ def parse(text: str, name: str) -> Harness:
                 continue
             raise DescriptorError(f"{where}: missing top-level key {key!r}")
         _check_type(top[key], want, f"{where}.{key}")
-    h = Harness(**top, mcp=mcp, verified=verified, reserved=reserved, **sections)
+    h = Harness(
+        **top, mcp=mcp, verified=verified, reserved=reserved, facts=overlay, given=given, **sections
+    )
     if h.id != name:
         raise DescriptorError(f"{where}: id {h.id!r} must equal the file name {name!r}")
     _validate(h, where)

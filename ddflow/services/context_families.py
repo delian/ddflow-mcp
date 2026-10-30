@@ -18,10 +18,11 @@ from typing import Any
 
 from ..core import clock
 from ..infra import paths
+from . import facts as facts_record
 
-FACT_KEYS = ("v", "s", "src", "d", "note", "exc", "only")
-STATUSES = ("verified", "documented", "unverified", "none")
-READABLE = ("verified", "documented")
+FACT_KEYS = facts_record.FACT_KEYS
+STATUSES = facts_record.STATUSES
+READABLE = facts_record.READABLE
 UNKNOWN = "unknown"
 _SHOWN = 5  # stale facts named in one doctor note
 _FILES = ("context_families.toml", "context_harnesses.toml")
@@ -33,8 +34,7 @@ def load(templates: Path | None = None) -> dict[str, dict[str, Any]]:
     return {name: tomllib.loads((base / name).read_text(encoding="utf-8")) for name in _FILES}
 
 
-def is_fact(node: Any) -> bool:
-    return isinstance(node, dict) and "s" in node
+is_fact = facts_record.is_fact
 
 
 def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
@@ -52,10 +52,8 @@ def facts(doc: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
 
 
 def _field_problems(at: str, f: dict[str, Any]) -> list[str]:
-    """Unknown fields and wrong types of `exc` / `only`; empty keys would match every model."""
+    """Wrong types of `exc` / `only`; empty keys would match every model."""
     out = []
-    if set(f) - set(FACT_KEYS):
-        out.append(f"{at} has unknown field(s) {sorted(set(f) - set(FACT_KEYS))}")
     exc, only = f.get("exc", {}), f.get("only", [])
     if not isinstance(exc, dict) or not all(k for k in exc):
         out.append(f"{at}: exc must be a table of non-empty model substrings")
@@ -94,14 +92,7 @@ def _fact_problems(name: str, doc: dict[str, Any]) -> list[str]:
         out.append(f"{name}: sources is not a table")
     for table, row, key, f in facts(doc):  # facts() skips non-table rows (see _shape_problems)
         at = f"{name}: {table}.{row}.{key}"
-        if f["s"] not in STATUSES:
-            out.append(f"{at}: status {f['s']!r} is not one of {STATUSES}")
-        if not isinstance(f.get("src"), str) or f["src"] not in sources:
-            out.append(f"{at}: source {f.get('src')!r} is not in [sources]")
-        try:
-            clock.parse_date(str(f.get("d")))
-        except ValueError:
-            out.append(f"{at}: date {f.get('d')!r} is not ISO")
+        out += facts_record.problems(at, f, sources)
         if f["s"] in READABLE and "v" not in f:
             out.append(f"{at}: status {f['s']} needs a value")
     return out

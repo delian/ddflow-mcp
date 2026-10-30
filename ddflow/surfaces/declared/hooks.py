@@ -255,11 +255,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "action",
-                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken (read-only).",
+                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value with status, source, tool version and date (read-only).",
             ),
             Param(
                 "harness",
-                help="harness_show / harness_doctor / run: the agent's descriptor id.",
+                help="harness_show / harness_doctor / harness_facts / run: the agent's descriptor id.",
             ),
             Param(
                 "event",
@@ -279,10 +279,18 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, even after compaction, starts with the ddflow brief. Other hooks there are untouched.",
             ),
+            Param(
+                "unverified",
+                type="boolean",
+                help="harness_facts: only the unverified leads and the sections left out.",
+            ),
         ),
         call=lambda repo, a, agent: (
             _api().harness_view(
-                repo, what=a["action"].removeprefix("harness_"), id=a.get("harness", "") or ""
+                repo,
+                what=a["action"].removeprefix("harness_"),
+                id=a.get("harness", "") or "",
+                unverified=bool(a.get("unverified")),
             )
             if str(a.get("action", "")).startswith("harness_")
             else _api().hooks(
@@ -366,6 +374,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("harness", "list"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "doctor"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "facts"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),
     Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
     Command(
