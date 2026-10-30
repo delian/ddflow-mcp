@@ -88,6 +88,23 @@ def test_re_recording_by_id_CORRECTS_a_memory(repo):
     assert _state(repo).memories["M-gpu"].text == "GPUs 4-7 are free"
 
 
+def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
+    """Bug B-memory-rerecord-keeps-old-text-in-log: `--id` corrected a fact but left the
+    superseded text (a stale or private copy) committed in the event log, so it stayed
+    recallable. The re-record must redact the superseded event's text, audited."""
+    run_cli(repo, "init")
+    run_cli(repo, "memory", "add", "old stale fact 10.77.3.91", "--id", "M-s")
+    _c, out, _ = run_cli(repo, "--json", "memory", "add", "corrected fact", "--id", "M-s")
+    assert json.loads(out)["replaced"] is True
+    assert _state(repo).memories["M-s"].text == "corrected fact"
+
+    shard = "\n".join(p.read_text() for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl")))
+    # only the new text survives; the superseded text is redacted, never left committed
+    assert "corrected fact" in shard
+    assert "old stale fact" not in shard
+    assert "[REDACTED:superseded]" in shard
+
+
 def test_over_mcp_a_subagent_is_the_author_of_its_memory(repo):
     run_cli(repo, "init")
     srv = Server(repo)
