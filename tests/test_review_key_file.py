@@ -267,3 +267,9 @@ def test_default_env_name_is_never_read_unless_configured(monkeypatch):
     rev = RV.Reviewer(name="g", kind="gemini")
     got = rev.key_result("GEMINI_API_KEY")
     assert not got.value and "GEMINI_API_KEY" in got.reason
+
+
+def test_an_env_key_with_a_control_character_is_refused_without_echo(monkeypatch):
+    monkeypatch.setenv(ENV, "sk-\rX: " + FAKE)
+    got = RK.resolve_key(ENV, "")
+    assert not got.value and FAKE not in got.reason and ENV in got.reason
