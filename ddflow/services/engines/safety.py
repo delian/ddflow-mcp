@@ -65,7 +65,7 @@ def _children(op, av):
     if op is _c.BRANCH:
         return list(av[1])
     if op in (_c.ASSERT, _c.ASSERT_NOT):
-        return [av[1]]
+        return [av[-1]]
     if op is _c.GROUPREF_EXISTS:
         return [s for s in av[1:] if s]
     if hasattr(_c, "ATOMIC_GROUP") and op is _c.ATOMIC_GROUP:
