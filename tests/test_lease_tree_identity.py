@@ -59,6 +59,8 @@ def test_heartbeat_from_the_items_tree_renewed_under_a_different_identity(repo):
     """Bug Bad4752f936: the CLI resolves an identity OTHER than the holder (an `as_agent`
     claim, a harness declaration), and the owner check answered the tree question from the
     primary -- 'no lease held' from exactly the tree that made the item's lease."""
+    import json
+
     assert run_cli(repo, "init")[0] == OK
     assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     tree = repo.parent / "item-tree"
@@ -67,11 +69,12 @@ def test_heartbeat_from_the_items_tree_renewed_under_a_different_identity(repo):
     assert code == OK, out + err
     assert "adopted" in out, out  # the item's OWN tree is this harness tree
     before = _item(repo).lease.renewed_at
-    code, out, err = run_cli(tree, "heartbeat", "T1", agent="other")
-    assert code == OK, out + err
+    code, out, err = run_cli(tree, "--json", "heartbeat", "T1", agent="other")
+    assert code == OK, out + err  # 'no lease held' exits 2, never 0
+    assert json.loads(out)["renewed"] is True, out
     after = _item(repo).lease
     assert after.holder == "lead", after.holder  # renewed, not taken over
-    assert after.renewed_at >= before
+    assert after.renewed_at >= before  # >= : a close renewal may be throttled, not written
 
 
 def test_heartbeat_from_an_unrelated_tree_still_refuses(repo):
