@@ -30,7 +30,12 @@ err = opt("--stderr", "")
 child = opt("--child")
 echo = opt("--echo-env")
 if child:
-    c = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(300)"])
+    c = subprocess.Popen(
+        [sys.executable, "-c", "import time;time.sleep(300)"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     open(child + ".tmp", "w").write(str(c.pid))
     os.rename(child + ".tmp", child)  # atomic: a reader never sees half a pid
 if "--read-stdin" in a:

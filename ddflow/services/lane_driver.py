@@ -216,11 +216,12 @@ def spec_from_headless(
     ):
         if val in ("", None):
             continue
+        values[ph] = str(val)
+        if "{" + ph + "}" in argv:
+            continue  # the template already carries it: no flag needed
         if not flag:
             return unavailable(f"the descriptor has no flag for {ph}; it is not guessed")
-        values[ph] = str(val)
-        if "{" + ph + "}" not in argv:
-            argv += [flag, "{" + ph + "}"]
+        argv += [flag, "{" + ph + "}"]
     if headless.autonomy:
         profile = (autonomy.profiles if autonomy and not autonomy.none else {}).get(
             headless.autonomy
