@@ -36,7 +36,7 @@ from .. import slots as SLOTS
 from .endpoint import Endpoint
 
 #: Pool name of an endpoint route: a plain file-name stem (a route is data, never a path).
-_STEM = re.compile(r"[^A-Za-z0-9_.-]")
+_STEM = re.compile(r"[^A-Za-z0-9-]")
 
 
 @dataclass(frozen=True)
@@ -63,8 +63,10 @@ class Headroom:
 
 
 def endpoint_pool(route: str) -> str:
-    """The pool name of an endpoint route (``ep-<route>``), safe as a lock-file stem."""
-    return "ep-" + _STEM.sub("_", route).lstrip(".")
+    """The pool name of an endpoint route (``ep-<route>``), safe as a lock-file stem and
+    one-to-one: every character outside ``[A-Za-z0-9-]`` becomes ``_<hex>``, so ``a/b`` and
+    ``a_b`` stay two pools."""
+    return "ep-" + _STEM.sub(lambda m: f"_{ord(m.group()):x}_", route)
 
 
 def pools_for(

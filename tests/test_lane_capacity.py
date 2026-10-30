@@ -34,7 +34,9 @@ def test_gpu_resource_pool_and_order() -> None:
 
 
 def test_route_name_is_a_safe_stem() -> None:
-    assert "/" not in C.endpoint_pool("a/b") and not C.endpoint_pool(".x").startswith(".")
+    names = {C.endpoint_pool(r) for r in ("a/b", "a_b", ".foo", "foo", "a-b")}
+    assert len(names) == 5  # one-to-one: distinct routes never share a pool
+    assert all("/" not in n and not n.startswith(".") for n in names)
 
 
 def test_view_figures_and_refusals() -> None:
@@ -68,7 +70,7 @@ def test_failed_acquire_releases_earlier_pools(tmp_path: Path) -> None:
     a, b = C.Pool("a-pool", 1), C.Pool("b-pool", 1)
     with S.Slots(tmp_path, "b-pool").hold(1):
         with pytest.raises(S.SlotsTimeout):
-            with C.acquire((b, a), 0, tmp_path):
+            with C.acquire((a, b), 0, tmp_path):
                 pass
         assert C.busy_counts((a,), tmp_path) == {"a-pool": 0}
 
