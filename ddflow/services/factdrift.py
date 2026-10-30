@@ -92,7 +92,8 @@ def assess(
 
 def effective(fact: dict[str, Any], installed: str | None = None, **kw: Any) -> dict[str, Any]:
     """The fact as dependent decisions should read it: a drifted fact becomes `unverified`
-    with the reason in its note; the input is not changed."""
+    with the reason in its note; the input is not changed. An `unknown` assessment (a range
+    but no installed version) is not drift: `pick` degrades on it, this leaves the fact be."""
     a = assess(fact, installed, **kw)
     if not a.drifted:
         return fact

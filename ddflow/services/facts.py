@@ -72,5 +72,6 @@ def rank(fact: dict[str, Any]) -> int:
 
 
 def best(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The highest-ranked fact (first wins a tie), or None for no candidates."""
+    """The highest-ranked fact by status alone (first wins a tie), or None. Staleness is
+    not judged here: `factdrift.pick` drops drifted facts before calling this."""
     return max(candidates, key=rank, default=None) if candidates else None
