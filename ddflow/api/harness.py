@@ -21,6 +21,7 @@ from ..core import outcome as O
 from ..mcpshim import clients
 from ..services import adopt as AD
 from ..services import claudehooks as CH
+from ..services import harnessfacts as HF
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
@@ -262,12 +263,28 @@ def harness_doctor(repo: Path, which: str = "") -> O.Outcome:
     )
 
 
-def harness_view(repo: Path, *, what: str = "list", id: str = "") -> O.Outcome:
-    """The three views behind one entry point (the CLI verb and the MCP action)."""
+def harness_facts(agent: str = "", unverified: bool = False) -> O.Outcome:
+    """The facts table: every descriptor value with status, source, version and date.
+    `unverified` keeps only the leads and adds the sections left out (NOT VERIFIED)."""
+    if agent and HR.get(agent) is None:
+        return O.failed("harness_facts", f"no harness {agent!r}; known: {', '.join(HR.ids())}")
+    targets = [HR.get(agent)] if agent else list(HR.load())
+    rs = [r for h in targets for r in HF.rows(h, absent=unverified)]
+    if unverified:
+        rs = [r for r in rs if r["status"] == "unverified"]
+    return O.ok("harness_facts", facts=rs, message=HF.table(rs))
+
+
+def harness_view(
+    repo: Path, *, what: str = "list", id: str = "", unverified: bool = False
+) -> O.Outcome:
+    """The views behind one entry point (the CLI verb and the MCP action)."""
+    if what == "facts":
+        return harness_facts(id, unverified)
     if what == "list":
         return harness_list(repo)
     if what == "show":
         return harness_show(repo, id) if id else O.failed("harness", "show needs a harness id")
     if what == "doctor":
         return harness_doctor(repo, id)
-    return O.failed("harness", f"unknown view {what!r}: list, show or doctor")
+    return O.failed("harness", f"unknown view {what!r}: list, show, doctor or facts")
