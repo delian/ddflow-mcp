@@ -9,7 +9,7 @@ Two stages (D-swarm-answers Q1, Q5, Q10):
 1. ``refusals``: hard constraints, each a reason string. Open needs, glob overlap with
    another item's live lease, the global, per-family and per-lane caps, hedging cap, the
    window, the trust tier, and family independence (a reviewer's family differs from the
-   author's; an author needs a reviewer family left that differs from its own). A refused
+   author's, an unknown family on either side never passes; an author needs a reviewer family left that differs from its own). A refused
    pair is never scored into eligibility: no weight can override a refusal.
 2. ``evaluate``: a score from critical path, fit (ledger), cost, rework and queue, each a
    term in [0, 1] times its ``[swarm]`` weight, kept in ``Decision.parts``. Cost only ranks
@@ -42,7 +42,7 @@ class Item:
     min_trust: int | None = None  # None: [swarm] default_min_trust
     est_in: int = 0  # estimated input / output tokens
     est_out: int = 0
-    attempts: int = 0  # live attempts already on it, the first included; hedge_max extra allowed
+    live_attempts: int = 0  # attempts live now, first included; at most 1 + hedge_max in all
 
 
 @dataclass(frozen=True)
@@ -113,8 +113,10 @@ def _state_refusals(item: Item, world: World, w: Weights) -> list[str]:
             out.append(f"globs overlap the live lease on {lv.item}")
     if len(world.live) >= w.max_lanes:  # every live lease, hedges included
         out.append(f"swarm at max_lanes ({w.max_lanes})")
-    if item.attempts > w.hedge_max:
-        out.append(f"hedge cap: {item.attempts} attempts, hedge_max {w.hedge_max}")
+    if item.live_attempts > w.hedge_max:
+        out.append(
+            f"hedge cap: {item.live_attempts} live attempts, 1 + hedge_max {w.hedge_max} reached"
+        )
     return out
 
 
