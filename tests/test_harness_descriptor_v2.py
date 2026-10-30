@@ -26,7 +26,9 @@ def p(extra: str = ""):
 
 
 def test_shipped_descriptors_still_load_with_v2_not_verified():
-    for h in harnessreg.load():
+    shipped = harnessreg.load()
+    assert shipped
+    for h in shipped:
         assert h.detect is None and h.headless is None and h.autonomy is None
         assert h.reserved == {}
 
@@ -95,6 +97,7 @@ def test_none_is_documented_absence_and_absent_is_not_verified():
         ("[continuation]\nmechanism = 'magic'\n", "continuation.mechanism"),
         ("[continuation]\ncap = 3\n", "need a mechanism"),
         ("[headless]\nautonomy = 'yolo'\n", "headless.autonomy"),
+        ("[headless]\nautonomy = ''\n", "headless.autonomy"),
         ("[spawn]\n", "exactly one"),
         ("[spawn]\nnone = true\nx = 'y'\n", "exactly one"),
         ("[bot]\nn = 3\n", r"bot\]\.n"),
