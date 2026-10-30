@@ -24,7 +24,7 @@ GOLDEN = Path(__file__).parent / "data" / "mcp_tool_aliases.json"
 def test_one_alias_per_old_name_that_is_not_a_hot_single():
     own = {"ddflow_doctor", "ddflow_workflow"}
     assert set(A.ALIASES) == set(TOOLS) - set(F.HOT_SINGLES) - own
-    assert len(A.ALIASES) == 113
+    assert len(A.ALIASES) == 114
     for old, alias in A.ALIASES.items():
         assert isinstance(alias, R.Alias)
         assert (alias.kind, alias.old) == ("tool", old)
