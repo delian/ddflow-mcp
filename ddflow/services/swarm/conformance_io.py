@@ -32,12 +32,15 @@ def _read(p: Path) -> dict:
 
 
 def _reports(raw: dict) -> dict[str, Report]:
-    if raw.get("schema") != SCHEMA:
-        return {}
-    try:
-        return {name: Report.from_data(d) for name, d in raw["lanes"].items()}
-    except (KeyError, TypeError, ValueError, AttributeError):
-        return {}
+    """The readable lanes of a document of this schema; a malformed entry is skipped."""
+    out: dict[str, Report] = {}
+    lanes = raw.get("lanes") if raw.get("schema") == SCHEMA else None
+    for name, d in lanes.items() if isinstance(lanes, dict) else ():
+        try:
+            out[name] = Report.from_data(d)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return out
 
 
 def load_all(root: Path) -> dict[str, Report]:
@@ -58,9 +61,9 @@ def save(root: Path, report: Report) -> Path:
             raise ValueError(
                 f"{p} has schema {raw.get('schema')!r}, not {SCHEMA!r}; not overwritten"
             )
-        lanes = _reports(raw)
-        lanes[report.lane] = report
-        body = {"schema": SCHEMA, "lanes": {k: v.to_data() for k, v in sorted(lanes.items())}}
+        lanes = dict(raw.get("lanes") or {})  # kept as written: a malformed entry survives
+        lanes[report.lane] = report.to_data()
+        body = {"schema": SCHEMA, "lanes": dict(sorted(lanes.items()))}
         p.parent.mkdir(parents=True, exist_ok=True)
         fsio.atomic_write(p, json.dumps(body, indent=2, sort_keys=True) + "\n")
     return p

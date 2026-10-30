@@ -229,10 +229,14 @@ def _record(o: Observed, ev: LaneEvent) -> None:
 
 
 def _shown(o: Observed, p: Params) -> bool:
-    """Enough seen: the lease actions were called and the accuracy sample is full."""
-    names = {norm_tool(c.get("name", "")) for c in o.calls if _ok(c)}
+    """Enough seen: each lease action has a successful call and the accuracy sample is full."""
     return (
-        bool(o.started) and {"claim", "heartbeat", "gate"} <= names and len(o.calls) >= p.min_calls
+        bool(o.started)
+        and all(
+            any(_ok(c) for c in _named(o.calls, tool, acts))
+            for tool, acts in (("claim", ("",)), ("heartbeat", ("",)), ("gate", ("", "record")))
+        )
+        and len(o.calls) >= p.min_calls
     )
 
 
@@ -327,6 +331,8 @@ def admits(report: Report | None, needed: int | str, p: Params, now: float | Non
     if isinstance(needed, str) and needed not in LEVEL_NAMES:
         return False  # an unknown level name admits nothing
     need = LEVEL_NAMES.index(needed) if isinstance(needed, str) else int(needed)
+    if not 0 <= need < len(LEVEL_NAMES):
+        return False
     if p.max_age_s and (time.time() if now is None else now) - report.at > p.max_age_s:
         return False
     return report.level >= need
