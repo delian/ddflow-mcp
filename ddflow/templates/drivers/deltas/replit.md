@@ -3,8 +3,10 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration.** Replit Agent runs long autonomous sessions. ddflow's unit is still one
-   claimed item; print `ddflow next` at the end of each.
+1. **Iteration.** Replit Agent runs long autonomous sessions: keep going inside one —
+   claim an item, run its gates to the merge, re-read `ddflow next`, repeat — until an
+   ask stops you or nothing is ready; one claimed item at a time. `ddflow next`
+   printed at the end of each session is the handoff.
 2. **Worktrees off.** A Replit workspace is already an isolated environment, and git
    worktrees inside it add a directory the merge step cannot reach. Set
    `worktree.enabled = false`.

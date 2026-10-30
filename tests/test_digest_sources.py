@@ -48,7 +48,11 @@ def test_operator_rows_have_a_chat_route_and_lead_rows_do_not_pretend():
 
 def _fixed(command: str) -> list[str]:
     """The tokens of a command that are not placeholders: verb words and options."""
-    return [w for w in command.split() if not w.startswith("<") and w != "..."]
+    return [
+        w
+        for w in command.split()
+        if not w.startswith("<") and w not in ("...", "--approval", "ID", "request|ID")
+    ]
 
 
 def _subsequence(needle: list[str], hay: list[str]) -> bool:
@@ -69,8 +73,8 @@ def test_site_commands_appear_in_the_answer_of_their_source():
             assert _subsequence(_fixed(cmd[v]), _fixed(s.command)), (s.kind, v)
 
 
-def test_red_main_is_urgent_and_by_kind_indexes_all():
-    assert S.by_kind()["red_main"].severity == "urgent"
+def test_red_main_starts_at_needs_and_by_kind_indexes_all():
+    assert S.by_kind()["red_main"].severity == "needs"
     assert len(S.by_kind()) == len(S.SOURCES)
 
 

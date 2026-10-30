@@ -40,7 +40,7 @@ def _partial_item(repo, reason="baseline-red: test_x, bug B1", baseline=True):
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
         fh.write("\n[agent]\nreviewer_family_must_differ = false\n")
     run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree")
     run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
     run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")

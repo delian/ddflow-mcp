@@ -59,7 +59,7 @@ def test_claiming_from_inside_a_worktree_adopts_it(repo):
     """The headline. No third tree, no second branch, no 'cd elsewhere'."""
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     before = len(_worktrees(repo))
     code, out, err = run_cli(agent_tree, "claim", "T1")
@@ -74,7 +74,7 @@ def test_the_adopted_tree_and_branch_are_recorded(repo):
     bug for a worse one."""
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(agent_tree, "claim", "T1")
 
     it = _item(repo)
@@ -89,7 +89,7 @@ def test_an_adopted_tree_is_not_marked_as_created(repo):
     than the one adoption fixes."""
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(agent_tree, "claim", "T1")
 
     kinds = [e.kind for e in EventLog(repo).read_all() if e.kind.startswith("worktree.")]
@@ -101,7 +101,7 @@ def test_claiming_from_the_PRIMARY_still_creates_one(repo):
     """The ordinary single-tree case must not change shape. Adoption fires only when
     the caller is demonstrably already isolated."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "claim", "T1")
     assert code == OK, err
     assert "cd there and work" in out, out
@@ -118,8 +118,8 @@ def test_a_tree_already_bound_to_an_open_item_is_refused(repo):
     uncommitted changes it found."""
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     run_cli(agent_tree, "claim", "T1")
 
     code, _out, err = run_cli(agent_tree, "claim", "T2")
@@ -133,8 +133,8 @@ def test_a_tree_whose_item_is_DONE_can_be_reused(repo):
     Refusing forever would make the guard a leak."""
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     run_cli(agent_tree, "claim", "T1")
     run_cli(agent_tree, "abandon", "T1", "--reason", "not needed")
 
@@ -148,7 +148,7 @@ def test_a_tree_whose_item_is_DONE_can_be_reused(repo):
 def test_no_worktree_still_skips_everything(repo):
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(agent_tree, "claim", "T1", "--no-worktree")
     assert code == OK, err
     assert "adopted" not in out
@@ -163,7 +163,7 @@ def test_adopt_existing_false_restores_the_old_behaviour(repo):
     # operator would actually set it. Appending a second `[worktree]` table by hand is
     # invalid TOML — `init` already wrote one.
     assert run_cli(repo, "config", "--set", "worktree.adopt_existing", "false")[0] == OK
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(agent_tree, "claim", "T1")
     assert code == OK, err
     # Assert the behaviour, not a word: the message may say "no tree is adopted".
@@ -211,7 +211,7 @@ def test_merge_does_NOT_delete_an_adopted_worktree(repo):
     """
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(agent_tree, "claim", "T1")
     assert _item(repo).adopted is True, "the fold did not record the adoption"
 
@@ -229,7 +229,7 @@ def test_merge_still_removes_a_worktree_ddflow_CREATED(repo):
     """The other half: `remove_on_merge` must keep working for our own trees, or the
     fix trades a data-loss bug for a disk-filling one."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1")
     tree = Path(_item(repo).worktree)
     resolved = tree if tree.is_absolute() else repo / tree
@@ -255,7 +255,7 @@ def test_adoption_works_over_the_MCP_surface(repo):
 
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     before = len(_worktrees(repo))
     srv = Server(repo, called_from=agent_tree)
@@ -282,8 +282,8 @@ def test_a_refused_claim_does_not_leave_the_lease_behind(repo):
     """
     run_cli(repo, "init")
     agent_tree = _agent_worktree(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     run_cli(agent_tree, "claim", "T1")
 
     code, _out, _err = run_cli(agent_tree, "claim", "T2")

@@ -46,7 +46,8 @@ def test_bug_found_does_not_copy_unrelated_globs(repo):
     log.append("task.added", "T1", {"parent": "P1", "title": "t", "globs": SRC})
     log.append("item.completed", "T1", {"sha": "abc"})
     K.bug_found(repo, summary="merge timed out; README.md stale", item="T1", id="Bm", agent="a")
-    assert state(repo).items["fix-Bm"].globs == []
+    # The bug's OWN named file is its scope (B45b80286d2); the source item's files are not copied.
+    assert state(repo).items["fix-Bm"].globs == ["README.md"]
 
 
 def test_slash_words_in_prose_are_not_file_names():

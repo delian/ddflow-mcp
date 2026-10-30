@@ -74,7 +74,7 @@ def _mid_merge(repo: Path, globs: str) -> None:
     assert _git(repo, "merge", "main", check=False).returncode != 0, "expected a conflict"
     (repo / "shared.txt").write_text("feat and main\n")
     _git(repo, "add", "shared.txt")
-    run_cli(repo, "task", "add", "T1", "--globs", globs)
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", globs)
     assert A.claim(repo, "T1", no_worktree=True, agent=AGENT).ok
 
 
@@ -110,7 +110,7 @@ def test_a_merge_in_a_linked_worktree_is_judged_the_same(repo, tmp_path):
     assert _git(tree, "merge", "main", check=False).returncode != 0, "expected a conflict"
     (tree / "shared.txt").write_text("feat and main\n")
     _git(tree, "add", "shared.txt")
-    run_cli(repo, "task", "add", "T1", "--globs", "shared.txt")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "shared.txt")
     assert A.claim(repo, "T1", no_worktree=True, agent=AGENT).ok
     out = _hook(tree)
     assert "from_main.txt" not in out and "not covered" not in out, out

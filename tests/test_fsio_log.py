@@ -4,6 +4,7 @@ with the behaviour each had before."""
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import hashlib
 import json
@@ -74,13 +75,21 @@ def test_the_lock_is_free_again_after_the_block(tmp_path):
 
 def test_the_snapshot_is_written_atomically_without_fsync(tmp_path, monkeypatch):
     calls: list[dict] = []
-    real = fsio.atomic_write
+    real_write = fsio.atomic_write
+    real_file = fsio.atomic_file
 
-    def spy(path, data, **kw):
+    def spy_write(path, data, **kw):
         calls.append({"path": path, **kw})
-        real(path, data, **kw)
+        real_write(path, data, **kw)
 
-    monkeypatch.setattr(fsio, "atomic_write", spy)
+    @contextlib.contextmanager
+    def spy_file(path, **kw):
+        calls.append({"path": path, **kw})
+        with real_file(path, **kw) as fh:
+            yield fh
+
+    monkeypatch.setattr(fsio, "atomic_write", spy_write)
+    monkeypatch.setattr(fsio, "atomic_file", spy_file)
     log = EventLog(tmp_path, "x", log_cfg=_SNAP)
     _put(log, "a", [_ev("a", i) for i in range(1, 1600)])
     log.read_all()

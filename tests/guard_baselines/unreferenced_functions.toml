@@ -16,6 +16,9 @@ baseline = 0
 "ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-e2e"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
 "ddflow/services/doctypes/sources.py:render_type" = "B-dt-ownership"
+# The pre-push tripwire hook ids (frozen-workflow-files); the ci run names the hooks that fire
+# over a changed range (api/ci.py check_after_merge). tests/test_ci_tripwire_hooks.py pins it.
+"ddflow/services/ci.py:tripwire_ids" = "B-ci-tripwire"
 # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
 # remaining wiring. (The doctor's too-little-history notes are wired: Bc6784dab3c.)
 "ddflow/core/flowcontrol.py:decide_admission" = "B-af-quota-signal"

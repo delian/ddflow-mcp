@@ -37,7 +37,7 @@ def _wrongly_bound(repo: Path) -> tuple[Path, Path]:
     bridge, real = repo.parent / "bridge", repo.parent / "real"
     _git(repo, "worktree", "add", "-q", str(bridge), "-b", "bridge-work")
     _git(repo, "worktree", "add", "-q", str(real), "-b", "real-work")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(bridge, "claim", "T1", agent="impl")
     assert code == OK and _item(repo).branch == "bridge-work", out + err
     (real / "a.py").write_text("a = 1\n")
@@ -93,7 +93,7 @@ def test_a_released_item_rebinds_and_a_reclaim_keeps_the_new_tree(repo):
 
 def test_rebind_refuses_a_tree_bound_to_another_open_item(repo):
     _wrongly_bound(repo)
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     other = repo.parent / "other"
     _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
     assert run_cli(other, "claim", "T2", agent="impl2")[0] == OK
@@ -159,7 +159,7 @@ def test_a_refused_field_edit_does_not_rebind_either(repo):
     """`update --worktree P --globs G` with G refused records nothing -- the rebind
     included (rubber_duck and roborev on the first cut: the rebind was written first)."""
     _bridge, real = _wrongly_bound(repo)
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     other = repo.parent / "other"
     _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
     assert run_cli(other, "claim", "T2", agent="impl2")[0] == OK
@@ -246,13 +246,13 @@ def test_the_empty_check_judges_the_named_branch_for_a_borrowed_item(repo):
     (feat / "a.py").write_text("a = 1\n")
     _git(feat, "add", "a.py")
     _git(feat, "commit", "-qm", "work")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert run_cli(here, "claim", "T1", "--no-worktree", agent="impl")[0] == OK
     code, out, err = run_cli(here, "merge", "T1", "--branch", "feature", agent="impl")
     assert code == OK, out + err
     assert _git(repo, "show", "main:a.py") == "a = 1"
     # ...and the caller's own empty branch, named, is refused for having nothing.
-    assert run_cli(repo, "task", "add", "T2", "--globs", "b.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")[0] == OK
     assert run_cli(here, "claim", "T2", "--no-worktree", agent="impl")[0] == OK
     code, out, err = run_cli(here, "merge", "T2", "--branch", "empty-here", agent="impl")
     assert code != OK, out + err

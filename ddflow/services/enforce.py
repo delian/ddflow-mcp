@@ -29,7 +29,9 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import difflib
+import glob
 import itertools
+import json
 import os
 import re
 import shlex
@@ -49,7 +51,6 @@ from ..core.admission import new_file_globs
 from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
-from ..core.globs import overlap as globs_overlap
 from ..core.model import Lease, fold
 from ..core.outcome import FAIL, NOTHING, OK, Verdict
 from ..core.schedule import is_shared, shared_globs
@@ -1479,15 +1480,26 @@ def _lapsed_mine(
     not taken over. Invisible above, so the message said "(no live lease)" and "claim
     the work" to the holder committing in its own tree, and the lapse was misread as
     an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
-    Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
-    globs, and reviving them over someone's live paths is the very race the STOP
-    text warns against."""
+
+    Per path, not per lease (DX-lapsed-lease-merge-deadlock): a lease whose globs overlap
+    another agent's live lease is withheld only because ACCEPTING it would wave a staged
+    path that other lease covers -- the one acceptance that could take a held path. By
+    that scope, the old overlap test withheld the lease for the paths too, stranding a
+    lapsed item unable to commit its merge of main with no remedy that works (a heartbeat
+    would revive the lease over someone's live paths, the race the STOP text warns
+    against). Held per path still: a staged path the other live lease covers must take a
+    live lease to commit, and `renew`'s revival refusal over a live claim
+    (L-revival-judged-on-lease-globs) stays as is."""
     return [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, grace_s).items()
         if _counts_as_mine(repo, lease, me, here, bound)
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
-        and not any(globs_overlap(g, o) for g in lease.globs for o in others)
+        and not any(
+            any(path_in_glob(p, o) for o in others)
+            for p in uncovered
+            if any(path_in_glob(p, g) for g in lease.globs)
+        )
     ]
 
 
@@ -1525,6 +1537,17 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _add_globs_arg(paths: list[str]) -> str:
+    """The already-shell-quoted `--add-globs` VALUE for the advice: ONE JSON array,
+    each staged path `glob.escape`d, wrapped by `shlex.quote`. Every other notation
+    splits on commas (`globspec.parse`), so a staged path holding a comma would be
+    printed as a command that ADDS DIFFERENT globs; JSON keeps each path whole,
+    `glob.escape` keeps metacharacters literal (a staged `src/a[b].py` must not
+    become a class matching `src/ab.py`), and `shlex.quote` keeps the printed
+    command copy-runnable (rubber_duck/critic rounds on DX-hook-suggests-add-globs)."""
+    return shlex.quote(json.dumps([glob.escape(p) for p in paths]))
+
+
 def _uncovered_message(
     cfg: Config,
     state,
@@ -1547,10 +1570,12 @@ def _uncovered_message(
     if len(uncovered) > MAX_LISTED_PATHS:
         lines.append(f"  ... and {len(uncovered) - MAX_LISTED_PATHS} more")
     lines.append("")
+    widen = _add_globs_arg(uncovered)
     if stolen and all(v.endswith(f"({me})") for v in stolen.values()):
         lines += [
-            "These paths belong to another item YOU hold, bound to a tree of its own: commit",
-            "them there, or widen THIS item's claim (`ddflow update <ID> --globs '...'`).",
+            f"These paths belong to another item YOU hold, bound to a tree of its own: "
+            f"commit them there, or widen THIS item's claim "
+            f"(`ddflow update <ID> --add-globs {widen}`).",
             "",
         ]
     elif stolen:
@@ -1580,8 +1605,9 @@ def _uncovered_message(
         if lapsed
         else "Fix by claiming the work, or by widening the claim you already hold:",
         "    ddflow next                     # what may be started",
-        "    ddflow claim <ID> --globs '...' # lease it and get a worktree",
-        "    ddflow update <ID> --globs '...'# widen an existing claim",
+        "    ddflow claim <ID>                # lease it and get a worktree",
+        f"    ddflow update <ID> --add-globs {widen}  # add THESE paths;"
+        " --globs would replace the list",
         "",
         f'Policy is [enforce].commit_without_lease = "{mode}" in .ddflow/config.toml.',
     ]

@@ -539,6 +539,16 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_watch": [
+  "ddflow_lease action=watch",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_waves": [
+  "ddflow_view action=waves",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_workflow_drop": [
   "ddflow_workflow action=drop",
   "0.2.8",

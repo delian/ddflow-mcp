@@ -3,10 +3,13 @@ bounded, configurable wait, and says why when it gives nothing."""
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
 from ddflow.services import roborev_branch as RB
+from ddflow.surfaces import cli
 
 FAKE = r"""#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
@@ -66,8 +69,8 @@ def test_no_result_in_time_is_unavailable_with_the_job_and_the_reason(tmp_path, 
     monkeypatch.setenv("FAKE_HANG", "1")
     r = RB.run(repo, "main", 1)
     assert r.outcome == "unavailable" and r.exit == 2 and r.job == 7
-    assert "no result in 1s" in r.reason and "roborev wait --job 7" in r.reason
-    assert "standards_wait_s" in r.reason
+    assert "gave no verdict" in r.reason and "timed out" in r.reason
+    assert "roborev wait --job 7" in r.reason
 
 
 def test_a_fail_verdict_is_findings_not_unavailable(tmp_path, monkeypatch):
@@ -101,19 +104,20 @@ def test_the_wait_is_a_knob():
     assert Config().gates.standards_wait_s == 900
 
 
-def test_a_job_missing_from_the_list_is_unavailable_and_keeps_the_text(tmp_path, monkeypatch):
-    """No readable status: never `findings` on the strength of printed text alone."""
+def test_a_job_missing_from_the_list_is_unavailable_and_never_findings(tmp_path, monkeypatch):
+    """A job the list no longer has is VANISHED, never `findings` on the strength of printed
+    text alone: the verdict asks are not even made for it."""
     repo, _log = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv("FAKE_LIST_EMPTY", "1")  # `roborev list` no longer names the job
     monkeypatch.setenv("FAKE_VERDICT", "a bug")
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "unavailable" and "unjudged" in r.reason and "a bug" in r.text
+    assert r.outcome == "unavailable" and "hold no job 7" in r.reason and r.text == ""
 
 
 def test_the_job_id_is_the_number_after_the_word_job_not_any_digit(tmp_path, monkeypatch):
     repo, _log = _setup(tmp_path, monkeypatch)
-    assert RB._find_job("roborev", repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
+    assert RB._find_job([], repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
 
 
 def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monkeypatch):
@@ -122,7 +126,7 @@ def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monk
     monkeypatch.setenv("FAKE_LIST_EMPTY", "1")
     monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "unavailable" and "unknown state" in r.reason
+    assert r.outcome == "unavailable" and "hold no job 7" in r.reason
 
 
 def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):
@@ -291,6 +295,51 @@ def test_findings_print_a_failed_record_line_and_an_unknown_agent_none(
     monkeypatch.setenv("FAKE_AGENT", "")
     RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"])
     assert "standards --outcome" not in capsys.readouterr().out
+
+
+def test_a_failed_record_line_carries_a_reason_the_gate_record_accepts(
+    tmp_path, monkeypatch, capsys
+):
+    """B0724593ecf: the line printed for a findings verdict omitted --reason, which
+    `ddflow gate record` refuses on a failed outcome, so the copied line could never
+    record the gate."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGENT", "kilo")
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv("FAKE_VERDICT", "a bug")
+    assert RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"]) == 1
+    record_line = next(
+        ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("record: ddflow ")
+    )
+    args = cli.build_parser().parse_args(
+        shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:]  # drop "record:", "ddflow"
+    )
+    assert args.outcome == "failed"
+    assert args.reason, "a failed outcome must carry --reason or gate record refuses it"
+
+
+def test_a_dash_led_first_finding_line_is_still_the_reason_value(tmp_path, monkeypatch, capsys):
+    """The review round on B0724593ecf: a space-separated `--reason --bug` would be read
+    as another flag; the attached --reason=<value> form keeps it the value."""
+    repo, _log = _setup(tmp_path, monkeypatch)
+    exe = tmp_path / "bin" / "roborev"
+    exe.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        '  review) echo "Enqueued job 7 for range" ;;\n'
+        "  wait) exit 1 ;;\n"
+        '  show) echo "  -- dangerously over-broad glob" ;;\n'
+        '  list) echo \'[{"id": 7, "status": "done", "git_ref": "x..abcdef0", "agent": "kilo"}]\' ;;\n'
+        "esac\n"
+    )
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    assert RB.main(["--repo", str(repo), "--base", "main", "--wait-s", "5"]) == 1
+    record_line = next(
+        ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("record: ddflow ")
+    )
+    args = cli.build_parser().parse_args(shlex.split(re.sub(r"<[^>]*>", "x", record_line))[2:])
+    assert args.outcome == "failed"
+    assert args.reason == "-- dangerously over-broad glob"
 
 
 def test_the_printed_label_is_the_one_the_family_check_judges_by(tmp_path, monkeypatch):

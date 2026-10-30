@@ -103,6 +103,7 @@ from .knowledge import (
     bug_fixed,
     bug_found,
     bug_invalid,
+    bug_tag,
     dupes,
     history,
     lesson_add,
@@ -152,7 +153,7 @@ from .operations import (
     precommit,
     relevant_tests,
 )
-from .plan import plan_apply, plan_check, plan_confirm
+from .plan import plan_apply, plan_check, plan_confirm, plan_lint
 from .records import record_resource_listing, record_resource_read
 from .report import item_report, show_report
 from .reporting import (
@@ -211,6 +212,8 @@ from .setup import setup as adopt_project
 from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
+from .watch import watch as watch_target
+from .watch import watch_summary
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -245,6 +248,7 @@ __all__ = [
     "bug_fixed",
     "bug_found",
     "bug_invalid",
+    "bug_tag",
     "cadence",
     "ci_tool",
     "claim",
@@ -316,6 +320,7 @@ __all__ = [
     "plan_apply",
     "plan_check",
     "plan_confirm",
+    "plan_lint",
     "pr_status",
     "pr_sync",
     "pr_threads",
@@ -385,6 +390,8 @@ __all__ = [
     "view_list",
     "view_read",
     "wait_item",
+    "watch_summary",
+    "watch_target",
     "workflow_drop",
     "workflow_gate",
     "workflow_overview",

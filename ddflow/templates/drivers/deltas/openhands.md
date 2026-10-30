@@ -3,8 +3,10 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration.** OpenHands runs autonomous multi-step sessions. One claimed item at a
-   time; print `ddflow next` at the end of each.
+1. **Iteration.** OpenHands runs autonomous multi-step sessions: keep going inside one
+   — claim an item, run its gates to the merge, re-read `ddflow next`, repeat — until
+   an ask stops you or nothing is ready; one claimed item at a time. `ddflow next`
+   printed at the end of each session is the handoff.
 2. **Worktrees.** A hosted OpenHands runtime is already an isolated checkout — set
    `worktree.enabled = false` there. Locally, leave them on.
 3. **Subagents.** Microagents are context, not parallel workers. Parallelism is a second

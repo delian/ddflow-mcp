@@ -189,7 +189,7 @@ def _project(repo):
 
     assert run_cli(repo, "init")[0] == 0
     for t in ("T1", "T2", "T3"):
-        assert run_cli(repo, "task", "add", t, "--globs", f"{t}.py")[0] == 0
+        assert run_cli(repo, "task", "add", t, "--title", "task item", "--globs", f"{t}.py")[0] == 0
 
 
 def _authors(repo):

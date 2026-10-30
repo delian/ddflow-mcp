@@ -10,7 +10,15 @@ from __future__ import annotations
 from ...core import outcome as O
 from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
-from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
+from ..tools._common import (
+    _answer,
+    _api,
+    _bug_reopen,
+    _bug_tag,
+    _regression_tests,
+    _reopening,
+    _tagging,
+)
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
@@ -156,6 +164,7 @@ COMMANDS: tuple[Command, ...] = (
             severity=a.get("severity", "") or "",
             scope=a.get("scope", "") or "",
             globs=a.get("globs", "") or "",
+            tags=a.get("tags", "") or "",
             no_task=bool(a.get("no_task")),
             answer=_answer(a),
             agent=agent,
@@ -189,6 +198,12 @@ COMMANDS: tuple[Command, ...] = (
                 "globs",
                 help="The fix task's files; default: the item's globs.",
                 cli_help="the fix task's files (comma-separated); default: the item's own globs",
+                default="",
+            ),
+            Param(
+                "tags",
+                help="Comma-separated tags; plain strings, `ns:x` is one tag, `wave:*` is reserved.",
+                cli_help="comma-separated tags (plain strings; a namespaced ns:x is one tag; wave:* is reserved)",
                 default="",
             ),
             Param(
@@ -256,21 +271,26 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_bug_fixed",
         flag_exempt=MUTATION_FLAG_EXEMPT,
         description="Close a bug. Requires the regression test that would catch it again: "
-        "write it, watch it FAIL against the unfixed code, then close.",
-        call=lambda repo, a, agent: _api().bug_fixed(
-            repo,
-            a["id"],
-            regression_test=_regression_tests(a),
-            lesson=a.get("lesson", "") or "",
-            lesson_title=a.get("lesson_title", "") or "",
-            lesson_rule=a.get("lesson_rule", "") or "",
-            changelog=a.get("changelog", "") or "",
-            verify_regression=not a.get("skip_regression_verify", False),
-            verify_reason=a.get("verify_reason", "") or "",
-            mutation=mutation_of(a),
-            landed=a.get("landed", "") or "",
-            lint_exempt=a.get("lint_exempt", "") or "",
-            agent=agent,
+        "write it, watch it FAIL against the unfixed code, then close. "
+        "`tag`: instead add/remove the tags (`add`, `remove`) of the open or closed bug `id`.",
+        call=lambda repo, a, agent: (
+            _bug_tag(repo, a, agent=agent)
+            if _tagging(a)
+            else _api().bug_fixed(
+                repo,
+                a["id"],
+                regression_test=_regression_tests(a),
+                lesson=a.get("lesson", "") or "",
+                lesson_title=a.get("lesson_title", "") or "",
+                lesson_rule=a.get("lesson_rule", "") or "",
+                changelog=a.get("changelog", "") or "",
+                verify_regression=not a.get("skip_regression_verify", False),
+                verify_reason=a.get("verify_reason", "") or "",
+                mutation=mutation_of(a),
+                landed=a.get("landed", "") or "",
+                lint_exempt=a.get("lint_exempt", "") or "",
+                agent=agent,
+            )
         ),
         payload=(
             "id",
@@ -279,6 +299,9 @@ COMMANDS: tuple[Command, ...] = (
             "regression_verify",
             "lesson_captured",
             "lesson_capture",
+            "tags",
+            "was",
+            "changed",
         ),
         params=(
             Param("id", help="Bug id.", cli_help="", positional=True),
@@ -341,9 +364,20 @@ COMMANDS: tuple[Command, ...] = (
                 help="The tests guarding this, one per element: the list form of regression_test.",
                 mcp_only=True,
             ),
+            Param(
+                "tag",
+                type="boolean",
+                help="Tag the bug instead of closing it: add/remove tags of the open or closed `id`.",
+                mcp_only=True,
+            ),
+            Param("add", help="With tag: comma-separated tags to add.", mcp_only=True),
+            Param("remove", help="With tag: comma-separated tags to remove.", mcp_only=True),
         ),
         tool_order=(
             "id",
+            "tag",
+            "add",
+            "remove",
             "regression_test",
             "regression_tests",
             "lesson_title",
@@ -397,6 +431,23 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param("reopen", type="boolean", help="Reopen the closed bug instead.", mcp_only=True),
+        ),
+    ),
+    Command(
+        path=("bug", "tag"),
+        via=("ddflow_bug_fixed", "tag"),
+        summary="add or remove tags on an existing bug, open or closed",
+        call=lambda repo, a, agent: _bug_tag(repo, a, agent=agent),
+        payload=("id", "tags", "was", "changed"),
+        render=lambda out, a: (
+            f"bug {a['id']} tags: {', '.join(out.data['tags']) or '(none)'}"
+            + ("" if out.data["changed"] else " (unchanged)")
+        ),
+        cli=CliPolicy(shown=(OK,)),
+        params=(
+            Param("id", positional=True),
+            Param("add", help="comma-separated tags to add", default=""),
+            Param("remove", help="comma-separated tags to remove", default=""),
         ),
     ),
     Command(

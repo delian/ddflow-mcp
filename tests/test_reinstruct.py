@@ -73,7 +73,7 @@ def test_a_skipped_gate_is_reported_as_skipped_not_as_passed(repo):
     """A skip is a recorded DECISION and legitimate. A skip nobody revisited is a step the
     pipeline claims to enforce and did not."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     pipeline = json.loads(run_cli(repo, "--json", "workflow")[1])["task_pipeline"]
     run_cli(repo, "gate", "skip", "T1", pipeline[0], "--reason", "not applicable here")
 
@@ -90,7 +90,7 @@ def test_finishing_work_with_no_lesson_is_reported_only_after_several(repo):
     assert threshold >= 2, "a threshold of 1 would report the first task ever completed"
 
     for i in range(threshold):
-        run_cli(repo, "task", "add", f"T{i}", "--globs", f"f{i}.py")
+        run_cli(repo, "task", "add", f"T{i}", "--title", "task item", "--globs", f"f{i}.py")
         run_cli(repo, "claim", f"T{i}")
         run_cli(repo, "complete", f"T{i}", "--force")
         if i < threshold - 1:

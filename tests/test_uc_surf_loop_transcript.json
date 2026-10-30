@@ -633,7 +633,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync} ...\nddflow: error: unrecognized arguments: --item T1\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
  ],
  [
   [
@@ -703,7 +703,7 @@
   ],
   0,
   "T1.bug_hunt = skipped\n",
-  "NOTE: bug_hunt comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n"
+  "NOTE: bug_hunt comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn'). not gated: a gate skip needs the operator's approval only over a FAILED review with findings still unanswered; bug_hunt is not one, so this skip was recorded directly, and no approval request was filed\n"
  ],
  [
   [
@@ -717,7 +717,7 @@
   ],
   0,
   "{\n  \"schema\": \"gate_skip@1\",\n  \"gate\": \"dedupe\",\n  \"outcome\": \"skipped\"\n}\n",
-  "NOTE: dedupe comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n"
+  "NOTE: dedupe comes after implement, rubber_duck, critic, standards, unit_tests in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn'). not gated: a gate skip needs the operator's approval only over a FAILED review with findings still unanswered; dedupe is not one, so this skip was recorded directly, and no approval request was filed\n"
  ],
  [
   [
@@ -792,7 +792,7 @@
   ],
   3,
   "",
-  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
+  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (or an `[agent].families` family name) (`model` over MCP), declare it once with `ddflow session start --model <author model>` under the same identity, or set `[agent].family` (DDFLOW_AGENT_FAMILY) so no model id is ever written to the log.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [
@@ -801,8 +801,8 @@
    "T1"
   ],
   3,
-  "{\n  \"refusal\": {\n    \"reason\": \"cannot complete T1 \\u2014 3 unmet condition(s):\\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\\n\\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"complete@1\"\n}\n",
-  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
+  "{\n  \"refusal\": {\n    \"reason\": \"cannot complete T1 \\u2014 3 unmet condition(s):\\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (or an `[agent].families` family name) (`model` over MCP), declare it once with `ddflow session start --model <author model>` under the same identity, or set `[agent].family` (DDFLOW_AGENT_FAMILY) so no model id is ever written to the log.\\n\\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"complete@1\"\n}\n",
+  "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (or an `[agent].families` family name) (`model` over MCP), declare it once with `ddflow session start --model <author model>` under the same identity, or set `[agent].family` (DDFLOW_AGENT_FAMILY) so no model id is ever written to the log.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [
@@ -1000,7 +1000,7 @@
   ],
   0,
   "T3 completed as <hex> [FORCED over 3 unmet condition(s)]\nProgress: tasks 1/3 (33%) · bugs fixed 0/0 (100%) · phases 0/0 (100%)\nNext: nothing ready\n",
-  ""
+  "author model: claude-opus-5 (from --model)\n"
  ],
  [
   [
@@ -1046,8 +1046,8 @@
    "claude-opus-5"
   ],
   0,
-  "{\n  \"schema\": \"complete@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"independence\": \"no reviewer ran at all\",\n  \"forced\": true,\n  \"coverage_gaps\": [],\n  \"note\": \"\",\n  \"woke\": [],\n  \"bugs_closed\": [],\n  \"progress\": \"Progress: tasks 2/4 (50%) \\u00b7 bugs fixed 0/0 (100%) \\u00b7 phases 0/0 (100%)\\nNext: nothing ready\",\n  \"umbrellas_completed\": [],\n  \"umbrella_refused\": {}\n}\n",
-  ""
+  "{\n  \"schema\": \"complete@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"author_model\": \"claude-opus-5\",\n  \"author_family\": null,\n  \"model_source\": \"flag\",\n  \"independence\": \"no reviewer ran at all\",\n  \"forced\": true,\n  \"coverage_gaps\": [],\n  \"note\": \"\",\n  \"woke\": [],\n  \"bugs_closed\": [],\n  \"progress\": \"Progress: tasks 2/4 (50%) \\u00b7 bugs fixed 0/0 (100%) \\u00b7 phases 0/0 (100%)\\nNext: nothing ready\",\n  \"umbrellas_completed\": [],\n  \"umbrella_refused\": {}\n}\n",
+  "author model: claude-opus-5 (from --model)\n"
  ],
  [
   [
@@ -1056,7 +1056,7 @@
   ],
   3,
   "",
-  "cannot complete T9 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests (current outcome: implement=not run, unit_tests=not run)\n  - gate(s) never run and never skipped: research, rules, implement, rubber_duck, critic, standards, unit_tests, bug_hunt, dedupe. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T9` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
+  "cannot complete T9 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests (current outcome: implement=not run, unit_tests=not run)\n  - gate(s) never run and never skipped: research, rules, implement, rubber_duck, critic, standards, unit_tests, bug_hunt, dedupe. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (or an `[agent].families` family name) (`model` over MCP), declare it once with `ddflow session start --model <author model>` under the same identity, or set `[agent].family` (DDFLOW_AGENT_FAMILY) so no model id is ever written to the log.\n\n`ddflow gate status T9` shows the pipeline. --force overrides, and the override is recorded.\nAn agent may not use --force; to ask the operator to override these in chat, re-run with `--approval request`, then `--approval <id>` once they have answered.\n"
  ],
  [
   [

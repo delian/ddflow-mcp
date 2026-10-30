@@ -204,13 +204,17 @@ def test_the_explicit_delta_flag_also_falls_back_after_a_rebase(repo, tmp_path):
     assert "not an ancestor" in out.data["text"]
 
 
-def test_nothing_changed_since_the_reviewed_head_says_how_to_force(repo, tmp_path):
+def test_nothing_changed_since_the_reviewed_head_counts_no_round_and_names_full(repo, tmp_path):
     seen = _setup(repo, tmp_path)
     _review(repo)
     calls = _calls(seen)
     out = _review(repo)
-    assert out.exit == REFUSED and "nothing changed" in out.reason and "--full" in out.reason
-    assert _calls(seen) == calls
+    assert out.exit == REFUSED and "nothing changed" in out.reason and "--full" in out.reason, (
+        out.reason
+    )
+    assert "No round was counted" in out.reason and _calls(seen) == calls
+    assert _ev(repo)["delta_rounds"] == 0, "the unchanged delta spent no delta round"
+    assert _ev(repo)["rounds"] == 1, "the unchanged delta spent no full round"
 
 
 def test_delta_default_false_is_the_old_behaviour(repo, tmp_path):
@@ -485,6 +489,106 @@ def test_a_clean_delta_does_not_clear_findings_nobody_triaged(repo, tmp_path):
     _fix(repo, "h.py")
     out = _review(repo)
     assert out.data["outcome"] == "passed", out.data
+
+
+def test_an_unchanged_delta_after_settled_triage_passes_the_gate_and_counts_no_round(
+    repo, tmp_path
+):
+    """B10ad449deb: a clean delta is held `failed` over untriaged earlier findings, and
+    its NOTE says the next clean delta passes -- but no code changed since the reviewed
+    head, so that delta has nothing to review. Now every finding has a verdict: the
+    unchanged delta releases the held pass and counts no round, instead of refusing and
+    keeping the gate failed until new commits arrive."""
+    seen = _setup(repo, tmp_path, "[review]\nmax_rounds = 4\n")
+    assert _review(repo).data["outcome"] == "failed"  # full round 1: FINDME finding
+    _fix(repo)
+    held = _review(repo)
+    assert held.data["outcome"] == "failed" and _ev(repo)["delta_rounds"] == 1, held.data
+    calls = _calls(seen)
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
+    out = _review(repo)  # unchanged since the reviewed head, every finding settled
+    assert _calls(seen) == calls, "no reviewer ran for an unchanged tree"
+    assert out.exit == OK, out.reason
+    assert "passed ON REFUTATION" in out.data["text"], out.data["text"]
+    assert _ev(repo)["held_pass"] is True, "the held clean delta is what gets released"
+    assert _ev(repo)["delta_rounds"] == 1, "the unchanged delta spent no round"
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].gates["critic"].outcome == "passed"
+
+
+def test_an_unchanged_delta_with_findings_still_untriaged_stays_failed_and_counts_no_round(
+    repo, tmp_path
+):
+    """B10ad449deb: the unchanged delta counts no round; without triage the gate stays
+    failed and the answer says so, instead of a refusal that leaves no way to tell the
+    no-op from a fix."""
+    seen = _setup(repo, tmp_path)
+    _review(repo)
+    _fix(repo)
+    held = _review(repo)
+    assert held.data["outcome"] == "failed", held.data
+    assert _ev(repo)["delta_rounds"] == 1, "the held delta counted its round"
+    calls = _calls(seen)
+    out = _review(repo)  # unchanged since the reviewed head; the finding is untriaged
+    assert out.exit == REFUSED, out.reason
+    assert _calls(seen) == calls
+    assert "stays failed" in out.reason and "review triage" in out.reason, out.reason
+    assert "No round was counted" in out.reason
+    assert _ev(repo)["delta_rounds"] == 1, "the unchanged delta spent no delta round"
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].gates["critic"].outcome == "failed", "the gate stays failed"
+
+
+def test_a_failed_delta_that_is_not_the_hold_is_never_released(repo, tmp_path):
+    """B10ad449deb in reverse: `_held_and_settled` reads the `held_pass` marker, so a delta
+    `failed` for its own finding (outcome failed without a clean review to hold) is not
+    flipped to passed by an unchanged delta -- every finding settled, triage alone does not
+    clear `fail` without the hold (the marker is what releases, and it is absent)."""
+    _setup(repo, tmp_path)
+    _review(repo)  # finding #1
+    _fix(repo, "y.py", "y = 1  # FINDME-B\n")  # finding #2, the delta's own: failed, NOT held
+    held = _review(repo)
+    assert held.data["outcome"] == "failed" and "held_pass" not in _ev(repo), held.data
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
+    assert api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="p").exit == OK
+    out = _review(repo)  # unchanged since the reviewed head; nothing held a clean pass
+    assert out.exit == REFUSED and "stays failed" in out.reason, out.reason
+    assert _ev(repo)["delta_rounds"] == 1
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].gates["critic"].outcome == "failed"
+
+
+def test_a_held_record_from_before_the_marker_releases_by_shape(repo, tmp_path):
+    """deepseek finding (rubber_duck delta): a record WRITTEN BY AN OLDER ddflow holds a
+    clean delta with the marker never invented yet (`review_kind = delta`, no findings of
+    its own, failed) -- it must release all the same once triaged, since only `_hold`
+    can fail a reviewed delta with no finding."""
+    _setup(repo, tmp_path)
+    _review(repo)  # finding #1
+    _fix(repo)
+    held = _review(repo)
+    assert held.data["outcome"] == "failed", held.data
+    ev = dict(_ev(repo))
+    assert ev["held_pass"] is True and ev["delta_findings"] == 0, ev
+    assert _ev(repo)["delta_rounds"] == 1, "the held delta counted its round"
+    log = EventLog(repo)
+    log.append(
+        "gate.failed",
+        "T1",
+        {
+            "gate": "critic",
+            "outcome": "failed",
+            # the older version's record: the same evidence, no marker
+            "evidence": {k: v for k, v in ev.items() if k != "held_pass"},
+        },
+    )
+    assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
+    out = _review(repo)  # unchanged: the shape releases without the marker
+    assert out.exit == OK, out.reason
+    assert "passed ON REFUTATION" in out.data["text"], out.data["text"]
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].gates["critic"].outcome == "passed"
+    assert _ev(repo)["delta_rounds"] == 1
 
 
 def test_force_with_delta_is_a_forced_delta_round(repo, tmp_path):

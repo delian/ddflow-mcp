@@ -51,7 +51,18 @@ def proj(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     _config(repo, None)
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "scaffold", "--no-verify")
     return repo
@@ -63,7 +74,21 @@ def _export(repo: Path) -> None:
 
 
 def _move_the_log(repo: Path) -> None:
-    assert run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")[0] == 0
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "P1.T2",
+            "--title",
+            "P1.T2 fixture",
+            "--phase",
+            "P1",
+            "--globs",
+            "src/b.py",
+        )[0]
+        == 0
+    )
 
 
 def test_a_fresh_exported_target_commits(proj):

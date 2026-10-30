@@ -3,8 +3,10 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** One task per session; print `ddflow next` and
-   `ddflow cadence` as the handoff.
+1. **Iteration.** Within one session keep going: claim a task, run its gates, merge,
+   then read `ddflow next` again for the next task — the session ends when an ask stops
+   you or nothing is ready. Across sessions the handoff is the printed `ddflow next`
+   and `ddflow cadence`.
 2. **Subagents.** One claimed item each where Goose runs several.
 3. **Asking the operator.** Ask and stop.
 4. **File references.** Plain repository-relative paths.

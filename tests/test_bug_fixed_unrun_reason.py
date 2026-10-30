@@ -19,7 +19,7 @@ def _unrun(repo):
     (repo / "tests" / "test_x.py").write_text(ALWAYS_PASSES)
     _commit(repo, "a test")
     run_cli(repo, "task", "add", "T2", "--title", "elsewhere", "--globs", "x.py")
-    run_cli(repo, "bug", "found", "--id", "B2", "--item", "T2", "--no-task", "--summary", "s")
+    run_cli(repo, "bug", "found", "--id", "B2", "--item", "T2", "--summary", "s")
 
 
 def test_the_cli_says_why_the_check_could_not_run_and_what_would_let_it(repo):

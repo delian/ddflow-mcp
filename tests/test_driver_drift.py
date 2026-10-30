@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ddflow.infra.fsio import MANAGED_DIGEST_LEN, content_digest
 from ddflow.services import adopt as AD
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,3 +116,29 @@ def test_refresh_docs_from_a_linked_worktree_writes_there(repo):
 def test_missing_templates_do_not_crash_doctor_or_the_drift_check(repo, tmp_path):
     _adopted(repo)
     assert AD.driver_drift(repo, package_dir=tmp_path / "no-package") == []
+
+
+def test_claude_delta_carries_the_goal_wave_contract():
+    """Bug Bc9e602dd98: the goal-wave rewrite skipped the Claude Code delta, leaving it on
+    the older self-paced /loop story with no wave contract; it must carry the elements the
+    bug names: a wave is a `ddflow next --json` fan-out by tier hint, the loop stops only
+    where the operator is required, and the wave position is recomputed from ddflow's own
+    event log."""
+    text = (ROOT / "ddflow" / "templates" / "drivers" / "deltas" / "claude-code.md").read_text()
+    assert "ddflow next --json" in text, "the claude delta does not read the wave"
+    assert "tier:fast|balanced|deep" in text, "the claude delta does not map tier hints"
+    assert "ONLY where the question or approval flow" in text, (
+        "the claude delta does not gate stops on the operator"
+    )
+    assert "committed event log" in text, (
+        "the claude delta does not recover the wave position from ddflow's log"
+    )
+    view = AD._region_body(AD._driver_region(DELTA), (ROOT / DELTA).read_text())
+    assert view == text, (
+        "the claude docs view was not regenerated from the template (stale stamp or body)"
+    )
+    region = AD._driver_region(DELTA)
+    stamp = region.stamp((ROOT / DELTA).read_text())
+    assert stamp is not None and stamp.sha == content_digest(view, length=MANAGED_DIGEST_LEN), (
+        "the claude docs view stamp does not certify its own body (regenerate the view)"
+    )

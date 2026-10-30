@@ -1,0 +1,88 @@
+# Provider routes: how a call reaches a model (DRV-model-catalog). Carried verbatim from the
+# review PRESETS of 2026-10-30; the reader `modelreg.presets()` returns them unchanged.
+#
+# Each route has one fact, `endpoint`, whose value is the preset (kind, base_url, key env NAME,
+# family, launch and, where the preset names one, a default model). Status is `unverified` on purpose: the addresses were carried,
+# not re-read. A route whose `class` is `local` costs nothing per token (see [class.local] in
+# models.toml: price facts of zero) and its address here is only the tool's
+# documented default port. A real endpoint (host, key env name, served model, window, limits)
+# goes in the git-ignored `.ddflow/local/models.toml` (rule D-no-own-services-local-dir), never here.
+
+[sources]
+review-presets = { path = "ddflow/services/review.py", note = "PRESETS dict, carried 2026-10-30; endpoints not re-read" }
+
+[route.openai]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.openai.com/v1", api_key_env = "OPENAI_API_KEY", model = "gpt-5" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.deepseek]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.deepseek.com/v1", api_key_env = "DEEPSEEK_API_KEY", model = "deepseek-chat" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.groq]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.groq.com/openai/v1", api_key_env = "GROQ_API_KEY", model = "llama-3.3-70b-versatile" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.together]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.together.xyz/v1", api_key_env = "TOGETHER_API_KEY" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.fireworks]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.fireworks.ai/inference/v1", api_key_env = "FIREWORKS_API_KEY" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.mistral]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.mistral.ai/v1", api_key_env = "MISTRAL_API_KEY", model = "mistral-large-latest" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.openrouter]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://openrouter.ai/api/v1", api_key_env = "OPENROUTER_API_KEY" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.xai]
+class = "saas"
+endpoint = { v = { kind = "openai", base_url = "https://api.x.ai/v1", api_key_env = "XAI_API_KEY", model = "grok-4" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.anthropic]
+class = "saas"
+endpoint = { v = { kind = "anthropic", base_url = "https://api.anthropic.com/v1", api_key_env = "ANTHROPIC_API_KEY", model = "claude-sonnet-5" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.gemini]
+class = "saas"
+endpoint = { v = { kind = "gemini", base_url = "https://generativelanguage.googleapis.com/v1beta", api_key_env = "GEMINI_API_KEY", model = "gemini-2.5-pro" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.ollama]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:11434/v1", model = "qwen3:8b", launch = { command = "ollama serve", ready_url = "http://127.0.0.1:11434/v1/models" } }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.llamacpp]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:8080/v1" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.lmstudio]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:1234/v1" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.vllm]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:8000/v1" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.claude-cli]
+class = "command"
+endpoint = { v = { kind = "command", command = "claude -p --model {model}", model = "claude-sonnet-5", family = "anthropic" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.gemini-cli]
+class = "command"
+endpoint = { v = { kind = "command", command = "gemini -m {model} -p", model = "gemini-2.5-pro", family = "google" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.codex-cli]
+class = "command"
+endpoint = { v = { kind = "command", command = "codex exec -m {model} -", model = "gpt-5", family = "openai" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.llm-cli]
+class = "command"
+endpoint = { v = { kind = "command", command = "llm -m {model}", family = "unknown" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
+
+[route.litellm]
+class = "proxy"
+endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:4000/v1", api_key_env = "LITELLM_API_KEY", launch = { command = "litellm --model {model} --port 4000", ready_url = "http://127.0.0.1:4000/v1/models" } }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }

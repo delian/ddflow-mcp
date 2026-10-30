@@ -25,6 +25,7 @@ OWN_CHILD_SITES = {
     ("infra/proc.py", "_shell_group"),
     ("services/review.py", "_abort"),
     ("services/companions.py", "_stop"),  # the install subprocess it spawned
+    ("services/ci.py", "free_then_die"),  # SIG_DFL, then the handled signal re-raised on itself
 }
 
 WATCHDOG = (

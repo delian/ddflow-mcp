@@ -20,7 +20,7 @@ GREEN = [{"status": "COMPLETED", "conclusion": "SUCCESS"}]
 
 
 def _three_commit_fix(repo: Path) -> None:
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py,c.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py,b.py,c.py")
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, err
     tree = Path(json.loads(out)["worktree"])
@@ -96,7 +96,7 @@ def test_a_squash_whose_range_matches_the_commit_count_by_coincidence_is_still_a
     2 commits -- the request's count -- but it is NOT a rebase, and merge_sha^1 is exact."""
     repo, forge, _remote = pr_repo
     run_cli(repo, "config", "--set", "worktree.merge_strategy", "squash")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py,b.py")
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, err
     tree = Path(json.loads(out)["worktree"])
@@ -135,7 +135,7 @@ def test_the_pre_merge_tip_proves_a_range_the_patch_id_cannot(pr_repo, tmp_path)
     _git(repo, "commit", "-qm", "lib")
     _git(repo, "push", "-q", "origin", "main")
 
-    run_cli(repo, "task", "add", "T1", "--globs", "lib.txt,x.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "lib.txt,x.py")
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, err
     tree = Path(json.loads(out)["worktree"])

@@ -108,6 +108,7 @@ def pair_records(
     floor: float,
     settled: Any = None,
     stop_after: int = 0,
+    item: str = "",
 ) -> list[dict[str, Any]]:
     """The pairs among ``records`` (id, kind, title, body) scoring at least ``floor``.
 
@@ -118,15 +119,21 @@ def pair_records(
     ``settled(a, b)`` asks whether the pair has already been answered. ``stop_after``
     (> 0) stops as soon as that many pairs are found, for a caller that only needs a
     bounded count (the doctor note) and must not pay for a dense log's full sweep.
+    With ``item`` named, only that record is queried (one query answers ``ddflow dupes
+    <item>``; scoring is symmetric, so the item's own pairs keep the scores the full
+    sweep would give them), and the pairs between two OTHER records are never weighed.
     """
 
     if len(records) < _MIN_PAIR:
         return []
     index = sim.build(records)
     by_id = {r["id"]: r for r in records}
+    if item and item not in by_id:
+        return []  # every row would contain the item; no record has its id
     answer = settled or (lambda _a, _b: False)
     best: dict[tuple[str, str], dict[str, Any]] = {}
-    for r in records:
+    probes = [by_id[item]] if item else records
+    for r in probes:
         for other, score in index.query(r, limit=None):
             if other == r["id"] or score < floor or other not in by_id:
                 continue
@@ -170,7 +177,9 @@ def pairs_from(
     weighs (`_sweep_records`), keep the live ones when asked, and pair them. Below the ask
     threshold the engine cannot tell a duplicate from a different-but-similar record
     (R-dedupe-matchers), so the floor defaults to ``[dedupe].show_floor`` -- a prompt to
-    LOOK, which is what a sweep is -- and the reader decides with `ddflow link`.
+    LOOK, which is what a sweep is -- and the reader decides with `ddflow link`. With
+    ``item`` named, only that record is queried and the returned pairs all contain it
+    (B098fd705f8: the full sweep weighed every pair and timed out the 120 s tool bound).
     """
     fl = cfg.dedupe.show_floor if floor is None else float(floor)
     scope = list(kinds) if kinds else list(cfg.dedupe.kinds)
@@ -182,11 +191,10 @@ def pairs_from(
         floor=fl,
         settled=lambda a, b: _settled(st, a, b),
         stop_after=0 if item else stop_after,  # a bound taken before the filter hides item's pairs
+        item=item,
     )
-    if item:
-        rows = [r for r in rows if item in (r["a"], r["b"])]
-        if stop_after:
-            rows = rows[:stop_after]
+    if item and stop_after:
+        rows = rows[:stop_after]
     return rows[:limit] if limit else rows
 
 

@@ -19,6 +19,7 @@ def register(s: argparse._SubParsersAction) -> None:
         groups={"approvals": "approval requests for operator-gated commands (a person answers)"},
         handlers={
             ("approvals", "list"): H.cmd_approvals_list,
+            ("approvals", "pending"): H.cmd_approvals_pending,
             ("approvals", "log"): H.cmd_approvals_log,
             ("approvals", "show"): H.cmd_approvals_show,
             ("approvals", "request"): H.cmd_approvals_request,

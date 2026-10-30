@@ -22,6 +22,15 @@ from ..core.globs import inside
 from ..infra import worktree as W
 from . import changes as CH
 
+#: `shared_files._inside`: whether one GLOB's matches all sit inside another, judged on a
+#: witness path a wildcard turns into (its owner uses it for `.gitattributes` ordering).
+#: Imported on purpose here, not re-written: check_paths must not answer "restriction sits
+#: inside the declared globs" with `core.globs.inside`, whose path-in-glob view read the
+#: literal pattern `docs/foo/**` as matched by `docs/foo/*` (rubber_duck finding): a wider
+#: restriction would then be accepted. Its negated-class false-negative direction fails
+#: closed (a refusal), which is the safe one for this call site.
+from .shared_files import _inside
+
 
 def _touches(item, paths: list[str] | None) -> bool:
     """Did ``paths`` reach something the item declared? An item declaring nothing has no
@@ -125,4 +134,23 @@ def check(repo: Path, item, base: str, before: str, after: str) -> str:
         return "that range changes nothing (or git cannot say)"
     if not _touches(item, paths):
         return f"that range touches none of the item's declared globs ({', '.join(item.globs) or 'none'})"
+    return ""
+
+
+def check_paths(repo: Path, item, before: str, after: str, paths: list[str]) -> str:
+    """Why ``paths`` may not restrict the ``before..after`` landing to ``item``'s own work,
+    or ``""`` when they may: every restriction glob inside one of the item's declared
+    globs (a restriction it never declared could hide code the commit carried), and the
+    range changing something inside the restriction (a landing that holds none of the
+    item's work on those paths is no evidence for it)."""
+    escaped = [p for p in paths if not any(_inside(p, g) for g in item.globs)]
+    if escaped:
+        return f"the path restriction escapes the declared globs: {', '.join(escaped)}" + (
+            f" (declared: {', '.join(item.globs)})" if item.globs else " (the item declares none)"
+        )
+    changed = CH.changed_paths(repo, before, tip=after, include=("committed",), fork=False)
+    if changed is None or not changed:
+        return "that range changes nothing (or git cannot say)"
+    if not any(inside(p, g) for p in changed for g in paths):
+        return "that range changes nothing inside the restriction"
     return ""

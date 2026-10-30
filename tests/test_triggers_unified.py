@@ -114,7 +114,7 @@ def test_the_recorded_count_of_a_run_follows_the_one_table(repo):
     assert run_cli(repo, "init")[0] == 0
     for args in (
         ("phase", "add", "P0", "--title", "p"),
-        ("task", "add", "P0.T1", "--phase", "P0", "--globs", "p0/*"),
+        ("task", "add", "P0.T1", "--title", "P0.T1 fixture", "--phase", "P0", "--globs", "p0/*"),
         ("claim", "P0.T1", "--no-worktree"),
     ):
         assert run_cli(repo, *args)[0] == 0

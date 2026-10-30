@@ -155,6 +155,24 @@ def test_a_fragment_is_an_unreleased_change_and_replays():
     assert [c.key for c in UM.changes_since("0.1.1", m)] == ["c.d", "x.y"]
 
 
+def test_every_unreleased_fragment_loads_cleanly():
+    """Each unreleased fragment is linted at test time, one `UM.parse` per file, so a
+    fragment whose `new` (or `old`) is not JSON fails HERE, on the branch that wrote it,
+    instead of a `ddflow upgrade` meeting it unannounced (B4b6bbf2400: a knob_added
+    fragment with `new = "core"` broke every upgrade command, and the failure was only
+    re-recorded into the pinned setup-ops transcript, so the suite stayed green)."""
+    broken = []
+    for frag in sorted((UM.MANIFEST.parent / UM.FRAGMENTS).glob("*.toml")):
+        try:
+            UM.parse(BASE, [(frag.name, frag.read_text("utf-8"))])
+        except UM.ManifestError as exc:
+            broken.append(f"{frag.name}: {exc}")
+    assert not broken, (
+        "unreleased fragments a `ddflow upgrade` cannot read -- fix or remove them "
+        f"(ddflow/templates/upgrade/unreleased/): {broken}"
+    )
+
+
 def test_a_null_default_round_trips():
     frag = '[[change]]\nkind = "knob_added"\nkey = "x.z"\nnew = \'null\'\n'
     (c,) = UM.parse(BASE, [("f.toml", frag)]).changes()

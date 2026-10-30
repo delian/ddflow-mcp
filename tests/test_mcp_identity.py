@@ -90,8 +90,8 @@ def test_two_connections_in_ONE_tree_write_as_two_different_agents(repo):
     """The whole point. Same repo, same cwd, same process-derived default — and the
     events must still be told apart."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
 
     a, b = Server(repo), Server(repo)
     _call(a, "ddflow_identify", agent="agent-a")
@@ -111,7 +111,7 @@ def test_the_typed_path_carries_the_identity_too(repo):
     is indistinguishable from a correct one: the event is attributed to the process
     default and looks entirely plausible."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     srv = Server(repo)
     _call(srv, "ddflow_identify", agent="typed-writer")
     _call(srv, "ddflow_update", id="T1", title="renamed")
@@ -125,7 +125,7 @@ def test_an_undeclared_connection_still_works_exactly_as_before(repo):
     the tree-derived identity, and breaking it to fix a multi-agent case would trade
     one silent wrong answer for a loud wrong one."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     before = _agents_in_log(repo)
     _call(Server(repo), "ddflow_claim", id="T1")
     assert _agents_in_log(repo) == before, "an undeclared connection invented a new identity"
@@ -135,8 +135,8 @@ def test_identity_persists_across_calls_on_one_connection(repo):
     """Declared once, not once per call — a per-call declaration would be forgotten
     exactly when a long session stopped thinking about it."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     srv = Server(repo)
     _call(srv, "ddflow_identify", agent="persistent")
     _call(srv, "ddflow_claim", id="T1")
@@ -216,7 +216,7 @@ def test_both_dispatch_paths_honour_DDFLOW_AGENT_on_an_UNDECLARED_connection(rep
     """
     monkeypatch.setenv("DDFLOW_AGENT", "alpha")
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     srv = Server(repo)  # deliberately NOT identified
     _call(srv, "ddflow_claim", id="T1")  # argv path
@@ -264,7 +264,7 @@ def test_a_declared_name_still_beats_the_environment(repo, monkeypatch):
     override an agent that has said who it is."""
     monkeypatch.setenv("DDFLOW_AGENT", "alpha")
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     srv = Server(repo)
     _call(srv, "ddflow_identify", agent="declared-one")
     _call(srv, "ddflow_claim", id="T1")
@@ -362,8 +362,8 @@ def test_subagents_sharing_ONE_connection_are_told_apart_by_as_agent(repo):
     two subagents claiming the SAME file are both granted. `as_agent` must make the
     second one a refusal."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "shared.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "shared.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "shared.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "shared.py")
     srv = Server(repo)
     first = _call(srv, "ddflow_claim", id="T1", no_worktree=True, as_agent="sub-1")
     assert not first.get("isError"), _text(first)
@@ -378,8 +378,8 @@ def test_as_agent_does_not_change_the_connections_identity(repo):
     """Per call means per call. A subagent's name leaking into the connection would
     attribute the parent's next write to the subagent -- the same collapse, reversed."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     srv = Server(repo)
     _call(srv, "ddflow_identify", agent="parent")
     _call(srv, "ddflow_update", id="T1", title="by the subagent", as_agent="sub-1")
@@ -391,7 +391,7 @@ def test_as_agent_does_not_change_the_connections_identity(repo):
 
 def test_as_agent_is_refused_when_it_could_not_be_a_shard_filename(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     srv = Server(repo)
     for bad in ("../escape", "has space", "a" * 65):
         result = _call(srv, "ddflow_update", id="T1", title="x", as_agent=bad)

@@ -30,6 +30,7 @@ from typing import Any
 from ..core import clock
 from ..core import outcome as O
 from ..core import progress as PR
+from ..core.bookkeeping import STATE_EXCLUDE
 from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..infra import worktree as W
@@ -58,8 +59,8 @@ from ._base import _load
 from .gate_baseline import apply as baseline_apply
 from .gate_guard import guard_record
 from .lifecycle import callers_tree
+from .lifecycle.author import _session_model
 from .lifecycle.claim import _new_report_count
-from .lifecycle.complete import _session_model
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
@@ -316,6 +317,63 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     return LK.keeper(log, cfg, it)
 
 
+def _at_merged_tree(repo: Path, cfg, it, here: Path) -> bool:
+    """Does the checkout at `here` stand AT the tree `it` merged in as?
+
+    `git merge-base --is-ancestor <merged_sha> <base>` proves the merge is in the base's
+    history, not WHERE the checked-out tree stands: a revert, a later merge onto the
+    base, or a moved checkout keeps the ancestry while the checked-out tree is a
+    different one, and a gate run there measures the wrong tree and records its outcome
+    for `it`. All must hold: the ancestry, the checked-out HEAD's tree being the merged
+    sha's tree where a cheap tree-sha comparison decides it -- `merge` records the sha at
+    the branch-line commit and advances the base with its OWN bookkeeping commit (the
+    event log), so a just-merged base sits one commit past the recorded sha with the
+    merged content untouched: a checkout whose non-.ddflow content IS the merged tree's
+    stands at it, measured with one pathspec-restricted diff -- and the working tree
+    carrying no uncommitted changes (`HEAD^{tree}` sees
+    only the committed tree, so a dirty primary at the merged HEAD is not the merged
+    tree either) (the B430dae3a68 reviewer holefix, both rounds). An index entry the
+    user marked `assume-unchanged` or `skip-worktree` lies to BOTH clean checks: under
+    the mark `git status` and `git diff --quiet` keep seeing the committed content while
+    the working file differs, so no checkout whose index carries a mark can be PROVEN
+    to stand at the merged tree; a checkout whose mark scan itself fails is not provable
+    either, and neither is admitted (the reviewers' fourth and fifth rounds).
+    """
+
+    if not it.merged_sha:
+        return False
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    if not W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
+        return False
+    if not W.git(here, "merge-base", "--is-ancestor", "HEAD", base).ok:
+        return False
+    head_tree = W.git(here, "rev-parse", "HEAD^{tree}")
+    merged_tree = W.git(repo, "rev-parse", f"{it.merged_sha}^{{tree}}")
+    if not (head_tree.ok and merged_tree.ok):
+        return False
+    if head_tree.out.strip() != merged_tree.out.strip():
+        # `merge` records `merged_sha` at the branch-line commit and then advances the base
+        # with its OWN bookkeeping commit (the event log), so a just-merged base sits one
+        # commit past the recorded sha with the merged content untouched. That is still
+        # the merged tree; content that moved on the base (a later commit, a revert,
+        # another item's merge) is not -- the tree comparison admits only a base whose
+        # non-.ddflow content IS the merged tree's.
+        # HEAD of the checkout ASKED ABOUT (`here`), not the primary's: a kept worktree moved
+        # off the merged work must not be admitted by the primary standing at it.
+        moved = W.git(here, "diff", "--name-only", it.merged_sha, "HEAD", "--", ".", *STATE_EXCLUDE)
+        if not moved.ok or moved.out.strip():
+            return False
+    marked = W.git(here, "ls-files", "-v")
+    if not marked.ok or any(
+        line and (line[0].islower() or line[0] in "Ss") for line in marked.out.splitlines()
+    ):
+        return False
+    if not W.dirty(W.Worktree(item=it.id, path=here, branch="", base=""), untracked=False):
+        if W.git(here, "diff", "--quiet").ok:
+            return True
+    return False
+
+
 def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
     """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
 
@@ -326,19 +384,36 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
     any uncommitted edit there would be credited to the item. None is recorded, not
     guessed. The primary stays the answer for a phase (its gates test the merged
     result), for an item never claimed, and with worktrees off -- the switch for a lone
-    agent that works in the primary.
+    agent that works in the primary -- and for a task whose merge removed its worktree
+    (B430dae3a68): its work IS committed at the base's HEAD, so the primary is the
+    honest post-merge home and a worktree gate genuinely re-runs there. The primary
+    counts as that home only while it still STANDS at the merged tree (`_at_merged_tree`):
+    `merged_sha` in the base's history does not make a reverted, moved-on or checked-out
+    elsewhere primary the merged tree (the B430dae3a68 holefix). A KEPT worktree a merge
+    left in place (remove_on_merge=false) counts by the same test: moved or dirtied off
+    the merged work, it is not the item's tree either (the reviewers' third round).
     """
 
     if it.worktree:
-        return W.load_path(repo, it.worktree), ""
+        tree = W.load_path(repo, it.worktree)
+        if not it.merged_sha or _at_merged_tree(repo, cfg, it, tree):
+            return tree, ""
+    if _at_merged_tree(repo, cfg, it, repo):
+        return repo, ""
     if it.kind != "phase" and cfg.worktree.enabled:
         here, held = callers_tree(repo, cfg, st, it, called_from)
         if held:
             return None, held
         if here is not None:
+            if it.merged_sha and not _at_merged_tree(repo, cfg, it, here.path):
+                return None, ""
             return here.path, ""
         if it.lease is not None:  # claimed --no-worktree, and asked from the primary
             return None, ""
+    if it.merged_sha and it.kind != "phase":
+        # off the `_at_merged_tree` branch, no honest task tree stands for a merged
+        # item: recording None over a moved/dirty fall-through is the honest no-tree.
+        return None, ""
     return repo, ""
 
 
@@ -960,14 +1035,21 @@ def _implement_without_commits(
     ahead of its base, else "" (a landed item is never judged: B998bcca9ce; bug B31c0109012: a commit the lease hook refused was
     silenced by the driver, and the gate passed over an empty branch). An item with no
     worktree of its own, or whose tree was removed, is not judged; a tree whose range cannot
-    be measured is refused, not passed."""
-    if gate != "implement" or result != "passed" or not it.worktree or wt is None:
+    be measured is refused, not passed. A merged phase is exempt by the same test as any
+    other kind: only where its checkout STANDS at the merged tree (the landed case), a
+    moved, reverted or dirty phase checkout is judged (B430dae3a68 reviewer finding #2)."""
+    if gate != "implement" or result != "passed" or not it.worktree:
         return ""
     if has_note:
         return ""  # its deliverable is the recorded note (`research add --item`), not a commit
     base = cfg.worktree.base_ref or W.default_branch(repo)
-    if it.merged_sha and W.git(repo, "merge-base", "--is-ancestor", it.merged_sha, base).ok:
-        return ""  # landed (B998bcca9ce): nothing ahead of the base because it IS the base
+    tree = W.load_path(repo, it.worktree)
+    if tree is None or _at_merged_tree(repo, cfg, it, tree):
+        return ""  # landed (B998bcca9ce): the checkout is gone or STANDS at the merged tree,
+        # i.e. it IS the base
+    # Off the merged tree, the implement claim is about the item's branch itself: measure
+    # IT (not the caller's tree, not the primary a merge left standing at the merged one).
+    wt = tree
     r = W.git(wt, "rev-list", "--count", f"{base}..HEAD")
     if not r.ok:
         return (
@@ -1004,25 +1086,51 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     `gate record --model` names the REVIEWER's model; `complete --model` the author's.
     Recording the author's own model on a reviewer gate overwrote the reviewer's, and
     `complete` then judged independence against the author's family (B1979dac602). The
-    author is the model this agent declared at `session start`; with none declared there
-    is nothing to compare, and the record stands.
+    author is the model this agent declared at `session start`, or the family the
+    harness configured (`[agent].family` / DDFLOW_AGENT_FAMILY), with none declared
+    there is nothing to compare, and the record stands. A bare FAMILY name after
+    `--model` is judged as that family (DX-author-family): an `[agent].families` value
+    in place of a model id.
     """
     if not G.is_reviewer_gate(gate, gdef):
         return ""
 
-    author = _session_model(st, log.agent_id)
+    author = cfg.agent.family or _session_model(st, log.agent_id)
     if not author:
         return ""
-    fam = G.family_of(model, cfg).strip().lower()
-    if not fam or fam != G.family_of(author, cfg).strip().lower():
-        return ""
-    return (
-        f"--model {model!r} is the author's own family ({fam}, the model {log.agent_id} "
-        f"declared at `session start`), and --model on a reviewer gate names the "
-        f"REVIEWER's model (the author's is `complete --model`). Pass the model that "
-        f"reviewed, or --reviewer-model {model} to state that this reviewer really is "
-        f"of that family (it will not count as independent)."
+    fam = _family_of_name_or_value(model, cfg)
+    author_fam = _family_of_name_or_value(author, cfg)
+    if not fam or fam != author_fam:
+        # An unrecognised `[agent].family` resolves to "" on BOTH legs -- nothing a map
+        # knows to compare -- yet the operator's own spelling still IS the author: the
+        # bare strings must compare too, or a writer recording "--model myorg-x" would
+        # never be told it just named its own family (roborev standards).
+        if not (
+            cfg.agent.family
+            and not author_fam
+            and (model or "").strip().lower() == author.strip().lower()
+        ):
+            return ""
+        fam = author
+    declared = (
+        f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
+        if cfg.agent.family
+        else f"the model {log.agent_id} declared at `session start`"
     )
+    return (
+        f"--model {model!r} is the author's own family ({fam}, {declared}), and --model on "
+        f"a reviewer gate names the REVIEWER's model (the author's is `complete "
+        f"--model`). Pass the model that reviewed, or --reviewer-model {model} to state "
+        f"that this reviewer really is of that family (it will not count as independent)."
+    )
+
+
+def _family_of_name_or_value(model: str, cfg) -> str:
+    """`model`'s family with a bare family name recognised as itself: the author and the
+    typed reviewer model are judged by the same resolution (DX-author-family). One
+    canonical form for both legs, so a configured value 'DeepSeek' and a family_for
+    answer 'deepseek' are one family, however they were spelled."""
+    return G.family_name_of(model, cfg.agent.families) or G.family_of(model, cfg).strip().lower()
 
 
 def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:
@@ -1180,6 +1288,47 @@ def _evidence_fields(
     return ev, None
 
 
+def _failed_review_unanswered(it, gdef, gate: str, confirmed_only: bool) -> str:
+    """Why ``gate``'s FAILED review outcome is still unanswered, or "" -- the empty
+    string for a gate with no reviewer too, so "a failed review stands" is ONE
+    expression everywhere (roborev job 3680: the refusal below and the not-gated note
+    above each computed `gdef is not None and gdef.reviewer and why` by hand).
+    ``confirmed_only`` mirrors `unresolved_review_failure`'s: the refusal varies it,
+    the note reads what a hard skip sees (always the False flavor past its guard)."""
+    if gdef is None or not gdef.reviewer:
+        return ""
+    return GO.unresolved_review_failure(it, gate, confirmed_only=confirmed_only)
+
+
+def _not_gated_skip_note(warning, approval_stamp, it, gdef, gate, hard_skip) -> str:
+    """B97106be46a: a skip must say WHICH case it is. A refused one already names the
+    approval request; one recorded on the strength of a consumed approval carries its
+    ask id in the evidence (`approval_stamp`). Any OTHER skip needs neither, for ANY
+    caller -- the first critic round flagged the old guard (a reviewer on the gate AND
+    an agent marker on the caller), which left a person's skip and a skip of a gate
+    with no reviewer silent again. So the not-gated note fires on every non-stamped
+    skip and names the one sub-case that differs: over review findings still
+    unanswered the skip IS the operator's own override (an agent over one is refused
+    before it gets here). The guard keys off `hard_skip`, the flag `record` itself
+    uses to treat the call as a skip: `skip=False, outcome="skipped"` records
+    `result` as 'skipped' all the same, and must say which case it is too
+    (second critic round)."""
+    if not hard_skip or approval_stamp:
+        return warning
+    failed = bool(_failed_review_unanswered(it, gdef, gate, confirmed_only=False))
+    clause = (
+        f"{gate} is a failed review with findings still unanswered, so this skip is "
+        "the operator's own override"
+        if failed
+        else "a gate skip needs the operator's approval only over a FAILED review "
+        f"with findings still unanswered; {gate} is not one, so this skip was "
+        "recorded directly"
+    )
+    return " ".join(
+        filter(None, [warning, f"not gated: {clause}, and no approval request was filed"])
+    )
+
+
 def _override_gate(log, cfg, it, gate, item, how, approval: str, reason: str):
     """The question `_agent_skip_refusal` asks the approvals engine when an agent sets aside a
     failed review: ``how`` is (skip?, the outcome word being hand-recorded)."""
@@ -1213,7 +1362,7 @@ def _agent_skip_refusal(
             return O.refused("gate.record", why, id=item, gate=gate, outcome=""), {}
     if not (hard_skip or hand) or gdef is None or not gdef.reviewer:
         return None, {}
-    why = GO.unresolved_review_failure(it, gate, confirmed_only=not hard_skip)
+    why = _failed_review_unanswered(it, gdef, gate, confirmed_only=not hard_skip)
     marker = agent_marker(agent) if why else ""
     if not marker:
         return None, {}
@@ -1272,13 +1421,15 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         gate,
         item,
         agent,
-        skip or outcome == "skipped",
+        hard_skip := skip or outcome == "skipped",
         outcome != "failed",
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
     if refused is not None:
         return refused
+    # B97106be46a: a refused skip already says which case it is (the refusal names the
+    # request id); a skip that was NOT refused must say so too. See `_not_gated_skip_note`.
 
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
@@ -1296,6 +1447,14 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     # out of `cmd_gate`: the api computed `ahead` and threw it away, and
     # `test_recording_a_gate_out_of_order_says_so` caught it on the full suite.
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
+    warning = _not_gated_skip_note(
+        warning,
+        approval_stamp,
+        it,
+        gdef,
+        gate,
+        hard_skip,
+    )
 
     result = "skipped" if skip else outcome
     ev, bad = _evidence_fields(evidence, item, gate, approval_stamp)

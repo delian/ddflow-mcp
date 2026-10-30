@@ -43,7 +43,7 @@ def _setup(repo: Path) -> None:
     (repo / ".ddflow" / "gates.toml").write_text(
         f'[gate.unit_tests]\ncommand = {json.dumps(cmd)}\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
 
 def test_gate_run_keeps_the_whole_output_its_digest_names(repo):

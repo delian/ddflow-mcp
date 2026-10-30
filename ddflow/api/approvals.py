@@ -16,6 +16,7 @@ from ..core import outcome as O
 from ..core.handlers.asks import asks_of
 from ..services import actors as A
 from ..services.approvals import audit as AU
+from ..services.approvals import class_states as CS
 from ..services.approvals import gate_skip as GS
 from ..services.approvals import request as R
 from ..services.approvals import state as PS
@@ -24,6 +25,7 @@ from ..services.approvals.canon import Canon, UnknownVerb
 from ._base import _load
 
 PS.register(GS.VERB, GS.provider)
+PS.register("config.set", CS.config_set_provider)
 
 
 def _commands(st, now: float) -> list[dict[str, Any]]:
@@ -54,6 +56,35 @@ def approvals_list(repo: Path, *, all_rows: bool = False, agent: str = "") -> O.
         ]  # fmt: skip
     text = "\n".join(_line(r, now) for r in rows) or "no pending or unspent approvals"
     return O.ok("approvals.list", approvals=[_row(r, now) for r in rows], text=text)
+
+
+def _pending_status(row: dict[str, Any], now: float) -> str:
+    if V.status(row, now) == "pending":
+        return f"expires {row['expires_at']}"
+    return f"{_status(row, now)} (expires {row['expires_at']})"
+
+
+def approvals_pending(repo: Path, *, agent: str = "") -> O.Outcome:
+    """The requests still waiting for a person, each with its digest and its answer form.
+
+    This is the surface a remote operator reads before answering (also rendered in the brief
+    and the status an MCP/chat surface carries): the digest here is what, together with the
+    answer form `ddflow approvals approve <id>`, any person channel can answer against."""
+    _log, _cfg, st = _load(repo, agent)
+    now = time.time()
+    rows = V.waiting_for_a_person(st, now)
+    out_rows = [{**r, "answer": f"ddflow approvals approve {r['id']}"} for r in rows]
+    text = "\n".join(_pending_line(r, now) for r in rows) or "no approval requests pending"
+    return O.ok("approvals.pending", approvals_pending=out_rows, text=text)
+
+
+def _pending_line(r: dict[str, Any], now: float) -> str:
+    form = f"ddflow approvals approve {r['id']}"
+    return (
+        f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})\n"
+        f"  digest : {r['digest']}\n"
+        f"  answer : {form}"
+    )
 
 
 def _row(r: dict[str, Any], now: float) -> dict[str, Any]:

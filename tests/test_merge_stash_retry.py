@@ -71,19 +71,6 @@ def test_a_stash_failure_that_never_clears_is_reported_with_its_cause(repo, monk
     assert _git(repo, "rev-parse", "HEAD") == head and not (repo / "f.py").exists()
 
 
-def test_a_conflict_in_a_file_named_stash_failed_is_not_retried(repo, monkeypatch):
-    """rubber_duck round 1: only git's own `fatal: stash failed` line is transient."""
-    cfg = Config()
-    wt = W.create(repo, cfg, "T1")
-    _commit(wt.path, "stash failed", "branch\n", "feat: f")
-    _commit(repo, "stash failed", "main\n", "main: same file")
-    pauses = []
-    _patch_sleep(monkeypatch, pauses.append)
-    r = W.merge(repo, cfg, wt)
-    assert not r.ok and not pauses
-    assert "CONFLICT" in (r.err + r.out)
-
-
 def test_a_blocking_file_named_like_the_error_is_not_retried(repo, monkeypatch):
     """critic round 2: git lists a blocking file indented, so its NAME is not the error line."""
     cfg = Config()
@@ -98,6 +85,24 @@ def test_a_blocking_file_named_like_the_error_is_not_retried(repo, monkeypatch):
     r = W.merge(repo, cfg, wt)
     assert not r.ok and not pauses, (r.err, r.out)
     assert "index.lock" not in (r.err + r.out)
+
+
+def test_a_conflict_in_a_file_named_would_be_overwritten_is_still_a_conflict(repo, monkeypatch):
+    """critic (B90939a78dc review, qwen): a REAL conflict over a file literally named
+    "would be overwritten by merge" prints the phrase inside a CONFLICT line; the
+    dirty-tree refusal is only git's own `error: ... would be overwritten by merge:` line,
+    so this must be a judged conflict (attempted), never a refusal (attempted=False)."""
+    cfg = Config()
+    name = "would be overwritten by merge"
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, name, "branch\n", "feat: f")
+    _commit(repo, name, "main\n", "main: same file")
+    pauses = []
+    _patch_sleep(monkeypatch, pauses.append)
+    r = W.merge(repo, cfg, wt)
+    assert not r.ok and r.attempted, (r.err, r.out)
+    assert "CONFLICT" in (r.err + r.out)
+    assert not pauses
 
 
 def test_a_merge_already_begun_is_never_rerun_whatever_its_output_says(repo, monkeypatch):

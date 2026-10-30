@@ -461,7 +461,7 @@ def test_merge_refuses_an_item_that_was_removed_from_the_queue(repo):
     it was actually looking for, and probed before it was fixed.
     """
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert run_cli(repo, "claim", "T1")[0] == OK
     assert run_cli(repo, "remove", "T1", "--reason", "dropped")[0] == OK
 
@@ -535,10 +535,36 @@ def test_the_critical_path_cycle_guard_covers_the_graph_it_actually_walks(repo):
     wrong number instead of the refusal its docstring promises.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**", "--needs", "P2.T1")
-    run_cli(repo, "phase", "add", "P2", "--globs", "p2/**", "--needs", "P1.T1")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+    run_cli(
+        repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p1/**", "--needs", "P2.T1"
+    )
+    run_cli(
+        repo, "phase", "add", "P2", "--title", "P2 fixture", "--globs", "p2/**", "--needs", "P1.T1"
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "p1/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "p2/a.py",
+    )
 
     from ddflow.core.model import fold
     from ddflow.core.schedule import critical_path

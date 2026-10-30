@@ -25,8 +25,10 @@ HOLDER, WAITER = "agent-holder", "agent-waiter"
 @pytest.fixture
 def proj(repo: Path) -> Path:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T9", "--globs", "src/unrelated.py")  # ready, and unrelated
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    run_cli(
+        repo, "task", "add", "T9", "--title", "T9 fixture", "--globs", "src/unrelated.py"
+    )  # ready, and unrelated
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     return repo
 
@@ -73,7 +75,7 @@ def test_lease_and_item_together_are_refused(proj):
 
 def test_a_shared_glob_is_not_held_against_a_waiter(proj):
     assert run_cli(proj, "config", "lease.shared_globs", '["docs/CHANGELOG.md"]')[0] == 0
-    run_cli(proj, "task", "add", "T5", "--globs", "docs/CHANGELOG.md")
+    run_cli(proj, "task", "add", "T5", "--title", "T5 fixture", "--globs", "docs/CHANGELOG.md")
     assert A.claim(proj, "T5", no_worktree=True, agent=HOLDER).ok
     out = A.wait(proj, lease="docs/CHANGELOG.md", timeout_s=0, agent=WAITER)
     assert out.data["woke"], out.data  # claim would grant it too

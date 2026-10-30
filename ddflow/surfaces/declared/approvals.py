@@ -21,6 +21,13 @@ COMMANDS: tuple[Command, ...] = (
         params=(Param("all", type="boolean", default=False, cli_help="every request, any state"),),
     ),
     Command(
+        path=("approvals", "pending"),
+        summary="the requests still waiting for a person, each with its digest and its answer form",
+        tool="",
+        reason="CLI-only with `approvals approve`: the operator's surface",
+        params=(),
+    ),
+    Command(
         path=("approvals", "log"),
         summary="the audit timeline of approvals (who asked, who answered, which channel and level, what was spent) and what looks wrong",
         tool="",

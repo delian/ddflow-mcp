@@ -24,13 +24,12 @@ it instead of copying it.
 
 from __future__ import annotations
 
+import importlib
 import re
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-
-import jinja2
 
 from ..core.digest import content_digest
 from ..infra import tomlcfg
@@ -105,6 +104,10 @@ def digest(text: str) -> str:
 
 def check_jinja(text: str) -> None:
     """Raise `SyntaxProblem` when ``text`` is not a valid Jinja2 template."""
+    # imported here: `scripts/bump.sh` imports the MCP engine under an interpreter without
+    # jinja2, and this module is on that import path (via the agent brief).
+    jinja2 = importlib.import_module("jinja2")
+
     try:
         # parse only, nothing is rendered, so autoescape is moot
         jinja2.Environment().parse(text)  # nosec B701

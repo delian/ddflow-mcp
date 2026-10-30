@@ -217,13 +217,19 @@ def hold(
     directory: Path | str | None = None,
     *,
     say: Callable[[str], None] | None = None,
+    wait_s: float | None = None,
 ) -> Iterator[None]:
     """Hold a full-suite slot for the block, in arrival order; `SuiteBusy` when none frees
     within the wait. ``say`` receives a line whenever the waiter's place in the queue
-    changes (default: stderr)."""
+    changes (default: stderr).
+
+    ``wait_s`` (new, default None) overrides the wait limit `[ci].suite_wait_s` for this
+    hold only: a `ddflow ci run --timeout N` passes N, so the per-run override bounds the
+    queue wait too, in either direction (a queued run used to give up at the knob whatever
+    the override said, Ba5d5d63f12)."""
     directory = Path(directory) if directory else state_dir()
     limit = max(1, int(cfg.ci.max_concurrent_suites))
-    wait = max(0.0, float(cfg.ci.suite_wait_s))
+    wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
     stale_s = float(cfg.ci.suite_queue_stale_s)
     grace_s = float(cfg.ci.suite_queue_grace_s)
     say = say or _say_default

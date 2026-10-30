@@ -102,8 +102,14 @@ def test_the_cluster_window_honours_a_fraction_of_a_minute():
     assert TR.cluster(evs, 3, 0.75) == []  # the three span 90s
 
 
-def test_one_cap_for_the_cli_and_for_mcp():
-    assert MC.MCP_WAIT_MAX_S == W.WAIT_MAX_S == 1800
+def test_the_silent_mcp_wait_cap_sits_below_the_idle_cutoff_the_cli_keeps_the_long_surface():
+    # The CLI's wait narrates its own progress, so it keeps the full 1800 s; an MCP
+    # token-less call sends no frame at all until the answer, so its SILENT cap sits
+    # below the client's idle cutoff (Bfc43dae5b9: 1800 s in, cap 1800 s -- the abort),
+    # while a progress-capable MCP wait keeps the CLI cap: its beats reset the timer.
+    assert W.WAIT_MAX_S == 1800
+    assert MC.MCP_WAIT_SILENT_MAX_S < MC.CLIENT_IDLE_ABORT_S
+    assert MC.MCP_WAIT_MAX_S == W.WAIT_MAX_S
 
 
 def test_a_wait_longer_than_the_cap_is_shortened_and_says_so(repo, monkeypatch):
@@ -153,11 +159,14 @@ def test_the_tool_table_does_not_pull_in_the_api():
 
 
 def test_an_mcp_timeout_beyond_a_double_is_capped_not_raised():
-    assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_MAX_S
+    assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_SILENT_MAX_S
     assert MC._wait_timeout({"timeout": 12}) == 12.0
     assert MC._wait_timeout({}) == MC.MCP_WAIT_DEFAULT_S
 
 
 def test_an_mcp_timeout_given_as_text_is_still_read_as_a_number():
     assert MC._wait_timeout({"timeout": "120"}) == 120.0
-    assert MC._wait_timeout({"timeout": "99999"}) == MC.MCP_WAIT_MAX_S
+    # No `_meta.progressToken`: the call is silent for the client's purposes, so the cap is
+    # the silent one (Bfc43dae5b9), not the full CLI cap a progress beat may hold.
+    assert MC._wait_timeout({"timeout": "99999"}) == MC.MCP_WAIT_SILENT_MAX_S
+    assert MC._wait_timeout({"timeout": "300"}) == 300.0

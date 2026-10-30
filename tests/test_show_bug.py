@@ -22,7 +22,7 @@ def _bug(repo, summary: str, *extra: str) -> str:
 
 def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     # --no-task: this test is about the hand-written fix tasks `show` recognises, not the
     # one `bug found` files (tests/test_bugs_as_items.py).
     bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
@@ -114,7 +114,7 @@ def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
     listed the fix of X as a mere mention: the list pattern needed a comma after every
     element, so the element before "and" could never be passed over."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
     run_cli(repo, "task", "add", "AND3", "--title", f"Three (fixes bugs B0, B1 and {bid})")
     run_cli(repo, "task", "add", "AND2", "--title", f"Two (fixes bugs B0 and {bid})")
@@ -149,7 +149,7 @@ def test_the_fix_list_pattern_neither_backtracks_nor_matches_inside_a_word(repo)
     title of many ', and's must still be answered at once; and an id embedded in a word
     (`AX`) is never a fix of X."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
     run_cli(repo, "task", "add", "MANY", "--title", "T (fixes A" + ", and" * 200 + f" ) {bid}")
     run_cli(repo, "task", "add", "WORD", "--title", f"Fixes A{bid} and {bid}x, see {bid}")

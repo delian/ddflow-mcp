@@ -50,7 +50,18 @@ def adopted(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     _config(repo, None)
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "scaffold", "--no-verify")
     return repo
@@ -75,7 +86,18 @@ def test_a_hand_edited_view_is_refused_and_named(adopted):
 def test_a_stale_view_is_refused(adopted):
     """The ordinary way a view goes wrong: rendered, then the queue moved on."""
     run_cli(adopted, "render")
-    run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/b.py",
+    )
     # The moved log is committed beside the view; a view that disagrees with the log
     # committed with it is refused (events only on disk are tests/test_generated_views_race.py).
     r = _commit(adopted, VIEW, ".ddflow/events")
@@ -185,7 +207,18 @@ def test_a_view_rendered_from_unstaged_events_is_refused(adopted):
     """roborev on 7216f5e, reproduced: the view came from the INDEX but the log it was
     compared with came from DISK. Render after an event, stage only the view, and the
     commit carried a QUEUE.md naming a task its own committed log never recorded."""
-    run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/b.py",
+    )
     assert run_cli(adopted, "render")[0] == 0
     r = _commit(adopted, VIEW)  # the log is NOT staged
     assert r.returncode != 0, "a view ahead of its committed log was committed"
@@ -195,7 +228,18 @@ def test_a_view_rendered_from_unstaged_events_is_refused(adopted):
 
 
 def test_the_view_and_its_log_staged_together_commit_cleanly(adopted):
-    run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/b.py",
+    )
     assert run_cli(adopted, "render")[0] == 0
     r = _commit(adopted, VIEW, ".ddflow/events")
     assert r.returncode == 0, f"a view committed with its own log was refused:\n{r.stderr}"
@@ -232,7 +276,19 @@ def test_a_view_rendered_from_an_ignored_shard_is_refused(adopted):
     (adopted / ".gitignore").write_text(".ddflow/events/ghost.jsonl\n")
     _git(adopted, "add", ".gitignore")
     _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
-    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="ghost")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T9",
+        "--title",
+        "P1.T9 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "x",
+        agent="ghost",
+    )
     assert (adopted / ".ddflow" / "events" / "ghost.jsonl").is_file()
     assert run_cli(adopted, "render")[0] == 0
     r = _commit(adopted, VIEW)
@@ -297,7 +353,19 @@ def test_a_non_ascii_ignored_shard_gets_a_remedy_that_works(adopted):
     (adopted / ".gitignore").write_text(".ddflow/events/café.jsonl\n")
     _git(adopted, "add", ".gitignore")
     _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
-    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="café")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T9",
+        "--title",
+        "P1.T9 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "x",
+        agent="café",
+    )
     assert (adopted / ".ddflow" / "events" / "café.jsonl").is_file()
     run_cli(adopted, "render")
     r = _commit(adopted, VIEW)
@@ -312,8 +380,22 @@ def test_the_mixed_case_remedy_clears_both_kinds_at_once(adopted):
     (adopted / ".gitignore").write_text(".ddflow/events/ghost.jsonl\n")
     _git(adopted, "add", ".gitignore")
     _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
-    run_cli(adopted, "task", "add", "P1.T8", "--phase", "P1", "--globs", "y")  # tracked shard
-    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="ghost")
+    run_cli(
+        adopted, "task", "add", "P1.T8", "--title", "P1.T8 fixture", "--phase", "P1", "--globs", "y"
+    )  # tracked shard
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T9",
+        "--title",
+        "P1.T9 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "x",
+        agent="ghost",
+    )
     run_cli(adopted, "render")
     r = _commit(adopted, VIEW)
     assert r.returncode != 0

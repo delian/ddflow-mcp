@@ -16,7 +16,18 @@ from conftest import run_cli
 def _proj(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "159.A", "--title", "a")
-    run_cli(repo, "task", "add", "159.A.T1", "--phase", "159.A", "--globs", "a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "159.A.T1",
+        "--title",
+        "159.A.T1 fixture",
+        "--phase",
+        "159.A",
+        "--globs",
+        "a.py",
+    )
 
 
 @pytest.mark.parametrize("verb", ["brief", "board"])

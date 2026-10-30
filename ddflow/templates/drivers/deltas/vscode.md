@@ -7,9 +7,11 @@ Only the items below differ.
    Copilot Chat, and any extension that speaks MCP. GitHub Copilot also has surfaces
    outside VS Code (a CLI, a cloud coding agent); those are `github-copilot.md`. Adopt
    **both** if you use Copilot inside VS Code and on the command line.
-2. **Iteration is operator-driven.** Agent mode runs one request to completion. Do ONE
-   task, then end your reply with `ddflow_next` and `ddflow_cadence` output — nothing
-   persists those between requests, so printing them IS the handoff.
+2. **Iteration.** Agent mode runs one request to completion: keep going inside that
+   request — claim, run the gates, merge — and re-read `ddflow next` after each merge.
+   Across requests do ONE task, then end your reply with `ddflow_next` and
+   `ddflow_cadence` output — nothing persists those between requests, so printing them
+   IS the handoff.
 3. **Subagents.** None with worktree isolation. For parallelism open a second window on
    the same repo, or run another agent in a terminal; ddflow's leases coordinate
    *processes*, so each claims its own item and gets its own worktree.

@@ -26,8 +26,8 @@ HOLDER, ME = "agent-holder", "agent-me"
 
 def _setup(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "H1", "--globs", "pkg/gates/**")
-    run_cli(repo, "task", "add", "M1", "--globs", "mine.py")
+    run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--globs", "pkg/gates/**")
+    run_cli(repo, "task", "add", "M1", "--title", "M1 fixture", "--globs", "mine.py")
     assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
     assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
 
@@ -68,7 +68,7 @@ def test_a_finished_holders_lease_blocks_nothing(repo):
 
 def test_keep_list_counts_every_holder(repo):
     _setup(repo)
-    run_cli(repo, "task", "add", "H2", "--globs", "other/**")
+    run_cli(repo, "task", "add", "H2", "--title", "H2 fixture", "--globs", "other/**")
     assert A.claim(repo, "H2", no_worktree=True, agent="agent-h2").ok
     ok = AI.update(
         repo, "M1", AI.ItemEdit(globs=["pkg/gates/a.py", "other/b.py", "fine.py"]), agent=ME
@@ -111,8 +111,8 @@ def test_a_shared_file_the_holder_changed_is_inert(repo, monkeypatch):
 
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "H1", "--globs", "pkg/exact.py")
-    run_cli(repo, "task", "add", "M1", "--globs", "mine.py")
+    run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--globs", "pkg/exact.py")
+    run_cli(repo, "task", "add", "M1", "--title", "M1 fixture", "--globs", "mine.py")
     assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
     assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
     monkeypatch.setattr(L, "holder_changed_paths", lambda log, item: [])

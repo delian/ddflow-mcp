@@ -1,0 +1,5 @@
+# Ratchet `complexity_d_or_worse` for ddflow.services.gates.hand_approve (tests/test_architecture_guards.py).
+# `record` (CC 26) is the shipped gate-outcome evidence contract (the boundary that rejects
+# a bare pass, D-gate-evidence), moved out of outcomes.py (B92f2fe5750); the fan-out over
+# the outcome kinds IS the feature, not branch debt.
+baseline = 1

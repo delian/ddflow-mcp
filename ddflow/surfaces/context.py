@@ -24,6 +24,7 @@ from typing import Any
 from ..api import identity as ID
 from ..api import surf_context as surf
 from ..api._base import folded
+from ..api.harness import HR
 from ..config import Config, csv_list
 from ..core.ids import auto_id
 from ..core.outcome import (  # noqa: F401  (the commands import these from here)
@@ -92,7 +93,9 @@ class Ctx:
             # rides in `requested_agent`: the api calls re-resolve from that, and
             # leaving it out would split them again.
 
-            harness = self.requested_agent = harness_identity.declared(self.repo)
+            harness = self.requested_agent = harness_identity.declared(
+                self.repo, scope=HR.session_fingerprint(os.environ)
+            )
         who = ID.resolve(self.repo, self.cfg, self.requested_agent)
         # The layer that actually won, not a guess from comparing values. With nothing set
         # anywhere the derived name differs from `cfg.agent.id` ("") so the old code fired

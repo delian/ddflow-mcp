@@ -60,7 +60,7 @@ def test_the_mapping_reaches_the_recorded_outcome_end_to_end(repo):
         '[gate.unit_tests]\ncommand = "echo endpoint down; exit 2"\ncwd = "repo"\n'
         "unavailable_exits = [2]\n"
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree")
     code, out, _err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
     assert code == NOTHING, "unavailable is exit 2, not a failure"
@@ -75,7 +75,7 @@ def test_a_long_gate_keeps_its_lease_alive(repo):
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "sleep 3.5"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     before = sum(1 for e in EventLog(repo).read_all() if e.kind == "lease.renewed")
     code, _out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
@@ -91,7 +91,7 @@ def test_a_gate_run_by_someone_else_does_not_renew_a_lease_it_does_not_hold(repo
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "sleep 2.5"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     run_cli(repo, "gate", "run", "T1", "unit_tests", agent="bystander")
     renewed = [e for e in EventLog(repo).read_all() if e.kind == "lease.renewed"]
@@ -111,7 +111,7 @@ def test_the_lease_is_renewed_on_the_CALLERS_thread(repo, monkeypatch):
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "sleep 2.5"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     threads = []
     real = L.renew

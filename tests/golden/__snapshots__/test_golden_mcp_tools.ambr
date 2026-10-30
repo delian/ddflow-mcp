@@ -44,6 +44,18 @@
           "type": "string",
           "description": "Stable id, e.g. 'B1'. You will cite it when closing."
          },
+         "tag": {
+          "type": "boolean",
+          "description": "Tag the bug instead of closing it: add/remove tags of the open or closed `id`."
+         },
+         "add": {
+          "type": "string",
+          "description": "With tag: comma-separated tags to add."
+         },
+         "remove": {
+          "type": "string",
+          "description": "With tag: comma-separated tags to remove."
+         },
          "regression_test": {
           "type": "string",
           "description": "Test that now guards this. Several: separate with ',' or ';'."
@@ -130,6 +142,10 @@
          "globs": {
           "type": "string",
           "description": "The fix task's files; default: the item's globs."
+         },
+         "tags": {
+          "type": "string",
+          "description": "Comma-separated tags; plain strings, `ns:x` is one tag, `wave:*` is reserved."
          },
          "no_task": {
           "type": "boolean",
@@ -250,6 +266,10 @@
          "regression_test": {
           "type": "string",
           "description": "Fix task: the test guarding its bug(s); closes them."
+         },
+         "lint_exempt": {
+          "type": "string",
+          "description": "Fix task of a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test. As `bug fixed lint_exempt`; instead of regression_test."
          },
          "mutation": {
           "type": "string",
@@ -933,6 +953,10 @@
           "type": "string",
           "description": "Earlier fix this follows up: reuses the lines it reached."
          },
+         "kind": {
+          "type": "string",
+          "description": "Work kind: task (default), doc, research or job (its gate pipeline)."
+         },
          "question": {
           "type": "string",
           "description": "What was asked."
@@ -985,9 +1009,9 @@
           "type": "string",
           "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
          },
-         "kind": {
+         "landed_paths": {
           "type": "string",
-          "description": "Work kind: task, doc, research or job (its gate pipeline)."
+          "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone."
          },
          "worktree": {
           "type": "string",
@@ -1061,7 +1085,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1095,7 +1119,11 @@
          },
          "limit": {
           "type": "integer",
-          "description": "Rows returned, most effort first (default 25; 0 = all)."
+          "description": "Items listed per wave in the text view (default 10; 0 = all)."
+         },
+         "by_tag": {
+          "type": "string",
+          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the done/running/ready/review/blocked/abandoned/open counts, the buckets the plan puts them in, and the open dependencies blocking the most items (e.g. 'wave' or 'track')."
          },
          "out": {
           "type": "string",
@@ -1153,6 +1181,10 @@
           "type": "string",
           "description": "search: comma-separated search sources (default all)."
          },
+         "sort": {
+          "type": "string",
+          "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). Default: newest change first."
+         },
          "tail": {
           "type": "integer",
           "description": "Last N entries, oldest first (overrides limit)."
@@ -1175,7 +1207,7 @@
          },
          "check": {
           "type": "boolean",
-          "description": "regenerate: list stale pins only."
+          "description": "Exit 1 when any wave:N stamp is stale."
          },
          "only": {
           "type": "string",
@@ -1188,6 +1220,10 @@
          "after_merge": {
           "type": "boolean",
           "description": "regenerate: the post-merge hook entry."
+         },
+         "approval": {
+          "type": "string",
+          "description": "regenerate: an agent's route: 'request' files an operator approval, an approval id re-records the pins."
          },
          "tests": {
           "type": "string",
@@ -1225,6 +1261,10 @@
           "type": "string",
           "description": "check: a git base; report only the extracted surface added since it."
          },
+         "stamp": {
+          "type": "boolean",
+          "description": "Write the derived wave:N tags."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -1241,7 +1281,8 @@
            "lanes",
            "metrics",
            "health",
-           "docs"
+           "docs",
+           "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }

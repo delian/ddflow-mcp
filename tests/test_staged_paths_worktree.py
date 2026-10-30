@@ -69,7 +69,18 @@ def behind(repo: Path, cfg: Config, monkeypatch) -> tuple[Path, Path]:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "base", "--no-verify")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "mine.txt")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "mine.txt",
+    )
     wt = W.create(repo, cfg, "P1.T1")
     L.acquire(
         EventLog(repo, "the-claimer"),
@@ -232,7 +243,18 @@ def test_a_view_staged_by_hand_in_a_worktree_is_checked_against_that_trees_log(b
 
     shutil.copytree(events, wt / ".ddflow" / "events")
     _git(wt, "add", "-f", ".ddflow/events")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "b.txt")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "b.txt",
+    )
     stage_view()
     code, msg = E.check_views(repo, Config.load(repo))
     assert code == 1 and "does not record" in msg, msg

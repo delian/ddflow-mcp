@@ -8,6 +8,13 @@ from dataclasses import dataclass
 
 from ._docs import declare, knob
 
+#: The shipped generated-class exclusion (the `[review].exclude_globs` default):
+#: generated and pinned content -- lockfiles, golden snapshots, transcripts. `review_exclude`
+#: reads this same list to tell GENERATED content (a review of nothing is not silence) from a
+#: project's own exclusion (a privacy pattern like `*.pem`), the class that never waives the
+#: reviewer-independence rule (B-lockfile-only-item-cannot-complete).
+GENERATED_EXCLUDE_DEFAULTS = ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"]
+
 
 @declare("review")
 @dataclass
@@ -17,7 +24,7 @@ class ReviewConfig:
 
     max_rounds: int = knob(
         2,
-        doc='How many cross-family review rounds one gate (rubber_duck, critic) may have on one item, full and delta alike (default 2; 0 = unlimited; decision D-gate-economy 2 -- a delta after the cap was the way around it). Later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review triage` (refute each remaining finding with the run that shows it false, or confirm it with the test that now passes; always allowed), then recording the gate on that triage or asking the operator. A re-review of named chunks (--chunk) repeats part of a recorded round and is not counted. `--force --reason "..."` runs one more round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
+        doc='How many cross-family review rounds one gate (rubber_duck, critic) may have on one item, full and delta alike (default 2; 0 = unlimited; decision D-gate-economy 2 -- a delta after the cap was the way around it). The cap counts the gate\'s recorded rounds from the one fold every view uses (`gate status`, `review show` and `review triage` all report it) -- always the full and delta rounds that reached a reviewer. Later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review triage` (refute each remaining finding with the run that shows it false, or confirm it with the test that now passes; always allowed), then recording the gate on that triage or asking the operator. A re-review of named chunks (--chunk) repeats part of a recorded round and is not counted. `--force --reason "..."` runs one more round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
     )
     settle_all_refuted: bool = knob(
         True,
@@ -49,8 +56,12 @@ class ReviewConfig:
         factory=lambda: ["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"],
         doc="Globs of files whose change after a review round does not void a triage pass (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit, B4ab42dbedb): answering a refuted finding with a regression test used to change the item's reviewed paths, so the settled round 'held other content now' and cost another round. A path that moved since the round and matches one of these is not new work; any other moved path still blocks the pass and is named. Default: tests and conftest files. An empty list makes every moved path block. Change it for the project (`ddflow config review.triage_ignore_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`.",
     )
+    doc_globs: list[str] = knob(
+        factory=lambda: ["docs/**", "README*", "CHANGELOG*"],
+        doc="Documentation directories and changelogs: wording, not code. A documentation file the review round reviewed whose wording changed later never voids a triage pass or a gate's freshness at `complete` (bug Bb89ff23f21): a one-line doc edit after triage invalidated refuted gates and cost a second 8-15 min review round, and a wording-only edit after the final pass still triggered 'different tree' warnings. Unlike [review].triage_ignore_globs (tests), a reviewed documentation file keeps the exemption if it still exists: the review judged the code, so clarified wording is not new work, while a reviewed code file that changed still blocks, and a reviewed doc that was deleted still blocks. One the round did NOT review is not exempt by name alone. An empty list exempts no documentation. Change it for the project (`ddflow config review.doc_globs ...`), for this machine (add --local), per run (DDFLOW_REVIEW_DOC_GLOBS), or over MCP with `ddflow_configure`.",
+    )
     exclude_globs: list[str] = knob(
-        factory=lambda: ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"],
+        factory=lambda: list(GENERATED_EXCLUDE_DEFAULTS),
         doc="Globs of generated and pinned files (golden snapshots, transcripts, lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a re-pinned transcript turned a 3 KB change into an 11-chunk review that took 7 minutes and judged generated text. A bare pattern matches at any depth. The review output and the gate's evidence say how many files and bytes were left out and name them, so a skipped file is never silent. Change it for the project (`ddflow config review.exclude_globs ...`), for this machine (add --local), or over MCP with `ddflow_configure`; an empty list leaves out no glob-matched file (the files pins.toml owns are governed by [review].exclude_pin_files, which must be turned off as well to send every file).",
     )
     manifest_max_files: int = knob(

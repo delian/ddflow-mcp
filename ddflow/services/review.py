@@ -349,7 +349,8 @@ class ReviewResult:
     #: The chunks this run was asked for (`ddflow review --chunk`); empty = all.
     requested: list[int] = field(default_factory=list)
     #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
-    #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
+    #: was cut with (the EFFECTIVE budget `_chunk_budget`, not the `Reviewer.max_chunk_chars`
+    #: config). A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
     max_chunk_chars: int = 0
 
@@ -722,6 +723,37 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
     return packed
 
 
+def _chunk_budget(rev: Reviewer) -> int:
+    """The largest chunk ``rev`` can reason about within its declared output cap.
+
+    ``max_chunk_chars`` is a bound picked for review QUALITY, not a promise the model
+    answers a chunk that size: a reasoning model spends its ``max_tokens`` OUTPUT budget
+    thinking before it emits the verdict, and the thinking grows with the input. Measured
+    on Qwen3.8-Flash-Next (``Reviewer.max_tokens``): a 30 KB chunk needed 28 381 reasoning
+    tokens -- about one reasoning token per input character -- so a chunk near
+    ``max_chunk_chars`` can exhaust ``max_tokens`` mid-thought and come back ``TRUNCATED``,
+    which ddflow records UNAVAILABLE and a review round is spent (bug B9a2279db22: the qwen
+    reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
+    the output cap, so a reviewer whose ``max_tokens`` is below ``max_chunk_chars`` has its
+    chunk split to fit before it is ever sent, and a chunk can never outgrow the budget the
+    model has to reason about it.
+    """
+    return min(rev.max_chunk_chars, rev.max_tokens)
+
+
+def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
+    """The budget ``review()`` sends after ``chunk_max_tokens`` lowers the request window.
+
+    `_rerun_scope` must compare a recorded cut against the SAME number the reviewing run
+    computed: the reporter's own reduction of its output window is part of that cut, or a
+    ``--chunk`` re-review of a run under ``[review].chunk_max_tokens`` is falsely refused as
+    a changed cut.
+    """
+    if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
+        rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
+    return _chunk_budget(rev)
+
+
 #: A hunk header and whatever git appended after its closing ``@@``.
 _HUNK_CONTEXT_RE = re.compile(r"(?m)^(@{2,} [-+0-9, ]+ @{2,})[ \t][^\n]*$")
 
@@ -1062,15 +1094,29 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
 def parse(text: str) -> tuple[list[Finding], bool]:
     """(findings, on_contract). Off contract means no STATUS: block at all."""
     status = _STATUS_RE.search(text or "")
-    findings = [
-        Finding(
-            severity=m.group(1).upper(),
-            location=(m.group(2) or "").strip(),
-            title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
-            detail=(m.group(3) or "").strip(),
+    findings = []
+    for m in _FINDING_RE.finditer(text or ""):
+        location = (m.group(2) or "").strip()
+        #: The finding's text is the reviewer's paragraph. A reviewer may write only a
+        #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
+        #: the spot the author must answer, so its text is derived from the location and
+        #: a location-only finding is never recorded empty (B-review-finding-empty-text).
+        detail = (m.group(3) or "").strip() or location
+        title = location or " ".join(detail.split())[:80]
+        if not detail:
+            #: The reviewer declared a finding but named no location and no paragraph.
+            #: It is still a finding -- recorded with a marker, not dropped, so the gate
+            #: stays failed (fail-closed) instead of reading a finding as a clean review.
+            title = "(unnamed finding)"
+            detail = "(reviewer raised a finding but named nothing)"
+        findings.append(
+            Finding(
+                severity=m.group(1).upper(),
+                location=location,
+                title=title,
+                detail=detail,
+            )
         )
-        for m in _FINDING_RE.finditer(text or "")
-    ]
     return findings, status is not None
 
 
@@ -1578,9 +1624,10 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return problem
 
     stripped = strip_hunk_context(diff)
-    chunks = split_diff(stripped, rev.max_chunk_chars)
+    chunk_budget = _chunk_budget(rev)
+    chunks = split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
-    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]

@@ -6,8 +6,10 @@ Only the items below differ.
 1. **Two products, one of which no repo file can configure.** The **Devin CLI** reads
    `.devin/mcp_config.json` from the project, and that is what ddflow writes. **Cloud
    Devin sessions** are configured in the web UI / org settings instead.
-2. **Iteration.** Cloud sessions run long and autonomously; the CLI runs per invocation.
-   Either way, one claimed item at a time, and print `ddflow next` at the end.
+2. **Iteration.** Cloud sessions run long and autonomously: keep going inside one —
+   claim an item, run its gates to the merge, re-read `ddflow next`, repeat — until an
+   ask stops you or nothing is ready; one claimed item at a time. The CLI runs per
+   invocation, and `ddflow next` printed at the end is its handoff.
 3. **Subagents.** A cloud session already works in its own checkout, so set
    `worktree.enabled = false` for those runs — the isolation is already there, and a
    worktree inside an ephemeral clone is a directory the merge step cannot reach.

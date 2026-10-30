@@ -15,8 +15,32 @@ def test_json_board_is_json_with_the_boards_structure(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--title", "first", "--globs", "a.py")
-    run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "b.py")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--needs", "P1.T1", "--globs", "c.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1a",
+        "--title",
+        "P1.T1a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "b.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+        "--globs",
+        "c.py",
+    )
     run_cli(repo, "claim", "P1.T1a", "--no-worktree", agent="a1")
 
     code, out, err = run_cli(repo, "--json", "board")

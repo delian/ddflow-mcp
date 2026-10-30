@@ -60,7 +60,7 @@ def live(repo):
 
 
 def _task(repo: Path, name: str) -> None:
-    run_cli(repo, "task", "add", name, "--globs", f"{name}.py")
+    run_cli(repo, "task", "add", name, "--title", "task item", "--globs", f"{name}.py")
     code, _o, err = run_cli(repo, "claim", name, "--no-worktree")
     assert code == OK, err
 

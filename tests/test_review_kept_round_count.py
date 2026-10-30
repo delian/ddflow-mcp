@@ -57,7 +57,7 @@ def test_a_copy_written_before_the_marker_existed_is_not_counted_either():
     from types import SimpleNamespace as NS
 
     def run(**ev):
-        return NS(evidence={"review_kind": "full", **ev})
+        return NS(evidence={"review_kind": "full", **ev}, outcome="failed")
 
     it = NS(runs_of=lambda _g: [run(), run(unavailable_deltas=[{"reason": "down"}])])
     assert api._full_rounds(it, "critic") == 1

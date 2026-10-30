@@ -279,6 +279,7 @@ def cmd_config(a, c: Ctx) -> int:
             local=bool(getattr(a, "local", False)),
         ),
         agent=c.requested_agent,
+        approval=getattr(a, "approval", "") or "",
     )
     if out.exit != OK:  # failed (1), nothing (2) or refused (3): never collapsed into 0
         print(out.reason, file=sys.stderr)
@@ -303,6 +304,7 @@ def cmd_config(a, c: Ctx) -> int:
                     "effective",
                     "effective_source",
                     "shadowed",
+                    "approval",
                 )
             ),
         )
@@ -455,9 +457,22 @@ def cmd_hooks(a, c: Ctx) -> int:
             event=event,
             harness=harness,
             stdin=_hook_stdin(),
+            dry_run=bool(getattr(a, "dry_run", False)),
         )
         if c.json:
-            c.out("", {"stdout": out.data["stdout"], "note": out.data["note"]})
+            # The MCP twin's declared payload for `run` (`_HARNESS_PAYLOAD["run"]`), so the
+            # two surfaces stay parity-shaped; non-json prints stdout, shaped for the agent.
+            # `.get` everywhere: every `_run_hook` path carries result/dry_run, and the
+            # defensive reads keep the exit-0 contract even if one ever does not.
+            c.out(
+                "",
+                {
+                    "stdout": out.data["stdout"],
+                    "note": out.data["note"],
+                    "result": out.data.get("result"),
+                    "dry_run": bool(out.data.get("dry_run")),
+                },
+            )
         elif out.data["stdout"]:
             print(out.data["stdout"])
         if out.data["note"] and not c.json:

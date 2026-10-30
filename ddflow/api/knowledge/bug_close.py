@@ -9,13 +9,19 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, OPEN, fold
+from ...core.model import fold
 from ...infra import worktree as W
+from ...services import completion as CM
 from ...services import gates as G
-from ...services import leases as L
 from .._base import _load
 from .bug_lint import _close_lint_exempt, _is_node_id
 from .bugs import _unknown_bug
+from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
+    NOTHING_TO_REMOVE,
+    STILL_QUEUED,
+    _drop_fix_task,
+    _ended_by_abandon,
+)
 from .regression import _looks_like_several, _split_outside_brackets, _unresolved_tests
 
 
@@ -118,17 +124,18 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     log, cfg, st = _load(repo, agent)
     tests, regression_test = _named_tests(regression_test)
     if lint_exempt:
-        takes_no = {"--landed": landed, "a mutation": mutation, "--verify-reason": verify_reason}
-        return _close_lint_exempt(
+        return _lint_exempt_close(
+            repo,
             log,
             cfg,
             st,
             item,
-            lint_exempt,
-            tests,
-            entry,
-            takes_no=[n for n, v in takes_no.items() if v],
-            record=_record_fixed,
+            lint_exempt=lint_exempt,
+            tests=tests,
+            entry=entry,
+            mutation=mutation,
+            verify_reason=verify_reason,
+            landed=landed,
         )
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
@@ -150,10 +157,7 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
             "recorded so a later reader knows the pre-fix check was skipped, and why.",
             id=item,
         )
-    landing, why = _landing_for(repo, cfg, landed, tests, verify_regression)
-    if why:
-        return O.refused("bug.fixed", why, id=item)
-    verified, verify_ev = _verify_regression(
+    refusal, verified, verify_ev, landing = _verified_close(
         repo,
         cfg,
         st,
@@ -162,16 +166,10 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         verify_regression=verify_regression,
         reason=verify_reason,
         mutation=mutation,
-        landing=landing,
+        landed=landed,
     )
-    if verified in ("passed-on-prefix", "failed-on-fix"):
-        return O.refused(
-            "bug.fixed",
-            f"cannot close {item}: {verify_ev.get('reason', '')}. Name a test that FAILS "
-            f"without the fix, or close with --skip-regression-verify --verify-reason "
-            f"'<why>' (recorded).",
-            id=item,
-        )
+    if refusal is not None:
+        return refusal
     payload = {
         "regression_test": regression_test,
         "regression_tests": tests,
@@ -197,6 +195,60 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
     )
+
+
+def _verified_close(
+    repo: Path,
+    cfg,
+    st,
+    item: str,
+    tests: list[str],
+    *,
+    verify_regression: bool,
+    reason: str,
+    mutation: dict[str, str] | None,
+    landed: str,
+) -> tuple[O.Outcome | None, str, dict[str, Any], tuple[str, str] | None]:
+    """`(refusal or None, verdict, evidence, landing)`: the landing the close names and the
+    check that the regression test fails without the fix (B-bugfix-verified)."""
+    landing, why = _landing_for(repo, cfg, landed, tests, verify_regression)
+    if why:
+        return O.refused("bug.fixed", why, id=item), "", {}, landing
+    verified, verify_ev = _verify_regression(
+        repo,
+        cfg,
+        st,
+        item,
+        tests,
+        verify_regression=verify_regression,
+        reason=reason,
+        mutation=mutation,
+        landing=landing,
+    )
+    if verified == "needs-fix-task":
+        # A gap the caller could close -- by filing a fix task, or naming a landing --
+        # is not recorded on a bug left open: the close is REFUSED naming how to give
+        # the check its pre-fix source (Bb49d834e90).
+        return (
+            O.refused("bug.fixed", _needs_fix_task_refusal(item, verify_ev), id=item),
+            "",
+            {},
+            landing,
+        )
+    if verified in ("passed-on-prefix", "failed-on-fix"):
+        return (
+            O.refused(
+                "bug.fixed",
+                f"cannot close {item}: {verify_ev.get('reason', '')}. Name a test that FAILS "
+                f"without the fix, or close with --skip-regression-verify --verify-reason "
+                f"'<why>' (recorded).",
+                id=item,
+            ),
+            "",
+            {},
+            landing,
+        )
+    return None, verified, verify_ev, landing
 
 
 def _landing_for(
@@ -226,6 +278,39 @@ def _landing_for(
     return landing, ""
 
 
+def _missing_fix_source(rec) -> dict[str, str]:
+    """Why an open bug's pre-fix source does not exist, and how to give it one (Bb49d834e90).
+
+    `_fixing_item` is None once it has neither a queued fix task nor a found item with a
+    worktree or a landing pair, so nothing names what the fix removed. `bug fixed`
+    REFUSES the close (never the silent could-not-run gap below) and names what is
+    missing and what would make the check runnable.
+    """
+    named = (
+        f"its fix task ({rec.fix_task}) is not in the queue"
+        if rec.fix_task
+        else "it has no fix task, and the item that found it offers no worktree"
+    )
+    return {
+        "reason": f"no pre-fix source to compare the test against: {named}",
+        "remedy": (
+            f"file a fix task (`ddflow bug file-tasks {rec.id}`), claim it, and put the "
+            "test and the fix inside its globs; or close with `--landed <sha>` when the "
+            "fix already reached the base"
+        ),
+    }
+
+
+def _needs_fix_task_refusal(item: str, verify_ev: dict[str, Any]) -> str:
+    """The `bug fixed` refusal for a bug whose pre-fix source does not exist (and no
+    ``--landed`` named one): what is missing, and how the caller gives the check its
+    source -- never a close with a silent, caller-fixable gap (Bb49d834e90)."""
+    return (
+        f"cannot close {item}: the test cannot be shown to fail without the fix -- "
+        f"{verify_ev.get('reason', '')}. To fix it: {verify_ev.get('remedy', '')}"
+    )
+
+
 def _record_fixed(
     log, item: str, payload: dict[str, Any], landing: tuple[str, str] | None
 ) -> dict[str, Any]:
@@ -233,6 +318,44 @@ def _record_fixed(
     with log.transaction():
         log.append("bug.fixed", item, {**payload, **({"landed": landing[0]} if landing else {})})
         return _end_fix_task_landed(log, item, landing[0]) if landing else {}
+
+
+def _lint_exempt_close(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
+    repo: Path,
+    log,
+    cfg,
+    st,
+    item: str,
+    *,
+    lint_exempt: str,
+    tests: list[str],
+    entry: dict[str, Any],
+    mutation: dict[str, str] | None,
+    verify_reason: str,
+    landed: str,
+) -> O.Outcome:
+    """The lint-exempt branch of `bug_fixed`, folded out so that function stays under the
+    grade-D complexity ratchet (Bab0c83b80c). `--landed` is allowed here: the exemption
+    waives the regression test, not the commit reference, so the record can name the
+    commit that holds the fix."""
+    takes_no = {"a mutation": mutation, "--verify-reason": verify_reason}
+    landing = None
+    if landed.strip():
+        landing, why = _landing(repo, cfg, landed)
+        if why:
+            return O.refused("bug.fixed", f"--landed: {why}", id=item)
+    return _close_lint_exempt(
+        log,
+        cfg,
+        st,
+        item,
+        lint_exempt,
+        tests,
+        entry,
+        takes_no=[n for n, v in takes_no.items() if v],
+        landing=landing,
+        record=_record_fixed,
+    )
 
 
 def _landing(repo: Path, cfg, ref: str) -> tuple[tuple[str, str] | None, str]:
@@ -305,178 +428,35 @@ def _capture_lesson(repo: Path, log, cfg, st, bug: str, title: str, rule: str) -
     return {"captured": rid, **chk.data()}
 
 
-def bug_invalid(
-    repo: Path, bug: str, *, reason: str, evidence: str = "", agent: str = ""
-) -> O.Outcome:
-    """Close a bug as a FALSE finding: nothing was broken, so nothing was fixed.
-
-    `bug fixed` was the only closure, and it claims a repair plus a regression test that
-    fails on the unfixed code. A finding shown false has neither, so B97355c6d15 stayed
-    open forever -- and closing it as fixed would have recorded a repair nobody made. This
-    closure never sets `fixed_at` and never counts as a fix.
-
-    Refused (exit 3): an unknown id, a bug already closed either way (a fixed bug is not
-    re-labelled false after the fact), and an empty reason -- "invalid" with no why is an
-    unexplained dismissal. `evidence` is the probe that showed it false: a command, or a
-    test node id, which is resolved statically as `--regression-test` is (exit 1 when it
-    names nothing).
-    """
-    log, _cfg, st = _load(repo, agent)
-    if not reason.strip():
-        return O.refused(
-            "bug.invalid",
-            "a bug may not be closed as invalid without --reason saying why the finding "
-            "is false; pass --evidence with the probe or test that showed it.",
-            id=bug,
-        )
-    if bug not in st.bugs:
-        return _unknown_bug("bug.invalid", bug, st)
-    rec = st.bugs[bug]
-    if rec.resolution == "fixed":
-        return O.refused(
-            "bug.invalid",
-            f"bug {bug} is already closed as fixed (regression test: "
-            f"{rec.regression_test or 'none recorded'}); a fixed bug is not re-labelled "
-            f"a false finding.",
-            id=bug,
-        )
-    if rec.resolution == "invalid":
-        return O.refused(
-            "bug.invalid",
-            f"bug {bug} is already closed as invalid: {rec.invalid_reason}",
-            id=bug,
-        )
-    missing, unchecked = _unresolved_tests(repo, evidence)
-    if missing:
-        return O.failed(
-            "bug.invalid",
-            f"--evidence names a test that exists in no worktree of this repository: "
-            f"{', '.join(missing)}. Name the test or probe that shows the finding false.",
-            id=bug,
-        )
-    reason = reason.strip()
-    with log.transaction():
-        log.append("bug.invalid", bug, {"reason": reason, "evidence": evidence})
-        # Decided from the log as it is NOW, under the lock: a claim on the fix task made
-        # since `_load` must be seen, or the task is removed under its holder.
-        fresh = fold(log.read_all(), strict=False)
-        rec = fresh.bugs.get(bug, rec)  # the record the removal is decided from, and reported
-        removed, kept = _drop_fix_task(log, fresh, rec, reason=reason)
-        task = fresh.items.get(rec.fix_task) if rec.fix_task else None
-        holder = task.lease.holder if kept == "held" and task and task.lease else ""
-    # A task ended from the caller's own lease was ABANDONED, not removed (B8f9668d27d). Its
-    # worktree is NOT disposed here: this call cannot see where the caller's shell stands
-    # (over MCP the process cwd is the server's), so the tree stays for `ddflow cleanup`.
-    abandoned = removed if removed and _ended_by_abandon(log, removed) else ""
-    tree = ""
-    if abandoned:
-        wt = fold(log.read_all(), strict=False).items[abandoned].worktree
-        tree = (
-            f"worktree {wt} kept; `ddflow cleanup` reports it and removes it once clean"
-            if wt
-            else ""
-        )
-    return O.ok(
-        "bug.invalid",
-        id=bug,
-        invalid_reason=reason,
-        evidence=evidence,
-        unchecked=unchecked,
-        fix_task=rec.fix_task,
-        fix_task_removed="" if abandoned else removed,
-        fix_task_abandoned=abandoned,
-        fix_task_kept=kept,
-        fix_task_holder=holder,
-        fix_task_tree=tree,
-    )
+def _has_landing_pair(item: Any) -> bool:
+    """Whether ``item`` landed through ddflow's own merge: it records both the target
+    before the landing and the landing itself, the pair a pre-fix check runs between."""
+    return bool(item is not None and item.landed_before and item.landed_after)
 
 
-def _ended_by_abandon(log, item: str) -> bool:
-    """Whether the item's last ending event was an abandonment (by this very call)."""
-    it = fold(log.read_all(), strict=False).items.get(item)
-    return it is not None and it.state == ABANDONED
-
-
-#: Why `bug invalid` left a fix task alone (`fix_task_kept`), with the words the surfaces
-#: say: the queue still wants it (`STILL_QUEUED`), or there is nothing to remove. "" when
-#: the bug has no fix task or it was removed. ONE vocabulary, read by the CLI, so a
-#: reason added here cannot fall through to the wrong sentence there (roborev, job 1300).
-STILL_QUEUED: dict[str, str] = {
-    "held": "somebody holds it",
-    "needed": "an item is filed under it or needs it",
-    "shared": "it fixes another open bug too",
-}
-NOTHING_TO_REMOVE: dict[str, str] = {
-    "finished": "already finished",
-    "removed": "already removed from the queue",
-    "missing": "not in the queue at all",
-}
-
-
-def _drop_fix_task(
-    log, st, rec, *, reason: str = "", closed: str = "as invalid"
-) -> tuple[str, str]:
-    removed, why = _drop_fix_task_unchecked(log, st, rec, reason=reason, closed=closed)
-    assert not why or why in STILL_QUEUED or why in NOTHING_TO_REMOVE, why
-    return removed, why
-
-
-def _drop_fix_task_unchecked(
-    log, st, rec, *, reason: str = "", closed: str = "as invalid"
-) -> tuple[str, str]:
-    """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN -- or, under the CALLER's own lease, in any non-terminal state (RUNNING,
-    BLOCKED), when it is abandoned and released rather than removed (B8f9668d27d); a task
-    held by anyone else stays. No other open bug may name it, nothing is filed under it and
-    nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
-    one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
-    `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
-    surfaces without its sentence),
-    so the reply can say what is true: a task somebody has claimed, or that fixes a real
-    bug too, stays and the agent decides; a finished or removed one is not "still queued"."""
-
-    if not rec.fix_task:
-        return "", ""
-    t = st.items.get(rec.fix_task)
-    if t is None:
-        return "", "missing"
-    if t.removed:
-        return "", "removed"
-    mine = bool(t.lease) and t.lease.holder == log.agent_id
-    if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
-        return "", "held"
-    if t.terminal or (t.state != OPEN and not mine):
-        return "", "finished"
-    if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
-        return "", "shared"
-    if st.open_descendants(t.id) or any(
-        not o.removed and t.id in o.needs for o in st.items.values()
-    ):
-        return "", "needed"
-    why = f"bug {rec.id} closed {closed}" + (f": {reason}" if reason else "")
-    if mine:  # the caller's own lease: end the task and release it, as `abandon` does
-        log.append("item.abandoned", t.id, {"reason": why, "kind": t.kind})
-        L.release(log, t.id, note=f"abandoned: {why}")
-        return t.id, ""
-    log.append("task.removed", t.id, {"reason": why})
-    return t.id, ""
-
-
-def _fixing_item(st, bug_id: str) -> Any:
+def _fixing_item(st, cfg, bug_id: str) -> Any:
     """The item whose source is the fix: the bug's fix task, else -- for `bug found
     --item X --no-task`, fixed in the commit that found it -- X while it works in a
-    worktree (B3eeb47ca9b). Only then: a landed X (merged here, or through a pull
-    request, which records only `merged_sha`) may have been merely where an older bug
-    was seen, and its base already holds the fix."""
+    worktree, or X landed through ddflow's own merge (a landed_before/landed_after
+    pair) named as the pre-fix source (Bb49d834e90). Only then: a landed X recorded
+    through a pull request, which keeps only `merged_sha` and no before/after pair,
+    may have been merely where an older bug was seen."""
     rec = st.bugs.get(bug_id)
     if rec is None:
         return None
-    if rec.fix_task:
-        return st.items.get(rec.fix_task)
+    fix_task = CM.fix_task_for(st, bug_id, cfg)
+    if fix_task is not None:
+        return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
-    if found_on is None or not found_on.worktree:
-        return None
-    return None if (found_on.landed_after or found_on.merged_sha) else found_on
+    if _has_landing_pair(found_on):
+        return found_on
+    if (
+        found_on is not None
+        and found_on.worktree
+        and not (found_on.landed_after or found_on.merged_sha)
+    ):
+        return found_on
+    return None
 
 
 def _verify_regression(
@@ -499,7 +479,9 @@ def _verify_regression(
     source, `landed_after` the fixed one), never the base by name, which then holds the
     fix (B0d5253d31f). An unlanded one needs its WORKTREE, the only thing that then names
     a pre-fix source: an unclaimed fix task is "could-not-run", recorded, never
-    "verified".
+    "verified". A bug with NO source at all -- no fix task, no found item with a worktree
+    or a landing pair -- is "needs-fix-task": `bug_fixed` REFUSES the close and the
+    reason names how to give the check its source (Bb49d834e90).
     """
     if not verify_regression:
         return "overridden", {"reason": reason.strip()}
@@ -507,7 +489,7 @@ def _verify_regression(
     if not module_tests:
         return "not-applicable", {}
 
-    fx = _fixing_item(st, bug_id)
+    fx = _fixing_item(st, cfg, bug_id)
     if landing is not None:
         # The caller named the commit that holds the fix: its first parent is the pre-fix
         # source, whatever the fix task did or did not do (B256be593f0).
@@ -521,7 +503,7 @@ def _verify_regression(
             mutation=mutation,
         )
         return _regression_status(status, ev, G)
-    if fx is not None and fx.landed_before and fx.landed_after:
+    if _has_landing_pair(fx):
         # Merged already: the landing's own before and after, never the base by NAME,
         # which now holds the fix -- the driver merges first and completes after
         # (B0d5253d31f). `tree` is unused: the fixed tree is a checkout of `after`.
@@ -535,6 +517,8 @@ def _verify_regression(
             mutation=mutation,
         )
         return _regression_status(status, ev, G)
+    if fx is None:
+        return "needs-fix-task", _missing_fix_source(st.bugs[bug_id])
     tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
     if tree is None:
         return "could-not-run", {

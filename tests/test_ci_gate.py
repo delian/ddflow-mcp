@@ -172,7 +172,7 @@ def test_an_item_id_names_its_branch_and_the_cli_defaults_to_the_directorys_head
     """As a gate it runs in the item's worktree: the primary checkout's HEAD is main, not the work."""
     _project(repo)
     default = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
-    run_cli(repo, "task", "add", "T1", "--globs", "x.txt")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "x.txt")
     wt = repo.parent / "wt-T1"
     _git(repo, "worktree", "add", "-q", "-b", "ddflow/T1", str(wt))
     _commit(wt, {"BAD.txt": "x\n"}, "T1 work")  # only the item's branch is bad
@@ -245,8 +245,10 @@ def _item_with_ci(repo, monkeypatch, agent=""):
     (repo / ".ddflow" / "config.toml").write_text(
         '[ci]\ncommand = "true"\n[gates]\ntask_pipeline = ["implement", "ci", "merge"]\n'
     )
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "src/x.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "src/x.py"
+    )
     code, out, err = run_cli(repo, "claim", "T1", agent=agent)
     assert code == 0, out + err
 
@@ -376,7 +378,9 @@ def test_ci_run_as_a_gate_checks_the_tree_it_runs_in_not_another_item_the_agent_
     branch (the one live lease the caller held) when its own tree was not recognised as an
     item's. A gate runs in the tree it was given; that tree's HEAD is what is tested."""
     _item_with_ci(repo, monkeypatch, agent="other-w")
-    run_cli(repo, "task", "add", "T2", "--phase", "P1", "--globs", "src/y.py")
+    run_cli(
+        repo, "task", "add", "T2", "--title", "T2 fixture", "--phase", "P1", "--globs", "src/y.py"
+    )
     code, out, err = run_cli(repo, "claim", "T2", agent="holder-w")
     assert code == 0, out + err
     _, out, _ = run_cli(repo, "--json", "show", "T1")

@@ -75,7 +75,7 @@ def _fail_gate(repo: Path) -> str:
         "red.toml",
         'event = "gate.failed"\nkey = "{subject}"\naction = { job = "fix" }\nenabled = true\n',
     )
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == 0
     code, out, err = run_cli(
         repo, "gate", "record", "T1", "unit_tests", "--outcome", "failed", "--reason", "red"
     )

@@ -111,7 +111,18 @@ def test_an_absolute_stored_path_is_still_honoured(repo):
 def test_the_event_log_carries_no_absolute_paths(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "p")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/*",
+    )
     run_cli(repo, "claim", "P1.T1")
     log = "\n".join(p.read_text() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     entries = [json.loads(ln) for ln in log.splitlines() if ln.strip()]
@@ -224,7 +235,18 @@ def test_the_json_interface_returns_a_usable_absolute_path(repo):
     """
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "p")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/*",
+    )
     run_cli(repo, "claim", "P1.T1")
 
     shown = json.loads(run_cli(repo, "--json", "show", "P1.T1")[1])

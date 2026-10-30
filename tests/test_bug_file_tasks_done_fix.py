@@ -72,10 +72,55 @@ def test_a_tasks_own_bug_on_its_done_task_is_left_for_verify_reopen(repo):
     assert state(repo).bugs["Bx"].fix_task == "fix-Bx"
 
 
-def test_a_report_on_a_running_fix_task_is_still_its_fix(repo):
+def test_a_report_mislinked_to_another_bugs_open_fix_task_gets_its_own_task(repo):
+    """Bb141cbd8d8: the OLD `bug found --item <another bug's fix task>` bound Brep to
+    fix-Bx -- OPEN, fixing Bx -- and file-tasks saw a live task and left it there
+    forever. It now files `fix-Brep`, once; the task's OWN bug stays with its task."""
+    seed(repo)
+    dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
+    assert dry.data["filed"] == ["Brep"] and dry.data["tasks"] == {"Brep": "fix-Brep"}, dry.data
+    out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.exit == 0 and out.data["filed"] == ["Brep"], out.data
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep" and st.items["fix-Brep"].fixes == ["Brep"]
+    assert st.bugs["Bx"].fix_task == "fix-Bx", "the task's own bug is left alone"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "filed once, not on every run"
+
+
+def test_a_report_mislinked_to_a_live_fix_task_of_another_bug_is_refiled(repo):
+    """Ba3cf059594: the audit-tail twin of Bb141cbd8d8 -- a log where `bug found --item
+    <another bug fix task>` is REAL (the other task live, fixing another bug) -- gets
+    its own task too, and its own bug's link is untouched."""
     seed(repo)
     out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.data["filed"] == ["Brep"], out.data
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep" and st.items["fix-Brep"].fixes == ["Brep"]
+    assert st.bugs["Bx"].fix_task == "fix-Bx", "the other bug's link is untouched"
+    assert K.bug_file_tasks(repo, every=True, agent="a").exit == 2, "refiled once, not on every run"
+
+
+def test_a_bug_bound_to_an_open_task_with_no_fixes_of_its_own_is_left(repo):
+    """The refile takes a bug off a task declared to fix ANOTHER bug; a live hand-filed
+    task with no `fixes` named as the fix IS the fix (B8fb4a2ec4a) and file-tasks leaves
+    the bug with it."""
+    log = seed(repo)
+    log.append("task.added", "B-hand", {"parent": "P1", "title": "h", "tags": ["bug"]})
+    log.append("bug.found", "Brep", {"fix_task": "B-hand", "item": "B-hand"})
+    out = K.bug_file_tasks(repo, every=True, agent="a")
     assert out.exit == 2, out.data
+    assert state(repo).bugs["Brep"].fix_task == "B-hand"
+
+
+def test_a_bug_named_among_its_open_tasks_fixes_is_left(repo):
+    """`--same-fix` put Brep into T-both's `fixes`: that OPEN task was filed to fix it,
+    so file-tasks leaves it (unlike the mis-link, which names another bug)."""
+    log = seed(repo)
+    log.append("task.added", "T-both", {"parent": "P1", "title": "both", "fixes": ["Bx", "Brep"]})
+    log.append("bug.found", "Brep", {"fix_task": "T-both", "item": "fix-Bx"})
+    out = K.bug_file_tasks(repo, every=True, agent="a")
+    assert out.exit == 2, out.data
+    assert state(repo).bugs["Brep"].fix_task == "T-both"
 
 
 def test_a_report_whose_own_fix_task_already_finished_is_linked_once(repo):

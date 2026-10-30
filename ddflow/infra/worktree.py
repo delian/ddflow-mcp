@@ -23,7 +23,7 @@ import contextlib
 import os
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -67,6 +67,7 @@ def scratch_tree(
     prefix: str = "ddflow-scratch-",
     under: Path | None = None,
     quiet: bool = False,
+    claim: Callable[[Path], Path | None] | None = None,
 ) -> Iterator[Scratch]:
     """A throwaway worktree of ``ref`` in ``root``'s repository: one place that makes it,
     removes it however the body ends and prunes the registry.
@@ -77,9 +78,15 @@ def scratch_tree(
     caller words its own failure from ``add``. Nothing is left behind: the tree is removed
     (forced), its directory deleted and the registry pruned, in that order, whatever the
     body did.
+
+    ``claim`` runs with the tree's path once it exists but BEFORE `git worktree add`
+    registers it (ci passes one that writes its sibling owner marker, so a sweep between
+    the add and the claim can never see the tree unclaimed). The path it returns (the
+    marker ci writes) is unlinked on exit, so a claim without a registration does not leak.
     """
     root = Path(root)
     tmp = fsio.unused_dir(prefix, under)  # `worktree add` wants to create it
+    claimed: Path | None = claim(tmp) if claim is not None else None
     args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
     add = git(root, *args, str(tmp), ref)
     try:
@@ -89,6 +96,9 @@ def scratch_tree(
             git(root, "worktree", "remove", "--force", str(tmp))
         # Delete the directory BEFORE pruning: prune only drops registrations whose tree is
         # already gone, so after a failed `remove` it would keep the very entry we clean up.
+        if claimed is not None:
+            with contextlib.suppress(OSError):
+                claimed.unlink()
         shutil.rmtree(tmp, ignore_errors=True)
         git(root, "worktree", "prune")
 
@@ -641,6 +651,21 @@ def _stash_failed(r: GitResult, tree: Path) -> bool:
     return not probe.ok and not probe.unavailable  # "could not run" is not "no merge begun"
 
 
+def _overwritten(r: GitResult) -> bool:
+    """Is this git's own refusal to merge over a locally-modified tracked file it would
+    overwrite? Unlike ``fatal: stash failed`` (its pre-merge save died on a lock), this is
+    the dirty tree itself refusing the merge, and the branch was never judged. Anchored to
+    the refusal LINE, never the bare phrase: a conflict over a file literally NAMED
+    "would be overwritten by merge" prints the phrase inside a CONFLICT line, and git does
+    not start those with ``error: ``."""
+    for line in (r.err or r.out).splitlines():
+        if line.strip().startswith("error: ") and line.strip().endswith(
+            "would be overwritten by merge:"
+        ):
+            return True
+    return False
+
+
 def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
     """`git <args>`, retried only while git says ``stash failed`` (it merged nothing then).
     When it never clears, the error names the cause and says nothing was merged."""
@@ -658,6 +683,17 @@ def _merge_retrying_stash(tree: Path, args: list[str]) -> GitResult:
             f"merging, {tries} times (usually another process holding the git `index.lock` of {tree} "
             "or rewriting a tracked file as git read it); nothing was merged. Retry the merge "
             "once that process is done, or commit or move the uncommitted changes.",
+            attempted=False,
+        )
+    if not r.ok and _overwritten(r):
+        # git names the exact files the merge would overwrite; that is a dirty tree, not a
+        # judgement on the branch, so it is refused, never recorded as a failed merge.
+        return GitResult(
+            GIT_REFUSED,
+            r.out,
+            f"{r.err or r.out}\n\nNothing was merged (the item's branch was not judged). "
+            f"Commit or move those uncommitted changes, then re-run the merge.",
+            attempted=False,
         )
     return r
 

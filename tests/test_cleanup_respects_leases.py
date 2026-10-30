@@ -61,7 +61,7 @@ def _row(out, path: Path):
 def test_a_live_leased_clean_tree_survives_cleanup_apply(repo):
     """The headline. Claimed a moment ago: clean, nothing ahead -- and someone's."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, _, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == OK, err
     tree = _tree_of(repo, "T1")
@@ -79,7 +79,7 @@ def test_an_adopted_clean_tree_survives_cleanup_apply_after_its_lease_is_release
     """No lease protects it any more -- only adoption does. The harness made this tree
     and may still be standing in it; `release` ends ddflow's claim, not the harness's."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     # On a branch carrying ddflow's prefix, so the survey cannot skip it by name.
     tree = _harness_tree(repo, "ddflow/harness-work")
     code, out_, err = run_cli(tree, "claim", "T1", agent="worker")
@@ -107,7 +107,7 @@ def test_an_adopted_tree_survives_with_an_empty_branch_prefix(repo):
     text = cfg_path.read_text()
     assert "\n[worktree]\n" in text, "fixture: init wrote no [worktree] table to extend"
     cfg_path.write_text(text.replace("\n[worktree]\n", '\n[worktree]\nbranch_prefix = ""\n', 1))
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     tree = _harness_tree(repo, "agent-work")
     code, _, err = run_cli(tree, "claim", "T1", agent="worker")
     assert code == OK, err
@@ -127,7 +127,7 @@ def test_a_merged_tree_nobody_holds_is_still_removed(repo):
     """The guard must not turn cleanup into a no-op: a released, ddflow-created, merged
     tree is exactly what `--apply` exists to remove."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", agent="worker")
     tree = _tree_of(repo, "T1")
     code, _, err = run_cli(repo, "release", "T1", agent="worker")
@@ -142,7 +142,7 @@ def test_a_live_leased_branch_without_a_tree_is_not_deleted(repo):
     """`claim` takes the lease before the tree exists, and `--no-worktree` never makes
     one: a leased branch with no tree is the holder's, not a stale leftover."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", agent="worker")
     tree = _tree_of(repo, "T1")
     # The tree goes (by hand, say), the lease and the branch stay.
@@ -165,7 +165,7 @@ def test_a_tree_claimed_between_survey_and_apply_survives(repo):
     from ddflow.services import cleanup as CL
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", agent="worker")
     tree = _tree_of(repo, "T1")
     run_cli(repo, "release", "T1", agent="worker")
@@ -198,7 +198,7 @@ def test_a_claim_racing_the_removal_itself_keeps_its_tree(repo, monkeypatch):
     from ddflow.infra import worktree as W
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", agent="worker")
     _tree_of(repo, "T1")
     run_cli(repo, "release", "T1", agent="worker")

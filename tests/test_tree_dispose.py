@@ -35,7 +35,7 @@ def _tree_of(repo: Path, item: str) -> Path:
 
 def _released_tree(repo: Path) -> Path:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, _, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == OK, err
     tree = _tree_of(repo, "T1")
@@ -64,7 +64,7 @@ def test_onboard_apply_records_the_tree_it_removed(repo):
 
 def test_onboard_apply_never_removes_a_tree_an_agent_holds(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, _, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == OK, err
     tree = _tree_of(repo, "T1")
@@ -79,7 +79,7 @@ def test_onboard_apply_never_removes_a_tree_an_item_adopted(repo):
     import subprocess
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     tree = repo.parent / "harness-tree"
     subprocess.run(
         ["git", "-C", str(repo), "worktree", "add", "-q", str(tree), "-b", "agent-work"],
@@ -147,7 +147,7 @@ def test_dispose_removes_a_clean_merged_tree_deletes_its_branch_and_logs_it(repo
 
 def test_dispose_keeps_a_tree_a_live_lease_holds_but_not_the_callers_own(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert run_cli(repo, "claim", "T1", agent="worker")[0] == OK
     tree = _tree_of(repo, "T1")
     wt, cfg, log = _wt(repo, tree), Config.load(repo), EventLog(repo, "t")

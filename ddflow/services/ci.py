@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
+import signal
 import sys
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -41,12 +43,23 @@ from .pins import pin_files
 from .pins import regenerate as regenerate_pins
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
-DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
+#: The pre-push run every derived default command is recognised by; the all-files arg is the
+#: only part `scope_to_diff` replaces (the configured run now checks the change, Bf333cb2f5d).
+PRE_PUSH_RUN = "pre-commit run --hook-stage pre-push"
+DEFAULT_COMMAND = f"{PRE_PUSH_RUN} --all-files"
 #: What `merge_tree` says of a base that conflicts with the ref, and what `run` reads back to
 #: tell that FAILED from a merge git could not finish (UNAVAILABLE): one constant for both.
 NOT_MERGEABLE = "does not merge with"
 CONFLICT = "conflict"  # Failure.kind: git merged and the branches disagree
 CANNOT_MERGE = "cannot-merge"  # Failure.kind: the merge could not be done (timeout, lock, bad ref)
+#: The scratch trees of a ci run (`merge_tree`), made under the system temp directory: the
+#: prefix `cleanup` recognises when it looks for the leftovers of killed runs (B43593d1f3c).
+SCRATCH_PREFIX = "ddflow-ci."
+#: The suffix of the file that claims a scratch tree for the process that owns it while a ci
+#: run lives: `<tree><OWNER_SUFFIX>` holds ``pid start-ticks``, so `cleanup` can tell a live
+#: run's tree from a killed run's leftover (keyed by pid AND start time: a reused pid is not
+#: the owner that died).
+OWNER_SUFFIX = ".owner"
 
 
 class Failure(str):
@@ -211,32 +224,230 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
     return None
 
 
-_LEADING_SKIP = re.compile(r"^SKIP=(?P<ids>\S+)\s+")
+def _escaped(quote: str, nxt: str) -> str | None:
+    """What an escape pair contributes: outside quotes a backslash escapes ANY next char,
+    inside double quotes only `$`, backtick, `"` and backslash (a backslash-newline is a
+    line continuation that contributes NOTHING, the same outside); ``None`` is
+    not-an-escape here (single quotes, a bare backslash before an ordinary double-quoted
+    char) and both chars stay literal."""
+    if not quote:
+        return "" if nxt == "\n" else nxt
+    if quote == '"' and nxt in '$`"\\\n':
+        return "" if nxt == "\n" else nxt
+    return None
 
 
-def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
-    """``command`` (the default pre-push command, maybe after `SKIP=...`) with the tripwire
-    hooks taken out of its all-files run and run once on the diff ``since``..HEAD instead; the
-    command as it is when the project has no tripwire or ``since`` is not a commit there."""
-    ids = tripwire_ids(tree)
-    if not ids or not since or not W.rev(tree, since):
+def _shell_active(c: str, value: list[str]) -> bool:
+    """Does the shell expand ``c`` in an unquoted value here? `$`, backtick, or a tilde
+    at the word's head / after a `:` (a PATH-style assignment value)."""
+    return c in "$`" or (c == "~" and (not value or value[-1] == ":"))
+
+
+def _sub_end(quote: str, c: str, command: str, i: int, n: int) -> int:
+    """The index just past a rounded `$( ... )` opened at ``i`` -- one shell word-part the
+    scan must cross whole -- or -1 when ``c`` is not one (a `$` inside single quotes is
+    literal, not a substitution) or the parens never balance."""
+    if quote == "'" or c != "$" or i + 1 >= n or command[i + 1] != "(":
+        return -1
+    depth, i = 1, i + 2
+    inner = ""  # quotes inside the substitution are its own: parens inside them are text
+    while i < n and depth:
+        c = command[i]
+        if inner:
+            if c == inner:
+                inner = ""
+            elif inner == '"' and c == "\\" and i + 1 < n and command[i + 1] in '"\\$`':
+                i += 1  # `\"` etc. inside the inner double quotes is a literal quote char
+        elif c in "\"'":
+            inner = c
+        elif c == "\\" and i + 1 < n:
+            i += 1  # the escaped char inside the substitution is text, not a paren
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        i += 1
+    return i if depth == 0 else -1
+
+
+def _leading_skip(command: str) -> tuple[str | None, str, str]:
+    """Split a leading shell ``SKIP=<word>`` off ``command``: ``(own, verbatim, rest)``
+    -- the value the shell would resolve it to (`'a b'` -> `a b`), the value's source text
+    (non-empty only when the value must stay verbatim), and the untouched remainder, so
+    the rest of the command (shell text) is never re-tokenized. ``own`` is ``None`` when
+    the value cannot be reproduced as a literal (`$`/backtick/**tilde** expansions the
+    rebuild would have to guess at, or unbalanced quotes); its ``verbatim`` text then
+    keeps the operator's own expansion semantics. A word whose END is uncertain is
+    returned whole (``verbatim=command``, nothing after)."""
+    if not command.startswith("SKIP="):
+        return None, "", command
+    value: list[str] = []
+    activity = False  # the shell would expand part of this value: keep it verbatim
+    quote = ""  # "'" or '"' inside it, "" outside
+    i, n = len("SKIP="), len(command)
+    while i < n:
+        c = command[i]
+        if c == "\\" and i + 1 < n and (got := _escaped(quote, command[i + 1])) is not None:
+            if got:
+                value.append(got)
+            i += 1
+        elif (end := _sub_end(quote, c, command, i, n)) >= 0:
+            activity = True  # the whole substitution is one verbatim word-span
+            i = end
+            continue
+        elif quote and c == quote:
+            quote = ""
+        elif quote:
+            if quote == '"' and c in "$`":
+                activity = True
+            value.append(c)  # inside the quotes: everything else is literal text
+        elif c in " \t\n" or c in ";\n|&<>()":
+            break  # a word ends at POSIX whitespace or a shell operator (kept in the rest)
+        elif c in "\"'":
+            quote = c
+        elif _shell_active(c, value):
+            activity = True  # an expansion the shell would perform: keep the value verbatim
+            value.append(c)
+        else:
+            value.append(c)
+        i += 1
+    if quote:  # unbalanced: the word's end is unknown
+        return None, command, ""
+    if activity:
+        return None, command[:i], command[i:]  # verbatim value text, run from its end
+    return "".join(value), "", command[i:]
+
+
+def _sh_single(word: str) -> str:
+    """``word`` single-quoted for a POSIX shell: the value stays a literal whatever it
+    holds (`$(...)`, quotes), so re-emission cannot make it shell-active."""
+    return "'" + word.replace("'", "'\\''") + "'"
+
+
+def _scope_the_run(run: str, resolve: str) -> str:
+    """``run`` with its own ` --all-files` replaced by the since..HEAD range -- when the
+    run IS the default run phrase, give or take the shell operator the `SKIP=` word ended
+    at (`;`, `&&`) and POSIX whitespace around them. A run carrying anything beyond that
+    phrase is shell text, not the default one: it stays as written, uncorrupted."""
+    at = run.find(DEFAULT_COMMAND)
+    if at < 0:
+        return run
+    lead, tail = run[:at], run[at + len(DEFAULT_COMMAND) :]
+    if lead.strip(" \t\n") in ("", ";", "&&", "&") and not tail.strip(" \t\n"):
+        return lead + f"{PRE_PUSH_RUN} --from-ref {resolve} --to-ref HEAD" + tail
+    return run
+
+
+def scope_to_diff(command: str, tree: Path, since: str) -> str:
+    """``command`` (the default pre-push command, maybe after `SKIP=...`) run over the diff
+    ``since``..HEAD instead of over every file (`--all-files`): the checks a push is about run
+    on what the push changes, so an error the base itself carries does not fail a branch that
+    did not make it (Bf333cb2f5d). The ref name itself is never interpolated: the command runs
+    through a shell, and a ref name is not shell text (the resolved commit is).
+    ``command`` as written when ``since`` is not a commit there."""
+    resolve = W.rev(tree, since) if since else ""
+    if not resolve or " --all-files" not in command:
         return command
-    lead = _LEADING_SKIP.match(command)
-    rest = command[lead.end() :] if lead else command
-    skip = ",".join([*([lead["ids"]] if lead else []), *ids])
-    # The environment's own SKIP (the selected-tests plan sets one) stays in front.
-    first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
-    base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
-    # The command's own SKIP= is the operator's skip: it applies to the named runs as well.
-    mine = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
-    ranged = [f"{mine}{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
-    steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
-    return "rc=0; " + "; ".join(steps) + "; exit $rc"
+    own, verbatim, run = _leading_skip(command)
+    scoped = _scope_the_run(run, resolve)
+    if scoped == run:
+        return command  # nothing was actually scoped: leave the command exactly as written
+    # A leading `SKIP=` assignment shadows the INHERITED `SKIP` the run's environment set (the
+    # selected-tests plan), so merge the two like the earlier tripwire run did; the merged
+    # value is the env expansion plus the command's own list as a shell literal. `SKIP=''` is
+    # an explicit EMPTY override -- it keeps clearing the inherited SKIP. When the value was
+    # not parseable its verbatim text stays (unmerged, its own expansion semantics); with no
+    # assignment the environment's own SKIP reaches pre-commit as it is.
+    if own is not None:
+        merged = f'SKIP="${{SKIP:+$SKIP,}}"{_sh_single(own)}' if own else 'SKIP=""'
+    else:
+        merged = verbatim
+    return merged + scoped
 
 
 def tool_missing(command: str) -> str:
     """The executable the command starts with, when it is not installed ("" when it is)."""
     return executable_missing(command)
+
+
+def owner_line() -> str:
+    """This process's owner-marker line: ``pid start-ticks``. Keyed by pid AND start time
+    (like the harness identity), so a reused pid never reads as the owner that died. On a
+    host with no /proc the line is the bare pid; `cleanup` treats a missing start-ticks as
+    unknown (LEFT ALONE, never pruned), so the fallback trades liveness for never guessing."""
+    pid = os.getpid()
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text("utf-8", "replace").rsplit(")", 1)[1].split()
+        return f"{pid} {fields[19]}"
+    except (OSError, IndexError):
+        return str(pid)
+
+
+def owner_marker(tree: Path) -> Path:
+    """The sibling file that claims scratch tree ``tree`` for its owner: ``<tree>[OWNER_SUFFIX]``.
+
+    Outside the tree, so the checked-out files stay untouched by it."""
+    return Path(f"{tree}{OWNER_SUFFIX}")
+
+
+def _claim_owner(tree: Path) -> Path:
+    """Write the owner marker for ``tree``, and return it. A marker that cannot be written
+    (a read-only temp dir) costs `cleanup` the liveness check, never the run itself."""
+    marker = owner_marker(tree)
+    try:
+        fsio.atomic_write(marker, owner_line() + "\n")
+    except OSError:
+        pass
+    return marker
+
+
+def _remove_scratch(repo: Path, tree: Path) -> None:
+    """Remove scratch tree ``tree`` and prune its git registration: the exit path of the
+    infra scratch helper, factored for a SIGNAL, under which no ``finally`` can run and
+    this handler is the only cleanup there is. Never raises: a removal that fails leaves
+    the tree for `cleanup` to name and prune."""
+    W.git(repo, "worktree", "remove", "--force", str(tree))
+    shutil.rmtree(tree, ignore_errors=True)
+    W.git(repo, "worktree", "prune")
+
+
+@contextmanager
+def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
+    """Remove ``tree`` even when a signal ends the run: SIGTERM (a supervisor), SIGHUP (a
+    closed session) and SIGINT (ctrl-C) first free tree, marker and registration, then
+    re-raise themselves with their default action, so their default kill, or a caller's
+    handler, never outlives the cleanup. The handlers this installs are restored (and the
+    marker removed) however the body ends; a non-main thread cannot install handlers, and
+    keeps whatever it arrived with."""
+    previous: dict[signal.Signals, object] = {}
+
+    def free_then_die(signum: int, _frame) -> None:
+        try:
+            _remove_scratch(repo, tree)
+            marker.unlink(missing_ok=True)  # the process dies here: no `finally` follows
+        except OSError:
+            pass
+        finally:
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        try:
+            previous[sig] = signal.signal(sig, free_then_die)
+        except (ValueError, OSError):
+            pass
+    try:
+        yield
+    finally:
+        for sig, old in previous.items():
+            try:
+                signal.signal(sig, old)
+            except (ValueError, OSError):
+                pass
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 @contextmanager
@@ -249,7 +460,9 @@ def merge_tree(
 
     Removed on exit. A base already contained in `ref` needs no merge; a base that
     conflicts with `ref` is reported as the failure it is."""
-    with W.scratch_tree(repo, ref, detach=True, prefix="ddflow-ci.", quiet=True) as s:
+    with W.scratch_tree(
+        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner
+    ) as s:
         if s.path is None:
             yield (
                 None,
@@ -257,55 +470,62 @@ def merge_tree(
             )
             return
         tree = s.path
-        if base and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
-            yield (
-                None,
-                Failure(
-                    f"could not merge {base} into {ref}: {base!r} is not a commit", CANNOT_MERGE
-                ),
-            )
-            return
-        if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
-            # No hook of the repository runs in the scratch merge (core.hooksPath): the
-            # post-merge hook regenerated pins by running the golden suite, which outlived
-            # the git timeout and was reported as a conflict (B36c484af97).
-            m = W.git(
-                tree,
-                "-c",
-                "core.hooksPath=/dev/null",
-                "-c",
-                "user.name=ddflow",
-                "-c",
-                "user.email=ddflow@localhost",
-                "merge",
-                "--no-edit",
-                "--no-ff",
-                base,
-            )
-            said = m.out or m.err
-            # A conflict is git's own answer: exit 1, or histories with nothing in common.
-            # Anything else (killed at the timeout, a base it cannot resolve, a lock held:
-            # exit 128) is a merge it could not do, which the gate cannot call a conflict.
-            conflict = m.code == 1 or "unrelated histories" in said
-            if not m.ok and not conflict:
+        marker = owner_marker(tree)  # written by `claim`, BEFORE the add registered the tree
+        with _remove_on_signals(repo, tree, marker):
+            if (
+                base
+                and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok
+            ):
                 yield (
                     None,
                     Failure(
-                        f"could not merge {base} into {ref}: {m.err or m.out}"[-400:], CANNOT_MERGE
+                        f"could not merge {base} into {ref}: {base!r} is not a commit",
+                        CANNOT_MERGE,
                     ),
                 )
                 return
-            if not m.ok:
-                yield (
-                    None,
-                    Failure(
-                        f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
-                        + CC.cause(tree, base, pins),
-                        CONFLICT,
-                    ),
+            if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
+                # No hook of the repository runs in the scratch merge (core.hooksPath): the
+                # post-merge hook regenerated pins by running the golden suite, which outlived
+                # the git timeout and was reported as a conflict (B36c484af97).
+                m = W.git(
+                    tree,
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "user.name=ddflow",
+                    "-c",
+                    "user.email=ddflow@localhost",
+                    "merge",
+                    "--no-edit",
+                    "--no-ff",
+                    base,
                 )
-                return
-        yield tree, Failure("", "ok")
+                said = m.out or m.err
+                # A conflict is git's own answer: exit 1, or histories with nothing in common.
+                # Anything else (killed at the timeout, a base it cannot resolve, a lock held:
+                # exit 128) is a merge it could not do, which the gate cannot call a conflict.
+                conflict = m.code == 1 or "unrelated histories" in said
+                if not m.ok and not conflict:
+                    yield (
+                        None,
+                        Failure(
+                            f"could not merge {base} into {ref}: {m.err or m.out}"[-400:],
+                            CANNOT_MERGE,
+                        ),
+                    )
+                    return
+                if not m.ok:
+                    yield (
+                        None,
+                        Failure(
+                            f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
+                            + CC.cause(tree, base, pins),
+                            CONFLICT,
+                        ),
+                    )
+                    return
+            yield tree, Failure("", "ok")
 
 
 def parse_checks(output: str) -> list[Check]:
@@ -353,7 +573,9 @@ def run(
     tick: tuple[Callable[[], None], float] | None = None,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
+    queued phase of the host suite lock besides (the per-run override covers the queue wait,
+    not only the run behind it, Ba5d5d63f12).
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
@@ -388,16 +610,26 @@ def run(
         if stale := _stale_pins(tree, cfg, base, custom=bool(command.strip())):
             return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
+        cmd = _default_on_the_diff(repo, cfg, cmd, tree, sha, base, changed_from)
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
         full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
+        holder = _holder(repo, ref)
         try:
             p, out_prefix, waited = _run_locked(
-                cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite
+                cfg,
+                holder,
+                tree,
+                cmd,
+                scope,
+                budget,
+                tick,
+                used,
+                full_suite,
+                lock_wait=_lock_wait(timeout_s),
             )
         except SL.SuiteBusy as busy:
             return Result(
@@ -414,12 +646,26 @@ def run(
     return res
 
 
-def _run_locked(cfg, repo, ref, tree, cmd, scope, budget, tick, used, full_suite):
+def _lock_wait(timeout_s: int) -> float | None:
+    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone, what
+    `SL.hold` falls back to), or ``timeout_s`` when it is a positive per-run override: the
+    override caps the queued wait (this value) and is the budget of the run behind it.
+    A queued run used to give up at the knob although the caller had authorised a much
+    longer run, and a shorter run had no say about its queue wait either (Ba5d5d63f12)."""
+    if timeout_s <= 0:
+        return None
+    return float(timeout_s)
+
+
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
-    its output prefix and the seconds spent queued for the slot (None without one)."""
+    its output prefix and the seconds spent queued for the slot (None without one). ``holder``
+    is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
+    an empty named command is the suite, never `not cmd.strip()` on the materialized command.
+    ``lock_wait`` replaces the wait limit for this hold (see `_lock_wait`)."""
     waited: float | None = None
     queued_at = time.monotonic()
-    with SL.hold(cfg, _holder(repo, ref)) if full_suite else nullcontext():
+    with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
         p, out_prefix = _execute(
@@ -472,18 +718,18 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
     )
 
 
-def _default_with_tripwires(
+def _default_on_the_diff(
     repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
 ) -> str:
-    """``cmd`` with the tripwire hooks on the diff, when it is the default command (an operator's
-    own `[ci].command` is run as written). The diff is the one the check is about: on the base
-    itself (the after-merge check) there is no branch to compare with, so the commit just made
-    against its first parent."""
+    """``cmd`` scoped to the diff the check is about, when it is the default command (an
+    operator's own `[ci].command` is run as written). The diff is the one the check is about:
+    on the base itself (the after-merge check) there is no branch to compare with, so the
+    commit just made against its first parent."""
     if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
         return cmd
     # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
-    return with_tripwires_on_the_diff(cmd, tree, since)
+    return scope_to_diff(cmd, tree, since)
 
 
 def _worker_log(scope) -> dict[str, dict]:
@@ -524,7 +770,7 @@ def _needs_suite_slot(cfg: Config, cmd: str, scope) -> bool:
 
 def _runs_whole_suite(cmd: str, scope) -> bool:
     """The default pre-push command with its test hooks on, not narrowed to a selection."""
-    if DEFAULT_COMMAND not in cmd or "SKIP=" in cmd:
+    if PRE_PUSH_RUN not in cmd or "SKIP=" in cmd:
         return False
     return scope is None or scope.scope != "selected"
 

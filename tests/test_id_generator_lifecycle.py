@@ -17,7 +17,7 @@ def test_complete_closes_the_bug_a_configured_fix_task_names(repo: Path) -> None
     cfg.write_text(cfg.read_text("utf-8") + '\n[ids]\nfix_task = "bugfix-{parent}"\n', "utf-8")
     bid = K.bug_found(repo, summary="the flange fails", no_task=True).data["id"]
     task = f"bugfix-{bid}"
-    assert run_cli(repo, "task", "add", task, "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", task, "--title", "task item", "--globs", "a.py")[0] == 0
     (repo / "tests").mkdir()
     (repo / "tests" / "test_flange.py").write_text("def test_it():\n    pass\n", "utf-8")
     out = complete(repo, task, regression_test="tests/test_flange.py::test_it", force=True)
@@ -37,7 +37,12 @@ def test_complete_does_not_refile_the_bug_its_configured_fix_task_fixes(repo: Pa
     bid = "B0123456789"
     task = f"bugfix-{bid}"
     # the fix task first, hand-filed and tagged a bug fix; then the bug, filed against it
-    assert run_cli(repo, "task", "add", task, "--globs", "a.py", "--tags", "bugfix")[0] == 0
+    assert (
+        run_cli(
+            repo, "task", "add", task, "--title", "task item", "--globs", "a.py", "--tags", "bugfix"
+        )[0]
+        == 0
+    )
     K.bug_found(repo, id=bid, summary="the gasket fails", item=task)
     st = fold(EventLog(repo, "t").read_all(), strict=False)
     assert st.bugs[bid].fix_task == task  # the precondition the refile check reads
@@ -48,3 +53,34 @@ def test_complete_does_not_refile_the_bug_its_configured_fix_task_fixes(repo: Pa
     after = set(fold(EventLog(repo, "t").read_all(), strict=False).items)
     assert out.data.get("bugs_refiled") == {}, out.data.get("bugs_refiled")
     assert after - before == set(), f"a fix task was refiled: {after - before}"
+
+
+def test_a_removed_linked_fix_task_does_not_hide_the_configured_one() -> None:
+    from ddflow.config import Config
+    from ddflow.core.model import Bug, Item, State
+    from ddflow.services import completion as CM
+
+    cfg = Config()
+    gone = Item(id="fix-B1", kind="task", removed=True)
+    live = Item(id="bugfix-B1", kind="task")
+    cfg.ids.fix_task = "bugfix-{parent}"
+    st = State()
+    other = Item(id="T-other", kind="task")
+    st.items = {gone.id: gone, other.id: other, live.id: live}
+    st.bugs = {"B1": Bug(id="B1", fix_task="fix-B1")}
+    assert CM.fix_task_for(st, "B1", cfg) is live
+
+
+def test_the_configured_fix_task_wins_over_an_older_item_that_also_fixes_the_bug() -> None:
+    from ddflow.config import Config
+    from ddflow.core.model import Bug, Item, State
+    from ddflow.services import completion as CM
+
+    cfg = Config()
+    cfg.ids.fix_task = "bugfix-{parent}"
+    old = Item(id="T-old", kind="task", fixes=["B1"])
+    live = Item(id="bugfix-B1", kind="task")
+    st = State()
+    st.items = {old.id: old, live.id: live}
+    st.bugs = {"B1": Bug(id="B1")}
+    assert CM.fix_task_for(st, "B1", cfg) is live

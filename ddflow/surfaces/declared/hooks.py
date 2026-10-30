@@ -19,6 +19,8 @@ _HARNESS_PAYLOAD = {
     "harness_list": ("harnesses",),
     "harness_show": ("id", "levels", "features"),
     "harness_doctor": ("findings",),
+    #: `run`'s reply fields, as `ddflow hooks run --json` sends them (plus `dry_run`).
+    "run": ("stdout", "note", "result", "dry_run"),
 }
 
 COMMANDS: tuple[Command, ...] = (
@@ -249,22 +251,46 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_hooks",
-        description="Inspect or install the enforcement git hook — the one layer of this workflow that does not depend on the agent agreeing. It refuses a commit touching paths no live lease of yours covers. `status` reports whether it is installed AND whether the policy actually blocks, since a block policy with no hook installed enforces nothing.",
+        description="Inspect or install the enforcement git hook — the one layer of this workflow that does not depend on the agent agreeing. It refuses a commit touching paths no live lease of yours covers. `status` reports whether it is installed AND whether the policy actually blocks, since a block policy with no hook installed enforces nothing. `run` is the MCP twin of `ddflow hooks run`: one lifecycle event for a harness; `dry_run` computes and shapes the reply and writes no event.",
         params=(
             Param(
                 "action",
-                help="status (default), install, uninstall; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken (read-only).",
+                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value with status, source, tool version and date (read-only).",
             ),
-            Param("harness", help="harness_show / harness_doctor: the agent's descriptor id."),
+            Param(
+                "harness",
+                help="harness_show / harness_doctor / harness_facts / run: the agent's descriptor id.",
+            ),
+            Param(
+                "event",
+                help="run: the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact, stop, session_end.",
+            ),
+            Param(
+                "stdin",
+                help="run: the agent's hook JSON, exactly as the harness would send it on stdin.",
+            ),
+            Param(
+                "dry_run",
+                type="boolean",
+                help="run: compute and print what the hook would do, and write no event.",
+            ),
             Param(
                 "claude",
                 type="boolean",
                 help="Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, even after compaction, starts with the ddflow brief. Other hooks there are untouched.",
             ),
+            Param(
+                "unverified",
+                type="boolean",
+                help="harness_facts: only the unverified leads and the sections left out.",
+            ),
         ),
         call=lambda repo, a, agent: (
             _api().harness_view(
-                repo, what=a["action"].removeprefix("harness_"), id=a.get("harness", "") or ""
+                repo,
+                what=a["action"].removeprefix("harness_"),
+                id=a.get("harness", "") or "",
+                unverified=bool(a.get("unverified")),
             )
             if str(a.get("action", "")).startswith("harness_")
             else _api().hooks(
@@ -272,6 +298,11 @@ COMMANDS: tuple[Command, ...] = (
                 action=a.get("action", "status") or "status",
                 claude=bool(a.get("claude")),
                 agent=agent,
+                # `hooks` reads these only when action == "run".
+                harness=a.get("harness", "") or "",
+                event=a.get("event", "") or "",
+                stdin=a.get("stdin", "") or "",
+                dry_run=bool(a.get("dry_run")),
             )
         ),
         # The FACTS. `message` is the prose rendering of them and stays OUT of the JSON
@@ -343,6 +374,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("harness", "list"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "doctor"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "facts"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),
     Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
     Command(

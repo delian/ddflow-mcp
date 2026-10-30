@@ -18,9 +18,10 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
+from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
+from .bug_tags import found_tags
 
 BUG_SCOPES = ("project", "ddflow")
-BUG_SEVERITIES = ("low", "medium", "high", "critical")
 #: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
 #: The offer to prepare a report names it, so it is only made when this is set
 #: (tests/test_bug_scope.py pins it to the parser).
@@ -54,6 +55,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     test: str = "",
     repro_cmd: str = "",
     repro_capture: str = "",
+    tags: str | list[str] = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
     says what it is; a bug a task will fix is filed against it (``item``), which answers
@@ -64,7 +66,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     A bug is an item in the queue (B-bugs-as-items): unless ``no_task`` (a bug fixed in
     the commit that found it) or ``[bugs].file_task`` is off, the same transaction files
     its fix task -- `_file_fix_task` -- and the reply carries ``fix_task``. ``globs`` are
-    the fix task's files, kept verbatim; absent, the item's that exist in the tree. An OPEN bug-fix task named as ``item`` (one fixing no other bug) is
+    the fix task's files, kept verbatim; absent, the bug's own found scope when its text
+    names at most `[bugs].named_scope_at` files, else the item's that exist in the tree
+    (a ddflow-scoped bug never takes the found scope: `--globs` names its files). An OPEN bug-fix task named as ``item`` (one fixing no other bug) is
     the fix itself and nothing new is filed."""
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
@@ -72,6 +76,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
+    tag_list, bad_tags = found_tags(tags)
+    if bad_tags:
+        return O.failed("bug.found", bad_tags)
     log, cfg, st = _load(repo, agent)
     minted = IDS.mint(cfg, st, "bug", events=log.read_all, given=id, hash_parts=(summary, item))
     bid = minted.id
@@ -89,7 +96,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         return chk.refusal
     # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
     # id) does not turn it back to `project`; `--scope project` says it and does.
-    extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
+    said = (("title", title), ("severity", severity), ("scope", scope), ("tags", tag_list))
+    extra = {k: v for k, v in said if v}
     if globs:
         extra["globs"] = GS.parse(globs)
     if chk.extension:
@@ -277,7 +285,9 @@ def _file_fix_task(
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
     `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
     use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first open or absent one,
-    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the item's that exist in the tree, the item's
+    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the bug's own found scope (the files its text
+    names plus the tests pinning them; past `[bugs].named_scope_at` named files, the item's
+    that exist in the tree; a ddflow-scoped bug never takes the found scope), the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
     transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
@@ -309,7 +319,12 @@ def _file_fix_task(
         f"(or `ddflow bug fixed {bug_id} --regression-test <test>` first)."
     )
     kept, dropped = fix_task_globs(
-        log.root, globs, src.globs if src else [], summary, tool_bug=scope == "ddflow"
+        log.root,
+        globs,
+        src.globs if src else [],
+        summary,
+        tool_bug=scope == "ddflow",
+        named_scope_at=cfg.bugs.named_scope_at,
     )
     if dropped:
         body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
@@ -346,16 +361,25 @@ def _live(st, item: str) -> bool:
 def _needs_fix_task(st, b, cfg=None) -> bool:
     """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue; a
     DONE task it was merely reported against -- `bug found --item <open fix task>` links
-    a report to that task, and the task's completion does not fix it (B8dcbf2f8da); or an
+    a report to that task, and the task's completion does not fix it (B8dcbf2f8da); an
     ABANDONED task, which nothing sends back -- its own `fix-<bug>` included, refiled as
-    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83). Left alone: a done task's OWN bug
-    (`verify --reopen` sends that task back)."""
+    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83); or a task in any other live state
+    (OPEN, RUNNING, BLOCKED, REVIEW) whose `fixes` name a DIFFERENT bug -- the old
+    `bug found --item <another bug's fix task>` bound a report to it whatever it was
+    filed to fix (Bb141cbd8d8, which `bug found` no longer binds).
+    Left alone: a done task's OWN bug (`verify --reopen` sends that task back), an open
+    task with no `fixes` of its own (a hand-filed bug-fix task named as the fix,
+    `_fix_task_of`, B8fb4a2ec4a), and a task whose `fixes` name this very bug
+    (`--same-fix`)."""
     if not _live(st, b.fix_task):
         return True
     state = st.items[b.fix_task].state
     if state == ABANDONED:
         return True
-    return state == DONE and b.id not in fixes_of(st, b.fix_task, cfg)
+    if state == DONE:
+        return b.id not in fixes_of(st, b.fix_task, cfg)
+    fix = fixes_of(st, b.fix_task, cfg)
+    return bool(fix) and b.id not in fix
 
 
 def bug_file_tasks(

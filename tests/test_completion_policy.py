@@ -33,7 +33,7 @@ def _ask(repo: Path, item: str, **kw) -> CM.Verdict:
 def test_the_rules_are_callable_without_argv(repo):
     """The whole point of B36. No subprocess, no stderr scraping, no parser."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     v = _ask(repo, "T1")
     assert isinstance(v, CM.Verdict)
     assert not v.may_complete, "a task with nothing recorded cannot complete"
@@ -44,7 +44,7 @@ def test_every_unmet_condition_is_reported_together(repo):
     """Reporting the first one turns a single refusal into a round-trip per problem,
     and an agent that cannot see how many more are coming reaches for --force."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     v = _ask(repo, "T1")
     assert len(v.blockers) >= 2, f"only {len(v.blockers)} of several conditions: {v.blockers}"
 
@@ -62,15 +62,26 @@ def test_open_sub_tasks_block_their_umbrella(repo):
     """Any item with work beneath it, not only a phase: completing an umbrella while
     its children are open marks work finished that nobody has done."""
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "p/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "p/a.py",
+    )
     v = _ask(repo, "P1")
     assert any("unfinished" in b for b in v.blockers), v.blockers
 
 
 def test_silence_is_a_blocker_under_require_outcome(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     v = _ask(repo, "T1")
     assert any("never run and never skipped" in b for b in v.blockers), v.blockers
 
@@ -78,7 +89,7 @@ def test_silence_is_a_blocker_under_require_outcome(repo):
 def test_it_writes_nothing(repo):
     """`verdict` is a question. A question with a side effect cannot be asked twice."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     before = sorted(p.read_bytes() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     _ask(repo, "T1")
     _ask(repo, "T1")
@@ -90,7 +101,7 @@ def test_the_surface_and_the_policy_agree(repo):
     """The refusal an operator sees must be the verdict the policy returned — that is
     what makes extracting it a refactor rather than a second implementation."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     v = _ask(repo, "T1")
     code, _out, err = run_cli(repo, "complete", "T1")
     assert code == REFUSED

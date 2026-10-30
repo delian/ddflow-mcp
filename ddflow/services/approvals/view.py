@@ -36,13 +36,21 @@ def waiting_for_a_person(state, now: float | None = None) -> list[dict[str, Any]
 
 
 def pending_line(state, shown: int = 3) -> str:
-    """One line for the brief and the status when a request waits for the operator, or ""."""
+    """One line for the brief and the status when a request waits for the operator, or "".
+
+    Carries each request's DIGEST and answer form: the notice an MCP/chat surface renders for
+    a remote operator says what to answer with, not only that an answer is wanted."""
     rows = waiting_for_a_person(state)
     if not rows:
         return ""
-    names = ", ".join(f"{r['id']} ({r['verb']} for {r['requested_by']})" for r in rows[:shown])
+    names = ", ".join(
+        f"{r['id']} ({r['verb']} for {r['requested_by']}, digest {r['digest'][:12]}, "
+        f"answer `ddflow approvals approve {r['id']}`)"
+        for r in rows[:shown]
+    )
     more = f" (+{len(rows) - shown} more)" if len(rows) > shown else ""
     return (
         f"{len(rows)} approval request(s) wait for the operator: {names}{more}. "
-        "`ddflow approvals list`; a person answers with `ddflow approvals approve ID`."
+        "`ddflow approvals pending` lists them with their digests; a person answers with "
+        "`ddflow approvals approve ID`."
     )

@@ -71,7 +71,21 @@ def test_record_with_an_output_file_keeps_the_same_evidence_and_its_own_extras(r
 
     assert run_cli(repo, "init")[0] == 0
     assert run_cli(repo, "phase", "add", "P0", "--title", "p")[0] == 0
-    assert run_cli(repo, "task", "add", "P0.T1", "--phase", "P0", "--globs", "a/*")[0] == 0
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "P0.T1",
+            "--title",
+            "P0.T1 fixture",
+            "--phase",
+            "P0",
+            "--globs",
+            "a/*",
+        )[0]
+        == 0
+    )
     assert run_cli(repo, "claim", "P0.T1", "--no-worktree")[0] == 0
     out = repo / "out.txt"
     out.write_text("collecting\n7 passed in 0.2s\n")

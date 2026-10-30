@@ -41,69 +41,111 @@ KNOWN_UNREAD: dict[str, str] = {
 }
 
 
-def _sources() -> str:
+def _file_sources() -> list[str]:
     pkg = pathlib.Path(__file__).resolve().parents[1] / "ddflow"
     # `rglob`, not `glob`: the package is layered (core/ infra/ services/ views/
     # surfaces/) and a non-recursive scan sees only `__init__.py` and `config.py` —
     # which reports every knob in the package as dead. `test_the_scan_is_not_vacuous`
-    # below is what caught that, and is why it exists.
-    return "\n".join(
+    # below is what caught that, and is why it exists. One entry per file, because a
+    # local alias names a section within that file only (see `_aliases`).
+    return [
         p.read_text("utf-8")
         for p in pkg.rglob("*.py")
         # The config's own definitions are not reads: config.py and its sections package.
         if p.name != "config.py"
         and p.relative_to(pkg).parts[0] != "config_sections"
         and "__pycache__" not in str(p)
-    )
+    ]
 
 
-def _alias_map(src: str) -> dict[str, str]:
-    """Local names bound to a config section: ``lc = cfg.loops`` -> {"lc": "loops"}.
+def _sources() -> str:
+    return "\n".join(_file_sources())
 
-    Resolving these keeps the detector strong. The alternative -- allowlisting every
-    knob read through an alias -- would grow the exemption list for a pattern that is
+
+#: A name bound to a config section: `lc = cfg.loops` -> "loops". `(?![\w.])` keeps a
+#: deeper path from binding: `agent=cfg.agent.id` must NOT bind "agent", or the scan
+#: quietly weakens for every `agent.*` knob.
+_ALIAS_RE = re.compile(r"(\w+)\s*=\s*(?:self\.)?(?:[\w]+\.)?cfg\.(\w+)(?![\w.])")
+
+
+def _aliases(src: str) -> dict[str, str]:
+    """Names bound to a config section in ONE file: ``lc = cfg.loops`` -> {"lc": "loops"}.
+
+    Resolving a local name keeps the detector strong. The alternative — allowlisting every
+    knob read through an alias — would grow the exemption list for a pattern that is
     perfectly good style, and an exemption list that grows for good reasons stops being
     read for the bad ones.
     """
-    out: dict[str, str] = {}
-    # Two bindings, both good style, both invisible to a plain `.section.knob` grep:
-    #   1. a local:            `lc = cfg.loops`
-    #   2. a keyword argument: `EventLog(repo, log_cfg=cfg.log)`  -> alias "log_cfg"
-    # (2) was added when `[log]` arrived: `infra/log.py` reads `self.log_cfg.reuse_parsed`
-    # and no line anywhere spells `.log.reuse_parsed`, so both knobs were reported dead
-    # while two tests proved they were read. The detector was blind, not the code.
-    #
-    # `(?![\w.])` keeps it from treating a deeper path as a section: `agent=cfg.agent.id`
-    # must NOT bind "agent", or the scan quietly weakens for every `agent.*` knob.
-    for m in re.finditer(r"(\w+)\s*=\s*(?:self\.)?(?:[\w]+\.)?cfg\.(\w+)(?![\w.])", src):
-        out[m.group(1)] = m.group(2)
-    return out
+    return {m.group(1): m.group(2) for m in _ALIAS_RE.finditer(src)}
 
 
-def dead_knobs(keys: list[str] | None = None, src: str | None = None) -> list[str]:
+def _unique_aliases(per_file: list[dict[str, str]]) -> dict[str, str]:
+    """Names bound to exactly ONE section across the whole tree.
+
+    A section carried under a name across files — a parameter like ``session`` or an
+    attribute like ``log_cfg`` — is read in a file that never binds it to ``cfg.<that
+    section>``, so that name is unambiguous and its reads are matched anywhere. A name
+    bound to SEVERAL sections (``s = cfg.schedule`` in one file, ``s = cfg.swarm`` in
+    another) is a local short name and must resolve per file, so it is omitted here.
+    """
+    sections: dict[str, set[str]] = {}
+    for aliases in per_file:
+        for name, sec in aliases.items():
+            sections.setdefault(name, set()).add(sec)
+    return {name: next(iter(secs)) for name, secs in sections.items() if len(secs) == 1}
+
+
+def dead_knobs(keys: list[str] | None = None, src: str | list[str] | None = None) -> list[str]:
     """Which of ``keys`` never appear in ``src``.
 
     Both inputs are injectable so the detector itself can be tested against planted
     input. A scan whose inputs can only come from the live tree is a scan that cannot
     be shown to work — it passes identically when it has silently stopped looking.
+    ``src`` is one file's text; pass a list of strings to plant several files.
     """
-    src = _sources() if src is None else src
+    if src is None:
+        files = _file_sources()
+    elif isinstance(src, str):
+        files = [src]
+    else:
+        files = list(src)
     keys = [k for k, *_ in Config.load().explain()] if keys is None else keys
-    aliases = _alias_map(src)
+    per_file = [_aliases(text) for text in files]
     dead = []
     for key in keys:
         section, knob = key.split(".", 1)
-        if re.search(rf"\.{re.escape(section)}\.{re.escape(knob)}\b", src):
-            continue
-        # ...or through a local alias of that section.
-        if any(
-            re.search(rf"\b{re.escape(alias)}\.{re.escape(knob)}\b", src)
-            for alias, sec in aliases.items()
-            if sec == section
-        ):
+        if _read_in_any(section, knob, files, per_file, _unique_aliases(per_file)):
             continue
         dead.append(key)
     return dead
+
+
+def _read_in_any(
+    section: str,
+    knob: str,
+    files: list[str],
+    per_file: list[dict[str, str]],
+    unique: dict[str, str],
+) -> bool:
+    """Whether ``section.knob`` is read in ``files``, directly or through an alias.
+
+    A local alias is resolved within the file that bound it; a name unambiguous across
+    the tree is matched in any file (``_unique_aliases``). One match anywhere is enough.
+    """
+    direct = rf"\.{re.escape(section)}\.{re.escape(knob)}\b"
+    for text, aliases in zip(files, per_file, strict=True):
+        if re.search(direct, text):
+            return True
+        if any(
+            sec == section and re.search(rf"\b{re.escape(alias)}\.{re.escape(knob)}\b", text)
+            for alias, sec in aliases.items()
+        ):
+            return True
+    return any(
+        sec == section
+        and any(re.search(rf"\b{re.escape(name)}\.{re.escape(knob)}\b", t) for t in files)
+        for name, sec in unique.items()
+    )
 
 
 def test_no_knob_is_dead():
@@ -123,6 +165,16 @@ def test_the_detector_resolves_section_aliases():
     src = "lc = cfg.loops\nif flips < lc.max_gate_flaps: pass"
     assert dead_knobs(["loops.max_gate_flaps"], src) == []
     assert dead_knobs(["loops.max_reopens"], src) == ["loops.max_reopens"]
+
+
+def test_the_alias_map_is_scoped_to_one_file():
+    """A local alias lives in ONE file, so `s = cfg.swarm` elsewhere must not steal `s`
+    from `s = cfg.schedule` and hide the schedule.* reads behind the swarm binding."""
+    src = [
+        "s = cfg.schedule\nif age > s.max_age_s: pass\n",
+        "s = cfg.swarm\nif w > s.window_s: pass\n",
+    ]
+    assert dead_knobs(["schedule.max_age_s", "swarm.window_s"], src) == []
 
 
 def test_the_detector_can_still_see():

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "enforce.machine_local_keys"
+new = "[]"
+why = "Extra dotted keys whose `config KEY VALUE` writes default to the machine-local layer, added to the shipped classification (services.configwrite.MACHINE_LOCAL_KEYS: the parallelism knobs -- this machine's worker count is not the next machine's). Empty by default; the shipped classification is unchanged until a key is named."
+impact = "additive"

@@ -23,6 +23,11 @@ For every fact the descriptor says one of:
   `unknown`, and `ddflow harness show <id>` lists it under `not verified`. (`harness doctor` reports drift, not missing facts: a clean doctor is not evidence that anything was verified.) Writing `none` for something you did not
   check is the one wrong answer.
 
+Per-fact provenance goes in an optional `[facts."section.key"]` overlay with the shared
+record's fields: `s` (verified, documented, unverified, none), `src`, `d` (ISO date), and
+optional `ver` (tool version) and `note`. A value with no overlay reads as `unverified`.
+`ddflow harness facts [--agent X] [--unverified]` renders the table.
+
 Cite where each value came from in `[verified]`: `sources` (at least one URL), `date`, and
 `unverified = [...]` for the facts you could not check. A key the loader does not know is an
 error that names the key and the file.
@@ -92,6 +97,8 @@ What each section is for:
 | `[hooks]` | the hook `style` (`claude`, `gemini`, `copilot`, `cursor`, `cline`, `cascade`, `antigravity`, `plugin`, `none`), where it lives, how a payload is normalized and an answer emitted, how a refusal is signalled (`block`), and which events can inject text (`inject`) | `hooks install`, `hooks run` |
 | `[hooks.events]` | canonical event to the agent's event name: `session_start`, `prompt`, `pre_tool`, `post_tool`, `pre_compact`, `stop`, `session_end` | hook writers, the ladder |
 | `[plugin]` `[commands]` `[skills]` `[subagents]` `[worktrees]` | the other surfaces the agent has, or `none = true` | `adopt`, `inventory` |
+| `[detect]` `[headless]` `[continuation]` `[meters]` `[caps]` `[autonomy]` `[telemetry]` | descriptor v2, agent parity: how the agent is recognised (`client_names`, `env`, `process_names`); how it runs unattended (the launch `argv`, `model_flag`, `effort_flag`, `mcp_flag`, `max_turns_flag`, `output_flag`, `output_format`, `resume_flag`, `exit_codes`, and `autonomy` naming a profile of `[autonomy].profiles`; the permission flags themselves live in `[autonomy]`, never in `[headless]`); how it keeps going (`mechanism` = `stop-hook-block`, `followup-message`, `plugin-idle-prompt`, `plugin-agent-end`, `external-driver` or `none`, with `cap`, `goal_command`, `loop_guard`); `context` and `quota` sources; `mcp_tools`, `instructions_bytes`, `subagent_depth`; unattended permission `profiles` and `files`; `transcript_path`, `transcript_format`, `otel`. Each is absent (not verified) or `none = true` | headless driver, governor, lanes |
+| `[research]` `[plan]` `[bot]` `[adapters]` `[spawn]` `[doors]` `[acp]` `[platform]` `[governor]` `[test]` | names reserved so one task owns each; today `none = true` or string values; the owning task only fills values under its name, it adds no section | their owner tasks |
 | `[env]` | the environment variables that carry the agent's session id (`session_id = [...]`) | session identity, attribution |
 | `[verified]` | sources, date, probe, record | `harness show`, review |
 
