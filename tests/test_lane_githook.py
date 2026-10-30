@@ -228,3 +228,19 @@ def test_reinstall_follows_a_changed_shared_hooks_path(lane, tmp_path):
     sh(main, "git", "config", "core.hooksPath", str(tmp_path / "new"))
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     assert "NEW-HOOK" in commit(wt, "n.txt").stderr
+
+
+def test_merge_commit_hook_falls_back_to_the_lease_check_and_presence_hooks_are_not_invented(
+    lane, tmp_path
+):
+    main, wt = lane
+    GH.install(wt, invocation=stub(tmp_path, "echo LEASE-CHECK >&2; exit 1"))
+    d = GH.hook_dir(wt)
+    assert not (d / "push-to-checkout").exists() and not (d / "fsmonitor-watchman").exists()
+    r = sh(d, str(d / "pre-merge-commit"), check=False)  # absent project hook: lease check runs
+    assert r.returncode == 1 and "LEASE-CHECK" in r.stderr
+    hooks = main / ".git" / "hooks"
+    (hooks / "push-to-checkout").write_text("#!/bin/sh\nexit 0\n")
+    (hooks / "push-to-checkout").chmod(0o755)
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert (d / "push-to-checkout").exists()
