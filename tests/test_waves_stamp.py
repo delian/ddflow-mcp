@@ -42,7 +42,7 @@ def _tag_events(repo) -> int:
 
 
 def _chain(repo):
-    """A (free) <- B <- C, plus D under phase P that needs A: D inherits nothing, E is free."""
+    """A (free) <- B <- C, plus E (free)."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "A", "--globs", "a.py")
     run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
