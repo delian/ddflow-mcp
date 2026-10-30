@@ -492,8 +492,16 @@ def test_probe_programs_are_bare_names_and_output_is_read_capped(tmp_path):
 
 
 def test_stream_map_checks_length_before_stripping():
+    class Line(str):
+        def strip(self, *a):  # the old order called this on a line of any length
+            raise AssertionError("strip() before the length check")
+
     r = stream_map.parse_rules(DSH_RULES)
-    assert stream_map.map_line(" " + "x" * 5000, r, Limits(max_line_chars=100)) is None
+    assert stream_map.map_line(Line(" " + "x" * 5000), r, Limits(max_line_chars=100)) is None
+    spec = transcript_map.parse(TSPEC)
+    assert (
+        transcript_map.map_lines([Line(" " + "x" * 5000)], spec, Limits(max_line_chars=100)) == []
+    )
 
 
 def test_second_review_findings():
@@ -517,3 +525,24 @@ def test_second_review_findings():
         safety.safe_regex(pat)
     with pytest.raises(EngineError):
         safety.safe_regex("^" + "a*" * 98 + "b$")
+
+
+def test_third_review_findings(tmp_path):
+    with pytest.raises(EngineError):
+        mcp_shape.render_json(mcpconfig.SHAPE_MCP_SERVERS, "d", ENTRY, '{"o": 1e999}')
+    with pytest.raises(EngineError):
+        render_argv.render(["cmd.exe.", "/c"], {})
+    with pytest.raises(EngineError):
+        render_argv.render(["C:\\x\\CMD.EXE ", "/c"], {})
+    with pytest.raises(EngineError):  # eight three-way groups between two stars
+        safety.safe_regex("a*" + "(a|[a]|[aa])" * 8 + "a*b")
+    two = tmp_path / "two"
+    two.write_text("#!/bin/sh\necho out; echo err >&2; head -c 100000 /dev/zero | tr '\\0' a\n")
+    two.chmod(0o755)
+    f = probe.run(
+        probe.parse([[str(two), "--version"]], allow_paths=True),
+        probe_id="t",
+        now="d",
+        limits=Limits(probe_output_bytes=10),
+    )[0]
+    assert len(f["output"]) <= 10
