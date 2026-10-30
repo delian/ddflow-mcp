@@ -764,7 +764,7 @@ def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
         claim = _claim_text(f)
         t = triage.get(str(_finding_field(f, "digest") or ""))
         if point and claim and t and t.get("verdict") in _SETTLED:
-            by_point.setdefault((point, claim), t)
+            by_point[(point, claim)] = t  # the latest settled triage for this design point
     if not by_point:
         return {}
     carried: dict = {}
@@ -849,13 +849,21 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
     verdicts = it.triage.get(gate, {})
-    untriaged = sum(
+    return _untriaged(kept, gone, carried, verdicts)
+
+
+def _untriaged(kept: list[dict], gone, carried: dict, verdicts: dict) -> int:
+    """Findings of the merged record still without a settled verdict. A carried digest's
+    triage is a fresh `review.triaged` `_carry_delta_verdicts` appends, not one the folded
+    ``verdicts`` held, so it is excluded per finding and never over-subtracted."""
+    carried_set = set(carried)
+    return sum(
         1
         for f in kept
         if f.get("digest") not in gone
+        and f.get("digest") not in carried_set
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
-    return max(0, untriaged - len(carried))
 
 
 def _replaced_by_rerun(prior: dict[str, Any], again: set[int]) -> set[str]:
