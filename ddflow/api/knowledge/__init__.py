@@ -26,16 +26,19 @@ from .bug_close import (  # noqa: F401
     NOTHING_TO_REMOVE,
     STILL_QUEUED,
     bug_fixed,
-    bug_invalid,
     could_not_run_text,
 )
 from .bug_repro import repro_lead  # noqa: F401
+from .bug_tags import bug_tag  # noqa: F401
+from .bug_void import bug_invalid  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,
     BUG_SCOPES,
     BUG_SEVERITIES,
     bug_file_tasks,
     bug_found,
+    finish_bug_list,
+    severity_rank,
     upstream_offer,
 )
 from .lessons import LessonDraft, lesson_add, lesson_search, lessons_verify  # noqa: F401

@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
 from helpers import rpc_call as _call
 
+from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server
 
 
@@ -164,6 +165,98 @@ def test_complete_explicit_model_wins_over_the_session(repo, monkeypatch):
     assert code == 0, out + err
     code, out, err = run_cli(repo, "complete", "T2", "--model", "gemini-2.5-pro")
     assert code == 0, out + err
+
+
+def test_complete_says_the_author_model_came_from_the_session(repo, monkeypatch):
+    """The read-from-session default alone is invisible later: the completion must say
+    WHERE the author model came from (B-complete-requires-model-even-when-recorded)."""
+    _queue(repo)
+    code, out, err = run_cli(repo, "session", "start", "--model", "claude-opus", agent="impl")
+    assert code == 0, out + err
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "session", body
+    done = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"]
+    assert done[-1].data.get("model_source") == "session", done[-1].data
+
+
+def test_complete_says_the_author_model_came_from_the_flag(repo, monkeypatch):
+    _queue(repo)
+    _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2", "--model", "claude-opus")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "flag", body
+    done = [e for e in EventLog(repo).read_all() if e.kind == "item.completed"]
+    assert done[-1].data.get("author_model") == "claude-opus", done[-1].data
+
+
+def test_complete_reads_the_model_the_session_declared_even_after_it_ended(repo, monkeypatch):
+    """The declaration is the record, not its liveness: an agent that ended its session
+    (the driver's close step) still declared this model under its identity."""
+    _queue(repo)
+    code, out, err = run_cli(
+        repo, "--json", "session", "start", "--model", "claude-opus", agent="impl"
+    )
+    assert code == 0, out + err
+    sid = json.loads(out)["session"]
+    _ready_to_complete(repo, monkeypatch, "impl")
+    code, out, err = run_cli(repo, "session", "end", sid, agent="impl")
+    assert code == 0, out + err
+
+    code, out, err = run_cli(repo, "--json", "complete", "T2")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["author_model"] == "claude-opus", body
+    assert body["model_source"] == "session", body
+
+
+def test_a_later_session_with_no_model_does_not_resurrect_an_older_declaration(repo, monkeypatch):
+    """The agent's LATEST session speaks last: reaching past a newer empty session would
+    re-attribute the older session's model to an author that never declared it twice."""
+    _queue(repo)
+    for with_model in (True, False):
+        line = (
+            ["session", "start", "--model", "claude-opus"] if with_model else ["session", "start"]
+        )
+        code, out, err = run_cli(repo, "--json", *line, agent="impl")
+        assert code == 0, out + err
+        run_cli(repo, "session", "end", json.loads(out)["session"], agent="impl")
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "complete", "T2")
+    assert code == 3, out + err
+    assert "pass `--model <author model>`" in out + err, out + err
+
+
+def test_the_latest_session_speaks_last_even_over_an_older_open_one(repo, monkeypatch):
+    """The critic's case: an older session with a model stays OPEN while a newer session
+    declared no model -- the newest declaration, empty or not, is what the agent says now."""
+    _queue(repo)
+    code, out, err = run_cli(repo, "session", "start", "--model", "claude-opus", agent="impl")
+    assert code == 0, out + err
+    code, out, err = run_cli(repo, "--json", "session", "start", agent="impl")
+    assert code == 0, out + err
+    _ready_to_complete(repo, monkeypatch, "impl")
+
+    code, out, err = run_cli(repo, "complete", "T2")
+    assert code == 3, out + err
+    assert "pass `--model <author model>`" in out + err, out + err
+
+
+def test_the_human_completion_names_the_author_model_source(repo, monkeypatch):
+    _queue(repo)
+    _ready_to_complete(repo, monkeypatch, "impl")  # cross-family reviewer: gemini-2.5-pro
+
+    code, out, err = run_cli(repo, "complete", "T2", "--model", "claude-opus")
+    assert code == 0, out + err
+    assert "author model: claude-opus (from --model)" in out + err, out + err
 
 
 def test_mcp_complete_defaults_from_the_session_started_over_mcp(repo, monkeypatch):

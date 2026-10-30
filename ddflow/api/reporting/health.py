@@ -10,16 +10,13 @@ from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.events import is_older
-from ...core.model import ABANDONED, DONE
-from ...core.plain import plain
-from ...core.schedule import is_external, stale_package_globs, unpickable
+from ...core.schedule import is_external, unpickable
 from ...core.stuck import stuck_edges
 from ...core.tier import unknown_tier_notes
 from ...infra import container as CT
 from ...infra import signals as SIG
 from ...infra import worktree as W
 from ...infra.store import Store
-from ...infra.worktree import absolutise
 from ...services import adopt as AD
 from ...services import cleanup as CL
 from ...services import configcompat as CC
@@ -29,6 +26,7 @@ from ...services import external as EX
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
+from ...services import leasebreak as LBR
 from ...services import leases as L
 from ...services import logblobs as LB
 from ...services import pins_merge as PM
@@ -52,7 +50,7 @@ from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
 from ...services.review import load_reviewers
 from ...views import human
-from ...views.markdown import may_hold_work, render_views
+from ...views.markdown import render_views
 from .._base import _load
 from ..knowledge import pairs_from
 from ..knowledge.pairs import _sweep_records
@@ -63,31 +61,7 @@ from .records import _contest_problems
 from .recovery_notes import _recovery_findings
 from .waitcycles import wait_cycles, wait_findings, wait_order
 
-
-def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
-    """Crashed agents' leases and orphaned worktrees. Exit 2 when there is nothing.
-
-    A worktree with uncommitted changes is reported and never touched, whatever `apply`
-    says — the whole value of the sweep is that it does not destroy the work it found.
-    """
-
-    log, cfg, _ = _load(repo, agent)
-    found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
-    # Every entry that may hold work, as the brief bands them: a tree git could not
-    # measure and a RUNNING item nobody holds count too (B3f8c406fea, Be0d308babd).
-    salvageable = [r for r in found if may_hold_work(r)]
-    data: dict[str, Any] = {
-        "found": [absolutise(repo, plain(r)) for r in found],
-        "count": len(found),
-        "salvageable": len(salvageable),
-        "applied": apply,
-        "_render": {"found": found, "salvageable": salvageable},
-    }
-    if not found:
-        return O.nothing(
-            "recover", "Nothing to recover — no expired leases, no orphan worktrees.", **data
-        )
-    return O.ok("recover", **data)
+_stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
 
 def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[str]) -> None:
@@ -117,30 +91,6 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 )
             elif dep not in st.external:
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
-
-
-def _stale_glob_notes(repo: Path, st) -> list[str]:
-    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
-    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
-    Each is named with the corrected glob and the command that applies it."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
-        return []
-    tracked = W.git_paths(repo, "ls-files")
-    if tracked is None:  # "could not tell" is said, never read as "nothing stale"
-        return ["stale task globs not checked: git could not list the tracked files"]
-    notes = []
-    for it in live:
-        stale = stale_package_globs(it.globs, tracked)
-        if not stale:
-            continue
-        fixed = dict(stale)
-        globs = ",".join(fixed.get(g, g) for g in it.globs)
-        notes.append(
-            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
-            f"its lease covers none of those files. `ddflow update {it.id} --globs {globs}`"
-        )
-    return notes
 
 
 def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
@@ -450,6 +400,7 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     data: dict[str, Any] = {
         "problems": problems,

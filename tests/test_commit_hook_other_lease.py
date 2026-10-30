@@ -22,7 +22,7 @@ from ddflow.services import enforce as E
 
 
 def _other_holds(repo: Path, glob: str, *, finished: bool = False) -> None:
-    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", glob)[0] == 0
     other = EventLog(repo, "other")
     other.append(
         "lease.acquired",
@@ -79,7 +79,7 @@ def _other_holds_wild(repo: Path, cfg, glob: str, *, changed: str | None) -> Non
     """T2 held by "other" on a wildcard, in a tree of its own that changed ``changed``."""
     from ddflow.infra import worktree as W
 
-    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", glob)[0] == 0
     wt = W.create(repo, cfg, "T2")
     EventLog(repo, "other").append(
         "lease.acquired",
@@ -146,7 +146,9 @@ def test_a_lease_on_another_release_line_is_another_branch(repo, cfg, monkeypatc
     """`update` skips a lease on another line, so the hook must."""
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T2", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/new.py")[0] == 0
+    )
     other = EventLog(repo, "other")
     other.append("task.updated", "T2", {"line": "1"})
     other.append(
@@ -168,7 +170,7 @@ def test_the_same_line_by_name_and_by_default_is_one_branch(repo, cfg, monkeypat
 
 
 def _lined_other(repo: Path, glob: str) -> None:
-    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", glob)[0] == 0
     other = EventLog(repo, "other")
     other.append("task.updated", "T2", {"line": "1"})
     other.append(
@@ -184,7 +186,7 @@ def test_only_the_lines_of_the_leases_covering_the_path_count(repo, cfg, monkeyp
     other agent's line-1 lease on src/new.py a rival of this commit."""
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "docs/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "docs/*")[0] == 0
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -202,7 +204,7 @@ def test_the_commits_own_tree_decides_which_item_it_is_for(repo, cfg, monkeypatc
     committed in is the line-"" item's, so a line-1 rival is another branch."""
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/*")[0] == 0
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -222,7 +224,9 @@ def test_an_exact_lease_of_the_committers_other_item_does_not_hide_the_contest(
     tree's own wildcard item on the default line, where another agent names it exactly too."""
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/new.py")[0] == 0
+    )
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -255,7 +259,7 @@ def test_a_path_two_of_the_committers_lines_cover_is_contested_by_a_rival_on_eit
     """Outside any linked tree nothing says which item the commit is for."""
     _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/*")[0] == 0
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -279,7 +283,9 @@ def test_an_exact_lease_on_one_line_does_not_hide_a_wildcard_on_the_other_outsid
     nothing for the default-line wildcard item, whose rival (default line) still contests."""
     _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/new.py")[0] == 0
+    )
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -299,7 +305,7 @@ def test_an_exact_lease_on_one_line_does_not_hide_a_wildcard_on_the_other_outsid
 def test_a_line_one_rival_contests_the_path_too(repo, cfg, monkeypatch):
     _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/*")[0] == 0
+    assert run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/*")[0] == 0
     mine = EventLog(repo, "owner")
     mine.append("task.updated", "T3", {"line": "1"})
     mine.append(
@@ -320,7 +326,9 @@ def test_an_exact_and_a_wildcard_lease_on_one_line_are_judged_together(repo, cfg
     """Two of the committer's leases on the SAME line: the exact one makes the line exact."""
     _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
-    assert run_cli(repo, "task", "add", "T3", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "src/new.py")[0] == 0
+    )
     EventLog(repo, "owner").append(
         "lease.acquired",
         "T3",
@@ -346,7 +354,9 @@ def test_a_shared_file_is_never_contested(repo, cfg, monkeypatch):
 def test_my_exact_lease_over_a_wildcard_that_never_touched_the_file_commits(repo, cfg, monkeypatch):
     """`update` granted the exact glob because the wildcard's holder never changed the file."""
     assert run_cli(repo, "init")[0] == 0
-    assert run_cli(repo, "task", "add", "T1", "--globs", "src/new.py")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/new.py")[0] == 0
+    )
     from ddflow.infra import worktree as W
 
     wt = W.create(repo, cfg, "T1")

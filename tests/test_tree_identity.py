@@ -31,7 +31,7 @@ def adopted(repo: Path) -> Path:
     run_cli(repo, "init")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     return repo
 
 

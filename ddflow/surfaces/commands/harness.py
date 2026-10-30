@@ -9,7 +9,12 @@ from ..context import FAIL, OK, Ctx
 
 
 def cmd_harness(a, c: Ctx) -> int:
-    out = harness_view(c.repo, what=a.harness_cmd, id=getattr(a, "id", "") or "")
+    out = harness_view(
+        c.repo,
+        what=a.harness_cmd,
+        id=getattr(a, "id", "") or getattr(a, "agent", "") or "",
+        unverified=bool(getattr(a, "unverified", False)),
+    )
     if out.exit == FAIL and not out.data.get("findings"):
         print(out.reason, file=sys.stderr)
         return FAIL

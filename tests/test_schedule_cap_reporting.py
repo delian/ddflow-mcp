@@ -109,10 +109,10 @@ def test_a_free_slot_any_wait_still_waits_on_every_holder(repo):
     cfg = repo / ".ddflow" / "config.toml"
     text = cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 3\n", 1)
     cfg.write_text(text.replace("[schedule]", '[schedule]\nready_policy = "deps_only"', 1))
-    run_cli(repo, "task", "add", "A", "--globs", "a.py")
-    run_cli(repo, "task", "add", "D", "--globs", "d.py")
-    run_cli(repo, "task", "add", "B", "--globs", "a.py")
-    run_cli(repo, "task", "add", "C", "--globs", "c.py")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "D", "--title", "D fixture", "--globs", "d.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "C", "--title", "C fixture", "--globs", "c.py")
     assert LA.claim(repo, "A", no_worktree=True, agent="x").ok
     assert LA.claim(repo, "D", no_worktree=True, agent="y").ok
     out = LA.wait(repo, timeout_s=0, agent="w")
@@ -137,9 +137,24 @@ def test_status_counts_every_task_in_exactly_one_bucket(repo):
     )
     run_cli(repo, "phase", "add", "P", "--title", "P")
     for i in range(1, 6):
-        run_cli(repo, "task", "add", f"U{i}", "--phase", "P", "--globs", f"u{i}")
-    run_cli(repo, "task", "add", "D1", "--phase", "P", "--globs", "d1", "--needs", "U1")
-    run_cli(repo, "task", "add", "X1", "--phase", "P", "--globs", "x1")
+        run_cli(
+            repo, "task", "add", f"U{i}", "--title", "task item", "--phase", "P", "--globs", f"u{i}"
+        )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "D1",
+        "--title",
+        "D1 fixture",
+        "--phase",
+        "P",
+        "--globs",
+        "d1",
+        "--needs",
+        "U1",
+    )
+    run_cli(repo, "task", "add", "X1", "--title", "X1 fixture", "--phase", "P", "--globs", "x1")
     run_cli(repo, "abandon", "X1", "--reason", "not needed")
 
     t = api.status(repo).data["tasks"]
@@ -166,7 +181,7 @@ def test_status_and_brief_prose_name_the_items_the_cap_holds(repo):
         )
     )
     for i in range(1, 5):
-        run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
+        run_cli(repo, "task", "add", f"U{i}", "--title", "task item", "--globs", f"u{i}")
     _code, status, _err = run_cli(repo, "status")
     assert "max_parallel_tasks=2" in status and "U3, U4" in status, status
     assert "2 more are ready but held by" in status, status
@@ -185,7 +200,7 @@ def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
         )
     )
     for i in range(1, 4):
-        run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
+        run_cli(repo, "task", "add", f"U{i}", "--title", "task item", "--globs", f"u{i}")
     assert run_cli(repo, "claim", "U1", "--no-worktree", agent="a1")[0] == 0
     _code, status, _err = run_cli(repo, "status")
     assert "2 are ready but held by" in status and "more" not in status, status
@@ -201,12 +216,14 @@ def test_status_says_a_ready_task_was_interrupted(repo):
     from ddflow.infra.log import EventLog
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     log = EventLog(repo, "ghost")
     log.append("lease.acquired", "T1", {"holder": "ghost", "at": time.time() - 99999, "ttl_s": 60})
     log.append("item.started", "T1", {})
     out = api.status(repo)
-    assert out.data["ready_now"] == [{"id": "T1", "title": "", "interrupted": True}], out.data
+    assert out.data["ready_now"] == [{"id": "T1", "title": "T1 fixture", "interrupted": True}], (
+        out.data
+    )
     assert out.data["interrupted"] and out.data["interrupted"][0].startswith("T1"), out.data
     t = out.data["tasks"]
     assert t["ready"] == 1 and _buckets(t) + t["abandoned"] == t["total"] == 1, t

@@ -3,10 +3,13 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration is operator-driven.** Cursor's Agent runs one request to completion; there
-   is no persistent loop primitive. Do ONE task, then end your reply with the output of
+1. **Iteration.** Cursor's Agent runs one request to completion; there is no persistent
+   loop. Inside that request do ONE task, then end your reply with the output of
    `ddflow_next` and `ddflow_cadence` — nothing persists those between requests, so
-   printing them IS the handoff to the next request.
+   printing them IS the handoff to the next request. The operator row of a wave (what
+   reads `next` and hands tasks out) is the place for a Cursor **Background Agent**:
+   it plans which item is next; execution and merging follow via background chat
+   rounds, and the handoff print carries across them.
 2. **Subagents.** Cursor has no worktree-isolated subagent. Two routes to parallelism,
    both safe because ddflow's leases coordinate *processes*:
    - open a second Cursor window on the same repo, or

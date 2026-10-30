@@ -1,0 +1,158 @@
+id = "grok"
+rank = 23
+family = "xai-grok"
+title = "Grok Build"
+delta = "grok-build.md"
+
+[mcp]
+path = ".grok/config.toml"
+shape = "toml.mcp_servers"
+note = "Project scope is `grok mcp add --scope project`, which writes [mcp_servers.<name>] here. A project server of the same name replaces a user one. Project MCP servers need folder trust (/hooks-trust or --trust)."
+
+[instructions]
+reads = ["AGENTS.md", "Agents.md", "AGENT.md", "CLAUDE.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".grok/hooks/ddflow.json"
+normalizer = "copilot"
+emitter = "claude"
+block = "exit2"
+session_id = "sessionId"
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[skills]
+dir = ".grok/skills"
+
+[subagents]
+dir = ".grok/agents"
+
+[detect]
+process_names = ["grok"]
+
+[headless]
+argv = ["grok", "-p"]
+model_flag = "-m"
+output_flag = "--output-format"
+output_format = "streaming-json"
+resume_flag = "--resume"
+autonomy = "always-approve"
+
+[autonomy]
+profiles = { always-approve = "--always-approve" }
+
+[env]
+session_id = ["GROK_SESSION_ID"]
+
+[facts."instructions.reads"]
+s = "documented"
+src = "https://docs.x.ai/build/features/skills-plugins-marketplaces"
+d = "2026-10-30"
+note = "AGENTS.md, Agents.md, AGENT.md from the current directory up to the repo root; Claude Code instruction files"
+
+[facts."hooks.file"]
+s = "documented"
+src = "https://docs.x.ai/build/features/hooks"
+d = "2026-10-30"
+note = "project hooks are <project>/.grok/hooks/*.json and need /hooks-trust or --trust; the file name ddflow.json is ddflow's choice"
+
+[facts."hooks.events"]
+s = "documented"
+src = "https://docs.x.ai/build/features/hooks"
+d = "2026-10-30"
+note = "14 events listed; the 7 canonical ones are mapped"
+
+[facts."hooks.block"]
+s = "documented"
+src = "https://docs.x.ai/build/features/hooks"
+d = "2026-10-30"
+note = "exit 2 denies, and PreToolUse JSON {decision: deny}; only PreToolUse is described as blocking; timeouts and malformed output fail open"
+
+[facts."hooks.session_id"]
+s = "documented"
+src = "https://docs.x.ai/build/features/hooks"
+d = "2026-10-30"
+note = "stdin sessionId (camelCase); env GROK_SESSION_ID"
+
+[facts."skills.dir"]
+s = "documented"
+src = "https://docs.x.ai/build/features/skills-plugins-marketplaces"
+d = "2026-10-30"
+
+[facts."subagents.dir"]
+s = "documented"
+src = "https://docs.x.ai/build/features/subagents"
+d = "2026-10-30"
+note = "location only; the file format is not documented there"
+
+[facts."headless.argv"]
+s = "documented"
+src = "https://docs.x.ai/build/cli/headless-scripting"
+d = "2026-10-30"
+
+[facts."headless.output_format"]
+s = "documented"
+src = "https://docs.x.ai/build/cli/headless-scripting"
+d = "2026-10-30"
+note = "json (one object at the end) or streaming-json (newline-delimited events)"
+
+[facts."headless.resume_flag"]
+s = "documented"
+src = "https://docs.x.ai/build/cli/headless-scripting"
+d = "2026-10-30"
+note = "-r, --resume <ID>; -s, --session-id <ID> creates or resumes a named headless session"
+
+[facts."autonomy.profiles"]
+s = "documented"
+src = "https://docs.x.ai/build/cli/headless-scripting"
+d = "2026-10-30"
+note = "--always-approve: auto-approve tool executions"
+
+[facts."env.session_id"]
+s = "documented"
+src = "https://docs.x.ai/build/features/hooks"
+d = "2026-10-30"
+note = "set in the environment of hooks (with GROK_HOOK_EVENT, GROK_HOOK_NAME, GROK_WORKSPACE_ROOT); not shown for the agent's other child processes"
+
+[facts."detect.process_names"]
+s = "documented"
+src = "https://docs.x.ai/build/overview"
+d = "2026-10-30"
+note = "binary name grok"
+
+[verified]
+date = "2026-10-30"
+sources = [
+  "https://docs.x.ai/build/overview",
+  "https://docs.x.ai/build/features/hooks",
+  "https://docs.x.ai/build/features/mcp-servers",
+  "https://docs.x.ai/build/features/skills-plugins-marketplaces",
+  "https://docs.x.ai/build/features/subagents",
+  "https://docs.x.ai/build/cli/headless-scripting",
+  "https://docs.x.ai/build/modes-and-commands",
+]
+record = "R-hx-grok"
+probe = "none run: grok is not installed here and `grok inspect` waits for the operator's consent; read-only fetch of the vendor docs, 2026-10-30. To run later: grok --version; grok inspect"
+unverified = [
+  "every payload shape (fixtures are synthetic, from the docs' field list; no live recording)",
+  "the prompt field name of UserPromptSubmit",
+  "context injection per event (third party says PreToolUse and PostToolUse only)",
+  "the normalizer is the copilot one because it reads sessionId and toolName; a grok normalizer is future work",
+  "SessionStart output discarded (third party)",
+  "plugin manifest (plugins exist under .grok/plugins/, manifest not documented)",
+  "commands directory (third party: .grok/commands)",
+  "worktrees (third party: grok -w)",
+  "exit codes of the headless run",
+  ".grok/rules/ (third party)",
+  "the community grok-cli (superagent-ai) is a different tool and has no descriptor",
+]

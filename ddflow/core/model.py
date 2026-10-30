@@ -105,11 +105,13 @@ from .handlers.knowledge import (
     _h_bug_invalid,
     _h_bug_reopened,
     _h_bug_reported_upstream,
+    _h_bug_tagged,
     _h_decision,
     _h_decision_superseded,
     _h_lesson,
     _h_memory,
     _h_memory_forgotten,
+    _h_memory_redacted,
     _h_research,
 )
 from .handlers.leases import (  # noqa: F401
@@ -251,6 +253,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "bug.fixed": _h_bug_fixed,
     "bug.invalid": _h_bug_invalid,
     "bug.reopened": _h_bug_reopened,  # first writer: api/bug_reopen.py
+    "bug.tagged": _h_bug_tagged,
     "bug.reported_upstream": _h_bug_reported_upstream,
     "lesson.recorded": _linking(_h_lesson),
     "research.recorded": _linking(_h_research),
@@ -261,6 +264,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "external.observed": _h_external,
     "job.ended": _h_job_ended,
     "memory.forgotten": _h_memory_forgotten,
+    "memory.redacted": _h_memory_redacted,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
     "ci.result": _h_ci_result,

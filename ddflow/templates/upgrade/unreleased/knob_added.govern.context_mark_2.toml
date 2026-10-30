@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "govern.context_mark_2"
+new = "0.75"
+why = "The session and cost governor (D-quotas-governor): marks, caps, floors, hysteresis and cooldown are knobs."
+impact = "additive"

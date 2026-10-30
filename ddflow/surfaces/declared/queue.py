@@ -56,6 +56,7 @@ def item_edit(a: dict):
         worktree=a.get("worktree"),
         queue=bool(a.get("queue")),
         landed=a.get("landed"),
+        landed_paths=_raw_globs(a, "landed_paths"),
         parent=_parent_of(a),
         kind=a.get("kind"),
     )
@@ -172,10 +173,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("task", "add"),
         tool="ddflow_task_add",
-        flag_exempt={
-            **ANSWER_FLAG_EXEMPT,
-            "--kind": "CLI only (tools/list byte budget): a doc is made by a person or driver",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
         description="Add a task to a phase. ALWAYS set globs to the paths this task will write: "
         "they are what lets two agents work in parallel safely, and an unset glob "
         "means the conflict detector cannot protect you.",
@@ -213,11 +211,10 @@ COMMANDS: tuple[Command, ...] = (
             Param("body", help="Detail and acceptance criteria.", cli_help=""),
             Param(
                 "kind",
-                help="",
+                help="Work kind: task (default), doc, research or job (its gate pipeline).",
                 cli_help="what kind of work: task (default), doc, research or job. A kind runs "
                 "the gate pipeline [gates].kind_pipelines gives it (doc ships without the code "
                 "gates), so docs-only work completes without unit_tests",
-                cli_only=True,
             ),
             Param(
                 "resources",
@@ -286,6 +283,7 @@ COMMANDS: tuple[Command, ...] = (
             "readd",
             "relation",
             "check_only",
+            "kind",
         ),
     ),
     Command(
@@ -473,6 +471,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="record the commit (or <before>..<after>) on the base that holds this item's work merged outside `ddflow merge`; refused unless it is on the base and touches the item's globs",
             ),
             Param(
+                "landed_paths",
+                help="With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone.",
+                cli_help="restrict the recorded landing to the item's own paths (comma-separated globs, verified inside the item's declared globs and the landing's changed files), so a commit that also changed code does not force the code pipeline on a docs-only item",
+                action=_Globs,
+            ),
+            Param(
                 "parent",
                 help="Move the task under this phase (or task); empty makes it top level. Refused for a finished item, a missing parent, or a dependency cycle.",
                 cli_help="move the task under this phase or task ('' = top level)",
@@ -516,6 +520,7 @@ COMMANDS: tuple[Command, ...] = (
             "resources",
             "queue",
             "landed",
+            "landed_paths",
             "parent",
             "kind",
             "worktree",

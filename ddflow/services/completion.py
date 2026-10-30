@@ -28,6 +28,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import ids as IDS
 from ..core.admission import is_shared
+from ..core.globs import inside
 from ..core.model import Item, State
 from ..infra import worktree as W
 from . import changes as CH
@@ -35,9 +36,11 @@ from . import chore as CO
 from . import gate_accept as GA
 from . import gates as G
 from . import landed as LD
+from . import review_exclude as RX
 from . import testselect as TS
 from .cadence import phase_overdue
 from .docsonly import diff_is_docs_only
+from .gates import reviewers as GR
 from .gates.evidence import commit_tree_entries, worktree_entries
 from .gates.evidence import tree_being_completed as _tree_being_completed
 from .gates.reviewed_paths import ignorable
@@ -100,6 +103,21 @@ def fixes_of(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
     named = set(it.fixes) if it is not None else set()
     named.update(IDS.bugs_named_by_fix_task(cfg, item_id))
     return {b for b in named if b in state.bugs}
+
+
+def fix_task_for(state: State, bug_id: str, cfg: Config | None = None) -> Item | None:
+    """The queued item filed to fix ``bug_id``: the one the bug's `fix_task` names, else one
+    whose `fixes_of` includes it (a hand-filed task named by the `[ids].fix_task` template
+    carries no link on the bug), else None."""
+    rec = state.bugs.get(bug_id)
+    named = state.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    if named is not None and not named.removed:
+        return named
+    fixers = [i for i in state.live_items() if bug_id in fixes_of(state, i.id, cfg)]
+    # Several may name the bug: the one working in a worktree, then the one the configured
+    # id template names, then the first filed.
+    fixers.sort(key=lambda i: (not i.worktree, bug_id not in IDS.bugs_named_by_fix_task(cfg, i.id)))
+    return fixers[0] if fixers else None
 
 
 def open_bugs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
@@ -186,19 +204,38 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
     return out
 
 
-def needs_independent_reviewer(it: Item, cfg: Config, paths: list[str] | None = None) -> bool:
+def needs_independent_reviewer(
+    it: Item,
+    cfg: Config,
+    paths: list[str] | None = None,
+    repo: Path | None = None,
+    reviewed: bool = False,
+) -> bool:
     """Is a reviewer from another family required of ``it``? Only of a task that writes code:
-    not a promotion, and not a task whose ACTUAL change is documents only (`paths`), which
-    runs the doc pipeline."""
+    not a promotion, not a task whose ACTUAL change is documents only (`paths`), which
+    runs the doc pipeline -- and not a task whose ACTUAL change is entirely the generated
+    class (`paths` matches the shipped generated excludes, a canonical lockfile or a pin
+    file), which the review gates record UNAVAILABLE: a reviewer could only be sent
+    content the project generated, and none ran (`reviewed` is False). Once ANY reviewer
+    gate really reviewed (``reviewed``), the ordinary family rule governs it again --
+    content was sent and judged (B-lockfile-only-item-cannot-complete)."""
     return (
         cfg.agent.reviewer_family_must_differ
         and it.kind == "task"
         and not it.promote_to
         and not diff_is_docs_only(it, cfg, paths)
+        and not (
+            not reviewed
+            and repo is not None
+            and paths is not None
+            and RX.excluded_outright(cfg, repo, paths)
+        )
     )
 
 
-def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None):
+def _independence(
+    state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None, repo=None
+):
     """(why, blockers): whether a reviewer from another family ran. The project's own
     reviewer gates count, as their definitions declare (B0e1330bf74).
 
@@ -206,9 +243,12 @@ def _independence(state: State, cfg: Config, it: Item, model: str, gdefs, excuse
     very check, as the tasks that produced it; demanding an independent reviewer of a merge
     between environment branches blocked every promotion, since its pipeline (rightly) has no
     review gate to satisfy it with. Not for a chore either (D-chore-class): a person
-    approved its file list instead."""
+    approved its file list instead. Not for a change made entirely of the GENERATED
+    exclusion class either (B-lockfile-only-item-cannot-complete): no reviewer can be
+    sent generated content, the review gates record that UNAVAILABLE, and -- while none
+    actually reviewed -- no cross-family reviewer is demanded."""
     ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
-    needed = needs_independent_reviewer(it, cfg, paths)
+    needed = needs_independent_reviewer(it, cfg, paths, repo, GR.reviewer_ran(state, it.id, gdefs))
     if needed and not ok and excused is None:
         return why, [f"reviewer independence not satisfied: {why}"]
     return why, []
@@ -323,7 +363,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         )
 
     v.independence, no_reviewer = _independence(
-        state, cfg, it, model, gdefs, excused, changed_paths(repo, it)
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
     )
     v.blockers += no_reviewer
 
@@ -339,7 +379,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
-    for note in refine_stale_notes(stale, it, cwd, landed, own, cfg.review.triage_ignore_globs):
+    for note in refine_stale_notes(
+        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
+    ):
         if note.unverified:
             v.warnings.append(
                 f"{note.gate} passed, but whether on the tree you are completing could "
@@ -360,6 +402,7 @@ def refine_stale_notes(
     landed: str,
     changed: list[str] | None,
     ignore: Sequence[str] = (),
+    docs: Sequence[str] = (),
 ):
     """Narrow the "passed on a different tree" notes of review gates to the item's own paths
     (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
@@ -367,8 +410,9 @@ def refine_stale_notes(
     the item never touched is not a different tree FOR THE REVIEW: its note is dropped, and one
     that stays names the paths that moved. Anything not comparable (no snapshot, the changed
     set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
-    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) is not a
-    difference, as it is not at triage."""
+    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) and a file
+    matching ``docs`` (`[review].doc_globs`: wording, bug Bb89ff23f21) are not a difference, as
+    they are not at triage."""
     entries = None
     out = []
     for note in notes:
@@ -382,11 +426,13 @@ def refine_stale_notes(
         if entries is None:
             out.append(note)
             continue
+        candidates = recorded.keys() | set(changed)
+        gone = {p for p in candidates if p not in entries}
         moved = sorted(
             p
-            for p in recorded.keys() | set(changed)
+            for p in candidates
             if recorded.get(p) != (" ".join(entries[p]) if p in entries else "")
-            and not ignorable(p, recorded, ignore)
+            and not ignorable(p, recorded, ignore, docs, gone)
         )
         if moved:
             shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
@@ -506,12 +552,22 @@ def _is_test_or_doc_path(path: str) -> bool:
 
 def changed_paths(repo: Path, it) -> list[str] | None:
     """The paths the item changed: what landed (`landed_before..landed_after`), or before
-    it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\"."""
+    it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\". A landing restricted to the item's own
+    paths (`update --landed-paths`, B738d7bbeab) reports only the range's changed files
+    inside those, never the whole commit's; a restriction the range no longer answers
+    to is None (fail closed), never empty and never the whole commit."""
 
     if it.landed_before and it.landed_after:
-        return CH.changed_paths(
+        paths = CH.changed_paths(
             repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
         )
+        if it.landed_paths and paths is not None:
+            # Never the whole commit's; when the range stopped holding the item's work,
+            # None -- like every other "cannot say" here: full pipeline, never a guess
+            # (verified at record time, so this needs the recorded range tampered with).
+            matched = sorted(p for p in paths if any(inside(p, g) for g in it.landed_paths))
+            return matched if matched else None
+        return paths
     base = it.base or W.default_branch(repo)
     found, may_cite = _unlanded_paths(repo, it, base)
     if found or not may_cite:

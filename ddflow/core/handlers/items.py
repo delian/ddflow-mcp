@@ -109,7 +109,7 @@ def _h_updated(st: State, ev: Event, kind: str) -> None:
     for f in ("title", "parent", "body", "blocked_reason", "line"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
-    for f in ("needs", "globs", "tags", "resources"):
+    for f in ("needs", "globs", "tags", "resources", "landed_paths"):
         if f in d:
             setattr(it, f, list(d[f]))
     if "globs" in d:

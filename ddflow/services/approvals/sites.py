@@ -58,6 +58,8 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/export/select.py:disable": 1,
     "ddflow/services/export/select.py:acknowledge": 1,
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
+    "ddflow/api/setup.py:configure": 1,
+    "ddflow/api/pin_files.py:_regenerate_approval": 1,
 }
 
 MARKER_NAMES = frozenset({"agent_marker", "is_agent", "_is_agent", "reviewer_agent_marker"})
@@ -174,6 +176,24 @@ SITES: tuple[Site, ...] = (
         "the [[reviewer]] command line (it executes code)",
         ("ddflow/surfaces/commands/review.py:_reviewers_add",),
         "ddflow reviewers add --preset ...",
+    ),
+    Site(
+        "config.set",
+        "C",
+        T2,
+        L1,
+        "the key, the value and the layer this edit writes",
+        ("ddflow/api/setup.py:configure",),
+        "ddflow config <key> <value> [--local] --approval request|ID",
+    ),
+    Site(
+        "pins.regenerate",
+        "C",
+        T2,
+        L1,
+        "the pin files as recorded before the re-record",
+        ("ddflow/api/pin_files.py:_regenerate_approval",),
+        "ddflow pins regenerate [--only NAME] --approval request|ID",
     ),
     Site(
         "upgrade.self",

@@ -228,18 +228,19 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_heartbeat",
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
-        call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a.get("id", ""), agent=agent, called_from=called_from
-        ),
+        call=L.heartbeat_call,
         payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
             body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
+            call_kwargs=L.heartbeat_kwargs,
         ),
-        # The item's own tree renews its lease whoever claimed it -- identity is derived
-        # from the tree, so without WHERE the caller is this said "no lease held" from
-        # exactly the tree `claim` made.
+        # The item's own tree renews its lease whoever claimed it -- the CLI may resolve a
+        # DIFFERENT identity than the holder (a harness declaration, `as_agent`), so the
+        # tree check must answer from where the caller actually stands. `heartbeat_kwargs`
+        # passes that raw start past the owner-check redirect (`Ctx.called_from`), which
+        # answered "no lease held" from exactly the tree `claim` made (Bad4752f936).
         wants_called_from=True,
         params=(
             Param(
@@ -301,7 +302,7 @@ COMMANDS: tuple[Command, ...] = (
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
-            timeout_s=_wait_timeout(a),
+            timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
             agent=agent,
@@ -717,6 +718,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            lint_exempt=a.get("lint_exempt", "") or "",
             mutation=mutation_of(a),
             called_from=called_from,
             shell_cwd=shell_cwd,
@@ -726,6 +728,9 @@ COMMANDS: tuple[Command, ...] = (
         payload=(
             "id",
             "sha",
+            "author_model",
+            "author_family",
+            "model_source",
             "independence",
             "forced",
             "coverage_gaps",
@@ -737,6 +742,8 @@ COMMANDS: tuple[Command, ...] = (
             "refuted_passes",
             "worktree_removed",
             "kept_reason",
+            # Optional: a chore's exemption (no key when not a chore).
+            "chore",
         ),
         cli=CliPolicy(
             shown=(OK,),
@@ -780,6 +787,12 @@ COMMANDS: tuple[Command, ...] = (
                 action="append",
                 default=[],
             ),
+            Param(
+                "lint_exempt",
+                help="Fix task of a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test. As `bug fixed lint_exempt`; instead of regression_test.",
+                cli_help="close the CI-filed lint bug this fix task fixes (no test to write) with this reason, recorded, instead of --regression-test",
+                default="",
+            ),
             *MUTATION_PARAMS,
         ),
         tool_order=(
@@ -788,6 +801,7 @@ COMMANDS: tuple[Command, ...] = (
             "model",
             "changelog",
             "regression_test",
+            "lint_exempt",
             *MUTATION_ORDER,
             "force",
             "approval",

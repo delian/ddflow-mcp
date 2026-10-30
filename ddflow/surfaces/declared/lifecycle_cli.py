@@ -72,6 +72,26 @@ def release_text(out, a) -> str:
     )
 
 
+def heartbeat_call(repo, a, agent, called_from=None, start=None):
+    """`heartbeat`: renew from where the caller ACTUALLY stands, not from the primary its
+    shell was redirected to because the tree is another identity's (`Ctx.called_from`). The
+    item's own worktree speaks for its lease whoever the caller resolves as (Bad4752f936),
+    so the tree check answers from the un-redirected `start`, not the owner-checked
+    `called_from`."""
+    return _api().heartbeat(
+        repo,
+        a.get("id", ""),
+        agent=agent,
+        called_from=start if start is not None else called_from,
+    )
+
+
+def heartbeat_kwargs(ctx) -> dict[str, Any]:
+    """`heartbeat` wants the caller's RAW start -- where its shell stands -- which `Ctx`
+    keeps on `_start` before it answers a foreign tree from the primary."""
+    return {"start": ctx._start}
+
+
 # -- abandon, remove, block, unblock ---------------------------------------------------
 
 
@@ -375,7 +395,9 @@ def claim_text(out, a, ctx) -> str:
     if not d["globs"]:
         msg += (
             f"\n  The commit hook refuses files no glob covers; to cover yours: "
-            f"ddflow --agent {ctx.log.agent_id} update {item} --globs <comma,separated>"
+            f"ddflow --agent {ctx.log.agent_id} update {item} "
+            "--add-globs <comma,separated or a JSON array -- the only notation a path "
+            "holding a comma survives>"
         )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
@@ -389,6 +411,9 @@ def claim_text(out, a, ctx) -> str:
 COMPLETE_BODY = (
     "id",
     "sha",
+    "author_model",
+    "author_family",
+    "model_source",
     "independence",
     "forced",
     "coverage_gaps",
@@ -402,6 +427,9 @@ COMPLETE_OPTIONAL = (
     "progress",
     "umbrellas_completed",
     "umbrella_refused",
+    # A chore completed with no reviewer: the exemption (services.chore), so both
+    # surfaces are told why (DX-chore-completed-event).
+    "chore",
 )
 
 
@@ -412,6 +440,14 @@ def complete_notes(out, a, ctx) -> Iterator[str]:
         yield f"bug {bid} closed"
     if out.exit != OK:
         return
+    src = out.data.get("model_source") or ""
+    where = {"flag": "--model", "config": "[agent].family"}.get(src, "the agent's session")
+    if out.data.get("author_model") and out.data.get("model_source"):
+        # Say where the judged author model came from (B-complete-requires-model-even-when-recorded).
+        yield f"author model: {out.data['author_model']} (from {where})"
+    if out.data.get("author_family") and out.data.get("model_source"):
+        # A family-only author is said out loud too (DX-author-family), from the same sources.
+        yield f"author family: {out.data['author_family']} (from {where})"
     if out.data.get("export_refresh"):
         yield f"  {out.data['export_refresh']['summary']}"
     for up in out.data.get("umbrellas_completed", []):
@@ -434,6 +470,7 @@ def complete_text(out, a, ctx) -> str:
         + (f" as {a['sha']}" if a.get("sha") else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + waiting(data.get("woke", []), "woke:")
+        + (f"\n{data['chore']}" if data.get("chore") else "")
         + "".join(f"\nPASSED ON REFUTATION: {line}" for line in data.get("refuted_passes", []))
         + (f"\n{data['progress']}" if data.get("progress") else "")
         + _tree_line(out)

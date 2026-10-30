@@ -3,9 +3,10 @@
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
 Only the items below differ.
 
-1. **Iteration.** Antigravity is agent-first and can run multi-step work, but ddflow's
-   loop is still one task per claim. Print `ddflow next` and `ddflow cadence` at the end
-   of each unit.
+1. **Iteration.** Antigravity is agent-first and can run multi-step work: keep going
+   inside its run — claim a task, run its gates to the merge, re-read `ddflow next` for
+   the next claim — until an ask stops you or nothing is ready. Print `ddflow next`
+   and `ddflow cadence` at the end of each unit; that print is the handoff.
 2. **Subagents.** Where the IDE runs several agents, each must claim its own item — the
    lease is what keeps two of them off one file.
 3. **Asking the operator.** Ask in the agent surface and stop.

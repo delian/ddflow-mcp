@@ -1,0 +1,6 @@
+# Ratchet `complexity_d_or_worse` for ddflow.api.reporting.recovery (tests/test_architecture_guards.py).
+# `recover` (CC 44) is the shipped recovery-plan dispatcher (DX-recovery-plan): the fan-out
+# over the lease sweep, dead gate runs, unended jobs and queue entries IS the feature, not
+# branch debt. Lower in the change that refactors it; delete the file at zero.
+# Never raise it.
+baseline = 1

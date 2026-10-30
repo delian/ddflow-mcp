@@ -124,7 +124,7 @@ def test_every_api_function_returns_an_outcome(repo):
     rather than each surface describing the same thing independently, which is the
     shape that printed a coverage gap to humans only."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     for result in (
         api.update(repo, "T1", api.ItemEdit(title="x")),
         api.update(repo, "NOPE", api.ItemEdit(title="x")),
@@ -147,8 +147,8 @@ def test_clearing_a_field_is_distinguishable_from_not_touching_it(repo):
     the one the loop detector tells you to perform.
     """
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--globs", "a.py")
-    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--globs", "b.py", "--needs", "A")
 
     api.update(repo, "B", api.ItemEdit(title="renamed"))  # needs untouched
     _code, out, _ = run_cli(repo, "--json", "show", "B")
@@ -172,8 +172,8 @@ def test_clearing_a_field_over_mcp_works_on_whichever_path_is_live(repo):
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--globs", "a.py")
-    run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--globs", "b.py", "--needs", "A")
 
     reply = Server(repo).handle(
         {
@@ -197,7 +197,7 @@ def test_the_dispatcher_actually_uses_the_typed_path(repo):
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     def boom(_repo, _args, _agent):
         raise ValueError("the typed path was taken")
@@ -222,7 +222,7 @@ def test_an_update_that_changes_nothing_says_so(repo):
     """`2` is not `0`. "You asked me to change nothing" is an answer, and returning
     success for it hides a caller that forgot to pass a field."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     result = api.update(repo, "T1", api.ItemEdit())
     assert result.exit == NOTHING, result
     assert not result.ok
@@ -232,7 +232,7 @@ def test_asking_whether_an_item_may_complete_does_not_complete_it(repo):
     """An agent that can only ask by ATTEMPTING learns the answer by causing the thing
     it was checking for."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     result = api.completion_verdict(repo, "T1")
     assert result.exit == REFUSED, result
     assert result.data["blockers"]
@@ -303,6 +303,7 @@ def test_the_reason_is_its_OWN_content_block_never_a_prefix():
 MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_loops": (["loops"], {}),
     "ddflow_health": (["health"], {}),
+    "ddflow_watch": (["watch", "--pid", "999999"], {"pid": 999999}),
     "ddflow_docs": (["docs", "check"], {"verb": "check"}),
     "ddflow_record": (["record", "risk", "list"], {"args": ["risk", "list"]}),
     "ddflow_progress": (["progress"], {}),
@@ -513,9 +514,11 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
 
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "P")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "A", "--needs", "B")
-    run_cli(repo, "task", "add", "B", "--needs", "A")  # a cycle, so findings exist
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
+    run_cli(
+        repo, "task", "add", "B", "--title", "B fixture", "--needs", "A"
+    )  # a cycle, so findings exist
     # A decision with an EXPLICIT id, governing T1's globs, so the decision tools have
     # something to return. An auto id would be content-addressed and unrepeatable, and
     # a comparison of two empty bodies passes without proving anything.
@@ -651,8 +654,10 @@ def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "A", "--needs", "B")
-    run_cli(repo, "task", "add", "B", "--needs", "A")  # a real cycle, so findings exist
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
+    run_cli(
+        repo, "task", "add", "B", "--title", "B fixture", "--needs", "A"
+    )  # a real cycle, so findings exist
 
     _code, cli_out, _err = run_cli(repo, "--json", "loops")
     from_cli = _json.loads(cli_out)
@@ -687,8 +692,8 @@ def test_a_migrated_tool_keeps_its_exit_contract(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "loops")[0] == NOTHING
 
-    run_cli(repo, "task", "add", "A", "--needs", "B")
-    run_cli(repo, "task", "add", "B", "--needs", "A")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--needs", "B")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--needs", "A")
     assert run_cli(repo, "loops")[0] == FAIL
 
 
@@ -911,8 +916,8 @@ def test_status_counts_what_actually_happened(repo):
 
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "P")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--phase", "P1", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--phase", "P1", "--globs", "b.py")
 
     before = api.status(repo)
     assert before.data["tasks"] == {
@@ -942,7 +947,7 @@ def test_status_counts_a_completed_task_as_done(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1")
     # `--force`, deliberately. Completion has a rule-set of its own — required gates,
     # evidence, reviewer independence — and `tests/test_completion_policy.py` is where
@@ -970,7 +975,7 @@ def test_show_returns_a_worktree_path_the_caller_can_use(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1")
 
     wt = api.show(repo, "T1").data["item"]["worktree"]
@@ -984,7 +989,7 @@ def test_nothing_to_recover_is_exit_2_not_success(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     out = api.recover(repo)
     assert out.exit == NOTHING, out
     assert out.data["count"] == 0
@@ -1003,7 +1008,7 @@ def test_every_text_bodied_tool_actually_returns_a_STRING(repo):
     from ddflow.surfaces.mcp import TOOLS, Server
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     srv = Server(repo)
 
     checked = 0
@@ -1142,7 +1147,7 @@ def test_enforce_order_block_actually_blocks(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     pipeline = _pipeline(repo)
     assert len(pipeline) > 2, pipeline
     later = pipeline[-2]
@@ -1169,7 +1174,7 @@ def test_recording_out_of_order_under_warn_records_the_violation(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     pipeline = _pipeline(repo)
     later = pipeline[-2]
 
@@ -1190,7 +1195,7 @@ def test_running_an_AGENT_gate_refuses_and_hands_over_the_instruction(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     pipeline = _pipeline(repo)
     agent_gate = next(
         g
@@ -1364,7 +1369,7 @@ def test_each_default_VALUE_is_the_one_the_behaviour_needs(repo):
 
     # `--kind` -> "task". A phase is an umbrella; "work on P1" is not an instruction.
     run_cli(repo, "phase", "add", "P1", "--title", "P")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "a.py")
     offered = api.next_item(repo)
     assert [i["id"] for i in offered.data["ready"]] == ["T1"], (
         f"the default kind no longer offers tasks: {offered.data['ready']}"
@@ -1562,7 +1567,7 @@ def test_no_reviewer_configured_records_UNAVAILABLE_not_a_pass(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     out = api.run_review(repo, gate="critic", item="T1", intent="add a guard")
     assert out.exit == NOTHING, out
@@ -1592,7 +1597,7 @@ def test_an_unreachable_reviewer_records_UNAVAILABLE_not_a_pass(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _stub_reviewer(repo)
     (repo / "a.py").write_text("x = 1\n")  # something to review
 
@@ -1614,7 +1619,7 @@ def test_an_empty_diff_records_UNAVAILABLE_not_a_pass(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _stub_reviewer(repo)
     # Commit EVERYTHING, including what `init` wrote, so the diff is genuinely empty and
     # the run stops before it ever reaches the endpoint.
@@ -1693,7 +1698,7 @@ def test_cleanup_without_apply_destroys_nothing(repo):
     from ddflow import api
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1")
     _code, shown, _ = run_cli(repo, "--json", "show", "T1")
     tree = Path(json.loads(shown)["worktree"])
@@ -1756,7 +1761,7 @@ def test_the_out_of_order_warning_reaches_the_AGENT_too(repo):
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     pipeline = _pipeline(repo)
     first, later = pipeline[0], pipeline[-2]
 

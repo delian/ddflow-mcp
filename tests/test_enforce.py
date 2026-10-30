@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.core import globspec
+from ddflow.core.globs import inside as path_in_glob
 from ddflow.services import enforce as E
 
 
@@ -48,8 +51,30 @@ def enforced(repo):
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "scaffold", "--no-verify"], check=True)
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/b.py",
+    )
     return repo
 
 
@@ -64,6 +89,60 @@ def test_an_unclaimed_commit_is_refused(enforced):
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     assert "not covered by a lease you hold" in r.stderr
     assert "ddflow claim" in r.stderr, "the refusal must name the remedy"
+
+
+def test_the_refusal_advice_adds_the_uncovered_paths_instead_of_replacing_globs(enforced):
+    """The remedy names `--add-globs` filled with the staged paths: `--globs` REPLACES
+    the item's whole list, so an agent following the old advice dropped every glob it
+    held (DX-hook-suggests-add-globs)."""
+    (enforced / "src" / "a.py").write_text("x = 2\n")
+    (enforced / "src" / "b.py").write_text("y = 2\n")
+    r = _commit(enforced, "unclaimed", paths=["src/a.py", "src/b.py"])
+    assert r.returncode != 0, "the hook allowed an unclaimed commit"
+    msg = r.stderr
+    assert 'ddflow update <ID> --add-globs \'["src/a.py", "src/b.py"]\'' in msg, (
+        f"the remedy must name --add-globs with the staged paths filled in:\n{msg}"
+    )
+    assert "ddflow update <ID> --globs" not in msg, (
+        f"the remedy must not name the replacing --globs:\n{msg}"
+    )
+    assert "ddflow claim <ID> --globs" not in msg, (
+        f"the claim remedy must not invite replacing the item's globs:\n{msg}"
+    )
+    assert "ddflow claim" in msg, "the refusal must still name the claim remedy"
+
+
+def test_the_refusal_advice_keeps_a_comma_path_whole(enforced):
+    (enforced / "src" / "a,b.py").write_text("x = 2\n")
+    (enforced / "src" / "a[b].py").write_text("z = 3\n")
+    (enforced / "src" / "it's.py").write_text("q = 4\n")
+    r = _commit(
+        enforced,
+        "comma/bracket/quote paths",
+        paths=["src/a,b.py", ":(literal)src/a[b].py", "src/it's.py"],
+    )
+    assert r.returncode != 0, "the hook allowed an unclaimed commit"
+    msg = r.stderr
+    # Hardcoded expectation (the sibling test's style): the JSON array keeps the comma
+    # WHOLE, the `[[]` escape keeps the bracket LITERAL and the `'"'"'` escape keeps the
+    # apostrophe inside the quoted shell word -- not a re-run of the production
+    # expression.
+    expected = '--add-globs \'["src/a,b.py", "src/a[[]b].py", "src/it\'"\'"\'s.py"]\''
+    assert expected in msg, (
+        f"comma, bracket and apostrophe must stay ONE runnable literal glob in the remedy:\n{msg}"
+    )
+    # And the emitted value really is the three files: parse it off the message like a
+    # shell would, decode it like `update --add-globs` does, and match it like the
+    # lease check does. This binds the producer (enforce._add_globs_arg) to the
+    # consumer (globspec.parse, core.globs.inside) so the pair cannot drift apart.
+    line = next(x for x in msg.splitlines() if " --add-globs " in x)
+    value = shlex.split(line.split(" --add-globs ", 1)[1].split(" #", 1)[0])[0]
+    got = globspec.parse(value)
+    want = ["src/a,b.py", "src/a[[]b].py", "src/it's.py"]
+    assert got == want, f"decoded as {got}, not the literal files"
+    assert path_in_glob("src/a[b].py", got[1]), "the escaped glob must match the literal file"
+    assert not path_in_glob("src/ab.py", got[1]), "the escaped glob must not match the class"
+    assert path_in_glob("src/it's.py", got[2]), "the apostrophe file must stay one glob"
 
 
 def test_a_claimed_commit_is_allowed(enforced):
@@ -252,7 +331,18 @@ def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo, monke
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "scaffold", "--no-verify"], check=True)
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     run_cli(repo, "claim", "P1.T1", "--no-worktree")
 
     (repo / "src" / "a.py").write_text("x = 2\n")
@@ -291,7 +381,18 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/*",
+    )
     wt = W.create(repo, cfg, "P1.T1")
     log = EventLog(repo, "some-other-identity")
     L.acquire(
