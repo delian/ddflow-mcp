@@ -140,7 +140,7 @@ def render(ep: Endpoint, harness: str) -> str | Result:
     if lay is None:
         return unavailable(f"harness {harness!r} has no private provider layout")
 
-    env = Environment(
+    env = Environment(  # nosec B701 - JSON text for a config file, not HTML: escaping would corrupt it
         loader=FileSystemLoader(str(paths.package_dir() / "templates")),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
