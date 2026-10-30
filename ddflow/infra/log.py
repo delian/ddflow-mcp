@@ -1391,6 +1391,10 @@ class EventLog:
         original = self._find_event(event_id)
         if original is None:
             raise KeyError(f"no event {event_id!r}")
+        if field not in original.data:
+            # Refuse a field the record never wrote: redacting a field that is not there would
+            # add it rather than remove the sensitive one, leaving the target text committed.
+            raise KeyError(f"no field {field!r} in event {event_id!r}")
         data = dict(original.data)
         data[field] = marker
         redacted = Event(
