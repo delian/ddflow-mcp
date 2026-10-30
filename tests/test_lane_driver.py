@@ -45,7 +45,8 @@ LIMIT = limit_detect.parse({"exit_codes": [75], "messages": ["resets (?P<reset>a
 
 def spec(*extra, rec="ok.jsonl", **kw):
     argv = (sys.executable, AGENT, str(FIX / rec), *extra)
-    return ld.LaunchSpec(name="t", argv=argv, stream_rules=RULES, limit=LIMIT, stop_grace_s=2, **kw)
+    kw = {"stop_grace_s": 2, **kw}
+    return ld.LaunchSpec(name="t", argv=argv, stream_rules=RULES, limit=LIMIT, **kw)
 
 
 @pytest.fixture
