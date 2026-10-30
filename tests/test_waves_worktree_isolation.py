@@ -92,3 +92,45 @@ def test_a_worktree_command_against_its_own_primary_does_not_auto_stamp_the_live
     with waves_auto.keep_stamped(p, cfg, log, "probe"):
         log.append("session.note", "probe", {"text": "a command that wrote"})
     assert _waves(p) == {}
+
+
+def test_a_worktree_command_against_another_repo_still_auto_stamps(
+    ddflow_source, tmp_path, monkeypatch
+):
+    """The guard is NOT blanket off for worktree code: targeting a repository that is not
+    the worktree's primary writes that repository's own log, and auto-stamping is normal
+    (as the suite does when ddflow's own tests run from an item worktree)."""
+    from ddflow.api import waves_auto
+    from ddflow.config import Config
+    from ddflow.services import identity as ID
+
+    other = tmp_path / "proj"
+    other.mkdir()
+    _git(other, "init", "-q", "-b", "main")
+    _git(
+        other,
+        "-c",
+        "user.email=t@e",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "x",
+    )
+    run_cli(other, "init")
+    write_config(other, [("waves.auto_stamp", False)])
+    run_cli(other, "task", "add", "A", "--globs", "a.py", "--title", "A")
+    assert _waves(other) == {}
+
+    tree = tmp_path / "wt"
+    _git(ddflow_source, "worktree", "add", "-q", str(tree), "-b", "feature")
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+
+    cfg = Config.load(other)
+    cfg.waves.auto_stamp = True
+    log, _who = ID.open_log(other, cfg, "probe")
+    with waves_auto.keep_stamped(other, cfg, log, "probe"):
+        log.append("session.note", "probe", {"text": "a command that wrote"})
+    assert _waves(other) == {"A": "wave:0"}
