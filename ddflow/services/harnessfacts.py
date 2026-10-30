@@ -5,7 +5,8 @@ A descriptor value stays where it is (`[headless] argv = ...`). Its provenance g
 no `v`, the value is the descriptor's own). A value with no overlay reads as `unverified`
 with the `[verified]` source and date: a lead, never believed. A section that says
 `none = true` reads as status `none`. Absent sections are NOT VERIFIED and are listed only
-on request. No probing here; staleness by version is `P-agent-parity.drift`.
+on request. A falsy value (0, false, empty list) reads as not given: the dataclass default
+and an explicit zero look the same. No probing here; staleness by version is `P-agent-parity.drift`.
 """
 
 from __future__ import annotations

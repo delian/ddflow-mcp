@@ -3,7 +3,9 @@
 Shared by the context tables (`context_families`) and the descriptor `[facts]` overlay
 (`harnessfacts`); DRV-facts extends it with a version range and expiry. Three-valued on
 purpose: `s` is `verified` or `documented` (believable), `unverified` (a lead, never read
-as true) or `none` (a documented absence). `ver` is the tool version the fact was read
+as true) or `none` (a documented absence). `v` is required of a readable fact in a context table (`context_families` checks it) and
+absent from a descriptor overlay, whose value is the descriptor's own, so `problems` does
+not require it. `ver` is the tool version the fact was read
 against; deciding it went stale is `P-agent-parity.drift`, not this module.
 """
 
