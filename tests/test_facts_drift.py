@@ -62,7 +62,7 @@ def test_drifted_fact_demoted_to_unverified():
     assert same == f
 
 
-def test_none_status_is_not_demoted_below_itself():
+def test_expired_absence_is_demoted_to_a_lead():
     f = fact(s="none", expires="2020-01-01")
     assert factdrift.effective(f, today=TODAY)["s"] == "unverified"
 
