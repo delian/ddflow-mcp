@@ -169,3 +169,12 @@ def test_listed_model_with_a_missing_family_is_unknown_not_a_needle_match():
 def test_litellm_proxy_is_not_priced_as_local():
     cat = M.load()
     assert M.read(cat, "qwen3:8b", "price_in", "litellm").value is None
+
+
+def test_non_fact_values_and_bad_identity_are_problems():
+    cat = M.load()
+    cat.model["deepseek-flash"]["window"] = 1000000
+    cat.family["claude"]["identity"]["v"] = {"needles": "claude"}
+    bad = " ".join(M.validate(cat))
+    assert "model.deepseek-flash.window is not a fact" in bad
+    assert "family.claude.identity" in bad

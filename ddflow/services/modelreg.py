@@ -106,6 +106,29 @@ def _fact_nodes(row: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return out
 
 
+#: Row keys that are plain data, not facts.
+_PLAIN_KEYS = ("note", "family", "class", "served")
+
+
+def _shape_problems(cat: Catalog) -> list[str]:
+    out = []
+    for table, rid, row in _rows(cat):
+        for key, node in row.items():
+            if key not in _PLAIN_KEYS and not facts.is_fact(node):
+                out.append(f"{table}.{rid}.{key} is not a fact (no `s`) and would be ignored")
+    for fid, row in cat.family.items():
+        v = _identity(row)
+        needles = v.get("needles")
+        if facts.is_fact(row.get("identity")) and not (
+            isinstance(v.get("vendor"), str)
+            and v["vendor"]
+            and isinstance(needles, list)
+            and all(isinstance(n, str) and n for n in needles)
+        ):
+            out.append(f"family.{fid}.identity: v needs a vendor string and a needles list")
+    return out
+
+
 def _link_problems(cat: Catalog) -> list[str]:
     out = []
     for rid, row in cat.model.items():
@@ -140,7 +163,7 @@ def validate(cat: Catalog) -> list[str]:
             out += facts.problems(at, node, cat.sources)
             if node["s"] in facts.READABLE and "v" not in node:
                 out.append(f"{at}: status {node['s']} needs a value")
-    return out + _link_problems(cat) + _family_problems(cat)
+    return out + _shape_problems(cat) + _link_problems(cat) + _family_problems(cat)
 
 
 def _identity(row: dict[str, Any]) -> dict[str, Any]:
