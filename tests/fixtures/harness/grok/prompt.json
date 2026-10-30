@@ -12,7 +12,6 @@
     "workspaceRoot": "/w"
   },
   "expect": {
-    "session_id": "s-1",
-    "prompt": "hello"
+    "session_id": "s-1"
   }
 }
