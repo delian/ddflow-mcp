@@ -201,3 +201,8 @@ def test_waiting_lane_holds_nothing_between_sweeps(tmp_path: Path) -> None:
     with C.acquire(pools, 30, tmp_path, sleep=sleep, poll_s=0.01) as held:
         assert len(held.slots["gpu"]) == 2
     assert seen == [1, 1]  # only the outside holder, never the waiter's partial set
+
+
+def test_a_very_long_route_still_gives_a_short_distinct_stem() -> None:
+    a, b = C.endpoint_pool("_" * 64), C.endpoint_pool("_" * 65)
+    assert a != b and max(len(a), len(b)) < 200
