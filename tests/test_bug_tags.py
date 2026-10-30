@@ -110,7 +110,7 @@ def test_derived_wave_tags_are_neither_set_nor_removed_by_hand(repo):
     log.append("bug.tagged", "B1", {"tags": ["wave:2", "a"]})  # as `waves --stamp` would
     assert run_cli(repo, "bug", "tag", "B1", "--remove", "wave:2")[0] == 3
     assert BT.set_tags(repo, "B1", ["b"]).ok
-    assert _tags(repo, "B1") == ["wave:2", "b"]
+    assert _tags(repo, "B1") == ["b", "wave:2"]
 
 
 def test_set_get_round_trips_and_a_re_report_does_not_undo_a_removal(repo):
@@ -125,3 +125,23 @@ def test_set_get_round_trips_and_a_re_report_does_not_undo_a_removal(repo):
     assert _tags(repo, "B1") == ["wave:2"]
     _found(repo, "B1", "--tags", "security")  # an explicit-id re-report
     assert _tags(repo, "B1") == ["wave:2"]
+
+
+def test_tags_over_mcp_on_the_existing_bug_tool(repo):
+    """`bug tag` is `ddflow_bug_fixed` with tag=true (no new tool), and `bug found` takes tags."""
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    srv = Server(repo)
+
+    def call(name, **args):
+        msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call"}
+        msg["params"] = {"name": name, "arguments": args}
+        return srv.handle(msg)["result"]
+
+    r = call("ddflow_bug_found", id="B1", summary="b1 broken", tags="security", no_task=True)
+    assert r["_meta"]["exit"] == 0, r
+    r = call("ddflow_bug_fixed", id="B1", tag=True, add="x", remove="security")
+    assert r["_meta"]["exit"] == 0, r
+    assert _tags(repo, "B1") == ["x"]
+    assert call("ddflow_bug_fixed", id="B1", tag=True, add="wave:1")["_meta"]["exit"] == 3
