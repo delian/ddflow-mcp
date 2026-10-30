@@ -39,9 +39,10 @@ AGENT = textwrap.dedent(
         end = time.time() + 20
         while not os.path.exists(flag) and time.time() < end:
             time.sleep(0.05)
-        for t in ("claim", "heartbeat"):
-            print(json.dumps({"type": "call", "tool": t}), flush=True)
-        print(json.dumps({"type": "call", "tool": "gate", "action": "record"}), flush=True)
+        if os.path.exists(flag):  # no revocation, no late work
+            for t in ("claim", "heartbeat"):
+                print(json.dumps({"type": "call", "tool": t}), flush=True)
+            print(json.dumps({"type": "call", "tool": "gate", "action": "record"}), flush=True)
     elif mode != "once":
         end = time.time() + 20
         while time.time() < end:
