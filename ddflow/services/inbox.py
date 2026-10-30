@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import re
 import time
 from dataclasses import asdict, dataclass
@@ -129,6 +130,7 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             ok = all(isinstance(getattr(m, f), str) for f in ("to", "reason", "text", "sender"))
             ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
             ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
+            ok = ok and math.isfinite(m.sent_at)
             m.id = path.stem  # the file is the identity: a forged id cannot hide a message
             # Whatever the file holds is read as untrusted, however it got there.
             m.text, m.sender, m.item = (
@@ -205,10 +207,4 @@ def has_pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> bool:
     """Cheap test used in a wait's poll loop: is anything waiting to be delivered? With a
     ``ttl_s`` an expired message does not count (it is dropped), so a wait never wakes for
     a message that delivery would then discard."""
-    if ttl_s > 0:
-        return bool(pending(repo, agent, ttl_s=ttl_s))
-    d = _dir(repo, agent)
-    try:
-        return d.is_dir() and any(d.glob("*.json"))
-    except OSError:
-        return False
+    return bool(pending(repo, agent, ttl_s=ttl_s))

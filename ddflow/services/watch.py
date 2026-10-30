@@ -89,7 +89,9 @@ def decode_wait(token: str) -> dict[str, Any] | None:
         if not isinstance(d, dict):
             return None
         out = {k: v for k, v in d.items() if k in _WAIT_ARGS and v is not None}
-        return out if all(isinstance(v, _WAIT_ARGS[k]) for k, v in out.items()) else None
+        typed = all(isinstance(v, _WAIT_ARGS[k]) for k, v in out.items())
+        strs = all(isinstance(g, str) for g in out.get("globs", []))
+        return out if typed and strs else None
     except (ValueError, TypeError, AttributeError):
         return None
 
