@@ -141,3 +141,12 @@ def test_modelless_later_session_ends_the_earlier_model():
     log.session("x", "s2", T0 - 5, tool="t")  # newer session, no model recorded
     _item(log, "A", "x", T0, [("ci", "passed")])
     assert list(_run(log).cells) == [L.Key("", "", "task")]
+
+
+def test_lease_models_read_in_time_order_not_log_order():
+    log = Log()
+    log.task("B", "B.py")
+    log.add("lease.acquired", "B", "y", T0 + 5, holder="y", model="deepseek-v4", globs=[])
+    log.add("lease.acquired", "B", "y", T0, holder="y", model="claude-opus-4", globs=[])
+    log.complete("y", "B", T0 + 50)
+    assert list(_run(log).cells) == [L.Key("deepseek", "deepseek-v4", "task")]
