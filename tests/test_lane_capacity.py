@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -94,6 +95,8 @@ def test_dead_holder_frees_its_slot(tmp_path: Path) -> None:
     proc = subprocess.Popen(
         [sys.executable, "-c", code, str(tmp_path)], stdout=subprocess.PIPE, text=True
     )
+    watchdog = threading.Timer(30, proc.kill)  # a stuck child must not hang the suite
+    watchdog.start()
     try:
         assert proc.stdout is not None and proc.stdout.readline().strip() == "held"
         pools = (C.Pool("ep-local", 1),)
@@ -103,6 +106,7 @@ def test_dead_holder_frees_its_slot(tmp_path: Path) -> None:
         with C.acquire(pools, 2, tmp_path):
             pass
     finally:
+        watchdog.cancel()
         proc.kill()
 
 
