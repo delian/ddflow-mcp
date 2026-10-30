@@ -745,10 +745,11 @@ def _chunk_budget(rev: Reviewer) -> int:
     reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
     the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
     below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
-    always budget left to write the verdict in. A reviewer too small to leave a reserve is
-    refused at the top of ``review()`` before a chunk is ever sized.
+    always budget left to write the verdict in. The floor at one verdict reserve keeps a
+    reviewer just above the reserve from degrading into one chunk per line; a cap too small
+    to leave a reserve is refused at the top of ``review()`` before a chunk is ever sized.
     """
-    return min(rev.max_chunk_chars, max(1, rev.max_tokens - VERDICT_RESERVE_TOKENS))
+    return min(rev.max_chunk_chars, max(VERDICT_RESERVE_TOKENS, rev.max_tokens - VERDICT_RESERVE_TOKENS))
 
 
 def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
