@@ -262,11 +262,6 @@ COMMANDS: tuple[Command, ...] = (
                 help="harness_show / harness_doctor / harness_facts / run: the agent's descriptor id.",
             ),
             Param(
-                "unverified",
-                type="boolean",
-                help="harness_facts: only the unverified leads and the sections left out.",
-            ),
-            Param(
                 "event",
                 help="run: the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact, stop, session_end.",
             ),
@@ -283,6 +278,11 @@ COMMANDS: tuple[Command, ...] = (
                 "claude",
                 type="boolean",
                 help="Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, even after compaction, starts with the ddflow brief. Other hooks there are untouched.",
+            ),
+            Param(
+                "unverified",
+                type="boolean",
+                help="harness_facts: only the unverified leads and the sections left out.",
             ),
         ),
         call=lambda repo, a, agent: (

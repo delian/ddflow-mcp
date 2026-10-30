@@ -100,4 +100,4 @@ def test_view_facts_table_filters(tmp_path):
 def test_table_cells_cannot_break_the_columns():
     h = p(HEAD + OK.replace("https://x.example", "a|b"))
     for line in harnessfacts.table(harnessfacts.rows(h)).splitlines():
-        assert line.count("|") == 8
+        assert line.count("|") == 9
