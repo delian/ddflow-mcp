@@ -21,6 +21,7 @@ pre-commit hook runs (``core.globs``); this module writes no second one. What it
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -99,23 +100,44 @@ def _write_exec(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
+def _original(worktree: Path, d: Path) -> Path:
+    """The hooks directory the lane hook chains to: the worktree's own setting before the
+    install (resolved as git does, against the worktree top), else the shared hooks dir."""
+    prior = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
+    value = prior.out.strip() if prior.ok else ""
+    top = G.run(worktree, "rev-parse", "--show-toplevel", timeout=P.TIMEOUTS["probe"])
+    base = Path(top.out.strip()) if top.ok and top.out.strip() else Path(worktree)
+    here = (base / value).resolve() if value else None
+    if here is not None and here != d.resolve():
+        return here
+    saved = d / "original"
+    if saved.is_file() and Path(saved.read_text().strip()).resolve() != d.resolve():
+        return Path(saved.read_text().strip())
+    # Never the lane dir itself (the generated hook would exec itself): the shared setting.
+    shared = G.run(worktree, "config", "--get", "core.hooksPath")
+    if shared.ok and shared.out.strip() and (base / shared.out.strip()).resolve() != d.resolve():
+        return (base / shared.out.strip()).resolve()
+    c = G.run(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    common = Path(c.out.strip()) if c.ok and c.out.strip() else base / ".git"
+    return common / "hooks"
+
+
 def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     """Install the lane hook for ``worktree``; one line saying what was done. Idempotent."""
     worktree = Path(worktree)
     d = hook_dir(worktree)
-    prior = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
-    original = Path(prior.out.strip()) if prior.ok and prior.out.strip() != str(d) else None
-    if original is None and prior.ok:  # already ours: keep the project's recorded hooks dir
-        saved = d / "original"
-        original = Path(saved.read_text().strip()) if saved.is_file() else None
-    if original is None:
-        original = _current_hooks_path(worktree)
+    original = _original(worktree, d)
+    had_prior = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath").ok
     d.mkdir(parents=True, exist_ok=True)
+    for stale in d.iterdir():  # wrappers of hooks the project no longer has
+        stale.unlink()
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
+    replace_text(d / "had_prior", ("1" if had_prior or _had_prior(d) else "0") + "\n")
     if original.is_dir():
         for h in sorted(original.iterdir()):
-            if h.is_file() and h.name not in CHAINED_SKIP and not h.name.endswith(".sample"):
+            runnable = h.is_file() and os.access(h, os.X_OK)  # git ignores non-executable hooks
+            if runnable and h.name not in CHAINED_SKIP and not h.name.endswith(".sample"):
                 body = f'#!/bin/sh\n{MARKER}\nexec {shlex.quote(str(h))} "$@"\n'
                 _write_exec(d / h.name, body)
     G.run(worktree, "config", "extensions.worktreeConfig", "true")
@@ -126,6 +148,11 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
         f"installed the lane lease hook at {d}: a commit touching files outside the item's "
         f"lease globs is refused (detection at commit, not prevention at edit)"
     )
+
+
+def _had_prior(d: Path) -> bool:
+    flag = d / "had_prior"
+    return flag.is_file() and flag.read_text().strip() == "1"
 
 
 def installed(worktree: Path) -> bool:
@@ -140,7 +167,11 @@ def uninstall(worktree: Path) -> str:
     if not d.is_dir():
         return "no lane hook installed"
     if installed(worktree):
-        G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
+        saved = d / "original"
+        if _had_prior(d) and saved.is_file():  # the worktree had its own setting: put it back
+            G.run(worktree, "config", "--worktree", "core.hooksPath", saved.read_text().strip())
+        else:
+            G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
     for f in d.iterdir():
         f.unlink()
     d.rmdir()
