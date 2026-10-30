@@ -163,6 +163,22 @@ def status(env_name: str, key_file: str = "") -> str:
     )
 
 
+def _tracked(root: Path, path: Path) -> bool:
+    """Whether git tracks ``path`` (a force-added "local" file is shared, not local)."""
+    import subprocess  # nosec B404 - fixed argv, no shell
+
+    try:
+        done = subprocess.run(  # nosec B603 B607
+            ["git", "-C", str(root), "ls-files", "--error-unmatch", "--", str(path)],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
+
+
 def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
     """Raise ValueError when a reviewers file that is NOT machine-local sets ``api_key_file``.
 
@@ -174,7 +190,9 @@ def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
     local = (Path(root) / LOCAL_DIR).resolve()
     for path in paths:
         p = Path(path)
-        if not p.is_file() or p.resolve().parent == local:
+        if not p.is_file():
+            continue
+        if p.resolve().parent == local and not _tracked(root, p):
             continue
         for n, raw in enumerate(read_toml(p).get("reviewer") or [], 1):
             if isinstance(raw, dict) and "api_key_file" in raw:

@@ -88,6 +88,8 @@ def test_missing_and_unreadable_file_are_unavailable(tmp_path):
     assert "does not exist" in RK.resolve_key(ENV, str(tmp_path / "nope")).reason
     assert "not a regular file" in RK.resolve_key(ENV, str(tmp_path)).reason
     p = _keyfile(tmp_path, 0o000)
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses permission bits")
     got = RK.resolve_key(ENV, str(p))
     assert not got.value and got.reason
 
@@ -299,3 +301,25 @@ def test_nul_in_the_path_and_blank_env_do_not_raise(tmp_path, monkeypatch):
     monkeypatch.setenv(ENV, " ")
     st = RK.status(ENV, str(_keyfile(tmp_path)))
     assert st.startswith("UNAVAILABLE")
+
+
+def test_a_force_added_local_file_is_treated_as_shared(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    _write(tmp_path, ".ddflow/local/reviewers.toml", BLOCK)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", "-f", ".ddflow/local/reviewers.toml"], check=True
+    )
+    with pytest.raises(ValueError, match="machine-local"):
+        RV.load_reviewers(tmp_path)
+
+
+def test_a_bad_env_key_is_refused_for_the_openai_kind_too(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV, "sk-\nX-Injected: yes")
+    _capture(monkeypatch, {})
+    rev = RV.Reviewer(
+        name="r", kind="openai", base_url="https://e.invalid/v1", model="m", api_key_env=ENV
+    )
+    _text, err = RV._chat_openai(rev, "s", "u", 5)
+    assert "control or whitespace" in err and "X-Injected" not in err
