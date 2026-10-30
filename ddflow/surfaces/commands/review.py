@@ -47,8 +47,24 @@ def _triage(a, c: Ctx, item: str) -> int:
     return OK
 
 
+def _detach_refused(a) -> str:
+    """The refusal for `--detach` on a verb that runs no review, or "" when it is not set.
+
+    `review triage` and `review show` only read or record a verdict; silently accepting
+    `--detach` there would promise a durable detached run that never happens (rubber-duck
+    finding 21ddfbf787532f59)."""
+    return (
+        "--detach reviews an item's diff; `review triage` and `review show` run no review"
+        if getattr(a, "detach", False)
+        else ""
+    )
+
+
 def _triage_verb(a, c: Ctx, ids: list[str]) -> int:
     """`review triage <id>`: a verb, not an item named "triage"."""
+    if message := _detach_refused(a):
+        print(message, file=sys.stderr)
+        return FAIL
     if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
         print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
         return FAIL
@@ -94,6 +110,9 @@ def _list_verb(a, c: Ctx, item: str) -> int:
 
 def _show_verb(a, c: Ctx, ids: list[str]) -> int:
     """`review show <id> [--gate G]`: the recorded round's numbered findings."""
+    if message := _detach_refused(a):
+        print(message, file=sys.stderr)
+        return FAIL
     if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
         print("usage: ddflow review show <id> [--gate G]", file=sys.stderr)
         return FAIL
