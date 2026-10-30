@@ -227,6 +227,8 @@ def prepare(
         return unavailable(f"harness provider data is malformed: {bad[0]}")
     lay = layout(harness) or {}
     support = lay.get("custom_provider") or {}
+    if support.get("s") in facts.READABLE and support.get("v") is not True:
+        return unavailable(f"{harness!r}: recorded as NOT accepting a custom provider block")
     if support.get("s") not in facts.READABLE and not allow_unverified_harness:
         return unavailable(
             f"{harness!r}: custom OpenAI-compatible provider support is "
