@@ -134,6 +134,7 @@ def test_stop_kills_the_whole_process_group_and_removes_home(driver, tmp_path):
 
 def test_interrupt_signals_the_group(driver):
     h = driver.start(spec("--hang"))
+    assert next(driver.events(h, idle_s=20)).event == "started"  # the agent is up
     assert driver.interrupt(h).ok
     deadline = time.time() + 10
     while driver.status(h).state == "running" and time.time() < deadline:
@@ -153,7 +154,9 @@ def test_keys_by_env_name_are_passed_but_never_shown_or_leaked(driver, monkeypat
     assert "sk-very-secret-value" not in repr(h) and "sk-very-secret-value" not in repr(evs)
     h2 = driver.start(spec("--echo-env", "OTHER_SECRET", pass_env=("PATH",)))
     evs, _ = finish(driver, h2)
-    assert [e.fields["name"] for e in evs if e.event == "tool"][0] == "<unset>"  # only named variables reach the lane
+    assert (
+        next(e.fields["name"] for e in evs if e.event == "tool") == "<unset>"
+    )  # only named variables reach the lane
 
 
 def test_missing_key_env_refuses_before_launch(driver, monkeypatch):
@@ -265,3 +268,16 @@ def test_spec_from_headless_composes_flags_and_reports_gaps():
     assert ld.spec_from_headless("l", Headless(none=True)).status == "unavailable"
     assert ld.spec_from_headless("l", Headless(argv=("a",)), effort="high").status == "unavailable"
     assert ld.spec_from_headless("l", h).status == "unavailable"  # autonomy profile absent
+
+
+def test_lane_options_come_from_the_lanes_knobs():
+    from ddflow.config import Config
+
+    o = ld.lane_options(Config())
+    assert o == {
+        "stop_grace_s": 10.0,
+        "event_buffer": 1000,
+        "scope": "none",
+        "pass_env": ("PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"),
+    }
+    assert ld.LaunchSpec(name="x", argv=("a",), **o).scope == "none"
