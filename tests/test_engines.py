@@ -479,14 +479,14 @@ def test_probe_programs_are_bare_names_and_output_is_read_capped(tmp_path):
     with pytest.raises(EngineError):
         probe.parse([["/tmp/x", "--version"]])
     big = tmp_path / "big"
-    big.write_text("#!/bin/sh\nyes aaaaaaaaaaaaaaaa | head -c 200000000\n")
+    big.write_text("#!/bin/sh\nexec yes aaaaaaaaaaaaaaaa\n")
     big.chmod(0o755)
     t = time.monotonic()
     f = probe.run(
         probe.parse([[str(big), "--version"]], allow_paths=True),
         probe_id="b",
         now="d",
-        limits=Limits(probe_output_bytes=2000),
+        limits=Limits(probe_output_bytes=2000, probe_timeout_s=3),
     )[0]
     assert len(f["output"]) == 2000 and time.monotonic() - t < 5
 
