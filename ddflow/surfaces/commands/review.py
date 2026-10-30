@@ -21,6 +21,7 @@ import ddflow.api.review_findings as RS
 import ddflow.api.review_settle as ST
 
 from ...api import surf_setup as SS
+from ...api import jobs as AJ
 from ...api._base import _load
 from ...config import csv_list
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
@@ -209,8 +210,6 @@ def _detach(a, c: Ctx) -> int:
     which has already returned: the review runs on, and every line it says lands in a log a
     killed process cannot lose.
     """
-    from ...api import jobs as AJ
-
     argv = _relaunch_argv(list(getattr(a, "_argv", [])))
     if not argv:
         print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
