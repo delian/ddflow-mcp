@@ -93,68 +93,95 @@ def _target_names(target: ast.expr) -> list[str]:
 
 
 def _bound_by(node: ast.AST) -> list[str]:
-    """Names one statement binds directly (its nested body is ``ast.walk``'s job)."""
+    """Names one AST node binds directly, with no recursion into its body. ``"*"`` marks a
+    wildcard import, which can rebind any name."""
+    if isinstance(node, ast.Assign):
+        return [n for t in node.targets for n in _target_names(t)]
+    if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+        return _target_names(node.target)
     if isinstance(node, (ast.For, ast.AsyncFor)):
         return _target_names(node.target)
     if isinstance(node, (ast.With, ast.AsyncWith)):
         return [n for item in node.items for n in _target_names(item.optional_vars)]
-    if isinstance(node, ast.AugAssign):
-        return _target_names(node.target)
     if isinstance(node, ast.Delete):
         return [n for t in node.targets for n in _target_names(t)]
     if isinstance(node, ast.Import):
         return [a.asname or a.name.split(".")[0] for a in node.names]
     if isinstance(node, ast.ImportFrom):
-        return [a.asname or a.name for a in node.names if a.name != "*"]
+        return ["*"] if any(a.name == "*" for a in node.names) else [a.asname or a.name for a in node.names]
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         return [node.name]
-    if isinstance(node, ast.Assign):
-        return [n for t in node.targets for n in _target_names(t)]
+    if isinstance(node, (ast.MatchAs, ast.MatchStar)):
+        return [node.name] if node.name else []
     return []
 
 
-def _rebindings(node: ast.stmt) -> list[str]:
-    """Names a module-level statement rebinds, recursing into module-scope bodies
-    (if/for/while/with/try, except handlers, match cases) but not into a function or
-    class body (a separate scope)."""
-    names = _bound_by(node)
+def _count_bindings(node: ast.stmt, counts: dict[str, int]) -> None:
+    """Count every module-scope binding, recursing into module-scope bodies (if/for/while/
+    with/try/try*, except handlers, match cases) but not into a function or class body
+    (a separate scope)."""
+    for name in _bound_by(node):
+        counts[name] = counts.get(name, 0) + 1
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return names
+        return
     stmts: list[ast.stmt] = []
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.stmt):
             stmts.append(child)
+        elif isinstance(child, ast.NamedExpr):
+            counts[child.target.id] = counts.get(child.target.id, 0) + 1
     if isinstance(node, (ast.Try, ast.TryStar)):
         stmts += [s for h in node.handlers for s in h.body]
     if isinstance(node, ast.Match):
-        stmts += [s for c in node.cases for s in c.body]
+        for case in node.cases:
+            stmts += list(case.body)
+            for name in _match_captures(case.pattern):
+                counts[name] = counts.get(name, 0) + 1
     for child in stmts:
-        names += _rebindings(child)
-    return names
+        _count_bindings(child, counts)
+
+
+def _match_captures(pattern: ast.pattern | None) -> list[str]:
+    """Names a match capture pattern binds (a ``case X:`` at module scope rebinds X)."""
+    if pattern is None:
+        return []
+    if isinstance(pattern, (ast.MatchAs, ast.MatchStar)):
+        return [pattern.name] if pattern.name else []
+    for field in ("patterns", "elements", "items"):
+        for sub in getattr(pattern, field, ()):
+            names = _match_captures(sub)
+            if names:
+                return names
+    return []
 
 
 def candidates_in(source: str, path: str) -> list[Candidate]:
-    """The candidates among ``source``'s module-level statements (not nested ones)."""
+    """The candidates among ``source``'s module-level statements (not nested ones).
+
+    A Name operand folds to a module-level constant only when that name is bound exactly
+    once in the module scope (a clean constant), so no later rebinding can leave a stale
+    value in the fold.
+    """
+    module = ast.parse(source)
+    counts: dict[str, int] = {}
+    for node in module.body:
+        _count_bindings(node, counts)
+    wildcard = "*" in counts  # a wildcard import can rebind any name: resolve nothing
     out: list[Candidate] = []
-    scope: dict[str, float] = {}  # module-level name -> folded value, in source order
-    for node in ast.parse(source).body:
+    scope: dict[str, float] = {}
+    for node in module.body:
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             targets, value = [node.target], node.value
         else:
-            for name in _rebindings(node):  # can no longer be a statically-known constant
-                scope.pop(name, None)
             continue
         number = _number(value, scope)
         if number is None:
-            for t in targets:  # a (re)binding we cannot fold must not leave a stale value
-                for name in _target_names(t):
-                    scope.pop(name, None)
             continue
         for t in targets:
-            if isinstance(t, ast.Name):  # later arithmetic may reference this one
-                scope[t.id] = number
+            if not wildcard and isinstance(t, ast.Name) and counts.get(t.id) == 1:
+                scope[t.id] = number  # a clean module-level constant
             name = t.id if isinstance(t, ast.Name) else ""
             bare = name.lstrip("_")
             if bare and bare.isupper() and TUNABLE.search(bare):

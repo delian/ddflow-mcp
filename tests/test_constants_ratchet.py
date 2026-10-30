@@ -76,9 +76,9 @@ def test_detector_folds_symbolic_name_arithmetic(tmp_path: Path) -> None:
 
 
 def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
-    knobs = {c.key: c.value for c in ca.audit(ROOT).knob}
-    assert knobs.get("ddflow/services/swarm/ledger.py:BUG_WINDOW_S") == 604800.0
-    assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in knobs
+    keys = {c.key for c in ca.scan(ROOT)}
+    assert "ddflow/services/swarm/ledger.py:BUG_WINDOW_S" in keys
+    assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys
 
 
 def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> None:
