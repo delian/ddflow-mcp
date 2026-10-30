@@ -11,6 +11,7 @@ rather than the project's.
 
 from __future__ import annotations
 
+import shlex
 import sys
 
 # The SUBMODULE. `from ...api import review` would bind the re-exported function; this
@@ -157,6 +158,55 @@ def _report_refusal(a, c: Ctx, out) -> None:
 _ITEM_AND_GATE = 2
 
 
+def _one_item_and_gate(a, ids: list[str]) -> tuple[list[str], str] | None:
+    """One item and the gate, or None with the refusal printed. `review <id> <gate>` spells
+    the gate positionally; giving it twice names it twice."""
+    gate = a.gate or ""
+    if len(ids) == _ITEM_AND_GATE:
+        if gate and gate != ids[1]:
+            print(f"the gate is given twice: {ids[1]!r} and --gate {gate!r}", file=sys.stderr)
+            return None
+        return ids[:1], ids[1]
+    if len(ids) > 1:
+        print(f"review takes one item id (and an optional gate); got {ids}", file=sys.stderr)
+        return None
+    return ids, gate
+
+
+def _detach(a, c: Ctx) -> int:
+    """`--detach`: this review in its OWN session, streamed to a job log (bug Be927e56fb6).
+
+    A harness gives its foreground command a time limit and then SIGKILLs it; a review of a
+    large diff against remote reviewers outlasts the limit, so only "[killed]" ever showed.
+    Relaunching through the job launcher (`setsid`) means the cut reaches only this command,
+    which has already returned: the review runs on, and every line it says lands in a log a
+    killed process cannot lose.
+    """
+    from ...api import jobs as AJ
+
+    argv = [x for x in getattr(a, "_argv", []) if x != "--detach"]
+    if not argv:
+        print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
+        return FAIL
+    out = AJ.job_detach(
+        c.repo,
+        a.id[0] if a.id else "",
+        shlex.join([sys.executable, "-m", "ddflow", *argv]),
+        cwd=str(c.called_from),
+        agent=c.requested_agent,
+    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    pid, log = out.data["pid"], out.data["log"]
+    c.out(
+        f"review detached as pid {pid}; it runs in its own session and outlives this command\n"
+        f"  its progress streams to {log}  (read it: tail -f {log})",
+        {"id": out.data["id"], "pid": pid, "log": log},
+    )
+    return OK
+
+
 def cmd_review(a, c: Ctx) -> int:
     ids = list(a.id or [])
     if ids[:1] == ["triage"]:
@@ -166,16 +216,13 @@ def cmd_review(a, c: Ctx) -> int:
         return FAIL
     if ids[:1] == ["show"]:
         return _show_verb(a, c, ids)
-    gate = a.gate or ""
-    if len(ids) == _ITEM_AND_GATE:  # `review <id> <gate>`, as every other gate command spells it
-        if gate and gate != ids[1]:
-            print(f"the gate is given twice: {ids[1]!r} and --gate {gate!r}", file=sys.stderr)
-            return FAIL
-        ids, gate = ids[:1], ids[1]
-    if len(ids) > 1:
-        print(f"review takes one item id (and an optional gate); got {ids}", file=sys.stderr)
+    resolved = _one_item_and_gate(a, ids)
+    if resolved is None:
         return FAIL
+    ids, gate = resolved
     a.gate = gate  # _report_refusal names it
+    if getattr(a, "detach", False):
+        return _detach(a, c)
     out = A.review(
         c.repo,
         gate=gate or "critic",
