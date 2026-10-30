@@ -28,7 +28,7 @@ def _a_person(monkeypatch):
 @pytest.fixture
 def proj(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py")
     return repo
 
 

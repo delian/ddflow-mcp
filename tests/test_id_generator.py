@@ -79,7 +79,7 @@ def test_a_bugs_fix_task_and_its_follow_up_keep_todays_ids(repo) -> None:
 
 def test_a_split_names_children_as_today(repo) -> None:
     _init(repo)
-    run_cli(repo, "task", "add", "P.T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "P.T", "--title", "P.T fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "--json", "split", "P.T", "--into", "=one", "--into", "=two")
     assert code == 0, err
     assert json.loads(out)["created"] == ["P.T.1", "P.T.2"]
@@ -162,7 +162,7 @@ def test_a_hand_filed_default_fix_task_still_names_its_bug(repo) -> None:
 
     _init(repo)
     bid = K.bug_found(repo, summary="the thing fails", no_task=True).data["id"]
-    run_cli(repo, "task", "add", f"fix-{bid}", "--globs", "a.py")
+    run_cli(repo, "task", "add", f"fix-{bid}", "--title", "task item", "--globs", "a.py")
     st = fold(EventLog(repo, "t").read_all(), strict=False)
     assert fixes_of(st, f"fix-{bid}") == {bid}
 
@@ -231,7 +231,7 @@ def test_a_follow_up_fix_task_names_its_bug(repo) -> None:
 
     _init(repo)
     bid = K.bug_found(repo, summary="the sprocket fails", no_task=True).data["id"]
-    run_cli(repo, "task", "add", f"fix-{bid}-2", "--globs", "a.py")
+    run_cli(repo, "task", "add", f"fix-{bid}-2", "--title", "task item", "--globs", "a.py")
     st = fold(EventLog(repo, "t").read_all(), strict=False)
     assert fixes_of(st, f"fix-{bid}-2") == {bid}
 

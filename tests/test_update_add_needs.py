@@ -10,8 +10,13 @@ from helpers import items_of as _items
 def _tasks(repo):
     run_cli(repo, "init")
     for t in ("A", "B", "C"):
-        assert run_cli(repo, "task", "add", t, "--globs", f"{t}.py")[0] == 0
-    assert run_cli(repo, "task", "add", "T", "--globs", "t.py", "--needs", "A,B")[0] == 0
+        assert run_cli(repo, "task", "add", t, "--title", "task item", "--globs", f"{t}.py")[0] == 0
+    assert (
+        run_cli(
+            repo, "task", "add", "T", "--title", "T fixture", "--globs", "t.py", "--needs", "A,B"
+        )[0]
+        == 0
+    )
 
 
 def test_add_needs_keeps_the_existing_ones(repo):

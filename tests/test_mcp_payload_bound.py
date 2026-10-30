@@ -104,7 +104,7 @@ def test_show_drops_tree_boilerplate_and_cuts_long_notes_and_says_so(repo):
 
 def test_show_of_an_item_with_nothing_to_cut_says_nothing_was_cut(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     body = _body(_call(repo, "ddflow_show", id="T1"))
     assert "truncated" not in body and body["id"] == "T1" and body["adopted"] is False
 
