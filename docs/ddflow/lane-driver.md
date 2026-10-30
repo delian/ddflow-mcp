@@ -39,7 +39,7 @@ descriptor gap (no template, no flag for a value asked, missing autonomy profile
   not set refuses the launch.
 - Lane-private home: `HOME` (and `home_env`, e.g. `CODEX_HOME`, `DSH_HOME`) point at a 0700
   directory; only `[lanes].pass_env` names and the spec's own env reach the child. Telemetry-off
-  literals (D-dsh-telemetry) go in `fixed_env`. A temporary home is removed at cleanup; a caller's
+  literals (D-dsh-telemetry) go in `fixed_env`. A temporary home and any prompt file are removed by `stop` (call it after the lane ended too); a caller's
   is not.
 - Cleanup is one process-group kill (`infra.proc.kill_group`), optionally inside a systemd scope
   (`[lanes].scope = systemd`; unavailable, never silently dropped, where systemd-run is missing).

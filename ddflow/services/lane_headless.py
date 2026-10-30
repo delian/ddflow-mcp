@@ -149,6 +149,7 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
         if spec.prompt and "{prompt_file}" in spec.argv:
             pf = home / "prompt.txt"
             fsio.atomic_write(pf, spec.prompt, mode=0o600)
+            private.append(pf)
             values["prompt_file"] = str(pf)
         r = render_argv.render(spec.argv, values, env=dict(spec.env), environ=os.environ)
     except (EngineError, OSError) as e:
@@ -156,11 +157,11 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
     if r.missing:
         return failed(f"key environment variable(s) not set: {', '.join(r.missing)}")
     env = {n: os.environ[n] for n in spec.pass_env if n in os.environ}
-    env["HOME"] = str(home)
-    if spec.home_env:
-        env[spec.home_env] = str(home)
     env.update(spec.fixed_env)
     env.update(r.env)
+    env["HOME"] = str(home)  # last: nothing in the spec may point the lane back at the real home
+    if spec.home_env:
+        env[spec.home_env] = str(home)
     return r, env, values
 
 
@@ -179,7 +180,7 @@ class ProcessHeadless:
         if isinstance(prep, Result):
             self._rm(private)
             return prep
-        r, env, values = prep
+        r, env, _ = prep
         run_id = f"{spec.name}-{secrets.token_hex(3)}"
         argv, unit = list(r.argv), ""
         if spec.scope == "systemd":
@@ -213,7 +214,7 @@ class ProcessHeadless:
             t = threading.Thread(target=fn, args=(run,), daemon=True)
             t.start()
             run.threads.append(t)
-        if spec.prompt and "prompt_file" not in values:
+        if spec.prompt and "{prompt_file}" not in spec.argv:
             threading.Thread(target=_write_stdin, args=(p, spec.prompt), daemon=True).start()
         else:
             with contextlib.suppress(OSError):
@@ -282,8 +283,6 @@ class ProcessHeadless:
                 hit = limit_detect.detect(
                     h.spec.limit, exit_code=code, events=h.seen, text="".join(h.stderr)
                 )
-            if code is not None:
-                self._cleanup(h)
             return LaneStatus(
                 state=state,
                 pid=h.popen.pid,
@@ -301,7 +300,10 @@ class ProcessHeadless:
     @staticmethod
     def _rm(paths: list[Path]) -> None:
         for d in paths:
-            shutil.rmtree(d, ignore_errors=True)
+            if d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                d.unlink(missing_ok=True)
 
     def _cleanup(self, h: _Run) -> None:
         if not h.cleaned:

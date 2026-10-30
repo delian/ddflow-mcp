@@ -31,13 +31,14 @@ child = opt("--child")
 echo = opt("--echo-env")
 if child:
     c = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(300)"])
-    open(child, "w").write(str(c.pid))
+    open(child + ".tmp", "w").write(str(c.pid))
+    os.rename(child + ".tmp", child)  # atomic: a reader never sees half a pid
 if "--read-stdin" in a:
     print(json.dumps({"type": "stdin", "text": sys.stdin.read().strip()}), flush=True)
 if echo:
-    print('{"type":"env","value":"%s"}' % os.environ.get(echo, "<unset>"), flush=True)
+    print(json.dumps({"type": "env", "value": os.environ.get(echo, "<unset>")}), flush=True)
 if "--pwd-home" in a:
-    print('{"type":"home","home":"%s"}' % os.environ.get("HOME"), flush=True)
+    print(json.dumps({"type": "home", "home": os.environ.get("HOME")}), flush=True)
 for line in open(rec):
     sys.stdout.write(line)
     sys.stdout.flush()
