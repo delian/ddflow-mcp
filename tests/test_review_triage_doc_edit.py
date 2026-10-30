@@ -109,6 +109,8 @@ def test_complete_drops_the_different_tree_note_for_a_reviewed_doc_edit_only(tmp
     (d / "docs").mkdir()
     (d / "docs" / "notes.md").write_text("# notes\n")
     subprocess.run(["git", "-C", str(d), "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(d), "config", "user.name", "a"], check=True)
+    subprocess.run(["git", "-C", str(d), "config", "user.email", "a@b"], check=True)
     subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(d), "commit", "-qm", "base"], check=True)
     snap = path_snapshot(d, ["docs/notes.md"])
