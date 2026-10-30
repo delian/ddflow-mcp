@@ -52,7 +52,7 @@ case "$rc" in
 0) [ -z "$out" ] || printf '%s\\n' "$out" >&2 ;;
 1)
   case "$out" in
-  *Traceback*) printf '%s\\n' "ddflow lane hook: the lease check crashed; commit allowed (not checked)." >&2 ;;
+  *'Traceback (most recent call last)'*) printf '%s\\n' "ddflow lane hook: the lease check crashed; commit allowed (not checked)." >&2 ;;
   *) printf '%s\\n' "$out" >&2; exit 1 ;;
   esac ;;
 *) printf '%s\\n' "ddflow lane hook: the lease check could not run (exit $rc); commit allowed (not checked)." >&2 ;;
