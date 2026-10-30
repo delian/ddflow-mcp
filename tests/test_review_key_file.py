@@ -284,3 +284,18 @@ def test_invalid_utf8_key_file_is_refused(tmp_path):
     p.write_bytes(b"\xff\xfe")
     p.chmod(0o600)
     assert "UTF-8" in RK.resolve_key("", str(p)).reason
+
+
+def test_no_introspection_path_reaches_the_value(tmp_path):
+    got = RK.resolve_key("", str(_keyfile(tmp_path)))
+    with pytest.raises(TypeError):
+        vars(got)
+    with pytest.raises(TypeError):
+        got.__getstate__()
+
+
+def test_nul_in_the_path_and_blank_env_do_not_raise(tmp_path, monkeypatch):
+    assert RK.resolve_key("", "a\x00b").reason
+    monkeypatch.setenv(ENV, " ")
+    st = RK.status(ENV, str(_keyfile(tmp_path)))
+    assert st.startswith("UNAVAILABLE")
