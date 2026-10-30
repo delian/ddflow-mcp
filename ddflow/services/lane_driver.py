@@ -158,7 +158,10 @@ def transports() -> tuple[str, ...]:
 def driver_for(transport: str) -> Lane | Result:
     """The driver for ``transport``, or an ``unavailable`` Result naming what is known."""
     if transport not in _TRANSPORTS and transport in BUILTIN_TRANSPORTS:
-        importlib.import_module(BUILTIN_TRANSPORTS[transport])
+        try:
+            importlib.import_module(BUILTIN_TRANSPORTS[transport])
+        except ImportError as e:
+            return unavailable(f"lane transport {transport!r} cannot be loaded: {e}")
     factory = _TRANSPORTS.get(transport)
     if factory is None:
         return unavailable(f"no lane transport {transport!r}; known: {list(transports())}")
@@ -211,12 +214,13 @@ def spec_from_headless(
         (headless.mcp_flag, "mcp_config", mcp_config),
         (headless.resume_flag, "session", session),
     ):
-        if val != "" and not flag:
+        if val in ("", None):
+            continue
+        if not flag:
             return unavailable(f"the descriptor has no flag for {ph}; it is not guessed")
-        if val != "":
-            values[ph] = str(val)
-            if "{" + ph + "}" not in argv:
-                argv += [flag, "{" + ph + "}"]
+        values[ph] = str(val)
+        if "{" + ph + "}" not in argv:
+            argv += [flag, "{" + ph + "}"]
     if headless.autonomy:
         profile = (autonomy.profiles if autonomy and not autonomy.none else {}).get(
             headless.autonomy

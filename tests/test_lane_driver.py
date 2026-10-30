@@ -53,12 +53,15 @@ def driver():
     return lh.ProcessHeadless()
 
 
-def finish(driver, h):
+def finish(driver, h, stop=True):
     evs = list(driver.events(h))
     deadline = time.time() + 10
     while driver.status(h).state == "running" and time.time() < deadline:
         time.sleep(0.02)
-    return evs, driver.status(h)
+    st = driver.status(h)
+    if stop:
+        driver.stop(h)  # removes the private home; the lane has ended, so this only cleans up
+    return evs, st
 
 
 def test_replay_gives_canonical_events_and_status(driver):
@@ -191,13 +194,40 @@ def test_prompt_goes_on_stdin_without_a_placeholder(driver):
     assert any(e.fields.get("name") == "do the thing" for e in evs)
 
 
-def test_prompt_file_placeholder_writes_a_private_file(driver):
-    s = ld.LaunchSpec(
-        name="p", argv=(sys.executable, AGENT, str(FIX / "ok.jsonl"), "{prompt_file}"), prompt="x"
-    )
-    h = driver.start(s)
+def test_prompt_file_placeholder_writes_a_private_file(driver, tmp_path):
+    argv = (sys.executable, AGENT, str(FIX / "ok.jsonl"), "{prompt_file}")
+    h = driver.start(ld.LaunchSpec(name="p", argv=argv, prompt="x", home=tmp_path / "h"))
     assert not isinstance(h, ld.Result)
+    pf = tmp_path / "h" / "prompt.txt"
+    assert pf.read_text() == "x" and oct(pf.stat().st_mode & 0o777) == "0o600"
     finish(driver, h)
+    assert not pf.exists() and (tmp_path / "h").is_dir()  # the file goes, a caller's home stays
+
+
+def test_nothing_in_the_spec_can_point_the_lane_at_the_real_home(driver, tmp_path):
+    home = tmp_path / "h"
+    h = driver.start(spec("--pwd-home", home=home, fixed_env={"HOME": "/home/real"}))
+    evs, _ = finish(driver, h)
+    assert [e.fields["name"] for e in evs if e.fields.get("name", "").startswith("/")] == [
+        str(home)
+    ]
+
+
+def test_a_prompt_with_a_stale_prompt_file_value_still_reaches_stdin(driver):
+    h = driver.start(spec("--read-stdin", prompt="hi", values={"prompt_file": "/stale"}))
+    evs, _ = finish(driver, h)
+    assert any(e.fields.get("name") == "hi" for e in evs)
+
+
+def test_none_values_are_absent_not_the_text_none():
+    h = Headless(argv=("a",), model_flag="--model", resume_flag="--resume")
+    s = ld.spec_from_headless("l", h, model=None, session=None)
+    assert s.argv == ("a",) and s.values == {}
+
+
+def test_a_transport_that_cannot_load_is_unavailable(monkeypatch):
+    monkeypatch.setitem(ld.BUILTIN_TRANSPORTS, "ghost", "ddflow.services.no_such_module")
+    assert ld.driver_for("ghost").status == "unavailable"
 
 
 def test_missing_executable_and_shell_are_failed_results(driver):
