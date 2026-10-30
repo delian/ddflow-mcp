@@ -100,6 +100,9 @@ def render(
     limits: Limits = DEFAULT,
 ) -> Rendered:
     """``template`` with each placeholder element replaced by its value (one argument)."""
+    for what, val in (("values", values), ("env", env or {}), ("environ", environ or {})):
+        if not isinstance(val, Mapping):
+            raise EngineError(f"{what} must be a mapping, got {type(val).__name__}")
     _lint(template, limits)
     argv: list[str] = []
     for el in template:
