@@ -309,3 +309,17 @@ def test_third_round_findings(tree, tmp_path):
     del m["agent"], m["files"]
     (home / LH.DIR_NAME / LH.MANIFEST).write_text(json.dumps(m))
     assert LH.hook_probe(home)() is False  # missing keys: False, not a KeyError
+
+
+def test_paths_are_judged_against_the_worktree_root(tmp_path, monkeypatch):
+    root = tmp_path / "wt"
+    (root / "src").mkdir(parents=True)
+    (tmp_path / "etc").mkdir()
+    (root / "link").symlink_to(tmp_path / "etc")
+    monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["src/**"], []))
+    sub = root / "src"  # the tool ran in a subdirectory: the glob is still rooted at the worktree
+    assert CK.verdict(tmp_path, "l", ["main.py"], sub, root) == (0, "")
+    assert CK.verdict(tmp_path, "l", ["x"], tmp_path, root)[0] == CK.REFUSE  # /tmp/.../x: outside
+    monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["**"], []))
+    assert CK.verdict(tmp_path, "l", ["link/passwd"], root, root)[0] == CK.REFUSE  # via a symlink
+    assert "--worktree" in LH.check_argv(Path("/r"), "l", Path("/w"))

@@ -157,14 +157,14 @@ def _need_consent(harness: str, state: Any) -> Consent | None:
     )
 
 
-def check_argv(repo: Path, agent: str) -> list[str]:
+def check_argv(repo: Path, agent: str, worktree: Path | None = None) -> list[str]:
     """The command every lane hook runs: the lane's own identity and the project root."""
     return [sys.executable, "-m", "ddflow.services.swarm.lanehooks_check", "--repo", str(repo),
-            "--agent", agent]  # fmt: skip
+            "--agent", agent, *(["--worktree", str(worktree)] if worktree else [])]  # fmt: skip
 
 
-def _plan(s: Strength, home: Path, repo: Path, agent: str) -> _Plan:
-    argv = check_argv(repo, agent)
+def _plan(s: Strength, home: Path, repo: Path, agent: str, worktree: Path) -> _Plan:
+    argv = check_argv(repo, agent, worktree)
     if s.door == "plugin-home":
         hk = harnessreg.get(s.harness).hooks  # type: ignore[union-attr]
         sub = Path(hk.file).name or "plugin"
@@ -251,7 +251,7 @@ def prepare(
     if s.level == PREVENT:
         if s.consent and (need := _need_consent(harness, state)) is not None:
             return need
-        plan = _plan(s, home, repo, agent)
+        plan = _plan(s, home, repo, agent, worktree)
         if _tracked(repo, list(plan.files)):
             return unavailable("a lane hook path is tracked by the project: refusing to write it")
         for path, text in plan.files.items():

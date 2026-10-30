@@ -50,13 +50,15 @@ def paths_of(payload: Any) -> list[str]:
     return [str(inp[k]) for k in PATH_KEYS if isinstance(inp.get(k), str) and inp[k]]
 
 
-def _relative(path: str, cwd: Path) -> str | None:
-    """``path`` relative to the lane worktree, or None when it leaves it."""
+def _relative(path: str, cwd: Path, root: Path | None = None) -> str | None:
+    """``path`` (resolved against the call's ``cwd``, symlinks followed) relative to the lane
+    worktree ``root`` -- where the lease globs are rooted -- or None when it leaves it."""
+    root = cwd if root is None else root
     p = Path(path)
-    p = p if p.is_absolute() else cwd / p
-    rel = Path(os.path.relpath(os.path.normpath(p), os.path.normpath(cwd)))
+    real = os.path.realpath(p if p.is_absolute() else cwd / p)
+    rel = Path(os.path.relpath(real, os.path.realpath(root)))
     if rel.parts[:1] == ("..",) or rel.is_absolute():
-        return None  # leaves the worktree (relative_to would not raise for a sibling)
+        return None
     return PurePosixPath(*rel.parts).as_posix()
 
 
@@ -78,9 +80,11 @@ def _self_managed(rel: str) -> bool:
     return any(rel.startswith(m) if m.endswith("/") else rel == m for m in SELF_MANAGED)
 
 
-def verdict(repo: Path, agent: str, paths: list[str], cwd: Path) -> tuple[int, str]:
+def verdict(
+    repo: Path, agent: str, paths: list[str], cwd: Path, root: Path | None = None
+) -> tuple[int, str]:
     """(0, "") to allow; (REFUSE, reason) to refuse. Raises only on what fail-open covers."""
-    rels = [(p, _relative(p, cwd)) for p in paths]
+    rels = [(p, _relative(p, cwd, root)) for p in paths]
     for raw, rel in rels:
         if rel is not None and (rel == PROBE_DIR or rel.startswith(PROBE_DIR + "/")):
             return REFUSE, f"ddflow lane hook probe: {raw} is refused on purpose (the hook fired)"
@@ -108,13 +112,16 @@ def verdict(repo: Path, agent: str, paths: list[str], cwd: Path) -> tuple[int, s
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="lanehooks_check")
     ap.add_argument("--repo", required=True)
+    ap.add_argument("--worktree", default="", help="the lane worktree (default: the call's cwd)")
     ap.add_argument("--agent", required=True)
     a = ap.parse_args(argv)
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
         cwd = Path(payload.get("cwd") or os.getcwd()) if isinstance(payload, dict) else Path.cwd()
-        code, msg = verdict(Path(a.repo), a.agent, paths_of(payload), cwd)
+        code, msg = verdict(
+            Path(a.repo), a.agent, paths_of(payload), cwd, Path(a.worktree) if a.worktree else None
+        )
     except Exception:  # never the traceback: it may carry paths or values
         print(NOTE_CRASH, file=sys.stderr)
         return 0
