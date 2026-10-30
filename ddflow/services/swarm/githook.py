@@ -23,6 +23,7 @@ pre-commit hook runs (``core.globs``); this module writes no second one. What it
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -36,6 +37,11 @@ POLICY = "block"
 #: The directory, inside the worktree's git dir, that holds the lane's hooks.
 DIR_NAME = "ddflow-lane-hooks"
 MARKER = "# DDFLOW-LANE-HOOK v1 -- managed by ddflow swarm githook; remove with uninstall"
+#: Hooks git treats differently when present (a push-to-checkout that exits 0 is taken as
+#: having updated the tree; fsmonitor-watchman must answer): wrapped only if the project has one.
+PRESENCE_MATTERS = ("push-to-checkout", "fsmonitor-watchman")
+#: Hook git replaces with pre-commit when absent.
+FALLS_BACK = "pre-merge-commit"
 #: git's other client-side hook names; each gets a run-time wrapper to the project's hook.
 GIT_HOOKS = (
     "applypatch-msg", "pre-applypatch", "post-applypatch", "commit-msg", "prepare-commit-msg",
@@ -146,11 +152,16 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     replace_text(d / "original", str(original) + "\n")
     replace_text(old_raw, raw + "\n")  # the prior setting verbatim (may be relative)
     replace_text(d / "had_prior", ("1" if had_prior else "0") + "\n")
+    known = {"pre-commit", "original", "prior_raw", "had_prior"}
     for name in GIT_HOOKS:  # looked up at run time: a hook added or removed later is honoured
         target = shlex.quote(str(original / name))
-        body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\nexit 0\n'
+        if name in PRESENCE_MATTERS and not os.access(original / name, os.X_OK):
+            continue  # git changes behaviour when such a hook EXISTS, even if it does nothing
+        # No pre-merge-commit hook: git runs pre-commit for a merge commit, so do the same.
+        fallback = f"exec {shlex.quote(str(d / 'pre-commit'))}" if name == FALLS_BACK else "exit 0"
+        body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\n{fallback}\n'
         _write_exec(d / name, body)
-    known = {"pre-commit", "original", "prior_raw", "had_prior", *GIT_HOOKS}
+        known.add(name)
     for stale in d.iterdir():  # files an older version wrote; removed AFTER the new ones exist
         if stale.name not in known:
             stale.unlink()
