@@ -12,7 +12,11 @@ from ._docs import declare, knob
 
 
 def _num(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and (isinstance(value, int) or math.isfinite(value))
+    )
 
 
 def _nonneg(value: object) -> str:

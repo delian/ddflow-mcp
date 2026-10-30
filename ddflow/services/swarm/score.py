@@ -39,6 +39,7 @@ class Item:
     needs: tuple[str, ...] = ()
     critical: float = 0.0  # 0..1: share of the longest dependency chain this item sits on
     waited_s: float = 0.0
+    author_family: str = ""  # who wrote it, for a review item (independence is per item)
     min_trust: int | None = None  # None: [swarm] default_min_trust
     est_in: int = 0  # estimated input / output tokens
     est_out: int = 0
@@ -160,7 +161,7 @@ def refusals(
     return [
         *_state_refusals(item, world, w),
         *_lane_refusals(item, lane, world, w),
-        *_independence(lane, world, role, author_family),
+        *_independence(lane, world, role, author_family or item.author_family),
     ]
 
 
