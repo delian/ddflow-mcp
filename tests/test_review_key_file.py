@@ -273,3 +273,14 @@ def test_an_env_key_with_a_control_character_is_refused_without_echo(monkeypatch
     monkeypatch.setenv(ENV, "sk-\rX: " + FAKE)
     got = RK.resolve_key(ENV, "")
     assert not got.value and FAKE not in got.reason and ENV in got.reason
+
+
+def test_scrub_catches_lowercase_percent_hex():
+    assert "%2f" not in RK.scrub("echo a%2fb", "a/b")
+
+
+def test_invalid_utf8_key_file_is_refused(tmp_path):
+    p = tmp_path / "bin.key"
+    p.write_bytes(b"\xff\xfe")
+    p.chmod(0o600)
+    assert "UTF-8" in RK.resolve_key("", str(p)).reason
