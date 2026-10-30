@@ -192,6 +192,14 @@ def _one_item_and_gate(a, ids: list[str]) -> tuple[list[str], str] | None:
     return ids, gate
 
 
+def _relaunch_argv(raw: list[str]) -> list[str]:
+    """`raw` (the typed argv) without the `--detach` FLAG. argparse consumed the flag before
+    any `--`, so only tokens before the first `--` are stripped; a positional `--detach` past
+    `--` (an item by that name) is not the flag and stays."""
+    cut = raw.index("--") if "--" in raw else len(raw)
+    return [x for x in raw[:cut] if x != "--detach"] + raw[cut:]
+
+
 def _detach(a, c: Ctx) -> int:
     """`--detach`: this review in its OWN session, streamed to a job log (bug Be927e56fb6).
 
@@ -203,11 +211,7 @@ def _detach(a, c: Ctx) -> int:
     """
     from ...api import jobs as AJ
 
-    argv = list(getattr(a, "_argv", []))
-    # Only the FLAG: argparse consumed it before any `--`; a positional `--detach` past `--`
-    # (an item by that name) is not the flag and stays.
-    cut = argv.index("--") if "--" in argv else len(argv)
-    argv = [x for x in argv[:cut] if x != "--detach"] + argv[cut:]
+    argv = _relaunch_argv(list(getattr(a, "_argv", [])))
     if not argv:
         print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
         return FAIL
