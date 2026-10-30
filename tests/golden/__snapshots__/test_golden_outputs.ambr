@@ -2291,6 +2291,7 @@
           zero.
       swarm.queue_ref_s = 3600   [default]
           Seconds of waiting at which the queue term reaches one (it saturates there).
+          Must be above zero.
       swarm.max_lanes = 4   [default]
           Most lanes holding an item at once across the swarm. Zero admits none.
       swarm.family_cap = 3   [default]

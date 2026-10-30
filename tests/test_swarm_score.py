@@ -196,3 +196,12 @@ def test_property_score_never_overrides_a_constraint_and_is_deterministic(item, 
     assert (chosen is None) == (not any(d.ok for d in ranked))
     if chosen:
         assert not refusals(item, next(x for x in lanes if x.name == chosen.lane), wd, w)
+
+
+def test_hedged_leases_each_count_against_max_lanes_and_zero_refs_do_not_divide():
+    w = replace(W, max_lanes=2, cost_ref_usd=0.0, rework_ref=0.0)
+    wd = _world(
+        {L.Key("f", "m", "task"): _cell(4, 2, rework=2)}, live=(Live("A", ()), Live("A", ()))
+    )
+    d = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), wd, w)
+    assert not d.ok and any("max_lanes" in r for r in d.reasons)

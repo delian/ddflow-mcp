@@ -111,7 +111,7 @@ def _state_refusals(item: Item, world: World, w: Weights) -> list[str]:
     for lv in world.live:
         if lv.item != item.id and any(overlap(a, b) for a in item.globs for b in lv.globs):
             out.append(f"globs overlap the live lease on {lv.item}")
-    if len({lv.item for lv in world.live}) >= w.max_lanes:
+    if len(world.live) >= w.max_lanes:  # every live lease, hedges included
         out.append(f"swarm at max_lanes ({w.max_lanes})")
     if item.attempts > w.hedge_max:
         out.append(f"hedge cap: {item.attempts} attempts, hedge_max {w.hedge_max}")
@@ -170,9 +170,10 @@ def _terms(item: Item, lane: Lane, world: World, w: Weights) -> tuple[dict[str, 
         cost_t = NEUTRAL
         why.append("price unverified: neutral cost term")
     else:
-        cost_t = 1.0 - min(1.0, cost / w.cost_ref_usd)
+        cost_t = 1.0 - (min(1.0, cost / w.cost_ref_usd) if w.cost_ref_usd > 0 else float(cost > 0))
     if cell.items:
-        rework_t = 1.0 - min(1.0, (cell.rework + cell.bugs) / cell.items / w.rework_ref)
+        rate = (cell.rework + cell.bugs) / cell.items
+        rework_t = 1.0 - (min(1.0, rate / w.rework_ref) if w.rework_ref > 0 else float(rate > 0))
     else:
         rework_t = NEUTRAL
         why.append(f"unmeasured pair on {item.kind}: neutral fit prior")
