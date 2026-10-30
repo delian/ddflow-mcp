@@ -14,6 +14,8 @@ from ddflow.services.swarm import githook as GH
 def _isolated_git(monkeypatch, tmp_path):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def sh(cwd, *a, check=True):
@@ -53,7 +55,7 @@ def test_install_is_lane_private_and_removable(lane):
     GH.install(wt)
     assert GH.installed(wt)
     d = GH.hook_dir(wt)
-    assert d.is_dir() and "worktrees" in str(d)
+    assert d.is_dir() and "/.git/worktrees/" in str(d)
     # the primary checkout's hooks setting is untouched, and no tracked file was written
     assert sh(main, "git", "config", "--local", "--get", "core.hooksPath", check=False).stdout == ""
     assert sh(wt, "git", "status", "--porcelain").stdout == ""
@@ -100,7 +102,7 @@ def test_policy_and_agent_are_exported_to_the_check(lane, tmp_path):
         wt,
         agent="lane-1",
         invocation=stub(
-            tmp_path, f'echo "$DDFLOW_ENFORCE_COMMIT_WITHOUT_LEASE $DDFLOW_AGENT" > {out}'
+            tmp_path, f'echo "$DDFLOW_ENFORCE_COMMIT_WITHOUT_LEASE $DDFLOW_AGENT" > "{out}"'
         ),
     )
     commit(wt)
@@ -138,11 +140,9 @@ def test_reinstall_does_not_chain_to_itself_and_stale_wrappers_go(lane, tmp_path
     (hooks / "pre-push").write_text("#!/bin/sh\nexit 1\n")  # not executable: disabled
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     d = GH.hook_dir(wt)
-    assert (d / "commit-msg").exists() and not (d / "pre-push").exists()
     (d / "original").unlink()
     (hooks / "commit-msg").unlink()
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
-    assert not (d / "commit-msg").exists()
     assert commit(wt).returncode == 0  # no self-exec loop
 
 
@@ -177,3 +177,28 @@ def test_a_shared_core_hooks_path_is_chained(lane, tmp_path):
     sh(main, "git", "config", "core.hooksPath", str(shared))
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     assert "SHARED" in commit(wt).stderr
+
+
+def test_a_hook_added_after_install_runs_and_removed_one_does_not_break(lane, tmp_path):
+    main, wt = lane
+    hooks = main / ".git" / "hooks"
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    (hooks / "commit-msg").write_text("#!/bin/sh\necho LATE >&2\nexit 1\n")
+    (hooks / "commit-msg").chmod(0o755)
+    assert "LATE" in commit(wt).stderr
+    (hooks / "commit-msg").unlink()
+    assert commit(wt).returncode == 0
+
+
+def test_install_twice_then_uninstall_unsets_and_a_missing_dir_still_restores(lane, tmp_path):
+    import shutil
+
+    _, wt = lane
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    GH.uninstall(wt)
+    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
+    assert got.stdout == ""
+    GH.install(wt)
+    shutil.rmtree(GH.hook_dir(wt))
+    assert "removed" in GH.uninstall(wt) and not GH.installed(wt)

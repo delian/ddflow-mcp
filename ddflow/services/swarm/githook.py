@@ -21,7 +21,6 @@ pre-commit hook runs (``core.globs``); this module writes no second one. What it
 
 from __future__ import annotations
 
-import os
 import shlex
 from pathlib import Path
 
@@ -35,8 +34,12 @@ POLICY = "block"
 #: The directory, inside the worktree's git dir, that holds the lane's hooks.
 DIR_NAME = "ddflow-lane-hooks"
 MARKER = "# DDFLOW-LANE-HOOK v1 -- managed by ddflow swarm githook; remove with uninstall"
-#: Hooks the project already has, wrapped so the lane's hooksPath does not hide them.
-CHAINED_SKIP = ("pre-commit",)
+#: git's other client-side hook names; each gets a run-time wrapper to the project's hook.
+GIT_HOOKS = (
+    "applypatch-msg", "pre-applypatch", "post-applypatch", "commit-msg", "prepare-commit-msg",
+    "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-auto-gc",
+    "post-rewrite", "reference-transaction", "push-to-checkout", "post-index-change",
+)  # fmt: skip
 
 _SCRIPT = """#!/bin/sh
 {marker}
@@ -127,19 +130,18 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     worktree = Path(worktree)
     d = hook_dir(worktree)
     original = _original(worktree, d)
-    had_prior = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath").ok
+    cur = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
+    had_prior = (cur.ok and cur.out.strip() != str(d)) or _had_prior(d)
     d.mkdir(parents=True, exist_ok=True)
     for stale in d.iterdir():  # wrappers of hooks the project no longer has
         stale.unlink()
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
-    replace_text(d / "had_prior", ("1" if had_prior or _had_prior(d) else "0") + "\n")
-    if original.is_dir():
-        for h in sorted(original.iterdir()):
-            runnable = h.is_file() and os.access(h, os.X_OK)  # git ignores non-executable hooks
-            if runnable and h.name not in CHAINED_SKIP and not h.name.endswith(".sample"):
-                body = f'#!/bin/sh\n{MARKER}\nexec {shlex.quote(str(h))} "$@"\n'
-                _write_exec(d / h.name, body)
+    replace_text(d / "had_prior", ("1" if had_prior else "0") + "\n")
+    for name in GIT_HOOKS:  # looked up at run time: a hook added or removed later is honoured
+        target = shlex.quote(str(original / name))
+        body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\nexit 0\n'
+        _write_exec(d / name, body)
     G.run(worktree, "config", "extensions.worktreeConfig", "true")
     r = G.run(worktree, "config", "--worktree", "core.hooksPath", str(d))
     if not r.ok:
@@ -164,7 +166,7 @@ def uninstall(worktree: Path) -> str:
     """Remove the lane hook and restore the worktree's hooks directory."""
     worktree = Path(worktree)
     d = hook_dir(worktree)
-    if not d.is_dir():
+    if not d.is_dir() and not installed(worktree):
         return "no lane hook installed"
     if installed(worktree):
         saved = d / "original"
@@ -172,7 +174,8 @@ def uninstall(worktree: Path) -> str:
             G.run(worktree, "config", "--worktree", "core.hooksPath", saved.read_text().strip())
         else:
             G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
-    for f in d.iterdir():
-        f.unlink()
-    d.rmdir()
+    if d.is_dir():
+        for f in d.iterdir():
+            f.unlink()
+        d.rmdir()
     return f"removed the lane lease hook at {d}"
