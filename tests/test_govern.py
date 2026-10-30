@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ddflow.config import KNOB_STRICTEST, Config
+from ddflow.config import KNOB_STRICTEST
+from ddflow.config_sections.govern import GovernConfig
 from ddflow.core import govern as g
 from ddflow.core.flowcontrol import Sample
 
@@ -161,7 +164,9 @@ def test_hysteresis_does_not_flap(mark_index, wobble):
 
 
 def test_govern_config_defaults_match_params_and_fallbacks_are_strict():
-    cfg = Config.load()
+    cfg = SimpleNamespace(
+        govern=GovernConfig()
+    )  # not Config.load(): ambient config must not matter
     assert g.params_from_config(cfg) == g.Params(load_thresholds=g.Params().load_thresholds)
     assert KNOB_STRICTEST["govern.tier_cap_1"][0] == "fast"
     assert KNOB_STRICTEST["govern.effort_cap_2"][0] == "low"
