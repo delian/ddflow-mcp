@@ -40,7 +40,8 @@ def test_every_fixture_is_labelled_synthetic_and_normalizes():
 
 def test_tool_event_carries_the_tool_name():
     fx = json.loads((FIX / "pre_tool.json").read_text())
-    got = hookio.normalize("copilot", "pre_tool", "grok", json.dumps(fx["stdin"]))
+    plan = hookio.plan_for("grok")
+    got = hookio.normalize(plan.normalizer, "pre_tool", "grok", json.dumps(fx["stdin"]))
     assert got.tool == "Bash"
 
 
