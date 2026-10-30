@@ -749,7 +749,9 @@ def _chunk_budget(rev: Reviewer) -> int:
     reviewer just above the reserve from degrading into one chunk per line; a cap too small
     to leave a reserve is refused at the top of ``review()`` before a chunk is ever sized.
     """
-    return min(rev.max_chunk_chars, max(VERDICT_RESERVE_TOKENS, rev.max_tokens - VERDICT_RESERVE_TOKENS))
+    return min(
+        rev.max_chunk_chars, max(VERDICT_RESERVE_TOKENS, rev.max_tokens - VERDICT_RESERVE_TOKENS)
+    )
 
 
 def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
@@ -1634,11 +1636,14 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         # EFFECTIVE budget: a small per-chunk window trips it the same as a small declared
         # cap (bug B9a2279db22).
         res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
-        res.status, res.reason = UNAVAILABLE, (
-            f"the reviewer's output budget max_tokens={rev.max_tokens} is at or below the "
-            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
-            f"reasoning and the verdict. Raise [[reviewer]].max_tokens above "
-            f"{VERDICT_RESERVE_TOKENS} (and [review].chunk_max_tokens, if set below it)."
+        res.status, res.reason = (
+            UNAVAILABLE,
+            (
+                f"the reviewer's output budget max_tokens={rev.max_tokens} is at or below the "
+                f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
+                f"reasoning and the verdict. Raise [[reviewer]].max_tokens above "
+                f"{VERDICT_RESERVE_TOKENS} (and [review].chunk_max_tokens, if set below it)."
+            ),
         )
         return res
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
