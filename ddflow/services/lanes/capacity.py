@@ -155,19 +155,20 @@ class Held:
 
 def _try_all(
     stack: contextlib.ExitStack, pools: Sequence[Pool], d: Path
-) -> dict[str, tuple[int, ...]] | None:
-    """Every slot of every pool in one sweep, or nothing: on a miss the stack is unwound."""
+) -> tuple[dict[str, tuple[int, ...]], Pool | None]:
+    """Every slot of every pool in one sweep, or nothing: on a miss the stack is unwound and
+    the pool that was full is returned."""
     got: dict[str, tuple[int, ...]] = {}
-    try:
-        for p in pools:
-            sl = SLOTS.Slots(d, p.name)
+    for p in pools:
+        sl = SLOTS.Slots(d, p.name)
+        try:
             got[p.name] = tuple(
                 stack.enter_context(sl.try_hold(p.limit)).index for _ in range(p.need)
             )
-    except SLOTS.SlotsTimeout:
-        stack.close()
-        return None
-    return got
+        except SLOTS.SlotsTimeout:
+            stack.close()
+            return {}, p
+    return got, None
 
 
 @contextlib.contextmanager
@@ -197,9 +198,13 @@ def acquire(
     start = clock()
     deadline = None if timeout_s is None else start + max(0.0, timeout_s)
     with contextlib.ExitStack() as stack:
-        while (got := _try_all(stack, ordered, d)) is None:
-            if deadline is not None and clock() >= deadline:
-                name = ordered[0].name if ordered else ""
-                raise SLOTS.SlotsTimeout(name, ordered[0].limit if ordered else 0, timeout_s or 0.0)
-            sleep(poll_s)
+        while True:
+            got, full = _try_all(stack, ordered, d)
+            if full is None:
+                break
+            now = clock()
+            if deadline is not None and now >= deadline:
+                raise SLOTS.SlotsTimeout(full.name, full.limit, round(now - start, 3))
+            # never sleep past the deadline: the last sweep happens at it, not after it
+            sleep(poll_s if deadline is None else min(poll_s, deadline - now))
         yield Held(got, round(clock() - start, 3))
