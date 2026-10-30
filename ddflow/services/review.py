@@ -747,9 +747,9 @@ def _chunk_budget(rev: Reviewer) -> int:
     always budget left to write the verdict in. An output cap that cannot even hold the
     reserve has no chunk small enough to room both the reasoning and the verdict: it keeps
     ``max_chunk_chars`` (and the truncation retry reports the honest "reasoning cap
-    exhausted" outcome) instead of degrading the review into one-character chunks.
+    exhausted" outcome) instead of shrinking to a chunk that cannot hold the verdict.
     """
-    if rev.max_tokens < 2 * VERDICT_RESERVE_TOKENS:
+    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
         return rev.max_chunk_chars
     return min(rev.max_chunk_chars, rev.max_tokens - VERDICT_RESERVE_TOKENS)
 
