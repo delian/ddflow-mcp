@@ -202,3 +202,19 @@ def test_install_twice_then_uninstall_unsets_and_a_missing_dir_still_restores(la
     GH.install(wt)
     shutil.rmtree(GH.hook_dir(wt))
     assert "removed" in GH.uninstall(wt) and not GH.installed(wt)
+
+
+def test_reinstall_follows_a_changed_shared_hooks_path(lane, tmp_path):
+    main, wt = lane
+    for name in ("old", "new"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "pre-commit").write_text(
+            f"#!/bin/sh\necho {name.upper()}-HOOK >&2\nexit 1\n"
+        )
+        (tmp_path / name / "pre-commit").chmod(0o755)
+    sh(main, "git", "config", "core.hooksPath", str(tmp_path / "old"))
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert "OLD-HOOK" in commit(wt).stderr
+    sh(main, "git", "config", "core.hooksPath", str(tmp_path / "new"))
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert "NEW-HOOK" in commit(wt, "n.txt").stderr

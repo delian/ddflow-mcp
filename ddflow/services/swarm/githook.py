@@ -17,6 +17,8 @@ pre-commit hook runs (``core.globs``); this module writes no second one. What it
 * fail open: ddflow missing, a crash or a lease that cannot be read allows the commit
   with one fixed line (never the traceback, which may carry paths or values);
 * removable: `uninstall` restores the worktree's setting and deletes the directory.
+  `extensions.worktreeConfig` (needed for a per-worktree setting) stays on: it only
+  activates `config.worktree` files, which no other worktree has unless it asked for one.
 """
 
 from __future__ import annotations
@@ -114,12 +116,14 @@ def _original(worktree: Path, d: Path) -> Path:
     if here is not None and here != d.resolve():
         return here
     saved = d / "original"
-    if saved.is_file() and Path(saved.read_text().strip()).resolve() != d.resolve():
+    if _had_prior(d) and saved.is_file():  # the worktree's own setting before the first install
         return Path(saved.read_text().strip())
     # Never the lane dir itself (the generated hook would exec itself): the shared setting.
-    shared = G.run(worktree, "config", "--get", "core.hooksPath")
-    if shared.ok and shared.out.strip() and (base / shared.out.strip()).resolve() != d.resolve():
-        return (base / shared.out.strip()).resolve()
+    for scope in ("--local", "--global", "--system"):  # all but the worktree's own value
+        shared = G.run(worktree, "config", scope, "--get", "core.hooksPath")
+        value = shared.out.strip() if shared.ok else ""
+        if value and (base / value).resolve() != d.resolve():
+            return (base / value).resolve()
     c = G.run(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
     common = Path(c.out.strip()) if c.ok and c.out.strip() else base / ".git"
     return common / "hooks"
