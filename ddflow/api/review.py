@@ -985,9 +985,9 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
             f"reviewer {prior.get('reviewer')!r}, which recorded {it.id}.{gate}, is not "
             f"configured for {gate!r} now: run the full review"
         )
-    if mine[0].max_chunk_chars != prior.get("max_chunk_chars"):
+    if RV._chunk_budget(mine[0]) != prior.get("max_chunk_chars"):
         return (
-            f"[[reviewer]].max_chunk_chars is {mine[0].max_chunk_chars} now, "
+            f"the reviewer's chunk budget is {RV._chunk_budget(mine[0])} now, "
             f"{prior.get('max_chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
             f"differ, run the full review"
         )
