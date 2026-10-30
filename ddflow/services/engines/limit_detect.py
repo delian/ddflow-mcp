@@ -60,7 +60,7 @@ def detect(
 ) -> Hit | None:
     if exit_code is not None and exit_code in spec.exit_codes:
         return Hit("exit_code")
-    if spec.stream_events.intersection(events):
+    if any(e in spec.stream_events for e in events):
         return Hit("stream_event")
     for rx in spec.messages:
         m = search(rx, text, limits)

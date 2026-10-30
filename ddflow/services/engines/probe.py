@@ -137,7 +137,7 @@ def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dic
             continue
         code, out = res
         fact.update(status="verified", exit_code=code, output=out)
-        m = _VERSION.search(out)
+        m = _VERSION.search(out[: limits.max_match_chars])
         if m:
             fact["tool_version"] = m.group(0)
         facts.append(fact)

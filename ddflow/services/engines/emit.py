@@ -34,6 +34,8 @@ VARIANTS = frozenset(_IMPL)
 def variant_for(emitter: str) -> str:
     """The variant a descriptor's ``[hooks] emitter`` id means (an id's function decides, so no
     agent is named here); a variant name is its own."""
+    if not isinstance(emitter, str):
+        raise EngineError(f"emitter must be a string, got {type(emitter).__name__}")
     if emitter in VARIANTS:
         return emitter
     fn = EMITTERS.get(emitter)
@@ -45,6 +47,6 @@ def variant_for(emitter: str) -> str:
 
 def render(variant: str, event: str, text: str, inject: bool, native: str = "") -> str:
     """The exact stdout for ``text`` under ``variant``; ``EngineError`` for a name outside the set."""
-    if variant not in VARIANTS:
+    if not isinstance(variant, str) or variant not in VARIANTS:
         raise EngineError(f"unknown emit variant {variant!r}; closed list: {sorted(VARIANTS)}")
     return _IMPL[variant](event, text, inject, native)

@@ -47,8 +47,10 @@ def _lint(template: Sequence[str], limits: Limits) -> None:
     if len(template) > limits.max_argv:
         raise EngineError(f"argv longer than {limits.max_argv} elements")
     for i, el in enumerate(template):
-        if not isinstance(el, str) or "\0" in el:
-            raise EngineError(f"argv[{i}]: expected a string without NUL")
+        if not isinstance(el, str) or "\0" in el or len(el) > limits.max_value_chars:
+            raise EngineError(
+                f"argv[{i}]: expected a string without NUL, at most {limits.max_value_chars} characters"
+            )
         if "{" in el or "}" in el:
             m = _PH.fullmatch(el)
             if not m:
@@ -94,7 +96,8 @@ def render(
     missing: list[str] = []
     for child, source in (env or {}).items():
         if (
-            not _ENV_NAME.fullmatch(child)
+            not isinstance(child, str)
+            or not _ENV_NAME.fullmatch(child)
             or not isinstance(source, str)
             or not _ENV_NAME.fullmatch(source)
         ):
