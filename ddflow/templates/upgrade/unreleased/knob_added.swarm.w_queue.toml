@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.w_queue"
+new = "0.5"
+why = "The swarm scheduler core (SW-score): every weight and cap of the dispatch score is a knob."
+impact = "additive"
