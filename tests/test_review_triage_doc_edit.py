@@ -93,3 +93,30 @@ def test_ignorable_exempts_a_reviewed_doc_edit_not_a_deletion_or_code():
     assert not ignorable("docs/notes.md", recorded, ["tests/**"], docs, {"docs/notes.md"})
     # A reviewed code file edited is never ignorable.
     assert not ignorable("c.py", recorded, ["tests/**"], docs)
+
+
+def test_complete_drops_the_different_tree_note_for_a_reviewed_doc_edit_only(tmp_path):
+    """The reported `complete` path: a wording edit of a reviewed doc drops the 'different
+    tree' note; a reviewed doc deleted keeps it (bug Bb89ff23f21's second symptom)."""
+    from types import SimpleNamespace
+
+    from ddflow.services import completion as C
+    from ddflow.services.gates.outcomes import StaleNote
+    from ddflow.services.gates.reviewed_paths import path_snapshot
+
+    d = tmp_path / "t"
+    d.mkdir()
+    (d / "docs").mkdir()
+    (d / "docs" / "notes.md").write_text("# notes\n")
+    subprocess.run(["git", "-C", str(d), "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(d), "commit", "-qm", "base"], check=True)
+    snap = path_snapshot(d, ["docs/notes.md"])
+    rec = SimpleNamespace(outcome="passed", evidence={"reviewed_paths": snap})
+    it = SimpleNamespace(gates={"critic": rec})
+    note = [StaleNote("critic", "it ran on abc; the working tree differs in docs/notes.md")]
+    (d / "docs" / "notes.md").write_text("# notes\nclarified\n")  # wording: not new work
+    assert C.refine_stale_notes(note, it, d, "", ["docs/notes.md"], (), ["docs/**"]) == []
+    (d / "docs" / "notes.md").unlink()  # reviewed doc deleted: still new work, and named
+    (out,) = C.refine_stale_notes(note, it, d, "", ["docs/notes.md"], (), ["docs/**"])
+    assert "docs/notes.md" in out.why
