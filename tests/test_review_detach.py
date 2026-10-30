@@ -167,6 +167,15 @@ def test_a_detached_delta_review_records_passed_without_the_launcher(repo, tmp_p
         _kill_reviewer(pidfile, pid)
 
 
+def test_relaunch_argv_strips_only_the_flag_never_a_positional_detach():
+    from ddflow.surfaces.commands import review as CR
+
+    assert CR._relaunch_argv(["--detach", "T1", "--delta"]) == ["T1", "--delta"]
+    # a positional item literally named `--detach` past `--` is not the flag and stays
+    assert CR._relaunch_argv(["--detach", "--", "--detach"]) == ["--", "--detach"]
+    assert CR._relaunch_argv(["--", "--detach"]) == ["--", "--detach"]
+
+
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
     _setup(repo, tmp_path)
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
