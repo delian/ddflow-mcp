@@ -1439,6 +1439,8 @@ class EventLog:
                     with contextlib.suppress(PermissionError):
                         os.chown(tmp, mode.st_uid, mode.st_gid)
                     os.replace(tmp, shard)
+                    if self._meta is not None:
+                        self._meta._rows.pop(shard.name, None)
                     return
         raise KeyError(old_id)
 
