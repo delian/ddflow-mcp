@@ -42,7 +42,7 @@ class Item:
     min_trust: int | None = None  # None: [swarm] default_min_trust
     est_in: int = 0  # estimated input / output tokens
     est_out: int = 0
-    attempts: int = 0  # live attempts already on it (hedges)
+    attempts: int = 0  # live attempts already on it, the first included; hedge_max extra allowed
 
 
 @dataclass(frozen=True)
@@ -278,8 +278,20 @@ def choose(
     return good[0]
 
 
-def pull(lane: Lane, items: Sequence[Item], world: World, w: Weights) -> Decision | None:
-    """What an idle ``lane`` should take: the best-scoring eligible item (ties by id)."""
-    ds = [evaluate(it, lane, world, w) for it in sorted(items, key=lambda i: i.id)]
+def pull(
+    lane: Lane,
+    items: Sequence[Item],
+    world: World,
+    w: Weights,
+    *,
+    role: str = "author",
+    author_family: str = "",
+) -> Decision | None:
+    """What an idle ``lane`` should take: the best-scoring eligible item (ties by id).
+    A reviewer lane passes ``role="reviewer"`` and the author's family."""
+    ds = [
+        evaluate(it, lane, world, w, role=role, author_family=author_family)
+        for it in sorted(items, key=lambda i: i.id)
+    ]
     good = [d for d in ds if d.ok]
     return max(good, key=lambda d: (d.score, -good.index(d))) if good else None

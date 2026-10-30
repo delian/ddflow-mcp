@@ -5,23 +5,28 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section. R
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from ._docs import declare, knob
 
 
+def _num(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _nonneg(value: object) -> str:
-    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+    ok = _num(value) and value >= 0
     return "" if ok else "a number of zero or more"
 
 
 def _share(value: object) -> str:
-    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1
+    ok = _num(value) and 0 <= value <= 1
     return "" if ok else "a number between 0 and 1"
 
 
 def _positive(value: object) -> str:
-    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    ok = _num(value) and value > 0
     return "" if ok else "a number above zero"
 
 
