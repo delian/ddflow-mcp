@@ -1,0 +1,7 @@
+# Ratchet `deferred_imports` for ddflow.services.facts (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+# Justification: `parse_range` is imported inside `problems` because `factdrift`
+# imports `facts` at module level; hoisting it would close the cycle
+# (facts -> factdrift -> facts) and break import of the package.
+baseline = 1

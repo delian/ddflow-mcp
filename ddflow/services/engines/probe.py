@@ -10,10 +10,10 @@ from __future__ import annotations
 import os
 import re
 import select
-import shutil
 import time
 
 from ...infra import proc
+from ..cmdrunner import executable_missing
 from .render_argv import is_shell
 from .safety import DEFAULT, EngineError, Limits
 
@@ -131,12 +131,11 @@ def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dic
     facts = []
     for argv in argvs:
         fact: dict = {"argv": list(argv), "source": f"probe:{probe_id}", "retrieved": now}
-        exe = shutil.which(argv[0])
-        if exe is None:
+        if executable_missing(argv[0], env.get("PATH", os.defpath)):
             facts.append({**fact, "status": "unavailable", "reason": "not installed"})
             continue
         try:
-            res = _run_capped([exe, *argv[1:]], env, limits)
+            res = _run_capped([argv[0], *argv[1:]], env, limits)
         except OSError as exc:
             facts.append(
                 {**fact, "status": "unavailable", "reason": f"cannot run: {exc.strerror or exc}"}
