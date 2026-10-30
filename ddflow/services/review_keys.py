@@ -34,8 +34,8 @@ class KeyResult:
 
     Deliberately NOT a dataclass: `dataclasses.asdict` and the generated `__eq__` and
     `__repr__` would reach the value. `repr`, `str` and pickling name the source alone;
-    introspection (`vars`, `__slots__`) can still reach it, so never serialise one: pass
-    `.value` to the request and nowhere else."""
+    `vars` fails (no `__dict__`) and `__getstate__` refuses; `.value` is the one way in:
+    pass it to the request and nowhere else."""
 
     __slots__ = ("_value", "reason", "source")
 
@@ -53,6 +53,9 @@ class KeyResult:
         return f"KeyResult(source={self.source!r}, reason={self.reason!r}, value=<hidden>)"
 
     def __reduce__(self):
+        raise TypeError("a KeyResult holds a secret and is not serialised")
+
+    def __getstate__(self):
         raise TypeError("a KeyResult holds a secret and is not serialised")
 
 
@@ -81,6 +84,8 @@ def read_key_file(path: str) -> KeyResult:
         fd = os.open(p, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
     except FileNotFoundError:
         return KeyResult(reason=f"key file {p} does not exist")
+    except ValueError:  # an embedded NUL in the path
+        return KeyResult(reason="key file path is not a valid path")
     except OSError as exc:
         return KeyResult(reason=f"key file {p} cannot be opened ({exc.strerror or 'error'})")
     try:
@@ -143,15 +148,19 @@ def scrub(text: str, key: str) -> str:
 
 
 def status(env_name: str, key_file: str = "") -> str:
-    """One word and a hint for a listing: names and paths only, never a value."""
-    if env_name and os.environ.get(env_name):
-        return f"env ${env_name}"
-    if key_file:
-        got = read_key_file(key_file)
-        return f"file {key_file}" if got else f"UNAVAILABLE: {got.reason}"
+    """One line for a listing: names and paths only, never a value. Decided by `resolve_key`,
+    so a listing and a review cannot disagree."""
+    got = resolve_key(env_name, key_file)
+    if got:
+        return f"env ${env_name}" if got.source == "env" else f"file {key_file}"
+    if got.reason:
+        return f"UNAVAILABLE: {got.reason}"
     if not env_name:
         return "keyless"
-    return f'missing: set ${env_name} or add api_key_file = "~/path/to/key" (mode 600) to the local reviewers file'
+    return (
+        f'missing: set ${env_name} or add api_key_file = "~/path/to/key" (mode 600) '
+        f"to the local reviewers file"
+    )
 
 
 def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
