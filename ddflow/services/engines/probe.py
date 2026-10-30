@@ -69,7 +69,9 @@ READ_CHUNK = 65536
 TICK_S = 0.1  #: how often the wait wakes to check the deadline
 
 
-def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[int, str] | None:
+def _run_capped(
+    cmd: list[str], env: dict[str, str], limits: Limits
+) -> tuple[int, str, bool] | None:
     """Run ``cmd`` reading stdout and stderr in chunks (their order is as it arrives). Past ``probe_output_bytes``
     or ``probe_timeout_s`` the child's whole process group is killed, so a huge writer cannot
     fill memory. None on timeout; the exit code is the child's, or -9 after a cap kill."""
@@ -117,9 +119,8 @@ def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[in
             return None
     if timed_out:
         return None
-    return (child.returncode if child.returncode is not None else -9), b"".join(chunks).decode(
-        "utf-8", "replace"
-    )
+    code = child.returncode if child.returncode is not None else -9
+    return code, b"".join(chunks).decode("utf-8", "replace"), total >= limits.probe_output_bytes
 
 
 def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dict]:
@@ -142,8 +143,10 @@ def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dic
         if res is None:
             facts.append({**fact, "status": "unavailable", "reason": "timeout"})
             continue
-        code, out = res
+        code, out, cut = res
         fact.update(status="verified", exit_code=code, output=out)
+        if cut:  # output past the cap: the child was stopped, so its exit code is ours
+            fact.update(truncated=True)
         m = _VERSION.search(out[: limits.max_match_chars])
         if m:
             fact["tool_version"] = m.group(0)

@@ -18,7 +18,27 @@ PLACEHOLDERS = frozenset(
     {"model", "session", "prompt_file", "dir", "effort", "max_turns", "mcp_config"}
 )
 SHELLS = frozenset(
-    {"sh", "bash", "zsh", "dash", "fish", "ksh", "csh", "tcsh", "cmd", "powershell", "pwsh", "env"}
+    {
+        "sh",
+        "bash",
+        "zsh",
+        "dash",
+        "ash",
+        "busybox",
+        "rbash",
+        "fish",
+        "ksh",
+        "mksh",
+        "csh",
+        "tcsh",
+        "xonsh",
+        "nu",
+        "elvish",
+        "cmd",
+        "powershell",
+        "pwsh",
+        "env",
+    }
 )
 _PH = re.compile(r"\{([a-z_]+)\}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")

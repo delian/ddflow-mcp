@@ -49,6 +49,8 @@ def parse_rules(rules: object, limits: Limits = DEFAULT) -> tuple[Rule, ...]:
             raise EngineError(f"{w}: emit must be one of {list(EVENTS)}")
         if "exists" in when and when["exists"] is not True:
             raise EngineError(f"{w}.when.exists: only true is meaningful")
+        if "equals" in when and when["equals"] is None:
+            raise EngineError(f"{w}.when.equals: null cannot be matched; use exists")
         tests = [k for k in ("equals", "regex", "exists") if k in when]
         if len(tests) != 1:
             raise EngineError(f"{w}.when: exactly one of equals, regex, exists")
