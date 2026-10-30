@@ -229,7 +229,7 @@ COMMANDS: tuple[Command, ...] = (
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
         call=L.heartbeat_call,
-        payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
+        payload=("renewed", "waiters", "globs_withheld", "yield_requested", "wake"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
@@ -269,7 +269,7 @@ COMMANDS: tuple[Command, ...] = (
             force=bool(a.get("force")),
             reason=a.get("reason", "") or "",
         ),
-        payload=("released", "woke"),
+        payload=("released", "woke", "wake"),
         flag_exempt=OVERRIDE_EXEMPT,
         render=L.release_text,
         # A refusal (another clone's live lease) says why on stderr, not "no lease on".
@@ -302,6 +302,7 @@ COMMANDS: tuple[Command, ...] = (
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
+            token=a.get("token", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -341,6 +342,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="wait for a lease instead of an item: an agent id (until it holds nothing) or a "
                 "path/glob (until no other agent's live lease covers it); a bare wait returns the first "
                 "ready item at once",
+                default="",
+            ),
+            Param(
+                "token",
+                help="The resume token a bounded wait returned (`wake.token`): asks the same question again; item, phase, lease and globs given with it win.",
+                cli_help="resume token from an earlier wait",
                 default="",
             ),
             Param(
@@ -736,6 +743,7 @@ COMMANDS: tuple[Command, ...] = (
             "coverage_gaps",
             "note",
             "woke",
+            "wake",
             "bugs_closed",
             "umbrellas_completed",
             "umbrella_refused",
