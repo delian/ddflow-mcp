@@ -64,11 +64,19 @@ def _refusal(bug: str, tags) -> O.Outcome | None:
 def set_tags(repo: Path, bug: str, tags: list[str], *, agent: str = "") -> O.Outcome:
     """Make ``tags`` the tag list of ``bug`` (open or closed): one `bug.tagged` event."""
     tags = GS.parse(tags)
-    refused = _refusal(bug, tags)
+    _log, _cfg, st = _load(repo, agent)
+    held = get_tags(st, bug)
+    # `set_tags(get_tags())` must round-trip: a derived tag the bug already holds is
+    # accepted back; a NEW wave:* tag is refused (only the scheduler writes them)
+    refused = _refusal(bug, [t for t in tags if t not in held])
     if refused is not None:  # an Outcome is falsy when it is not ok: test for None
         return refused
-    # the derived wave:* tags the bug holds stay: only the scheduler rewrites them
-    return _apply(repo, bug, lambda held: [*reserved(held), *tags], agent=agent)
+    return _apply(
+        repo,
+        bug,
+        lambda now: [*reserved(now), *(t for t in tags if t not in reserved(now))],
+        agent=agent,
+    )
 
 
 def bug_tag(

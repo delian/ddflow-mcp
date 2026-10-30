@@ -111,3 +111,14 @@ def test_derived_wave_tags_are_neither_set_nor_removed_by_hand(repo):
     assert run_cli(repo, "bug", "tag", "B1", "--remove", "wave:2")[0] == 3
     assert BT.set_tags(repo, "B1", ["b"]).ok
     assert _tags(repo, "B1") == ["wave:2", "b"]
+
+
+def test_set_get_round_trips_and_a_re_report_does_not_undo_a_removal(repo):
+    run_cli(repo, "init")
+    _found(repo, "B1", "--tags", "security")
+    _load(repo)[0].append("bug.tagged", "B1", {"tags": ["wave:2", "security"]})
+    held = BT.get_tags(_load(repo)[2], "B1")
+    assert BT.set_tags(repo, "B1", held).ok
+    assert run_cli(repo, "bug", "tag", "B1", "--remove", "security")[0] == 0
+    _found(repo, "B1", "--tags", "security")  # an explicit-id re-report
+    assert _tags(repo, "B1") == ["wave:2"]

@@ -18,8 +18,8 @@ from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
-from .bug_tags import found_tags
 from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
+from .bug_tags import found_tags
 
 BUG_SCOPES = ("project", "ddflow")
 #: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
