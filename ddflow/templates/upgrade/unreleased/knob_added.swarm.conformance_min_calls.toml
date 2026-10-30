@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.conformance_min_calls"
+new = '5'
+why = "Lane conformance levels (SW-conformance): the pass thresholds and waits of a conformance run are knobs."
+impact = "additive"
