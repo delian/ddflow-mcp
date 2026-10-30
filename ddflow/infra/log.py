@@ -1449,15 +1449,19 @@ class EventLog:
                             fh.flush()
                             os.fsync(fd)
                         os.replace(tmp, shard)
+                    except BaseException:
+                        with contextlib.suppress(OSError):
+                            os.unlink(tmp)
+                        raise
+                    # Best-effort: persist the rename. A directory that is not readable (e.g.
+                    # mode 0300) cannot be opened for this, and the redaction is already done --
+                    # never raise after a successful replace, or the caller cannot record the audit.
+                    with contextlib.suppress(OSError):
                         dirfd = os.open(shard.parent, os.O_RDONLY)
                         try:
                             os.fsync(dirfd)
                         finally:
                             os.close(dirfd)
-                    except BaseException:
-                        with contextlib.suppress(OSError):
-                            os.unlink(tmp)
-                        raise
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
                     return
