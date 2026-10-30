@@ -69,6 +69,8 @@ def test_install_is_lane_private_and_removable(lane):
     GH.install(wt)  # idempotent
     assert "removed" in GH.uninstall(wt)
     assert not GH.installed(wt) and not d.exists()
+    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
+    assert got.stdout == ""
     assert GH.uninstall(wt) == "no lane hook installed"
 
 
@@ -244,3 +246,14 @@ def test_merge_commit_hook_falls_back_to_the_lease_check_and_presence_hooks_are_
     (hooks / "push-to-checkout").chmod(0o755)
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     assert (d / "push-to-checkout").exists()
+
+
+def test_installed_and_uninstall_accept_an_equivalent_spelling(lane, tmp_path):
+    _, wt = lane
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    d = GH.hook_dir(wt)
+    sh(wt, "git", "config", "--worktree", "core.hooksPath", str(d) + "/")
+    assert GH.installed(wt)
+    GH.uninstall(wt)
+    got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
+    assert got.stdout == ""
