@@ -124,7 +124,7 @@ def rows(h: Any, *, absent: bool = False) -> list[dict[str, str]]:
 
 def table(rs: list[dict[str, str]]) -> str:
     """The rows as one markdown table."""
-    head = "| agent | fact | value | status | source | date | version |"
+    head = "| agent | fact | value | status | source | date | version | note |"
 
     def cell(text: str) -> str:
         return text.replace("|", "/")
@@ -133,9 +133,9 @@ def table(rs: list[dict[str, str]]) -> str:
         "| "
         + " | ".join(
             cell(r[k] or "-")
-            for k in ("agent", "fact", "value", "status", "source", "date", "tool_version")
+            for k in ("agent", "fact", "value", "status", "source", "date", "tool_version", "note")
         )
         + " |"
         for r in rs
     ]
-    return "\n".join([head, "|" + "---|" * 7, *body])
+    return "\n".join([head, "|" + "---|" * 8, *body])
