@@ -36,6 +36,7 @@ from ..infra.tomlcfg import atomic_write
 
 INBOX_DIR = Path(".ddflow") / "local" / "inbox"
 _CUT = " [cut]"
+READ_CAP = 1 << 16  #: the most a reader keeps of one message, whatever a sender asked
 REASONS = ("ready", "merge_offer", "yield", "message")
 
 #: Control characters other than tab and newline: stripped, so a message cannot move a
@@ -91,8 +92,9 @@ def send(
     d = _dir(repo, to)
     if len(pending(repo, to, ttl_s=ttl_s)) >= max_pending:
         return None, f"{to}'s inbox holds {max_pending} messages already: it is not reading them"
+    max_chars = min(max_chars, READ_CAP)  # what a reader keeps whole
     body, cut = clean(text, max_chars)
-    if cut and max_chars > len(_CUT):  # the marker is inside the cap, never past it
+    if cut and max_chars >= len(_CUT):  # the marker is inside the cap, never past it
         body = body[: max_chars - len(_CUT)] + _CUT
     now = time.time()
     msg = Message(
@@ -133,12 +135,14 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             ok = ok and math.isfinite(m.sent_at)
             m.id = path.stem  # the file is the identity: a forged id cannot hide a message
             # Whatever the file holds is read as untrusted, however it got there.
-            m.text, m.sender, m.item = (
-                clean(m.text, 1 << 16)[0],
-                clean(m.sender, 80)[0],
-                clean(m.item, 120)[0],
-            )
-        except (OSError, ValueError, TypeError, AttributeError, RecursionError):
+            if ok:
+                m.to, m.sender, m.item = (
+                    clean(m.to, 80)[0],
+                    clean(m.sender, 80)[0],
+                    clean(m.item, 120)[0],
+                )
+                m.text = clean(m.text, READ_CAP)[0]
+        except (OSError, ValueError, TypeError, AttributeError, RecursionError, OverflowError):
             continue
         if not ok:
             continue
