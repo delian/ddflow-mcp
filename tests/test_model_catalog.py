@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from urllib.parse import urlparse
 
 from ddflow.config_sections.agent import FAMILY_HINTS, family_for
 from ddflow.infra import paths
@@ -112,7 +113,7 @@ def test_committed_files_hold_no_keys_and_no_remote_local_address():
     for rid, row in cat.route.items():
         if row.get("class") == "local":
             url = row["endpoint"]["v"].get("base_url", "")
-            assert re.match(r"http://(127\.0\.0\.1|localhost)[:/]", url), (rid, url)
+            assert urlparse(url).hostname in ("127.0.0.1", "localhost"), (rid, url)
 
 
 def test_drifted_fact_is_not_believed():
@@ -136,3 +137,35 @@ def test_files_ship_inside_the_package():
         "models.toml",
         "routes.toml",
     }
+
+
+def test_local_served_facts_merge_per_model_not_replace(tmp_path):
+    fact = '{ v = %d, s = "verified", src = "op", d = "2026-10-30" }'
+    cat = _cat(
+        '[sources]\nop = { note = "x" }\n'
+        f"[route.vllm.served.m1]\nwindow = {fact % 8}\n"
+        f"[route.vllm.served.m2]\nwindow = {fact % 9}\n",
+        tmp_path,
+    )
+    assert M.read(cat, "m1", "window", "vllm").value == 8
+    assert M.read(cat, "m2", "window", "vllm").value == 9
+
+
+def test_local_overlay_does_not_drop_shipped_served_facts(tmp_path):
+    shipped = M.load()
+    shipped.route["vllm"]["served"] = {"m": {"window": {"v": 1}}}
+    M._merge_row(shipped.route["vllm"], {"served": {"m": {"rpm": {"v": 2}}, "n": {}}})
+    assert set(shipped.route["vllm"]["served"]["m"]) == {"window", "rpm"}
+    assert "n" in shipped.route["vllm"]["served"]
+
+
+def test_listed_model_with_a_missing_family_is_unknown_not_a_needle_match():
+    cat = M.load()
+    cat.model["claude-ish"] = {"family": "missing"}
+    assert M.resolve(cat, "claude-ish").family == M.UNKNOWN
+    assert any("claude-ish" in p for p in M.validate(cat))
+
+
+def test_litellm_proxy_is_not_priced_as_local():
+    cat = M.load()
+    assert M.read(cat, "qwen3:8b", "price_in", "litellm").value is None

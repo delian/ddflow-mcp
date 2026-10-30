@@ -84,5 +84,5 @@ class = "command"
 endpoint = { v = { kind = "command", command = "llm -m {model}", family = "unknown" }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
 
 [route.litellm]
-class = "saas"
+class = "proxy"
 endpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:4000/v1", api_key_env = "LITELLM_API_KEY", launch = { command = "litellm --model {model} --port 4000", ready_url = "http://127.0.0.1:4000/v1/models" } }, s = "unverified", src = "review-presets", d = "2026-10-30", note = "carried from PRESETS, not re-read" }
