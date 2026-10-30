@@ -38,7 +38,8 @@ _TARGETS = [
     ("openhands", "openhands.md", "", "none"),
     ("goose", "goose.md", "", "none"),
     ("cody", "cody.md", "", "none"),
-    ("dsh", "dsh.md", ".ddflow/harness/dsh.cordis.yml", "cordis-patch-yaml"),    ("grok", "grok-build.md", ".grok/config.toml", "toml.mcp_servers"),
+    ("dsh", "dsh.md", ".ddflow/harness/dsh.cordis.yml", "cordis-patch-yaml"),
+    ("grok", "grok-build.md", ".grok/config.toml", "toml.mcp_servers"),
 ]
 
 #: (agent, path, form, why) exactly as NATIVE_RULES held them, in order.
