@@ -105,7 +105,8 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.fix_task = ev.data.get("fix_task", "") or bug.fix_task
     bug.repro = dict(ev.data.get("repro") or {}) or bug.repro
     bug.globs = list(ev.data.get("globs") or bug.globs)
-    bug.tags = list(dict.fromkeys([*bug.tags, *(ev.data.get("tags") or [])]))
+    if not bug.found_at:  # only the first report sets tags: a re-report never undoes `bug tag`
+        bug.tags = list(dict.fromkeys(ev.data.get("tags") or []))
     bug.found_at = bug.found_at or ev.ts
 
 
