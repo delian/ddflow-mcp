@@ -499,7 +499,7 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
         if moved:  # a test the round did not review is not new work (triage_ignore_globs)
             seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
-            moved = [p for p in moved if not RP.ignorable(p, seen, ignore)]
+            moved = [p for p in moved if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [])]
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
