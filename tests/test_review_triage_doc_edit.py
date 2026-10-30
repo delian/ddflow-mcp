@@ -66,6 +66,14 @@ def test_the_doc_was_reviewed_and_then_edited(repo, tmp_path):
     assert _state(repo).gates["critic"].outcome == "passed", last.data["text"]
 
 
+def test_a_reviewed_doc_deleted_after_the_round_still_blocks_and_is_named(repo, tmp_path):
+    wt = _round_doc(repo, tmp_path)
+    (wt / "docs" / "notes.md").unlink()  # reviewed, then deleted: not wording, still new work
+    last = _settle(repo)
+    assert _state(repo).gates["critic"].outcome == "failed", last.data["text"]
+    assert "docs/notes.md" in last.data["text"]
+
+
 def test_a_reviewed_code_file_that_changed_still_blocks_the_pass(repo, tmp_path):
     wt = _round_doc(repo, tmp_path)
     (wt / "c.py").write_text("x = 2  # edited after the review\n")

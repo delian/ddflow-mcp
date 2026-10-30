@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "review.doc_globs"
-new = "[\"docs/**\", \"**/*.md\", \"**/*.rst\", \"**/*.adoc\", \"**/*.txt\", \"README*\", \"CHANGELOG*\"]"
+new = "[\"docs/**\", \"**/*.md\", \"**/*.rst\", \"**/*.adoc\", \"README*\", \"CHANGELOG*\"]"
 why = "Documentation files never void a review pass after an edit (bug Bb89ff23f21): a one-line doc edit after triage invalidated refuted gates, and a wording-only edit after the final pass still warned 'different tree' at complete."
 impact = "additive"
