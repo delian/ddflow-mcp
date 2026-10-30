@@ -39,11 +39,11 @@ _FIELD_NAME = re.compile(r"[a-z_][a-z0-9_]{0,31}")
 
 
 def _check_when(when: dict, w: str) -> None:
-    """Exactly one meaningful test: equals (not null), regex, or exists = true."""
+    """Exactly one meaningful test: equals (not null), regex, or exists = true (present and not null)."""
     if "exists" in when and when["exists"] is not True:
         raise EngineError(f"{w}.when.exists: only true is meaningful")
     if "equals" in when and when["equals"] is None:
-        raise EngineError(f"{w}.when.equals: null cannot be matched; use exists")
+        raise EngineError(f"{w}.when.equals: JSON null is read as absent and cannot be matched")
     if sum(k in when for k in ("equals", "regex", "exists")) != 1:
         raise EngineError(f"{w}.when: exactly one of equals, regex, exists")
 

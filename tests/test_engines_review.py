@@ -171,7 +171,7 @@ def test_third_review_findings(tmp_path):
     assert len(f["output"]) <= 10
 
 
-@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
+@pytest.mark.skipif(not os.path.isdir("/proc/self/fd"), reason="counts descriptors through procfs")
 def test_a_failed_spawn_leaks_no_descriptor():
 
     def fds():
