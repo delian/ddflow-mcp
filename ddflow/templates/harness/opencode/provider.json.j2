@@ -1,0 +1,22 @@
+{#- A lane-PRIVATE provider block for opencode and kilo (same schema). Written into the lane home, never the project. -#}
+{
+  "$schema": {{ schema | tojson }},
+  "provider": {
+    {{ provider | tojson }}: {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": {{ name | tojson }},
+      "options": {
+        "baseURL": {{ base_url | tojson }}{% if api_key_env %},
+        "apiKey": {{ ("{env:" ~ api_key_env ~ "}") | tojson }}{% endif %}
+      },
+      "models": {
+        {{ model | tojson }}: {
+          "name": {{ model | tojson }},
+          "tool_call": {{ tool_call | tojson }}{% if window %},
+          "limit": {"context": {{ window }}, "output": {{ max_output or window }}}{% endif %}
+        }
+      }
+    }
+  },
+  "model": {{ (provider ~ "/" ~ model) | tojson }}
+}
