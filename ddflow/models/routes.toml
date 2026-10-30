@@ -2,7 +2,7 @@
 # review PRESETS of 2026-10-30; the reader `modelreg.presets()` returns them unchanged.
 #
 # Each route has one fact, `endpoint`, whose value is the preset (kind, base_url, key env NAME,
-# default model, family, launch). Status is `unverified` on purpose: the addresses were carried,
+# family, launch and, where the preset names one, a default model). Status is `unverified` on purpose: the addresses were carried,
 # not re-read. A route whose `class` is `local` costs nothing per token (see [class.local] in
 # models.toml: price facts of zero) and its address here is only the tool's
 # documented default port. A real endpoint (host, key env name, served model, window, limits)
