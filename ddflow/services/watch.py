@@ -88,7 +88,7 @@ def decode_wait(token: str) -> dict[str, Any] | None:
         d = json.loads(raw).get("wait")
         if not isinstance(d, dict):
             return None
-        out = {k: v for k, v in d.items() if k in _WAIT_ARGS}
+        out = {k: v for k, v in d.items() if k in _WAIT_ARGS and v is not None}
         return out if all(isinstance(v, _WAIT_ARGS[k]) for k, v in out.items()) else None
     except (ValueError, TypeError, AttributeError):
         return None

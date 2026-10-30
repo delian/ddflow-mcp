@@ -85,6 +85,7 @@ def session_message(
         item=item,
         max_chars=cfg.lease.inbox_max_chars,
         max_pending=cfg.lease.inbox_max_pending,
+        ttl_s=cfg.lease.inbox_ttl_s,
     )
     if msg is None:
         return O.failed("session.message", why, to=to, sent=False)

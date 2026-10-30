@@ -355,7 +355,10 @@ def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs)
     if carried is None:
         return O.failed("wait", "that is not a wait token")
     item, phase = item or carried.get("item", ""), phase or carried.get("phase", "")
-    lease, globs = lease or carried.get("lease", ""), globs or carried.get("globs")
+    lease, globs = (
+        lease or carried.get("lease", ""),
+        (carried.get("globs") if globs is None else globs),
+    )
     if kind == DEFAULT_NEXT_KIND:
         kind = carried.get("kind", kind)
     named = (("item", item), ("phase", phase), ("kind", kind), ("lease", lease))
@@ -490,7 +493,11 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
         return _finish(st, cfg, v, data, bool(got), lease, waited)
 
     v = _judge(st, cfg, me, item, phase, kind, want, repo, lease)
-    if v["status"] != "blocked" or timeout == 0 or IB.has_pending(repo, me):
+    if (
+        v["status"] != "blocked"
+        or timeout == 0
+        or IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s)
+    ):
         return result(v, 0.0, [])
 
     _note_cap(say, capped, cfg.lease.wait_cap_s)
@@ -529,7 +536,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
                 return result(v, time.monotonic() - started, [])
             time.sleep(min(poll, left))
             keep_alive()
-            if IB.has_pending(repo, me):
+            if IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s):
                 return result(v, time.monotonic() - started, [])
             # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
             ext = log.mark(clock=False)

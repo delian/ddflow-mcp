@@ -186,7 +186,7 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
         # Never sleep past a renewal: a long poll would let the lease lapse mid-wait.
         time.sleep(min(poll, left, max(1.0, cfg.lease.heartbeat_s / 2)))
         renew()
-        if IB.has_pending(repo, me):
+        if IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s):
             # A message, offer or yield ends the wait early, with the token to go on.
             return O.ok("watch", **done({"matched": False, "timed_out": False}, "message"))
         # Only a gate (or a job whose record may change) is judged on the folded log.

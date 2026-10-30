@@ -34,6 +34,7 @@ from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
 
 INBOX_DIR = Path(".ddflow") / "local" / "inbox"
+_CUT = " [cut]"
 REASONS = ("ready", "merge_offer", "yield", "message")
 
 #: Control characters other than tab and newline: stripped, so a message cannot move a
@@ -56,7 +57,10 @@ class Message:
 
 
 def _dir(repo: Path, agent: str) -> Path:
-    return Path(repo) / INBOX_DIR / safe_filename(agent, repl="_", unicode=True, max=80)
+    name = safe_filename(agent, repl="_", unicode=True, max=80)
+    if not name.strip("."):  # "." and ".." name a directory, not an agent
+        name = "_" + name
+    return Path(repo) / INBOX_DIR / name
 
 
 def clean(text: str, max_chars: int) -> tuple[str, bool]:
@@ -75,6 +79,7 @@ def send(
     item: str = "",
     max_chars: int = 2000,
     max_pending: int = 50,
+    ttl_s: float = 0.0,
 ) -> tuple[Message | None, str]:
     """Put a message in ``to``'s inbox. (the message, why not): a refusal says why and
     stores nothing. A full inbox refuses rather than dropping an older message."""
@@ -83,14 +88,16 @@ def send(
     if reason not in REASONS:
         return None, f"reason must be one of {', '.join(REASONS)}"
     d = _dir(repo, to)
-    if len(pending(repo, to)) >= max_pending:
+    if len(pending(repo, to, ttl_s=ttl_s)) >= max_pending:
         return None, f"{to}'s inbox holds {max_pending} messages already: it is not reading them"
     body, cut = clean(text, max_chars)
+    if cut:  # the marker is inside the cap, never past it
+        body = body[: max(0, max_chars - len(_CUT))] + _CUT
     now = time.time()
     msg = Message(
         to=to,
         reason=reason,
-        text=body + (" [cut]" if cut else ""),
+        text=body,
         sender=clean(sender, 80)[0],
         item=clean(item, 120)[0],
         sent_at=now,
@@ -121,6 +128,8 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             m = Message(**{k: v for k, v in raw.items() if k in Message.__dataclass_fields__})
             ok = all(isinstance(getattr(m, f), str) for f in ("to", "reason", "text", "sender"))
             ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
+            ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
+            m.id = path.stem  # the file is the identity: a forged id cannot hide a message
         except (OSError, ValueError, TypeError, AttributeError):
             continue
         if not ok:
@@ -186,8 +195,12 @@ def wake(
     return {"reason": wake_reason(msgs), "messages": view(msgs)}
 
 
-def has_pending(repo: Path, agent: str) -> bool:
-    """Cheap test used in a wait's poll loop: is anything waiting to be delivered?"""
+def has_pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> bool:
+    """Cheap test used in a wait's poll loop: is anything waiting to be delivered? With a
+    ``ttl_s`` an expired message does not count (it is dropped), so a wait never wakes for
+    a message that delivery would then discard."""
+    if ttl_s > 0:
+        return bool(pending(repo, agent, ttl_s=ttl_s))
     d = _dir(repo, agent)
     try:
         return d.is_dir() and any(d.glob("*.json"))
