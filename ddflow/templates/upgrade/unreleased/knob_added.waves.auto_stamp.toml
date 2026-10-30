@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "waves.auto_stamp"
+new = "true"
+why = "Derived `wave:N` tags (D-wave-semantics) are kept current by default: after a command that changed the dependency graph ddflow restamps, in one transaction, only the open items whose wave changed (`ddflow waves --stamp` / `--check` do it on request)."
+effect = "the first command that writes after upgrading stamps every open task once (one tag event per task whose wave:N is missing or stale); after that only the items a graph change moves are written. Set [waves].auto_stamp = false (or DDFLOW_WAVES_AUTO_STAMP=false) to stamp only on request."
+impact = "additive"

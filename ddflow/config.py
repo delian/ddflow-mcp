@@ -136,6 +136,7 @@ from .config_sections.upgrade import (
     UPGRADE_SKEW_POLICIES,  # noqa: F401 -- re-exported
     UpgradeConfig,
 )
+from .config_sections.waves import WavesConfig
 from .config_sections.worktree import WorktreeConfig
 
 
@@ -230,6 +231,7 @@ class Config:
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
     plan: PlanConfig = field(default_factory=PlanConfig)
+    waves: WavesConfig = field(default_factory=WavesConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
