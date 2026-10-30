@@ -302,3 +302,14 @@ def test_merge_commit_falls_back_to_the_projects_pre_commit_without_a_merge_hook
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     d = GH.hook_dir(wt)
     assert sh(d, str(d / "pre-merge-commit"), check=False).returncode == 7
+
+
+def test_a_hand_unset_lane_setting_is_not_remembered_as_a_prior_one(lane, tmp_path):
+    _, wt = lane
+    sh(wt, "git", "config", "extensions.worktreeConfig", "true")
+    sh(wt, "git", "config", "--worktree", "core.hooksPath", "/old")
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    sh(wt, "git", "config", "--worktree", "--unset", "core.hooksPath")
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    GH.uninstall(wt)
+    assert unset(wt)

@@ -87,12 +87,6 @@ def hook_dir(worktree: Path) -> Path:
     return _git_dir(worktree) / DIR_NAME
 
 
-def _current_hooks_path(worktree: Path) -> Path:
-    r = G.run(worktree, "rev-parse", "--git-path", "hooks", timeout=P.TIMEOUTS["probe"])
-    p = Path(r.out.strip()) if r.ok and r.out.strip() else Path(".git/hooks")
-    return p if p.is_absolute() else (Path(worktree) / p).resolve()
-
-
 def render(*, chain_to: Path | None = None, agent: str = "", invocation: str = "") -> str:
     """The pre-commit script. ``invocation`` replaces the ddflow command line (tests)."""
     exports = [f"DDFLOW_ENFORCE_COMMIT_WITHOUT_LEASE={shlex.quote(POLICY)}"]
@@ -124,7 +118,9 @@ def _original(worktree: Path, d: Path) -> Path:
     if here is not None and here != d.resolve():
         return here
     saved = d / "original"
-    if _had_prior(d) and saved.is_file():  # the worktree's own setting before the first install
+    if (
+        installed(worktree) and _had_prior(d) and saved.is_file()
+    ):  # the worktree's own setting before the first install
         return Path(saved.read_text().strip())
     # Never the lane dir itself (the generated hook would exec itself): the shared setting.
     for scope in ("--local", "--global", "--system"):  # all but the worktree's own value
@@ -143,10 +139,11 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     d = hook_dir(worktree)
     original = _original(worktree, d)
     cur = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
-    had_prior = (cur.ok and not installed(worktree)) or _had_prior(d)
+    live = installed(worktree)  # a lane setting someone unset by hand is not a prior one
+    had_prior = (cur.ok and not live) or (live and _had_prior(d))
     old_raw = d / "prior_raw"
     raw = cur.out.strip() if cur.ok and not installed(worktree) else ""
-    raw = raw or (old_raw.read_text().strip() if old_raw.is_file() else "")
+    raw = raw or (old_raw.read_text().strip() if live and old_raw.is_file() else "")
     d.mkdir(parents=True, exist_ok=True)
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
