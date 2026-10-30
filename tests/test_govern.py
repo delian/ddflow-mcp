@@ -119,7 +119,7 @@ def test_replay_matches_stepwise_and_none_when_empty():
 
 
 @settings(max_examples=200, deadline=None)
-@given(FRAC, FRAC, FRAC, FRAC, TIER, EFFORT, st.booleans(), st.integers(0, 3), st.integers(0, 3))
+@given(FRAC, FRAC, FRAC, FRAC, TIER, EFFORT, st.booleans(), st.integers(0, 3), st.integers(0, 4))
 def test_monotone_more_use_never_raises_the_cap(a, b, c1, c2, tier, effort, mech, ql, cl):
     lo, hi = sorted((a, b))
     last = g.Decision("continue", "balanced", "high", "", g.Ladder(ql, 0), g.Ladder(cl, 0))
