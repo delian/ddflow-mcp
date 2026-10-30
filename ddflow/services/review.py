@@ -744,17 +744,10 @@ def _chunk_budget(rev: Reviewer) -> int:
     reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
     the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
     below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
-    always budget left to write the verdict in. The cap is never shrunk below one verdict
-    reserve: a chunk smaller than that is not worth the request, so a reviewer just above the
-    reserve keeps reserve-sized chunks rather than one chunk per line. An output cap that
-    cannot hold even the reserve has no chunk small enough to room both the reasoning and
-    the verdict: it keeps ``max_chunk_chars``, so the truncation retry reports the honest
-    "reasoning cap exhausted" outcome -- never one chunk per line.
+    always budget left to write the verdict in. A reviewer too small to leave a reserve is
+    refused in ``_preflight`` before a chunk is ever sized.
     """
-    room = rev.max_tokens - VERDICT_RESERVE_TOKENS
-    if room <= 0:
-        return rev.max_chunk_chars
-    return min(rev.max_chunk_chars, max(VERDICT_RESERVE_TOKENS, room))
+    return min(rev.max_chunk_chars, rev.max_tokens - VERDICT_RESERVE_TOKENS)
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
@@ -1140,6 +1133,19 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
             return res
     elif not rev.base_url or not rev.model:
         res.status, res.reason = UNAVAILABLE, (f"reviewer {rev.name!r} has no base_url or model")
+        return res
+    if rev.max_tokens < 2 * VERDICT_RESERVE_TOKENS:
+        # An output cap below two verdict reserves leaves less than a reserve of room for
+        # the reasoning a chunk needs (about one reasoning token per input character), so
+        # every chunk either outgrows the cap or shrinks to nothing. Such a reviewer is
+        # under-sized; the honest outcome is "reasoning cap exhausted", not a review that
+        # spends round after round truncating. Refuse before a single request (bug
+        # B9a2279db22).
+        res.status, res.reason = UNAVAILABLE, (
+            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, below "
+            f"{2 * VERDICT_RESERVE_TOKENS}: too small to reserve {VERDICT_RESERVE_TOKENS} "
+            f"tokens for the verdict after the reasoning. Raise [[reviewer]].max_tokens."
+        )
         return res
     if not diff.strip():
         # An empty diff is the commonest way a review passes vacuously: the command ran,

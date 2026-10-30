@@ -69,18 +69,11 @@ def test_a_chunk_is_split_to_fit_the_reviewers_output_cap(monkeypatch):
     assert res.status == REVIEWED, res.reason
 
 
-def test_an_undersized_output_cap_keeps_the_quality_bound():
-    """A quality bound that already leaves the verdict room is kept; only a cap that would
-    outgrow the output budget is shrunk below ``max_tokens`` to reserve the verdict. An
-    output cap too small to hold the reserve is left alone, not shrunk to one chunk per
-    line."""
-    # the default reviewer keeps its quality bound (the reserve is already inside it)
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=32000, max_chunk_chars=30000)) == 30000
-    # a small output cap is shrunk below max_tokens to leave the verdict room
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=8000, max_chunk_chars=30000)) == 6000
-    # the quality bound below the reserved output cap is kept
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=100000, max_chunk_chars=120)) == 120
-    # a cap just above the reserve never shrinks below one verdict reserve (not one chunk per line)
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=2001, max_chunk_chars=100000)) == 2000
-    # an output cap too small to hold the reserve is left to the truncation retry
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=1000, max_chunk_chars=30000)) == 30000
+def test_an_undersized_output_cap_is_unavailable_not_a_round():
+    """A reviewer whose output cap cannot reserve a verdict after the reasoning is refused
+    upfront (reasoning cap exhausted), never dispatched a chunk that must truncate."""
+    rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=3000, hedge=1)
+    res = review(rev, _files("a"), "i")
+    assert res.status == R.UNAVAILABLE, res.reason
+    assert "max_tokens" in res.reason and "too small" in res.reason
+    assert res.chunks_total == 0, "nothing is dispatched to an under-sized reviewer"
