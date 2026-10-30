@@ -1863,6 +1863,29 @@
       lanes.brief_text_chars = 1200   [default]
           Characters kept of each text a lane brief quotes (the objective, the last
           session summary, a note), cut at a line boundary.
+      lanes.stop_grace_s = 10   [default]
+          Seconds a lane driver waits after SIGTERM to a lane's process group before
+          SIGKILL (`Lane.stop`, process-headless). 0 kills at once.
+      lanes.event_buffer = 1000   [default]
+          How many canonical events a lane driver keeps unread per lane; when a reader
+          falls behind, the oldest are dropped and counted in the lane status
+          (`dropped`), never silently.
+      lanes.scope = 'none'   [default]
+          Extra containment for a launched lane beyond its process group: 'none' (the
+          group alone) or 'systemd' (`systemd-run --user --scope`, so a cgroup holds
+          everything the lane started). 'systemd' where it is not available makes the
+          start report `unavailable`; it never falls back silently. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'systemd', the strictest (the most containment; a start where systemd-run
+          is missing then reports unavailable instead of running uncontained); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      lanes.pass_env = ['PATH', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR']   [default]
+          Environment variable NAMES a launched lane inherits from the launching
+          process, besides its own private home and the key names its launch spec
+          lists. Everything else is dropped, so the operator's credentials and
+          settings do not reach the lane.
       health.mode = 'propose'   [default]
           What the watchdog does about a lane it finds unhealthy: 'off' inspects
           nothing in the periodic pass; 'propose' (default) reports each finding with
@@ -2202,6 +2225,21 @@
           path block. Change it for the project (`ddflow config
           review.triage_ignore_globs ...`), for this machine (add --local), or over
           MCP with `ddflow_configure`.
+      review.doc_globs = ['docs/**', 'README*', 'CHANGELOG*']   [default]
+          Documentation directories and changelogs: wording, not code. A documentation
+          file the review round reviewed whose wording changed later never voids a
+          triage pass or a gate's freshness at `complete` (bug Bb89ff23f21): a one-
+          line doc edit after triage invalidated refuted gates and cost a second 8-15
+          min review round, and a wording-only edit after the final pass still
+          triggered 'different tree' warnings. Unlike [review].triage_ignore_globs
+          (tests), a reviewed documentation file keeps the exemption if it still
+          exists: the review judged the code, so clarified wording is not new work,
+          while a reviewed code file that changed still blocks, and a reviewed doc
+          that was deleted still blocks. One the round did NOT review is not exempt by
+          name alone. An empty list exempts no documentation. Change it for the
+          project (`ddflow config review.doc_globs ...`), for this machine (add
+          --local), per run (DDFLOW_REVIEW_DOC_GLOBS), or over MCP with
+          `ddflow_configure`.
       review.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]
           Globs of generated and pinned files (golden snapshots, transcripts,
           lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a
@@ -2246,6 +2284,58 @@
           recorded as unreviewed with how many parts were, and the findings of the
           parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer
           in 1800 s twice).
+      swarm.w_critical = 3.0   [default]
+          Weight of the critical-path term in the dispatch score: an item on the
+          longest dependency chain is offered before one with slack. Zero ignores the
+          chain.
+      swarm.w_fit = 2.0   [default]
+          Weight of the fit term: the quality ledger's Beta-smoothed first-pass rate
+          of the lane's (family, model) on the item's kind. An unmeasured pair scores
+          the prior (0.5), not zero.
+      swarm.w_cost = 1.0   [default]
+          Weight of the cost term (cheaper estimated dollars score higher). Cost only
+          ranks lanes whose fit is within `fit_margin` of the best eligible lane, so a
+          free local route never beats a better-qualified one for being free.
+      swarm.w_rework = 1.5   [default]
+          Weight of the rework term: failed gates before completion plus bugs filed
+          after it, per item, for the lane's pair on the item's kind. Lower rework
+          scores higher.
+      swarm.w_queue = 0.5   [default]
+          Weight of the queue term: how long the item has waited, so a low-priority
+          item is not starved.
+      swarm.fit_margin = 0.1   [default]
+          How far below the best eligible lane's fit a lane may be and still compete
+          on cost. A lane further below is ranked after every lane inside the margin.
+      swarm.cost_ref_usd = 1.0   [default]
+          Estimated dollars at which the cost term reaches zero (it falls linearly
+          from a free route at one). Must be above zero.
+      swarm.rework_ref = 1.0   [default]
+          Rework events per item at which the rework term reaches zero. Must be above
+          zero.
+      swarm.queue_ref_s = 3600   [default]
+          Seconds of waiting at which the queue term reaches one (it saturates there).
+          Must be above zero.
+      swarm.max_lanes = 4   [default]
+          Most lanes holding an item at once across the swarm. Zero admits none.
+      swarm.family_cap = 3   [default]
+          Most live claims one model family may hold at once, so one vendor's outage
+          or rate limit cannot stall the swarm.
+      swarm.hedge_max = 1   [default]
+          Extra concurrent attempts one item may have beyond the first (hedging,
+          D-swarm-answers Q5). Zero turns hedging off.
+      swarm.default_min_trust = 0   [default]
+          Trust tier a lane needs for an item that names none. A lane's tier is
+          whatever the operator grants it; a lane below the item's tier is refused,
+          whatever its score.
+      swarm.explore_share = 0.1   [default]
+          Share of picks spent on under-measured (family, model) pairs (D-swarm-
+          answers Q10). Zero turns exploration off.
+      swarm.explore_min_n = 5   [default]
+          Items per (family, model, kind) under which a pair counts as under-measured
+          and may be explored.
+      swarm.bug_window_s = 604800   [default]
+          A bug filed this many seconds after an item completed still counts against
+          the author in the quality ledger (default a week).
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
