@@ -20,7 +20,20 @@ from ..core import clock
 #: DRV-facts adds `versions` (range of tool versions it holds for, e.g. ">=1.2,<2"),
 #: `expires` (ISO date after which it is stale), `probe` (command that re-reads it) and
 #: `by` (who/what read it). Judging them against today / an installed version is `factdrift`.
-FACT_KEYS = ("v", "s", "src", "d", "ver", "note", "exc", "only", "versions", "expires", "probe", "by")
+FACT_KEYS = (
+    "v",
+    "s",
+    "src",
+    "d",
+    "ver",
+    "note",
+    "exc",
+    "only",
+    "versions",
+    "expires",
+    "probe",
+    "by",
+)
 STATUSES = ("verified", "documented", "unverified", "none")
 READABLE = ("verified", "documented")
 
