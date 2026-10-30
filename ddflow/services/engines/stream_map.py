@@ -14,7 +14,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..hookio import _dig
-from .safety import DEFAULT, EngineError, Limits, check_path, clip, expect_keys, safe_regex, search
+from .safety import (
+    DEFAULT,
+    EngineError,
+    Limits,
+    check_path,
+    clip,
+    expect_keys,
+    no_constant,
+    safe_regex,
+    search,
+)
 
 EVENTS = ("started", "tool", "usage", "settled", "limit", "error")
 
@@ -96,7 +106,7 @@ def map_line(line: str, rules: tuple[Rule, ...], limits: Limits = DEFAULT) -> Ev
     if len(line) > limits.max_line_chars or not line.strip():
         return None
     try:
-        raw = json.loads(line)
+        raw = json.loads(line, parse_constant=no_constant)
     except (ValueError, RecursionError):
         return None
     if not isinstance(raw, dict):

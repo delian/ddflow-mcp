@@ -21,7 +21,6 @@ SAFE_ARGS = frozenset(
     {
         "--version",
         "-V",
-        "version",
         "--help",
         "-h",
         "--dump-config",
@@ -106,6 +105,9 @@ def _run_capped(
                     continue
                 chunks.append(data[: limits.probe_output_bytes - total])
                 total += len(data)
+    except ValueError as exc:  # select() refuses a descriptor above FD_SETSIZE
+        proc.stop_group(child, reap_s=2)
+        raise OSError(f"cannot watch the probe: {exc}") from None
     finally:
         os.close(err_r)
         child.stdout.close()

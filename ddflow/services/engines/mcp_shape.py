@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 from .. import mcpconfig
-from .safety import EngineError
+from .safety import EngineError, no_constant
 
 #: shape -> path of the server table inside the JSON document
 CONTAINERS: dict[str, tuple[str, ...]] = {
@@ -28,14 +28,10 @@ SERIALISERS: dict[str, str] = {
 }
 
 
-def _no_constant(name: str):
-    raise ValueError(f"{name} is not JSON")
-
-
 def container_path(shape: str) -> tuple[str, ...]:
     try:
         return CONTAINERS[shape]
-    except KeyError:
+    except (KeyError, TypeError):  # TypeError: an unhashable shape
         raise EngineError(
             f"no JSON container for MCP shape {shape!r}; known: {sorted(CONTAINERS)}"
         ) from None
@@ -51,7 +47,7 @@ def render_json(shape: str, name: str, launch: dict, existing: str = "") -> str:
     """``existing`` (the operator's file text, or empty) with server ``name`` placed; siblings kept."""
     container_path(shape)
     try:
-        data = json.loads(existing, parse_constant=_no_constant) if existing.strip() else {}
+        data = json.loads(existing, parse_constant=no_constant) if existing.strip() else {}
     except (ValueError, RecursionError) as exc:
         raise EngineError(f"the existing file is not JSON: {exc}") from None
     if not isinstance(data, dict):

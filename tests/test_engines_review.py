@@ -205,3 +205,45 @@ def test_fourth_review_findings(tmp_path):
     spec = probe.parse([[str(big), "--version"]], allow_paths=True)
     f = probe.run(spec, probe_id="t", now="d", limits=Limits(probe_output_bytes=100))[0]
     assert f["truncated"] is True and len(f["output"]) == 100
+
+
+def test_fifth_review_findings(tmp_path):
+    import json
+
+    with pytest.raises(EngineError):
+        mcp_shape.render_json([], "s", {})
+    with pytest.raises(EngineError):
+        probe.parse([["cat", "version"]])
+    for sh in ("C:cmd.exe", "c:\\\\x\\\\POWERSHELL.EXE"):
+        with pytest.raises(EngineError):
+            render_argv.render([sh, "/c"], {})
+    with pytest.raises(EngineError):
+        safety.safe_regex("a{1000,}b")
+    with pytest.raises(EngineError):
+        safety.check_path("." * 1_000_000, "p")
+    with pytest.raises(EngineError):
+        safety.expect_keys({1: None, "a": None}, {"b"}, "w")
+    rules = stream_map.parse_rules(
+        [{"when": {"path": "x", "exists": True}, "emit": "error", "fields": {"x": "x"}}]
+    )
+    assert stream_map.map_line('{"x": NaN}', rules) is None
+    assert stream_map.map_line('{"x": 1e999}', rules) == stream_map.Event("error", {})
+    spec = transcript_map.parse(
+        {"path": "{session}", "format": "jsonl", "fields": {"role": "role"}}
+    )
+    for bad in (1, [".."], None):
+        with pytest.raises(EngineError):
+            transcript_map.resolve_path(spec, session=bad)
+    assert json.dumps(1)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
+def test_the_cap_binds_a_stderr_only_writer(tmp_path):
+    noisy = tmp_path / "noisy"
+    noisy.write_text("#!/bin/sh\nexec yes aaaaaaaaaaaaaaaa >&2\n")
+    noisy.chmod(0o755)
+    spec = probe.parse([[str(noisy), "--version"]], allow_paths=True)
+    f = probe.run(
+        spec, probe_id="n", now="d", limits=Limits(probe_output_bytes=50, probe_timeout_s=3)
+    )[0]
+    assert f["truncated"] is True and len(f["output"]) == 50
