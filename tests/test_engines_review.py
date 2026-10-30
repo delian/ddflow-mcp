@@ -149,8 +149,7 @@ def test_second_review_findings():
         safety.safe_regex("^" + "a*" * 98 + "b$")
 
 
-@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
-def test_third_review_findings(tmp_path):
+def test_third_review_findings():
     with pytest.raises(EngineError):
         mcp_shape.render_json(mcpconfig.SHAPE_MCP_SERVERS, "d", ENTRY, '{"o": 1e999}')
     with pytest.raises(EngineError):
@@ -159,6 +158,10 @@ def test_third_review_findings(tmp_path):
         render_argv.render(["C:\\x\\CMD.EXE ", "/c"], {})
     with pytest.raises(EngineError):  # eight three-way groups between two stars
         safety.safe_regex("a*" + "(a|[a]|[aa])" * 8 + "a*b")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
+def test_both_streams_share_one_cap(tmp_path):
     two = tmp_path / "two"
     two.write_text("#!/bin/sh\necho out; echo err >&2; head -c 100000 /dev/zero | tr '\\0' a\n")
     two.chmod(0o755)
@@ -168,7 +171,13 @@ def test_third_review_findings(tmp_path):
         now="d",
         limits=Limits(probe_output_bytes=10),
     )[0]
-    assert len(f["output"]) <= 10
+    assert len(f["output"]) <= 10 and f["truncated"] is True
+
+
+def test_the_text_cap_hides_a_late_match():
+    s = limit_detect.parse({"messages": ["429"]})
+    assert limit_detect.detect(s, text="a" * 5_000_000 + "429") is None
+    assert limit_detect.detect(s, text="429") is not None
 
 
 @pytest.mark.skipif(not os.path.isdir("/proc/self/fd"), reason="counts descriptors through procfs")
