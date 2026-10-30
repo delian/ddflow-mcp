@@ -1624,19 +1624,22 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     reviewer's own ``max_tokens``; ``split_rounds`` is how many times a chunk lost to size
     (out of tokens or time) is halved and retried (``_retry_truncated``).
     """
-    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
-        # Refuse on the reviewer's DECLARED output cap, before `chunk_max_tokens` can
-        # rewrite it: an under-sized reviewer cannot be rescued by chunk sizing, while a
-        # small per-chunk window is the operator's own (halving retry exists for it).
-        res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
-        res.status, res.reason = UNAVAILABLE, (
-            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, at or below the "
-            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
-            f"reasoning and the verdict. Raise [[reviewer]].max_tokens."
-        )
-        return res
     if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
         rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
+    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
+        # Refuse before a single request: an output budget that cannot hold the verdict
+        # reserve leaves nothing for the reasoning, so no chunk survives (about one reasoning
+        # token per input character). `chunk_max_tokens` was applied above, so this reads the
+        # EFFECTIVE budget: a small per-chunk window trips it the same as a small declared
+        # cap (bug B9a2279db22).
+        res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
+        res.status, res.reason = UNAVAILABLE, (
+            f"the reviewer's output budget max_tokens={rev.max_tokens} is at or below the "
+            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
+            f"reasoning and the verdict. Raise [[reviewer]].max_tokens above "
+            f"{VERDICT_RESERVE_TOKENS} (and [review].chunk_max_tokens, if set below it)."
+        )
+        return res
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
     started = time.time()
 
