@@ -166,3 +166,38 @@ def test_settings_read_the_lanes_knobs() -> None:
     assert (
         C.Settings.from_config(Config()) == C.Settings()
     )  # the dataclass defaults match the knobs
+
+
+def test_timeout_names_the_full_pool_and_never_overshoots(tmp_path: Path) -> None:
+    a, b = C.Pool("a-pool", 1), C.Pool("b-pool", 1)
+    now = [0.0]
+    naps: list[float] = []
+
+    def sleep(s: float) -> None:
+        naps.append(s)
+        now[0] += s
+
+    with S.Slots(tmp_path, "b-pool").hold(1):
+        with pytest.raises(S.SlotsTimeout) as err:
+            with C.acquire((a, b), 0.5, tmp_path, clock=lambda: now[0], sleep=sleep, poll_s=1.0):
+                pass
+    assert err.value.name == "b-pool" and err.value.timeout_s == 0.5
+    assert naps == [0.5]  # clamped to the deadline, not a full poll
+
+
+def test_waiting_lane_holds_nothing_between_sweeps(tmp_path: Path) -> None:
+    """The deadlock shape: two lanes need 2 of 2 slots while someone holds one. During every
+    nap the waiter has released whatever its sweep touched."""
+    pools = (C.Pool("gpu", 2, 2),)
+    seen: list[int] = []
+    outer = S.Slots(tmp_path, "gpu").hold(2)
+    outer.__enter__()
+
+    def sleep(_s: float) -> None:
+        seen.append(C.busy_counts(pools, tmp_path)["gpu"])
+        if len(seen) == 2:
+            outer.__exit__(None, None, None)
+
+    with C.acquire(pools, 30, tmp_path, sleep=sleep, poll_s=0.01) as held:
+        assert len(held.slots["gpu"]) == 2
+    assert seen == [1, 1]  # only the outside holder, never the waiter's partial set
