@@ -10,6 +10,12 @@ import pytest
 from ddflow.services.swarm import githook as GH
 
 
+@pytest.fixture(autouse=True)
+def _isolated_git(monkeypatch, tmp_path):
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+
 def sh(cwd, *a, check=True):
     return subprocess.run(a, cwd=cwd, capture_output=True, text=True, check=check)
 
@@ -49,7 +55,7 @@ def test_install_is_lane_private_and_removable(lane):
     d = GH.hook_dir(wt)
     assert d.is_dir() and "worktrees" in str(d)
     # the primary checkout's hooks setting is untouched, and no tracked file was written
-    assert sh(main, "git", "config", "--get", "core.hooksPath", check=False).stdout == ""
+    assert sh(main, "git", "config", "--local", "--get", "core.hooksPath", check=False).stdout == ""
     assert sh(wt, "git", "status", "--porcelain").stdout == ""
     GH.install(wt)  # idempotent
     assert "removed" in GH.uninstall(wt)
@@ -74,10 +80,12 @@ def test_traceback_and_unreadable_lease_fail_open_without_leaking(lane, tmp_path
     _, wt = lane
     GH.install(wt, invocation=stub(tmp_path, "echo 'Traceback: token=SECRET123'; exit 1"))
     r = commit(wt)
-    assert r.returncode == 0 and "SECRET123" not in r.stderr and "not checked" in r.stderr
+    assert (
+        r.returncode == 0 and "SECRET123" not in r.stderr + r.stdout and "not checked" in r.stderr
+    )
     GH.install(wt, invocation=stub(tmp_path, "echo boom SECRET123; exit 127"))
     r = commit(wt, "y.txt")
-    assert r.returncode == 0 and "SECRET123" not in r.stderr and "exit 127" in r.stderr
+    assert r.returncode == 0 and "SECRET123" not in r.stderr + r.stdout and "exit 127" in r.stderr
 
 
 def test_policy_and_agent_are_exported_to_the_check(lane, tmp_path):
@@ -115,3 +123,35 @@ def test_the_script_says_it_is_detection_and_uses_the_one_matcher():
     assert "Detection at\n# commit, not prevention" in text
     assert "hooks check-commit" in text
     assert "fnmatch" not in Path(GH.__file__).read_text()
+
+
+def test_reinstall_does_not_chain_to_itself_and_stale_wrappers_go(lane, tmp_path):
+    main, wt = lane
+    hooks = main / ".git" / "hooks"
+    (hooks / "commit-msg").write_text("#!/bin/sh\nexit 0\n")
+    (hooks / "commit-msg").chmod(0o755)
+    (hooks / "pre-push").write_text("#!/bin/sh\nexit 1\n")  # not executable: disabled
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    d = GH.hook_dir(wt)
+    assert (d / "commit-msg").exists() and not (d / "pre-push").exists()
+    (d / "original").unlink()
+    (hooks / "commit-msg").unlink()
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert not (d / "commit-msg").exists()
+    assert commit(wt).returncode == 0  # no self-exec loop
+
+
+def test_a_prior_relative_worktree_hooks_path_is_chained_and_restored(lane, tmp_path):
+    _, wt = lane
+    mine = wt / ".githooks"
+    mine.mkdir()
+    (mine / "pre-commit").write_text("#!/bin/sh\necho MINE >&2\nexit 1\n")
+    (mine / "pre-commit").chmod(0o755)
+    sh(wt, "git", "config", "extensions.worktreeConfig", "true")
+    sh(wt, "git", "config", "--worktree", "core.hooksPath", ".githooks")
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert "MINE" in commit(wt).stderr
+    GH.uninstall(wt)
+    assert sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath").stdout.strip() == str(
+        mine
+    )
