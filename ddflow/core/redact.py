@@ -527,7 +527,10 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
-    ("memory.redacted", "event"): "the id of the superseded memory.recorded event that was redacted",
+    (
+        "memory.redacted",
+        "event",
+    ): "the id of the superseded memory.recorded event that was redacted",
     ("lease.waiting", "holder"): "an agent id compared with a lease's holder",
     ("lease.waiting", "lease_event"): "an event id compared with the waiter's lease",
     ("lease.waiting", "on"): "item ids, holders and glob pairs of the leases waited for",
