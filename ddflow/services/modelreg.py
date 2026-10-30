@@ -33,7 +33,7 @@ _TABLES = ("family", "model", "route", "class")
 #: Route keys that are not facts about a model.
 _ROUTE_META = ("endpoint",)
 #: Route classes that need no [class] row (they carry no shared facts).
-_PLAIN_CLASSES = ("saas", "command")
+_PLAIN_CLASSES = ("saas", "command", "proxy")
 
 
 def data_dir() -> Path:
@@ -56,6 +56,16 @@ def _read(path: Path) -> dict[str, Any]:
     return tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
+def _merge_row(into: dict[str, Any], row: dict[str, Any]) -> None:
+    """Overlay `row` on `into` fact by fact; `served` merges per served model too."""
+    for key, node in row.items():
+        if key == "served" and isinstance(node, dict) and isinstance(into.get(key), dict):
+            for model, tbl in node.items():
+                into[key].setdefault(model, {}).update(tbl)
+        else:
+            into[key] = node
+
+
 def load(
     data: Path | None = None, local_dir: Path | None = None, templates: Path | None = None
 ) -> Catalog:
@@ -71,7 +81,7 @@ def load(
         for table, dest in zip(_TABLES, (cat.family, cat.model, cat.route, cat.cls), strict=True):
             for rid, row in (doc.get(table) or {}).items():
                 if isinstance(row, dict):
-                    dest.setdefault(rid, {}).update(row)
+                    _merge_row(dest.setdefault(rid, {}), row)
                     if local:
                         cat.local_ids.add(f"{table}.{rid}")
     return cat
@@ -174,8 +184,10 @@ def resolve(cat: Catalog, model: str) -> Resolved:
     low = (model or "").strip().lower()
     if low:
         for rid, row in cat.model.items():
-            if rid.lower() == low and row.get("family") in cat.family:
-                fam = row["family"]
+            if rid.lower() == low:
+                fam = row.get("family")
+                if fam not in cat.family:  # a broken row is unknown, not a needle neighbour
+                    return Resolved(model, UNKNOWN, "", "unknown")
                 return Resolved(
                     model, fam, _identity(cat.family[fam]).get("vendor", ""), "model", rid
                 )
