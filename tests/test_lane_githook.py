@@ -78,7 +78,12 @@ def test_allowed_commit_goes_through(lane, tmp_path):
 
 def test_traceback_and_unreadable_lease_fail_open_without_leaking(lane, tmp_path):
     _, wt = lane
-    GH.install(wt, invocation=stub(tmp_path, "echo 'Traceback: token=SECRET123'; exit 1"))
+    GH.install(
+        wt,
+        invocation=stub(
+            tmp_path, "echo 'Traceback (most recent call last): token=SECRET123'; exit 1"
+        ),
+    )
     r = commit(wt)
     assert (
         r.returncode == 0 and "SECRET123" not in r.stderr + r.stdout and "not checked" in r.stderr
@@ -155,3 +160,20 @@ def test_a_prior_relative_worktree_hooks_path_is_chained_and_restored(lane, tmp_
     assert sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath").stdout.strip() == str(
         mine
     )
+
+
+def test_a_refusal_naming_a_file_called_traceback_still_blocks(lane, tmp_path):
+    _, wt = lane
+    GH.install(wt, invocation=stub(tmp_path, "echo 'not covered: Traceback.py'; exit 1"))
+    assert commit(wt, "Traceback.py").returncode != 0
+
+
+def test_a_shared_core_hooks_path_is_chained(lane, tmp_path):
+    main, wt = lane
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "pre-commit").write_text("#!/bin/sh\necho SHARED >&2\nexit 1\n")
+    (shared / "pre-commit").chmod(0o755)
+    sh(main, "git", "config", "core.hooksPath", str(shared))
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    assert "SHARED" in commit(wt).stderr
