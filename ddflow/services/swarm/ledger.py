@@ -125,6 +125,8 @@ def _lease_models(events: Sequence[Event]) -> dict[tuple[str, str], list[tuple[f
             out.setdefault((ev.subject, str(d.get("holder") or ev.agent)), []).append(
                 (PR.epoch(ev.ts), m)
             )
+    for rows in out.values():
+        rows.sort(key=lambda r: r[0])
     return out
 
 
