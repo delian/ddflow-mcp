@@ -127,6 +127,7 @@ from .config_sections.session import (
     PROGRESS_MODES,  # noqa: F401 -- re-exported (services/progress_line)
     SessionConfig,
 )
+from .config_sections.swarm import SwarmConfig
 from .config_sections.triggers import (
     TRIGGERS_MAX_FIRES_LIMIT,  # noqa: F401 -- re-exported
     TRIGGERS_STRICTEST_NUMBER,
@@ -227,6 +228,7 @@ class Config:
     govern: GovernConfig = field(default_factory=GovernConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
+    swarm: SwarmConfig = field(default_factory=SwarmConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
