@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import signal
 import stat
 import subprocess
@@ -52,24 +51,24 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     return began, pidfile
 
 
-def _detach(repo: Path) -> tuple[str, str]:
-    """Run `ddflow review --detach` and wait for the LAUNCHER; (stdout, stderr)."""
+def _detach(repo: Path, *extra: str) -> dict:
+    """Run `ddflow review --detach` and wait for the LAUNCHER; its `--json` body."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     p = subprocess.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "review", "T1", "--gate",
-         "critic", "--branch", "feat", "--detach"],
+        [sys.executable, "-m", "ddflow", "--json", "--repo", str(repo), "review", "T1",
+         "--gate", "critic", "--branch", "feat", "--detach", *extra],
         capture_output=True, text=True, env=env, timeout=120,
     )  # fmt: skip
     assert p.returncode == 0, f"exit {p.returncode}: {p.stdout!r} {p.stderr!r}"
-    return p.stdout, p.stderr
+    return json.loads(p.stdout)
 
 
-def _pid(out: str) -> int:
-    return int(re.search(r"pid (\d+)", out).group(1))
-
-
-def _log(out: str) -> Path:
-    return Path(re.search(r"streams to (\S+)", out).group(1))
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
 
 
 def _gate(repo: Path) -> dict:
@@ -87,37 +86,57 @@ def _kill_reviewer(pidfile: Path, detached_pid: int) -> None:
 def test_detach_returns_at_once_while_the_review_keeps_running(repo, tmp_path):
     began, pidfile = _setup(repo, tmp_path)
     (tmp_path / "slow").touch()
-    out, _err = _detach(repo)
-    log = _log(out)
-    # The reviewer's start marker appears after the launcher already returned: the review
-    # runs in its own session, so the command that started it held only the launcher.
+    body = _detach(repo)
+    log = Path(body["log"])
+    # The reviewer's start marker appears after the launcher already returned AND the
+    # detached process is still alive then: it outlived the launcher, not just its marker.
     deadline = time.monotonic() + 60
     while not began.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
     assert began.exists(), "the detached review never started: " + log.read_text()
-    _kill_reviewer(pidfile, _pid(out))
+    assert _alive(body["pid"]), body
+    _kill_reviewer(pidfile, body["pid"])
 
 
 def test_a_killed_detached_review_leaves_its_streamed_output(repo, tmp_path):
     began, pidfile = _setup(repo, tmp_path)
     (tmp_path / "slow").touch()
-    out, _err = _detach(repo)
-    pid, log = _pid(out), _log(out)
+    body = _detach(repo)
+    pid, log = body["pid"], Path(body["log"])
     deadline = time.monotonic() + 60
     while not began.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
     assert began.exists(), "the reviewer never started: " + log.read_text()
-    body = log.read_text()
+    seen = log.read_text()
     # Streamed BEFORE it was cut down, so a killed review is not a silent "[killed]".
-    assert "→ r (" in body and "reviewing" in body, body
+    assert "→ r (" in seen and "reviewing" in seen, seen
     _kill_reviewer(pidfile, pid)
     assert "reviewing" in log.read_text(), log.read_text()
 
 
+def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
+    _setup(repo, tmp_path)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    for verb in ("show", "triage"):
+        p = subprocess.run(
+            [sys.executable, "-m", "ddflow", "--repo", str(repo), "review", verb, "T1",
+             "--detach"],
+            capture_output=True, text=True, env=env, timeout=120,
+        )  # fmt: skip
+        assert p.returncode != 0, p.stdout
+        assert "--detach" in p.stderr and "run no review" in p.stderr, p.stderr
+
+
 def test_a_detached_review_records_passed_without_the_launcher(repo, tmp_path):
     _setup(repo, tmp_path)
-    out, _err = _detach(repo)
-    log = _log(out)
+    # The first review sets the head a delta diffs from; the follow-up is what --delta
+    # detached re-checks, exactly the run the bug reported dying.
+    assert run_cli(repo, "review", "T1", "--gate", "critic", "--branch", "feat")[0] == 0
+    (repo / "y.py").write_text("y = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "followup")
+    body = _detach(repo, "--delta")
+    log = Path(body["log"])
     deadline = time.monotonic() + 60
     gate = {}
     while time.monotonic() < deadline and gate.get("outcome") != "passed":
