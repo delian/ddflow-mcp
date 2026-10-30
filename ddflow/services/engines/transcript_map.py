@@ -63,8 +63,10 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
 def resolve_path(spec: Spec, *, home: str = "", dir: str = "", session: str = "") -> str:
     """The transcript path; ``session`` must be one safe path segment, ``home``/``dir`` absolute."""
     vals = {"home": home, "dir": dir, "session": session}
-    if not all(isinstance(v, str) for v in vals.values()):
-        raise EngineError("home, dir and session are strings")
+    if not all(isinstance(v, str) and len(v) <= MAX_PATH_CHARS for v in vals.values()):
+        raise EngineError(
+            f"home, dir and session are strings of at most {MAX_PATH_CHARS} characters"
+        )
     used = set(_PH.findall(spec.path))
     if ("session" in used and not _SEGMENT.fullmatch(session or "")) or session in (".", ".."):
         raise EngineError("session id is not a single safe path segment")
