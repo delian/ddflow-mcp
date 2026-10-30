@@ -111,6 +111,7 @@ from .handlers.knowledge import (
     _h_lesson,
     _h_memory,
     _h_memory_forgotten,
+    _h_memory_redacted,
     _h_research,
 )
 from .handlers.leases import (  # noqa: F401
@@ -263,6 +264,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "external.observed": _h_external,
     "job.ended": _h_job_ended,
     "memory.forgotten": _h_memory_forgotten,
+    "memory.redacted": _h_memory_redacted,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
     "ci.result": _h_ci_result,
