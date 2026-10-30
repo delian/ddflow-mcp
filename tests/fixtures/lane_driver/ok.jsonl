@@ -1,0 +1,6 @@
+{"type":"session","sessionId":"s-123"}
+{"type":"tool_call","tool":"Read","callId":"c1"}
+not json at all
+{"type":"noise"}
+{"usage":{"totalTokens":15,"inputTokens":10,"outputTokens":5}}
+{"reason":{"kind":"completed"}}
