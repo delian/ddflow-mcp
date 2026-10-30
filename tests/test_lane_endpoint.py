@@ -140,7 +140,14 @@ def test_malformed_route_row_is_unavailable_and_old_file_mode_is_tightened(tmp_p
 
 
 @pytest.mark.parametrize(
-    "url", ["https://h/v1?api_key=sk-1", "https://h/v1#x", "https://h", "http://h:8000/v1/"]
+    "url",
+    [
+        "https://h/v1?api_key=sk-1",
+        "https://h/v1#x",
+        "https://h",
+        "http://h:8000/v1/",
+        "https://h/compatible-mode/v1",
+    ],
 )
 def test_url_with_query_or_fragment_is_refused(tmp_path, url):
     t = EXAMPLE.read_text().replace("http://ENDPOINT-HOST:8000/v1", url)
