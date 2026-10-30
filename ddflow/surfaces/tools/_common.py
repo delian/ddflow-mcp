@@ -174,9 +174,10 @@ def _tagging(a: dict[str, Any]) -> bool:
 
 def _bug_tag(repo, a: dict[str, Any], *, agent: str):
     """`bug tag`, served by `ddflow_bug_fixed` with `tag`."""
-    from ...api.knowledge.bug_tags import bug_tag
-
-    return bug_tag(
+    # Reached through the shared `_api()` interface (P-unify), not a direct submodule
+    # import: `bug_tag` is re-exported by `ddflow.api`, and a fresh deferred import here
+    # is exactly the ad-hoc way this module's deferred-import ratchet retires.
+    return _api().bug_tag(
         repo, a["id"], add=a.get("add", "") or "", remove=a.get("remove", "") or "", agent=agent
     )
 
