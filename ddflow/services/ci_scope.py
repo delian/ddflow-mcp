@@ -178,9 +178,11 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     if not cmd:
         return Plan("full", "the `tests` hook does not run pytest")
     cut = [t.path for t in sel.cut]
-    why = f"{len(paths)} test file(s) its change reaches" + (
-        f", {len(cut)} cut at the budget" if cut else ""
-    )
+    why = f"{len(paths)} test file(s) its change reaches"
+    if sel.neutral:
+        why += " (the change is whitespace/comment-only: behaviour-neutral)"
+    if cut:
+        why += f", {len(cut)} cut at the budget"
     if always:
         why += f", {len(always)} always-run guard file(s)"
     return Plan("selected", why, cmd, TESTS_HOOKS, paths, cut, sel.cut_at, always, always_cmd)

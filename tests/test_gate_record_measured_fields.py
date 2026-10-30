@@ -32,7 +32,7 @@ def _setup(repo: Path, monkeypatch, *claim: str) -> None:
     (repo / ".ddflow" / "gates.toml").write_text(
         f'[gate.unit_tests]\ncommand = {json.dumps("true")}\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     if claim:
         assert run_cli(repo, "claim", "T1", *claim)[0] == OK
 

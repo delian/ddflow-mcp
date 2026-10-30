@@ -112,6 +112,7 @@ EXEMPT: dict[str, str] = {
             "bug.fixed",
             "bug.invalid",
             "bug.reopened",
+            "bug.tagged",
             "bug.reported_upstream",
             "decision.superseded",
             "memory.forgotten",

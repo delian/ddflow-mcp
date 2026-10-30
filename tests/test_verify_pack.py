@@ -71,7 +71,7 @@ def test_the_pack_is_bounded(repo):
 
 def test_an_item_that_is_not_done_has_nothing_to_pack(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert pack(repo, "T1").exit == O.NOTHING
     assert pack(repo, "NOPE").exit == O.FAIL
 
@@ -180,7 +180,10 @@ def test_judge_refuses_a_task_with_no_requirement_text_instead_of_passing_it(rep
         'model = "gemini-2.5-pro"\ngates = ["verify"]\n'
     )
     _commit(repo, {"seed.txt": "s\n"}, "seed")
-    run_cli(repo, "task", "add", "T1", "--globs", "w.py")  # no title, no body
+    # A title-less item cannot come from `task add` (Bbd67278144 refuses one without a title);
+    # the importer's `task.added` is the route that still files one, and no title AND no body
+    # is no requirement text.
+    EventLog(repo).append("task.added", "T1", {"title": "", "body": "", "globs": ["w.py"]})
     sha = _commit(repo, {"w.py": "1\n"}, "merge T1: w")
     run_cli(repo, "complete", "T1", "--sha", sha, "--force")
     out = judge(repo, "T1")

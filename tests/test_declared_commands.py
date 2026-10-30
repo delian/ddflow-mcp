@@ -102,8 +102,8 @@ def test_the_answer_flags_exclude_each_other_on_every_add_command():
         ["decision", "add", "--title", "t", "--decision", "d", "--check", "--new"],
         ["bug", "found", "--summary", "s", "--related", "B1", "--duplicate-of", "B2"],
         ["research", "--question", "q", "--verdict", "THEORETICAL", "--new", "--check"],
-        ["phase", "add", "P1", "--new", "--extends", "P0"],
-        ["task", "add", "T1", "--related", "T0", "--duplicate-of", "T2"],
+        ["phase", "add", "P1", "--title", "P1 fixture", "--new", "--extends", "P0"],
+        ["task", "add", "T1", "--title", "T1 fixture", "--related", "T0", "--duplicate-of", "T2"],
         ["memory", "add", "fact", "--new", "--extends", "M1"],
     ):
         with pytest.raises(SystemExit) as stop:
@@ -214,7 +214,7 @@ def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
     assert items.DEFAULT_PRIORITY is defaults.DEFAULT_PRIORITY
     assert api_lifecycle.DEFAULT_NEXT_KIND is defaults.DEFAULT_NEXT_KIND
     assert api_lifecycle.DEFAULT_WAIT_TIMEOUT_S is defaults.DEFAULT_WAIT_TIMEOUT_S
-    ns = build_parser().parse_args(["task", "add", "T"])
+    ns = build_parser().parse_args(["task", "add", "T", "--title", "T fixture"])
     # none given: the task takes its DX or bug band, else DEFAULT_PRIORITY (services.priority)
     assert ns.priority is None
     assert build_parser().parse_args(["next"]).kind == defaults.DEFAULT_NEXT_KIND

@@ -42,6 +42,7 @@ HISTORY_VERBS: dict[str, str] = {
     "bug.fixed": "bug fixed",
     "bug.invalid": "bug closed as invalid",
     "bug.reopened": "BUG reopened",
+    "bug.tagged": "bug tags changed",
     "bug.reported_upstream": "bug reported upstream",
     "cadence.ran": "cadence ran",
     "ddflow.seen": "ddflow version stamped",

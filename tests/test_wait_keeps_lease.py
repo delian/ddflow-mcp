@@ -28,9 +28,9 @@ def _renewals(repo: Path, item: str) -> int:
 
 def test_a_blocked_wait_renews_the_waiters_own_lease(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T4", "--globs", "src/z.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T4", "--title", "T4 fixture", "--globs", "src/z.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     assert A.claim(repo, "T4", no_worktree=True, agent=WAITER).ok
     assert run_cli(repo, "config", "lease.heartbeat_s", "1", agent=WAITER)[0] == 0

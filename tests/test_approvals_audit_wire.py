@@ -28,7 +28,7 @@ def _item(repo):
 
 def test_a_skip_with_an_approval_names_the_approver_the_channel_and_the_ask(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py")
     assert run_cli(repo, "gate", "skip", "T1", "research", "--reason", "n/a here")[0] == 0
     plain = RG.overrides(_item(repo), {}, [], [])
     assert plain == ["gate research skipped: n/a here"]  # a person's skip: no tail

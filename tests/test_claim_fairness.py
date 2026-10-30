@@ -31,10 +31,10 @@ HOLDER, B, C = "agent-a", "agent-b", "agent-c"
 def proj(repo: Path) -> Path:
     """A holds `hot` on src/mcp.py; B's TB and C's TC both write it; TD is disjoint."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "HOT", "--globs", "src/mcp.py")
-    run_cli(repo, "task", "add", "TB", "--globs", "src/mcp.py")
-    run_cli(repo, "task", "add", "TC", "--globs", "src/mcp.py")
-    run_cli(repo, "task", "add", "TD", "--globs", "src/other.py")
+    run_cli(repo, "task", "add", "HOT", "--title", "HOT fixture", "--globs", "src/mcp.py")
+    run_cli(repo, "task", "add", "TB", "--title", "TB fixture", "--globs", "src/mcp.py")
+    run_cli(repo, "task", "add", "TC", "--title", "TC fixture", "--globs", "src/mcp.py")
+    run_cli(repo, "task", "add", "TD", "--title", "TD fixture", "--globs", "src/other.py")
     out = A.claim(repo, "HOT", no_worktree=True, agent=HOLDER)
     assert out.ok, out.reason
     return repo
@@ -139,8 +139,8 @@ def test_waiters_on_disjoint_files_never_block_each_other(proj):
 def test_a_waiter_held_back_by_an_older_one_reserves_nothing(proj):
     """B is first for TB; TX needs a file TB also needs. TX's waiter is behind B, so a
     claimant of an unrelated-to-B file that overlaps only TX is not held for it."""
-    run_cli(proj, "task", "add", "TX", "--globs", "src/mcp.py,src/x.py")
-    run_cli(proj, "task", "add", "TY", "--globs", "src/x.py")
+    run_cli(proj, "task", "add", "TX", "--title", "TX fixture", "--globs", "src/mcp.py,src/x.py")
+    run_cli(proj, "task", "add", "TY", "--title", "TY fixture", "--globs", "src/x.py")
     _queue(proj, B, "TB", time.time() - 300)  # first, needs mcp.py
     _queue(proj, "agent-x", "TX", time.time() - 200)  # behind B: overlaps TB on mcp.py
     assert A.release(proj, "HOT", agent=HOLDER).ok
@@ -151,7 +151,7 @@ def test_a_waiter_held_back_by_an_older_one_reserves_nothing(proj):
 def test_a_waiter_still_behind_another_holder_reserves_nothing(proj):
     # B needs TB's files AND is blocked by another lease on them held by someone else:
     # the file freeing does not make B claimable, so C is not made to wait for B.
-    run_cli(proj, "task", "add", "HOT2", "--globs", "src/mcp.py")
+    run_cli(proj, "task", "add", "HOT2", "--title", "HOT2 fixture", "--globs", "src/mcp.py")
     _queue(proj, B, "TB", time.time() - 120)
     # HOT stays held by A: nothing is free, so C is simply blocked by the lease.
     out = _claim(proj, "TC", C)

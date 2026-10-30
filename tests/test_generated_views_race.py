@@ -39,7 +39,18 @@ def adopted(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "off"\n')
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "scaffold", "--no-verify")
     return repo
@@ -47,13 +58,34 @@ def adopted(repo):
 
 def _another_agent_writes(repo: Path, name: str = "T2") -> None:
     code, _o, err = run_cli(
-        repo, "task", "add", f"P1.{name}", "--phase", "P1", "--globs", "src/z.py", agent="other"
+        repo,
+        "task",
+        "add",
+        f"P1.{name}",
+        "--title",
+        "task item",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/z.py",
+        agent="other",
     )
     assert code == 0, err
 
 
 def test_a_view_commits_while_another_agent_appends_events(adopted):
-    run_cli(adopted, "task", "add", "P1.T3", "--phase", "P1", "--globs", "src/c.py")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/c.py",
+    )
     assert run_cli(adopted, "render")[0] == 0
     _git(adopted, "add", VIEW, ".ddflow/events")
     _another_agent_writes(adopted)  # a new, untracked/modified shard nobody staged
@@ -86,7 +118,18 @@ def test_a_rule_file_commits_while_another_agent_appends_events(adopted):
 
 
 def test_a_view_whose_source_events_are_not_committed_is_still_refused(adopted):
-    run_cli(adopted, "task", "add", "P1.T3", "--phase", "P1", "--globs", "src/c.py")
+    run_cli(
+        adopted,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/c.py",
+    )
     assert run_cli(adopted, "render")[0] == 0
     _another_agent_writes(adopted)
     r = _commit(adopted, VIEW)  # the events the view was rendered from are NOT staged

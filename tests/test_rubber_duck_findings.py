@@ -31,7 +31,18 @@ def _queue(repo, *, tasks=("P1.T1",)):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "core", "--globs", "core/**")
     for t in tasks:
-        run_cli(repo, "task", "add", t, "--phase", "P1", "--globs", f"core/{t}.py")
+        run_cli(
+            repo,
+            "task",
+            "add",
+            t,
+            "--title",
+            "task item",
+            "--phase",
+            "P1",
+            "--globs",
+            f"core/{t}.py",
+        )
 
 
 # -- 1. provenance: replay must carry architectural decisions -------------------------
@@ -132,7 +143,18 @@ def test_a_split_cannot_give_two_children_the_same_id(repo):
 
 def test_removing_a_task_umbrella_does_not_orphan_its_sub_tasks(repo):
     _queue(repo)
-    run_cli(repo, "task", "add", "P1.T1.a", "--parent", "P1.T1", "--globs", "core/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1.a",
+        "--title",
+        "P1.T1.a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "core/a.py",
+    )
     code, _, err = run_cli(repo, "remove", "P1.T1")
     assert code == REFUSED, (
         "the child check ran only for phases, so removing a task umbrella left its "
@@ -294,10 +316,32 @@ def test_a_re_recorded_decision_stays_superseded(repo, log):
 def _two_phases(repo, config: str):
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(config)
-    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
-    run_cli(repo, "phase", "add", "P2", "--globs", "p2/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p1/**")
+    run_cli(repo, "phase", "add", "P2", "--title", "P2 fixture", "--globs", "p2/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "p1/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "p2/a.py",
+    )
 
 
 def _ready_in(repo, phase: str, agent: str) -> list[str]:
@@ -632,9 +676,22 @@ def test_a_dependency_can_be_CLEARED_over_mcp(repo):
     delivered on.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "PX", "--globs", "x/**")
+    run_cli(repo, "phase", "add", "PX", "--title", "PX fixture", "--globs", "x/**")
     for tid, needs in (("X.A", "X.C"), ("X.B", "X.A"), ("X.C", "X.B")):
-        run_cli(repo, "task", "add", tid, "--phase", "PX", "--needs", needs, "--globs", f"x/{tid}")
+        run_cli(
+            repo,
+            "task",
+            "add",
+            tid,
+            "--title",
+            "task item",
+            "--phase",
+            "PX",
+            "--needs",
+            needs,
+            "--globs",
+            f"x/{tid}",
+        )
     assert run_cli(repo, "loops")[0] == FAIL, "the ring must be reported first"
 
     replies = _mcp(
@@ -669,7 +726,7 @@ def test_an_omitted_field_is_still_left_alone(repo):
     the behaviour this test pins is unchanged.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
     run_cli(
         repo,
         "task",

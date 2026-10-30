@@ -49,8 +49,12 @@ def _attributes(repo: Path) -> list[str]:
 
 def test_two_items_may_both_claim_an_append_only_file(repo):
     _project(repo, append='["docs/CHANGELOG.md"]')
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py,docs/CHANGELOG.md")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/b.py,docs/CHANGELOG.md")
+    run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py,docs/CHANGELOG.md"
+    )
+    run_cli(
+        repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/b.py,docs/CHANGELOG.md"
+    )
     assert A.claim(repo, "T1", no_worktree=True, agent=ALICE).ok
     out = A.claim(repo, "T2", no_worktree=True, agent=BOB)
     assert out.ok, out.reason
@@ -58,8 +62,17 @@ def test_two_items_may_both_claim_an_append_only_file(repo):
 
 def test_a_shared_generated_file_is_shared_too_and_widening_onto_it_is_not_refused(repo):
     _project(repo, shared='["configs/default.toml"]')
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py,configs/default.toml")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/b.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T1",
+        "--title",
+        "T1 fixture",
+        "--globs",
+        "src/a.py,configs/default.toml",
+    )
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/b.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=ALICE).ok
     assert A.claim(repo, "T2", no_worktree=True, agent=BOB).ok
     out = AI.update(repo, "T2", AI.ItemEdit(globs=["src/b.py", "configs/default.toml"]))
@@ -70,8 +83,8 @@ def test_everything_else_still_collides(repo):
     """Only paths INSIDE a shared glob are exempt: a wide glob that merely overlaps one
     still claims the rest of the directory."""
     _project(repo, append='["docs/CHANGELOG.md"]')
-    run_cli(repo, "task", "add", "T1", "--globs", "docs/**")
-    run_cli(repo, "task", "add", "T2", "--globs", "docs/guide.md")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "docs/**")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "docs/guide.md")
     assert A.claim(repo, "T1", no_worktree=True, agent=ALICE).ok
     out = A.claim(repo, "T2", no_worktree=True, agent=BOB)
     assert out.exit == O.REFUSED, out.reason
@@ -79,8 +92,8 @@ def test_everything_else_still_collides(repo):
 
 def test_next_offers_an_item_whose_only_overlap_is_shared(repo):
     _project(repo, append='["docs/CHANGELOG.md"]')
-    run_cli(repo, "task", "add", "T1", "--globs", "docs/CHANGELOG.md,a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "docs/CHANGELOG.md,b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "docs/CHANGELOG.md,a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "docs/CHANGELOG.md,b.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=ALICE).ok
     code, out, err = run_cli(repo, "next", agent=BOB)
     assert code == O.OK and "T2" in out, out + err
@@ -107,7 +120,7 @@ def test_the_hook_counts_a_shared_path_covered_for_any_live_holder(repo):
     _project(repo, append='["docs/CHANGELOG.md"]')
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "ddflow"], check=True)
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
     (repo / "docs").mkdir()
     (repo / "docs" / "CHANGELOG.md").write_text("- a change\n")
     subprocess.run(["git", "-C", str(repo), "add", "docs/CHANGELOG.md"], check=True)
