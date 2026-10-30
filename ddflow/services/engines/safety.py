@@ -85,7 +85,7 @@ def _audit(sub, limits: Limits, tally: dict[str, int]) -> None:
         if op in (_c.GROUPREF, _c.GROUPREF_EXISTS):
             raise EngineError("back-references are not allowed")
         if op is _c.BRANCH:
-            tally["narrow"] += 1
+            tally["narrow"] += len(av[1])  # one per alternative
         if op in _REPEATS:
             lo, hi, body = av
             if hi != _c.MAXREPEAT and hi > limits.max_repeat:

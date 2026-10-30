@@ -73,6 +73,8 @@ def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[in
     """Run ``cmd`` reading stdout and stderr in chunks (their order is as it arrives). Past ``probe_output_bytes``
     or ``probe_timeout_s`` the child's whole process group is killed, so a huge writer cannot
     fill memory. None on timeout; the exit code is the child's, or -9 after a cap kill."""
+    if os.name != "posix":  # select() on pipes is POSIX-only
+        raise OSError("probe needs a POSIX host")
     err_r, err_w = os.pipe()
     try:
         child = proc.spawn_stdio(cmd, env=env, stderr=err_w)
@@ -91,6 +93,8 @@ def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[in
                 timed_out = True
                 break
             for fd in select.select(open_fds, [], [], min(left, TICK_S))[0]:
+                if total >= limits.probe_output_bytes:
+                    break
                 data = os.read(fd, READ_CHUNK)
                 if not data:
                     open_fds.remove(fd)  # EOF: the child closed this stream
@@ -104,7 +108,7 @@ def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[in
         proc.stop_group(child, reap_s=2)
     else:
         try:
-            child.wait(timeout=limits.probe_timeout_s)
+            child.wait(timeout=max(deadline - time.monotonic(), 0.01))
         except Exception:
             proc.stop_group(child, reap_s=2)
             return None

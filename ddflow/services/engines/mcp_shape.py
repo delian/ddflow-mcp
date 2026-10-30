@@ -60,4 +60,7 @@ def render_json(shape: str, name: str, launch: dict, existing: str = "") -> str:
         mcpconfig.place_server(data, shape, name, launch)
     except mcpconfig.UnplaceableConfig as exc:
         raise EngineError(str(exc)) from None
-    return json.dumps(data, indent=2, allow_nan=False) + "\n"
+    try:
+        return json.dumps(data, indent=2, allow_nan=False) + "\n"
+    except ValueError as exc:  # a number such as 1e999 loads as infinity
+        raise EngineError(f"the existing file holds a number JSON cannot store: {exc}") from None
