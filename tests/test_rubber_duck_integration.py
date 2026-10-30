@@ -88,12 +88,14 @@ def test_a_closed_status_that_also_says_in_progress_is_held_not_dropped(repo):
 
 def test_a_colon_is_refused_in_a_local_id_and_a_local_item_wins_over_external(repo):
     run_cli(repo, "init")
-    code, _o, err = run_cli(repo, "phase", "add", "foo:bar")
+    code, _o, err = run_cli(repo, "phase", "add", "foo:bar", "--title", "foo:bar fixture")
     assert code == FAIL and "colon" in err + _o
     # An item that already has one (an older log) is still local, not external.
     EventLog(repo, "old").append("task.added", "foo:bar", {"title": "legacy"})
     EventLog(repo, "old").append("item.completed", "foo:bar", {"kind": "task"})
-    run_cli(repo, "task", "add", "T2", "--needs", "foo:bar", "--globs", "a.py")
+    run_cli(
+        repo, "task", "add", "T2", "--title", "T2 fixture", "--needs", "foo:bar", "--globs", "a.py"
+    )
     _c, out, _e = run_cli(repo, "--json", "next")
     assert "T2" in {r["id"] for r in json.loads(out)["ready"]}
 

@@ -48,7 +48,7 @@ def _setup(repo) -> None:
     run_cli(repo, "init")
     (repo / ".ddflow" / "gates.toml").write_text(GATES_TOML)
     run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
 
 def _outcome(repo, item="T1", gate="plan_approved"):
@@ -360,7 +360,7 @@ def test_the_human_flag_cannot_be_flipped_from_the_config_writer(repo):
     run_cli(repo, "init")
     run_cli(repo, "config", "--append-toml", '[gate.plan_approved]\nhuman = true\nprompt = "p"')
     run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
     srv = Server(repo)
 

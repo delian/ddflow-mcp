@@ -47,8 +47,19 @@ def _project(repo: Path, *, mutation: str = 'old = "return a + b", new = "return
         'cwd = "repo"\n'
         f'mutations = [\n  {{ file = "src/calc.py", {mutation} }},\n]\n'
     )
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "src/calc.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T1",
+        "--title",
+        "T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/calc.py",
+    )
     return repo
 
 

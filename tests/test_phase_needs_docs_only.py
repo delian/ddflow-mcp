@@ -23,14 +23,55 @@ from ddflow.infra.log import EventLog
 def _queue(repo) -> None:
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P-gate", "--title", "gate")
-    run_cli(repo, "task", "add", "G1", "--phase", "P-gate", "--globs", "core/g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "G1",
+        "--title",
+        "G1 fixture",
+        "--phase",
+        "P-gate",
+        "--globs",
+        "core/g.py",
+    )
     run_cli(repo, "phase", "add", "P-next", "--title", "next", "--needs", "P-gate")
     add = ("task", "add")
-    run_cli(repo, *add, "N-code", "--phase", "P-next", "--globs", "core/n.py")
-    run_cli(repo, *add, "N-res", "--phase", "P-next", "--kind", "research",
+    run_cli(
+        repo,
+        *add,
+        "N-code",
+        "--title",
+        "N-code fixture",
+        "--phase",
+        "P-next",
+        "--globs",
+        "core/n.py",
+    )
+    run_cli(repo, *add, "N-res", "--title", "N-res fixture", "--phase", "P-next", "--kind", "research",
             "--globs", "docs/ddflow/research/n.md")  # fmt: skip
-    run_cli(repo, *add, "N-docs", "--phase", "P-next", "--globs", "docs/n.md")
-    run_cli(repo, *add, "N-mixed", "--phase", "P-next", "--globs", "docs/n.md,core/m.py")
+    run_cli(
+        repo,
+        *add,
+        "N-docs",
+        "--title",
+        "N-docs fixture",
+        "--phase",
+        "P-next",
+        "--globs",
+        "docs/n.md",
+    )
+    run_cli(
+        repo,
+        *add,
+        "N-mixed",
+        "--title",
+        "N-mixed fixture",
+        "--phase",
+        "P-next",
+        "--globs",
+        "docs/n.md,core/m.py",
+    )
 
 
 def _ready(repo) -> set[str]:

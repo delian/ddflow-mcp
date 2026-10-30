@@ -1062,15 +1062,29 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
 def parse(text: str) -> tuple[list[Finding], bool]:
     """(findings, on_contract). Off contract means no STATUS: block at all."""
     status = _STATUS_RE.search(text or "")
-    findings = [
-        Finding(
-            severity=m.group(1).upper(),
-            location=(m.group(2) or "").strip(),
-            title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
-            detail=(m.group(3) or "").strip(),
+    findings = []
+    for m in _FINDING_RE.finditer(text or ""):
+        location = (m.group(2) or "").strip()
+        #: The finding's text is the reviewer's paragraph. A reviewer may write only a
+        #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
+        #: the spot the author must answer, so its text is derived from the location and
+        #: a location-only finding is never recorded empty (B-review-finding-empty-text).
+        detail = (m.group(3) or "").strip() or location
+        title = location or " ".join(detail.split())[:80]
+        if not detail:
+            #: The reviewer declared a finding but named no location and no paragraph.
+            #: It is still a finding -- recorded with a marker, not dropped, so the gate
+            #: stays failed (fail-closed) instead of reading a finding as a clean review.
+            title = "(unnamed finding)"
+            detail = "(reviewer raised a finding but named nothing)"
+        findings.append(
+            Finding(
+                severity=m.group(1).upper(),
+                location=location,
+                title=title,
+                detail=detail,
+            )
         )
-        for m in _FINDING_RE.finditer(text or "")
-    ]
     return findings, status is not None
 
 

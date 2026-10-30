@@ -45,7 +45,9 @@ def _lease_globs(repo: Path, item: str) -> list[str]:
 
 def test_a_heartbeat_keeps_the_globs_the_claim_took(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/stored.py,src/shared.py")
+    run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/stored.py,src/shared.py"
+    )
     out = A.claim(repo, "T1", globs="src/stored.py,src/new.py", no_worktree=True, agent=HOLDER)
     assert out.ok, out.reason
     assert A.heartbeat(repo, "T1", agent=HOLDER).ok
@@ -56,7 +58,7 @@ def test_a_heartbeat_keeps_the_globs_the_claim_took(repo):
 
 def test_a_claim_without_globs_leaves_the_item_alone(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     before = len(EventLog(repo, "probe").read_all())
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     kinds = [e.kind for e in EventLog(repo, "probe").read_all()[before:]]
@@ -141,7 +143,7 @@ def test_a_hook_slower_than_the_claims_ttl_still_sees_the_revived_claim(repo, mo
 def test_a_json_array_is_read_whole_by_add_and_update(repo):
     run_cli(repo, "init")
     raw = json.dumps(["src/speaker.py", "config/speaker.py"])
-    code, _o, err = run_cli(repo, "task", "add", "T1", "--globs", raw)
+    code, _o, err = run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", raw)
     assert code == O.OK, err
     assert sorted(_items(repo)["T1"].globs) == ["config/speaker.py", "src/speaker.py"]
     out = AI.update(repo, "T1", AI.ItemEdit(globs=[json.dumps(["a.py", "b.py"])]))
@@ -151,7 +153,7 @@ def test_a_json_array_is_read_whole_by_add_and_update(repo):
 
 def test_a_mangled_glob_is_refused_by_claim_and_records_nothing(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     before = len(EventLog(repo, "probe").read_all())
     out = A.claim(repo, "T1", globs='["src/a.py", "src/b.py"', no_worktree=True, agent=HOLDER)
     assert out.exit == O.REFUSED, out.reason
@@ -161,9 +163,11 @@ def test_a_mangled_glob_is_refused_by_claim_and_records_nothing(repo):
 
 def test_a_mangled_glob_is_refused_by_add_and_update(repo):
     run_cli(repo, "init")
-    code, _o, err = run_cli(repo, "task", "add", "T1", "--globs", "'src/a.py")
+    code, _o, err = run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "'src/a.py"
+    )
     assert code != O.OK and "src/a.py" in err, err
-    run_cli(repo, "task", "add", "T2", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "a.py")
     out = AI.update(repo, "T2", AI.ItemEdit(globs=['"b.py"']))
     assert out.exit != O.OK and "b.py" in out.reason
     assert _items(repo)["T2"].globs == ["a.py"]
@@ -184,7 +188,7 @@ def test_claimed_globs_in_another_order_are_the_same_claim(repo):
     """Item and lease are compared as SETS -- here and in the heartbeat's catch-up -- so
     a reordered claim records no edit, and no heartbeat rewrites the lease."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py,b.py")
     before = len(EventLog(repo, "probe").read_all())
     assert A.claim(repo, "T1", globs="b.py,a.py", no_worktree=True, agent=HOLDER).ok
     assert A.heartbeat(repo, "T1", agent=HOLDER).ok
@@ -199,7 +203,7 @@ def test_an_update_after_the_claim_moves_item_and_lease_together(repo):
     on both sides -- `update` retargets a live lease (B209) and a heartbeat renews with
     `leases.renew`, which records no globs of its own."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/old.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/old.py")
     assert A.claim(repo, "T1", globs="src/claim.py", no_worktree=True, agent=HOLDER).ok
     assert AI.update(repo, "T1", AI.ItemEdit(globs=["src/user.py"]), agent=HOLDER).ok
     assert A.heartbeat(repo, "T1", agent=HOLDER).ok

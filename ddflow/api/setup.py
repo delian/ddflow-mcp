@@ -375,9 +375,15 @@ def _said(added: list[str]) -> str:
 
 
 def _extra_keys(cfg) -> set[str]:
-    """The keys `[enforce].machine_local_keys` adds to the machine-local classification."""
-    enforce = getattr(cfg, "enforce", None)
-    return set(getattr(enforce, "machine_local_keys", None) or [])
+    """The keys `[enforce].machine_local_keys` adds to the machine-local classification.
+
+    Read through the attribute directly, not `getattr(..., None)`: the dead-knob ratchet
+    (tests/test_ratchet_no_dead_knobs.py) is a NAME-based scan and cannot see a read that
+    spells the knob as a `getattr` string literal, so it would report a knob that this very
+    function consumes as dead (bug B21ec47765c). ``config.enforce`` is an `EnforceConfig`
+    dataclass with `machine_local_keys` defaulting to ``[]``, so the attribute is always present.
+    """
+    return set(cfg.enforce.machine_local_keys)
 
 
 def _default_layer(cfg, edit: ConfigEdit) -> str:

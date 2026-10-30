@@ -120,7 +120,7 @@ def test_a_zero_worktree_cap_follows_the_limit_and_a_number_still_caps(repo) -> 
 def _ten(repo: Path) -> None:
     assert run_cli(repo, "init")[0] == 0
     for i in range(10):
-        run_cli(repo, "task", "add", f"T{i}", "--globs", f"f{i}.py")
+        run_cli(repo, "task", "add", f"T{i}", "--title", "task item", "--globs", f"f{i}.py")
 
 
 def test_status_and_brief_carry_the_line(repo) -> None:

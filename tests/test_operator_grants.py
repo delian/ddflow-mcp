@@ -34,7 +34,7 @@ def _a_person(monkeypatch):
 @pytest.fixture
 def proj(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py")
     return repo
 
 
@@ -173,7 +173,7 @@ def test_a_grant_is_not_spent_without_force(proj):
 
 def test_a_grant_does_not_cross_gates_or_items(proj):
     _grant(proj)
-    run_cli(proj, "task", "add", "T2", "--globs", "u.py")
+    run_cli(proj, "task", "add", "T2", "--title", "T2 fixture", "--globs", "u.py")
     st = _state(proj)
     assert "T2" in st.items
     assert GR.pick(st, "T1", "rubber_duck", force=True) is None

@@ -520,7 +520,7 @@ def test_concurrent_config_writes_do_not_lose_each_other(repo):
 def _pipeline_of(repo, *gates):
     run_cli(repo, "init")
     run_cli(repo, "workflow", "pipeline", "task", ",".join(gates))
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
 
 def test_an_in_order_recording_counts_but_does_not_fire(repo):

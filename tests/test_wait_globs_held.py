@@ -17,8 +17,8 @@ HOLDER, WAITER = "agent-holder", "agent-waiter"
 
 def _setup(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "X", "--globs", "f.py")
-    run_cli(repo, "task", "add", "Y", "--globs", "other.py")
+    run_cli(repo, "task", "add", "X", "--title", "X fixture", "--globs", "f.py")
+    run_cli(repo, "task", "add", "Y", "--title", "Y fixture", "--globs", "other.py")
     assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok
 
 

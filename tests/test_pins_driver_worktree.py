@@ -187,7 +187,7 @@ def _claimed_repo(repo: Path):
     (repo / "transcript.json").write_text("{}\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "pins")
-    run_cli(repo, "task", "add", "T1", "--globs", "t1.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t1.py")
 
 
 def test_a_claim_gives_its_worktree_the_driver_and_doctor_names_the_gap(repo):

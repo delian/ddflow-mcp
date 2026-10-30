@@ -53,7 +53,7 @@ def _project(repo: Path, *, broken: str = "", command: str = "./bin/pytest -q te
         (repo / "broken").write_text("")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     if broken in ("tree", "mask"):
         (repo / "broken").write_text(broken)

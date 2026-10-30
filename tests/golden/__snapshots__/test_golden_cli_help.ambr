@@ -352,7 +352,7 @@
 # ---
 # name: test_help[ddflow bug found]
   '''
-  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--tags TAGS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check]
   
   options:
     -h, --help            show this help message and exit
@@ -363,6 +363,8 @@
     --severity SEVERITY   low | medium | high | critical (optional)
     --scope SCOPE         project (default), or ddflow for a bug in ddflow itself
     --globs GLOBS         the fix task's files (comma-separated); default: the item's own globs
+    --tags TAGS           comma-separated tags (plain strings; a namespaced ns:x is one tag; wave:*
+                          is reserved)
     --no-task             file no fix task: the bug is fixed in the commit that found it
     --repro-cmd REPRO_CMD
                           the command that shows the bug, kept in the repro bundle (never run)
@@ -399,12 +401,13 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
     -h, --help         show this help message and exit
     --state STATE      only rows in this state
     --phase PHASE      only rows under this phase id
+    --tag TAG          only rows carrying this tag
     --since SINCE      only rows last changed at or after this ISO date or timestamp
     --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                        most)
@@ -441,14 +444,29 @@
   
   '''
 # ---
-# name: test_help[ddflow bug]
+# name: test_help[ddflow bug tag]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,reopen,list,show} ...
+  usage: ddflow bug tag [-h] [--add ADD] [--remove REMOVE] id
   
   positional arguments:
-    {found,file-tasks,fixed,invalid,reopen,list,show}
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --add ADD        comma-separated tags to add
+    --remove REMOVE  comma-separated tags to remove
+  
+  '''
+# ---
+# name: test_help[ddflow bug]
+  '''
+  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,tag,reopen,list,show} ...
+  
+  positional arguments:
+    {found,file-tasks,fixed,invalid,tag,reopen,list,show}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
+      tag                 add or remove tags on an existing bug, open or closed
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
       list                list bugs: the open ones unless --all or --state
       show                read one bug: its text, where it was found, its fix task and its closure
@@ -617,7 +635,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--approval APPROVAL] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--lint-exempt LINT_EXEMPT] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--mutation MUTATION] id
   
   positional arguments:
     id
@@ -636,6 +654,9 @@
     --regression-test REGRESSION_TEST
                           for a fix task: the test that now guards the bug(s) it fixes; closes them
                           (as `bug fixed` would) and completes. Repeat for several.
+    --lint-exempt LINT_EXEMPT
+                          close the CI-filed lint bug this fix task fixes (no test to write) with
+                          this reason, recorded, instead of --regression-test
     --mutation-file MUTATION_FILE
                           fix confined to test files: the changed test file the mutation edits (with
                           --mutation-old/--mutation-new); ddflow applies it and the test must fail
@@ -3391,6 +3412,7 @@
     'ddflow bug list',
     'ddflow bug reopen',
     'ddflow bug show',
+    'ddflow bug tag',
     'ddflow cadence',
     'ddflow chore',
     'ddflow chore approve',

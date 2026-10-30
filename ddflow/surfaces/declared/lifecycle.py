@@ -717,6 +717,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            lint_exempt=a.get("lint_exempt", "") or "",
             mutation=mutation_of(a),
             called_from=called_from,
             shell_cwd=shell_cwd,
@@ -785,6 +786,12 @@ COMMANDS: tuple[Command, ...] = (
                 action="append",
                 default=[],
             ),
+            Param(
+                "lint_exempt",
+                help="Fix task of a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test. As `bug fixed lint_exempt`; instead of regression_test.",
+                cli_help="close the CI-filed lint bug this fix task fixes (no test to write) with this reason, recorded, instead of --regression-test",
+                default="",
+            ),
             *MUTATION_PARAMS,
         ),
         tool_order=(
@@ -793,6 +800,7 @@ COMMANDS: tuple[Command, ...] = (
             "model",
             "changelog",
             "regression_test",
+            "lint_exempt",
             *MUTATION_ORDER,
             "force",
             "approval",

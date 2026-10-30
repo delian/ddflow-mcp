@@ -15,6 +15,7 @@ only a non-ddflow tool keeps spawning.
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import re
 import sys
@@ -32,14 +33,6 @@ FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
-#: The built CLI parser this process ANSWERS from, and how it arrives. The parser itself
-#: is a surface-level object (its registry is assembled from `surfaces.commands`), and
-#: `services` may not reach up for it, so it is handed DOWN: `surfaces/__init__` binds a
-#: factory (the lazy `ddflow.surfaces.cli.build_parser`) at import, every ddflow process
-#: and test therefore has one registered before any docs check runs, and the binding is
-#: what keeps the services -> surfaces edge out of this layer (DX B66f6d0c93e).
-_parser_factory: list[Callable[[], ArgumentParser] | None] = [None]
-
 #: This process's own argparse root, built once, on first use: the CLI import drags in
 #: the whole surface, and one parser answers every chain of one walk. A one-element cell
 #: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
@@ -54,14 +47,6 @@ _parser: list[ArgumentParser | None] = [None]
 _capture_lock = threading.Lock()
 
 
-def bind_parser_factory(factory: Callable[[], ArgumentParser]) -> None:
-    """Register how this process builds its own CLI root: `ddflow.surfaces` binds the
-    lazy `build_parser` at import, so a docs check never spawns `ddflow <verb> --help`
-    for a chain this process can answer itself."""
-    _parser_factory[0] = factory
-    _parser[0] = None  # a parser built from a PREVIOUS factory must not answer for this one
-
-
 def in_process(verbs: list[str]) -> P.Captured:
     """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
 
@@ -73,20 +58,11 @@ def in_process(verbs: list[str]) -> P.Captured:
         try:
             parser = _parser[0]
             if parser is None:
-                factory = _parser_factory[0]
-                if factory is None:
-                    # `ddflow.surfaces` binds the factory at import; a caller that reached
-                    # this module without it (an embed that imports services directly) gets
-                    # the spawned walk instead -- slower, and THIS module's own repo is the
-                    # cwd, so the interpreter resolves the same `ddflow` package from its
-                    # own source, not from the caller's sys.path order (rubber_duck #2,
-                    # fix-B66f6d0c93e: a `./ddflow/__main__.py` shadow answered instead).
-                    return P.capture(
-                        [sys.executable, "-m", "ddflow", *verbs, "--help"],
-                        timeout=60,
-                        cwd=Path(__file__).resolve().parents[2],
-                    )
-                parser = _parser[0] = factory()
+                # Dynamic, not `from ..surfaces.cli import build_parser`: that STATIC import
+                # breaks the layers contract (services reaching up into surfaces) on this
+                # module's read path, exactly the cycle recovery.py breaks the same way
+                # (`importlib.import_module("ddflow.api.gates")`).
+                parser = _parser[0] = importlib.import_module("ddflow.surfaces.cli").build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does

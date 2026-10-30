@@ -33,7 +33,7 @@ def _item(repo: Path, iid: str = "T1"):
 
 def _claimed_with_its_own_tree(repo: Path) -> Path:
     assert run_cli(repo, "init")[0] == OK
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     code, out, err = run_cli(repo, "claim", "T1", agent="lead")
     assert code == OK, out + err
     tree = Path(_item(repo).lease.worktree)
@@ -91,7 +91,7 @@ def test_a_reclaim_from_another_tree_keeps_the_items_recorded_tree(repo):
 def test_a_first_claim_from_a_harness_tree_is_still_adopted(repo):
     """The adoption B115 introduced stays: an item with NO tree of its own takes yours."""
     assert run_cli(repo, "init")[0] == OK
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     harness = repo.parent / "harness-tree"
     _git(repo, "worktree", "add", "-q", str(harness), "-b", "harness")
     code, out, err = run_cli(harness, "claim", "T1")
@@ -103,7 +103,7 @@ def test_a_first_claim_from_a_harness_tree_is_still_adopted(repo):
 def test_a_reclaim_from_the_primary_keeps_an_adopted_tree_it_did_not_make(repo):
     """A recorded tree may be anywhere, not only where `W.create` would put one."""
     assert run_cli(repo, "init")[0] == OK
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     harness = repo.parent / "harness-tree"
     _git(repo, "worktree", "add", "-q", str(harness), "-b", "harness")
     assert run_cli(harness, "claim", "T1", agent="lead")[0] == OK
@@ -180,7 +180,7 @@ def test_heartbeat_from_the_tree_does_not_resurrect_an_expired_lease(repo):
     assert run_cli(repo, "init")[0] == OK
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     assert run_cli(repo, "claim", "T1", agent="lead")[0] == OK
     tree = _resolved(repo, _item(repo).lease.worktree)
     before = _item(repo).lease.renewed_at
@@ -258,7 +258,7 @@ def test_a_refused_reclaim_keeps_the_lease_the_caller_already_held(repo):
     is refused still leaks nothing."""
     assert run_cli(repo, "init")[0] == OK
     for iid, g in (("T1", "a.py"), ("T2", "b.py"), ("T3", "c.py")):
-        assert run_cli(repo, "task", "add", iid, "--globs", g)[0] == OK
+        assert run_cli(repo, "task", "add", iid, "--title", "task item", "--globs", g)[0] == OK
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
     bound = repo.parent / "bound-tree"
     _git(repo, "worktree", "add", "-q", str(bound), "-b", "bound")
@@ -279,7 +279,7 @@ def test_a_refused_reclaim_keeps_the_lease_the_caller_already_held(repo):
 
 def test_a_refused_reclaim_at_an_occupied_default_path_keeps_the_held_lease(repo):
     assert run_cli(repo, "init")[0] == OK
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == OK
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
     _git(repo, "worktree", "add", "-q", str(repo / ".ddflow" / "worktrees" / "T1"), "-b", "x")
 

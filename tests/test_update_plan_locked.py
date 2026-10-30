@@ -31,7 +31,7 @@ def test_a_line_move_is_refused_when_another_agent_claims_between_the_fold_and_t
     from ddflow.api import items as I
 
     _lined(repo)
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     real_load = I._load
 
     def load_then_someone_claims(r, agent):
@@ -49,8 +49,8 @@ def test_a_parent_move_under_a_task_claimed_since_the_fold_is_refused(repo, monk
     from ddflow.api import items as I
 
     _lined(repo)
-    run_cli(repo, "task", "add", "A")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     real_load = I._load
 
     def load_then_someone_claims(r, agent):
