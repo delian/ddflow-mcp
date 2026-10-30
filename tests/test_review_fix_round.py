@@ -132,8 +132,9 @@ def test_re_review_prompt_asks_for_each_prior_finding_to_be_checked(repo, tmp_pa
     assert "do not carry it over" in text and "still stands" in text
 
 
-def test_review_says_a_foreground_run_can_be_cut_and_to_use_background(repo, tmp_path):
+def test_review_says_a_foreground_run_can_be_cut_and_to_use_detach(repo, tmp_path):
     _setup(repo, tmp_path)
     lines: list[str] = []
     api.review(repo, gate="critic", item="T1", branch="feat", on_progress=lines.append)
+    assert any("detach" in ln for ln in lines)
     assert any("background" in ln for ln in lines)
