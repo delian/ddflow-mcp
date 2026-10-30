@@ -207,7 +207,9 @@ def uninstall(worktree: Path) -> str:
     if installed(worktree):
         raw = d / "prior_raw"
         value = raw.read_text().strip() if raw.is_file() else ""
-        if _had_prior(d) and value:  # the worktree had its own setting: put it back verbatim
+        if (
+            _had_prior(d) and raw.is_file()
+        ):  # the worktree had its own setting: put it back verbatim
             r = G.run(worktree, "config", "--worktree", "core.hooksPath", value)
         else:
             r = G.run(worktree, "config", "--worktree", "--unset", "core.hooksPath")
