@@ -143,7 +143,7 @@ def test_second_review_findings():
         render_argv.render(["prog", "A" * 9000], {})
     with pytest.raises(EngineError):
         render_argv.render(["prog"], {}, env={1: "FOO"}, environ={})
-    for pat in ("(?=a)", "(?=ab)", "(?!a*)b", "(?<=ab)c"):  # lookarounds audit without crashing
+    for pat in ("(?=a)", "(?=ab)", "(?<=ab)c"):  # lookarounds audit without crashing
         safety.safe_regex(pat)
     with pytest.raises(EngineError):
         safety.safe_regex("^" + "a*" * 98 + "b$")
@@ -177,9 +177,9 @@ def test_a_failed_spawn_leaks_no_descriptor():
     def fds():
         return len(os.listdir("/proc/self/fd"))
 
+    before = fds()
     spec = probe.parse([["definitely-not-installed-xyz", "--version"]])
     probe.run(spec, probe_id="x", now="d")
-    before = fds()
     for _ in range(20):
         with pytest.raises(OSError):
             probe._run_capped(["/definitely/not/here", "--version"], {}, Limits())
@@ -247,3 +247,20 @@ def test_the_cap_binds_a_stderr_only_writer(tmp_path):
         spec, probe_id="n", now="d", limits=Limits(probe_output_bytes=50, probe_timeout_s=3)
     )[0]
     assert f["truncated"] is True and len(f["output"]) == 50
+
+
+def test_sixth_review_findings():
+    with pytest.raises(EngineError):
+        safety.safe_regex("(?=a*a*b)a")
+    safety.safe_regex("(?=ab)a")
+    for bad in (["x"], None, 5):
+        with pytest.raises(EngineError):
+            render_argv.render(["prog", "{model}"], bad)
+    with pytest.raises(EngineError):
+        render_argv.render(["prog"], {}, env=["X"])
+    with pytest.raises(EngineError):
+        render_argv.render(["prog"], {}, env={"A": "B"}, environ=["PATH"])
+    with pytest.raises(EngineError):
+        transcript_map.parse(
+            {"path": "C:\\safe\\..\\x", "format": "jsonl", "fields": {"role": "r"}}
+        )

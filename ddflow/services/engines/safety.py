@@ -87,6 +87,8 @@ def _audit(sub, limits: Limits, tally: dict[str, int]) -> None:
     for op, av in sub:
         if op in (_c.GROUPREF, _c.GROUPREF_EXISTS):
             raise EngineError("back-references are not allowed")
+        if op in (_c.ASSERT, _c.ASSERT_NOT) and _variable(av[1]):
+            raise EngineError("a lookaround holding a variable repeat or branch")
         if op is _c.BRANCH:
             tally["narrow"] += len(av[1])  # one per alternative
         if op in _REPEATS:
