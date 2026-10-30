@@ -119,10 +119,9 @@ def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
     assert redacted[0]["subject"] == "M-s"
     assert redacted[0]["data"]["reason"] == "superseded by a memory re-record"
     superseded = redacted[0]["data"]["event"]
-    assert superseded
-    assert superseded in st.redacted_memory_events  # the audit names the redacted event
-    new_id = next(d["id"] for d in recorded if d["data"]["text"] == "corrected fact")
-    assert superseded != new_id  # ... the superseded one, not the correction
+    assert superseded == recorded[0]["id"]  # the audit names the superseded memory.recorded event
+    assert superseded in st.redacted_memory_events  # ... and the fold records that id as redacted
+    assert superseded != recorded[1]["id"]  # ... the superseded one, not the correction
     shard = _shard_text(repo)
     assert "old stale fact" not in shard
     assert "10.77.3.91" not in shard

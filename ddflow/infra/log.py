@@ -29,6 +29,7 @@ import os
 import re
 import secrets
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -1418,7 +1419,9 @@ class EventLog:
 
     def _rewrite_line(self, old_id: str, ev: Event) -> None:
         """Replace the line whose event id is ``old_id`` with ``ev``'s canonical line,
-        atomically (a reader sees the whole old shard or the whole new one, never a cut)."""
+        atomically. The temp file is created exclusive and private (``mkstemp``: a fresh name,
+        mode ``0600``) and only then set to the shard's own mode BEFORE any content is written,
+        so a restrictive shard is never world-readable and a pre-created name cannot be hijacked."""
         line = ev.to_json()
         for shard in self.shards():
             lines = shard.read_text(encoding="utf-8").splitlines()
@@ -1429,15 +1432,17 @@ class EventLog:
                     continue
                 if got == old_id:
                     lines[i] = line
-                    mode = shard.stat()
-                    tmp = shard.with_name(shard.name + ".redact")
-                    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                    # The replacement must keep the shard's permission bits (and, best-effort,
-                    # its owner): a redaction must never broaden a restrictive shard to the
-                    # process default, which would re-expose the log it is narrowing.
-                    os.chmod(tmp, mode.st_mode & 0o7777)
-                    with contextlib.suppress(PermissionError):
-                        os.chown(tmp, mode.st_uid, mode.st_gid)
+                    fd, tmp = tempfile.mkstemp(
+                        dir=str(shard.parent), prefix=shard.name + ".", suffix=".redact"
+                    )
+                    try:
+                        os.chmod(fd, shard.stat().st_mode & 0o7777)
+                        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                            fh.write("\n".join(lines) + "\n")
+                    except BaseException:
+                        with contextlib.suppress(OSError):
+                            os.unlink(tmp)
+                        raise
                     os.replace(tmp, shard)
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
