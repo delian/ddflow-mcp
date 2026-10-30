@@ -61,7 +61,10 @@ def save(root: Path, report: Report) -> Path:
             raise ValueError(
                 f"{p} has schema {raw.get('schema')!r}, not {SCHEMA!r}; not overwritten"
             )
-        lanes = dict(raw.get("lanes") or {})  # kept as written: a malformed entry survives
+        old = raw.get("lanes")
+        lanes = (
+            dict(old) if isinstance(old, dict) else {}
+        )  # kept as written: a malformed entry survives
         lanes[report.lane] = report.to_data()
         body = {"schema": SCHEMA, "lanes": dict(sorted(lanes.items()))}
         p.parent.mkdir(parents=True, exist_ok=True)
