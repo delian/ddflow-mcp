@@ -161,6 +161,8 @@ def check_table(table: Any, name: str, where: str) -> None:
         raise DescriptorError(
             f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"
         )
+    if name == "headless" and table.get("autonomy") == "":
+        raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
     if "none" in table and table["none"] is True and keys:
         raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
     if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
