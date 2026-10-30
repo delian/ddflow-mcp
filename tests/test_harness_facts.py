@@ -101,3 +101,10 @@ def test_table_cells_cannot_break_the_columns():
     h = p(HEAD + OK.replace("https://x.example", "a|b"))
     for line in harnessfacts.table(harnessfacts.rows(h)).splitlines():
         assert line.count("|") == 9
+
+
+def test_falsy_value_is_a_fact_when_an_overlay_names_it():
+    zero = '[caps]\nmcp_tools = 5\n[facts."caps.subagent_depth"]\ns = "verified"\nsrc = "a"\nd = "2026-10-30"\n'
+    rows = {r["fact"]: r for r in harnessfacts.rows(p(zero))}
+    assert rows["caps.subagent_depth"]["status"] == "verified"
+    assert rows["caps.subagent_depth"]["value"] == "0"

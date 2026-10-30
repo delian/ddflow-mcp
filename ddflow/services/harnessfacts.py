@@ -5,8 +5,8 @@ A descriptor value stays where it is (`[headless] argv = ...`). Its provenance g
 no `v`, the value is the descriptor's own). A value with no overlay reads as `unverified`
 with the `[verified]` source and date: a lead, never believed. A section that says
 `none = true` reads as status `none`. Absent sections are NOT VERIFIED and are listed only
-on request. A falsy value (0, false, empty list) reads as not given: the dataclass default
-and an explicit zero look the same. No probing here; staleness by version is `P-agent-parity.drift`.
+on request. A falsy value (0, false, empty list) is listed only when an overlay names it (a
+default and an explicit zero look the same otherwise). No probing here; staleness by version is `P-agent-parity.drift`.
 """
 
 from __future__ import annotations
@@ -84,14 +84,14 @@ def _known(h: Any) -> set[str]:
 def validate(h: Any, where: str) -> None:
     """Each overlay entry names a fact of this descriptor and its status fits the value."""
     present = _present(h)
-    known = _known(h)
+    known = _known(h)  # a falsy value is still named by an overlay
     for key, node in h.facts.items():
         if key not in known:
             raise DescriptorError(f"{where}: [facts] {key!r}: no such fact in this descriptor")
         value, is_none = present.get(key, (None, False))
         if node["s"] == "none" and not is_none:
             raise DescriptorError(f"{where}: [facts] {key!r}: status none needs none = true")
-        if node["s"] in facts.READABLE and (is_none or not value):
+        if node["s"] in facts.READABLE and is_none:
             raise DescriptorError(f"{where}: [facts] {key!r}: status {node['s']} needs a value")
 
 
@@ -111,9 +111,15 @@ def _row(h: Any, key: str, value: str, default: str, node: dict[str, Any] | None
 
 def rows(h: Any, *, absent: bool = False) -> list[dict[str, str]]:
     """The table of one descriptor; `absent` adds each section left out (NOT VERIFIED)."""
+    have = _present(h)
+    for key in h.facts:  # an overlay names a falsy value: it is a fact the author meant
+        if key not in have and "." in key:
+            sec, _, name = key.partition(".")
+            val = getattr(getattr(h, sec, None), name, None)
+            have[key] = (val if val is not None else "", False)
     out = [
         _row(h, key, _show(value), "none" if is_none else "unverified", h.facts.get(key))
-        for key, (value, is_none) in sorted(_present(h).items())
+        for key, (value, is_none) in sorted(have.items())
     ]
     if absent:
         left = [f.name for f in fields(h) if f.name not in _NOT_SECTIONS]
