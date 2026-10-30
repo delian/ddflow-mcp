@@ -186,3 +186,18 @@ def test_nan_times_and_non_string_globs_are_refused(proj):
     )
     assert IB.pending(proj, LANE) == [] and not IB.has_pending(proj, LANE)
     assert W.decode_wait(W.encode_wait({"globs": [1]})) is None
+
+
+def test_a_huge_time_and_an_escape_in_to_are_contained(proj):
+    d = proj / IB.INBOX_DIR / LANE
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "big.json").write_text(
+        '{"to":"a","reason":"message","text":"x","sender":"","item":"","sent_at":' + "9" * 400 + "}"
+    )
+    (d / "esc.json").write_text(
+        '{"to":"a\\u001bb","reason":"message","text":"x","sender":"","item":"","sent_at":1.0}'
+    )
+    got = IB.pending(proj, LANE)
+    assert [m.to for m in got] == ["ab"]
+    big, _ = IB.send(proj, LANE, "y" * 100000, max_chars=100000)
+    assert big and len(big.text) == IB.READ_CAP
