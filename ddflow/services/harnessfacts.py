@@ -5,8 +5,8 @@ A descriptor value stays where it is (`[headless] argv = ...`). Its provenance g
 no `v`, the value is the descriptor's own). A value with no overlay reads as `unverified`
 with the `[verified]` source and date: a lead, never believed. A section that says
 `none = true` reads as status `none`. Absent sections are NOT VERIFIED and are listed only
-on request. A falsy value (0, false, empty list) is listed only when an overlay names it (a
-default and an explicit zero look the same otherwise). No probing here; staleness by version is `P-agent-parity.drift`.
+on request. A key the file wrote (`given`) is a fact even when it is 0 or false; a falsy default
+is not, unless an overlay names it. No probing here; staleness by version is `P-agent-parity.drift`.
 """
 
 from __future__ import annotations
@@ -38,6 +38,20 @@ def parse_overlay(raw: Any, where: str) -> dict[str, dict[str, Any]]:
     return {k: dict(v) for k, v in raw.items()}
 
 
+def given_keys(raw: dict[str, Any]) -> tuple[str, ...]:
+    """`section.key` for each key a descriptor file wrote, so an explicit 0 or false is a
+    fact and a dataclass default is not."""
+    return tuple(
+        sorted(
+            f"{name}.{k}"
+            for name, table in raw.items()
+            if isinstance(table, dict) and name not in _NOT_SECTIONS
+            for k in table
+            if k != "none"
+        )
+    )
+
+
 def _show(value: Any) -> str:
     if isinstance(value, dict):
         return ", ".join(f"{k}={v}" for k, v in value.items())
@@ -58,7 +72,8 @@ def _present(h: Any) -> dict[str, tuple[Any, bool]]:
             out[f.name] = ("none", True)
             continue
         for sf in fields(sec):
-            if sf.name != "none" and (v := getattr(sec, sf.name)):
+            v = getattr(sec, sf.name)
+            if sf.name != "none" and (v or f"{f.name}.{sf.name}" in h.given):
                 out[f"{f.name}.{sf.name}"] = (v, False)
     for name, res in h.reserved.items():
         if res.none:
