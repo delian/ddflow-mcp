@@ -50,7 +50,7 @@ def test_each_hard_constraint_refuses_with_a_reason():
         "at its cap": (Item("x"), replace(lane, live=1), _world()),
         "trust tier": (Item("x", min_trust=2), lane, _world()),
         "window": (Item("x", est_in=10), replace(lane, window=5), _world()),
-        "hedge cap": (Item("x", attempts=9), lane, _world()),
+        "hedge cap": (Item("x", live_attempts=9), lane, _world()),
         "does not take kind": (Item("x", kind="doc"), replace(lane, kinds=("task",)), _world()),
         "independence": (Item("x"), lane, _world(reviewer_families=("anthropic",))),
     }
@@ -138,7 +138,7 @@ _items = st.builds(
     waited_s=st.floats(0, 1e5, allow_nan=False),
     est_in=st.integers(0, 10**5),
     est_out=st.integers(0, 10**5),
-    attempts=st.integers(0, 3),
+    live_attempts=st.integers(0, 3),
 )
 _lanes = st.builds(
     Lane,
@@ -212,8 +212,10 @@ def test_pull_applies_reviewer_independence_and_hedge_boundary_and_finite_knobs(
     wd = _world()
     assert pull(lane, [Item("r")], wd, W, role="reviewer", author_family="A") is None
     assert pull(lane, [Item("r")], wd, W, role="reviewer", author_family="B")
-    assert not refusals(Item("x", attempts=W.hedge_max), lane, wd, W)  # first + hedge_max extras
-    assert refusals(Item("x", attempts=W.hedge_max + 1), lane, wd, W)
+    assert not refusals(
+        Item("x", live_attempts=W.hedge_max), lane, wd, W
+    )  # first + hedge_max extras
+    assert refusals(Item("x", live_attempts=W.hedge_max + 1), lane, wd, W)
     from ddflow.config_sections.swarm import _nonneg, _positive
 
     assert _nonneg(float("inf")) and _positive(float("nan")) and not _nonneg(0.0)
