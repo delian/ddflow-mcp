@@ -72,6 +72,26 @@ def release_text(out, a) -> str:
     )
 
 
+def heartbeat_call(repo, a, agent, called_from=None, start=None):
+    """`heartbeat`: renew from where the caller ACTUALLY stands, not from the primary its
+    shell was redirected to because the tree is another identity's (`Ctx.called_from`). The
+    item's own worktree speaks for its lease whoever the caller resolves as (Bad4752f936),
+    so the tree check answers from the un-redirected `start`, not the owner-checked
+    `called_from`."""
+    return _api().heartbeat(
+        repo,
+        a.get("id", ""),
+        agent=agent,
+        called_from=start if start is not None else called_from,
+    )
+
+
+def heartbeat_kwargs(ctx) -> dict[str, Any]:
+    """`heartbeat` wants the caller's RAW start -- where its shell stands -- which `Ctx`
+    keeps on `_start` before it answers a foreign tree from the primary."""
+    return {"start": ctx._start}
+
+
 # -- abandon, remove, block, unblock ---------------------------------------------------
 
 

@@ -27,3 +27,7 @@ doc = "A decision was replaced by a later one."
 [[kind]]
 name = "memory.forgotten"
 doc = "A memory was forgotten."
+
+[[kind]]
+name = "memory.redacted"
+doc = "A superseded memory's text was redacted from the log."

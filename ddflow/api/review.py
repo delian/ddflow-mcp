@@ -951,7 +951,7 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     )
 
 
-def _rerun_scope(it, gate: str, revs: list, diff: str, value):
+def _rerun_scope(it, gate: str, revs: list, diff: str, value, chunk_max_tokens: int = 0):
     """(the reviewer to re-run, the evidence to merge into, the chunks), or why not.
 
     A chunk number means something only in the cut that printed it: the same diff, the
@@ -985,9 +985,9 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
             f"reviewer {prior.get('reviewer')!r}, which recorded {it.id}.{gate}, is not "
             f"configured for {gate!r} now: run the full review"
         )
-    if mine[0].max_chunk_chars != prior.get("max_chunk_chars"):
+    if RV.effective_chunk_budget(mine[0], chunk_max_tokens) != prior.get("max_chunk_chars"):
         return (
-            f"[[reviewer]].max_chunk_chars is {mine[0].max_chunk_chars} now, "
+            f"max_chunk_chars is {RV.effective_chunk_budget(mine[0], chunk_max_tokens)} now, "
             f"{prior.get('max_chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
             f"differ, run the full review"
         )
@@ -1501,7 +1501,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         say(_rounds_report(cfg, it, a, why_ok))
     rerun = None
     if a["chunks"] and diff.strip():
-        rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
+        rerun = _rerun_scope(it, gate, revs, diff, a["chunks"], cfg.review.chunk_max_tokens)
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
 

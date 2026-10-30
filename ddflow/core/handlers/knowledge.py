@@ -315,3 +315,13 @@ def _h_memory_forgotten(st: State, ev: Event) -> None:
     m = st.memories.get(ev.subject)
     if m is not None:
         m.forgotten = ev.data.get("reason", "") or "forgotten"
+
+
+def _h_memory_redacted(st: State, ev: Event) -> None:
+    """A superseded `memory.recorded` event's text was redacted from the log (the sanctioned
+    redaction, D-event-log-redaction-forward): record WHICH event was redacted, so the audit
+    trail the redaction promises survives a reconstruction. The re-record's new event follows
+    in the same transaction and is the memory's live text; this set records the redaction."""
+    eid = ev.data.get("event")
+    if isinstance(eid, str) and eid:
+        st.redacted_memory_events.add(eid)

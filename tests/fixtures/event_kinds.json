@@ -573,6 +573,13 @@
    },
    "v": 1
   },
+  "memory.redacted": {
+   "fields": {
+    "event": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
   "phase.added": {
    "fields": {
     "body": ["str"],

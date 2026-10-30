@@ -228,18 +228,19 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_heartbeat",
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
-        call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a.get("id", ""), agent=agent, called_from=called_from
-        ),
+        call=L.heartbeat_call,
         payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
             body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
+            call_kwargs=L.heartbeat_kwargs,
         ),
-        # The item's own tree renews its lease whoever claimed it -- identity is derived
-        # from the tree, so without WHERE the caller is this said "no lease held" from
-        # exactly the tree `claim` made.
+        # The item's own tree renews its lease whoever claimed it -- the CLI may resolve a
+        # DIFFERENT identity than the holder (a harness declaration, `as_agent`), so the
+        # tree check must answer from where the caller actually stands. `heartbeat_kwargs`
+        # passes that raw start past the owner-check redirect (`Ctx.called_from`), which
+        # answered "no lease held" from exactly the tree `claim` made (Bad4752f936).
         wants_called_from=True,
         params=(
             Param(
