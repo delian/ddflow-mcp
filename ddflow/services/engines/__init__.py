@@ -31,5 +31,17 @@ ENGINES = {
     "probe": probe,
 }
 
-__all__ = ["DEFAULT", "ENGINES", "EngineError", "Limits", "safe_regex", "safety"]
+#: The functions a caller (the lane drivers) uses per engine: the stable surface, pinned by a test.
+ENTRY_POINTS = {
+    "fieldmap": ("from_table", "extract"),
+    "emit": ("variant_for", "render"),
+    "mcp_shape": ("container_path", "entry", "render_json"),
+    "render_argv": ("render",),
+    "stream_map": ("parse_rules", "map_line", "map_stream"),
+    "limit_detect": ("parse", "detect"),
+    "transcript_map": ("parse", "resolve_path", "map_lines"),
+    "probe": ("parse", "run"),
+}
+
+__all__ = ["DEFAULT", "ENGINES", "ENTRY_POINTS", "EngineError", "Limits", "safe_regex", "safety"]
 from . import safety  # noqa: E402

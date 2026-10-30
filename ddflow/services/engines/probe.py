@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import os
 import re
+import select
 import shutil
-import signal
-import subprocess
-import threading
+import time
 
+from ...infra import proc
 from .render_argv import is_shell
 from .safety import DEFAULT, EngineError, Limits
 
@@ -65,41 +65,54 @@ def parse(
     return tuple(out)
 
 
-def _kill_group(proc: subprocess.Popen) -> None:
-    """Kill the child and everything it started (they share its session), so a stuck grandchild
-    cannot keep the output pipe open."""
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except OSError:
-        proc.kill()
+READ_CHUNK = 65536
+TICK_S = 0.1  #: how often the wait wakes to check the deadline
 
 
 def _run_capped(cmd: list[str], env: dict[str, str], limits: Limits) -> tuple[int, str] | None:
-    """Run ``cmd`` reading at most ``probe_output_bytes`` (stderr merged); kill it past the cap
-    or the timeout. None on timeout. The cap bounds memory, not just what is kept."""
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        env=env,
-        start_new_session=True,
-    )
-    got: list[bytes] = []
-    reader = threading.Thread(
-        target=lambda: got.append(proc.stdout.read(limits.probe_output_bytes)), daemon=True
-    )
-    reader.start()
-    reader.join(limits.probe_timeout_s)
-    timed_out = reader.is_alive()
-    full = bool(got) and len(got[0]) >= limits.probe_output_bytes
-    if timed_out or full:  # past the cap or the time the child may still be writing
-        _kill_group(proc)
-    code = proc.wait()
-    proc.stdout.close()
+    """Run ``cmd`` reading stdout and stderr in chunks (their order is as it arrives). Past ``probe_output_bytes``
+    or ``probe_timeout_s`` the child's whole process group is killed, so a huge writer cannot
+    fill memory. None on timeout; the exit code is the child's, or -9 after a cap kill."""
+    err_r, err_w = os.pipe()
+    try:
+        child = proc.spawn_stdio(cmd, env=env, stderr=err_w)
+    finally:
+        os.close(err_w)
+    child.stdin.close()  # EOF at once: a probe never reads input
+    open_fds = [child.stdout.fileno(), err_r]
+    chunks: list[bytes] = []
+    total = 0
+    timed_out = False
+    deadline = time.monotonic() + limits.probe_timeout_s
+    try:
+        while open_fds and total < limits.probe_output_bytes:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                timed_out = True
+                break
+            for fd in select.select(open_fds, [], [], min(left, TICK_S))[0]:
+                data = os.read(fd, READ_CHUNK)
+                if not data:
+                    open_fds.remove(fd)  # EOF: the child closed this stream
+                    continue
+                chunks.append(data[: limits.probe_output_bytes - total])
+                total += len(data)
+    finally:
+        os.close(err_r)
+        child.stdout.close()
+    if timed_out or total >= limits.probe_output_bytes:
+        proc.stop_group(child, reap_s=2)
+    else:
+        try:
+            child.wait(timeout=limits.probe_timeout_s)
+        except Exception:
+            proc.stop_group(child, reap_s=2)
+            return None
     if timed_out:
         return None
-    return code, (got[0] if got else b"").decode("utf-8", "replace")
+    return (child.returncode if child.returncode is not None else -9), b"".join(chunks).decode(
+        "utf-8", "replace"
+    )
 
 
 def run(argvs, *, probe_id: str, now: str, limits: Limits = DEFAULT) -> list[dict]:
