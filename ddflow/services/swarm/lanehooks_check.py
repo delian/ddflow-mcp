@@ -54,10 +54,9 @@ def _relative(path: str, cwd: Path) -> str | None:
     """``path`` relative to the lane worktree, or None when it leaves it."""
     p = Path(path)
     p = p if p.is_absolute() else cwd / p
-    try:
-        rel = Path(os.path.normpath(p)).relative_to(os.path.normpath(cwd))
-    except ValueError:
-        return None
+    rel = Path(os.path.relpath(os.path.normpath(p), os.path.normpath(cwd)))
+    if rel.parts[:1] == ("..",) or rel.is_absolute():
+        return None  # leaves the worktree (relative_to would not raise for a sibling)
     return PurePosixPath(*rel.parts).as_posix()
 
 

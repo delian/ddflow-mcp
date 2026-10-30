@@ -188,8 +188,17 @@ def _refuse_location(home: Path, repo: Path, worktree: Path) -> str:
     return ""
 
 
-def _tracked(worktree: Path, files: list[Path]) -> bool:
-    return any(G.run(worktree, "ls-files", "--error-unmatch", str(f)).ok for f in files)
+def _tracked(repo: Path, files: list[Path]) -> bool:
+    """Is any of ``files`` tracked by the project? (a path outside the repo cannot be)"""
+    root = repo.resolve()
+    for f in files:
+        try:
+            rel = f.resolve().relative_to(root)
+        except ValueError:
+            continue
+        if G.run(root, "ls-files", "--error-unmatch", "--", str(rel)).ok:
+            return True
+    return False
 
 
 def _write(path: Path, text: str) -> None:
@@ -223,7 +232,8 @@ def prepare(
 
     ``state`` is the folded event log (for the plugin approval check). A ``Consent`` or an
     ``unavailable`` Result means nothing was written. ``git_fallback`` installs the worktree's
-    lease-checking pre-commit hook when the harness has no lane hook door (``detect``)."""
+    lease-checking pre-commit hook: the only layer for a harness with no lane hook door
+    (``detect``) and a second one behind the others (a shell write carries no path)."""
     repo, worktree, home = Path(repo), Path(worktree), Path(home)
     if not agent or agent != agent.strip() or any(c.isspace() or c == "/" for c in agent):
         return unavailable("the lane needs its own agent identity (no spaces or slashes)")
@@ -238,21 +248,23 @@ def prepare(
         if s.consent and (need := _need_consent(harness, state)) is not None:
             return need
         plan = _plan(s, home, repo, agent)
-        if _tracked(worktree, list(plan.files)):
+        if _tracked(repo, list(plan.files)):
             return unavailable("a lane hook path is tracked by the project: refusing to write it")
         for path, text in plan.files.items():
             _write(path, text)
         files, args, argv = list(plan.files), plan.args, plan.argv
         note = f"{harness}: a blocking pre-tool hook in the lane home ({s.known})"
-    elif git_fallback:
-        githook.install(worktree, agent=agent)
-        note = f"{harness}: detection at commit only, not prevention ({s.reason})"
     else:
         note = f"{harness}: no hook installed ({s.reason})"
+    if git_fallback:
+        # Also behind a blocking hook: a shell command carries no path for the pre-tool check.
+        githook.install(worktree, agent=agent)
+        if s.level == DETECT:
+            note = f"{harness}: detection at commit only, not prevention ({s.reason})"
     manifest = {
         "harness": harness, "agent": agent, "level": s.level, "door": s.door,
         "files": [str(f) for f in files], "argv": argv, "worktree": str(worktree),
-        "git": s.level == DETECT and git_fallback, "template": PL.digest() if s.consent else "",
+        "git": git_fallback, "template": PL.digest() if s.consent else "",
     }  # fmt: skip
     _write(home / DIR_NAME / MANIFEST, json.dumps(manifest, indent=2) + "\n")
     return Prepared(s, agent, home, tuple(files), env, args, note)
@@ -275,7 +287,11 @@ def remove(home: Path) -> str:
     done = []
     if m.get("git"):
         done.append(githook.uninstall(Path(m["worktree"])))
+    root = home.resolve()
     for f in m.get("files", []):
+        if root not in Path(f).resolve().parents:  # a manifest is data: never delete outside home
+            done.append(f"refused to remove {f}: not inside the lane home")
+            continue
         Path(f).unlink(missing_ok=True)
         done.append(f"removed {f}")
     shutil.rmtree(home / DIR_NAME, ignore_errors=True)
