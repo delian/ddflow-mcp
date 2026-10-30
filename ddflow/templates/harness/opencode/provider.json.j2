@@ -1,4 +1,4 @@
-{#- A lane-PRIVATE provider block for opencode and kilo (same schema). Written into the lane home, never the project. -#}
+{#- kilo 7.8.18 skips the model when limit has context without output, so limit is written only when both are known (a guessed output is worse than none). A lane-PRIVATE provider block for opencode and kilo (same schema). Written into the lane home, never the project. -#}
 {
   "$schema": {{ schema | tojson }},
   "provider": {
@@ -12,8 +12,8 @@
       "models": {
         {{ model | tojson }}: {
           "name": {{ model | tojson }},
-          "tool_call": {{ tool_call | tojson }}{% if window %},
-          "limit": {"context": {{ window }}, "output": {{ max_output or window }}}{% endif %}
+          "tool_call": {{ tool_call | tojson }}{% if window and max_output %},
+          "limit": {"context": {{ window }}, "output": {{ max_output }}}{% endif %}
         }
       }
     }
