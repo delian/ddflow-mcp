@@ -33,8 +33,9 @@ class KeyResult:
     """The key (``value``) or why there is none (``reason``). ``source`` is ``env`` or ``file``.
 
     Deliberately NOT a dataclass: `dataclasses.asdict` and the generated `__eq__` and
-    `__repr__` would reach the value. Only ``.value`` does; `repr`, `str` and pickling
-    name the source alone."""
+    `__repr__` would reach the value. `repr`, `str` and pickling name the source alone;
+    introspection (`vars`, `__slots__`) can still reach it, so never serialise one: pass
+    `.value` to the request and nowhere else."""
 
     __slots__ = ("_value", "reason", "source")
 
@@ -109,6 +110,8 @@ def resolve_key(env_name: str, key_file: str = "", default_env: str = "") -> Key
     and ``key_file`` are both unset (a keyless endpoint) unless ``default_env`` is given."""
     name = env_name
     if name and (val := os.environ.get(name, "")):
+        if not val.isprintable() or any(c.isspace() for c in val):
+            return KeyResult(reason=f"${name} holds a control or whitespace character; not a key")
         return KeyResult(value=val, source="env")
     if key_file:
         got = read_key_file(key_file)
