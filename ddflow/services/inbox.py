@@ -56,9 +56,7 @@ class Message:
     file: str = ""  #: the on-disk name, set on read; never shown
 
     def wire(self) -> dict[str, Any]:
-        return {
-            k: (clean(v, 120)[0] if k == "id" else v) for k, v in asdict(self).items() if k != "to"
-        }
+        return {k: v for k, v in asdict(self).items() if k not in ("to", "file")}
 
 
 def _dir(repo: Path, agent: str) -> Path:
