@@ -107,8 +107,9 @@ def _models(events: Sequence[Event]) -> dict[str, list[tuple[float, str]]]:
     out: dict[str, list[tuple[float, str]]] = {}
     for ev in events:
         d = ev.data if isinstance(ev.data, dict) else {}
-        if ev.kind == "session.started" and isinstance(d.get("model"), str) and d["model"]:
-            out.setdefault(ev.agent, []).append((PR.epoch(ev.ts), d["model"]))
+        if ev.kind == "session.started":  # a model-less session is a marker: it ends the old one
+            m = d.get("model") if isinstance(d.get("model"), str) else ""
+            out.setdefault(ev.agent, []).append((PR.epoch(ev.ts), m))
     for rows in out.values():
         rows.sort(key=lambda r: r[0])  # stable: equal times keep log order
     return out
