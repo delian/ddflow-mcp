@@ -143,24 +143,25 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
     d = hook_dir(worktree)
     original = _original(worktree, d)
     cur = G.run(worktree, "config", "--worktree", "--get", "core.hooksPath")
-    had_prior = (cur.ok and cur.out.strip() != str(d)) or _had_prior(d)
+    had_prior = (cur.ok and not installed(worktree)) or _had_prior(d)
     old_raw = d / "prior_raw"
-    raw = cur.out.strip() if cur.ok and cur.out.strip() != str(d) else ""
+    raw = cur.out.strip() if cur.ok and not installed(worktree) else ""
     raw = raw or (old_raw.read_text().strip() if old_raw.is_file() else "")
     d.mkdir(parents=True, exist_ok=True)
     _write_exec(d / "pre-commit", render(chain_to=original, agent=agent, invocation=invocation))
     replace_text(d / "original", str(original) + "\n")
     replace_text(old_raw, raw + "\n")  # the prior setting verbatim (may be relative)
     replace_text(d / "had_prior", ("1" if had_prior else "0") + "\n")
-    known = {"pre-commit", "original", "prior_raw", "had_prior"}
+    known = {"pre-commit", "lease-check", "original", "prior_raw", "had_prior"}
+    _write_exec(d / "lease-check", render(agent=agent, invocation=invocation))
     for name in GIT_HOOKS:  # looked up at run time: a hook added or removed later is honoured
         target = shlex.quote(str(original / name))
         if name in PRESENCE_MATTERS and not os.access(original / name, os.X_OK):
             continue  # git changes behaviour when such a hook EXISTS, even if it does nothing
         if name == MERGE_HOOK:
             # git runs pre-commit for a merge commit only when there is NO pre-merge-commit
-            # hook; the lane runs it (lease check, then the project's pre-commit) first.
-            lane = shlex.quote(str(d / "pre-commit"))
+            # hook; the lane runs its lease check (only that) before the project's own hook.
+            lane = shlex.quote(str(d / "lease-check"))
             body = f'#!/bin/sh\n{MARKER}\n{lane} "$@" || exit $?\n'
             body += f'[ -x {target} ] && exec {target} "$@"\nexit 0\n'
         else:

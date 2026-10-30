@@ -273,3 +273,14 @@ def test_installed_and_uninstall_accept_an_equivalent_spelling(lane, tmp_path):
     GH.uninstall(wt)
     got = sh(wt, "git", "config", "--worktree", "--get", "core.hooksPath", check=False)
     assert got.stdout == ""
+
+
+def test_merge_commit_does_not_run_the_projects_pre_commit_when_it_has_a_merge_hook(lane, tmp_path):
+    main, wt = lane
+    hooks = main / ".git" / "hooks"
+    for name, code in (("pre-merge-commit", 0), ("pre-commit", 1)):
+        (hooks / name).write_text(f"#!/bin/sh\nexit {code}\n")
+        (hooks / name).chmod(0o755)
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    d = GH.hook_dir(wt)
+    assert sh(d, str(d / "pre-merge-commit"), check=False).returncode == 0
