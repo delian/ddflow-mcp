@@ -211,3 +211,16 @@ def test_malformed_served_overlay_loads_and_is_reported():
 def test_a_row_that_is_not_a_table_is_reported(tmp_path):
     cat = _cat('[model]\ndeepseek-flash = "paid"\n', tmp_path)
     assert "model.deepseek-flash is not a table" in M.validate(cat)
+
+
+def test_malformed_top_level_and_identity_do_not_crash(tmp_path):
+    cat = _cat('model = "oops"\nsources = 3\n', tmp_path)
+    assert "model is not a table of rows" in M.validate(cat)
+    cat = M.load()
+    cat.family["claude"]["identity"]["v"]["needles"] = [1, "x"]
+    assert M.resolve(cat, "claude-x").family == M.UNKNOWN
+    assert any("claude.identity" in p for p in M.validate(cat))
+    cat = M.load()
+    cat.route["openai"]["endpoint"]["v"] = "http://x"
+    assert any("route.openai.endpoint" in p for p in M.validate(cat))
+    assert "openai" not in M.presets(cat)
