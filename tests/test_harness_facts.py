@@ -116,3 +116,10 @@ def test_overlay_cannot_wave_through_a_missing_or_absent_value():
         p("[caps]\nnone = true\n" + ov.format(k="caps.mcp_tools"))
     with pytest.raises(DescriptorError, match="value"):
         p("[spawn]\nnone = true\n" + ov.format(k="spawn"))
+
+
+def test_an_explicit_zero_is_a_fact_without_an_overlay():
+    rows = {r["fact"]: r for r in harnessfacts.rows(p("[caps]\nsubagent_depth = 0\n"))}
+    assert rows["caps.subagent_depth"]["value"] == "0"
+    assert rows["caps.subagent_depth"]["status"] == "unverified"
+    assert "caps.mcp_tools" not in rows

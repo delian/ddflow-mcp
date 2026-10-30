@@ -200,6 +200,7 @@ class Harness:
     telemetry: harnessv2.Telemetry | None = None
     reserved: dict[str, Reserved] = field(default_factory=dict)  #: RESERVED_SECTIONS present
     facts: dict[str, dict[str, Any]] = field(default_factory=dict)  #: provenance (harnessfacts)
+    given: tuple[str, ...] = ()  #: `section.key` of every key the file wrote, even a zero
 
 
 def _check_type(value: Any, hint: Any, where: str) -> Any:
@@ -325,6 +326,7 @@ def parse(text: str, name: str) -> Harness:
     top = {k: raw.pop(k) for k in ("id", "rank", "family", "delta", "title") if k in raw}
     mcp = _build(Mcp, raw.pop("mcp", None), f"{where}[mcp]")
     verified = _build(Verified, raw.pop("verified", None), f"{where}[verified]")
+    given = harnessfacts.given_keys(raw)
     overlay = harnessfacts.parse_overlay(raw.pop("facts", {}), where)
     sections = {}
     for key, cls in _SECTIONS.items():
@@ -345,7 +347,9 @@ def parse(text: str, name: str) -> Harness:
                 continue
             raise DescriptorError(f"{where}: missing top-level key {key!r}")
         _check_type(top[key], want, f"{where}.{key}")
-    h = Harness(**top, mcp=mcp, verified=verified, reserved=reserved, facts=overlay, **sections)
+    h = Harness(
+        **top, mcp=mcp, verified=verified, reserved=reserved, facts=overlay, given=given, **sections
+    )
     if h.id != name:
         raise DescriptorError(f"{where}: id {h.id!r} must equal the file name {name!r}")
     _validate(h, where)
