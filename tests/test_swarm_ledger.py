@@ -133,3 +133,11 @@ def test_lease_model_wins_and_equal_time_sessions_keep_log_order():
     log2.add("lease.acquired", "B", "y", T0, holder="y", at=T0, model="deepseek-v4", globs=[])
     log2.complete("y", "B", T0 + 9)
     assert list(_run(log2).cells) == [L.Key("deepseek", "deepseek-v4", "task")]
+
+
+def test_modelless_later_session_ends_the_earlier_model():
+    log = Log()
+    log.session("x", "s1", T0 - 9, tool="t", model="deepseek-v4")
+    log.session("x", "s2", T0 - 5, tool="t")  # newer session, no model recorded
+    _item(log, "A", "x", T0, [("ci", "passed")])
+    assert list(_run(log).cells) == [L.Key("", "", "task")]
