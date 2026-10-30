@@ -134,8 +134,8 @@ _items = st.builds(
         tuple
     ),
     needs=st.lists(st.sampled_from(["n1", "n2"]), max_size=2).map(tuple),
-    critical=st.floats(0, 1),
-    waited_s=st.floats(0, 1e5),
+    critical=st.floats(0, 1, allow_nan=False),
+    waited_s=st.floats(0, 1e5, allow_nan=False),
     est_in=st.integers(0, 10**5),
     est_out=st.integers(0, 10**5),
     attempts=st.integers(0, 3),
@@ -146,8 +146,8 @@ _lanes = st.builds(
     family=st.sampled_from(["f1", "f2", ""]),
     model=st.sampled_from(["m1", "m2"]),
     trust=st.integers(0, 2),
-    price_in=st.one_of(st.none(), st.floats(0, 50)),
-    price_out=st.one_of(st.none(), st.floats(0, 50)),
+    price_in=st.one_of(st.none(), st.floats(0, 50, allow_nan=False)),
+    price_out=st.one_of(st.none(), st.floats(0, 50, allow_nan=False)),
     window=st.one_of(st.none(), st.integers(1, 3 * 10**5)),
     local=st.booleans(),
     live=st.integers(0, 2),
@@ -155,11 +155,11 @@ _lanes = st.builds(
 )
 _weights = st.builds(
     Weights,
-    w_critical=st.floats(0, 1e3),
-    w_fit=st.floats(0, 1e3),
-    w_cost=st.floats(0, 1e3),
-    w_rework=st.floats(0, 1e3),
-    w_queue=st.floats(0, 1e3),
+    w_critical=st.floats(0, 1e3, allow_nan=False),
+    w_fit=st.floats(0, 1e3, allow_nan=False),
+    w_cost=st.floats(0, 1e3, allow_nan=False),
+    w_rework=st.floats(0, 1e3, allow_nan=False),
+    w_queue=st.floats(0, 1e3, allow_nan=False),
     max_lanes=st.integers(0, 4),
     family_cap=st.integers(0, 3),
 )
@@ -205,3 +205,15 @@ def test_hedged_leases_each_count_against_max_lanes_and_zero_refs_do_not_divide(
     )
     d = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), wd, w)
     assert not d.ok and any("max_lanes" in r for r in d.reasons)
+
+
+def test_pull_applies_reviewer_independence_and_hedge_boundary_and_finite_knobs():
+    lane = Lane("rev", "A", "m", cap=2)
+    wd = _world()
+    assert pull(lane, [Item("r")], wd, W, role="reviewer", author_family="A") is None
+    assert pull(lane, [Item("r")], wd, W, role="reviewer", author_family="B")
+    assert not refusals(Item("x", attempts=W.hedge_max), lane, wd, W)  # first + hedge_max extras
+    assert refusals(Item("x", attempts=W.hedge_max + 1), lane, wd, W)
+    from ddflow.config_sections.swarm import _nonneg, _positive
+
+    assert _nonneg(float("inf")) and _positive(float("nan")) and not _nonneg(0.0)
