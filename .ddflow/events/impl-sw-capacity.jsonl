@@ -49,3 +49,4 @@
 {"agent":"impl-sw-capacity","data":{"at":1793394172.7784688,"holder":"impl-sw-capacity"},"id":"e07da969689abd5fa9a7c47be","kind":"lease.renewed","lamport":116051,"schema":1,"subject":"SW-capacity","ts":"2026-10-30T21:02:52.844058Z"}
 {"agent":"impl-sw-capacity","data":{"at":1793394299.0499337,"holder":"impl-sw-capacity"},"id":"eaebe0df8986dc6ad81e6b021","kind":"lease.renewed","lamport":116060,"schema":1,"subject":"SW-capacity","ts":"2026-10-30T21:04:59.132448Z"}
 {"agent":"impl-sw-capacity","data":{"at":1793394487.1852202,"holder":"impl-sw-capacity"},"id":"e85814c7f7f051a9c23e31485","kind":"lease.renewed","lamport":116073,"schema":1,"subject":"SW-capacity","ts":"2026-10-30T21:08:07.254609Z"}
+{"agent":"impl-sw-capacity","data":{"at":1793394611.0817957,"holder":"impl-sw-capacity"},"id":"e04bda4977504e6e5279a193e","kind":"lease.renewed","lamport":116083,"schema":1,"subject":"SW-capacity","ts":"2026-10-30T21:10:11.147482Z"}
