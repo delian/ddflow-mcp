@@ -11,6 +11,7 @@ in the project.
 from __future__ import annotations
 
 import json
+import re
 
 from ...core.digest import content_digest
 
@@ -64,4 +65,6 @@ def render(argv: list[str], agent: str) -> str:
         text = json.dumps(v)
         return text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
-    return TEMPLATE.replace(_ARGV, esc(list(argv))).replace(_AGENT, esc(agent))
+    values = {_ARGV: esc(list(argv)), _AGENT: esc(agent)}
+    # one pass: a value that contains a marker is never substituted again
+    return re.sub("|".join(values), lambda m: values[m.group()], TEMPLATE)

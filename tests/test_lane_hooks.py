@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -35,6 +36,7 @@ def tree(tmp_path):
     sh(repo, "git", "init", "-q")
     sh(repo, "git", "config", "user.email", "a@b.c")
     sh(repo, "git", "config", "user.name", "a")
+    (repo / ".git" / "info" / "exclude").write_text(".ddflow/\n")
     (repo / "a.txt").write_text("a")
     sh(repo, "git", "add", ".")
     sh(repo, "git", "commit", "-qm", "init")
@@ -188,6 +190,7 @@ def test_unavailable_not_guessed(tree):
     assert r.status == "unavailable" and "inside" in r.detail and not inside.exists()
     r = LH.prepare(repo, wt, repo / ".ddflow" / "x", "claude", "lane-7")
     assert isinstance(r, LH.Prepared)  # the project's git-ignored state dir is a private place
+    assert sh(repo, "git", "status", "--porcelain").stdout == ""
 
 
 # --- the check the hook runs ---------------------------------------------------------------
@@ -232,3 +235,31 @@ def test_probe_reaches_the_hook_level_in_conformance(tree):
     rep = C.grade("lane-7", o, C.Params())
     hook = next(x for x in rep.outcomes if x.check == "hook")
     assert hook.status == C.PASSED
+
+
+def test_review_findings_hold(tree, tmp_path):
+    repo, wt, home = tree
+    # an outside path is outside even when the lease is broad
+    assert CK._relative("/etc/passwd", Path("/lane/repo")) is None
+    assert CK._relative("../x", Path("/lane/repo")) is None
+    assert CK._relative("src/a.py", Path("/lane/repo")) == "src/a.py"
+    # a value holding a marker is never substituted twice
+    out = PL.render(["/bin/c", "__DDFLOW_AGENT__"], "lane-1")
+    assert '["/bin/c", "__DDFLOW_AGENT__"]' in out and '""lane-1""' not in out
+    # a manifest cannot make remove delete outside the lane home
+    victim = tmp_path / "important.txt"
+    victim.write_text("keep")
+    LH.prepare(repo, wt, home, "claude", "lane-7")
+    m = home / LH.DIR_NAME / LH.MANIFEST
+    d = json.loads(m.read_text())
+    d["files"].append(str(victim))
+    m.write_text(json.dumps(d))
+    assert "refused" in LH.remove(home) and victim.exists()
+    # a tracked hook path is refused (relative pathspec, absolute home under the repo)
+    h2 = repo / ".ddflow" / "h2"
+    (h2 / LH.DIR_NAME).mkdir(parents=True)
+    f = h2 / LH.DIR_NAME / "claude-settings.json"
+    f.write_text("{}")
+    sh(repo, "git", "add", "-f", str(f))
+    r = LH.prepare(repo, wt, h2, "claude", "lane-7")
+    assert getattr(r, "status", "") == "unavailable" and "tracked" in r.detail
