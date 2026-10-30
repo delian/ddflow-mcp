@@ -942,6 +942,9 @@ class State:
     research: dict[str, ResearchNote] = field(default_factory=dict)
     decisions: dict[str, Decision] = field(default_factory=dict)
     memories: dict[str, Memory] = field(default_factory=dict)
+    #: `memory.recorded` event ids whose superseded text was redacted from the log
+    #: (`memory.redacted`): the auditable record that the text no longer stands.
+    redacted_memory_events: set[str] = field(default_factory=set)
     jobs: dict[str, Job] = field(default_factory=dict)
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).

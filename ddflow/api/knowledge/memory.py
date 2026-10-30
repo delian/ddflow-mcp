@@ -10,6 +10,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...core.redact import SUPERSEDED_MARKER
 from ...services import searchcore as SC
 from .._base import _load
 from .lessons import _store
@@ -67,10 +68,42 @@ def memory_add(
         data["tags"] = csv_list(tags)
     with log.transaction():
         minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
+        prior_events, redacted_now = _prior_memory_state(log, mid)
         log.append("memory.recorded", mid, data | IDS.key_field(minted))
+        if id:  # a superseding add (an explicit --id): redact every prior event the LIVE log sees
+            for prior in prior_events:
+                # Redact each superseded memory.recorded event, so a stale or private copy of an
+                # older text does not survive (bug B-memory-rerecord-keeps-old-text-in-log), each
+                # audited (D-event-log-redaction-forward). Skip an event only when its text is
+                # ALREADY the redaction marker and an audit names it; both were read under the lock.
+                if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in redacted_now:
+                    continue
+                _original, redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
+                log.append(
+                    "memory.redacted",
+                    mid,
+                    {"event": redacted.id, "reason": "superseded by a memory re-record"},
+                )
         DD.after_add(log, cfg, mid, chk)
-    replaced = bool(id) and id in st.memories
+    # `replaced` is decided from the log read under the lock, not the pre-lock snapshot, so it is
+    # true exactly when a prior record was actually superseded -- even under a concurrent re-record.
+    replaced = bool(id) and bool(prior_events)
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
+
+
+def _prior_memory_state(log, mid: str) -> tuple[list, set[str]]:
+    """``memory.recorded`` events for ``mid`` (oldest first) and the event ids already audited
+    redacted, both read from the log NOW, so the set is fresh for the process holding the lock."""
+    mem_events: list = []
+    redacted: set[str] = set()
+    for e in log.read_all():
+        if e.subject != mid:
+            continue
+        if e.kind == "memory.recorded":
+            mem_events.append(e)
+        elif e.kind == "memory.redacted" and isinstance(e.data.get("event"), str):
+            redacted.add(e.data["event"])
+    return mem_events, redacted
 
 
 def _memory_row(m) -> dict[str, Any]:
