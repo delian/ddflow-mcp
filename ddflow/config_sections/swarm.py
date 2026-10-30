@@ -20,6 +20,11 @@ def _share(value: object) -> str:
     return "" if ok else "a number between 0 and 1"
 
 
+def _positive(value: object) -> str:
+    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    return "" if ok else "a number above zero"
+
+
 def _count(value: object) -> str:
     ok = isinstance(value, int) and not isinstance(value, bool) and value >= 0
     return "" if ok else "a whole number of zero or more"
@@ -80,8 +85,8 @@ class SwarmConfig:
     )
     queue_ref_s: int = knob(
         3600,
-        doc="Seconds of waiting at which the queue term reaches one (it saturates there).",
-        check=_count,
+        doc="Seconds of waiting at which the queue term reaches one (it saturates there). Must be above zero.",
+        check=_positive,
     )
     max_lanes: int = knob(
         4,
