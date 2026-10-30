@@ -27,7 +27,7 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     try:
         on = not _STAMPING.get() and bool(cfg.waves.auto_stamp)
         before = log.mark() if on else None
-    except Exception:  # noqa: BLE001 -- stamping must never break the command it follows
+    except Exception:  # stamping must never break the command it follows
         on, before = False, None
     yield
     if not on:
@@ -39,7 +39,7 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
                 waves.restamp(repo, agent)
             finally:
                 _STAMPING.reset(_token)
-    except Exception:  # noqa: BLE001 -- the command's own result stands
+    except Exception:  # the command's own result stands
         return
 
 
@@ -48,7 +48,7 @@ def scope_for(repo: Path, agent: str = ""):
     try:
         cfg = Config.load(repo)
         log, _who = ID.open_log(repo, cfg, agent)
-    except Exception:  # noqa: BLE001 -- a project that cannot load runs the call as before
+    except Exception:  # a project that cannot load runs the call as before
         return contextlib.nullcontext()
     return keep_stamped(repo, cfg, log, agent)
 
