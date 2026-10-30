@@ -1,0 +1,138 @@
+"""DRV-model-catalog: families, models and routes as fact records with provenance."""
+
+from __future__ import annotations
+
+import re
+from datetime import date
+
+from ddflow.config_sections.agent import FAMILY_HINTS, family_for
+from ddflow.infra import paths
+from ddflow.services import modelreg as M
+from ddflow.services import review
+
+
+def _cat(local: str | None = None, tmp_path=None):
+    if local is None:
+        return M.load()
+    (tmp_path / M.LOCAL_FILE).write_text(local, encoding="utf-8")
+    return M.load(local_dir=tmp_path)
+
+
+def test_shipped_catalog_is_well_formed():
+    assert M.validate(M.load()) == []
+
+
+def test_every_family_has_source_and_date():
+    cat = M.load()
+    for fid, row in cat.family.items():
+        if fid in ("local", "unknown"):
+            continue
+        ident = row["identity"]
+        assert ident["src"] in cat.sources and ident["d"], fid
+
+
+def test_a_fact_without_source_or_date_is_a_problem():
+    cat = M.load()
+    cat.model["deepseek-flash"]["window"] = {"v": 1, "s": "documented"}
+    bad = M.validate(cat)
+    assert any("source" in p for p in bad) and any("date" in p for p in bad)
+
+
+def test_family_hints_reader_matches_the_former_table_in_order():
+    assert list(M.family_hints(M.load()).items()) == list(FAMILY_HINTS.items())
+
+
+def test_presets_reader_matches_review_presets():
+    assert M.presets(M.load()) == review.PRESETS
+
+
+def test_unknown_model_never_matches_a_neighbour():
+    cat = M.load()
+    for name in ("", "totally-new-model", "deepseek"[:4], "flash-9"):
+        r = M.resolve(cat, name)
+        assert (r.family, r.vendor, r.how) == (M.UNKNOWN, "", "unknown")
+        assert M.read(cat, name, "window").value is None
+
+
+def test_resolution_agrees_with_family_for():
+    cat = M.load()
+    for name in ("claude-sonnet-5", "Qwen3-coder", "gpt-5", "kimi-k3", "llama-3", "x-unknown"):
+        assert M.resolve(cat, name).vendor == family_for(name)
+
+
+def test_listed_model_wins_over_family_and_reads_price():
+    cat = M.load()
+    assert M.resolve(cat, "DeepSeek-V4-Pro").how == "model"
+    assert M.read(cat, "deepseek-v4-pro", "price_in").value == 0.66
+    assert M.read(cat, "deepseek-v4-pro", "price_out").value is None  # left out, not guessed
+
+
+def test_cache_family_facts_are_read_with_model_scoping():
+    cat = M.load()
+    assert M.read(cat, "claude-sonnet-5.5", "read_mult").value == 0.05
+    assert M.read(cat, "claude-opus-4", "read_mult").value == 0.1
+    # an unverified fact is a lead: never read as true
+    p = M.read(cat, "kimi-k3", "read_mult")
+    assert p.value is None and "not verified" in p.reason
+
+
+def test_unlisted_model_of_known_family_reads_family_window():
+    assert M.read(M.load(), "deepseek-new", "window").value == 1000000
+
+
+def test_local_route_is_free_and_window_comes_from_the_served_model(tmp_path):
+    cat = _cat(
+        """
+[sources]
+op = { note = "operator measured" }
+[route.mybox]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://10.0.0.5:8000/v1", api_key_env = "BOX_KEY" }, s = "verified", src = "op", d = "2026-10-30" }
+[route.mybox.served."qwen3-coder"]
+window = { v = 131072, s = "verified", src = "op", d = "2026-10-30" }
+rpm = { v = 30, s = "verified", src = "op", d = "2026-10-30" }
+""",
+        tmp_path,
+    )
+    assert M.validate(cat) == []
+    assert M.read(cat, "qwen3-coder", "price_in", "mybox").value == 0
+    assert M.read(cat, "qwen3-coder", "window", "mybox").value == 131072
+    assert M.read(cat, "qwen3-coder", "rpm", "mybox").value == 30
+    # the same model direct keeps its own (here: no) window; a route never leaks sideways
+    assert M.read(cat, "qwen3-coder", "window").value is None
+    assert "route.mybox" in cat.local_ids
+    assert M.presets(cat)["mybox"]["base_url"].startswith("http://10.0.0.5")
+
+
+def test_committed_files_hold_no_keys_and_no_remote_local_address():
+    data = M.data_dir()
+    text = "".join(p.read_text() for p in data.glob("*.toml"))
+    assert not re.search(r"(sk-|Bearer )[A-Za-z0-9]{8,}", text)
+    cat = M.load()
+    for rid, row in cat.route.items():
+        if row.get("class") == "local":
+            url = row["endpoint"]["v"].get("base_url", "")
+            assert re.match(r"http://(127\.0\.0\.1|localhost)[:/]", url), (rid, url)
+
+
+def test_drifted_fact_is_not_believed():
+    cat = M.load()
+    cat.model["deepseek-flash"]["window"]["expires"] = "2026-01-01"
+    p = M.read(cat, "deepseek-flash", "window", today=date(2026, 10, 30))
+    # the expired model fact is skipped; the cache-family table answers, and says so
+    assert p.value == 1000000 and p.reason == "cache-family"
+
+
+def test_stale_names_old_facts():
+    old = M.stale(M.load(), 30, today=date(2027, 1, 1))
+    assert any(s.startswith("model.deepseek-flash.window") for s in old)
+    assert M.stale(M.load(), 30, today=date(2026, 10, 30)) == []
+
+
+def test_files_ship_inside_the_package():
+    assert M.data_dir().is_relative_to(paths.package_dir())
+    assert {p.name for p in M.data_dir().glob("*.toml")} == {
+        "families.toml",
+        "models.toml",
+        "routes.toml",
+    }
