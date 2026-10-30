@@ -1429,8 +1429,15 @@ class EventLog:
                     continue
                 if got == old_id:
                     lines[i] = line
+                    mode = shard.stat()
                     tmp = shard.with_name(shard.name + ".redact")
                     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                    # The replacement must keep the shard's permission bits (and, best-effort,
+                    # its owner): a redaction must never broaden a restrictive shard to the
+                    # process default, which would re-expose the log it is narrowing.
+                    os.chmod(tmp, mode.st_mode & 0o7777)
+                    with contextlib.suppress(PermissionError):
+                        os.chown(tmp, mode.st_uid, mode.st_gid)
                     os.replace(tmp, shard)
                     return
         raise KeyError(old_id)

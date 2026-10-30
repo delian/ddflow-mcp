@@ -103,12 +103,18 @@ def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
         for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
         for line in p.read_text().splitlines()
     ]
+    st = _state(repo)
     # every superseded memory.recorded event is redacted; only the new text survives
-    recorded = [d["data"]["text"] for d in events if d["kind"] == "memory.recorded"]
-    assert recorded == ["[REDACTED:superseded]", "corrected fact"]
+    recorded = [d for d in events if d["kind"] == "memory.recorded"]
+    assert [d["data"]["text"] for d in recorded] == ["[REDACTED:superseded]", "corrected fact"]
     redacted = [d for d in events if d["kind"] == "memory.redacted"]
-    assert redacted and redacted[0]["subject"] == "M-s"
+    assert len(redacted) == 1  # exactly one audit per re-record, never a duplicate for a prior redaction
+    assert redacted[0]["subject"] == "M-s"
     assert redacted[0]["data"]["reason"] == "superseded by a memory re-record"
+    superseded = redacted[0]["data"]["event"]
+    assert superseded and superseded in st.redacted_memory_events  # the audit names the redacted event
+    new_id = next(d["id"] for d in recorded if d["data"]["text"] == "corrected fact")
+    assert superseded != new_id  # ... the superseded one, not the correction
     # the private address is never committed raw, and the superseded text is fully gone
     shard = "\n".join(p.read_text() for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl")))
     assert "old stale fact" not in shard
