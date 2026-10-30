@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.inbox_max_chars"
+new = "2000"
+why = "LC-wake: longest message a lane inbox keeps; untrusted text is cut to it."
+impact = "additive"

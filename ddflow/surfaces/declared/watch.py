@@ -13,10 +13,19 @@ from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_time
 
 
 def _text(out, a) -> str:
+    from .lifecycle_cli import wake_text  # the one rendering of a lane's fenced messages
+
     d = out.data
+    msgs = (
+        wake_text({"reason": d["wake"]["reason"], "messages": d["wake"]["messages"]})
+        if (d.get("wake") or {}).get("messages")
+        else ""
+    )
     if out.exit:
-        return f"{out.reason}\ntoken {d['token']}" if "token" in d else out.reason
-    return f"{_api().watch_summary(d)}\ntoken {d['token']}"
+        return (f"{out.reason}\ntoken {d['token']}" if "token" in d else out.reason) + msgs
+    if d.get("matched") is False:  # woken by the inbox before the target happened
+        return f"woken by {d['wake']['reason']}; still watching {d['target']}\ntoken {d['token']}{msgs}"
+    return f"{_api().watch_summary(d)}\ntoken {d['token']}{msgs}"
 
 
 COMMANDS: tuple[Command, ...] = (

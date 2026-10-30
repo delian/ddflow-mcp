@@ -56,6 +56,13 @@ def _wait_timeout(a: dict[str, Any], repo: Any = None) -> float:
     default; never above the cap. Which cap that is depends on whether the call that
     contains this wait can send progress while it runs: see MCP_WAIT_MAX_S."""
     t = a.get("timeout")
+    if a.get("max_s") is not None:
+        # The caller's own hard bound is the wait's length (B-wait-lease-max-s-ignored);
+        # `wait` takes the smaller of the two, so no default or cap may shorten it here.
+        try:
+            return float(a["max_s"] if t is None else t)
+        except (TypeError, ValueError, OverflowError):
+            pass
     t = MCP_WAIT_DEFAULT_S if t is None else t
     cap = MCP_WAIT_MAX_S if _progress_will_flow(a, repo) else MCP_WAIT_SILENT_MAX_S
     try:

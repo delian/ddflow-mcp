@@ -66,6 +66,26 @@ class LeaseConfig:
         False,
         doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",
     )
+    inbox_max_chars: int = knob(
+        2000,
+        doc="Longest message a lane's inbox (`ddflow session message`) keeps, in characters; the rest is cut and marked. Messages are untrusted text shown to an agent, so the cap is a bound on what a sender can put in front of it.",
+        check=int_at_least(1),
+    )
+    inbox_max_pending: int = knob(
+        50,
+        doc="Most undelivered messages a lane's inbox holds; a further send is refused rather than dropping an older one.",
+        check=int_at_least(1),
+    )
+    inbox_ttl_s: int = knob(
+        86400,
+        doc="Seconds an undelivered inbox message stays before it is dropped, so a lane that never reads cannot keep an inbox forever. 0 keeps them until read.",
+        check=int_at_least(0),
+    )
+    wait_cap_s: int = knob(
+        1800,
+        doc="Longest one `wait` or `watch` call sleeps unless the caller names `--max-s`; a longer ask is cut and the caller is told to resume with the token. Below the client's idle abort, so a bounded wait is never killed silently.",
+        check=int_at_least(1),
+    )
     #: report | auto
     reclaim_policy: str = knob(
         "report",
