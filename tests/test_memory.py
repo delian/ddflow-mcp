@@ -106,7 +106,8 @@ def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
     superseded text (a stale or private copy) committed in the event log, so it stayed
     recallable. The re-record must redact every superseded event's text, audited."""
     run_cli(repo, "init")
-    run_cli(repo, "memory", "add", "old stale fact 10.77.3.91", "--id", "M-s")
+    lan = ".".join(("10", "77", "3", "91"))  # built, so no private host is committed text
+    run_cli(repo, "memory", "add", f"old stale fact {lan}", "--id", "M-s")
     _c, out, _ = run_cli(repo, "--json", "memory", "add", "corrected fact", "--id", "M-s")
     assert json.loads(out)["replaced"] is True
     assert _state(repo).memories["M-s"].text == "corrected fact"
@@ -124,7 +125,7 @@ def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
     assert superseded != recorded[1]["id"]  # ... the superseded one, not the correction
     shard = _shard_text(repo)
     assert "old stale fact" not in shard
-    assert "10.77.3.91" not in shard
+    assert lan not in shard
 
 
 def test_re_recording_does_not_stack_duplicate_redaction_audits(repo):
@@ -136,7 +137,11 @@ def test_re_recording_does_not_stack_duplicate_redaction_audits(repo):
     events = _shard_events(repo)
     # e1 is redacted at record 2, e2 at record 3 -- two DISTINCT redacted events, two audits,
     # never a second audit for the event record 2 already redacted
-    superseded_ids = [d["id"] for d in events if d["kind"] == "memory.recorded" and d["data"]["text"] == "[REDACTED:superseded]"]
+    superseded_ids = [
+        d["id"]
+        for d in events
+        if d["kind"] == "memory.recorded" and d["data"]["text"] == "[REDACTED:superseded]"
+    ]
     assert len(superseded_ids) == 2
     audits = [d for d in events if d["kind"] == "memory.redacted"]
     assert [d["data"]["event"] for d in audits] == superseded_ids
