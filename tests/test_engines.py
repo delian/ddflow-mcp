@@ -437,5 +437,8 @@ def test_probe_output_is_capped_and_env_is_scrubbed(tmp_path, monkeypatch):
         limits=Limits(probe_output_bytes=1000),
     )[0]
     assert (
-        f["tool_version"] == "1.2.3" and len(f["output"]) <= 1000 and "sk-leak" not in f["output"]
+        f.get("truncated") is True
+        and f["tool_version"] == "1.2.3"
+        and len(f["output"]) <= 1000
+        and "sk-leak" not in f["output"]
     )
