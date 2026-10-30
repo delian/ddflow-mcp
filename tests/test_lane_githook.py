@@ -14,6 +14,8 @@ from ddflow.services.swarm import githook as GH
 def _isolated_git(monkeypatch, tmp_path):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     for var in (
         "GIT_DIR",
         "GIT_WORK_TREE",
