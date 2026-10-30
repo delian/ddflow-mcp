@@ -139,6 +139,21 @@ def _kind(state: State, item: str, fallback: str) -> str:
     return fallback or "task"
 
 
+def _credit(c: Cell, outcomes: Sequence, done: float, bug_times: Sequence[float], window: float):
+    """Add one completed item's gate outcomes (up to completion) and later bugs to ``c``."""
+    before = [o for o in outcomes if o.at <= done]
+    failed = sum(o.kind == "failed" for o in before)
+    weak = sum(o.kind in _NOT_PASS for o in before)
+    c.items += 1
+    c.rework += failed
+    c.gates_failed += failed
+    c.gates_unavailable += weak
+    c.gates_passed += sum(o.kind == "passed" for o in before)
+    c.first_pass += not failed and not weak
+    c.unverified += not failed and bool(weak)
+    c.bugs += sum(0 < t - done <= window for t in bug_times)
+
+
 def build(
     events: Sequence[Event],
     state: State,
@@ -168,17 +183,7 @@ def build(
         model = _author_model(span.item, author, done, sessions, leases) if author else ""
         key = Key(family_for(model, fam_map or None), model, _kind(state, span.item, span.kind))
         c = cells.setdefault(key, Cell())
-        before = [o for o in gates.get(span.item, ()) if o.at <= done]
-        failed = sum(o.kind == "failed" for o in before)
-        weak = sum(o.kind in _NOT_PASS for o in before)
-        c.items += 1
-        c.rework += failed
-        c.gates_failed += failed
-        c.gates_unavailable += weak
-        c.gates_passed += sum(o.kind == "passed" for o in before)
-        c.first_pass += not failed and not weak
-        c.unverified += not failed and bool(weak)
-        c.bugs += sum(0 < t - done <= bug_window_s for t in bugs.get(span.item, ()))
+        _credit(c, gates.get(span.item, ()), done, bugs.get(span.item, ()), bug_window_s)
     return Ledger(cells)
 
 
