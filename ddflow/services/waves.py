@@ -40,7 +40,7 @@ def derive(state, cfg) -> dict[str, int | None]:
     """The wave of every open work item (a phase is not stamped): an int, or None on a cycle."""
     live = open_items(state)
     pre = prerequisites(state, cfg, live)
-    bad = {i for cycle in find_cycles(pre, lambda ds: list(ds)) for i in cycle}
+    bad = {i for cycle in find_cycles(pre, list) for i in cycle}
     value: dict[str, int | None] = {}
     for iid in _order(pre, bad):
         if iid in bad or any(value.get(d, -2) is None for d in pre[iid]):
