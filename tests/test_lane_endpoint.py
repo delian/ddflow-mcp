@@ -65,7 +65,7 @@ def test_key_by_name_only_and_keyless(tmp_path):
     assert "apiKey" not in json.loads(E.render(ep, "kilo"))["provider"][ep.provider]["options"]
     ep2 = E.resolve(_verified(tmp_path), "lan-vllm")
     assert E.launch_env(ep2) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
-    assert "LAN_ENDPOINT_KEY" not in repr(ep2) or "key_env" in repr(ep2)
+    assert "key_env='LAN_ENDPOINT_KEY'" in repr(ep2)
     assert "ENDPOINT-HOST" not in repr(ep2)
 
 
@@ -121,3 +121,16 @@ def test_limit_needs_both_numbers(tmp_path):
     assert ep.window == 32768 and ep.max_output is None
     m = json.loads(E.render(ep, "kilo"))["provider"][ep.provider]["models"]["SERVED-MODEL-ID"]
     assert "limit" not in m  # kilo skips a model with context but no output
+
+
+def test_malformed_route_row_is_unavailable_and_old_file_mode_is_tightened(tmp_path):
+    bad = '[route.x]\nclass = "local"\nendpoint = "http://h/v1"\n'
+    r = E.resolve(_cat(tmp_path, bad), "x")
+    assert isinstance(r, Result) and "not an OpenAI" in r.detail
+    ep = E.resolve(_verified(tmp_path), "lan-vllm")
+    old = tmp_path / "h" / ".config" / "kilo" / "kilo.json"
+    old.parent.mkdir(parents=True)
+    old.write_text("{}")
+    old.chmod(0o644)
+    E.write_private(ep, "kilo", tmp_path / "h")
+    assert stat.S_IMODE(old.stat().st_mode) == 0o600

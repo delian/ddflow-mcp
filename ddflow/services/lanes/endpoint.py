@@ -79,7 +79,8 @@ def _route_basics(
     row: dict[str, Any] | None, route: str, model: str
 ) -> tuple[str, str, str] | Result:
     """(base_url, key env name, served model) of an endpoint row, or what is wrong with it."""
-    v = ((row or {}).get("endpoint") or {}).get("v")
+    node = (row or {}).get("endpoint")
+    v = node.get("v") if isinstance(node, dict) else None
     if not isinstance(v, dict) or v.get("kind") != "openai":
         return unavailable(f"route {route!r} is not an OpenAI-compatible endpoint")
     url, key = str(v.get("base_url") or ""), str(v.get("api_key_env") or "")
@@ -164,6 +165,7 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
     target.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        os.fchmod(fh.fileno(), 0o600)  # a pre-existing file keeps its old mode otherwise
         fh.write(text)
     return target
 
