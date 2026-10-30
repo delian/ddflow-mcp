@@ -130,7 +130,7 @@ def test_lease_model_wins_and_equal_time_sessions_keep_log_order():
     assert list(_run(log).cells) == [L.Key("anthropic", "claude-opus-4", "task")]
     log2 = Log()
     log2.task("B", "B.py")
-    log2.add("lease.acquired", "B", "y", T0, holder="y", at=T0, model="deepseek-v4", globs=[])
+    log2.add("lease.acquired", "B", "y", T0, holder="y", model="deepseek-v4", globs=[])
     log2.complete("y", "B", T0 + 9)
     assert list(_run(log2).cells) == [L.Key("deepseek", "deepseek-v4", "task")]
 
