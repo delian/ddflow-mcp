@@ -105,6 +105,13 @@ def test_detector_folds_no_stale_value_through_unpacking(tmp_path: Path) -> None
     assert _plant(tmp_path, src).unclassified == []
 
 
+def test_a_function_body_shadowing_a_name_does_not_hide_the_module_constant(tmp_path: Path) -> None:
+    src = "HOUR = 3600.0\ndef _helper():\n    HOUR = 1.0\nA_WINDOW_S = 7 * 24 * HOUR\n"
+    assert [(c.name, c.value) for c in _plant(tmp_path, src).unclassified] == [
+        ("A_WINDOW_S", 604800.0)
+    ]
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"

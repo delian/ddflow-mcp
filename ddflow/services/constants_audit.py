@@ -114,9 +114,15 @@ def _bound_by(node: ast.AST) -> list[str]:
 
 
 def _rebindings(node: ast.stmt) -> list[str]:
-    """Names a module-level statement rebinds (directly or in a nested body): an AugAssign,
-    a for/with target, an import alias, `del`, a def/class name, a nested assignment."""
-    return [n for child in ast.walk(node) for n in _bound_by(child)]
+    """Names a module-level statement rebinds, recursing into module-scope bodies
+    (if/for/with/try) but not into a function or class body (a separate scope)."""
+    names = _bound_by(node)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return names
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.stmt):
+            names += _rebindings(child)
+    return names
 
 
 def candidates_in(source: str, path: str) -> list[Candidate]:
