@@ -110,24 +110,29 @@ def _models(events: Sequence[Event]) -> dict[str, list[tuple[float, str]]]:
         if ev.kind == "session.started" and isinstance(d.get("model"), str) and d["model"]:
             out.setdefault(ev.agent, []).append((PR.epoch(ev.ts), d["model"]))
     for rows in out.values():
-        rows.sort()
+        rows.sort(key=lambda r: r[0])  # stable: equal times keep log order
     return out
 
 
-def _lease_models(events: Sequence[Event]) -> dict[tuple[str, str], str]:
-    """(item, holder) -> the ``model`` a ``lease.acquired`` carried, when it carried one."""
-    out: dict[tuple[str, str], str] = {}
+def _lease_models(events: Sequence[Event]) -> dict[tuple[str, str], list[tuple[float, str]]]:
+    """(item, holder) -> [(time, model)] per ``lease.acquired``; "" when it carried none."""
+    out: dict[tuple[str, str], list[tuple[float, str]]] = {}
     for ev in events:
         d = ev.data if isinstance(ev.data, dict) else {}
-        if ev.kind == "lease.acquired" and isinstance(d.get("model"), str) and d["model"]:
-            out[(ev.subject, str(d.get("holder") or ev.agent))] = d["model"]
+        if ev.kind == "lease.acquired":
+            m = d.get("model") if isinstance(d.get("model"), str) else ""
+            out.setdefault((ev.subject, str(d.get("holder") or ev.agent)), []).append(
+                (PR.epoch(ev.ts), m)
+            )
     return out
 
 
-def _author_model(item: str, agent: str, at: float, sessions: dict, leases: dict) -> str:
-    if (item, agent) in leases:
-        return leases[(item, agent)]
-    seen = [m for t, m in sessions.get(agent, ()) if t <= at]
+def _author_model(item: str, agent: str, claim: float, sessions: dict, leases: dict) -> str:
+    """The model the author held at ``claim``: the lease's own, else their latest session's."""
+    held = [m for t, m in leases.get((item, agent), ()) if t <= claim]
+    if held and held[-1]:
+        return held[-1]
+    seen = [m for t, m in sessions.get(agent, ()) if t <= claim]
     return seen[-1] if seen else ""
 
 
@@ -179,8 +184,8 @@ def build(
         done = span.completed_at
         if span.kind == "phase" or done is None or (since is not None and done < since):
             continue
-        author = next((a for t, a in reversed(span.claims) if t <= done), "")
-        model = _author_model(span.item, author, done, sessions, leases) if author else ""
+        at, author = next(((t, a) for t, a in reversed(span.claims) if t <= done), (0.0, ""))
+        model = _author_model(span.item, author, at, sessions, leases) if author else ""
         key = Key(family_for(model, fam_map or None), model, _kind(state, span.item, span.kind))
         c = cells.setdefault(key, Cell())
         _credit(c, gates.get(span.item, ()), done, bugs.get(span.item, ()), bug_window_s)

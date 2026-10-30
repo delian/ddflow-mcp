@@ -17,7 +17,7 @@ H = 3600.0
 NOW = T0 + 100 * H
 
 
-def _item(log, tid, agent, t, outcomes, *, bug_at=None, tags=""):
+def _item(log, tid, agent, t, outcomes, *, bug_at=None):
     log.task(tid, f"{tid}.py")
     log.claim(agent, tid, t, f"{tid}.py")
     for n, (gate, verdict) in enumerate(outcomes, 1):
@@ -112,3 +112,24 @@ def test_to_dict_is_plain_data():
     _item(log, "A", "deep", T0, [("ci", "passed")])
     d = _run(log).to_dict()
     assert d[0]["family"] == "deepseek" and d[0]["items"] == 1 and "score" in d[0]
+
+
+def test_author_model_is_the_one_known_at_claim():
+    log = _build()
+    _item(log, "A", "deep", T0, [("ci", "passed")])
+    log.session("deep", "s9", T0 + 50, tool="opencode", model="claude-opus-4")  # after claim
+    cells = _run(log).cells
+    assert list(cells) == [L.Key("deepseek", "deepseek-v4", "task")]
+
+
+def test_lease_model_wins_and_equal_time_sessions_keep_log_order():
+    log = Log()
+    log.session("x", "s1", T0 - 5, tool="t", model="zzz-model")
+    log.session("x", "s2", T0 - 5, tool="t", model="claude-opus-4")
+    _item(log, "A", "x", T0, [("ci", "passed")])
+    assert list(_run(log).cells) == [L.Key("anthropic", "claude-opus-4", "task")]
+    log2 = Log()
+    log2.task("B", "B.py")
+    log2.add("lease.acquired", "B", "y", T0, holder="y", at=T0, model="deepseek-v4", globs=[])
+    log2.complete("y", "B", T0 + 9)
+    assert list(_run(log2).cells) == [L.Key("deepseek", "deepseek-v4", "task")]
