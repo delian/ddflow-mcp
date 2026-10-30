@@ -10,7 +10,16 @@ from helpers import items_of as _items
 def test_task_add_takes_resources(repo):
     run_cli(repo, "init")
     code, _o, err = run_cli(
-        repo, "task", "add", "G1", "--globs", "g.py", "--resources", "gpu:2,vllm-fleet"
+        repo,
+        "task",
+        "add",
+        "G1",
+        "--title",
+        "G1 fixture",
+        "--globs",
+        "g.py",
+        "--resources",
+        "gpu:2,vllm-fleet",
     )
     assert code == 0, err
     assert _items(repo)["G1"].resources == ["gpu:2", "vllm-fleet"]
@@ -18,7 +27,7 @@ def test_task_add_takes_resources(repo):
 
 def test_task_add_without_resources_leaves_none(repo):
     run_cli(repo, "init")
-    assert run_cli(repo, "task", "add", "G1", "--globs", "g.py")[0] == 0
+    assert run_cli(repo, "task", "add", "G1", "--title", "G1 fixture", "--globs", "g.py")[0] == 0
     assert _items(repo)["G1"].resources == []
 
 
@@ -33,7 +42,12 @@ def test_ddflow_task_add_takes_resources_over_mcp(repo):
             "method": "tools/call",
             "params": {
                 "name": "ddflow_task_add",
-                "arguments": {"id": "G2", "globs": "g.py", "resources": "gpu:1"},
+                "arguments": {
+                    "id": "G2",
+                    "title": "G2 fixture",
+                    "globs": "g.py",
+                    "resources": "gpu:1",
+                },
             },
         }
     )["result"]

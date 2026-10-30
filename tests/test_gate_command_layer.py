@@ -36,7 +36,7 @@ def _setup(repo: Path, committed: str = "") -> None:
         )
         _git(repo, "add", "-A")
         _git(repo, "commit", "-qm", "gate config")
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == 0
     code, out, err = run_cli(repo, "claim", "T1", agent=AGENT)
     assert code == 0, out + err
 

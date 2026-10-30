@@ -39,7 +39,18 @@ def history(repo):
         snapshots.append((label, {e.id for e in _log(repo).read_all()}))
 
     for t in ("A", "B", "C", "D"):
-        step(f"add {t}", "task", "add", t, "--globs", f"{t}.py", "--body", f"body {t}")
+        step(
+            f"add {t}",
+            "task",
+            "add",
+            t,
+            "--title",
+            "task item",
+            "--globs",
+            f"{t}.py",
+            "--body",
+            f"body {t}",
+        )
     step("abandon", "abandon", "C", "--reason", "not needed", "--force")
     step("fold", "task", "fold", "B", "A", "--reason", "same work")
     step("remove", "remove", "D", "--reason", "mistaken")

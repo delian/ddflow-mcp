@@ -20,6 +20,7 @@ def _bug_found(a, c: Ctx) -> int:
             severity=a.severity,
             scope=a.scope,
             globs=a.globs,
+            tags=a.tags or "",
             no_task=a.no_task,
             test=a.test or "",
             repro_cmd=a.repro_cmd or "",

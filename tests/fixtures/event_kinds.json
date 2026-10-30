@@ -122,6 +122,7 @@
     "score": ["float"],
     "severity": ["str"],
     "summary": ["str"],
+    "tags": ["list"],
     "title": ["str"]
    },
    "v": 1
@@ -143,6 +144,14 @@
   },
   "bug.reported_upstream": {
    "fields": {},
+   "v": 1
+  },
+  "bug.tagged": {
+   "fields": {
+    "add": ["list"],
+    "remove": ["list"],
+    "tags": ["list"]
+   },
    "v": 1
   },
   "cadence.ran": {
@@ -393,6 +402,7 @@
   "item.completed": {
    "fields": {
     "changelog": ["dict", "str"],
+    "chore": ["dict", "str"],
     "evidence": ["str"],
     "forced": ["bool"],
     "imported": ["bool"],
@@ -561,6 +571,13 @@
     "source": ["str"],
     "tags": ["list"],
     "text": ["str"]
+   },
+   "v": 1
+  },
+  "memory.redacted": {
+   "fields": {
+    "event": ["str"],
+    "reason": ["str"]
    },
    "v": 1
   },

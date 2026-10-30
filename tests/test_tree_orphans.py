@@ -58,7 +58,7 @@ def test_a_tree_on_our_branch_that_no_item_claims_is_reported_once(repo):
 
 def test_a_claimed_tree_is_not_unclaimed_and_survey_agrees(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, _, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == OK, err
 

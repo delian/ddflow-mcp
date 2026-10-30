@@ -1,12 +1,12 @@
 """The default CI command does not run commit-time tripwires over every tracked file
-(ci-default-all-files-fails-tripwire-hooks).
+(ci-default-all-files-fails-tripwire-hooks); since Bf333cb2f5d the whole default run checks
+the diff the CI is about (the branch against its base, or the range a merge added).
 
 A hook with `language: fail` and a `files:` pattern is a tripwire: it fires when a changed
-path matches. `pre-commit run --all-files` runs it over the whole tree and so fails whenever the
-frozen paths exist at all -- merge-time CI red by construction (run_nemo_run's
-frozen-workflow-files failed `ci on master` on every merge). The default command now runs the
-tripwires on the DIFF the CI is about (the branch against its base, or the range a merge
-added) and everything else over all files.
+path matches. `pre-commit run --all-files` ran it over the whole tree and so failed whenever
+the frozen paths exist at all -- merge-time CI red by construction (run_nemo_run's
+frozen-workflow-files failed `ci on master` on every merge), and any other hook over every
+file failed on errors the pushed change did not make.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def test_merge_passes_the_range_it_added_to_the_after_merge_check(repo, monkeypa
 
     M = importlib.import_module("ddflow.api.lifecycle.merge")
     default = _project(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "ok.txt")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "ok.txt")
     code, out, err = run_cli(repo, "claim", "T1", agent="alpha")
     assert code == 0, out + err
     import json
@@ -205,10 +205,110 @@ def test_comments_and_blank_lines_inside_a_stage_list_do_not_end_it(tmp_path):
     assert CI.tripwire_ids(tmp_path) == ["frozen-workflow-files"]
 
 
-def test_the_commands_own_skip_applies_to_the_tripwire_runs_too(tmp_path, repo):
+def test_the_commands_own_skip_applies_to_the_diff_scoped_run_too(tmp_path, repo):
     default = _project(repo)
-    cmd = CI.with_tripwires_on_the_diff(
-        "SKIP=frozen-workflow-files " + CI.DEFAULT_COMMAND, repo, default
+    since = _git(repo, "rev-parse", default)
+    cmd = CI.scope_to_diff("SKIP=op-skip " + CI.DEFAULT_COMMAND, repo, default)
+    assert " --all-files" not in cmd
+    # the caller's skip merges with the environment's (a bare assignment would drop it); the
+    # range is exactly since..HEAD, so it cannot silently lose the pushed tip
+    assert cmd.startswith(
+        "SKIP=\"${SKIP:+$SKIP,}\"'op-skip' pre-commit run --hook-stage pre-push "
+    ), cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_the_commands_own_quoted_skip_still_skips_after_the_diff_scope_rebuild(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    for prefix in ("SKIP='op-skip' ", 'SKIP="op-skip" '):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert " --all-files" not in cmd
+        # the rebuild drops the quote layer the shell would drop and re-emits the ids as a
+        # single-quoted literal; re-embedding the original quotes would skip the literal
+        # `'op-skip'` hook instead of `op-skip`
+        assert cmd.startswith("SKIP=\"${SKIP:+$SKIP,}\"'op-skip' pre-commit run "), cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_quoted_skip_values_stay_literal_and_an_empty_one_stays_an_override(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    # a space inside the quotes is the ids the operator wrote, not a command boundary...
+    cmd = CI.scope_to_diff("SKIP='lint, slow' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith("SKIP=\"${SKIP:+$SKIP,}\"'lint, slow' pre-commit run "), cmd
+    # ...inside double quotes a `\\` pair is ONE backslash, kept as the shell keeps it...
+    cmd = CI.scope_to_diff('SKIP="a\\\\b" ' + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith("SKIP=\"${SKIP:+$SKIP,}\"'a\\b' pre-commit run "), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # ...and a `\<newline>` is a line continuation the shell removes entirely
+    cmd = CI.scope_to_diff('SKIP="foo\\\nbar" ' + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith("SKIP=\"${SKIP:+$SKIP,}\"'foobar' pre-commit run "), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_the_range_lands_on_the_runs_own_all_files_flag(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    # a run WITH extra arguments is shell text beyond the default phrase: the whole
+    # command runs exactly as written, never half-rewritten
+    source = "SKIP=lint; pre-commit run --hook-stage pre-push --all-files --files ' --all-files'"
+    assert CI.scope_to_diff(source, repo, default) == source
+    odd = "SKIP=lint pre-commit run --hook-stage pre-push --files ' --all-files' --all-files"
+    assert CI.scope_to_diff(odd, repo, default) == odd
+    # but a run that IS the default phrase takes the range exactly there, --all-files gone
+    plain = CI.scope_to_diff("SKIP=op-skip " + CI.DEFAULT_COMMAND, repo, default)
+    assert " --all-files" not in plain
+    assert plain.endswith(f" --from-ref {since} --to-ref HEAD"), plain
+    # ...and a `$(...)` the operator quoted is a literal, never re-activated by the rebuild
+    cmd = CI.scope_to_diff("SKIP='$(echo pwn)' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith("SKIP=\"${SKIP:+$SKIP,}\"'$(echo pwn)' pre-commit run "), cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    # `SKIP=''` means "skip nothing": the explicit empty override clears the inherited SKIP
+    cmd = CI.scope_to_diff("SKIP='' " + CI.DEFAULT_COMMAND, repo, default)
+    assert cmd.startswith('SKIP="" pre-commit run --hook-stage pre-push '), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_a_skip_value_with_shell_expansions_runs_as_written(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    # an expansion's own text keeps its own shell semantics and is never merged into --
+    # but the bare default run after it is still scoped to the diff (a `$(` value, whose
+    # word is inseparable, leaves the whole command as written)
+    for prefix in ('SKIP="$SKIP,lint" ', "SKIP=$SKIP ", "SKIP=foo:~/bar "):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
+        assert " --all-files" not in cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    for prefix, inner in (("SKIP=$(echo lint) ", False), ("SKIP=$(echo --all-files) ", True)):
+        cmd = CI.scope_to_diff(prefix + CI.DEFAULT_COMMAND, repo, default)
+        assert cmd.startswith(prefix.rstrip() + " pre-commit run "), cmd
+        # the value's own text is untouched; only the RUN's flag is gone
+        assert cmd.count(" --all-files") == (1 if inner else 0), cmd
+        assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+    quoted_run = (
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" ' + CI.DEFAULT_COMMAND
     )
-    named = cmd.split("|| rc=1; ", 1)[1]  # the run on the diff, after the all-files one
-    assert named.startswith('SKIP="${SKIP:+$SKIP,}frozen-workflow-files" pre-commit run'), cmd
+    cmd = CI.scope_to_diff(quoted_run, repo, default)
+    assert cmd.startswith(
+        'SKIP="$(echo pre-commit run --hook-stage pre-push --all-files)" pre-commit run '
+    ), cmd
+    assert cmd.count(" --all-files") == 1, cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd
+
+
+def test_a_shell_operator_between_the_skip_value_and_the_run_stays_in_place(tmp_path, repo):
+    default = _project(repo)
+    since = _git(repo, "rev-parse", default)
+    cmd = CI.scope_to_diff("SKIP=lint; " + CI.DEFAULT_COMMAND, repo, default)
+    # the `;` ends the assignment exactly where the shell ends it, so the run after it
+    # is still the default phrase -- which is what takes the range
+    assert cmd.startswith(
+        "SKIP=\"${SKIP:+$SKIP,}\"'lint'; pre-commit run --hook-stage pre-push "
+    ), cmd
+    assert " --all-files" not in cmd
+    assert cmd.endswith(f" --from-ref {since} --to-ref HEAD"), cmd

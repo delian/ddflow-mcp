@@ -1313,8 +1313,10 @@
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
           `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
-          (never the found item's own phase, which it would hold open), carrying that
-          item's globs unless `--globs` says otherwise, and linked to the bug.
+          (never the found item's own phase, which it would hold open), carrying the
+          bug's own found scope (the files its summary names plus the tests pinning
+          them) unless `--globs` says otherwise -- and the item's inherited globs when
+          the bug names more than `named_scope_at` files -- and linked to the bug.
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
@@ -1333,6 +1335,16 @@
           (regression_verified=exempt-lint) instead of a `--regression-test`. A bug
           whose check id contains a pytest node (`::`), or matches none of these,
           still needs its regression test. Default: ruff, (CI: Lint), format.
+      bugs.named_scope_at = 20   [default]
+          How many files a bug's text may name (a `path/name.ext` token in its
+          summary) before the fix task's default globs fall back to the inherited item
+          globs. Up to this many named files, the task carries the bug's OWN found
+          scope instead -- the named files that exist in the tree plus the tests
+          pinning them (by-name, GOVERNS and data readers) -- so two narrow sibling
+          bug fixes no longer both inherit one project-wide item glob (ddflow/**,
+          tests/**) and exclude each other (B45b80286d2). More than this -- a bug
+          describing a whole sweep of files -- keeps the inherited globs (the current
+          wide default). 0 disables the found scope: the inherited globs always apply.
       bugs.repro_capture = 'full'   [default]
           How much of a reproduction bundle `bug found` stores with the bug (default
           `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
@@ -1770,6 +1782,15 @@
           The commit count past which `behind` fires; at or below it the check is
           silent. Must be >= 1 -- 0 or a negative number is refused as invalid rather
           than read as 'off', which is the `behind` knob's job.
+      enforce.machine_local_keys = []   [default]
+          Extra dotted keys whose `config KEY VALUE` writes default to the machine-
+          local layer, added to the shipped classification
+          (services.configwrite.MACHINE_LOCAL_KEYS: the parallelism knobs -- this
+          machine's worker count is not the next machine's). A write of such a key
+          lands in the git-ignored `.ddflow/local/config.toml` unless it goes there
+          anyway; `--local` says the same thing out loud, and a committed value is
+          written by editing `.ddflow/config.toml` by hand. Keyed as plain dotted keys
+          like the shipped table; a refusal names the first entry that is not one.
       loops.max_claims_per_item = 3   [default]
           How many times an item may be claimed and given up WITHOUT completing before
           it is reported as thrashing. Expiries (crash recovery) are excluded — only
@@ -1842,6 +1863,29 @@
       lanes.brief_text_chars = 1200   [default]
           Characters kept of each text a lane brief quotes (the objective, the last
           session summary, a note), cut at a line boundary.
+      lanes.stop_grace_s = 10   [default]
+          Seconds a lane driver waits after SIGTERM to a lane's process group before
+          SIGKILL (`Lane.stop`, process-headless). 0 kills at once.
+      lanes.event_buffer = 1000   [default]
+          How many canonical events a lane driver keeps unread per lane; when a reader
+          falls behind, the oldest are dropped and counted in the lane status
+          (`dropped`), never silently.
+      lanes.scope = 'none'   [default]
+          Extra containment for a launched lane beyond its process group: 'none' (the
+          group alone) or 'systemd' (`systemd-run --user --scope`, so a cgroup holds
+          everything the lane started). 'systemd' where it is not available makes the
+          start report `unavailable`; it never falls back silently. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'systemd', the strictest (the most containment; a start where systemd-run
+          is missing then reports unavailable instead of running uncontained); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      lanes.pass_env = ['PATH', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR']   [default]
+          Environment variable NAMES a launched lane inherits from the launching
+          process, besides its own private home and the key names its launch spec
+          lists. Everything else is dropped, so the operator's credentials and
+          settings do not reach the lane.
       health.mode = 'propose'   [default]
           What the watchdog does about a lane it finds unhealthy: 'off' inspects
           nothing in the periodic pass; 'propose' (default) reports each finding with
@@ -1943,6 +1987,114 @@
           is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      govern.quota_mark_1 = 0.4   [default]
+          Quota fraction (default 0.4) at which new work is capped at `tier_cap_1` and
+          `effort_cap_1`. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.quota_mark_2 = 0.6   [default]
+          Quota fraction (default 0.6) at which mechanical work is capped at
+          `tier_cap_2` (other work at `tier_cap_2_other`) and effort at
+          `effort_cap_2`. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.quota_mark_3 = 0.8   [default]
+          Quota fraction (default 0.8) at which the governor pauses and asks
+          (D-quotas-governor: refuse new work, pause items, resume at the reset). 1.0
+          uses everything. Marks are fractions of the allowance (0 to 1); a reading AT
+          a mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.context_mark_1 = 0.6   [default]
+          Context fraction (default 0.6) at which the session plans a checkpoint.
+          Marks are fractions of the allowance (0 to 1); a reading AT a mark steps the
+          ladder up at once, and it steps down only after falling `hysteresis` under
+          the mark and `cooldown_s` since the ladder last moved. A mark set out of
+          order is sorted.
+      govern.context_mark_2 = 0.75   [default]
+          Context fraction (default 0.75) at which the session writes the handoff.
+          Marks are fractions of the allowance (0 to 1); a reading AT a mark steps the
+          ladder up at once, and it steps down only after falling `hysteresis` under
+          the mark and `cooldown_s` since the ladder last moved. A mark set out of
+          order is sorted.
+      govern.context_mark_3 = 0.85   [default]
+          Context fraction (default 0.85) at which the session compacts or restarts at
+          the next safe point. Marks are fractions of the allowance (0 to 1); a
+          reading AT a mark steps the ladder up at once, and it steps down only after
+          falling `hysteresis` under the mark and `cooldown_s` since the ladder last
+          moved. A mark set out of order is sorted.
+      govern.context_mark_4 = 0.95   [default]
+          Context fraction (default 0.95) at which the session makes an emergency
+          checkpoint. Marks are fractions of the allowance (0 to 1); a reading AT a
+          mark steps the ladder up at once, and it steps down only after falling
+          `hysteresis` under the mark and `cooldown_s` since the ladder last moved. A
+          mark set out of order is sorted.
+      govern.hysteresis = 0.05   [default]
+          How far under a mark a reading must fall before its ladder steps down
+          (default 0.05), so a reading hovering at a mark does not flap.
+      govern.cooldown_s = 300   [default]
+          Seconds a ladder must have been still before it steps down (default 300).
+          Stepping up is never delayed.
+      govern.tier_cap_1 = 'balanced'   [default]
+          The highest model tier new work may use at the first quota (or load) mark:
+          fast | balanced | deep. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'fast', the strictest (an
+          unknown tier caps work at the cheapest one); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      govern.tier_cap_2 = 'fast'   [default]
+          The highest tier MECHANICAL work may use at the second mark: fast | balanced
+          | deep. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'fast', the strictest (an unknown tier caps work
+          at the cheapest one); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      govern.tier_cap_2_other = 'balanced'   [default]
+          The highest tier work that is not mechanical may use at the second mark (it
+          is held back by `effort_cap_2` instead): fast | balanced | deep. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'fast', the strictest (an unknown tier caps work at the
+          cheapest one); `config --set`, `ddflow_configure` and the environment refuse
+          it, and so does loading ddflow's own source tree, where the file and the
+          code are one commit.
+      govern.effort_cap_1 = 'medium'   [default]
+          The highest effort at the first mark: low | medium | high. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'low', the strictest (an unknown effort caps work at the lowest); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.effort_cap_2 = 'low'   [default]
+          The highest effort at the second mark: low | medium | high. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'low', the strictest (an unknown effort caps work at the lowest); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.reviewer_floor_tier = 'balanced'   [default]
+          The tier a reviewer never drops below, whatever the ladder says, so
+          independence and review quality hold: fast | balanced | deep. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'deep', the strictest (an unknown floor keeps reviewers at
+          the highest tier); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      govern.effort_floor = 'low'   [default]
+          The effort no work drops below: low | medium | high. An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'high', the strictest (an unknown floor keeps the highest effort); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      govern.deep_floor = True   [default]
+          A task tagged deep (architecture, security) is never downshifted (default
+          true).
+      govern.load_governs = True   [default]
+          Whether host load (the `[schedule.signals]` marks, read as flowcontrol reads
+          them) also caps the tier: over a signal's high mark counts as the first
+          mark, at its critical mark as the second (default true).
       metrics.min_samples = 10   [default]
           Fewest samples a metrics figure may rest on. Under it the figure is reported
           unavailable (n/a, with its sample count), never as a number, and a view with
@@ -1974,16 +2126,19 @@
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
-          D-gate-economy 2 -- a delta after the cap was the way around it). Later
-          rounds each find fewer defects than the one before, so after the cap the way
-          forward is `ddflow review triage` (refute each remaining finding with the
-          run that shows it false, or confirm it with the test that now passes; always
-          allowed), then recording the gate on that triage or asking the operator. A
-          re-review of named chunks (--chunk) repeats part of a recorded round and is
-          not counted. `--force --reason "..."` runs one more round and records why.
-          Change it for the project (`ddflow config --set review.max_rounds 3`), for
-          this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP
-          with `ddflow_configure` (the operator is told when an agent does).
+          D-gate-economy 2 -- a delta after the cap was the way around it). The cap
+          counts the gate's recorded rounds from the one fold every view uses (`gate
+          status`, `review show` and `review triage` all report it) -- always the full
+          and delta rounds that reached a reviewer. Later rounds each find fewer
+          defects than the one before, so after the cap the way forward is `ddflow
+          review triage` (refute each remaining finding with the run that shows it
+          false, or confirm it with the test that now passes; always allowed), then
+          recording the gate on that triage or asking the operator. A re-review of
+          named chunks (--chunk) repeats part of a recorded round and is not counted.
+          `--force --reason "..."` runs one more round and records why. Change it for
+          the project (`ddflow config --set review.max_rounds 3`), for this machine
+          (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with
+          `ddflow_configure` (the operator is told when an agent does).
       review.settle_all_refuted = True   [default]
           Whether the `ddflow review triage` that gives the LAST open finding of a
           failed review round its verdict, when every finding of the round was
@@ -2070,6 +2225,21 @@
           path block. Change it for the project (`ddflow config
           review.triage_ignore_globs ...`), for this machine (add --local), or over
           MCP with `ddflow_configure`.
+      review.doc_globs = ['docs/**', 'README*', 'CHANGELOG*']   [default]
+          Documentation directories and changelogs: wording, not code. A documentation
+          file the review round reviewed whose wording changed later never voids a
+          triage pass or a gate's freshness at `complete` (bug Bb89ff23f21): a one-
+          line doc edit after triage invalidated refuted gates and cost a second 8-15
+          min review round, and a wording-only edit after the final pass still
+          triggered 'different tree' warnings. Unlike [review].triage_ignore_globs
+          (tests), a reviewed documentation file keeps the exemption if it still
+          exists: the review judged the code, so clarified wording is not new work,
+          while a reviewed code file that changed still blocks, and a reviewed doc
+          that was deleted still blocks. One the round did NOT review is not exempt by
+          name alone. An empty list exempts no documentation. Change it for the
+          project (`ddflow config review.doc_globs ...`), for this machine (add
+          --local), per run (DDFLOW_REVIEW_DOC_GLOBS), or over MCP with
+          `ddflow_configure`.
       review.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]
           Globs of generated and pinned files (golden snapshots, transcripts,
           lockfiles) that `ddflow review` leaves out of the diff it sends reviewers: a
@@ -2114,6 +2284,76 @@
           recorded as unreviewed with how many parts were, and the findings of the
           parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer
           in 1800 s twice).
+      swarm.w_critical = 3.0   [default]
+          Weight of the critical-path term in the dispatch score: an item on the
+          longest dependency chain is offered before one with slack. Zero ignores the
+          chain.
+      swarm.w_fit = 2.0   [default]
+          Weight of the fit term: the quality ledger's Beta-smoothed first-pass rate
+          of the lane's (family, model) on the item's kind. An unmeasured pair scores
+          the prior (0.5), not zero.
+      swarm.w_cost = 1.0   [default]
+          Weight of the cost term (cheaper estimated dollars score higher). Cost only
+          ranks lanes whose fit is within `fit_margin` of the best eligible lane, so a
+          free local route never beats a better-qualified one for being free.
+      swarm.w_rework = 1.5   [default]
+          Weight of the rework term: failed gates before completion plus bugs filed
+          after it, per item, for the lane's pair on the item's kind. Lower rework
+          scores higher.
+      swarm.w_queue = 0.5   [default]
+          Weight of the queue term: how long the item has waited, so a low-priority
+          item is not starved.
+      swarm.fit_margin = 0.1   [default]
+          How far below the best eligible lane's fit a lane may be and still compete
+          on cost. A lane further below is ranked after every lane inside the margin.
+      swarm.cost_ref_usd = 1.0   [default]
+          Estimated dollars at which the cost term reaches zero (it falls linearly
+          from a free route at one). Must be above zero.
+      swarm.rework_ref = 1.0   [default]
+          Rework events per item at which the rework term reaches zero. Must be above
+          zero.
+      swarm.queue_ref_s = 3600   [default]
+          Seconds of waiting at which the queue term reaches one (it saturates there).
+          Must be above zero.
+      swarm.max_lanes = 4   [default]
+          Most lanes holding an item at once across the swarm. Zero admits none.
+      swarm.family_cap = 3   [default]
+          Most live claims one model family may hold at once, so one vendor's outage
+          or rate limit cannot stall the swarm.
+      swarm.hedge_max = 1   [default]
+          Extra concurrent attempts one item may have beyond the first (hedging,
+          D-swarm-answers Q5). Zero turns hedging off.
+      swarm.default_min_trust = 0   [default]
+          Trust tier a lane needs for an item that names none. A lane's tier is
+          whatever the operator grants it; a lane below the item's tier is refused,
+          whatever its score.
+      swarm.explore_share = 0.1   [default]
+          Share of picks spent on under-measured (family, model) pairs (D-swarm-
+          answers Q10). Zero turns exploration off.
+      swarm.explore_min_n = 5   [default]
+          Items per (family, model, kind) under which a pair counts as under-measured
+          and may be explored.
+      swarm.bug_window_s = 604800   [default]
+          A bug filed this many seconds after an item completed still counts against
+          the author in the quality ledger (default a week).
+      swarm.conformance_min_accuracy = 0.9   [default]
+          Share of a lane's tool calls in a conformance run that must be well formed
+          (a lean-core tool, no error) for the tool-call accuracy level to pass.
+      swarm.conformance_min_calls = 5   [default]
+          Fewest tool calls a conformance run must see before accuracy is judged;
+          fewer is `unavailable`, never passed.
+      swarm.conformance_idle_s = 5.0   [default]
+          Seconds of silence after which a conformance run stops collecting a lane's
+          events.
+      swarm.conformance_lease_wait_s = 10.0   [default]
+          Seconds a lane is given to stop after its lease is revoked in a conformance
+          run; a lane still working after that fails the lease level.
+      swarm.conformance_tools = ['brief', 'next', 'claim', 'heartbeat', 'show', 'help', 'identify', 'merge', 'complete', 'task', 'memory', 'gate', 'bug', 'session', 'rule', 'view']   [default]
+          The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes
+          are ignored) a lane's tool calls are judged against in a conformance run.
+      swarm.conformance_max_age_s = 2592000   [default]
+          A lane's conformance level older than this many seconds (default 30 days) no
+          longer admits it to items; it must be run again. Zero never expires.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
@@ -2426,6 +2666,15 @@
           file is named like an existing sibling (or exists under that name
           elsewhere). It is a warning, never a refusal: the claim is made and the plan
           check keeps its exit code. `false`: no such check.
+      waves.auto_stamp = True   [default]
+          Keep the derived `wave:N` tags (wave 0 = no open prerequisite, task-level or
+          inherited; wave N = 1 + the highest wave among open prerequisites) current
+          by DEFAULT: after a command that changed the graph (a task or phase added, a
+          `needs` change, a completion, an abandonment, a removal, a reopen) ddflow
+          restamps, in one transaction, ONLY the open items whose wave changed --
+          never the whole queue per event. A hand edit of `wave:*` is overwritten on
+          the next restamp. `false`: nothing is stamped on its own; `ddflow waves
+          --stamp` still does it on request and `--check` reports what is stale.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate
@@ -2465,6 +2714,22 @@
           matched globs and the approval). A gate of the item's pipeline that is
           neither listed here nor `merge` (which the merge itself records) is left for
           you to run, and the chore does not complete until it carries an outcome.
+      digest.escalate_after = '1h, 24h'   [default]
+          Two ages, comma separated. An operator-queue entry is a 'nudge' when it
+          appears, 'needs' once it has waited the first age and 'urgent' once it has
+          waited the second; the age counts from when it first became true, never from
+          the last time anyone looked. An entry whose kind starts higher (see the
+          source table) keeps that floor.
+      digest.escalate_after_red_main = '6h'   [default]
+          How long a red main may wait before its queue entry is 'urgent' (it starts
+          at 'needs'). A duration such as 6h or 90m.
+      digest.text_chars = 400   [default]
+          How many characters of a recorded text (an agent's question, a DECIDE task's
+          default line, a failed check) a queue entry quotes before it cuts it. Quoted
+          text has secrets masked first. 0 quotes none.
+      digest.spotcheck_min = 1   [default]
+          How many gates passed on refutation, not yet completed, make one spot-check
+          entry in the operator queue. 0 turns that entry off.
       grants.max_count = 3   [default]
           The most extra rounds ONE operator grant may carry (default 3): `ddflow
           grant add --count N` above it is refused. A grant is the operator's recorded
@@ -2701,10 +2966,11 @@
       ci.command = ''   [default]
           The command the `ci` gate and `ddflow ci run` execute in a scratch worktree
           of the branch merged with the base. Empty (default): the project's own pre-
-          push stage, `pre-commit run --hook-stage pre-push --all-files`, when .pre-
-          commit-config.yaml exists; with neither, the gate is UNAVAILABLE (never a
-          pass). Set it to run something else, e.g. `uv run ruff check . && uv run
-          pytest -q`.
+          push stage, `pre-commit run --hook-stage pre-push`, run over the diff the
+          check is about (the branch against its base, or the range a merge added)
+          when .pre-commit-config.yaml exists; with neither, the gate is UNAVAILABLE
+          (never a pass). Set it to run something else, e.g. `uv run ruff check . &&
+          uv run pytest -q`.
       ci.base = ''   [default]
           The branch merged into the task's branch before the checks run, so an
           interaction with what the base has become is tested (a parallel merge's
@@ -2913,6 +3179,18 @@
           pretraining-family map, used to enforce the rule above. Extend it as new
           families appear; an unknown model establishes nothing -- an unrecognised
           author is refused, an unrecognised reviewer is not counted as different.
+      agent.family = ''   [default]
+          The author model's pretraining family, so `complete` never needs a model id
+          written into this repository's log: `[agent].family` (or
+          DDFLOW_AGENT_FAMILY, per run) is accepted by `complete` and `gate record` in
+          place of `--model <author model>` -- a `--model` flag still wins, and the
+          configured family otherwise wins over the model the session declared -- and
+          the completion event then stores the family only, never a model name (a non-
+          canonical spelling that is a `[agent].families` NEEDLE, such as "gemini",
+          resolves to its canonical family value there). Set it once per harness, and
+          let onboarding fill it in per harness. Change it for the project (`ddflow
+          config --set agent.family deepseek`), for this machine (add --local), per
+          run (DDFLOW_AGENT_FAMILY), or over MCP with `ddflow_configure`.
       agent.routers = {'hydrafusion': []}   [default]
           Model-name substring to the SET of families a router author draws on -- a
           model that routes each task across providers, such as Copilot's HydraFusion.
@@ -3351,6 +3629,8 @@
       # proj
       
       1/3 tasks complete across 1 phase(s); 0.0 agent-hours, 0 commit(s).
+      
+      Task counts: this headline counts every task record (abandoned tasks and fix tasks included); the `Progress:` block after a completion counts live work items only, so the two totals can differ
       
       Completed:
         [x] T1           Tokenizer

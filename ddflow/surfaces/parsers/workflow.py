@@ -111,6 +111,12 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     hxd.add_argument("id", nargs="?", default="", help="one agent (default: every adopted one)")
     hxd.set_defaults(fn=cmd_harness)
+    hxf = hx_s.add_parser(
+        "facts", help="every descriptor value with its status, source, tool version and date"
+    )
+    hxf.add_argument("--agent", default="", help="one agent (default: all)")
+    hxf.add_argument("--unverified", action="store_true", help="only leads, and sections left out")
+    hxf.set_defaults(fn=cmd_harness)
 
     pr = s.add_parser("prompts", help="inspect and override the prompt templates")
     pr_s = pr.add_subparsers(dest="prompts_cmd", required=True)
@@ -205,6 +211,11 @@ def register(s: argparse._SubParsersAction) -> None:
         "--harness",
         default="claude",
         help="the agent whose hook dialect the call speaks (a descriptor id; default claude)",
+    )
+    hkr.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="compute and print what the hook would do, and write no event",
     )
     hkr.set_defaults(fn=cmd_hooks)
 

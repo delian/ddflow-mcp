@@ -280,8 +280,8 @@ def test_status_answers_what_has_been_completed(proj):
 
 
 def test_status_surfaces_loops_and_recoverable_work(proj):
-    run_cli(proj, "task", "add", "A", "--phase", "P1", "--needs", "B")
-    run_cli(proj, "task", "add", "B", "--phase", "P1", "--needs", "A")
+    run_cli(proj, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--needs", "B")
+    run_cli(proj, "task", "add", "B", "--title", "B fixture", "--phase", "P1", "--needs", "A")
     data = json.loads(run_cli(proj, "--json", "status")[1])
     assert any(f["kind"] == "dependency_cycle" for f in data["loops"])
     assert "⚠" in run_cli(proj, "status")[1]

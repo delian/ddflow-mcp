@@ -13,6 +13,10 @@ name = "bug.reopened"
 doc = "A closed bug was reopened."
 
 [[kind]]
+name = "bug.tagged"
+doc = "The tags of a bug were changed (added or removed), open or closed."
+
+[[kind]]
 name = "bug.reported_upstream"
 doc = "A ddflow-scoped bug was reported, or prepared for reporting, upstream."
 
@@ -23,3 +27,7 @@ doc = "A decision was replaced by a later one."
 [[kind]]
 name = "memory.forgotten"
 doc = "A memory was forgotten."
+
+[[kind]]
+name = "memory.redacted"
+doc = "A superseded memory's text was redacted from the log."

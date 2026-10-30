@@ -105,7 +105,15 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.fix_task = ev.data.get("fix_task", "") or bug.fix_task
     bug.repro = dict(ev.data.get("repro") or {}) or bug.repro
     bug.globs = list(ev.data.get("globs") or bug.globs)
+    if not bug.found_at:  # only the first report sets tags: a re-report never undoes `bug tag`
+        bug.tags = list(dict.fromkeys(ev.data.get("tags") or []))
     bug.found_at = bug.found_at or ev.ts
+
+
+def _h_bug_tagged(st: State, ev: Event) -> None:
+    """`bug.tagged`: the bug's tag list after an add/remove, whether it is open or closed."""
+    bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
+    bug.tags = list(ev.data.get("tags") or [])
 
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:
@@ -307,3 +315,13 @@ def _h_memory_forgotten(st: State, ev: Event) -> None:
     m = st.memories.get(ev.subject)
     if m is not None:
         m.forgotten = ev.data.get("reason", "") or "forgotten"
+
+
+def _h_memory_redacted(st: State, ev: Event) -> None:
+    """A superseded `memory.recorded` event's text was redacted from the log (the sanctioned
+    redaction, D-event-log-redaction-forward): record WHICH event was redacted, so the audit
+    trail the redaction promises survives a reconstruction. The re-record's new event follows
+    in the same transaction and is the memory's live text; this set records the redaction."""
+    eid = ev.data.get("event")
+    if isinstance(eid, str) and eid:
+        st.redacted_memory_events.add(eid)

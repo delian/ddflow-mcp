@@ -25,7 +25,10 @@ def test_show_gives_a_level_per_canonical_event_and_per_feature(repo):
     out = harness_view(repo, what="show", id="gemini")
     assert list(out.data["levels"]) == list(HR.CANONICAL_EVENTS)
     assert set(out.data["features"]) == {"commands", "skills", "subagents"}
-    assert out.data["levels"]["prompt"] == H.NATIVE
+    # The prompt hook is declared in `inject` but its handler emits nothing (B1878cc0da3):
+    # shown as declared, while session_start, which injects the brief, stays a native hook.
+    assert out.data["levels"]["prompt"] == H.DECLARED
+    assert out.data["levels"]["session_start"] == H.NATIVE
 
 
 def test_the_ladder_falls_back_for_an_agent_without_hooks(repo):

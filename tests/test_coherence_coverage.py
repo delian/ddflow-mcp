@@ -68,6 +68,7 @@ _CONFIG = "who changed a setting or approved a tool; the setting itself lives in
 #: Every other kind, and why it is not duplicate-checked. The gate records of an item
 #: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
+    "memory.redacted": "a redaction marker names the superseded event id and why; memory_add writes it, not an authored add to duplicate-check",
     **dict.fromkeys(
         (
             "lease.acquired",
@@ -112,6 +113,7 @@ EXEMPT: dict[str, str] = {
             "bug.fixed",
             "bug.invalid",
             "bug.reopened",
+            "bug.tagged",
             "bug.reported_upstream",
             "decision.superseded",
             "memory.forgotten",

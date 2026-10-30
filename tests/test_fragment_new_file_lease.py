@@ -24,7 +24,7 @@ FRAG = "ddflow/templates/upgrade/unreleased"
 
 
 def _task(repo, cfg, item, holder, glob):
-    assert run_cli(repo, "task", "add", item, "--globs", glob)[0] == 0
+    assert run_cli(repo, "task", "add", item, "--title", "task item", "--globs", glob)[0] == 0
     wt = W.create(repo, cfg, item)
     L.acquire(
         EventLog(repo, holder),

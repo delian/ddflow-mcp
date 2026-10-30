@@ -90,7 +90,9 @@ def test_every_add_command_carries_the_duplicate_check_answer():
     for command in adds:
         at = command.params.index(ANSWER_PARAMS[0])
         assert command.params[at : at + len(ANSWER_PARAMS)] == ANSWER_PARAMS
-        assert list(command.properties())[-2:] == ["relation", "check_only"]
+        # `kind` (task add only) is declared after the answer, so it follows `check_only`
+        props = [p for p in command.properties() if p != "kind"]
+        assert props[-2:] == ["relation", "check_only"]
 
 
 def test_the_answer_flags_exclude_each_other_on_every_add_command():
@@ -100,8 +102,8 @@ def test_the_answer_flags_exclude_each_other_on_every_add_command():
         ["decision", "add", "--title", "t", "--decision", "d", "--check", "--new"],
         ["bug", "found", "--summary", "s", "--related", "B1", "--duplicate-of", "B2"],
         ["research", "--question", "q", "--verdict", "THEORETICAL", "--new", "--check"],
-        ["phase", "add", "P1", "--new", "--extends", "P0"],
-        ["task", "add", "T1", "--related", "T0", "--duplicate-of", "T2"],
+        ["phase", "add", "P1", "--title", "P1 fixture", "--new", "--extends", "P0"],
+        ["task", "add", "T1", "--title", "T1 fixture", "--related", "T0", "--duplicate-of", "T2"],
         ["memory", "add", "fact", "--new", "--extends", "M1"],
     ):
         with pytest.raises(SystemExit) as stop:
@@ -164,6 +166,7 @@ def test_a_task_lists_its_own_arguments_first_on_the_tool_though_its_flags_follo
     """The order of the flags in `task add --help` and of the tool's properties differ; the
     goldens pin both, this names the one that is easy to lose."""
     props = list(TOOLS["ddflow_task_add"]["properties"])
+    props = [p for p in props if p != "kind"]  # declared after the answer, on task add only
     assert props[:3] == ["id", "phase", "parent"] and props[-2:] == ["relation", "check_only"]
 
 
@@ -211,7 +214,7 @@ def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
     assert items.DEFAULT_PRIORITY is defaults.DEFAULT_PRIORITY
     assert api_lifecycle.DEFAULT_NEXT_KIND is defaults.DEFAULT_NEXT_KIND
     assert api_lifecycle.DEFAULT_WAIT_TIMEOUT_S is defaults.DEFAULT_WAIT_TIMEOUT_S
-    ns = build_parser().parse_args(["task", "add", "T"])
+    ns = build_parser().parse_args(["task", "add", "T", "--title", "T fixture"])
     # none given: the task takes its DX or bug band, else DEFAULT_PRIORITY (services.priority)
     assert ns.priority is None
     assert build_parser().parse_args(["next"]).kind == defaults.DEFAULT_NEXT_KIND

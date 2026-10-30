@@ -79,6 +79,7 @@ from .failed_gate import (  # noqa: F401
     skipped_after_failure,
 )
 from .failed_review import failed_review_blockers, unresolved_review_failure  # noqa: F401
+from .hand_approve import approve, record  # noqa: F401
 from .handrecord import hand_record  # noqa: F401
 from .kinds import (  # noqa: F401
     BOILERPLATE,
@@ -116,11 +117,9 @@ from .mutation import (  # noqa: F401
 from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
-    approve,
     is_triageable,
     local_command_notes,
     on_refutation,
-    record,
     refuted_line,
     refuted_passes,
     rounds_line,
@@ -148,15 +147,18 @@ from .reviewed_paths import (  # noqa: F401
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,
     family_for,
+    family_name_of,
     family_of,
     git_state,
     git_state_change,
     is_reviewer_gate,
     reviewer_gates,
     reviewer_independence,
+    reviewer_ran,
     router_set,
     run_watching_git,
 )
+from .rounds import delta_rounds, full_rounds, kept_copy, rounds_used, settled_pass  # noqa: F401
 from .runner import (  # noqa: F401
     KEEP_RUN_LOGS,
     OUTPUT_TAIL_CHARS,
