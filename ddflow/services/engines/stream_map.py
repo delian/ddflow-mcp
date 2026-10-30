@@ -35,43 +35,51 @@ class Event:
     fields: dict[str, Any] = field(default_factory=dict)
 
 
+_FIELD_NAME = re.compile(r"[a-z_][a-z0-9_]{0,31}")
+
+
+def _check_when(when: dict, w: str) -> None:
+    """Exactly one meaningful test: equals (not null), regex, or exists = true."""
+    if "exists" in when and when["exists"] is not True:
+        raise EngineError(f"{w}.when.exists: only true is meaningful")
+    if "equals" in when and when["equals"] is None:
+        raise EngineError(f"{w}.when.equals: null cannot be matched; use exists")
+    if sum(k in when for k in ("equals", "regex", "exists")) != 1:
+        raise EngineError(f"{w}.when: exactly one of equals, regex, exists")
+
+
+def _check_fields(fields: object, w: str, limits: Limits) -> dict[str, str]:
+    if not isinstance(fields, dict):
+        raise EngineError(f"{w}.fields: expected a table of name = path")
+    for name, p in fields.items():
+        if not _FIELD_NAME.fullmatch(str(name)):
+            raise EngineError(f"{w}.fields: bad field name {str(name)[:30]!r}")
+        check_path(p, f"{w}.fields.{name}", limits)
+    return dict(fields)
+
+
+def _parse_rule(raw_rule: object, w: str, limits: Limits) -> Rule:
+    r = expect_keys(raw_rule, {"when", "emit", "fields"}, w)
+    when = expect_keys(r.get("when"), {"path", "equals", "regex", "exists"}, f"{w}.when")
+    if not isinstance(r.get("emit"), str) or r["emit"] not in EVENTS:
+        raise EngineError(f"{w}: emit must be one of {list(EVENTS)}")
+    _check_when(when, w)
+    return Rule(
+        path=check_path(when.get("path"), f"{w}.when.path", limits),
+        emit=r["emit"],
+        equals=when.get("equals"),
+        regex=safe_regex(when["regex"], limits) if "regex" in when else None,
+        exists=bool(when.get("exists")),
+        fields=_check_fields(r.get("fields", {}), w, limits),
+    )
+
+
 def parse_rules(rules: object, limits: Limits = DEFAULT) -> tuple[Rule, ...]:
     if not isinstance(rules, list):
         raise EngineError("stream rules: expected a list of tables")
     if len(rules) > limits.max_rules:
         raise EngineError(f"more than {limits.max_rules} stream rules")
-    out = []
-    for i, raw_rule in enumerate(rules):
-        w = f"stream rule {i}"
-        r = expect_keys(raw_rule, {"when", "emit", "fields"}, w)
-        when = expect_keys(r.get("when"), {"path", "equals", "regex", "exists"}, f"{w}.when")
-        if not isinstance(r.get("emit"), str) or r["emit"] not in EVENTS:
-            raise EngineError(f"{w}: emit must be one of {list(EVENTS)}")
-        if "exists" in when and when["exists"] is not True:
-            raise EngineError(f"{w}.when.exists: only true is meaningful")
-        if "equals" in when and when["equals"] is None:
-            raise EngineError(f"{w}.when.equals: null cannot be matched; use exists")
-        tests = [k for k in ("equals", "regex", "exists") if k in when]
-        if len(tests) != 1:
-            raise EngineError(f"{w}.when: exactly one of equals, regex, exists")
-        fields = r.get("fields", {})
-        if not isinstance(fields, dict):
-            raise EngineError(f"{w}.fields: expected a table of name = path")
-        for name, p in fields.items():
-            if not re.fullmatch(r"[a-z_][a-z0-9_]{0,31}", str(name)):
-                raise EngineError(f"{w}.fields: bad field name {str(name)[:30]!r}")
-            check_path(p, f"{w}.fields.{name}", limits)
-        out.append(
-            Rule(
-                path=check_path(when.get("path"), f"{w}.when.path", limits),
-                emit=r["emit"],
-                equals=when.get("equals") if "equals" in when else None,
-                regex=safe_regex(when["regex"], limits) if "regex" in when else None,
-                exists=bool(when.get("exists")),
-                fields=dict(fields),
-            )
-        )
-    return tuple(out)
+    return tuple(_parse_rule(r, f"stream rule {i}", limits) for i, r in enumerate(rules))
 
 
 def _matches(rule: Rule, raw: dict, limits: Limits) -> bool:
