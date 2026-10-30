@@ -64,6 +64,9 @@ cmd = "acme -p hi"
     )
     assert h.detect.client_names == ("acme-cli",)
     assert h.headless.exit_codes == {"1": "error"} and h.caps.mcp_tools == 128
+    assert h.continuation.mechanism == "stop-hook-block" and h.headless.autonomy == "yolo"
+    assert h.headless.argv == ("acme", "-p") and h.headless.model_flag == "--model"
+    assert h.autonomy.files == {".acme/p.json": "permissions"}
     assert h.meters.context == "statusline"
     assert h.telemetry.transcript_path == "~/.acme/t.jsonl"
     assert h.autonomy.profiles == {"yolo": "--yes"} and h.detect.env == ("ACME_SESSION",)
