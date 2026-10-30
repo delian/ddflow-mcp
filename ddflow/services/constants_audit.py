@@ -92,15 +92,28 @@ def _target_names(target: ast.expr) -> list[str]:
     return []
 
 
+_NAME_GETTERS = {
+    ast.AnnAssign: lambda n: _target_names(n.target),
+    ast.AugAssign: lambda n: _target_names(n.target),
+    ast.NamedExpr: lambda n: _target_names(n.target),
+    ast.For: lambda n: _target_names(n.target),
+    ast.AsyncFor: lambda n: _target_names(n.target),
+    ast.FunctionDef: lambda n: [n.name],
+    ast.AsyncFunctionDef: lambda n: [n.name],
+    ast.ClassDef: lambda n: [n.name],
+    ast.MatchAs: lambda n: [n.name] if n.name else [],
+    ast.MatchStar: lambda n: [n.name] if n.name else [],
+}
+
+
 def _bound_by(node: ast.AST) -> list[str]:
     """Names one AST node binds directly, with no recursion into its body. ``"*"`` marks a
     wildcard import, which can rebind any name."""
+    getter = _NAME_GETTERS.get(type(node))
+    if getter is not None:
+        return getter(node)
     if isinstance(node, ast.Assign):
         return [n for t in node.targets for n in _target_names(t)]
-    if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
-        return _target_names(node.target)
-    if isinstance(node, (ast.For, ast.AsyncFor)):
-        return _target_names(node.target)
     if isinstance(node, (ast.With, ast.AsyncWith)):
         return [n for item in node.items for n in _target_names(item.optional_vars)]
     if isinstance(node, ast.Delete):
@@ -109,10 +122,6 @@ def _bound_by(node: ast.AST) -> list[str]:
         return [a.asname or a.name.split(".")[0] for a in node.names]
     if isinstance(node, ast.ImportFrom):
         return ["*"] if any(a.name == "*" for a in node.names) else [a.asname or a.name for a in node.names]
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return [node.name]
-    if isinstance(node, (ast.MatchAs, ast.MatchStar)):
-        return [node.name] if node.name else []
     return []
 
 
