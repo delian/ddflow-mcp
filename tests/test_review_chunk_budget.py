@@ -66,15 +66,11 @@ def test_a_chunk_is_split_to_fit_the_reviewers_output_cap(monkeypatch):
 
 
 def test_an_undersized_output_cap_keeps_the_quality_bound():
-    """A quality bound that already fits the (verdict-reserved) output cap is kept; only a
-    cap that would outgrow the output budget is shrunk. An output cap that cannot even hold
-    the verdict reserve has no chunk small enough to room both the reasoning and the
-    verdict: it is left alone rather than shrunk to a chunk that cannot answer."""
-    reserve = R.VERDICT_RESERVE_TOKENS
-    # a normal cap is shrunk below max_tokens to leave the verdict room
+    """A quality bound that already leaves the verdict room is kept; only a cap that would
+    outgrow the output budget is shrunk below ``max_tokens`` to reserve the verdict."""
+    # the default reviewer keeps its quality bound (the reserve is already inside it)
+    assert R._chunk_budget(Reviewer(name="r", max_tokens=32000, max_chunk_chars=30000)) == 30000
+    # a small output cap is shrunk below max_tokens to leave the verdict room
     assert R._chunk_budget(Reviewer(name="r", max_tokens=8000, max_chunk_chars=30000)) == 6000
     # the quality bound below the reserved output cap is kept
     assert R._chunk_budget(Reviewer(name="r", max_tokens=100000, max_chunk_chars=120)) == 120
-    # an output cap that cannot hold the verdict reserve is capped at the cap alone, not
-    # shrunk to a useless one-character chunk and not left at the over-cap quality bound
-    assert R._chunk_budget(Reviewer(name="r", max_tokens=reserve, max_chunk_chars=30000)) == reserve

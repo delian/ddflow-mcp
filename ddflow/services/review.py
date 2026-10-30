@@ -745,14 +745,11 @@ def _chunk_budget(rev: Reviewer) -> int:
     the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
     below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
     always budget left to write the verdict in. An output cap that cannot even hold the
-    reserve has no chunk small enough to room both the reasoning and the verdict: it is
-    capped at the output cap ALONE (a small-but-real chunk, not a useless one-character
-    chunk), so such a reviewer is never dispatched a chunk larger than its own cap.
+    reserve has no chunk small enough to room both a one-character chunk and the verdict:
+    such an under-sized reviewer must raise its own ``max_tokens``; its truncated reply is
+    the truncation retry's to report, not something a chunk size can fix.
     """
-    room = rev.max_tokens - VERDICT_RESERVE_TOKENS
-    if room < 1:
-        room = rev.max_tokens  # cannot reserve a verdict: cap at the cap alone
-    return min(rev.max_chunk_chars, room)
+    return min(rev.max_chunk_chars, max(1, rev.max_tokens - VERDICT_RESERVE_TOKENS))
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
