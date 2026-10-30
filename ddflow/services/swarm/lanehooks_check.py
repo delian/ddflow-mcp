@@ -23,6 +23,15 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ...config import Config
+from ...core.bookkeeping import SELF_MANAGED
+from ...core.globs import inside
+from ...core.model import fold
+from ...core.schedule import shared_globs
+from ...infra.log import EventLog
+from .. import leases
+from ..leaseclock import localize
+
 #: Always refused: the conformance probe's path (never a real project path).
 PROBE_DIR = "ddflow-hook-probe"
 #: Keys a tool call's input may carry a file path under (Claude, opencode/kilo, Gemini).
@@ -54,13 +63,6 @@ def _relative(path: str, cwd: Path) -> str | None:
 
 def _mine(repo: Path, agent: str) -> tuple[list[str], list[str]]:
     """(globs of the agent's live leases, shared globs) from the project's event log."""
-    from ...config import Config
-    from ...core.model import fold
-    from ...core.schedule import shared_globs
-    from ...infra.log import EventLog
-    from .. import leases
-    from ..leaseclock import localize
-
     cfg = Config.load(repo)
     log = EventLog(repo, agent, log_cfg=cfg.log)
     now = time.time()
@@ -74,9 +76,6 @@ def _mine(repo: Path, agent: str) -> tuple[list[str], list[str]]:
 
 def verdict(repo: Path, agent: str, paths: list[str], cwd: Path) -> tuple[int, str]:
     """(0, "") to allow; (REFUSE, reason) to refuse. Raises only on what fail-open covers."""
-    from ...core.bookkeeping import SELF_MANAGED
-    from ...core.globs import inside
-
     rels = [(p, _relative(p, cwd)) for p in paths]
     for raw, rel in rels:
         if rel is not None and (rel == PROBE_DIR or rel.startswith(PROBE_DIR + "/")):
