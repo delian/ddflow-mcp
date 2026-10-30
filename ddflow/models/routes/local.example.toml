@@ -1,0 +1,16 @@
+# TEMPLATE for the git-ignored .ddflow/local/models.toml (rule D-no-own-services-local-dir).
+# Copy the route, replace the placeholders; the address and the key variable NAME never go in a
+# committed file. The key's VALUE is never written anywhere: the lane reads it from the
+# environment at launch. `class = "local"` makes every price a documented zero.
+
+[sources]
+lan-probe = { path = "operator-run probe", note = "what the operator observed on the endpoint" }
+
+[route.lan-vllm]
+class = "local"
+endpoint = { v = { kind = "openai", base_url = "http://ENDPOINT-HOST:8000/v1", api_key_env = "LAN_ENDPOINT_KEY", model = "SERVED-MODEL-ID" }, s = "unverified", src = "lan-probe", d = "2026-10-30" }
+window = { v = 32768, s = "unverified", src = "lan-probe", d = "2026-10-30", note = "the served window, not the model card" }
+max_output = { v = 4096, s = "unverified", src = "lan-probe", d = "2026-10-30" }
+tool_call = { v = true, s = "unverified", src = "lan-probe", d = "2026-10-30", note = "becomes verified only after the live probe" }
+streaming = { v = true, s = "unverified", src = "lan-probe", d = "2026-10-30" }
+concurrency = { v = 2, s = "unverified", src = "lan-probe", d = "2026-10-30", note = "parallel requests the server takes; the scheduler caps lanes on it" }
