@@ -191,3 +191,9 @@ def test_malformed_local_rows_are_problems_not_crashes():
     assert any("model.bad.family must be a string" in p for p in bad)
     assert any("route.r.served must be a table of tables" in p for p in bad)
     assert M.resolve(cat, "bad").family == M.UNKNOWN
+
+
+def test_loose_value_under_served_is_a_problem():
+    cat = M.load()
+    cat.route["vllm"]["served"] = {"m": {"window": 128000}}
+    assert any("served" in p and "is not a fact" in p for p in M.validate(cat))

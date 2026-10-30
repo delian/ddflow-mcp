@@ -118,7 +118,12 @@ def _row_problem(at: str, key: str, node: Any) -> str:
         return "" if isinstance(node, str) else f"{at} must be a string"
     if key == "served":
         ok = isinstance(node, dict) and all(isinstance(v, dict) for v in node.values())
-        return "" if ok else f"{at} must be a table of tables (served model -> facts)"
+        if not ok:
+            return f"{at} must be a table of tables (served model -> facts)"
+        loose = [
+            f"{m}.{k}" for m, tbl in node.items() for k, v in tbl.items() if not facts.is_fact(v)
+        ]
+        return f"{at}.{loose[0]} is not a fact (no `s`) and would be ignored" if loose else ""
     if key not in _PLAIN_KEYS and not facts.is_fact(node):
         return f"{at} is not a fact (no `s`) and would be ignored"
     return ""
