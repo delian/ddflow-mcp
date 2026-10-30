@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=7c4e58e103c9 -->
-<details><summary>All 89 commands</summary>
+<!-- ddflow:begin README/commands sha=3985e3f80b25 -->
+<details><summary>All 91 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -557,7 +557,7 @@ needs a line written by hand here.
 | `ddflow chore` | commit or approve chore files (no reviewer) |
 | `ddflow grant` | record or list the operator's grants (extra review rounds) |
 | `ddflow approvals` | approval requests for operator-gated commands (a person answers) |
-| `ddflow plan` | check, file (proposed) and confirm a plan |
+| `ddflow plan` | check a proposed plan, filed it PROPOSED, confirm it, or lint the whole open queue |
 | `ddflow next` | what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase) |
 | `ddflow claim` | lease an item + create its worktree (exit 3 = refused) |
 | `ddflow heartbeat` | renew a lease |
@@ -595,7 +595,7 @@ needs a line written by hand here.
 | `ddflow session` | see `ddflow session --help` |
 | `ddflow record` | records of a data-declared kind: `record <kind> <verb> [id] [--set field=value]` |
 | `ddflow replay` | reconstruct the decision history from the log |
-| `ddflow recover` | find crashed agents' work (exit 2 = nothing) |
+| `ddflow recover` | find crashed agents' work; --all --plan triages it (exit 2 = nothing) |
 | `ddflow progress` | work actually done, aggregated from the log |
 | `ddflow loops` | circular references and runtime loops (exit 2 = none) |
 | `ddflow cleanup` | classify ddflow worktrees/branches; --apply lands the safe ones |
@@ -635,6 +635,8 @@ needs a line written by hand here.
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
+| `ddflow watch` | wait for a job, a file line, a process or a gate, renewing your leases; exit 2 = not yet (resume with the… |
+| `ddflow waves` | print the dependency waves; --stamp writes the derived wave:N tags, --check exits 1 when they are stale |
 
 </details>
 <!-- ddflow:end README/commands -->
@@ -1101,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 406 knobs.
+cadences, and the rest of the 459 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5296,7 +5298,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 406): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 459): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5477,7 +5479,7 @@ A delta removes the surface that can drift instead of policing it.
 Both surfaces are one implementation — the MCP server maps each tool onto the same
 `cli.main()` call in-process, and two tests plus a demo step assert they cannot diverge.
 
-<!-- ddflow:begin README/agents sha=a7756cc6cc85 -->
+<!-- ddflow:begin README/agents sha=dbab3cccc704 -->
 | Agent | Id | MCP config written by `adopt` | Hook style | Best level |
 |---|---|---|---|---|
 | Claude Code | `claude` | `.mcp.json` | claude | native hook |
@@ -5491,18 +5493,19 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 | opencode | `opencode` | `opencode.json` | plugin | plugin |
 | Z Code (GLM) | `glm` | `.zcode/config.json` | not verified | nv |
 | Qwen Code | `qwen` | `.qwen/settings.json` | claude | native hook |
-| Google Antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | native hook |
+| Google Antigravity | `antigravity` | `.agents/mcp_config.json` | antigravity | declared, not delivering |
 | Devin | `devin` | `.devin/mcp_config.json` | claude | native hook |
 | Qodo | `qodo` | `mcp.json` | not verified | nv |
 | Tabnine | `tabnine` | `.tabnine/agent/settings.json` | gemini | native hook |
 | Aider | `aider` | none | none | instruction text |
-| Cline | `cline` | none | cline | native hook |
-| Windsurf | `windsurf` | none | cascade | native hook |
+| Cline | `cline` | none | cline | declared, not delivering |
+| Windsurf | `windsurf` | none | cascade | wired, not injected |
 | Replit Agent | `replit` | none | not verified | nv |
 | OpenHands | `openhands` | none | claude | native hook |
-| Goose | `goose` | none | claude | native hook |
+| Goose | `goose` | none | claude | wired, not injected |
 | Sourcegraph Cody | `cody` | none | not verified | nv |
 | dsh (DeepSeek Harness) | `dsh` | `.ddflow/harness/dsh.cordis.yml` | claude | native hook |
+| Grok Build | `grok` | `.grok/config.toml` | claude | native hook |
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
@@ -5577,7 +5580,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=039ca3b598b7 -->
+<!-- ddflow:begin README/tools sha=4f5f647a39d0 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5588,7 +5591,7 @@ drift. The groups are the ones `ddflow help` prints.
 **Families**: one tool with an `action`; the old tool name keeps working as a hidden alias, said once per session:
 
 - `ddflow_gate` (8 actions): `status` (was `ddflow_gate_status`), `list` (was `ddflow_gate_list`), `run` (was `ddflow_gate_run`), `record` (was `ddflow_gate_record`), `verify` (was `ddflow_gate_verify`), `skip` (was `ddflow_gate_skip`), `ci` (was `ddflow_ci`), `tests` (was `ddflow_tests`)
-- `ddflow_view` (14 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`)
+- `ddflow_view` (15 actions): `queue` (was `ddflow_queue`), `board` (was `ddflow_board`), `progress` (was `ddflow_progress`), `loops` (was `ddflow_loops`), `status` (was `ddflow_status`), `render` (was `ddflow_render`), `list` (was `ddflow_list`), `history` (was `ddflow_history`), `cadence` (was `ddflow_cadence`), `pins` (was `ddflow_pins`), `lanes` (was `ddflow_lanes`), `metrics` (was `ddflow_metrics`), `health` (was `ddflow_health`), `docs` (was `ddflow_docs`), `waves` (was `ddflow_waves`)
 - `ddflow_reviewers` (10 actions): `pr_sync` (was `ddflow_pr_sync`), `pr_status` (was `ddflow_pr_status`), `pr_threads` (was `ddflow_pr_threads`), `companions` (was `ddflow_companions`), `companions_verify` (was `ddflow_companions_verify`), `companions_add` (was `ddflow_companions_add`), `detect` (was `ddflow_reviewers_detect`), `list` (was `ddflow_reviewers_list`), `review` (was `ddflow_review`), `review_triage` (was `ddflow_review_triage`)
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
@@ -5599,11 +5602,11 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
 - `ddflow_session` (4 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`)
-- `ddflow_lease` (5 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`)
+- `ddflow_lease` (6 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `watch` (was `ddflow_watch`)
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 123 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 42 more in `all`</summary>
+<details><summary>All 125 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 44 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5658,6 +5661,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Doing the work | `ddflow_sync` | standard | Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with… |
+| Doing the work | `ddflow_watch` | all | Wait for ONE thing and return what happened, renewing your leases meanwhile: a job (job: exit status), a… |
 | Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
 | Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
@@ -5730,6 +5734,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
+| Reading the queue | `ddflow_waves` | all | Dependency waves of the open queue: wave 0 = no open prerequisite (task-level or inherited from a phase)… |
 
 </details>
 <!-- ddflow:end README/tools -->
@@ -5865,7 +5870,7 @@ declared once and persists — see
 
 ## Configuration
 
-406 knobs across 42 sections, every one documented in place and listed, with its default
+459 knobs across 46 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5932,8 +5937,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=06805b4982bf -->
-<details><summary>All 406 knobs across 42 sections</summary>
+<!-- ddflow:begin README/knobs sha=911e4ae3878d -->
+<details><summary>All 459 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6088,6 +6093,7 @@ long default is left to `ddflow config --explain`.
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
 | `bugs.lint_checks` | `["ruff", "(CI: Lint)", "format"]` |  |
+| `bugs.named_scope_at` | `20` |  |
 | `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
 | `bugs.repro_max_bytes` | `65536` |  |
 | `bugs.repro_tail_bytes` | `4096` |  |
@@ -6153,6 +6159,7 @@ long default is left to `ddflow config --explain`.
 | `enforce.readme_files` | `["README.md"]` |  |
 | `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.max_behind` | `50` |  |
+| `enforce.machine_local_keys` | `[]` |  |
 | `loops.max_claims_per_item` | `3` |  |
 | `loops.max_gate_flaps` | `4` |  |
 | `loops.max_reopens` | `2` |  |
@@ -6168,6 +6175,10 @@ long default is left to `ddflow config --explain`.
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
+| `lanes.stop_grace_s` | `10` |  |
+| `lanes.event_buffer` | `1000` |  |
+| `lanes.scope` | `"none"` | `none` \| `systemd` |
+| `lanes.pass_env` | (long: see `ddflow config --explain`) |  |
 | `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
 | `health.stall_s` | `3600` |  |
 | `health.runaway_s` | `14400` |  |
@@ -6182,6 +6193,24 @@ long default is left to `ddflow config --explain`.
 | `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
 | `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `govern.quota_mark_1` | `0.4` |  |
+| `govern.quota_mark_2` | `0.6` |  |
+| `govern.quota_mark_3` | `0.8` |  |
+| `govern.context_mark_1` | `0.6` |  |
+| `govern.context_mark_2` | `0.75` |  |
+| `govern.context_mark_3` | `0.85` |  |
+| `govern.context_mark_4` | `0.95` |  |
+| `govern.hysteresis` | `0.05` |  |
+| `govern.cooldown_s` | `300` |  |
+| `govern.tier_cap_1` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.tier_cap_2` | `"fast"` | `fast` \| `balanced` \| `deep` |
+| `govern.tier_cap_2_other` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.effort_cap_1` | `"medium"` | `low` \| `medium` \| `high` |
+| `govern.effort_cap_2` | `"low"` | `low` \| `medium` \| `high` |
+| `govern.reviewer_floor_tier` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.effort_floor` | `"low"` | `low` \| `medium` \| `high` |
+| `govern.deep_floor` | `true` |  |
+| `govern.load_governs` | `true` |  |
 | `metrics.min_samples` | `10` |  |
 | `metrics.top` | `5` |  |
 | `metrics.forecast_runs` | `1000` |  |
@@ -6198,11 +6227,34 @@ long default is left to `ddflow config --explain`.
 | `review.require_new_work` | `true` |  |
 | `review.combined_under_lines` | `150` |  |
 | `review.triage_ignore_globs` | (long: see `ddflow config --explain`) |  |
+| `review.doc_globs` | `["docs/**", "README*", "CHANGELOG*"]` |  |
 | `review.exclude_globs` | (long: see `ddflow config --explain`) |  |
 | `review.manifest_max_files` | `40` |  |
 | `review.exclude_pin_files` | `true` |  |
 | `review.chunk_max_tokens` | `0` |  |
 | `review.split_rounds` | `2` |  |
+| `swarm.w_critical` | `3.0` |  |
+| `swarm.w_fit` | `2.0` |  |
+| `swarm.w_cost` | `1.0` |  |
+| `swarm.w_rework` | `1.5` |  |
+| `swarm.w_queue` | `0.5` |  |
+| `swarm.fit_margin` | `0.1` |  |
+| `swarm.cost_ref_usd` | `1.0` |  |
+| `swarm.rework_ref` | `1.0` |  |
+| `swarm.queue_ref_s` | `3600` |  |
+| `swarm.max_lanes` | `4` |  |
+| `swarm.family_cap` | `3` |  |
+| `swarm.hedge_max` | `1` |  |
+| `swarm.default_min_trust` | `0` |  |
+| `swarm.explore_share` | `0.1` |  |
+| `swarm.explore_min_n` | `5` |  |
+| `swarm.bug_window_s` | `604800` |  |
+| `swarm.conformance_min_accuracy` | `0.9` |  |
+| `swarm.conformance_min_calls` | `5` |  |
+| `swarm.conformance_idle_s` | `5.0` |  |
+| `swarm.conformance_lease_wait_s` | `10.0` |  |
+| `swarm.conformance_tools` | (long: see `ddflow config --explain`) |  |
+| `swarm.conformance_max_age_s` | `2592000` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
@@ -6237,6 +6289,7 @@ long default is left to `ddflow config --explain`.
 | `pins.progress_s` | `30` |  |
 | `pins.merge_check` | `"fast"` | `fast` \| `all` \| `off` |
 | `plan.warn_missing_globs` | `true` |  |
+| `waves.auto_stamp` | `true` |  |
 | `merge_queue.max_batch` | `5` |  |
 | `merge_queue.run_unit_tests` | `false` |  |
 | `merge_queue.timeout_s` | `0` |  |
@@ -6245,6 +6298,10 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.keep_history` | `50` |  |
 | `chore.globs` | (long: see `ddflow config --explain`) |  |
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
+| `digest.escalate_after` | `"1h, 24h"` |  |
+| `digest.escalate_after_red_main` | `"6h"` |  |
+| `digest.text_chars` | `400` |  |
+| `digest.spotcheck_min` | `1` |  |
 | `grants.max_count` | `3` |  |
 | `grants.ttl_h` | `48` |  |
 | `approvals.use_ttl_s` | `3600` |  |
@@ -6307,6 +6364,7 @@ long default is left to `ddflow config --explain`.
 | `agent.id` | `""` |  |
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.families` | (long: see `ddflow config --explain`) |  |
+| `agent.family` | `""` |  |
 | `agent.routers` | `{hydrafusion = []}` |  |
 | `agent.roles` | (long: see `ddflow config --explain`) |  |
 | `agent.actors` | `{}` |  |
