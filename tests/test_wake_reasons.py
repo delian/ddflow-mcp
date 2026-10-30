@@ -165,3 +165,14 @@ def test_hostile_inbox_files_are_skipped_or_contained(proj):
 def test_the_cut_marker_stays_inside_the_cap_and_ttl_frees_a_full_inbox(proj):
     msg, _ = IB.send(proj, LANE, "x" * 50, max_chars=10)
     assert msg and len(msg.text) == 10 and msg.text.endswith("[cut]")
+
+
+def test_an_expired_message_does_not_keep_the_inbox_full_and_nesting_is_skipped(proj):
+    old, _ = IB.send(proj, LANE, "old")
+    assert old
+    f = next((proj / IB.INBOX_DIR / LANE).glob("*.json"))
+    f.write_text(f.read_text().replace(f'"sent_at": {old.sent_at}', '"sent_at": 1.0'))
+    new, why = IB.send(proj, LANE, "new", max_pending=1, ttl_s=60)
+    assert new, why
+    (proj / IB.INBOX_DIR / LANE / "deep.json").write_text("[" * 100000)
+    assert [m.text for m in IB.pending(proj, LANE)] == ["new"]
