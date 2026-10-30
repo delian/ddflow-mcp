@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -382,6 +383,7 @@ def test_transcript_map_paths_and_validation():
 
 
 # --- E8 probe ---------------------------------------------------------------------------
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_probe_runs_declared_safe_argv_and_stores_a_fact():
     spec = probe.parse([[sys.executable, "--version"]], allow_paths=True)
     facts = probe.run(spec, probe_id="py", now="2026-10-30")
@@ -406,6 +408,7 @@ def test_probe_refuses_what_is_not_declared_safe():
             probe.parse(bad)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_probe_missing_binary_is_unavailable_and_timeouts_are_bounded(tmp_path):
     spec = probe.parse([["definitely-not-installed-xyz", "--version"]])
     f = probe.run(spec, probe_id="x", now="2026-10-30")[0]
@@ -419,6 +422,7 @@ def test_probe_missing_binary_is_unavailable_and_timeouts_are_bounded(tmp_path):
     assert f["status"] == "unavailable" and f["reason"] == "timeout" and time.monotonic() - t < 3
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe reads pipes with select(): POSIX only")
 def test_probe_output_is_capped_and_env_is_scrubbed(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-leak")
     s = tmp_path / "tool"
