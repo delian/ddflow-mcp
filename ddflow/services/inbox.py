@@ -91,8 +91,8 @@ def send(
     if len(pending(repo, to, ttl_s=ttl_s)) >= max_pending:
         return None, f"{to}'s inbox holds {max_pending} messages already: it is not reading them"
     body, cut = clean(text, max_chars)
-    if cut:  # the marker is inside the cap, never past it
-        body = body[: max(0, max_chars - len(_CUT))] + _CUT
+    if cut and max_chars > len(_CUT):  # the marker is inside the cap, never past it
+        body = body[: max_chars - len(_CUT)] + _CUT
     now = time.time()
     msg = Message(
         to=to,
@@ -130,7 +130,13 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
             ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
             m.id = path.stem  # the file is the identity: a forged id cannot hide a message
-        except (OSError, ValueError, TypeError, AttributeError):
+            # Whatever the file holds is read as untrusted, however it got there.
+            m.text, m.sender, m.item = (
+                clean(m.text, 1 << 16)[0],
+                clean(m.sender, 80)[0],
+                clean(m.item, 120)[0],
+            )
+        except (OSError, ValueError, TypeError, AttributeError, RecursionError):
             continue
         if not ok:
             continue
