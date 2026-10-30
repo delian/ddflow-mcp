@@ -140,6 +140,14 @@ def no_constant(name: str):
     raise ValueError(f"{name} is not JSON")
 
 
+def finite_float(text: str) -> float:
+    """``json.loads(parse_float=...)``: 1e999 overflows to infinity, which is not JSON data."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"{text} overflows")
+    return value
+
+
 def clip(value: object, limits: Limits = DEFAULT) -> str | int | float | bool | None:
     """A scalar from untrusted JSON, or None; strings are cut to the cap."""
     if isinstance(value, str):
