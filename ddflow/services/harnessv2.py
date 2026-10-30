@@ -154,6 +154,13 @@ def check_table(table: Any, name: str, where: str) -> None:
     keys = set(table) - {"none"}
     if not table:
         raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
+    if not keys and table.get("none") is not True:
+        raise DescriptorError(f"{where}: [{name}] gives no values: omit it or say none = true")
+    mech = table.get("mechanism")
+    if name == "continuation" and isinstance(mech, str) and mech not in CONTINUATION_MECHANISMS:
+        raise DescriptorError(
+            f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"
+        )
     if "none" in table and table["none"] is True and keys:
         raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
     if name == "continuation" and keys & {"cap", "goal_command", "loop_guard"}:
