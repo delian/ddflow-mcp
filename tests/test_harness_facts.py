@@ -108,3 +108,11 @@ def test_falsy_value_is_a_fact_when_an_overlay_names_it():
     rows = {r["fact"]: r for r in harnessfacts.rows(p(zero))}
     assert rows["caps.subagent_depth"]["status"] == "verified"
     assert rows["caps.subagent_depth"]["value"] == "0"
+
+
+def test_overlay_cannot_wave_through_a_missing_or_absent_value():
+    ov = '[facts."{k}"]\ns = "verified"\nsrc = "a"\nd = "2026-10-30"\n'
+    with pytest.raises(DescriptorError, match="value"):
+        p("[caps]\nnone = true\n" + ov.format(k="caps.mcp_tools"))
+    with pytest.raises(DescriptorError, match="value"):
+        p("[spawn]\nnone = true\n" + ov.format(k="spawn"))
