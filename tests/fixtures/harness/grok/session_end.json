@@ -2,7 +2,7 @@
   "_meta": {
     "recorded": false,
     "synthetic": true,
-    "source": "synthetic: built from the field list on https://docs.x.ai/build/features/hooks (hookEventName, sessionId, cwd, workspaceRoot, toolName, toolInput); the prompt field name is a guess; replace with a live recording",
+    "source": "synthetic: built from the field list on https://docs.x.ai/build/features/hooks (hookEventName, sessionId, cwd, workspaceRoot, toolName, toolInput); replace with a live recording",
     "version": "unversioned"
   },
   "stdin": {
