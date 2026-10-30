@@ -4,6 +4,7 @@ closes it with the reason recorded; any other bug still needs its regression tes
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +22,14 @@ def _file(repo: Path, bug: str, title: str) -> None:
     run_cli(repo, "init")
     code, _o, err = run_cli(repo, "bug", "found", "--id", bug, "--summary", "red", "--title", title)
     assert code == 0, err
+
+
+def _commit(repo: Path, msg: str) -> str:
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", msg], check=True, capture_output=True)
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 def test_a_ci_lint_bug_closes_with_a_recorded_reason_and_no_test(repo):
@@ -78,16 +87,30 @@ def test_a_non_pytest_check_id_containing_colons_is_not_taken_for_a_test(repo):
     assert api.bug_fixed(repo, "Bci-ruff-colons", lint_exempt="formatted").exit == OK
 
 
-def test_it_takes_no_landing_mutation_or_verify_reason(repo):
+def test_it_takes_no_mutation_or_verify_reason(repo):
     _file(repo, "Bci-ruff-format-4", "merge CI check failed: ruff format --check (CI: Lint)")
     for kw in (
-        {"landed": "abc"},
         {"mutation": {"file": "x", "old": "a", "new": "b"}},
         {"verify_reason": "r"},
     ):
         out = api.bug_fixed(repo, "Bci-ruff-format-4", lint_exempt="formatted", **kw)
         assert out.exit == REFUSED and "takes no" in out.reason, (kw, out.reason)
     assert not fold(EventLog(repo).read_all()).bugs["Bci-ruff-format-4"].fixed_at
+
+
+def test_lint_exempt_names_the_landed_fix_commit(repo):
+    """`--lint-exempt` waives the regression test, not the commit reference: `--landed`
+    names the commit that holds the fix, recorded on the closed bug."""
+    _file(repo, "Bci-ruff-format-5", "merge CI check failed: ruff format --check (CI: Lint)")
+    (repo / "lint.py").write_text("x\n")
+    sha = _commit(repo, "the lint fix, already landed")
+    out = api.bug_fixed(repo, "Bci-ruff-format-5", lint_exempt="ruff format applied", landed=sha)
+    assert out.exit == OK, out.reason
+    assert out.data.get("landed") == sha, out.data
+    assert out.data["regression_verified"] == "exempt-lint"
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["landed"] == sha
+    assert fixed.data["regression_verify"]["reason"] == "ruff format applied"
 
 
 def test_only_a_title_that_starts_as_the_ci_filing_does_is_a_ci_bug(repo):
