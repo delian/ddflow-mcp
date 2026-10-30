@@ -61,7 +61,11 @@ def _merge_row(into: dict[str, Any], row: dict[str, Any]) -> None:
     for key, node in row.items():
         if key == "served" and isinstance(node, dict) and isinstance(into.get(key), dict):
             for model, tbl in node.items():
-                into[key].setdefault(model, {}).update(tbl)
+                have = into[key].get(model)
+                if isinstance(tbl, dict) and isinstance(have, dict):
+                    have.update(tbl)
+                else:  # malformed: keep it so `validate` reports it
+                    into[key][model] = tbl
         else:
             into[key] = node
 
@@ -258,11 +262,13 @@ def _tiers(
     cat: Catalog, res: Resolved, route: str | None
 ) -> list[tuple[str, dict[str, Any] | None]]:
     r = cat.route.get(route or "", {}) if route else {}
-    served = (r.get("served") or {}).get(res.model) or (r.get("served") or {}).get(res.row) or {}
+    table = r.get("served") if isinstance(r.get("served"), dict) else {}
+    served = table.get(res.model) or table.get(res.row) or {}
+    served = served if isinstance(served, dict) else {}
     return [
         ("route.served", served),
         ("route", {k: v for k, v in r.items() if k not in _ROUTE_META}),
-        ("class", cat.cls.get(r.get("class", ""), {})),
+        ("class", cat.cls.get(r["class"], {}) if isinstance(r.get("class"), str) else {}),
         ("model", cat.model.get(res.row, {}) if res.row else {}),
         ("family", cat.family.get(res.family, {})),
         ("cache-family", None),
