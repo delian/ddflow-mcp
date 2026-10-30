@@ -59,6 +59,7 @@ def test_running_worktree_code_against_its_primary_is_detected(
     _git(p, "worktree", "add", "-q", str(tree), "-b", "feature")
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
     assert PATHS.running_from_linked_worktree_against(p) is True
+    assert PATHS.running_from_linked_worktree_against(tree) is True  # raw worktree path
     monkeypatch.setattr(PATHS, "package_parent", lambda: p)
     assert PATHS.running_from_linked_worktree_against(p) is False
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
