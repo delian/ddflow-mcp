@@ -116,13 +116,13 @@ def pick(
     what: str = "fact",
     **kw: Any,
 ) -> Pick:
-    """Best believable fact (observation outranks document; drifted ones are skipped), else
+    """Best believable fact (observation outranks document; drifted and unknown-version ones are skipped), else
     `fallback` with a reason naming why nothing was usable."""
     why = []
     live = []
     for f in candidates:
         a = assess(f, installed, **kw)
-        if a.drifted:
+        if a.state != "ok":
             why.append(f"{a.state} ({a.reason})")
         elif f.get("s") in facts.READABLE or f.get("s") == "none":
             live.append(f)
