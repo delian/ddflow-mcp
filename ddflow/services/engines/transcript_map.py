@@ -42,7 +42,7 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
     path = t.get("path")
     if not isinstance(path, str) or not path or "\0" in path:
         raise EngineError("transcript.path: a non-empty template")
-    if ".." in re.split(r"[\\/]", path):
+    if ".." in re.split(r"[\\/:]", path):
         raise EngineError("transcript.path: '..' is not allowed")
     for name in _PH.findall(path):
         if name not in PLACEHOLDERS:
@@ -69,11 +69,11 @@ def resolve_path(spec: Spec, *, home: str = "", dir: str = "", session: str = ""
         raise EngineError("session id is not a single safe path segment")
     for k in ("home", "dir"):
         if k in used and (
-            not vals[k].startswith("/") or "\0" in vals[k] or ".." in re.split(r"[\\/]", vals[k])
+            not vals[k].startswith("/") or "\0" in vals[k] or ".." in re.split(r"[\\/:]", vals[k])
         ):
             raise EngineError(f"{k} must be an absolute path without '..'")
     out = _PH.sub(lambda m: vals[m.group(1)], spec.path)
-    if ".." in re.split(r"[\\/]", out):
+    if ".." in re.split(r"[\\/:]", out):
         raise EngineError("the resolved transcript path has a '..' segment")
     return out
 
