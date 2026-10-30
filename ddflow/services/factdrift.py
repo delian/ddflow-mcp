@@ -75,7 +75,10 @@ def assess(
     today = today or clock.now_utc().date()
     exp = fact.get("expires")
     if exp:
-        due = clock.parse_date(str(exp))
+        try:
+            due = clock.parse_date(str(exp))
+        except ValueError:
+            return Assessment("unknown", f"expires {exp!r} is not an ISO date")
         if (today - due).days > grace_days:
             return Assessment("expired", f"expired {due.isoformat()}")
     spec = fact.get("versions")

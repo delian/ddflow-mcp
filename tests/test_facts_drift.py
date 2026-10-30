@@ -63,7 +63,7 @@ def test_drifted_fact_demoted_to_unverified():
 
 
 def test_expired_absence_is_demoted_to_a_lead():
-    f = fact(s="none", expires="2020-01-01")
+    f = fact(s="none", v=None, expires="2020-01-01")
     assert factdrift.effective(f, today=TODAY)["s"] == "unverified"
 
 
@@ -119,3 +119,10 @@ def test_pick_skips_fact_whose_version_cannot_be_checked():
     got = factdrift.pick([obs], fallback="fb", installed=None, today=TODAY)
     assert got.value == "fb" and "installed version unknown" in got.reason
     assert factdrift.pick([doc, obs], installed="1.2", today=TODAY).value == "obs"
+
+
+def test_bad_expiry_degrades_instead_of_raising():
+    f = fact(expires="not-a-date")
+    assert factdrift.assess(f, today=TODAY).state == "unknown"
+    assert factdrift.pick([f], fallback=1, today=TODAY).value == 1
+    assert factdrift.doctor({"k": f}, today=TODAY) == []
