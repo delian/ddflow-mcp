@@ -36,24 +36,24 @@ class Weights:
 
     @classmethod
     def from_config(cls, cfg: Config) -> Weights:
-        s = cfg.swarm
+        sw = cfg.swarm
         return cls(
-            w_critical=s.w_critical,
-            w_fit=s.w_fit,
-            w_cost=s.w_cost,
-            w_rework=s.w_rework,
-            w_queue=s.w_queue,
-            fit_margin=s.fit_margin,
-            cost_ref_usd=s.cost_ref_usd,
-            rework_ref=s.rework_ref,
-            queue_ref_s=s.queue_ref_s,
-            max_lanes=s.max_lanes,
-            family_cap=s.family_cap,
-            hedge_max=s.hedge_max,
-            default_min_trust=s.default_min_trust,
-            explore_share=s.explore_share,
-            explore_min_n=s.explore_min_n,
-            bug_window_s=s.bug_window_s,
+            w_critical=sw.w_critical,
+            w_fit=sw.w_fit,
+            w_cost=sw.w_cost,
+            w_rework=sw.w_rework,
+            w_queue=sw.w_queue,
+            fit_margin=sw.fit_margin,
+            cost_ref_usd=sw.cost_ref_usd,
+            rework_ref=sw.rework_ref,
+            queue_ref_s=sw.queue_ref_s,
+            max_lanes=sw.max_lanes,
+            family_cap=sw.family_cap,
+            hedge_max=sw.hedge_max,
+            default_min_trust=sw.default_min_trust,
+            explore_share=sw.explore_share,
+            explore_min_n=sw.explore_min_n,
+            bug_window_s=sw.bug_window_s,
         )
 
 
