@@ -94,7 +94,10 @@ def read_key_file(path: str) -> KeyResult:
         os.close(fd)
     if len(data) > MAX_KEY_FILE_BYTES:
         return KeyResult(reason=f"key file {p} is too large to be a key")
-    text = data.decode("utf-8", "replace").strip()
+    try:
+        text = data.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return KeyResult(reason=f"key file {p} is not valid UTF-8 text")
     if not text:
         return KeyResult(reason=f"key file {p} is empty")
     if not text.isprintable() or any(c.isspace() for c in text):
@@ -126,13 +129,16 @@ def resolve_key(env_name: str, key_file: str = "", default_env: str = "") -> Key
 
 
 def scrub(text: str, key: str) -> str:
-    """``text`` with every occurrence of ``key`` (also URL-quoted) replaced; a server may echo it."""
+    """``text`` with ``key`` replaced, plain or URL-quoted (any hex case); a server may echo it."""
     if not key:
         return text
+    import re
     from urllib.parse import quote
 
     for form in {key, quote(key), quote(key, safe="")}:
-        text = text.replace(form, "[REDACTED:key]")
+        text = re.sub(
+            re.escape(form), "[REDACTED:key]", text, flags=re.IGNORECASE if "%" in form else 0
+        )
     return text
 
 
