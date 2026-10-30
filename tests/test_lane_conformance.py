@@ -35,7 +35,13 @@ AGENT = textwrap.dedent(
     script, mode, flag = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
     for line in script:
         print(json.dumps(line), flush=True)
-    if mode != "once":
+    if mode == "late":  # works only after the revocation, then ends
+        while not os.path.exists(flag):
+            time.sleep(0.05)
+        for t in ("claim", "heartbeat"):
+            print(json.dumps({"type": "call", "tool": t}), flush=True)
+        print(json.dumps({"type": "call", "tool": "gate", "action": "record"}), flush=True)
+    elif mode != "once":
         end = time.time() + 20
         while time.time() < end:
             if mode == "obey" and os.path.exists(flag):
@@ -270,3 +276,11 @@ def test_malformed_lane_entry_survives_a_save(tmp_path):
     cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
     assert "broken" in json.loads(cio.path_for(tmp_path).read_text())["lanes"]
     assert set(cio.load_all(tmp_path)) == {"a", "c"}
+
+
+def test_work_after_the_revocation_earns_no_level(tmp_path):
+    # the lane calls claim/heartbeat/gate only once the lease is revoked, then stops
+    spec, flag = lane(tmp_path, [{"type": "session"}], mode="late")
+    r = level(spec, hook_probe=lambda: True, revoke=lambda: flag.write_text("x"))
+    assert statuses(r)["claim"] == cf.FAILED and r.level == 1
+    assert statuses(r)["lease_stop"] == cf.PASSED  # it did stop, but earned nothing by it
