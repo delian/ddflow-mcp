@@ -38,3 +38,21 @@ class LanesConfig:
         1200,
         doc="Characters kept of each text a lane brief quotes (the objective, the last session summary, a note), cut at a line boundary.",
     )
+    stop_grace_s: int = knob(
+        10,
+        doc="Seconds a lane driver waits after SIGTERM to a lane's process group before SIGKILL (`Lane.stop`, process-headless). 0 kills at once.",
+    )
+    event_buffer: int = knob(
+        1000,
+        doc="How many canonical events a lane driver keeps unread per lane; when a reader falls behind, the oldest are dropped and counted in the lane status (`dropped`), never silently.",
+    )
+    scope: str = knob(
+        "none",
+        doc="Extra containment for a launched lane beyond its process group: 'none' (the group alone) or 'systemd' (`systemd-run --user --scope`, so a cgroup holds everything the lane started). 'systemd' where it is not available makes the start report `unavailable`; it never falls back silently.",
+        choices=("none", "systemd"),
+        strictest=("none", "the process group alone, which needs nothing installed"),
+    )
+    pass_env: list[str] = knob(
+        factory=lambda: ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"],
+        doc="Environment variable NAMES a launched lane inherits from the launching process, besides its own private home and the key names its launch spec lists. Everything else is dropped, so the operator's credentials and settings do not reach the lane.",
+    )
