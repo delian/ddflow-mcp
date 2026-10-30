@@ -85,8 +85,10 @@ def _route_basics(
     v = node.get("v") if isinstance(node, dict) else None
     if not isinstance(v, dict) or v.get("kind") != "openai":
         return unavailable(f"route {route!r} is not an OpenAI-compatible endpoint")
-    url, key = str(v.get("base_url") or ""), str(v.get("api_key_env") or "")
-    served = model or str(v.get("model") or "")
+    got = [v.get(k, "") for k in ("base_url", "api_key_env", "model")]
+    if not all(isinstance(x, str) for x in got):
+        return unavailable(f"route {route!r}: base_url, api_key_env and model must be strings")
+    url, key, served = got[0], got[1], model or got[2]
     if not _URL.fullmatch(url):
         return unavailable(
             f"route {route!r}: base_url missing, or carries credentials, a query or a fragment"

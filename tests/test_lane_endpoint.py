@@ -159,3 +159,9 @@ def test_unverified_harness_is_refused_unless_allowed(tmp_path):
         E.prepare(cat, "lan-vllm", "opencode", tmp_path / "o", allow_unverified_harness=True),
         E.Prepared,
     )
+
+
+def test_non_string_endpoint_values_are_refused(tmp_path):
+    t = EXAMPLE.read_text().replace('api_key_env = "LAN_ENDPOINT_KEY"', "api_key_env = true")
+    r = E.resolve(_cat(tmp_path, t), "lan-vllm", require_tools=False)
+    assert isinstance(r, Result) and "strings" in r.detail
