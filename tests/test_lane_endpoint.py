@@ -112,3 +112,12 @@ def test_prepare_writes_private_block_and_reports_probe(tmp_path):
     assert pr.probe.status == "unavailable"
     assert E.prepare(_cat(tmp_path), "lan-vllm", "kilo", tmp_path / "h2").status == "unavailable"
     assert not (tmp_path / "h2").exists()  # a refused route writes nothing
+
+
+def test_limit_needs_both_numbers(tmp_path):
+    t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
+    t = "\n".join(ln for ln in t.splitlines() if not ln.startswith("max_output"))
+    ep = E.resolve(_cat(tmp_path, t), "lan-vllm")
+    assert ep.window == 32768 and ep.max_output is None
+    m = json.loads(E.render(ep, "kilo"))["provider"][ep.provider]["models"]["SERVED-MODEL-ID"]
+    assert "limit" not in m  # kilo skips a model with context but no output
