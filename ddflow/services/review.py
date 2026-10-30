@@ -722,6 +722,15 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
     return packed
 
 
+#: Output tokens ``_chunk_budget`` holds back for the VERDICT after a chunk's reasoning.
+#: Measured in ``Reviewer.max_tokens``: a 30 KB chunk reasoned for 28 381 tokens, then
+#: wrote the verdict in 2 396 characters (~600 tokens). A budget sized for the reasoning
+#: alone leaves nothing for the answer, so a chunk that fills the WHOLE output cap still
+#: comes back ``TRUNCATED`` mid-thought. 2 000 tokens cover the verdict with headroom for a
+#: long findings list.
+VERDICT_RESERVE_TOKENS = 2000
+
+
 def _chunk_budget(rev: Reviewer) -> int:
     """The largest chunk ``rev`` can reason about within its declared output cap.
 
@@ -729,15 +738,15 @@ def _chunk_budget(rev: Reviewer) -> int:
     answers a chunk that size: a reasoning model spends its ``max_tokens`` OUTPUT budget
     thinking before it emits the verdict, and the thinking grows with the input. Measured
     on Qwen3.8-Flash-Next (``Reviewer.max_tokens``): a 30 KB chunk needed 28 381 reasoning
-    tokens -- about one reasoning token per input character -- so a chunk of
-    ``max_chunk_chars`` characters can exhaust a SMALL ``max_tokens`` mid-thought and come
-    back ``TRUNCATED``, which ddflow records UNAVAILABLE and a review round is spent
-    (bug B9a2279db22: the qwen reviewer hit its 64k-token reasoning cap on ledger-sized
-    chunks). Cap the chunk at the output cap, so a reviewer whose ``max_tokens`` is below
-    ``max_chunk_chars`` has its chunk split to fit before it is ever sent; the lower of the
-    two wins, so raising one without the other can never send a chunk too large to answer.
+    tokens -- about one reasoning token per input character -- so a chunk near
+    ``max_chunk_chars`` can exhaust ``max_tokens`` mid-thought and come back ``TRUNCATED``,
+    which ddflow records UNAVAILABLE and a review round is spent (bug B9a2279db22: the qwen
+    reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
+    the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
+    below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
+    always budget left to write the verdict in.
     """
-    return min(rev.max_chunk_chars, max(1, rev.max_tokens))
+    return min(rev.max_chunk_chars, max(1, rev.max_tokens - VERDICT_RESERVE_TOKENS))
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
