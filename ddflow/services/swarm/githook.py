@@ -41,6 +41,8 @@ GIT_HOOKS = (
     "applypatch-msg", "pre-applypatch", "post-applypatch", "commit-msg", "prepare-commit-msg",
     "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-auto-gc",
     "post-rewrite", "reference-transaction", "push-to-checkout", "post-index-change",
+    "pre-merge-commit", "sendemail-validate", "fsmonitor-watchman", "p4-changelist",
+    "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-update",
 )  # fmt: skip
 
 _SCRIPT = """#!/bin/sh
