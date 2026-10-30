@@ -71,6 +71,29 @@ def decode(token: str) -> Target | None:
         return None
 
 
+def encode_wait(args: dict[str, Any]) -> str:
+    """The resume token of a bounded `wait`: its arguments, urlsafe. `ddflow wait --token`
+    asks the same question again."""
+    raw = json.dumps({"wait": args}, sort_keys=True, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+_WAIT_ARGS = {"item": str, "phase": str, "kind": str, "lease": str, "globs": list}
+
+
+def decode_wait(token: str) -> dict[str, Any] | None:
+    """The `wait` arguments a token carries, or None if it is not a wait token."""
+    try:
+        raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+        d = json.loads(raw).get("wait")
+        if not isinstance(d, dict):
+            return None
+        out = {k: v for k, v in d.items() if k in _WAIT_ARGS}
+        return out if all(isinstance(v, _WAIT_ARGS[k]) for k, v in out.items()) else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 def problem(t: Target) -> str:
     """Why this target cannot be watched, or ''."""
     named = [k for k in KINDS if getattr(t, k)]

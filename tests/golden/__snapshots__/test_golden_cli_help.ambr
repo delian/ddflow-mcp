@@ -2687,6 +2687,19 @@
   
   '''
 # ---
+# name: test_help[ddflow session message]
+  '''
+  usage: ddflow session message [-h] --to TO [--text TEXT] [--reason {message,ready,merge_offer,yield}] [--item ITEM]
+  
+  options:
+    -h, --help            show this help message and exit
+    --to TO
+    --text TEXT           the message text
+    --reason {message,ready,merge_offer,yield}
+    --item ITEM
+  
+  '''
+# ---
 # name: test_help[ddflow session note]
   '''
   usage: ddflow session note [-h] [--text TEXT] [--item ITEM] [session]
@@ -2742,10 +2755,12 @@
 # ---
 # name: test_help[ddflow session]
   '''
-  usage: ddflow session [-h] {start,prompt,note,adopt-orphans,end,list,show} ...
+  usage: ddflow session [-h] {start,prompt,message,note,adopt-orphans,end,list,show} ...
   
   positional arguments:
-    {start,prompt,note,adopt-orphans,end,list,show}
+    {start,prompt,message,note,adopt-orphans,end,list,show}
+      message             put a message in another lane's inbox (delivered at its next wait, watch
+                          or heartbeat)
       adopt-orphans       attach prompts/notes recorded with no session id to a session
       list                sessions, newest first: agent, span, items, prompts, state
       show                one session: every prompt and note in order, redacted
@@ -3125,7 +3140,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3138,6 +3153,7 @@
     --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
                          or a path/glob (until no other agent's live lease covers it); a bare wait
                          returns the first ready item at once
+    --token TOKEN        resume token from an earlier wait
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
@@ -3570,6 +3586,7 @@
     'ddflow session adopt-orphans',
     'ddflow session end',
     'ddflow session list',
+    'ddflow session message',
     'ddflow session note',
     'ddflow session prompt',
     'ddflow session show',
