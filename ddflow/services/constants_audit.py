@@ -91,9 +91,14 @@ def candidates_in(source: str, path: str) -> list[Candidate]:
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             targets, value = [node.target], node.value
         else:
+            if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+                scope.pop(node.target.id, None)  # mutated: no longer the folded constant
             continue
         number = _number(value, scope)
         if number is None:
+            for t in targets:  # a (re)binding we cannot fold must not leave a stale value
+                if isinstance(t, ast.Name):
+                    scope.pop(t.id, None)
             continue
         for t in targets:
             if isinstance(t, ast.Name):  # later arithmetic may reference this one

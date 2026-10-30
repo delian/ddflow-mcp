@@ -81,6 +81,18 @@ def test_swarm_metrics_bug_window_is_seen_and_classified() -> None:
     assert knobs.get(key) == 604800.0
 
 
+def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> None:
+    src = (
+        "HOUR = 1\n"
+        "HOUR = get_hours()\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+        "UNIT = 2\n"
+        "UNIT += 1\n"
+        "B_LIMIT = UNIT\n"
+    )
+    assert _plant(tmp_path, src).unclassified == []
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"
