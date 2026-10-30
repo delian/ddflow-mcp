@@ -12,11 +12,13 @@ from ._docs import declare, knob
 
 
 def _num(value: object) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and (isinstance(value, int) or math.isfinite(value))
-    )
+    """A real number the scorer can multiply as a float: finite once converted."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 def _nonneg(value: object) -> str:

@@ -161,7 +161,7 @@ def refusals(
     return [
         *_state_refusals(item, world, w),
         *_lane_refusals(item, lane, world, w),
-        *_independence(lane, world, role, author_family or item.author_family),
+        *_independence(lane, world, role, item.author_family or author_family),
     ]
 
 

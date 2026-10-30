@@ -227,11 +227,19 @@ def test_pull_applies_reviewer_independence_and_hedge_boundary_and_finite_knobs(
     assert _nonneg(float("inf")) != "" and _positive(float("nan")) != "" and _nonneg(0.0) == ""
 
 
-def test_pull_takes_the_author_family_per_item_and_huge_ints_are_validated_not_raised():
+def test_pull_takes_the_author_family_per_item_and_huge_ints_are_rejected_not_raised():
     lane = Lane("rev", "R", "m", cap=2)
     items = [Item("a", author_family="R"), Item("b", author_family="X")]
     assert pull(lane, items, _world(), W, role="reviewer").item == "b"
     assert pull(lane, items[:1], _world(), W, role="reviewer") is None
     from ddflow.config_sections.swarm import _nonneg, _positive, _share
 
-    assert _positive(10**400) == "" and _nonneg(10**400) == "" and _share(10**400)
+    assert _positive(10**400) != "" and _nonneg(10**400) != "" and _share(10**400) != ""
+    assert _positive(10**6) == ""
+
+
+def test_the_item_author_family_wins_over_the_call_argument():
+    lane = Lane("rev", "A", "m", cap=2)
+    items = [Item("one", author_family="A"), Item("two", author_family="B")]
+    got = pull(lane, items, _world(), W, role="reviewer", author_family="A")
+    assert got.item == "two"
