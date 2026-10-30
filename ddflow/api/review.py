@@ -719,21 +719,21 @@ _LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
 
 
 def _design_point(location: str) -> str:
-    """The stable part of a finding's cited place, for a delta round re-raising the same
-    design point (bug B-review-delta-retriages-same-point).
+    """The stable part of a finding's cited place that two rounds agree on: the file and
+    the function/symbol it cites (bug B-review-delta-retriages-same-point).
 
-    A finding the reviewer cites as ``path:line`` moves as the diff grows -- the line number
-    churns on every edit above it -- so a delta that re-raises the same claim at a shifted
-    line is the same design point, not a new one: the line is dropped to get the key.
-    ``path:func`` (a symbol citation with no line) is already stable and is kept whole.
-    Returns "" when nothing is left to match on (no citation, or no file to anchor it).
+    A ``path:line`` citation names no function/symbol, and the line number churns as the
+    diff grows, so nothing identifies ONE design point -- it is dropped and no match is
+    made (two line-cited findings in one file are distinct design points, not one claim).
+    ``path:func`` (a symbol with no line) is stable and is kept whole. Returns "" when
+    nothing is left to match on.
     """
     loc = " ".join(str(location or "").split()).strip()
     if not loc or ":" not in loc:
         return ""
     path, _, anchor = loc.rpartition(":")
     anchor = anchor.strip()
-    return path.strip() if _LINE_CITATION.match(anchor) else loc
+    return loc if anchor and not _LINE_CITATION.match(anchor) else ""
 
 
 def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
