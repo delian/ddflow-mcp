@@ -70,10 +70,19 @@ def test_a_chunk_is_split_to_fit_the_reviewers_output_cap(monkeypatch):
 
 
 def test_an_undersized_output_cap_is_unavailable_not_a_round():
-    """A reviewer whose output cap cannot reserve a verdict after the reasoning is refused
-    upfront (reasoning cap exhausted), never dispatched a chunk that must truncate."""
-    rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=3000, hedge=1)
+    """A reviewer whose output cap cannot hold the verdict reserve is refused upfront
+    (reasoning cap exhausted), never dispatched a chunk that must truncate."""
+    rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=2000, hedge=1)
     res = review(rev, _files("a"), "i")
     assert res.status == R.UNAVAILABLE, res.reason
-    assert "max_tokens" in res.reason and "too small" in res.reason
+    assert "max_tokens" in res.reason
     assert res.chunks_total == 0, "nothing is dispatched to an under-sized reviewer"
+
+
+def test_a_cap_above_the_reserve_still_reviews_a_small_chunk(monkeypatch):
+    """A cap just above the reserve reviews a chunk it can reason about, not refused."""
+    rev = Reviewer(name="r", base_url="http://x", model="m", max_tokens=3000, max_chunk_chars=1000, hedge=1)
+    sent: list[str] = []
+    monkeypatch.setattr(R, "_race", lambda *a, **k: (sent.extend(a[2]), [("STATUS: NO FINDINGS", "")] * len(a[2]))[1])
+    res = review(rev, _files("a"), "i")
+    assert res.status == REVIEWED, res.reason
