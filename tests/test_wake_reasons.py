@@ -201,3 +201,14 @@ def test_a_huge_time_and_an_escape_in_to_are_contained(proj):
     assert [m.to for m in got] == ["ab"]
     big, _ = IB.send(proj, LANE, "y" * 100000, max_chars=100000)
     assert big and len(big.text) == IB.READ_CAP
+
+
+def test_a_hostile_file_name_never_reaches_the_wire(proj):
+    d = proj / IB.INBOX_DIR / LANE
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "a\x1b]0;owned\x07.json").write_text(
+        '{"to":"a","reason":"message","text":"x","sender":"","item":"","sent_at":1.0}'
+    )
+    (msg,) = IB.pending(proj, LANE)
+    assert "\x1b" not in msg.wire()["id"] and "\x1b" not in str(IB.view([msg]))
+    assert IB.wake(proj, LANE) and IB.pending(proj, LANE) == []  # still deletable
