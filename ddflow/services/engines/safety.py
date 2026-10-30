@@ -7,6 +7,7 @@ back-reference), and the text a pattern sees is length-capped.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -45,6 +46,8 @@ def check_path(path: object, where: str, limits: Limits = DEFAULT) -> str:
     """A dotted path (``a.b.0``) of plain key names; anything else is refused."""
     if not isinstance(path, str) or not path:
         raise EngineError(f"{where}: a path is a non-empty string")
+    if path.count(".") >= limits.max_path_parts:
+        raise EngineError(f"{where}: more than {limits.max_path_parts} path parts")
     parts = path.split(".")
     if len(parts) > limits.max_path_parts or not all(_PATH_PART.fullmatch(p) for p in parts):
         raise EngineError(
@@ -88,7 +91,7 @@ def _audit(sub, limits: Limits, tally: dict[str, int]) -> None:
             tally["narrow"] += len(av[1])  # one per alternative
         if op in _REPEATS:
             lo, hi, body = av
-            if hi != _c.MAXREPEAT and hi > limits.max_repeat:
+            if max(lo, 0 if hi == _c.MAXREPEAT else hi) > limits.max_repeat:
                 raise EngineError(f"a repeat bound above {limits.max_repeat}")
             if hi > 1 and _variable(body):
                 raise EngineError("a repeat of a repeat or branch can backtrack exponentially")
@@ -130,10 +133,17 @@ def search(rx: re.Pattern[str], text: str, limits: Limits = DEFAULT) -> re.Match
     return rx.search(text[: limits.max_match_chars])
 
 
+def no_constant(name: str):
+    """``json.loads(parse_constant=...)``: NaN and Infinity are not JSON."""
+    raise ValueError(f"{name} is not JSON")
+
+
 def clip(value: object, limits: Limits = DEFAULT) -> str | int | float | bool | None:
     """A scalar from untrusted JSON, or None; strings are cut to the cap."""
     if isinstance(value, str):
         return value[: limits.max_value_chars]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if isinstance(value, (bool, int, float)):
         return value
     return None
@@ -144,5 +154,7 @@ def expect_keys(table: object, allowed: set[str], where: str) -> dict:
         raise EngineError(f"{where}: expected a table")
     extra = set(table) - allowed
     if extra:
-        raise EngineError(f"{where}: unknown key(s) {sorted(extra)}; allowed {sorted(allowed)}")
+        raise EngineError(
+            f"{where}: unknown key(s) {sorted(extra, key=str)}; allowed {sorted(allowed)}"
+        )
     return table

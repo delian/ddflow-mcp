@@ -58,7 +58,7 @@ class Rendered:
 def is_shell(program: str) -> bool:
     """True for a shell or ``env`` by program name: either path separator, any case, ``.exe`` ignored."""
     base = (
-        re.split(r"[\\/]", program)[-1].lower().rstrip(". ")
+        re.split(r"[\\/:]", program)[-1].lower().rstrip(". ")
     )  # Windows drops a trailing dot or space
     return base.removesuffix(".exe") in SHELLS
 

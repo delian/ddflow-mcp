@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 
 from ..hookio import _dig
-from .safety import DEFAULT, EngineError, Limits, check_path, expect_keys
+from .safety import DEFAULT, EngineError, Limits, check_path, expect_keys, no_constant
 
 FIELDS = ("role", "text", "usage", "model", "ts")
 PLACEHOLDERS = ("home", "dir", "session")
@@ -62,6 +62,8 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
 def resolve_path(spec: Spec, *, home: str = "", dir: str = "", session: str = "") -> str:
     """The transcript path; ``session`` must be one safe path segment, ``home``/``dir`` absolute."""
     vals = {"home": home, "dir": dir, "session": session}
+    if not all(isinstance(v, str) for v in vals.values()):
+        raise EngineError("home, dir and session are strings")
     used = set(_PH.findall(spec.path))
     if ("session" in used and not _SEGMENT.fullmatch(session or "")) or session in (".", ".."):
         raise EngineError("session id is not a single safe path segment")
@@ -87,7 +89,7 @@ def map_lines(lines, spec: Spec, limits: Limits = DEFAULT) -> list[Entry]:
         if len(line) > limits.max_line_chars or not line.strip():
             continue
         try:
-            raw = json.loads(line)
+            raw = json.loads(line, parse_constant=no_constant)
         except (ValueError, RecursionError):
             continue
         if not isinstance(raw, dict):
