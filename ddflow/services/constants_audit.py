@@ -93,15 +93,28 @@ def _target_names(target: ast.expr) -> list[str]:
 
 
 def _rebindings(node: ast.stmt) -> list[str]:
-    """Names a module-level statement rebinds without a foldable scalar (an AugAssign,
-    a for/async-for target, `del`), so a stale value is dropped from the scope."""
-    if isinstance(node, ast.AugAssign):
-        return _target_names(node.target)
-    if isinstance(node, (ast.For, ast.AsyncFor)):
-        return _target_names(node.target)
-    if isinstance(node, ast.Delete):
-        return [n for t in node.targets for n in _target_names(t)]
-    return []
+    """Names a module-level statement rebinds (directly or in a nested body): an AugAssign, a
+    for/with target, an import alias, `del`, a def/class name, a nested assignment. Such a
+    name no longer holds a statically-known constant, so a stale value is dropped."""
+    names: list[str] = []
+    for child in ast.walk(node):
+        if isinstance(child, (ast.For, ast.AsyncFor)):
+            names += _target_names(child.target)
+        elif isinstance(child, (ast.With, ast.AsyncWith)):
+            names += [n for item in child.items for n in _target_names(item.optional_vars)]
+        elif isinstance(child, ast.AugAssign):
+            names += _target_names(child.target)
+        elif isinstance(child, ast.Delete):
+            names += [n for t in child.targets for n in _target_names(t)]
+        elif isinstance(child, ast.Import):
+            names += [a.asname or a.name.split(".")[0] for a in child.names]
+        elif isinstance(child, ast.ImportFrom):
+            names += [a.asname or a.name for a in child.names if a.name != "*"]
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign)):
+            names += [n for t in getattr(child, "targets", ()) for n in _target_names(t)]
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.append(child.name)
+    return names
 
 
 def candidates_in(source: str, path: str) -> list[Candidate]:
