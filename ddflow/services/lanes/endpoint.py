@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
 from ...infra import paths
 from .. import facts, modelreg
 from ..lane_driver import Result, unavailable
@@ -130,7 +132,6 @@ def render(ep: Endpoint, harness: str) -> str | Result:
     lay = layout(harness)
     if lay is None:
         return unavailable(f"harness {harness!r} has no private provider layout")
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
     env = Environment(
         loader=FileSystemLoader(str(paths.package_dir() / "templates")),
@@ -185,3 +186,38 @@ def probe_plan(ep: Endpoint, harness: str) -> Result:
         "run `<harness> run --model "
         f"{model_arg(ep)} 'call the tool'` in a scratch dir, then record tool_call verified"
     )
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """What a launcher needs of an endpoint: pass ``home`` as `LaunchSpec.home`, ``env`` as
+    `LaunchSpec.env` and ``model`` to the harness's model flag."""
+
+    endpoint: Endpoint
+    home: Path
+    config: Path
+    env: dict[str, str]
+    model: str
+    probe: Result  #: the live tool-call probe: `unavailable` until the operator runs it
+
+
+def prepare(
+    cat: modelreg.Catalog,
+    route: str,
+    harness: str,
+    home: Path,
+    model: str = "",
+    *,
+    require_tools: bool = True,
+) -> Prepared | Result:
+    """Resolve the route and write its private provider block under ``home`` in one call."""
+    bad = data_problems()
+    if bad:
+        return unavailable(f"harness provider data is malformed: {bad[0]}")
+    ep = resolve(cat, route, model, require_tools=require_tools)
+    if isinstance(ep, Result):
+        return ep
+    cfg = write_private(ep, harness, home)
+    if isinstance(cfg, Result):
+        return cfg
+    return Prepared(ep, home, cfg, launch_env(ep), model_arg(ep), probe_plan(ep, harness))
