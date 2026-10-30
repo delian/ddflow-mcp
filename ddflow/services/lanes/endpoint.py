@@ -73,14 +73,11 @@ def _val(cat: modelreg.Catalog, model: str, key: str, route: str) -> Any:
     return modelreg.read(cat, model, key, route=route).value
 
 
-def resolve(
-    cat: modelreg.Catalog, route: str, model: str = "", *, require_tools: bool = True
-) -> Endpoint | Result:
-    """The route as an `Endpoint`, or an `unavailable` Result saying what is missing."""
-    row = cat.route.get(route)
-    if row is None:
-        return unavailable(f"no route {route!r} in the catalog")
-    v = (row.get("endpoint") or {}).get("v")
+def _route_basics(
+    row: dict[str, Any] | None, route: str, model: str
+) -> tuple[str, str, str] | Result:
+    """(base_url, key env name, served model) of an endpoint row, or what is wrong with it."""
+    v = ((row or {}).get("endpoint") or {}).get("v")
     if not isinstance(v, dict) or v.get("kind") != "openai":
         return unavailable(f"route {route!r} is not an OpenAI-compatible endpoint")
     url, key = str(v.get("base_url") or ""), str(v.get("api_key_env") or "")
@@ -91,25 +88,40 @@ def resolve(
         return unavailable(f"route {route!r}: no served model id (set endpoint.model)")
     if key and not _ENV_NAME.match(key):
         return unavailable(f"route {route!r}: api_key_env must be a variable NAME, not a value")
+    return url, key, served
+
+
+def _int(x: Any) -> int | None:
+    return x if isinstance(x, int) and not isinstance(x, bool) else None
+
+
+def resolve(
+    cat: modelreg.Catalog, route: str, model: str = "", *, require_tools: bool = True
+) -> Endpoint | Result:
+    """The route as an `Endpoint`, or an `unavailable` Result saying what is missing."""
+    if route not in cat.route:
+        return unavailable(f"no route {route!r} in the catalog")
+    basics = _route_basics(cat.route[route], route, model)
+    if isinstance(basics, Result):
+        return basics
+    url, key, served = basics
     f = {k: _val(cat, served, k, route) for k in _FACT_KEYS}
     if require_tools and f["tool_call"] is not True:
         return unavailable(
             f"route {route!r}/{served}: tool calls are not verified; run the live probe "
             "(needs the operator's consent) and record tool_call as verified"
         )
-    ints = {k: f[k] if isinstance(f[k], int) and not isinstance(f[k], bool) else None for k in f}
-    price = modelreg.read(cat, served, "price_in", route=route).value
     return Endpoint(
         route,
         url,
         served,
         key,
-        ints["window"],
-        ints["max_output"],
+        _int(f["window"]),
+        _int(f["max_output"]),
         f["tool_call"] is True,
         f["streaming"] if isinstance(f["streaming"], bool) else None,
-        ints["concurrency"],
-        price == 0,
+        _int(f["concurrency"]),
+        _val(cat, served, "price_in", route) == 0,
     )
 
 
