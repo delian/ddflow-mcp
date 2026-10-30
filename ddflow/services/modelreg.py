@@ -83,9 +83,14 @@ def load(
     if local_dir is not None:
         docs.append((_read(local_dir / LOCAL_FILE), True))
     for doc, local in docs:
-        cat.sources.update(doc.get("sources", {}))
+        if isinstance(doc.get("sources"), dict):
+            cat.sources.update(doc["sources"])
         for table, dest in zip(_TABLES, (cat.family, cat.model, cat.route, cat.cls), strict=True):
-            for rid, row in (doc.get(table) or {}).items():
+            rows = doc.get(table) or {}
+            if not isinstance(rows, dict):
+                cat.bad_rows.append(f"{table} is not a table of rows")
+                continue
+            for rid, row in rows.items():
                 if not isinstance(row, dict):
                     cat.bad_rows.append(f"{table}.{rid} is not a table")
                 else:
@@ -122,6 +127,8 @@ _PLAIN_KEYS = ("note", "family", "class", "served")
 
 def _row_problem(at: str, key: str, node: Any) -> str:
     """What is wrong with one row value, or empty."""
+    if key == "endpoint" and facts.is_fact(node) and not isinstance(node.get("v"), dict):
+        return f"{at}: v must be a table (kind, base_url, ...)"
     if key in ("family", "class"):
         return "" if isinstance(node, str) else f"{at} must be a string"
     if key == "served":
@@ -138,7 +145,8 @@ def _row_problem(at: str, key: str, node: Any) -> str:
 
 
 def _identity_problem(fid: str, row: dict[str, Any]) -> str:
-    v = _identity(row)
+    raw = (row.get("identity") or {}).get("v") if facts.is_fact(row.get("identity")) else None
+    v = raw if isinstance(raw, dict) else {}
     needles = v.get("needles")
     if not facts.is_fact(row.get("identity")):
         return ""
@@ -201,9 +209,15 @@ def validate(cat: Catalog) -> list[str]:
 
 
 def _identity(row: dict[str, Any]) -> dict[str, Any]:
+    """`{vendor, needles}` of a row, or `{}`; a malformed one yields no needles here and is
+    reported by `validate`."""
     ident = row.get("identity")
     v = ident.get("v") if facts.is_fact(ident) else None
-    return v if isinstance(v, dict) else {}
+    if not isinstance(v, dict):
+        return {}
+    needles = v.get("needles")
+    ok = isinstance(needles, list) and all(isinstance(n, str) for n in needles)
+    return v if ok else {**v, "needles": []}
 
 
 def family_hints(cat: Catalog) -> dict[str, str]:
