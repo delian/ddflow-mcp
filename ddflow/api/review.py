@@ -734,8 +734,13 @@ def _design_point(location: str) -> str:
 def _claim_text(f) -> str:
     """A finding's claim with its whitespace collapsed: what the finding SAYS is wrong, not
     where it cites it. Two re-worded claims are NOT the same claim, so carrying a verdict
-    keyed by it can never hide a different finding at the same place."""
-    return " ".join(str(_finding_field(f, "detail") or _finding_field(f, "title") or "").split())
+    keyed by it can never hide a different finding at the same place. A whitespace-only
+    detail falls back to the title (the finding's cited text), so a finding with no body
+    still carries its claim from the citation."""
+    detail = " ".join(str(_finding_field(f, "detail") or "").split())
+    if detail:
+        return detail
+    return " ".join(str(_finding_field(f, "title") or "").split())
 
 
 def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
