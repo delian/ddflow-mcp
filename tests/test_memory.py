@@ -88,6 +88,19 @@ def test_re_recording_by_id_CORRECTS_a_memory(repo):
     assert _state(repo).memories["M-gpu"].text == "GPUs 4-7 are free"
 
 
+def _shard_events(repo):
+    """Every parsed event line of the project's committed event log, in shard order."""
+    return [
+        json.loads(line)
+        for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
+        for line in p.read_text().splitlines()
+    ]
+
+
+def _shard_text(repo):
+    return "".join(p.read_text() for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl")))
+
+
 def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
     """Bug B-memory-rerecord-keeps-old-text-in-log: `--id` corrected a fact but left the
     superseded text (a stale or private copy) committed in the event log, so it stayed
@@ -98,25 +111,19 @@ def test_re_recording_redacts_the_superseded_text_from_the_log(repo):
     assert json.loads(out)["replaced"] is True
     assert _state(repo).memories["M-s"].text == "corrected fact"
 
-    events = [
-        json.loads(line)
-        for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
-        for line in p.read_text().splitlines()
-    ]
     st = _state(repo)
-    # every superseded memory.recorded event is redacted; only the new text survives
-    recorded = [d for d in events if d["kind"] == "memory.recorded"]
+    recorded = [d for d in _shard_events(repo) if d["kind"] == "memory.recorded"]
     assert [d["data"]["text"] for d in recorded] == ["[REDACTED:superseded]", "corrected fact"]
-    redacted = [d for d in events if d["kind"] == "memory.redacted"]
-    assert len(redacted) == 1  # exactly one audit per re-record, never a duplicate for a prior redaction
+    redacted = [d for d in _shard_events(repo) if d["kind"] == "memory.redacted"]
+    assert len(redacted) == 1  # one audit per re-record, no duplicate for a prior redaction
     assert redacted[0]["subject"] == "M-s"
     assert redacted[0]["data"]["reason"] == "superseded by a memory re-record"
     superseded = redacted[0]["data"]["event"]
-    assert superseded and superseded in st.redacted_memory_events  # the audit names the redacted event
+    assert superseded
+    assert superseded in st.redacted_memory_events  # the audit names the redacted event
     new_id = next(d["id"] for d in recorded if d["data"]["text"] == "corrected fact")
     assert superseded != new_id  # ... the superseded one, not the correction
-    # the private address is never committed raw, and the superseded text is fully gone
-    shard = "\n".join(p.read_text() for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl")))
+    shard = _shard_text(repo)
     assert "old stale fact" not in shard
     assert "10.77.3.91" not in shard
 
