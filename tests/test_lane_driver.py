@@ -311,3 +311,9 @@ def test_lane_options_come_from_the_lanes_knobs():
         "pass_env": ("PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"),
     }
     assert ld.LaunchSpec(name="x", argv=("a",), **o).scope == "none"
+
+
+def test_a_placeholder_in_the_template_needs_no_flag():
+    h = Headless(argv=("agent", "{model}"))
+    s = ld.spec_from_headless("l", h, model="gpt")
+    assert s.argv == ("agent", "{model}") and s.values == {"model": "gpt"}
