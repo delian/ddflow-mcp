@@ -723,15 +723,6 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
     return packed
 
 
-#: Output tokens ``_chunk_budget`` holds back for the VERDICT after a chunk's reasoning.
-#: Measured in ``Reviewer.max_tokens``: a 30 KB chunk reasoned for 28 381 tokens, then
-#: wrote the verdict in 2 396 characters (~600 tokens). A budget sized for the reasoning
-#: alone leaves nothing for the answer, so a chunk that fills the WHOLE output cap still
-#: comes back ``TRUNCATED`` mid-thought. 2 000 tokens cover the verdict with headroom for a
-#: long findings list.
-VERDICT_RESERVE_TOKENS = 2000
-
-
 def _chunk_budget(rev: Reviewer) -> int:
     """The largest chunk ``rev`` can reason about within its declared output cap.
 
@@ -743,15 +734,11 @@ def _chunk_budget(rev: Reviewer) -> int:
     ``max_chunk_chars`` can exhaust ``max_tokens`` mid-thought and come back ``TRUNCATED``,
     which ddflow records UNAVAILABLE and a review round is spent (bug B9a2279db22: the qwen
     reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
-    the output cap MINUS ``VERDICT_RESERVE_TOKENS``, so a reviewer whose ``max_tokens`` is
-    below ``max_chunk_chars`` has its chunk split to fit before it is ever sent, and there is
-    always budget left to write the verdict in. The floor at one verdict reserve keeps a
-    reviewer just above the reserve from degrading into one chunk per line; a cap too small
-    to leave a reserve is refused at the top of ``review()`` before a chunk is ever sized.
+    the output cap, so a reviewer whose ``max_tokens`` is below ``max_chunk_chars`` has its
+    chunk split to fit before it is ever sent, and a chunk can never outgrow the budget the
+    model has to reason about it.
     """
-    return min(
-        rev.max_chunk_chars, max(VERDICT_RESERVE_TOKENS, rev.max_tokens - VERDICT_RESERVE_TOKENS)
-    )
+    return min(rev.max_chunk_chars, rev.max_tokens)
 
 
 def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
@@ -1629,23 +1616,6 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     """
     if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
         rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
-    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
-        # Refuse before a single request: an output budget that cannot hold the verdict
-        # reserve leaves nothing for the reasoning, so no chunk survives (about one reasoning
-        # token per input character). `chunk_max_tokens` was applied above, so this reads the
-        # EFFECTIVE budget: a small per-chunk window trips it the same as a small declared
-        # cap (bug B9a2279db22).
-        res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
-        res.status, res.reason = (
-            UNAVAILABLE,
-            (
-                f"the reviewer's output budget max_tokens={rev.max_tokens} is at or below the "
-                f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
-                f"reasoning and the verdict. Raise [[reviewer]].max_tokens above "
-                f"{VERDICT_RESERVE_TOKENS} (and [review].chunk_max_tokens, if set below it)."
-            ),
-        )
-        return res
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
     started = time.time()
 
