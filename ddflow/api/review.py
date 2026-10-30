@@ -715,6 +715,81 @@ def _link_refuted(log, it, gate: str, findings) -> list[str]:
     return linked
 
 
+_LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
+
+
+def _design_point(location: str) -> str:
+    """The stable part of a finding's cited place, for a delta round re-raising the same
+    design point (bug B-review-delta-retriages-same-point).
+
+    A finding the reviewer cites as ``path:line`` moves as the diff grows -- the line number
+    churns on every edit above it -- so a delta that re-raises the same claim at a shifted
+    line is the same design point, not a new one: the line is dropped to get the key.
+    ``path:func`` (a symbol citation with no line) is already stable and is kept whole.
+    Returns "" when nothing is left to match on (no citation, or no file to anchor it).
+    """
+    loc = " ".join(str(location or "").split()).strip()
+    if not loc or ":" not in loc:
+        return ""
+    path, _, anchor = loc.rpartition(":")
+    anchor = anchor.strip()
+    return path.strip() if _LINE_CITATION.match(anchor) else loc
+
+
+def _carry_delta_verdicts(log, it, gate: str, kept, mine) -> dict:
+    """Carry the same gate's triage to a delta finding that re-raises an already-triaged
+    design point under a new digest (bug B-review-delta-retriages-same-point).
+
+    A delta shows the reviewer only the follow-up commits; the design point the author
+    already triaged (refuted or confirmed) can come back reworded or at a shifted line, so
+    its digest -- what a triage is keyed by (decision D-review-triage) -- no longer attaches.
+    A finding of ``mine`` matching an earlier finding of ``gate`` at the same design point
+    (`_design_point`) inherits that verdict instead of re-opening the triage cycle. Appends
+    a `review.triaged` for each and returns them keyed by digest. A byte-identical re-raise
+    keeps its digest and so is skipped: it already stays the earlier triaged copy.
+    """
+    if it is None:
+        return {}
+    triage = it.triage.get(gate, {})
+    prior_digests = {str(_finding_field(f, "digest") or "") for f in kept}
+    if not triage or not prior_digests:
+        return {}
+    by_point = {}
+    for f in kept:
+        point = _design_point(_finding_field(f, "location"))
+        t = triage.get(str(_finding_field(f, "digest") or ""))
+        if point and t and t.get("verdict") in _SETTLED:
+            by_point.setdefault(point, (t, f))
+    if not by_point:
+        return {}
+    carried: dict = {}
+    for n, f in enumerate(mine, 1):
+        digest = str(_finding_field(f, "digest") or "")
+        if not digest or digest in prior_digests:
+            continue
+        point = _design_point(_finding_field(f, "location"))
+        match = by_point.get(point) if point else None
+        if match is None:
+            continue
+        t, _prior = match
+        log.append(
+            "review.triaged",
+            it.id,
+            {
+                "gate": gate,
+                "finding": n,
+                "digest": digest,
+                "verdict": t.get("verdict", ""),
+                "probe": t.get("probe", ""),
+                "severity": _finding_field(f, "severity"),
+                "title": _finding_field(f, "title"),
+                "location": _finding_field(f, "location"),
+            },
+        )
+        carried[digest] = t
+    return carried
+
+
 def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
@@ -747,6 +822,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     if not kept:
         return 0
     have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
+    carried = _carry_delta_verdicts(log, it, gate, kept, mine)
     for f in mine:
         if f.get("digest") not in have:
             kept.append(f)
@@ -763,11 +839,17 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"merged into the record of {it.id}.{gate} ({len(kept)} finding(s) in all): this "
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
+    if carried:
+        say(
+            f"carried the triage of {len(carried)} re-raised design point(s) to this delta's "
+            "findings (their line moved or was reworded, not triaged anew)"
+        )
     verdicts = it.triage.get(gate, {})
     return sum(
         1
         for f in kept
         if f.get("digest") not in gone
+        and f.get("digest") not in carried
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
 
