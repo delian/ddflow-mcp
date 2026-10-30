@@ -1382,7 +1382,7 @@ class EventLog:
         The sanctioned redaction (D-event-log-redaction-forward): the sensitive or superseded
         text leaves the shard, the event's content address is recomputed so `verify` still
         holds (`id == compute_id` for every event), and the caller records the auditable
-        redaction event naming ``original.id``.
+        redaction event naming ``redacted.id`` (the address the log now holds for that event).
 
         Returns ``(original, redacted)``: the event as written, and it with ``data[field]``
         replaced by ``marker``. Raises ``KeyError`` when no event has that id. Call the
@@ -1432,18 +1432,21 @@ class EventLog:
                     continue
                 if got == old_id:
                     lines[i] = line
+                    st = shard.stat()
                     fd, tmp = tempfile.mkstemp(
                         dir=str(shard.parent), prefix=shard.name + ".", suffix=".redact"
                     )
                     try:
-                        os.chmod(fd, shard.stat().st_mode & 0o7777)
                         with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                            with contextlib.suppress(PermissionError):
+                                os.chown(fd, st.st_uid, st.st_gid)
+                            os.chmod(fd, st.st_mode & 0o7777)
                             fh.write("\n".join(lines) + "\n")
+                        os.replace(tmp, shard)
                     except BaseException:
                         with contextlib.suppress(OSError):
                             os.unlink(tmp)
                         raise
-                    os.replace(tmp, shard)
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
                     return

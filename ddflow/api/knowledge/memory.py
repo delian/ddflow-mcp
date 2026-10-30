@@ -75,8 +75,10 @@ def memory_add(
             # A re-record supersedes EVERY prior memory.recorded event for this id: redact them
             # all, so a stale or private copy of an older text does not survive (bug
             # B-memory-rerecord-keeps-old-text-in-log), each audited (D-event-log-redaction-forward).
-            if prior.id in st.redacted_memory_events:
-                continue  # an earlier re-record already redacted and audited this event
+            # Skip only an event whose text is ACTUALLY already the redaction marker AND audited:
+            # an audit without a real redaction (a tombstone-only event) must not be left.
+            if prior.data.get("text") == SUPERSEDED_MARKER and prior.id in st.redacted_memory_events:
+                continue
             _original, redacted = log.redact_event_text(prior.id, "text", SUPERSEDED_MARKER)
             log.append(
                 "memory.redacted",
