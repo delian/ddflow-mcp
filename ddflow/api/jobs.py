@@ -140,7 +140,11 @@ def job_detach(
     if not command.strip():
         return O.failed("job.started", "a job needs a command", id="")
     where = Path(cwd) if cwd else repo
-    out = Path(log_file) if log_file else repo / JOB_LOG_DIR / f"{item or 'review'}-{clock.run_stamp()}.log"
+    out = (
+        Path(log_file)
+        if log_file
+        else repo / JOB_LOG_DIR / f"{item or 'review'}-{clock.run_stamp()}.log"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         pid = J.launch(command, where, out)
