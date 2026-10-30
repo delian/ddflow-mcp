@@ -95,7 +95,7 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 _TAKES: dict[str, frozenset[str]] = {
     "task": frozenset({"phase", "tag", "all", "offset"}),
     "phase": frozenset({"tag", "all", "offset"}),
-    "bug": frozenset({"phase", "all", "item", "offset"}),
+    "bug": frozenset({"phase", "tag", "all", "item", "offset"}),
     "research": frozenset({"phase", "tag", "all", "offset"}),
     "lesson": frozenset({"tag", "all", "offset"}),
     "session": frozenset({"id"}),

@@ -686,7 +686,10 @@
    "regression_verified",
    "regression_verify",
    "lesson_captured",
-   "lesson_capture"
+   "lesson_capture",
+   "tags",
+   "was",
+   "changed"
   ],
   "output_schema": {
    "type": "object",
@@ -700,6 +703,9 @@
     "regression_verify": {},
     "lesson_captured": {},
     "lesson_capture": {},
+    "tags": {},
+    "was": {},
+    "changed": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
