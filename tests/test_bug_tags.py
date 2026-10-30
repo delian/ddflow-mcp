@@ -141,6 +141,7 @@ def test_tags_over_mcp_on_the_existing_bug_tool(repo):
 
     r = call("ddflow_bug_found", id="B1", summary="b1 broken", tags="security", no_task=True)
     assert r["_meta"]["exit"] == 0, r
+    assert _tags(repo, "B1") == ["security"]
     r = call("ddflow_bug_fixed", id="B1", tag=True, add="x", remove="security")
     assert r["_meta"]["exit"] == 0, r
     assert _tags(repo, "B1") == ["x"]
