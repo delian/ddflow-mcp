@@ -719,21 +719,23 @@ _LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
 
 
 def _design_point(location: str) -> str:
-    """The stable part of a finding's cited place that two rounds agree on: the file and
-    the function/symbol it cites (bug B-review-delta-retriages-same-point).
-
-    A ``path:line`` citation names no function/symbol, and the line number churns as the
-    diff grows, so nothing identifies ONE design point -- it is dropped and no match is
-    made (two line-cited findings in one file are distinct design points, not one claim).
-    ``path:func`` (a symbol with no line) is stable and is kept whole. Returns "" when
-    nothing is left to match on.
-    """
+    """A finding's cited place with its churning line number dropped -- ``path:line`` ->
+    ``path``, ``path:func`` kept whole -- so two rounds that cite the same file (and
+    function/symbol, when one is named) describe the same place. The line is what moves as
+    the diff grows (bug B-review-delta-retriages-same-point)."""
     loc = " ".join(str(location or "").split()).strip()
     if not loc or ":" not in loc:
         return ""
     path, _, anchor = loc.rpartition(":")
     anchor = anchor.strip()
-    return loc if anchor and not _LINE_CITATION.match(anchor) else ""
+    return path.strip() if _LINE_CITATION.match(anchor) else loc
+
+
+def _claim_text(f) -> str:
+    """A finding's claim with its whitespace collapsed: what the finding SAYS is wrong, not
+    where it cites it. Two re-worded claims are NOT the same claim, so carrying a verdict
+    keyed by it can never hide a different finding at the same place."""
+    return " ".join(str(_finding_field(f, "detail") or _finding_field(f, "title") or "").split())
 
 
 def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
@@ -741,12 +743,14 @@ def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
     design point under a new digest (bug B-review-delta-retriages-same-point).
 
     A delta shows the reviewer only the follow-up commits; the design point the author
-    already triaged (refuted or confirmed) can come back reworded or at a shifted line, so
-    its digest -- what a triage is keyed by (decision D-review-triage) -- no longer attaches.
-    A finding of ``mine`` matching an earlier finding of ``gate`` at the same design point
-    (`_design_point`) inherits that verdict instead of re-opening the triage cycle. Appends
-    a `review.triaged` for each and returns them keyed by digest. A byte-identical re-raise
-    keeps its digest and so is skipped: it already stays the earlier triaged copy.
+    already triaged (refuted or confirmed) can come back at a shifted line, so its digest --
+    what a triage is keyed by (decision D-review-triage) -- no longer attaches. A finding of
+    ``mine`` matching an earlier finding of ``gate`` at the same design point (the cited file
+    and function, `_design_point`, AND the same claim `_claim_text`) inherits that verdict
+    instead of re-opening the triage cycle; a different claim at the same place stays its own
+    untriaged finding. Appends a `review.triaged` for each and returns them keyed by digest.
+    A byte-identical re-raise keeps its digest and so is skipped (it already stays the
+    earlier triaged copy).
     """
     if it is None:
         return {}
@@ -757,9 +761,10 @@ def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
     by_point = {}
     for f in kept:
         point = _design_point(_finding_field(f, "location"))
+        claim = _claim_text(f)
         t = triage.get(str(_finding_field(f, "digest") or ""))
-        if point and t and t.get("verdict") in _SETTLED:
-            by_point.setdefault(point, (t, f))
+        if point and claim and t and t.get("verdict") in _SETTLED:
+            by_point.setdefault((point, claim), t)
     if not by_point:
         return {}
     carried: dict = {}
@@ -768,10 +773,9 @@ def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
         if not digest or digest in prior_digests:
             continue
         point = _design_point(_finding_field(f, "location"))
-        match = by_point.get(point) if point else None
-        if match is None:
+        t = by_point.get((point, _claim_text(f)))
+        if not point or t is None:
             continue
-        t, _prior = match
         log.append(
             "review.triaged",
             it.id,

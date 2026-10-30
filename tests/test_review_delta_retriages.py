@@ -5,8 +5,9 @@ On HX-facts-core the rubber_duck/critic delta rounds re-sent the same documented
 (the falsy value) at a shifted line across four rounds, so each came back under a new
 digest and the `confirmed`/`refuted` verdict -- keyed by the digest of the exact text
 (decision D-review-triage) -- never carried: the budget was spent re-triaging one claim.
-A delta finding citing the SAME file and function/symbol as an already-triaged earlier
-finding is the same design point; its verdict carries instead of re-opening the triage.
+A delta finding citing the SAME file and function/symbol AND the same claim as an
+already-triaged earlier finding is the same design point; its verdict carries instead of
+re-opening the triage. A DIFFERENT claim at the same place does not.
 """
 
 from __future__ import annotations
@@ -28,11 +29,10 @@ OK = 0
 
 
 def _setup(repo: Path, tmp_path: Path) -> Path:
-    """A command reviewer that flags a `FINDME` line with a finding whose cited symbol and
-    text come from `wording` (the file:symbol first, the paragraph after the `|`), so a test
-    can move the symbol and reword the claim between rounds."""
+    """A command reviewer that flags a `FINDME` line with a finding whose citation and
+    claim come from `wording` (`file:line or symbol` first, the paragraph after `|`)."""
     wording = tmp_path / "wording"
-    wording.write_text("x.py:set_limit|the documented limit is falsy")
+    wording.write_text("x.py:7|the documented limit is falsy")
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
@@ -72,51 +72,44 @@ def _review(repo: Path, **kw):
     return api.review(repo, gate="critic", item="T1", branch="feat", **kw)
 
 
-def test_a_design_point_keeps_a_symbol_and_drops_a_bare_line():
+def test_a_design_point_drops_a_line_number_and_keeps_a_symbol():
     from ddflow.api.review import _design_point
 
+    assert _design_point("ddflow/config.py:123") == "ddflow/config.py"
+    assert _design_point("ddflow/config.py:123-130") == "ddflow/config.py"
     assert _design_point("ddflow/config.py:diff_fence") == "ddflow/config.py:diff_fence"
-    assert _design_point("x.py:set_limit") == "x.py:set_limit"
-    # a bare line names no function/symbol, so it is NOT a design point: two line-cited
-    # findings in one file are distinct.
-    assert _design_point("ddflow/config.py:123") == ""
-    assert _design_point("ddflow/config.py:123-130") == ""
     assert _design_point("") == ""
 
 
-def test_a_refuted_design_point_raised_again_reworded_inherits_the_verdict(repo, tmp_path):
-    """The same claim at `x.py:set_limit` triaged refuted, then re-raised reworded with a new
-    digest, is one claim: the delta carries the refutation, not a fresh one."""
+def test_the_same_claim_raised_again_at_a_shifted_line_inherits_the_refutation(repo, tmp_path):
+    """The same claim at `x.py:7` refuted, then re-raised at `x.py:40` (the line moved, so a
+    new digest) with the SAME text is one claim: the delta carries the refutation."""
     wording = _setup(repo, tmp_path)
-    out = _review(repo)  # full round
+    out = _review(repo)
     assert out.exit == OK and _ev(repo)["review_kind"] == "full", out.reason
     probe = "ran the suite: the limit is guarded on every path"
     assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe=probe).exit == OK
 
-    wording.write_text("x.py:set_limit|the documented default is falsy and undocumented")
-    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 8)
+    wording.write_text("x.py:40|the documented limit is falsy")
+    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     out = _review(repo, delta=True)
     assert out.exit == OK, out.reason
-    ev = _ev(repo)
-    assert ev["review_kind"] == "delta", ev
     counts = G.triage_counts(_state(repo), "critic")
-    # the earlier finding keeps its refutation, and the re-raised one INHERITS it: no
-    # untriaged finding re-opens the triage.
     assert counts == {"findings": 2, "refuted": 2, "confirmed": 0, "untriaged": 0}, counts
 
 
-def test_a_confirmed_design_point_raised_again_is_not_re_triaged(repo, tmp_path):
-    """A `confirmed` verdict carries too: the author already agreed it is a defect and is
-    fixing it; a delta re-raising the same point does not start the cycle over."""
+def test_a_confirmed_claim_raised_again_under_a_new_digest_is_not_re_triaged(repo, tmp_path):
+    """A `confirmed` verdict carries too: the author already agreed it is a defect; a delta
+    re-raising the same claim at a shifted line does not start the cycle over."""
     wording = _setup(repo, tmp_path)
     assert _review(repo).exit == OK
     probe = "fixed it: the limit is now truthy and documented"
     assert api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe=probe).exit == OK
 
-    wording.write_text("x.py:set_limit|the default value is falsy")
-    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 8)
+    wording.write_text("x.py:40|the documented limit is falsy")
+    (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     assert _review(repo, delta=True).exit == OK
@@ -124,18 +117,16 @@ def test_a_confirmed_design_point_raised_again_is_not_re_triaged(repo, tmp_path)
     assert counts["confirmed"] == 2 and counts["untriaged"] == 0, counts
 
 
-def test_a_line_cited_finding_in_the_same_file_is_not_carried(repo, tmp_path):
-    """A verdict does NOT carry across a bare `path:line`: without a function/symbol two
-    line-cited findings in one file stay distinct, so an unrelated finding is not hidden."""
+def test_a_different_claim_at_the_same_place_is_not_carried(repo, tmp_path):
+    """A verdict does NOT carry across a different claim at the same file: two distinct
+    findings in one file stay distinct, so an unrelated finding is not hidden."""
     wording = _setup(repo, tmp_path)
-    wording.write_text("x.py:7|the documented limit is falsy")
     assert _review(repo).exit == OK
     api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK
-    wording.write_text("x.py:90|an unrelated new defect")
+    wording.write_text("x.py:40|an unrelated new defect")
     (repo / "x.py").write_text("def set_limit():\n    return 1  # FINDME moved\n" + "line = 0\n" * 40)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "moved")
     assert _review(repo, delta=True).exit == OK
     counts = G.triage_counts(_state(repo), "critic")
-    # the re-raised line-cited finding stays untriaged: no function/symbol to carry on.
     assert counts["untriaged"] == 1 and counts["refuted"] == 1, counts
