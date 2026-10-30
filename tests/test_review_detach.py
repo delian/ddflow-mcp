@@ -22,7 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git as _git
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="setsid is POSIX")
+# setsid and the /proc zombie check are POSIX; `_alive` reads /proc, so a POSIX host without
+# it (macOS) must skip rather than Answer a zombie as alive.
+pytestmark = pytest.mark.skipif(
+    os.name != "posix" or not Path("/proc").exists(), reason="setsid and /proc are Linux"
+)
 
 
 def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
@@ -76,8 +80,8 @@ def _alive(pid: int) -> bool:
         return True
 
 
-def _wait(gate: dict) -> bool:
-    return gate.get("outcome") == "passed"
+def _read(log: Path) -> str:
+    return log.read_text() if log.exists() else ""
 
 
 def _gate(repo: Path) -> dict:
@@ -97,8 +101,18 @@ def _started(began: Path, log: Path, pid: int) -> None:
     deadline = time.monotonic() + 60
     while not began.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
-    assert began.exists(), f"the detached review never started: {log.read_text()}"
+    assert began.exists(), f"the detached review never started: {_read(log)}"
     assert _alive(pid), {"pid": pid, "was": began.exists()}
+
+
+def _wait_for_text(log: Path, needle: str, deadline: float) -> str:
+    """The log's text once `needle` appears (a flushed line), or "" past the deadline."""
+    while time.monotonic() < deadline:
+        seen = _read(log)
+        if needle in seen:
+            return seen
+        time.sleep(0.1)
+    return _read(log)
 
 
 def test_detach_returns_at_once_while_the_review_keeps_running(repo, tmp_path):
@@ -115,12 +129,14 @@ def test_a_killed_detached_review_leaves_its_streamed_output(repo, tmp_path):
     (tmp_path / "slow").write_text("120")
     body = _detach(repo)
     pid, log = body["pid"], Path(body["log"])
-    _started(began, log, pid)
-    seen = log.read_text()
-    # Streamed BEFORE it was cut down, so a killed review is not a silent "[killed]".
-    assert "→ r (" in seen and "reviewing" in seen, seen
-    _kill_reviewer(pidfile, pid)
-    assert "reviewing" in log.read_text(), log.read_text()
+    try:
+        _started(began, log, pid)
+        seen = _wait_for_text(log, "reviewing", time.monotonic() + 60)
+        # Streamed BEFORE it was cut down, so a killed review is not a silent "[killed]".
+        assert "→ r (" in seen and "reviewing" in seen, seen
+    finally:
+        _kill_reviewer(pidfile, pid)
+    assert "reviewing" in _read(log), _read(log)
 
 
 def test_a_detached_delta_review_records_passed_without_the_launcher(repo, tmp_path):
@@ -131,19 +147,24 @@ def test_a_detached_delta_review_records_passed_without_the_launcher(repo, tmp_p
     (repo / "y.py").write_text("y = 1\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "followup")
-    (tmp_path / "slow").write_text("4")
+    (tmp_path / "slow").write_text("30")
     body = _detach(repo, "--delta")
     pid, log = body["pid"], Path(body["log"])
-    # It outlived the launcher while its reviewer was still running, then recorded a fresh
-    # DELTA round (not the fore-run's pass): delta_rounds rises only when the detached
-    # reviewer actually returned a verdict.
-    _started(began, log, pid)
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline and (not _wait(_gate(repo)) or _gate(repo).get("evidence", {}).get("delta_rounds", 0) < 1):
-        time.sleep(0.2)
-    gate = _gate(repo)
-    assert _wait(gate), (gate, log.read_text() if log.exists() else "")
-    assert gate.get("evidence", {}).get("delta_rounds", 0) >= 1, (gate, log.read_text() if log.exists() else "")
+    try:
+        # It outlived the launcher while its reviewer was still running, then recorded a
+        # fresh DELTA round (not the fore-run's pass): delta_rounds rises only when the
+        # detached reviewer actually returned a verdict.
+        _started(began, log, pid)
+        deadline = time.monotonic() + 90
+        gate = {}
+        while time.monotonic() < deadline and gate.get("evidence", {}).get("delta_rounds", 0) < 1:
+            gate = _gate(repo)
+            time.sleep(0.2)
+        gate = _gate(repo)
+        assert gate.get("outcome") == "passed", (gate, _read(log))
+        assert gate.get("evidence", {}).get("delta_rounds", 0) >= 1, (gate, _read(log))
+    finally:
+        _kill_reviewer(pidfile, pid)
 
 
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
