@@ -95,7 +95,7 @@ def test_traceback_and_unreadable_lease_fail_open_without_leaking(lane, tmp_path
     GH.install(
         wt,
         invocation=stub(
-            tmp_path, "echo 'Traceback (most recent call last): token=SECRET123'; exit 1"
+            tmp_path, "echo 'Traceback (most recent call last):'; echo token=SECRET123; exit 1"
         ),
     )
     r = commit(wt)
@@ -263,7 +263,7 @@ def test_presence_sensitive_hooks_are_wrapped_only_when_the_project_has_one(lane
     for name in ("push-to-checkout", "fsmonitor-watchman"):
         (hooks / name).unlink()
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
-    assert not (d / "push-to-checkout").exists()
+    assert not (d / "push-to-checkout").exists() and not (d / "fsmonitor-watchman").exists()
 
 
 def test_installed_and_uninstall_accept_an_equivalent_spelling(lane, tmp_path):
@@ -286,3 +286,13 @@ def test_merge_commit_does_not_run_the_projects_pre_commit_when_it_has_a_merge_h
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     d = GH.hook_dir(wt)
     assert sh(d, str(d / "pre-merge-commit"), check=False).returncode == 0
+
+
+def test_merge_commit_falls_back_to_the_projects_pre_commit_without_a_merge_hook(lane, tmp_path):
+    main, wt = lane
+    hooks = main / ".git" / "hooks"
+    (hooks / "pre-commit").write_text("#!/bin/sh\nexit 7\n")
+    (hooks / "pre-commit").chmod(0o755)
+    GH.install(wt, invocation=stub(tmp_path, "exit 0"))
+    d = GH.hook_dir(wt)
+    assert sh(d, str(d / "pre-merge-commit"), check=False).returncode == 7

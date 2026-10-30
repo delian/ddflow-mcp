@@ -65,7 +65,7 @@ case "$rc" in
 0) [ -z "$out" ] || printf '%s\\n' "$out" >&2 ;;
 1)
   case "$out" in
-  *'Traceback (most recent call last)'*) printf '%s\\n' "ddflow lane hook: the lease check crashed; commit allowed (not checked)." >&2 ;;
+  'Traceback (most recent call last)'*) printf '%s\\n' "ddflow lane hook: the lease check crashed; commit allowed (not checked)." >&2 ;;
   *) printf '%s\\n' "$out" >&2; exit 1 ;;
   esac ;;
 *) printf '%s\\n' "ddflow lane hook: the lease check could not run (exit $rc); commit allowed (not checked)." >&2 ;;
@@ -163,7 +163,9 @@ def install(worktree: Path, *, agent: str = "", invocation: str = "") -> str:
             # hook; the lane runs its lease check (only that) before the project's own hook.
             lane = shlex.quote(str(d / "lease-check"))
             body = f'#!/bin/sh\n{MARKER}\n{lane} "$@" || exit $?\n'
-            body += f'[ -x {target} ] && exec {target} "$@"\nexit 0\n'
+            body += f'[ -x {target} ] && exec {target} "$@"\n'
+            pre = shlex.quote(str(original / "pre-commit"))  # git's own fallback, kept
+            body += f'[ -x {pre} ] && exec {pre} "$@"\nexit 0\n'
         else:
             body = f'#!/bin/sh\n{MARKER}\n[ -x {target} ] && exec {target} "$@"\nexit 0\n'
         _write_exec(d / name, body)
