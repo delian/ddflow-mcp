@@ -32,6 +32,8 @@ LOCAL_FILE = "models.toml"
 _TABLES = ("family", "model", "route", "class")
 #: Route keys that are not facts about a model.
 _ROUTE_META = ("endpoint",)
+#: Route classes that need no [class] row (they carry no shared facts).
+_PLAIN_CLASSES = ("saas", "command")
 
 
 def data_dir() -> Path:
@@ -94,6 +96,31 @@ def _fact_nodes(row: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return out
 
 
+def _link_problems(cat: Catalog) -> list[str]:
+    out = []
+    for rid, row in cat.model.items():
+        if row.get("family") not in cat.family:
+            out.append(f"model.{rid}: family {row.get('family')!r} is not in the catalog")
+    for rid, row in cat.route.items():
+        klass = row.get("class")
+        if klass and klass not in cat.cls and klass not in _PLAIN_CLASSES:
+            out.append(f"route.{rid}: class {klass!r} has no [class] row")
+    return out
+
+
+def _family_problems(cat: Catalog) -> list[str]:
+    out = []
+    for fid, row in cat.family.items():
+        if fid == UNKNOWN:
+            if any(facts.is_fact(v) for v in row.values()) or "needles" in row:
+                out.append("family.unknown must have no facts or needles (no neighbour)")
+        elif fid != "local" and not facts.is_fact(row.get("identity")):
+            out.append(f"family.{fid}: no `identity` fact (vendor, needles with source and date)")
+    if UNKNOWN not in cat.family:
+        out.append("family.unknown is missing")
+    return out
+
+
 def validate(cat: Catalog) -> list[str]:
     """Problems, one string each; empty means the catalog is well formed."""
     out = []
@@ -103,23 +130,7 @@ def validate(cat: Catalog) -> list[str]:
             out += facts.problems(at, node, cat.sources)
             if node["s"] in facts.READABLE and "v" not in node:
                 out.append(f"{at}: status {node['s']} needs a value")
-    for rid, row in cat.model.items():
-        if row.get("family") not in cat.family:
-            out.append(f"model.{rid}: family {row.get('family')!r} is not in the catalog")
-    for rid, row in cat.route.items():
-        if row.get("class") and row["class"] not in cat.cls and row["class"] not in ("saas",):
-            if row["class"] not in ("command",):
-                out.append(f"route.{rid}: class {row['class']!r} has no [class] row")
-    for fid, row in cat.family.items():
-        ident = row.get("identity")
-        if fid == UNKNOWN:
-            if any(facts.is_fact(v) for v in row.values()) or "needles" in row:
-                out.append("family.unknown must have no facts or needles (no neighbour)")
-        elif fid != "local" and not facts.is_fact(ident):
-            out.append(f"family.{fid}: no `identity` fact (vendor, needles with source and date)")
-    if UNKNOWN not in cat.family:
-        out.append("family.unknown is missing")
-    return out
+    return out + _link_problems(cat) + _family_problems(cat)
 
 
 def _identity(row: dict[str, Any]) -> dict[str, Any]:
