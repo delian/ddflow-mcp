@@ -1103,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 451 knobs.
+cadences, and the rest of the 457 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5298,7 +5298,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 451): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 457): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5870,7 +5870,7 @@ declared once and persists — see
 
 ## Configuration
 
-451 knobs across 46 sections, every one documented in place and listed, with its default
+457 knobs across 46 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5937,8 +5937,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=9988291b1c60 -->
-<details><summary>All 451 knobs across 46 sections</summary>
+<!-- ddflow:begin README/knobs sha=bb798bda0b7f -->
+<details><summary>All 457 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6249,6 +6249,12 @@ long default is left to `ddflow config --explain`.
 | `swarm.explore_share` | `0.1` |  |
 | `swarm.explore_min_n` | `5` |  |
 | `swarm.bug_window_s` | `604800` |  |
+| `swarm.conformance_min_accuracy` | `0.9` |  |
+| `swarm.conformance_min_calls` | `5` |  |
+| `swarm.conformance_idle_s` | `5.0` |  |
+| `swarm.conformance_lease_wait_s` | `10.0` |  |
+| `swarm.conformance_tools` | (long: see `ddflow config --explain`) |  |
+| `swarm.conformance_max_age_s` | `2592000` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
