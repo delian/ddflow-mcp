@@ -179,3 +179,14 @@ def test_scalar_family_and_empty_sources_do_not_crash_or_misreport():
             {"context_families.toml": {"family": {"unknown": {}}, "sources": {}}, **base}
         )
     )
+
+
+def test_known_but_empty_family_does_not_leak_the_unknown_row_and_harness_scalar_is_safe():
+    data = {"context_families.toml": {"family": {"known_empty": {}, "unknown": {"note": "n"}}}}
+    assert CF.family_row(data, "known_empty") == {}
+    assert CF.family_row(data, "zzz") == {"note": "n"}
+    bad = {
+        "context_families.toml": {"family": {"unknown": {}}},
+        "context_harnesses.toml": {"harness": 42},
+    }
+    assert any("harness is not a table" in p for p in CF.validate(bad, ["h1"]))
