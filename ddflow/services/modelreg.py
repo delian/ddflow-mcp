@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..infra import paths
 from . import context_families as CF
 from . import factdrift, facts
@@ -333,10 +335,6 @@ def read(
 
 def stale(cat: Catalog, max_age_days: int, today: Any = None) -> list[str]:
     """Facts older than `max_age_days`, as `table.row.key (N days old)`."""
-    from datetime import date
-
-    from ..core import clock
-
     today = today or date.today()
     out = []
     for table, rid, row in _rows(cat):
