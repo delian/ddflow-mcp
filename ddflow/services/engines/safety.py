@@ -83,7 +83,7 @@ def _audit(sub, limits: Limits) -> None:
         if op in (_c.GROUPREF, _c.GROUPREF_EXISTS):
             raise EngineError("back-references are not allowed")
         if op in _REPEATS:
-            lo, hi, body = av
+            _lo, hi, body = av
             if hi != _c.MAXREPEAT and hi > limits.max_repeat:
                 raise EngineError(f"a repeat bound above {limits.max_repeat}")
             if hi > 1 and _ambiguous(body):
