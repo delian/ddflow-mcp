@@ -379,7 +379,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
-    for note in refine_stale_notes(stale, it, cwd, landed, own, cfg.review.triage_ignore_globs):
+    for note in refine_stale_notes(
+        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
+    ):
         if note.unverified:
             v.warnings.append(
                 f"{note.gate} passed, but whether on the tree you are completing could "
@@ -400,6 +402,7 @@ def refine_stale_notes(
     landed: str,
     changed: list[str] | None,
     ignore: Sequence[str] = (),
+    docs: Sequence[str] = (),
 ):
     """Narrow the "passed on a different tree" notes of review gates to the item's own paths
     (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
@@ -407,8 +410,9 @@ def refine_stale_notes(
     the item never touched is not a different tree FOR THE REVIEW: its note is dropped, and one
     that stays names the paths that moved. Anything not comparable (no snapshot, the changed
     set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
-    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) is not a
-    difference, as it is not at triage."""
+    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) and a file
+    matching ``docs`` (`[review].doc_globs`: wording, bug Bb89ff23f21) are not a difference, as
+    they are not at triage."""
     entries = None
     out = []
     for note in notes:
@@ -422,11 +426,13 @@ def refine_stale_notes(
         if entries is None:
             out.append(note)
             continue
+        candidates = recorded.keys() | set(changed)
+        gone = {p for p in candidates if p not in entries}
         moved = sorted(
             p
-            for p in recorded.keys() | set(changed)
+            for p in candidates
             if recorded.get(p) != (" ".join(entries[p]) if p in entries else "")
-            and not ignorable(p, recorded, ignore)
+            and not ignorable(p, recorded, ignore, docs, gone)
         )
         if moved:
             shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
