@@ -57,7 +57,12 @@ def sync(
         notes = GO.stale_evidence_detail(st, cfg, it.id, tree, landed="HEAD")
         # a judged gate is stale only when the item's OWN files moved, not for main's work
         notes = refine_stale_notes(
-            notes, it, tree, "HEAD", changed_paths(repo, it), cfg.review.triage_ignore_globs,
+            notes,
+            it,
+            tree,
+            "HEAD",
+            changed_paths(repo, it),
+            cfg.review.triage_ignore_globs,
             cfg.review.doc_globs,
         )
         stale = {n.gate for n in notes if not n.unverified}
