@@ -334,3 +334,17 @@ def test_a_malformed_status_line_echoing_the_key_is_scrubbed(tmp_path, monkeypat
     monkeypatch.setattr(RV, "_open", boom)
     _text, err = RV._chat_openai(_rev("openai", tmp_path), "s", "u", 5)
     assert err and FAKE not in err
+
+
+def test_a_tracked_file_behind_a_symlinked_local_dir_is_shared(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    _write(tmp_path, "actual_local/reviewers.toml", BLOCK)
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "local").symlink_to(tmp_path / "actual_local")
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", "-f", "actual_local/reviewers.toml"], check=True
+    )
+    with pytest.raises(ValueError, match="machine-local"):
+        RV.load_reviewers(tmp_path)
