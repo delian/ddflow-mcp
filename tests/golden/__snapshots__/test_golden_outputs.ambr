@@ -1876,10 +1876,11 @@
           everything the lane started). 'systemd' where it is not available makes the
           start report `unavailable`; it never falls back silently. An unrecognised
           value in a config file is warned about, reported by `doctor` and falls back
-          to 'none', the strictest (the process group alone, which needs nothing
-          installed); `config --set`, `ddflow_configure` and the environment refuse
-          it, and so does loading ddflow's own source tree, where the file and the
-          code are one commit.
+          to 'systemd', the strictest (the most containment; a start where systemd-run
+          is missing then reports unavailable instead of running uncontained); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       lanes.pass_env = ['PATH', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR']   [default]
           Environment variable NAMES a launched lane inherits from the launching
           process, besides its own private home and the key names its launch spec

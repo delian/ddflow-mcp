@@ -50,7 +50,10 @@ class LanesConfig:
         "none",
         doc="Extra containment for a launched lane beyond its process group: 'none' (the group alone) or 'systemd' (`systemd-run --user --scope`, so a cgroup holds everything the lane started). 'systemd' where it is not available makes the start report `unavailable`; it never falls back silently.",
         choices=("none", "systemd"),
-        strictest=("none", "the process group alone, which needs nothing installed"),
+        strictest=(
+            "systemd",
+            "the most containment; a start where systemd-run is missing then reports unavailable instead of running uncontained",
+        ),
     )
     pass_env: list[str] = knob(
         factory=lambda: ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"],
