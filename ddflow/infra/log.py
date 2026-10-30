@@ -29,7 +29,6 @@ import os
 import re
 import secrets
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -1422,10 +1421,12 @@ class EventLog:
         return None
 
     def _rewrite_line(self, old_id: str, ev: Event) -> None:
-        """Replace the line whose event id is ``old_id`` with ``ev``'s canonical line,
-        atomically. The temp file is created exclusive and private (``mkstemp``: a fresh name,
-        mode ``0600``) and only then set to the shard's own mode BEFORE any content is written,
-        so a restrictive shard is never world-readable and a pre-created name cannot be hijacked."""
+        """Replace the line whose event id is ``old_id`` with ``ev``'s canonical line.
+
+        The whole shard is rewritten atomically through `infra.fsio.replace_text` (the one
+        home for `tempfile`/`os.replace`): a reader sees the old shard or the new one, the
+        shard keeps its permission bits (or the write happens in place where a rename would
+        give it away), and the content is fsynced before the rename."""
         line = ev.to_json()
         for shard in self.shards():
             lines = shard.read_text(encoding="utf-8").splitlines()
@@ -1436,32 +1437,7 @@ class EventLog:
                     continue
                 if got == old_id:
                     lines[i] = line
-                    st = shard.stat()
-                    fd, tmp = tempfile.mkstemp(
-                        dir=str(shard.parent), prefix=shard.name + ".", suffix=".redact"
-                    )
-                    try:
-                        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                            with contextlib.suppress(OSError):
-                                os.fchown(fd, st.st_uid, st.st_gid)
-                            os.fchmod(fd, st.st_mode & 0o7777)
-                            fh.write("\n".join(lines) + "\n")
-                            fh.flush()
-                            os.fsync(fd)
-                        os.replace(tmp, shard)
-                    except BaseException:
-                        with contextlib.suppress(OSError):
-                            os.unlink(tmp)
-                        raise
-                    # Best-effort: persist the rename. A directory that is not readable (e.g.
-                    # mode 0300) cannot be opened for this, and the redaction is already done --
-                    # never raise after a successful replace, or the caller cannot record the audit.
-                    with contextlib.suppress(OSError):
-                        dirfd = os.open(shard.parent, os.O_RDONLY)
-                        try:
-                            os.fsync(dirfd)
-                        finally:
-                            os.close(dirfd)
+                    fsio.replace_text(shard, "\n".join(lines) + "\n")
                     if self._meta is not None:
                         self._meta._rows.pop(shard.name, None)
                     return
