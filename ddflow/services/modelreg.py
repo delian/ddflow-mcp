@@ -86,7 +86,7 @@ def load(
         if isinstance(doc.get("sources"), dict):
             cat.sources.update(doc["sources"])
         for table, dest in zip(_TABLES, (cat.family, cat.model, cat.route, cat.cls), strict=True):
-            rows = doc.get(table) or {}
+            rows = doc.get(table, {})
             if not isinstance(rows, dict):
                 cat.bad_rows.append(f"{table} is not a table of rows")
                 continue

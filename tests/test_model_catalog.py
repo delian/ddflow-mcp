@@ -224,3 +224,8 @@ def test_malformed_top_level_and_identity_do_not_crash(tmp_path):
     cat.route["openai"]["endpoint"]["v"] = "http://x"
     assert any("route.openai.endpoint" in p for p in M.validate(cat))
     assert "openai" not in M.presets(cat)
+
+
+def test_falsy_non_table_top_level_value_is_reported(tmp_path):
+    cat = _cat("family = []\n", tmp_path)
+    assert "family is not a table of rows" in M.validate(cat)
