@@ -184,3 +184,20 @@ def test_a_failed_spawn_leaks_no_descriptor():
     assert safety.search(safety.safe_regex("a"), "a")
     with pytest.raises(EngineError):
         safety.safe_regex("(")
+
+
+def test_fourth_review_findings(tmp_path):
+    for sh in ("/bin/ash", "busybox", "/usr/bin/MKSH"):
+        with pytest.raises(EngineError):
+            render_argv.render([sh, "-c", "x"], {})
+    with pytest.raises(EngineError):
+        stream_map.parse_rules([{"when": {"path": "a", "equals": None}, "emit": "tool"}])
+    for pat in ("(x|y(z+)+)", "a|(b+)+"):  # every alternative of a branch is audited
+        with pytest.raises(EngineError):
+            safety.safe_regex(pat)
+    big = tmp_path / "big"
+    big.write_text("#!/bin/sh\nhead -c 100000 /dev/zero | tr '\\0' a\n")
+    big.chmod(0o755)
+    spec = probe.parse([[str(big), "--version"]], allow_paths=True)
+    f = probe.run(spec, probe_id="t", now="d", limits=Limits(probe_output_bytes=100))[0]
+    assert f["truncated"] is True and len(f["output"]) == 100
