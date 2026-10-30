@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import sys
 import tomllib
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -433,8 +434,6 @@ def _above(live: dict[str, Item], by_parent: dict[str, str], iid: str) -> list[s
 
 
 def _count_lint(report: PL.Report) -> str:
-    from collections import Counter
-
     kinds = Counter(f.kind for f in report.findings)
     label = ", ".join(f"{k}: {n}" for k, n in sorted(kinds.items()))
     return f"{len(report.findings)} finding(s) in {report.items} live item(s): {label}"
