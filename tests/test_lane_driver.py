@@ -255,7 +255,7 @@ def test_scope_systemd_without_systemd_run_is_unavailable(driver, monkeypatch):
 def test_registry_and_unknown_transport():
     d = ld.driver_for("process-headless")
     assert isinstance(d, ld.Lane) and "process-headless" in ld.transports()
-    r = ld.driver_for("acp")
+    r = ld.driver_for("no-such-transport")
     assert r.status == "unavailable" and "process-headless" in r.detail
     with pytest.raises(ValueError):
         ld.register_transport("process-headless", lambda: d)
