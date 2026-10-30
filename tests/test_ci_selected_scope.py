@@ -262,8 +262,19 @@ def test_the_item_ci_gate_records_scope_selected_count_and_cut_set(project, stub
     )
     _git(project, "add", "-A")
     _git(project, "commit", "-qm", "cfg")
-    run_cli(project, "phase", "add", "P1", "--globs", "pkg/**")
-    run_cli(project, "task", "add", "T1", "--phase", "P1", "--globs", "pkg/mod.py")
+    run_cli(project, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "pkg/**")
+    run_cli(
+        project,
+        "task",
+        "add",
+        "T1",
+        "--title",
+        "T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "pkg/mod.py",
+    )
     assert run_cli(project, "claim", "T1")[0] == 0
     _, out, _ = run_cli(project, "--json", "show", "T1")
     tree = Path(json.loads(out)["worktree"])

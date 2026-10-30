@@ -84,7 +84,7 @@ def test_a_machine_local_scrub_env_reaches_a_gate_run_in_the_items_worktree(repo
     )
     (repo / ".ddflow" / "gates.toml").write_text(f"[gate.unit_tests]\ncommand = {SHOW!r}\n")
     monkeypatch.setenv("KEEPME", "x")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "claim", "T1")
     assert code == 0, (out, err)
     code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")

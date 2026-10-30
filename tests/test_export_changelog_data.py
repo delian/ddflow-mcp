@@ -31,7 +31,7 @@ def _state(repo):
 
 def _task(repo, tid="T1"):
     run_cli(repo, "init")
-    assert run_cli(repo, "task", "add", tid, "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", tid, "--title", "task item", "--globs", "a.py")[0] == 0
 
 
 def test_parse_accepts_category_text_case_insensitively():
@@ -165,7 +165,7 @@ def test_mcp_complete_records_the_changelog(repo):
     res = _mcp(repo, "ddflow_complete", id="T1", model="claude-opus-5", changelog="Changed: x")
     assert res["_meta"]["exit"] == 0, res
     assert _state(repo).items["T1"].changelog["category"] == "Changed"
-    assert run_cli(repo, "task", "add", "T2", "--globs", "b.py")[0] == 0
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")[0] == 0
     pass_pipeline(repo, "T2")
     bad = _mcp(repo, "ddflow_complete", id="T2", model="claude-opus-5", changelog="Zzz: x")
     assert bad["_meta"]["exit"] != 0

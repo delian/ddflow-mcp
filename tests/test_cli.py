@@ -212,14 +212,47 @@ def test_brief_respects_its_token_budget(proj):
 
 
 def test_doctor_detects_a_dependency_cycle(proj):
-    run_cli(proj, "task", "add", "P1.TA", "--phase", "P1", "--needs", "P1.TB")
-    run_cli(proj, "task", "add", "P1.TB", "--phase", "P1", "--needs", "P1.TA")
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "P1.TA",
+        "--title",
+        "P1.TA fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.TB",
+    )
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "P1.TB",
+        "--title",
+        "P1.TB fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.TA",
+    )
     code, out, _ = run_cli(proj, "doctor")
     assert code == FAIL and "cycle" in out
 
 
 def test_doctor_detects_an_unknown_dependency(proj):
-    run_cli(proj, "task", "add", "P1.TZ", "--phase", "P1", "--needs", "GHOST")
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "P1.TZ",
+        "--title",
+        "P1.TZ fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "GHOST",
+    )
     code, out, _ = run_cli(proj, "doctor")
     assert code == FAIL and "GHOST" in out
 
@@ -432,7 +465,18 @@ def test_a_coverage_gap_is_reported_on_the_json_surface_too(proj):
     assert "never ran" in data["note"] and "not as a pass" in data["note"], data
 
     # And the human surface still says it in words.
-    run_cli(proj, "task", "add", "P1.T8", "--phase", "P1", "--globs", "other/*")
+    run_cli(
+        proj,
+        "task",
+        "add",
+        "P1.T8",
+        "--title",
+        "P1.T8 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "other/*",
+    )
     run_cli(proj, "claim", "P1.T8", "--no-worktree")
     pass_pipeline(proj, "P1.T8", omit=("critic",))
     for g in ("implement", "merge"):
