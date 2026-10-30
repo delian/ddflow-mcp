@@ -323,3 +323,14 @@ def test_a_bad_env_key_is_refused_for_the_openai_kind_too(tmp_path, monkeypatch)
     )
     _text, err = RV._chat_openai(rev, "s", "u", 5)
     assert "control or whitespace" in err and "X-Injected" not in err
+
+
+def test_a_malformed_status_line_echoing_the_key_is_scrubbed(tmp_path, monkeypatch):
+    import http.client
+
+    def boom(req, timeout=0):
+        raise http.client.BadStatusLine(f"HTTP/1.1 999 {FAKE}")
+
+    monkeypatch.setattr(RV, "_open", boom)
+    _text, err = RV._chat_openai(_rev("openai", tmp_path), "s", "u", 5)
+    assert err and FAKE not in err
