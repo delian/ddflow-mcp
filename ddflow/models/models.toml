@@ -1,0 +1,36 @@
+# Per-model facts (DRV-model-catalog). Each fact is the shared record {v, s, src, d, ...}
+# (services/facts.py). Prices are USD per million tokens (`[meta] price_unit`). A key that is not
+# listed is left out: nothing is known, nothing is assumed. Operators add their own models, with
+# the window and limits their server actually serves, in `.ddflow/local/models.toml`.
+[meta]
+schema = 1
+price_unit = "usd_per_mtok"
+
+[sources]
+deepseek-pricing = { url = "https://api-docs.deepseek.com/quick_start/pricing" }
+cache-families = { path = "ddflow/templates/context_families.toml", note = "numbers carried from the CC-inventory notes, read 2026-10-29" }
+ddflow-definition = { path = "ddflow/models/models.toml", note = "true by definition of a self-hosted route, not read from a vendor page" }
+
+# Off-peak prices (the CC-inventory note: flash hit 0.003 vs miss 0.15, pro hit 0.022 vs miss 0.66).
+# The output price was not recorded there: left out.
+[model.deepseek-flash]
+family = "deepseek"
+price_in = { v = 0.15, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "cache miss, off-peak" }
+price_cache_read = { v = 0.003, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "off-peak" }
+window = { v = 1000000, s = "documented", src = "deepseek-pricing", d = "2026-10-29" }
+max_output = { v = 384000, s = "documented", src = "deepseek-pricing", d = "2026-10-29" }
+
+[model.deepseek-v4-pro]
+family = "deepseek"
+price_in = { v = 0.66, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "cache miss, off-peak" }
+price_cache_read = { v = 0.022, s = "documented", src = "deepseek-pricing", d = "2026-10-29", note = "off-peak" }
+window = { v = 1000000, s = "documented", src = "deepseek-pricing", d = "2026-10-29" }
+max_output = { v = 384000, s = "documented", src = "deepseek-pricing", d = "2026-10-29" }
+
+# Route classes: facts that hold for every route of the class, whatever model it serves.
+[class.local]
+note = "A self-hosted server costs no per-token fee. Window and limits are the served model's: set them per route in .ddflow/local/models.toml."
+price_in = { v = 0, s = "documented", src = "ddflow-definition", d = "2026-10-30", note = "self-hosted: no per-token fee (power and hardware are not priced here)" }
+price_out = { v = 0, s = "documented", src = "ddflow-definition", d = "2026-10-30", note = "self-hosted: no per-token fee" }
+price_cache_read = { v = 0, s = "documented", src = "ddflow-definition", d = "2026-10-30", note = "self-hosted: no per-token fee" }
+price_cache_write = { v = 0, s = "documented", src = "ddflow-definition", d = "2026-10-30", note = "self-hosted: no per-token fee" }

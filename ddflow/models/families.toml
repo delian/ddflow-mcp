@@ -1,0 +1,71 @@
+# Model families of the catalog (DRV-model-catalog). Order matters: a model name takes the FIRST
+# row whose needle it contains (the order of the former FAMILY_HINTS, which `modelreg.family_hints()`
+# rebuilds). A row id is the cache family of templates/context_families.toml where one exists
+# (claude, qwen, kimi, glm...), so cache and window facts are read from there; `vendor` is the
+# pretraining lineage review independence compares. Per-family numbers only ddflow reads and the
+# cache table lacks go in a row's own fact keys (none are known yet: left out, not guessed).
+# Unknown matches nothing: no needles, no facts, never a neighbour.
+#
+# `identity` is a fact: v = {vendor, needles}; src/d say where the mapping was read.
+[meta]
+schema = 1
+
+[sources]
+family-hints = { path = "ddflow/config_sections/agent.py", note = "FAMILY_HINTS, carried 2026-10-30; the needle-to-vendor map review independence already used" }
+
+[family.qwen]
+identity = { v = { vendor = "alibaba", needles = ["qwen"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.claude]
+identity = { v = { vendor = "anthropic", needles = ["claude"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.openai]
+identity = { v = { vendor = "openai", needles = ["gpt", "o1", "o3", "codex"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.gemini]
+identity = { v = { vendor = "google", needles = ["gemini", "gemma"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.meta]
+identity = { v = { vendor = "meta", needles = ["llama"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.mistral]
+identity = { v = { vendor = "mistral", needles = ["mistral", "mixtral"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.deepseek]
+identity = { v = { vendor = "deepseek", needles = ["deepseek"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.xai]
+identity = { v = { vendor = "xai", needles = ["grok"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.microsoft]
+identity = { v = { vendor = "microsoft", needles = ["phi"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.cohere]
+identity = { v = { vendor = "cohere", needles = ["command"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.01ai]
+identity = { v = { vendor = "01ai", needles = ["yi-"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.glm]
+identity = { v = { vendor = "zhipu", needles = ["glm"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.nvidia]
+identity = { v = { vendor = "nvidia", needles = ["nemotron"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.ibm]
+identity = { v = { vendor = "ibm", needles = ["granite"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.kimi]
+identity = { v = { vendor = "moonshot", needles = ["kimi"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.minimax]
+identity = { v = { vendor = "minimax", needles = ["minimax"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.baidu]
+identity = { v = { vendor = "baidu", needles = ["ernie"] }, s = "documented", src = "family-hints", d = "2026-10-30" }
+
+[family.local]
+note = "Self-hosted servers: the model behind one is of any family. Resolved by route class, never by name."
+
+[family.unknown]
+note = "A model that matches no family has no facts. Never resolved by neighbour."
