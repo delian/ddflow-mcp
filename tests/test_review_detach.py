@@ -31,7 +31,7 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     began, pidfile = tmp_path / "began", tmp_path / "reviewer.pid"
     cli = tmp_path / "reviewer"
     cli.write_text(
-        f"#!/bin/sh\ncat >/dev/null\nif [ -e '{tmp_path / 'slow'}' ]; then S=$(cat '{tmp_path / 'slow'}'); echo $$ > '{pidfile}'; touch '{began}'; exec sleep ${{S:-120}}; fi\n"
+        f"#!/bin/sh\ncat >/dev/null\nif [ -e '{tmp_path / 'slow'}' ]; then S=$(cat '{tmp_path / 'slow'}'); echo $$ > '{pidfile}'; touch '{began}'; sleep ${{S:-120}}; fi\n"
         "echo 'STATUS: NO FINDINGS'\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
@@ -134,13 +134,16 @@ def test_a_detached_delta_review_records_passed_without_the_launcher(repo, tmp_p
     (tmp_path / "slow").write_text("4")
     body = _detach(repo, "--delta")
     pid, log = body["pid"], Path(body["log"])
-    # It outlived the launcher while its reviewer was still running, then recorded the gate.
+    # It outlived the launcher while its reviewer was still running, then recorded a fresh
+    # DELTA round (not the fore-run's pass): delta_rounds rises only when the detached
+    # reviewer actually returned a verdict.
     _started(began, log, pid)
     deadline = time.monotonic() + 60
-    while time.monotonic() < deadline and not _wait(_gate(repo)):
+    while time.monotonic() < deadline and (not _wait(_gate(repo)) or _gate(repo).get("evidence", {}).get("delta_rounds", 0) < 1):
         time.sleep(0.2)
     gate = _gate(repo)
     assert _wait(gate), (gate, log.read_text() if log.exists() else "")
+    assert gate.get("evidence", {}).get("delta_rounds", 0) >= 1, (gate, log.read_text() if log.exists() else "")
 
 
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
