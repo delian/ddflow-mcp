@@ -13,15 +13,13 @@ import contextlib
 import os
 import secrets
 import shutil
-import subprocess
-import tempfile
 import threading
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..infra import proc
+from ..infra import fsio, proc
 from .engines import limit_detect, render_argv, stream_map
 from .engines.safety import DEFAULT, EngineError
 from .lane_driver import (
@@ -141,7 +139,8 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
     try:
         home = spec.home
         if home is None:
-            home = Path(tempfile.mkdtemp(prefix="ddflow-lane-"))
+            home = fsio.unused_dir("ddflow-lane-")
+            home.mkdir(mode=0o700)  # fails if the name was taken meanwhile
             private.append(home)
         else:
             home.mkdir(parents=True, exist_ok=True)
@@ -149,8 +148,7 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
         values = dict(spec.values)
         if spec.prompt and "{prompt_file}" in spec.argv:
             pf = home / "prompt.txt"
-            pf.write_text(spec.prompt, encoding="utf-8")
-            pf.chmod(0o600)
+            fsio.atomic_write(pf, spec.prompt, mode=0o600)
             values["prompt_file"] = str(pf)
         r = render_argv.render(spec.argv, values, env=dict(spec.env), environ=os.environ)
     except (EngineError, OSError) as e:
@@ -254,18 +252,15 @@ class ProcessHeadless:
             proc.kill_group(p, 15)
             try:
                 p.wait(timeout=max(0.0, grace))
-            except subprocess.TimeoutExpired:  # asking was not enough
+            except proc.TimeoutExpired:  # asking was not enough
                 pass
         # the group may outlive its leader: always finish with a group kill, then reap
         proc.kill_group(p)
         proc.stop_group(p, reap_s=proc.TIMEOUTS["drain"])
         if h.unit:
-            with contextlib.suppress(OSError, subprocess.SubprocessError):
-                proc.run(
-                    ["systemctl", "--user", "stop", f"{h.unit}.scope"],
-                    capture_output=True,
-                    timeout=proc.TIMEOUTS["instant"],
-                )
+            proc.capture(
+                ["systemctl", "--user", "stop", f"{h.unit}.scope"], timeout=proc.TIMEOUTS["instant"]
+            )
         for t in h.threads:
             t.join(timeout=2)
         self._cleanup(h)

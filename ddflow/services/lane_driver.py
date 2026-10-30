@@ -170,6 +170,16 @@ def advertise(driver: Lane, wanted: set[str] | frozenset[str]) -> frozenset[str]
     return frozenset(wanted) & CAPABILITIES & driver.capabilities
 
 
+def lane_options(cfg: Any) -> dict[str, Any]:
+    """The ``[lanes]`` knobs a launch uses, as ``LaunchSpec`` keywords (a ``Config`` in)."""
+    return {
+        "stop_grace_s": float(cfg.lanes.stop_grace_s),
+        "event_buffer": int(cfg.lanes.event_buffer),
+        "scope": cfg.lanes.scope,
+        "pass_env": tuple(cfg.lanes.pass_env),
+    }
+
+
 def spec_from_headless(
     name: str,
     headless: Headless,
@@ -244,6 +254,7 @@ __all__ = [
     "advertise",
     "driver_for",
     "failed",
+    "lane_options",
     "ok",
     "register_transport",
     "spec_from_headless",
