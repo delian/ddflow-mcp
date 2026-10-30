@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 
 from hypothesis import given, settings
@@ -205,6 +206,10 @@ def test_hedged_leases_each_count_against_max_lanes_and_zero_refs_do_not_divide(
     )
     d = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), wd, w)
     assert not d.ok and any("max_lanes" in r for r in d.reasons)
+    # evaluate scores a refused pair too (its parts explain the refusal): no division by zero
+    assert len(d.parts) == 5 and all(math.isfinite(v) for _, v in d.parts)
+    ok = evaluate(Item("B", est_in=10), Lane("a", "f", "m", price_in=1.0), _world(), w)
+    assert ok.ok and math.isfinite(ok.score)
 
 
 def test_pull_applies_reviewer_independence_and_hedge_boundary_and_finite_knobs():
@@ -218,7 +223,8 @@ def test_pull_applies_reviewer_independence_and_hedge_boundary_and_finite_knobs(
     assert refusals(Item("x", live_attempts=W.hedge_max + 1), lane, wd, W)
     from ddflow.config_sections.swarm import _nonneg, _positive
 
-    assert _nonneg(float("inf")) and _positive(float("nan")) and not _nonneg(0.0)
+    # a validator returns "" for a good value and a message for a bad one
+    assert _nonneg(float("inf")) != "" and _positive(float("nan")) != "" and _nonneg(0.0) == ""
 
 
 def test_pull_takes_the_author_family_per_item_and_huge_ints_are_validated_not_raised():
