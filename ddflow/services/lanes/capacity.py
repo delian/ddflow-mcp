@@ -119,7 +119,7 @@ def lane_figures(heads: Sequence[Headroom]) -> tuple[int, int]:
         return 0, 1
     h = min(heads, key=lambda x: (x.limit // max(1, x.need), x.pool))
     need = max(1, h.need)
-    return -(-h.busy // need), max(1, h.limit // need)
+    return -(-h.busy // need), h.limit // need  # 0 lanes fit when need > limit
 
 
 def refusals(heads: Sequence[Headroom]) -> list[str]:
