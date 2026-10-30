@@ -748,7 +748,7 @@ def _chunk_budget(rev: Reviewer) -> int:
     always budget left to write the verdict in. A reviewer too small to leave a reserve is
     refused in ``_preflight`` before a chunk is ever sized.
     """
-    return min(rev.max_chunk_chars, rev.max_tokens - VERDICT_RESERVE_TOKENS)
+    return min(rev.max_chunk_chars, max(1, rev.max_tokens - VERDICT_RESERVE_TOKENS))
 
 
 #: A hunk header and whatever git appended after its closing ``@@``.
@@ -1134,18 +1134,6 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
             return res
     elif not rev.base_url or not rev.model:
         res.status, res.reason = UNAVAILABLE, (f"reviewer {rev.name!r} has no base_url or model")
-        return res
-    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
-        # An output cap that cannot hold the verdict reserve alone leaves nothing for the
-        # reasoning a chunk needs, so no chunk survives (about one reasoning token per input
-        # character). Such a reviewer is under-sized; the honest outcome is "reasoning cap
-        # exhausted", not a review that spends round after round truncating. Refuse before a
-        # single request (bug B9a2279db22).
-        res.status, res.reason = UNAVAILABLE, (
-            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, at or below the "
-            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
-            f"reasoning and the verdict. Raise [[reviewer]].max_tokens."
-        )
         return res
     if not diff.strip():
         # An empty diff is the commonest way a review passes vacuously: the command ran,
@@ -1623,6 +1611,17 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     reviewer's own ``max_tokens``; ``split_rounds`` is how many times a chunk lost to size
     (out of tokens or time) is halved and retried (``_retry_truncated``).
     """
+    if rev.max_tokens <= VERDICT_RESERVE_TOKENS:
+        # Refuse on the reviewer's DECLARED output cap, before `chunk_max_tokens` can
+        # rewrite it: an under-sized reviewer cannot be rescued by chunk sizing, while a
+        # small per-chunk window is the operator's own (halving retry exists for it).
+        res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
+        res.status, res.reason = UNAVAILABLE, (
+            f"reviewer {rev.name!r} declares max_tokens={rev.max_tokens}, at or below the "
+            f"{VERDICT_RESERVE_TOKENS}-token verdict reserve: too small to room both the "
+            f"reasoning and the verdict. Raise [[reviewer]].max_tokens."
+        )
+        return res
     if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
         rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
