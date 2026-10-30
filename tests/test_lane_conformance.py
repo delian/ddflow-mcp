@@ -36,7 +36,8 @@ AGENT = textwrap.dedent(
     for line in script:
         print(json.dumps(line), flush=True)
     if mode == "late":  # works only after the revocation, then ends
-        while not os.path.exists(flag):
+        end = time.time() + 20
+        while not os.path.exists(flag) and time.time() < end:
             time.sleep(0.05)
         for t in ("claim", "heartbeat"):
             print(json.dumps({"type": "call", "tool": t}), flush=True)
@@ -284,3 +285,10 @@ def test_work_after_the_revocation_earns_no_level(tmp_path):
     r = level(spec, hook_probe=lambda: True, revoke=lambda: flag.write_text("x"))
     assert statuses(r)["claim"] == cf.FAILED and r.level == 1
     assert statuses(r)["lease_stop"] == cf.PASSED  # it did stop, but earned nothing by it
+
+
+def test_non_mapping_lanes_are_replaced_not_crashed_on(tmp_path):
+    cio.path_for(tmp_path).parent.mkdir(parents=True)
+    cio.path_for(tmp_path).write_text('{"schema": "lane-levels@1", "lanes": ["a"]}')
+    cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
+    assert set(cio.load_all(tmp_path)) == {"c"}
