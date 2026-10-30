@@ -110,8 +110,8 @@ def test_wait_holds_no_lease_and_is_bounded(
     import ddflow.services.lanes.capacity as mod
 
     src = Path(mod.__file__).read_text()
-    for banned in ("import lease", "from .. import lease", "events", "subprocess"):
-        assert banned not in src.split('"""', 2)[2]
+    for banned in ("lease", "events", "subprocess"):
+        assert banned not in src.split('"""', 2)[2].replace("# lease", "")
     pools = (C.Pool("ep-local", 1),)
     t0 = time.monotonic()
     with S.Slots(tmp_path, "ep-local").hold(1):
@@ -120,8 +120,35 @@ def test_wait_holds_no_lease_and_is_bounded(
                 pass
     assert time.monotonic() - t0 < 5
     assert sorted(p.name for p in tmp_path.iterdir()) == ["ep-local.0.lock"]  # no other state
+    assert C.busy_counts(pools, tmp_path) == {"ep-local": 0}  # and nothing leaked
 
 
 def test_waited_is_reported(tmp_path: Path) -> None:
     with C.acquire((C.Pool("x", 1),), 0, tmp_path) as held:
         assert held.waited_s >= 0.0
+
+
+def test_no_hold_while_waiting_two_gpu_lanes(tmp_path: Path) -> None:
+    """Two lanes needing 2 of 2 slots: one wins whole, the other holds NOTHING meanwhile."""
+    pools = (C.Pool("gpu", 2, 2),)
+    with S.Slots(tmp_path, "gpu").hold(2):  # one slot taken by someone else
+        with pytest.raises(S.SlotsTimeout):
+            with C.acquire(pools, 0, tmp_path):
+                pass
+        assert C.busy_counts(pools, tmp_path) == {"gpu": 1}  # the failed lane kept none
+    with C.acquire(pools, 0, tmp_path) as held:
+        assert len(held.slots["gpu"]) == 2
+
+
+def test_wait_succeeds_when_slot_frees(tmp_path: Path) -> None:
+    pools = (C.Pool("ep-local", 1),)
+    outer = S.Slots(tmp_path, "ep-local").hold(1)
+    outer.__enter__()
+    naps = []
+
+    def sleep(s: float) -> None:
+        naps.append(s)
+        outer.__exit__(None, None, None)  # the holder finishes during the first nap
+
+    with C.acquire(pools, 30, tmp_path, sleep=sleep, poll_s=0.01) as held:
+        assert held.slots == {"ep-local": (0,)} and len(naps) == 1
