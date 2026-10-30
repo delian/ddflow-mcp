@@ -15,6 +15,7 @@ only a non-ddflow tool keeps spawning.
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import re
 import sys
@@ -57,9 +58,11 @@ def in_process(verbs: list[str]) -> P.Captured:
         try:
             parser = _parser[0]
             if parser is None:
-                from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
-
-                parser = _parser[0] = build_parser()
+                # Dynamic, not `from ..surfaces.cli import build_parser`: that STATIC import
+                # breaks the layers contract (services reaching up into surfaces) on this
+                # module's read path, exactly the cycle recovery.py breaks the same way
+                # (`importlib.import_module("ddflow.api.gates")`).
+                parser = _parser[0] = importlib.import_module("ddflow.surfaces.cli").build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does

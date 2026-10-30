@@ -187,6 +187,27 @@ def _warning_lines(r) -> list[str]:
     return out
 
 
+def _status_body(d: dict, r: dict, by_tag_lines: tuple = ()) -> list[str]:
+    """The prose `status` body the plain `status` and the declared `--by-tag` handler
+    share: the `# repo` head, the progress head line and the section lines. The `--by-tag`
+    mode passes its per-value lines (folded from the one `status` call, B-gap-log-scale)
+    through, placed before the release line."""
+    return [
+        f"# {r['repo']}",
+        "",
+        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
+        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
+        "",
+        status_tasks_note(),
+        "",
+        *_queue_lines(r),
+        *_recorded_line(r),
+        *_warning_lines(r),
+        *by_tag_lines,
+        *(["", r["release"]] if r.get("release") else []),
+    ]
+
+
 def cmd_status(a, c: Ctx) -> int:
     """One answer to "what is the state of this project?".
 
@@ -205,19 +226,7 @@ def cmd_status(a, c: Ctx) -> int:
         return out.exit
     d = out.data
     r = d["_render"]
-    lines = [
-        f"# {r['repo']}",
-        "",
-        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
-        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
-        "",
-        status_tasks_note(),
-        "",
-        *_queue_lines(r),
-        *_recorded_line(r),
-        *_warning_lines(r),
-        *(["", r["release"]] if r.get("release") else []),
-    ]
+    lines = _status_body(d, r)
     print("\n".join(lines))
     return out.exit
 

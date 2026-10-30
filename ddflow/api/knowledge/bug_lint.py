@@ -30,9 +30,13 @@ def _lint_check(cfg, st, item: str) -> str:
 
 
 def _close_lint_exempt(
-    log, cfg, st, item, reason, tests, changelog_entry, *, takes_no, record
+    log, cfg, st, item, reason, tests, changelog_entry, *, takes_no, record, landing=None
 ) -> O.Outcome:
-    """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write."""
+    """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write.
+
+    `landing` (the resolved ``--landed`` ``(sha, parent)`` pair, or None) is allowed here:
+    the exemption waives the regression TEST, not the commit reference, so the record can
+    name the commit that holds the fix (Bab0c83b80c)."""
     if item not in st.bugs:
         return _unknown_bug("bug.fixed", item, st)
     check = _lint_check(cfg, st, item)
@@ -62,7 +66,7 @@ def _close_lint_exempt(
         "regression_verify": {"lint_check": check, "reason": reason.strip()},
         **({"changelog": changelog_entry} if changelog_entry else {}),
     }
-    record(log, item, payload, None)
+    dropped = record(log, item, payload, landing)
     return O.ok(
         "bug.fixed",
         id=item,
@@ -70,4 +74,5 @@ def _close_lint_exempt(
         regression_tests=[],
         regression_verified="exempt-lint",
         regression_verify=payload["regression_verify"],
+        **({"landed": landing[0], **dropped} if landing else {}),
     )

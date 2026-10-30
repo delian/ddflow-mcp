@@ -23,8 +23,7 @@ def _status_handler(a, c):
     `status` call (which folded the log once, B-gap-log-scale) followed by the per-value
     lines the API put in `_render['by_tag_lines']` — so the two never disagree (B37).
     """
-    from ...views.progress import status_tasks_note
-    from ..commands.reporting import _queue_lines, _recorded_line, _warning_lines, cmd_status
+    from ..commands.reporting import _status_body, cmd_status
 
     by = getattr(a, "by_tag", "") or ""
     if not by:
@@ -35,20 +34,7 @@ def _status_handler(a, c):
         return out.exit
     d = out.data
     r = d["_render"]
-    lines = [
-        f"# {r['repo']}",
-        "",
-        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
-        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
-        "",
-        status_tasks_note(),
-        "",
-        *_queue_lines(r),
-        *_recorded_line(r),
-        *_warning_lines(r),
-        *(r.get("by_tag_lines") or []),
-        *(["", r["release"]] if r.get("release") else []),
-    ]
+    lines = _status_body(d, r, by_tag_lines=tuple(r.get("by_tag_lines") or ()))
     print("\n".join(lines))
     return out.exit
 
