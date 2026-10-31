@@ -249,22 +249,35 @@ def _all_keys(tables: Mapping[str, Mapping[str, Any]], pol: Policy) -> list[str]
     return sorted(out)
 
 
+def _route_facts(cat: modelreg.Catalog, res: modelreg.Resolved, route: str | None) -> dict:
+    """Class facts, overlaid by the route's, overlaid by its served-model table."""
+    rrow = cat.route.get(route or "", {}) if route else {}
+    served = rrow.get("served") if isinstance(rrow.get("served"), dict) else {}
+    srv = served.get(res.model) or served.get(res.row) or {}
+    cname = rrow.get("class")
+    cls = cat.cls.get(cname, {}) if isinstance(cname, str) else {}
+    out: dict[str, Any] = {}
+    for tbl in (cls, rrow, srv if isinstance(srv, dict) else {}):  # weakest first
+        out.update({k: v for k, v in tbl.items() if facts.is_fact(v) and k != "endpoint"})
+    return out
+
+
+def _facts_of(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in row.items() if facts.is_fact(v)}
+
+
 def model_layer(cat: modelreg.Catalog, model: str, route: str | None = None) -> dict[str, Any]:
     """The `model` and `route` arguments of `effective` read from a loaded catalog:
     a model row's facts, its family row's, the route's (served table, route, class). A name
     that matches no row has family `unknown` and no facts, never a neighbour's."""
     res = modelreg.resolve(cat, model)
     row = cat.model.get(res.row, {}) if res.row else {}
-    rrow = cat.route.get(route or "", {}) if route else {}
-    served = rrow.get("served") if isinstance(rrow.get("served"), dict) else {}
-    srv = served.get(res.model) or served.get(res.row) or {}
-    cls = cat.cls.get(rrow.get("class", ""), {}) if isinstance(rrow.get("class"), str) else {}
-    rfacts: dict[str, Any] = {}
-    for tbl in (cls, rrow, srv if isinstance(srv, dict) else {}):  # weakest first
-        rfacts.update({k: v for k, v in tbl.items() if facts.is_fact(v) and k != "endpoint"})
-    mfacts = {k: v for k, v in row.items() if facts.is_fact(v)}
-    ffacts = {k: v for k, v in cat.family.get(res.family, {}).items() if facts.is_fact(v)}
     return {
-        "model": {"id": model, "family": res.family, "facts": mfacts, "family_facts": ffacts},
-        "route": {"id": route or "", "facts": rfacts},
+        "model": {
+            "id": model,
+            "family": res.family,
+            "facts": _facts_of(row),
+            "family_facts": _facts_of(cat.family.get(res.family, {})),
+        },
+        "route": {"id": route or "", "facts": _route_facts(cat, res, route)},
     }
