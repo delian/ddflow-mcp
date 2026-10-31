@@ -1103,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 465 knobs.
+cadences, and the rest of the 469 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5306,7 +5306,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 465): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 469): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5879,7 +5879,7 @@ declared once and persists — see
 
 ## Configuration
 
-465 knobs across 46 sections, every one documented in place and listed, with its default
+469 knobs across 46 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5946,8 +5946,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7f2bdc6f26fe -->
-<details><summary>All 465 knobs across 46 sections</summary>
+<!-- ddflow:begin README/knobs sha=367859f4a6ce -->
+<details><summary>All 469 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6194,6 +6194,10 @@ long default is left to `ddflow config --explain`.
 | `lanes.pass_env` | (long: see `ddflow config --explain`) |  |
 | `lanes.endpoint_slots` | `1` |  |
 | `lanes.slot_wait_s` | `600` |  |
+| `lanes.release_mode` | `"flag"` | `off` \| `flag` \| `auto` |
+| `lanes.release_max` | `4` |  |
+| `lanes.release_gates` | (long: see `ddflow config --explain`) |  |
+| `lanes.release_machine_gates` | `["standards"]` |  |
 | `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
 | `health.stall_s` | `3600` |  |
 | `health.runaway_s` | `14400` |  |
