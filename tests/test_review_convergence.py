@@ -37,7 +37,7 @@ def _setup(repo: Path, tmp_path: Path, *, first: str, later: str) -> Path:
         "in=$(cat)\n"
         f'printf "%s" "$in" > "{tmp_path / "prompt.txt"}"\n'
         f'n=0\n[ -f "{counter}" ] && n=$(cat "{counter}")\n'
-        'n=$((n+1))\n'
+        "n=$((n+1))\n"
         f'printf "%s" "$n" > "{counter}"\n'
         f'if [ "$n" -eq 1 ]; then printf "FINDING {first} x.py:1\\nsome problem\\n\\n'
         'STATUS: FINDINGS 1\\n"; '
