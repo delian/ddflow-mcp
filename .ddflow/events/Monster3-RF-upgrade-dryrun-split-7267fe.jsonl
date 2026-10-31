@@ -1,0 +1,2 @@
+{"agent":"Monster3-RF-upgrade-dryrun-split-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ea0c79250e742d4291320ce80","kind":"ddflow.seen","lamport":119552,"schema":1,"subject":"ddflow","ts":"2026-10-31T18:24:59.982259Z"}
+{"agent":"Monster3-RF-upgrade-dryrun-split-7267fe","data":{"gate":"rubber_duck"},"id":"efa003360938bc1ff8928040f","kind":"gate.started","lamport":119553,"schema":1,"subject":"RF-upgrade-dryrun-split","ts":"2026-10-31T18:25:00.015933Z"}

@@ -1,0 +1,2 @@
+{"agent":"Monster3-RF-api-setup-split-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ebc51c8b16ca862f90d8ff925","kind":"ddflow.seen","lamport":119470,"schema":1,"subject":"ddflow","ts":"2026-10-31T18:03:29.590812Z"}
+{"agent":"Monster3-RF-api-setup-split-7267fe","data":{"gate":"rubber_duck"},"id":"ee932800c6e16e6daa5e3553e","kind":"gate.started","lamport":119471,"schema":1,"subject":"RF-api-setup-split","ts":"2026-10-31T18:03:29.619408Z"}
