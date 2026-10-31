@@ -147,7 +147,7 @@ def approvals_log(
     repo: Path, *, verb: str = "", agent_filter: str = "", since: str = "", agent: str = ""
 ) -> O.Outcome:
     """The audit timeline of command approvals and what looks wrong (RA-audit)."""
-    _log, cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     floor = 0.0
     if since:
         try:
@@ -155,7 +155,7 @@ def approvals_log(
         except (ValueError, TypeError):
             return O.failed("approvals.log", f"--since {since!r} is not an ISO date or timestamp")
     rows = AU.rows(st, cfg, verb=verb, agent=agent_filter, since=floor)
-    warnings = AU.findings(st, cfg)
+    warnings = AU.findings(st, cfg, events=log.read_all())
     text = "\n".join(AU.line(r) for r in rows) or "no approval requests"
     if warnings:
         text += "\n\nCheck:\n  " + "\n  ".join(warnings)

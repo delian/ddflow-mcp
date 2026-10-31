@@ -359,3 +359,17 @@ def test_pipx_home_relocation_is_recognised(monkeypatch) -> None:
     monkeypatch.setenv("PIPX_HOME", "/opt/py-tools")
     kw = {"container": False, "writable": True, "base_prefix": "/usr"}
     assert II.install_method(_info(), prefix="/opt/py-tools/venvs/ddflow-mcp", **kw) == "pipx"
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _a_person_at_a_terminal(monkeypatch):
+    """These tests act as the operator: an agent harness's own markers (the shell the suite runs
+    in may carry one) would make every call an agent's (`--force`, `--local`, `--self` then need
+    a person's approval, RA-consume-sites-4)."""
+    from ddflow.services.identity import HARNESS_MARKERS
+
+    for var in ("DDFLOW_AGENT", *HARNESS_MARKERS):
+        monkeypatch.delenv(var, raising=False)

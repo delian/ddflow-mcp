@@ -47,7 +47,7 @@ class ApprovalsConfig:
     )
     policy: list[str] = knob(
         factory=list,
-        doc="Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4). Each id names a rule registered in code (`ddflow approvals log` lists what fired): `skip_after_unavailable` (an agent may skip a failed review gate whose reviewer was recorded unavailable `policy_unavailable_runs` times), `accept_baseline_red` (an agent may accept a partial that ddflow measured baseline-red). A rule approves only its own verb, at most `policy_max_uses` times per item and target, and every use is recorded as an approval answered by `policy:<id>`, never by a person. An agent surface cannot write this knob.",
+        doc="Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4). Each id names a rule registered in code (`ddflow approvals log` lists what fired): `skip_after_unavailable` (an agent may skip a failed review gate whose reviewer was recorded unavailable `policy_unavailable_runs` times), `accept_baseline_red` (an agent may accept a partial that ddflow measured baseline-red). A rule approves only its own verb, at most `policy_max_uses` times per item and target, and every use is recorded as an approval answered by `policy:<id>`, never by a person. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     policy_max_uses: int = knob(
         1,
@@ -64,4 +64,8 @@ class ApprovalsConfig:
     forbid_chat_for_t3: bool = knob(
         False,
         doc="Forbid tier-3 acts over typed chat whatever `accept_chat_for_t3` says (default false). Tighten-only: true in any layer (a project or company file, the machine file, the environment) wins over the opt-in; nothing a chat answer says can undo it.",
+    )
+    require_approval: list[str] = knob(
+        factory=list,
+        doc="Verbs whose RELAYED consent (an agent's `--yes --reason`, 'the operator said so in chat') is no longer accepted (default none; D-RA-Q2). `upgrade.self` and `plan.confirm` may be listed: an agent then needs `--approval ID`, a person's recorded approval. Until a verb is listed, a relayed use still works and every one is warned about by `ddflow approvals log` and `doctor`. `skew.override` cannot be listed: the version guard refuses the approval engine's own writes, so it has no approval route. A person at a terminal is unaffected. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )

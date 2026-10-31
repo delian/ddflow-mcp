@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core import outcome as O
+from ...core.records import SIGHTINGS_THAT_CONFIRM
 from .._base import _load
 from ..viewers import view_list
 
@@ -115,5 +116,17 @@ def _row_edges(row: dict, st) -> None:
     b = st.bugs.get(row.get("id") or "")
     row["severity"] = b.severity if b is not None else ""
     row["fix_task"] = b.fix_task if b is not None else ""
+    # An open bug whose repro RAN and did not fail ('no') is unconfirmed until a second
+    # sighting or a confirming run (DX-bug-repro-verify): a run that failed, or a second
+    # sighting -- so far the filing alone ran clean (or no run was had) -- reads "open"
+    # again. Only a demonstrated non-failing 'no' is unconfirmed; a '' (no repro command
+    # ran) is no evidence either way and stays "open", the SAME predicate as bug_items.
+    if b is not None and b.open and b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM:
+        row["state"] = "unconfirmed"
+        row["reproduced"] = b.reproduced or ""
+    elif b is not None:
+        row["reproduced"] = b.reproduced
+    else:
+        row["reproduced"] = ""
     fix = st.items.get(row["fix_task"]) if row["fix_task"] else None
     row["needs"] = list(fix.needs) if fix is not None else []

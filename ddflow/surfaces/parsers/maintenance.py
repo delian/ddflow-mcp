@@ -136,6 +136,13 @@ def register(s: argparse._SubParsersAction) -> None:
         default=False,
         help="with --self: the operator consents to installing a new ddflow (needs --reason)",
     )
+    up.add_argument(
+        "--approval",
+        default="",
+        metavar="ID",
+        help="with --self, an agent: the id of a person's approval of this install, instead of "
+        "relaying their consent as --yes --reason (a refusal files the request and names it)",
+    )
     up.set_defaults(fn=cmd_upgrade)
 
     add_commands(

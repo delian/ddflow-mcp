@@ -173,6 +173,7 @@ COMMANDS: tuple[Command, ...] = (
             yes=bool(a.get("yes")),
             reason=a.get("reason") or "",
             agent=agent,
+            approval=a.get("approval") or "",
         ),
         payload=("plan", "released", "waiting"),
         render=_confirm_text,
@@ -181,6 +182,10 @@ COMMANDS: tuple[Command, ...] = (
             Param("plan_id", help="The plan's label.", positional=True),
             Param("yes", type="boolean", help="The operator's consent."),
             Param("reason", help="Why the operator accepts the plan."),
+            Param(
+                "approval",
+                help="An agent: the id of a person's approval of this plan's release, instead of relaying their consent as --yes --reason (a refusal files the request and names it).",
+            ),
         ),
     ),
     Command(

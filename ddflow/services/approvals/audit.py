@@ -15,6 +15,7 @@ from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ..ask import engine as E
 from . import harness as H
+from . import relayed as RL
 
 
 def _commands(state) -> list[dict[str, Any]]:
@@ -81,8 +82,10 @@ def _typed_t3_uses(r: dict[str, Any]) -> list[str]:
     ]
 
 
-def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
-    """What an operator should be told, one line each."""
+def findings(state, cfg: Config, *, now: float | None = None, events=()) -> list[str]:
+    """What an operator should be told, one line each. ``events``: the log's events, so a relayed
+    consent (D-RA-Q2: `upgrade --self`, `plan confirm`, the skew override) is warned about once
+    per use; without them only the skew overrides, which the fold holds, are."""
     now = time.time() if now is None else now
     out: list[str] = []
     for r in _commands(state):
@@ -113,6 +116,7 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
         f"{n} approval(s) granted by standing rule {who} (not a person)"
         for who, n in sorted(by_rule.items())
     ]
+    out.extend(RL.uses(events, state))
     out.extend(standing_notes(cfg, state))
     return out
 
