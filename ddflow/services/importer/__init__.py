@@ -30,6 +30,8 @@ Three rules hold this together:
    import you have to get right first time.
 """
 
+from ...core.slug import slug as _slug  # noqa: F401
+from ...core.slug import slug_words as _slug_words  # noqa: F401
 from . import _apply, _phases, _plan, _scan, _tables, _titles, _todo
 
 # `services.importer` was one module split into submodules. Re-export its flat namespace
