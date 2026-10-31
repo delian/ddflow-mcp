@@ -1,0 +1,2 @@
+{"agent":"Monster3-RF-core-records-split-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e641d1462f27dde718c51ef2e","kind":"ddflow.seen","lamport":120261,"schema":1,"subject":"ddflow","ts":"2026-10-31T20:53:41.621667Z"}
+{"agent":"Monster3-RF-core-records-split-7267fe","data":{"gate":"critic"},"id":"e4d22f55a59ea01d2a91759b6","kind":"gate.started","lamport":120262,"schema":1,"subject":"RF-core-records-split","ts":"2026-10-31T20:53:41.651546Z"}
