@@ -45,6 +45,7 @@
     "by": ["str"],
     "digest": ["str"],
     "effect": ["str"],
+    "grade": ["str"],
     "id": ["str"],
     "verb": ["str"]
    },
