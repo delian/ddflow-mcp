@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.redact_builtin_shapes"
+new = "true"
+why = "Built-in provider credential shapes (Google/Gemini, Anthropic, OpenAI, xAI, Groq, GitHub, AWS, Slack, Stripe, Hugging Face) are redacted from every logged text (Bsecbug-redact-google-api-key)."
+impact = "additive"

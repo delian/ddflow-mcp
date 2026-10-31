@@ -21,6 +21,7 @@ from ..core.redact import (
     private_addresses,
     redact_text,
 )
+from ..core.secret_shapes import session_secret_patterns
 from ..infra import hostinfo as H
 
 __all__ = [
@@ -45,7 +46,7 @@ def names_for(cfg: Config | None) -> list[str]:
 def session_patterns(cfg: Config | None) -> list[str]:
     """The session redaction patterns of ``cfg``, or the built-in defaults."""
     session = cfg.session if cfg is not None else SessionConfig()
-    return [*session.redact_patterns, *session.redact_extra]
+    return session_secret_patterns(session, cfg.log.redact_builtin_shapes if cfg else True)
 
 
 def _cwd_repo_root() -> str:

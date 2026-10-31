@@ -35,6 +35,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from .digest import MARKER
+from .redact_errors import PatternError
 
 #: The tool's own names are public, and a report about ddflow must still say "ddflow".
 PUBLIC_NAMES = frozenset({"ddflow", "ddflow-mcp", "ddflow_mcp"})
@@ -187,7 +188,7 @@ def _secrets(p: _Pass, patterns: Iterable[str], style: str) -> None:
         try:
             compiled = re.compile(pat)
         except re.error as exc:
-            raise ValueError(
+            raise PatternError(
                 f"redaction pattern {pat!r} does not compile: {exc}.\n"
                 f"If you set [session].redact_patterns from an environment variable, a "
                 f"regex containing a comma (e.g. the quantifier '{{16,}}') is split on "
