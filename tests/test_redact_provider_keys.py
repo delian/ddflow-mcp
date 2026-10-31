@@ -173,7 +173,13 @@ def test_no_shape_is_quadratic_on_hostile_input():
     import time
 
     def worst(n):
-        pieces = ["token=" * n, "a" * (20 * n), "AI" + "za" + "-" * (10 * n), "AQ." * n, "AQ." + "a" * (10 * n)]
+        pieces = [
+            "token=" * n,
+            "a" * (20 * n),
+            "AI" + "za" + "-" * (10 * n),
+            "AQ." * n,
+            "AQ." + "a" * (10 * n),
+        ]
         for prefix in ("sk-", "sk-proj-", "sk_live_", "AKIA", "ghp_", "xox" + "b-", "hf_", "xai-"):
             pieces.append(prefix + "a" * (10 * n))
         text = " ".join(pieces)
@@ -403,6 +409,9 @@ def test_reviewers_list_never_prints_a_key_value(monkeypatch, tmp_path):
     for var in ("KIMI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.setenv(var, "AQ" + "." + sentinel)
     r = subprocess.run(
-        [sys.executable, "-m", "ddflow", "reviewers", "list"], cwd=tmp_path, capture_output=True, text=True
+        [sys.executable, "-m", "ddflow", "reviewers", "list"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
     )
     assert sentinel not in r.stdout + r.stderr
