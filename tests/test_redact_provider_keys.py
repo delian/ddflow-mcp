@@ -354,3 +354,7 @@ def test_openai_legacy_keys_glued_to_text_are_caught_and_numeric_ids_are_not():
 def test_an_aws_id_with_trailing_or_numeric_neighbours_is_caught():
     assert shape_hit("123" + KEYS["aws-akia"]) == "aws-access-key-id"
     assert shape_hit(KEYS["aws-akia"] + "A") == "aws-access-key-id"
+
+
+def test_awss_documented_example_key_is_not_a_hit():
+    assert shape_hit("AKIA" + "IOSFODNN7EXAMPLE") == ""  # the id .gitleaks.toml allowlists
