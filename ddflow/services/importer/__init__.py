@@ -30,6 +30,7 @@ Three rules hold this together:
    import you have to get right first time.
 """
 
+from ...core.globs import match as glob_match
 from ...core.slug import slug as _slug  # noqa: F401
 from ...core.slug import slug_words as _slug_words  # noqa: F401
 from . import _apply, _phases, _plan, _scan, _tables, _titles, _todo
@@ -69,6 +70,7 @@ __all__ = [
     "VerifyReport",
     "all_source_globs",
     "apply_import",
+    "glob_match",
     "plan_import",
     "scan_branches",
     "scan_decisions",
