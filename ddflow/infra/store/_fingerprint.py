@@ -53,12 +53,17 @@ def code_fingerprint() -> str:
     # `ddflow/infra/store/` package.
     root = here.parent.parent.parent
     core = root / "core"
-    sources = sorted([*core.rglob("*.py"), *here.parent.rglob("*.py")])
+    # The store package files are always present in an install (they are the module); it is
+    # the CORE source tree whose absence means "no source to read", so the fallback counts
+    # core files only — counting the seven package files too would make the check always
+    # false in a zipped/bytecode-only install and the release could no longer stand in.
+    core_sources = sorted(core.rglob("*.py"))
+    sources = sorted([*core_sources, *here.parent.rglob("*.py")])
     for f in sources:
         h.update(f.relative_to(root).as_posix().encode())
         with contextlib.suppress(OSError):
             h.update(f.read_bytes())
-    if len(sources) < MIN_FINGERPRINT_SOURCES:
+    if len(core_sources) < MIN_FINGERPRINT_SOURCES:
         # No source tree to read (a zipped or bytecode-only install): the release stands in
         # for the code rather than the fingerprint silently becoming a constant.
         h.update(__version__.encode())
