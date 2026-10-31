@@ -201,9 +201,10 @@ def _resolve_key(
 
 def effective(
     harness: Mapping[str, Any],
-    model: Mapping[str, Any],
-    route: Mapping[str, Any] | None = None,
+    model: Mapping[str, Any] | str,
+    route: Mapping[str, Any] | str | None = None,
     *,
+    catalog: modelreg.Catalog | None = None,
     keys: list[str] | tuple[str, ...] = (),
     pair: Mapping[str, Any] | None = None,
     operator: Mapping[str, Any] | None = None,
@@ -216,8 +217,13 @@ def effective(
     into their base key) resolved with its winning layer.
 
     `harness`, `model`, `route` are `{id, facts: {key: fact}}`; a model also carries
-    `family` (a catalog family or `unknown`) and `family_facts`. `pair`, `operator` and
-    `observed` are plain `key -> fact` tables (see `match_pair`)."""
+    `family` (a catalog family or `unknown`) and `family_facts`. A model (and route) may be
+    a name with `catalog=`. `pair`, `operator` and `observed` are plain `key -> fact` tables (see `match_pair`)."""
+    if isinstance(model, str):  # names, read from the catalog (`model_layer`)
+        got = model_layer(
+            catalog or modelreg.Catalog(), model, route if isinstance(route, str) else None
+        )
+        model, route = got["model"], got["route"]
     pol = policy or Policy()
     tables = _layer_tables(harness, model, route, pair, operator, observed)
     family = str(model.get("family") or UNKNOWN_FAMILY)
