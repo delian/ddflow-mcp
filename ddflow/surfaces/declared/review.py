@@ -216,6 +216,13 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="review the item's WHOLE diff even when [review].delta_default would make it a delta: a full round, counted against [review].max_rounds",
             ),
             Param(
+                "detach",
+                type="boolean",
+                help="Run the review in its own session, streamed to a log it names (a harness time limit then kills only the launcher).",
+                cli_help="review in its own session and stream to a durable log instead of this command: a harness that cuts the foreground command at its time limit kills only the launcher, and the review outlives it",
+                cli_only=True,
+            ),
+            Param(
                 "exclude",
                 help="Comma-separated globs left out of THIS review's diff instead of [review].exclude_globs (and the item's review-exclude:<glob> tags); `none` leaves out no glob-matched file.",
                 cli_help="globs left out of this review instead of [review].exclude_globs and the item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing out)",
