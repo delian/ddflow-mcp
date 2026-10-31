@@ -266,9 +266,17 @@ def test_select_with_no_extra_dirs_never_searches_cwd(tmp_path, monkeypatch):
     d, _ = fake_bin(tmp_path)
     monkeypatch.chdir(d)
     monkeypatch.setenv("PATH", "/nonexistent")
-    assert isinstance(OC.select(extra_dirs=()), ld.Result)
+    assert isinstance(OC.select(extra_dirs=(), environ={}), ld.Result)
 
 
 def test_instructions_without_an_item_do_not_cite_a_lease(tmp_path):
     text = OC.instructions("lane-7", "", tmp_path)
     assert "lease allows" not in text and "claim one" in text and "assess ddflow" in text
+
+
+def test_override_expands_tilde(tmp_path, monkeypatch):
+    d, _ = fake_bin(tmp_path, "opencode", ver="1.19.0")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    seen = lambda n, path=None: n if n == str(d / "opencode") else None  # noqa: E731
+    b = OC.select(which=seen, environ={"DDFLOW_OPENCODE_BIN": "~/bin/opencode"})
+    assert b.path == str(d / "opencode")

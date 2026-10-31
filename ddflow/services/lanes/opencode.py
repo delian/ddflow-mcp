@@ -120,7 +120,7 @@ def select(
     environ = os.environ if environ is None else environ
     dirs = os.pathsep.join(str(Path(d).expanduser()) for d in extra_dirs)
     for name in binaries:
-        override = environ.get(ENV_PATTERN.format(name.upper()), "")
+        override = os.path.expanduser(environ.get(ENV_PATTERN.format(name.upper()), ""))  # a path
         found = (
             (which(override) if override else None)
             or which(name)
