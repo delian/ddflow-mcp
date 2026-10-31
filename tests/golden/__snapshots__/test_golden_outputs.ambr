@@ -1909,6 +1909,32 @@
           Seconds a launched lane waits for a free endpoint or GPU slot before giving
           up with a report (it holds no lease while it waits and starts no daemon). 0
           tries each slot once.
+      lanes.release_mode = 'flag'   [default]
+          Release at enqueue (`ddflow queue add ITEM --release`): the agent hands the
+          item to the merge queue, gives up its lease and may claim the next item; the
+          integrator runs the remaining machine gates and merges. 'off' refuses every
+          release, 'flag' releases only when `--release` is given, 'auto' releases
+          every item that is eligible when it is enqueued. An item is eligible only
+          when each judgement gate of `release_gates` is recorded passed on the
+          current tree (or skipped with its reason). An unrecognised value in a config
+          file is warned about, reported by `doctor` and falls back to 'off', the
+          strictest (no item is released: the agent keeps its lease until the item is
+          merged); `config --set`, `ddflow_configure` and the environment refuse it,
+          and so does loading ddflow's own source tree, where the file and the code
+          are one commit.
+      lanes.release_max = 4   [default]
+          How many released items may wait for the integrator at once. The count and
+          the new place are taken under one lock, so two releases never both take the
+          last slot; a release over the cap is refused with the count (the agent keeps
+          its lease and may enqueue without `--release`).
+      lanes.release_gates = ['rubber_duck', 'critic', 'bug_hunt', 'dedupe']   [default]
+          The judgement gates that must already be recorded passed (on the tree as it
+          is now) or skipped before an item may be released at enqueue. A gate not in
+          the item's pipeline is not asked.
+      lanes.release_machine_gates = ['standards']   [default]
+          Gates, besides ci and (by `[merge_queue].run_unit_tests`) unit_tests, that
+          the integrator runs itself for a released item when they carry no passed
+          outcome. Every other gate must carry an outcome before release.
       health.mode = 'propose'   [default]
           What the watchdog does about a lane it finds unhealthy: 'off' inspects
           nothing in the periodic pass; 'propose' (default) reports each finding with

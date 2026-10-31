@@ -65,6 +65,7 @@ from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
+from ..services.swarm import lanehooks_check as CK
 from ..views import human
 from ..views import human as _human
 from ._base import _load
@@ -1110,9 +1111,19 @@ def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -
 
 
 def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
-    """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
-    else (another tool, no command, any problem) is allowed: a guard that fails closed on its
-    own bug would stop every command the agent runs."""
+    """Refuse a file write outside the agent's lease globs, or a Bash command that breaks
+    `[hooks].forbidden_commands`, before it runs. Anything else (another tool, no path, no
+    command, any problem) is allowed: a guard that fails closed on its own bug would stop
+    every command the agent runs."""
+    # The lease-glob check for a tool call that names a file path (reuses the lane check,
+    # SW-lane-hooks): a write outside the globs is refused before it happens, and an agent
+    # holding no live lease is stopped. Paths are judged against the repo root, where `_mine`
+    # roots the lease globs.
+    paths = CK.paths_of(p.raw)
+    if paths:
+        code, denial = CK.verdict(repo, agent, paths, Path(p.cwd or Path.cwd()), root=repo)
+        if code == CK.REFUSE:
+            return _HookResult(result="denied", deny=denial, note=denial)
     tool_input = p.raw.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):
