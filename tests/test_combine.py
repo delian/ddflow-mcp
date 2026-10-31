@@ -115,8 +115,15 @@ def test_mixed_name_and_mapping():
         combine.effective(H(), "m", keys=["window"])
 
 
-def test_cap_applies_to_lcd_value():
+def test_cap_applies_to_lcd_value_and_keeps_the_unknown_name():
     pol = combine.Policy(lcd={"max_tokens": 4000})
     h = H(**{"cap.max_tokens": F(1000, "verified")})
-    r = combine.effective(h, M(), keys=["max_tokens"], policy=pol)
-    assert r["max_tokens"] == 1000 and r.fields["max_tokens"].unknown
+    r = combine.effective(h, M("unknown", "mystery"), keys=["max_tokens"], policy=pol)
+    f = r.fields["max_tokens"]
+    assert f.value == 1000 and f.unknown and "mystery" in f.reason
+
+
+def test_cap_without_a_value_stays_unknown():
+    r = combine.effective(H(**{"cap.window": F(1000)}), M("unknown", "x"), keys=["window"])
+    f = r.fields["window"]
+    assert f.value is None and f.unknown and "capped at 1000" in f.reason

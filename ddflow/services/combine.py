@@ -187,10 +187,19 @@ def _resolve_key(
         if isinstance(v, (int, float)) and not isinstance(v, bool)
     ]
     num = isinstance(got.value, (int, float)) and not isinstance(got.value, bool)
-    if caps and (num or got.value is None):  # a cap bounds an unknown number too
+    if caps and (num or got.value is None):
         layer, low, node = min(caps, key=lambda c: c[1])
-        if got.value is None or low < got.value:
-            reason = f"capped to {low} by {layer}; {got.source} said {got.value}"
+        if got.value is None:  # an upper bound is not a value: stay unknown, say the bound
+            return Field(
+                key,
+                None,
+                got.source,
+                got.unknown,
+                f"{got.reason}; capped at {low} by {layer}",
+                got.fact,
+            )
+        if low < got.value:
+            reason = f"capped to {low} by {layer}; {got.source} said {got.value} ({got.reason})"
             return Field(key, low, "cap", got.unknown, reason, node)
     return got
 
