@@ -29,9 +29,9 @@ _SUBMODULE_OF = {
     "REVIEW_GATES": "models",
     "_epoch": "models",
     "epoch": "models",
-    # work
-    "_absorb": "work",
-    "work": "work",
+    # tracking
+    "_absorb": "tracking",
+    "work": "tracking",
     # loops
     "_duplicate_work": "loops",
     "_gate_flapping": "loops",

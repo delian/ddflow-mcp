@@ -11,7 +11,7 @@ from ..graph import closure, find_cycles
 from ..model import ABANDONED, DONE, State
 from ..schedule import inherited_deps
 from .models import BOOKKEEPING_KINDS, PROGRESS_KINDS, REVIEW_GATES, ItemWork, LoopFinding
-from .work import work
+from .tracking import work
 
 
 def _is_removed(state: State, item_id: str) -> bool:
