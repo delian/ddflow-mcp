@@ -109,33 +109,37 @@ def approve(
     return approval.grant(log, t.subject, t.digest(), note=note, requested_agent=requested_agent)
 
 
+def _bad_type(raw: dict[str, Any]) -> str:
+    """The first field of ``raw`` that has the wrong type or a non-finite number, or ""."""
+    for k in _TEXT + ("min_hooks",):
+        if k in raw and not isinstance(raw[k], str):
+            return f"{k} must be text"
+    for k in _NUM:
+        v = raw.get(k)
+        if v is not None and (
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+        ):
+            return f"{k} must be a finite number"
+    if "local" in raw and not isinstance(raw["local"], bool):
+        return "local must be true or false"
+    kinds = raw.get("kinds", [])
+    if not isinstance(kinds, list) or not all(isinstance(x, str) for x in kinds):
+        return "kinds must be a list of text"
+    return ""
+
+
 def _row(name: str, raw: dict[str, Any]) -> tuple[Template | None, list[str]]:
     notes: list[str] = []
     if "approved" in raw:
         notes.append(f"{name}: the `approved` key is ignored; approval is a person's event")
     known = set(Template.__dataclass_fields__)
-    unknown = sorted(set(raw) - known - {"approved"})
-    if unknown:
+    if unknown := sorted(set(raw) - known - {"approved"}):
         return None, [*notes, f"{name}: unknown key(s) {unknown}"]
-    kw = {k: raw[k] for k in raw if k in known and k != "name"}
-    for k in _TEXT:
-        if k in kw and not isinstance(kw[k], str):
-            return None, [*notes, f"{name}: {k} must be text"]
-    for k in _NUM:
-        v = kw.get(k)
-        if v is not None and (
-            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
-        ):
-            return None, [*notes, f"{name}: {k} must be a finite number"]
-    if "local" in kw and not isinstance(kw["local"], bool):
-        return None, [*notes, f"{name}: local must be true or false"]
+    if bad := _bad_type(raw):
+        return None, [*notes, f"{name}: {bad}"]
+    kw = {k: v for k, v in raw.items() if k in known and k != "name"}
     if "kinds" in kw:
-        kinds = kw["kinds"]
-        if not isinstance(kinds, list) or not all(isinstance(x, str) for x in kinds):
-            return None, [*notes, f"{name}: kinds must be a list of text"]
-        kw["kinds"] = tuple(kinds)
-    if "min_hooks" in kw and not isinstance(kw["min_hooks"], str):
-        return None, [*notes, f"{name}: min_hooks must be text"]
+        kw["kinds"] = tuple(kw["kinds"])
     t = Template(name=name, **kw)
     if bad := problems(t):
         return None, [*notes, *(f"{name}: {b}" for b in bad)]
