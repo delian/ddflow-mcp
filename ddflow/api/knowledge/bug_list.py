@@ -121,12 +121,7 @@ def _row_edges(row: dict, st) -> None:
     # sighting -- so far the filing alone ran clean (or no run was had) -- reads "open"
     # again. Only a demonstrated non-failing 'no' is unconfirmed; a '' (no repro command
     # ran) is no evidence either way and stays "open", the SAME predicate as bug_items.
-    if (
-        b is not None
-        and b.open
-        and b.reproduced == "no"
-        and b.sightings < SIGHTINGS_THAT_CONFIRM
-    ):
+    if b is not None and b.open and b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM:
         row["state"] = "unconfirmed"
         row["reproduced"] = b.reproduced or ""
     elif b is not None:
