@@ -196,9 +196,9 @@ WRITERS_EXEMPT: dict[str, str] = {
     "environment is enforced instead",
     "services/items.py:add_task": "the one task writer: every caller passes the settled check "
     "or the reason there is none, and this scan follows the calls to it",
-    "services/importer.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
+    "services/importer/_apply.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
     "not withhold one (`_dedupe_found` checks the knowledge kinds)",
-    "services/importer.py:apply_import": "the plan was de-duplicated against the queue with "
+    "services/importer/_apply.py:apply_import": "the plan was de-duplicated against the queue with "
     "the same engine and [dedupe] thresholds (`_dedupe_found`) before apply",
     "services/importer_harness.py:apply": "each fact is checked with similar.assess / "
     "screen before it is written",
@@ -221,7 +221,7 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     ("rule", "edit"): "own check: a new title or content runs api._dedupe.check_add through "
     "api.rules._cross_kind (D-rule-dedupe-everywhere)",
     ("split",): WRITERS_EXEMPT["api/items.py:split"],
-    ("import",): WRITERS_EXEMPT["services/importer.py:apply_import"],
+    ("import",): WRITERS_EXEMPT["services/importer/_apply.py:apply_import"],
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
     ("grant", "add"): "a person's recorded permission on one item.gate (refused under an agent "
     "identity), not authored prose that could repeat: the same words are a second grant",
