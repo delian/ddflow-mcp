@@ -81,15 +81,13 @@ def test_probe_with_consent_runs_version_only(tmp_path, monkeypatch):
         lambda argvs, **k: (
             seen.extend(argvs)
             or [
-                {"argv": a, "status": "verified", "exit_code": 0, "output": "secret 10.0.0.5"}
+                {"argv": a, "status": "verified", "exit_code": 0, "output": "x 10.0.0.5"}
                 for a in argvs
             ]
         ),
     )
-    out = H.harness_view(tmp_path, what="probe", id="claude", run=True)
-    if out.exit == O.NOTHING:  # descriptor names no binary: nothing is guessed
-        assert not seen
-        return
+    out = H.harness_view(tmp_path, what="probe", id="grok", run=True)  # grok names a binary
+    assert out.ok and seen
     assert all(a[1:] == ["--version"] for a in seen)
     assert "output" not in str(out.data["facts"])
 
