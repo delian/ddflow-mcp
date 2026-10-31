@@ -66,7 +66,7 @@ def in_process(verbs: list[str]) -> P.Captured:
         try:
             parser = _parser[0]
             if parser is None:
-                from ..surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
+                from ddflow.surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
 
                 parser = _parser[0] = build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
