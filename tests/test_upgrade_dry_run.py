@@ -820,7 +820,9 @@ def test_a_shard_that_never_held_still_is_named(
     for name in ("a.jsonl", "b.jsonl"):
         (events / name).write_bytes(b"{}\n")
 
-    monkeypatch.setattr(_DR_READ, "read_stable", lambda p, attempts=3: (b"{}\n", p.name != "a.jsonl"))
+    monkeypatch.setattr(
+        _DR_READ, "read_stable", lambda p, attempts=3: (b"{}\n", p.name != "a.jsonl")
+    )
 
     data, unstable = DR.shard_bytes_checked(tmp_path)
 
