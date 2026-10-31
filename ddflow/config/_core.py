@@ -58,8 +58,10 @@ from ..config_sections.upgrade import UpgradeConfig
 from ..config_sections.waves import WavesConfig
 from ..config_sections.worktree import WorktreeConfig
 from ._coerce import _coerce_layer_knob
+from ._compat import _migrate_renamed
 from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
 from ._errors import InvalidValue
+from ._tree import _is_code_tree
 from ._warn import _warn_unknown
 
 
@@ -204,8 +206,6 @@ class Config:
     # -- loading ------------------------------------------------------------------
     @classmethod
     def load(cls, root: Path | None = None, *, env: dict[str, str] | None = None) -> Config:
-        from . import _is_code_tree
-
         cfg = cls()
         cfg.root = Path(root) if root is not None else None
         env = os.environ if env is None else env
@@ -298,8 +298,6 @@ class Config:
         lenient: bool | None = None,
         written: frozenset[str] | None = None,
     ) -> None:
-        from . import _migrate_renamed
-
         # A key a config FILE carries that this code does not know is recorded and
         # skipped, never fatal. Several checkouts of one repository run different
         # versions of ddflow -- a worktree whose branch predates a knob runs its own,

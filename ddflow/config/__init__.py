@@ -14,10 +14,6 @@ its docstring, which is the discoverability contract this module exists to keep.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from typing import Any
-
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
 from ..config_sections._compat import is_source_tree, upgrade_advice  # noqa: F401
 from ..config_sections._docs import DECLARED, KNOB_DOCS, RENAMED, declared_tables  # noqa: F401
@@ -72,6 +68,7 @@ from ._coerce import (  # noqa: F401
     _outer_is_dict,
     csv_list,
 )
+from ._compat import _WARNED_RENAMED, _migrate_renamed  # noqa: F401
 
 # The loader machinery, split across submodules so each stays under 30k chars; every
 # name is re-exported from here so call sites keep `from ddflow.config import X`.
@@ -141,58 +138,5 @@ from ._decls import (  # noqa: F401
     strictest,
 )
 from ._errors import InvalidValue  # noqa: F401
-from ._tree import _CODE_TREE
+from ._tree import _CODE_TREE, _is_code_tree  # noqa: F401
 from ._warn import _WARNED, _warn_unknown  # noqa: F401
-
-
-def _is_code_tree(root: Path) -> bool:
-    """Is `root` the very tree this code runs from -- not merely a parent of it?
-
-    Equality, not a prefix: a harness tree NESTED under the primary
-    (`.claude/worktrees/x`) has the primary as a prefix, and it is exactly the checkout
-    whose older code meets the primary's newer config (bug B9cb7dd1c3b).
-    """
-    try:
-        return root.resolve() == _CODE_TREE
-    except OSError:
-        return False
-
-
-#: Old keys already warned about in this process (`_migrate_renamed`).
-_WARNED_RENAMED: set[str] = set()
-
-
-def _migrate_renamed(data: dict[str, Any], source: str) -> dict[str, Any]:
-    """``data`` with every renamed knob (`RENAMED`, D-compat) under its CURRENT key.
-
-    The old key is still read, with one warning on stderr per process; when both are set the
-    new key wins, as the more recent spelling. ``source="check"`` (a write being validated)
-    stays quiet: the write path migrates the file itself (`services/configwrite`).
-    """
-    hits = [
-        old
-        for old in RENAMED
-        if isinstance(sec := data.get(old.partition(".")[0]), dict) and old.partition(".")[2] in sec
-    ]
-    if not hits:
-        return data
-    out = {k: dict(v) if isinstance(v, dict) else v for k, v in data.items()}
-    for old in hits:
-        new, since, removed_in = RENAMED[old]
-        osec, _, oknob = old.partition(".")
-        nsec, _, nknob = new.partition(".")
-        value = out[osec].pop(oknob)
-        if not out[osec] and osec not in Config.__dataclass_fields__:
-            del out[osec]  # the old section held nothing else: do not call it unknown
-        target = out.setdefault(nsec, {})
-        if isinstance(target, dict):
-            target.setdefault(nknob, value)
-        if source != "check" and old not in _WARNED_RENAMED:
-            _WARNED_RENAMED.add(old)
-            print(
-                f"ddflow: warning: config key '{old}' is deprecated since {since}; use "
-                f"'{new}' (the old key is read until {removed_in}; the next config write "
-                "moves it).",
-                file=sys.stderr,
-            )
-    return out
