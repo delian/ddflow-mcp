@@ -62,8 +62,8 @@ class Request:
     home: Path
     state: Any  #: folded event log (approvals, item, decisions)
     cat: modelreg.Catalog
+    world: score.World  #: the scheduler's snapshot of live lanes: the caps are judged on it
     cfg: Config = field(default_factory=Config)
-    world: score.World = field(default_factory=score.World)
     est_in: int = 0
     est_out: int = 0
     handoff: str = ""
@@ -101,11 +101,11 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         kinds=t.kinds,
     )
     out = score.refusals(sc_item, lane, req.world, w)
-    cost = score.est_cost(sc_item, lane)
-    if cost is None:
-        if req.est_in or req.est_out:
-            out.append("cost cannot be estimated: the template has no verified price")
-    elif cost > t.budget_usd and not t.local:
+    if not t.local and (t.price_in is None or t.price_out is None):
+        out.append("the budget cannot be enforced: the template has no verified price")
+    elif (
+        (cost := score.est_cost(sc_item, lane)) is not None and cost > t.budget_usd and not t.local
+    ):
         out.append(f"estimated cost {cost:.4f} USD is above the template budget {t.budget_usd}")
     return out
 

@@ -121,6 +121,7 @@ def request(tmp_path, tree, t=None, st=None, enabled=True, **kw):
     args = {"template": t, "item": "X-1", "agent": "lane-7", "repo": repo, "worktree": wt,
             "home": home, "state": st, "cat": cat(tmp_path), "cfg": cfg, "binary": b}  # fmt: skip
     args.update(kw)
+    args.setdefault("world", score.World())
     return LN.Request(**args)
 
 
@@ -207,7 +208,14 @@ def test_budget_ceiling_and_estimate_are_enforced(tmp_path, tree):
     r = LN.launch(request(tmp_path, tree, est_in=2_000_000, est_out=1_000_000))  # 4 USD > 1
     assert isinstance(r, LN.Refused) and any("above the template budget" in x for x in r.reasons)
     noprice = tpl(price_in=None, price_out=None)
-    r = LN.launch(request(tmp_path, tree, t=noprice, st=state(noprice), est_in=10))
+    r = LN.launch(
+        request(
+            tmp_path,
+            tree,
+            t=noprice,
+            st=state(noprice),
+        )
+    )
     assert isinstance(r, LN.Refused) and any("no verified price" in x for x in r.reasons)
     assert not (tmp_path / "record.json").exists()
 
@@ -335,3 +343,13 @@ def test_malformed_template_files_are_notes(tmp_path):
         assert got == {} and notes
     (tmp_path / "t.toml").write_bytes(b"\xff")
     assert T.load(tmp_path / "t.toml")[0] == {}
+
+
+def test_unpriced_template_and_negative_prices_and_bare_tables(tmp_path):
+    (tmp_path / "t.toml").write_text(
+        '[template.x]\n[template.y]\nharness="kilo"\nroute="r"\nfamily="f"\nbudget_usd=1.0\n'
+        "price_in=-1\nprice_out=-1\n"
+    )
+    got, notes = T.load(tmp_path / "t.toml")
+    assert got == {} and any("x: harness is empty" in n for n in notes)
+    assert any("y: " in n and "negative" in n for n in notes)

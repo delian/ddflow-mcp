@@ -79,8 +79,8 @@ def problems(t: Template) -> list[str]:
         out.append(f"harness {t.harness!r} cannot be launched yet (supported: {list(HARNESSES)})")
     if t.min_hooks not in HOOK_LEVELS:
         out.append(f"min_hooks must be one of {list(HOOK_LEVELS)}")
-    if t.trust < 0 or t.budget_usd < 0:
-        out.append("trust and budget_usd must not be negative")
+    if min(t.trust, t.budget_usd, t.price_in or 0, t.price_out or 0) < 0:
+        out.append("trust, budget_usd and prices must not be negative")
     if t.budget_usd <= 0 and not t.local:
         out.append("a template that is not local needs a budget_usd above zero")
     return out
@@ -140,6 +140,8 @@ def _row(name: str, raw: dict[str, Any]) -> tuple[Template | None, list[str]]:
     kw = {k: v for k, v in raw.items() if k in known and k != "name"}
     if "kinds" in kw:
         kw["kinds"] = tuple(kw["kinds"])
+    for req in ("harness", "route", "family"):
+        kw.setdefault(req, "")  # a missing field is reported by `problems`, not a crash
     t = Template(name=name, **kw)
     if bad := problems(t):
         return None, [*notes, *(f"{name}: {b}" for b in bad)]
