@@ -33,7 +33,7 @@ from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
 from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
-from .heartbeat import _commit_events, _waiters
+from .heartbeat import _commit_events, _inbox, _waiters
 from .planning import plan_for
 
 
@@ -285,6 +285,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     # completion completes its umbrella, and that one's, up the chain.
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
+    extra.update(_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=False))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
