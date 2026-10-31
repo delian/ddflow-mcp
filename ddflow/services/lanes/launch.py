@@ -130,6 +130,13 @@ def launch(req: Request) -> Launched | Refused:
         return Refused((f"no such item {req.item!r}",))
     if why := _constraints(req, Weights.from_config(cfg)):
         return Refused(tuple(why))
+    binary = req.binary if req.binary is not None else OC.select((t.harness,))
+    if isinstance(binary, Result):
+        return Refused((f"{binary.status}: {binary.detail}",))
+    if binary.name != t.harness:
+        return Refused(
+            (f"binary {binary.name!r} is not the approved template's harness {t.harness!r}",)
+        )
     seed = SP.build(
         SP.from_state(
             req.state, req.repo, req.item, handoff=req.handoff, handoff_by=req.handoff_by
@@ -147,7 +154,7 @@ def launch(req: Request) -> Launched | Refused:
         item=req.item,
         state=req.state,
         model=t.model,
-        binary=req.binary,
+        binary=binary,
         cfg=cfg,
     )
     if isinstance(prep, LH.Consent):

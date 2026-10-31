@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import math
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -122,10 +123,19 @@ def _row(name: str, raw: dict[str, Any]) -> tuple[Template | None, list[str]]:
             return None, [*notes, f"{name}: {k} must be text"]
     for k in _NUM:
         v = kw.get(k)
-        if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
-            return None, [*notes, f"{name}: {k} must be a number"]
+        if v is not None and (
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+        ):
+            return None, [*notes, f"{name}: {k} must be a finite number"]
+    if "local" in kw and not isinstance(kw["local"], bool):
+        return None, [*notes, f"{name}: local must be true or false"]
     if "kinds" in kw:
-        kw["kinds"] = tuple(map(str, kw["kinds"]))
+        kinds = kw["kinds"]
+        if not isinstance(kinds, list) or not all(isinstance(x, str) for x in kinds):
+            return None, [*notes, f"{name}: kinds must be a list of text"]
+        kw["kinds"] = tuple(kinds)
+    if "min_hooks" in kw and not isinstance(kw["min_hooks"], str):
+        return None, [*notes, f"{name}: min_hooks must be text"]
     t = Template(name=name, **kw)
     if bad := problems(t):
         return None, [*notes, *(f"{name}: {b}" for b in bad)]

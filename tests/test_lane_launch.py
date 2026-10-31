@@ -215,7 +215,9 @@ def test_scheduler_constraints_apply(tmp_path, tree):
     r = LN.launch(request(tmp_path, tree, item="X-2"))
     assert isinstance(r, LN.Refused) and any("open needs" in x for x in r.reasons)
     r = LN.launch(request(tmp_path, tree, t=tpl(trust=0), st=state(tpl(trust=0))))
-    assert not isinstance(r, LN.Refused)  # default_min_trust is 0
+    assert isinstance(r, LN.Launched)  # default_min_trust is 0
+    r.driver.stop(r.handle)
+    LN.OC.cleanup(tree[2])
     req = request(tmp_path, tree)
     req.cfg.swarm.default_min_trust = 2
     assert any("trust" in x for x in LN.launch(req).reasons)
@@ -292,3 +294,24 @@ def test_a_lane_that_cannot_start_cleans_up_and_is_refused(tmp_path, tree):
         if (tree[2] / ".config/kilo/plugin").exists()
         else True
     )
+
+
+def test_a_binary_of_another_harness_than_the_approved_one_is_refused(tmp_path, tree):
+    other = OC.Binary("opencode", "/x/opencode", "1", True)
+    r = LN.launch(request(tmp_path, tree, binary=other))
+    assert isinstance(r, LN.Refused) and "approved template's harness" in r.reasons[0]
+    assert not (tmp_path / "record.json").exists()
+
+
+def test_hostile_template_values_are_notes_not_crashes_or_loopholes(tmp_path):
+    head = 'harness="kilo"\nroute="r"\nfamily="f"\n'
+    f = tmp_path / "t.toml"
+    f.write_text(
+        f"[template.a]\n{head}budget_usd=nan\n[template.b]\n{head}budget_usd=1.0\ntrust=inf\n"
+        f'[template.c]\n{head}budget_usd=0\nlocal="false"\n'
+        f"[template.d]\n{head}budget_usd=1.0\nkinds=1\n"
+        f'[template.e]\n{head}budget_usd=1.0\nkinds="fix"\n'
+        f"[template.f]\n{head}budget_usd=1.0\nmin_hooks=3\n"
+    )
+    got, notes = T.load(f)
+    assert got == {} and len(notes) == 6
