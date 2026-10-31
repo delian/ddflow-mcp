@@ -63,6 +63,12 @@ def _approved_force(log, cfg, item: str, blockers: list[str], approval: str, age
     )
 
 
+def _person_force(force: bool, agent: str) -> bool:
+    """B49fa10bbb1: `--force` is a person's. An agent's flag (every MCP call is one) is not
+    honoured, whatever it passes beside it: its route is `--approval`, which the verdict spends."""
+    return force and not AP.agent_marker(agent)
+
+
 def _ask_hint(agent: str) -> str:
     """For an agent: how to have the operator override these in chat (it may not use --force)."""
     if not AP.agent_marker(agent):
@@ -123,6 +129,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     # is invisible to it and the old pipeline (unit_tests) still blocks (Bf0a1039f9f). The
     # CLI is a fresh process every time and never hit this; the in-process MCP server did.
     log, cfg, st = _load_fresh(repo, agent)
+    force = _person_force(force, agent)
     it = _require(st, item, "item.completed", cfg.lease.grace_s, log.clone_id(create=False))
     # B2809f4213b: a contested claim is settled by `resolve`, not by finishing
     refusal = (

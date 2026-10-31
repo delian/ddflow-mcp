@@ -221,10 +221,16 @@ def claim(  # noqa: PLR0913 -- the door's own flags
         "globs": globs, "no_worktree": no_worktree, "called_from": called_from,
         "resources": resources, "agent": agent, "queue": queue, "break_lease": break_lease,
     }  # fmt: skip
+    force = force and not _agent_marker_of(agent)  # B49fa10bbb1: an agent's route is --approval
     out = _claim_once(repo, item, note=note, force=force, **kw)
     if force or out.exit != O.REFUSED or "--force" not in (out.reason or ""):
         return out
     return _claim_by_approval(repo, item, out, approval, note, kw)
+
+
+def _agent_marker_of(agent: str) -> str:
+    """Why this claim is an agent's ("" for a person): only a person's `--force` is honoured."""
+    return AP.agent_marker(agent)
 
 
 def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str, note: str, kw):
