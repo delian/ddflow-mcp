@@ -22,6 +22,10 @@ class LogConfig:
         100_000,
         doc="Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 100,000 default holds ~74 MB in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
     )
+    redact_builtin_shapes: bool = knob(
+        True,
+        doc="Also apply ddflow's built-in credential shapes (`core/secret_shapes.py`: Google/Gemini, Anthropic, OpenAI, xAI, Groq, GitHub, AWS, Slack, Stripe, Hugging Face, npm keys and a `key = <long value>` assignment) to every text written to the committed log, whatever `[session] redact_patterns` says. Setting redact_patterns replaces its own defaults, so without this a project that tunes the list loses these; turn this off only if the shapes mask text you must keep byte for byte.",
+    )
     #: Commit ddflow's own event shards after complete and release (Bcd3512c891).
     commit_events: bool = knob(
         True,

@@ -69,6 +69,8 @@ from ..core.events import (
     version_key,
 )
 from ..core.model import known_kinds
+from ..core.redact_errors import PatternError, fail_closed_data
+from ..core.secret_shapes import session_secret_patterns
 from ..core.slug import safe_filename
 from . import blobstore as BS
 from . import fsio
@@ -1353,14 +1355,14 @@ class EventLog:
             try:
                 cfg = Config.load(self.root)
                 self._lookup_net = bool(cfg.session.redact_lookup_network)
-                patterns = [*cfg.session.redact_patterns, *cfg.session.redact_extra]
+                patterns = session_secret_patterns(cfg.session, cfg.log.redact_builtin_shapes)
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
                 up = getattr(cfg, "upstream", None)
                 names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
             except Exception:
                 # an unreadable config: the built-in patterns for THIS write, and the config is
                 # read again on the next one, so a fixed config is not shadowed by the fallback
-                patterns, cached = [*SessionConfig().redact_patterns], False
+                patterns, cached = session_secret_patterns(SessionConfig()), False
             host = H.hostname()
             # the `log` profile's machine-local inputs, as `services.redact_report.redactor`
             # resolves them: this machine's hostname and $HOME, no repo root
@@ -1373,7 +1375,12 @@ class EventLog:
             )
             if cached:
                 self._redactor = red
-        return R.redact_event_data(kind, data, red, lookup_network=self._lookup_net)
+        try:
+            return R.redact_event_data(kind, data, red, lookup_network=self._lookup_net)
+        except PatternError:
+            raise
+        except Exception:  # fail closed: a placeholder in every text field, never the raw text
+            return fail_closed_data(data)
 
     def redact_event_text(self, event_id: str, field: str, marker: str) -> tuple[Event, Event]:
         """Redact one free-text field of an already-written event, in place.
