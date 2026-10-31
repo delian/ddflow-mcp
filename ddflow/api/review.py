@@ -42,6 +42,7 @@ from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services import review_exclude as REX
+from ..services import review_keys
 from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
@@ -1011,6 +1012,7 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
             "enabled": r.enabled,
             "base_url": r.base_url,
             "model": r.model,
+            "key": review_keys.status(r.api_key_env, r.api_key_file),
         }
         for r in revs
     ]
@@ -1019,7 +1021,11 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     # rather than about a missing `family = "..."` line.
     unclassified = [r["name"] for r in rows if not r["family"] and r["enabled"]]
 
-    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified}
+    # Names only: which enabled reviewer has neither its variable nor a readable key file.
+    no_key = [
+        r["name"] for r in rows if r["enabled"] and r["key"].startswith(("missing", "UNAVAILABLE"))
+    ]
+    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified, "no_key": no_key}
     if not rows:
         empty = "No reviewers configured. Run `ddflow reviewers detect --write`."
         return O.nothing("reviewers.list", empty, text=empty, **data)

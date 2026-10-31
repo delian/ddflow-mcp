@@ -22,9 +22,19 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
     if not cfg.approvals.accept_harness:
         return O.refused("approvals.ask", "the harness channel is off ([approvals].accept_harness)")
     if row["min_level"] > H.LEVEL:
-        return O.refused(
+        if not H.chat_t3(cfg):
+            return O.refused("approvals.ask", H.t3_refusal(row))
+        digits = cfg.approvals.min_digest_chars
+        return O.ok(  # a T3 act: only the typed answer counts, so no AskUserQuestion is offered
             "approvals.ask",
-            f"'{row['verb']}' needs level L{row['min_level']}: never approved over chat",
+            id=ask_id,
+            text=(
+                f"'{row['verb']}' is a tier-3 act; the operator opted in to typed chat answers "
+                f"(rated L2-typed, no stronger than L2; every use is warned on). Show the person the "
+                f"request (`ddflow approvals show {ask_id}`); they type `approve {ask_id} <first "
+                f"{digits}+ digest characters>` in their own chat, then run `ddflow approvals attest "
+                f"{ask_id}`. An AskUserQuestion answer is not accepted for this act."
+            ),
         )
     body = H.payload(row)
     text = (
