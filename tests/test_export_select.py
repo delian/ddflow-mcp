@@ -129,7 +129,10 @@ def test_enable_refuses_an_unknown_kind_a_bad_mode_and_a_path_outside_the_repo(p
 
 
 def test_enable_local_writes_the_local_layer_only(proj):
-    assert run_cli(proj, "export", "enable", "bugs", "--local", agent="bot")[0] == 0
+    # an agent's --local needs a person's approval (tests/test_approvals_sites4.py)
+    assert run_cli(proj, "export", "enable", "bugs", "--local", agent="bot")[0] == 3
+    assert "bugs" not in _cfg(proj, local=True)  # the refused call wrote nothing
+    assert run_cli(proj, "export", "enable", "bugs", "--local")[0] == 0
     assert 'documents = ["bugs"]' in _cfg(proj, local=True)
     assert "[export]" not in _cfg(proj)
     assert json.loads(run_cli(proj, "--json", "export")[1])["selected"] == ["bugs"]
@@ -498,3 +501,17 @@ def test_the_plain_listing_at_a_terminal_acknowledges_and_no_other_mode_does(pro
     (ev,) = _events(proj, "export.acknowledged")
     assert ev["data"]["documents"] == ["roadmap"] and ev["data"]["human"] is True
     assert "Export:" not in run_cli(proj, "brief")[1]
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _a_person_at_a_terminal(monkeypatch):
+    """These tests act as the operator: an agent harness's own markers (the shell the suite runs
+    in may carry one) would make every call an agent's (`--force`, `--local`, `--self` then need
+    a person's approval, RA-consume-sites-4)."""
+    from ddflow.services.identity import HARNESS_MARKERS
+
+    for var in ("DDFLOW_AGENT", *HARNESS_MARKERS):
+        monkeypatch.delenv(var, raising=False)

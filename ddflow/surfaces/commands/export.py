@@ -194,6 +194,8 @@ def cmd_export(a, c: Ctx) -> int:
         out=a.out,
         force=a.force,
         confirm=_confirm if interactive else None,
+        agent=c.requested_agent,
+        approval=a.approval or "",
     )
     if c.json:
         emit_json(out.body())
