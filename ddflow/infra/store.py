@@ -160,6 +160,31 @@ _SEARCH_COLS: dict[str, tuple[str, ...]] = {
     "records": ("title", "body"),
 }
 
+#: The FTS/trigram tables a capability is built out of: `{table}_fts` (porter) and
+#: `{table}_tri` (trigram). A capability is only real when its tables exist, whatever the
+#: `meta` rows claim -- the reconcile `_capability_changed` guards stamped `trigram=1` over
+#: an index that never grew the `_tri` tables, so the claim cannot be trusted.
+_CAP_FTS_TABLES = {f"{t}_fts" for t in _SEARCH_COLS}
+_CAP_TRI_TABLES = {f"{t}_tri" for t in _SEARCH_COLS}
+
+
+def _capability_tables(con, fts: bool, trig: bool) -> bool:
+    """Do the tables the capability needs all exist? False when a claimed-present
+    capability has none: the `meta` can lie, so the capability is reconstructed from the
+    tables, not the claim."""
+    if not (fts or trig):
+        return True
+    try:
+        tables = {
+            r[0] for r in con.execute("select name from sqlite_master where type = 'table'")
+        }
+    except sqlite3.DatabaseError:
+        return False
+    needed = _CAP_FTS_TABLES if fts else set()
+    if trig:
+        needed |= _CAP_TRI_TABLES
+    return needed <= tables
+
 
 class Store:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:
@@ -279,6 +304,7 @@ class Store:
         try:
             with closing(self.connect()) as con:
                 row = {r["k"]: r["v"] for r in con.execute("select k,v from meta")}
+                cap_ok = _capability_tables(con, self.fts, self.trigram)
         except sqlite3.DatabaseError:
             return True
         if row.get("schema") != str(SCHEMA):
@@ -287,8 +313,14 @@ class Store:
             return True
         # An index built where SQLite had no trigram tokenizer has no `_tri` tables filled;
         # read where it has one, it would rank on empty tables. A change of capability is
-        # a rebuild.
-        if row.get("trigram", "0") != ("1" if self.trigram else "0"):
+        # a rebuild -- and so is a meta that CLAIMS the capability while its tables are
+        # absent (the reconcile `_rebuild_locked` refuses stamped `trigram=1` over an index
+        # with no `_tri` tables at all).
+        if (
+            row.get("fts", "0") != ("1" if self.fts else "0")
+            or row.get("trigram", "0") != ("1" if self.trigram else "0")
+            or not cap_ok
+        ):
             return True
         # `EventLog.mark()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
@@ -495,12 +527,12 @@ class Store:
         return True
 
     def _capability_changed(self) -> bool:
-        """Does the existing index claim a different capability than this store has now?
-        FTS5 on/off or the trigram tokenizer on/off are both renames of which tables exist:
-        the rewrite a delta would apply to a table the old index never created, leaving it
-        missing (or absent) while the meta claims it is there. `stale()` already reads the
-        trigram flip as stale; this catches the FTS flip too, so a reconcile is never keyed
-        on a capability the old index cannot honest-claim."""
+        """Does the existing index not actually hold the capability this store needs?
+        FTS5 on/off or the trigram tokenizer on/off disagree with the index's `meta`, OR
+        the meta claims the capability while its tables are absent -- in either case the
+        reconcile delta would write a table the old index never created, leaving it empty
+        while the meta claims it is there. A capability change is a full rebuild, never a
+        delta over the gap; `stale()` reads the same two facts the same way."""
         if not self.path.exists():
             return False
         try:
@@ -509,6 +541,8 @@ class Store:
                     r["k"]: r["v"]
                     for r in con.execute("select k, v from meta where k in ('fts', 'trigram')")
                 }
+                if not _capability_tables(con, self.fts, self.trigram):
+                    return True
         except sqlite3.DatabaseError:
             return True  # an unreadable meta is doubt, and doubt is a rebuild
         return meta.get("fts", "0") != ("1" if self.fts else "0") or meta.get(

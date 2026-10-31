@@ -8,6 +8,7 @@ query finds the same rows on every machine.
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -222,6 +223,28 @@ def test_an_index_built_without_trigram_is_rebuilt_where_there_is_one(repo, log,
     new.rebuild(log)
     assert not new.stale(log)
     assert {r["id"] for r in new.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
+
+
+def test_an_index_that_claims_trigram_without_tables_is_rebuilt_where_there_is_one(
+    repo, log, monkeypatch
+):
+    """The buggy reconcile stamped ``trigram=1`` over an index grown where SQLite had no
+    trigram tokenizer (no ``_tri`` tables). Meta now CLAIMS the capability it does not
+    hold, so the owner must be read from the tables, not the claim -- else the rebuild
+    reconciles over the gap and the trigram ranking stays empty."""
+    if not (_has_fts5() and S._has_trigram()):
+        pytest.skip("this SQLite has no FTS5 trigram")
+    _lessons(log)
+    built = _store(repo, "fts5", trigram=False, monkeypatch=monkeypatch)
+    built.rebuild(log)
+    monkeypatch.undo()
+    with sqlite3.connect(built.path) as con:
+        con.execute("insert or replace into meta values('trigram', '1')")
+    fresh = _store(repo, "fts5")
+    assert fresh.trigram and fresh.stale(log)  # claims trigram without the tables
+    fresh.rebuild(log)
+    assert not fresh.stale(log)
+    assert {r["id"] for r in fresh.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
 
 
 @pytest.mark.parametrize("backend", ["fts5", "like"])
