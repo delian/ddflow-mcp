@@ -136,7 +136,7 @@ SITES: tuple[Site, ...] = (
         L4,
         "the pending command reviewer entry (the program it runs)",
         ("ddflow/services/reviewer_trust.py:approve",),
-        "ddflow reviewers approve <name> --approval ID",
+        "ddflow reviewers approve <name>",
     ),
     Site(
         "export.ack",
