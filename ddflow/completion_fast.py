@@ -26,15 +26,20 @@ def complete(argv: list[str]) -> list[str]:
         words: list[str] = []
         i = 0
         while i < len(rest):
-            if rest[i] in ("--kind", "--state") and i + 1 < len(rest):
-                if rest[i] == "--kind":
+            w = rest[i]
+            if w in ("--kind", "--state"):
+                if i + 1 >= len(rest):
+                    return []  # a flag without its value: bad arguments print nothing
+                if w == "--kind":
                     kind = rest[i + 1]
                 else:
                     state = rest[i + 1]
                 i += 2
             else:
-                words.append(rest[i])
+                words.append(w)
                 i += 1
+        if len(words) > 1:
+            return []
         prefix = words[0] if words else ""
         if verb == "ids":
             return CI.complete_ids(prefix, kind, state)

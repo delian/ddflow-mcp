@@ -82,7 +82,8 @@ def test_newest_index_wins_and_sidecars_ignored(tmp_path):
     assert old != new
 
 
-def test_missing_index_gives_nothing(tmp_path):
+def test_missing_index_gives_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     (tmp_path / ".ddflow").mkdir()
     assert CI.find_index(str(tmp_path)) is None
     assert CI.complete_ids("x", index=str(tmp_path / "nope")) == []
@@ -198,3 +199,29 @@ def test_lookup_latency_budget(tmp_path):
         check=True,
     )
     assert time.monotonic() - t < 1.0 and r.stdout  # generous: loaded CI box
+
+
+def test_bad_arguments_print_nothing(tmp_path, monkeypatch):
+    _index(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert CF.complete(["ids", "COMP"]) == ["COMP-a", "COMP-b"]
+    assert CF.complete(["ids", "bug", "--kind"]) == []
+    assert CF.complete(["ids", "alpha", "beta"]) == []
+
+
+def test_irregular_plurals_and_lock_knob(tmp_path, monkeypatch):
+    p = tmp_path / "index.db-dddddddd"
+    con = sqlite3.connect(p)
+    con.executescript(
+        "create table memories(id text); create table classes(id text);"
+        "insert into memories values('mem-1'); insert into classes values('c1');"
+    )
+    con.commit()
+    con.close()
+    assert CI.complete_ids("", "memory", index=str(p)) == ["mem-1"]
+    assert CI.complete_ids("", "class", index=str(p)) == ["c1"]
+    assert CI.complete_ids("", "memories", index=str(p)) == ["mem-1"]
+    monkeypatch.setenv(CI.LOCK_MS_ENV, "7")
+    assert CI._lock_ms() == 7
+    monkeypatch.setenv(CI.LOCK_MS_ENV, "junk")
+    assert CI._lock_ms() == CI.LOCK_MS_DEFAULT

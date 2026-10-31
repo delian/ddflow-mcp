@@ -110,10 +110,23 @@ def find_index(start: str | None = None) -> str | None:
     return None
 
 
+#: How long a locked index is waited for, in ms: a TAB must not hang behind a writer.
+#: Settable as DDFLOW_COMPLETION_LOCK_MS (the config layer is too heavy to import here).
+LOCK_MS_ENV, LOCK_MS_DEFAULT = "DDFLOW_COMPLETION_LOCK_MS", 30
+
+
+def _lock_ms() -> int:
+    try:
+        return max(0, int(os.environ.get(LOCK_MS_ENV, LOCK_MS_DEFAULT)))
+    except ValueError:
+        return LOCK_MS_DEFAULT
+
+
 def _connect(path: str) -> sqlite3.Connection:
+    ms = _lock_ms()
     uri = "file:" + path.replace("%", "%25").replace("?", "%3f").replace("#", "%23")
-    con = sqlite3.connect(uri + "?mode=ro", uri=True, timeout=0.2)
-    con.execute("pragma busy_timeout=200")
+    con = sqlite3.connect(uri + "?mode=ro", uri=True, timeout=ms / 1000)
+    con.execute(f"pragma busy_timeout={ms}")
     return con
 
 
@@ -149,7 +162,27 @@ def _state_expr(cols: tuple[str, ...]) -> str | None:
 
 
 def _kind_matches(want: str, name: str) -> bool:
-    return want in (name, name + "s", name + "es") or name == want + "s"
+    """Whether the kind word ``want`` names table ``name``: either may be the plural."""
+    return name in _forms(want) or want in _forms(name) or want in _singulars(name)
+
+
+def _forms(word: str) -> set[str]:
+    forms = {word, word + "s", word + "es"}
+    if word.endswith("y"):
+        forms.add(word[:-1] + "ies")
+    return forms
+
+
+def _singulars(name: str) -> set[str]:
+    """Singulars a plural table name could stand for (memories -> memory, classes -> class)."""
+    out = set()
+    if name.endswith("ies"):
+        out.add(name[:-3] + "y")
+    if name.endswith("es"):
+        out.add(name[:-2])
+    if name.endswith("s"):
+        out.add(name[:-1])
+    return out
 
 
 def _query_ids(con, prefix, kind, state, limit) -> list[str]:
