@@ -101,3 +101,4 @@ _SUBMODULE_OF = {
 }
 
 _reexport.reexport(globals(), _SUBMODULE_OF, __name__)
+del _reexport
