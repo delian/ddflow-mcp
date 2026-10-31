@@ -110,5 +110,27 @@ def test_model_show_never_prints_a_route_endpoint(tmp_path):
         '[route.mine]\nendpoint = "http://10.1.2.3:8000/v1"\n'
         '[model.mine-1]\nfamily = "deepseek"\nnote = "http://192.168.0.9/x"\n'
     )
-    out = M.model_show(tmp_path, "mine-1")
-    assert "10.1.2.3" not in out.data["message"] and "192.168" not in str(out.data)
+    for name in ("mine-1", "mine"):
+        out = M.model_show(tmp_path, name)
+        assert "10.1.2.3" not in str(out.data) and "192.168" not in str(out.data)
+
+
+def test_model_show_redacts_the_wire_body_too(tmp_path):
+    loc = tmp_path / ".ddflow/local"
+    loc.mkdir(parents=True)
+    (loc / "models.toml").write_text(
+        '[sources]\nsrv = { url = "http://10.9.8.7/models" }\n'
+        '[model.m2]\nfamily = "deepseek"\n'
+        'window = { v = 5, s = "documented", src = "srv", d = "2026-10-31" }\n'
+    )
+    out = M.model_show(tmp_path, "m2")
+    assert out.data["facts"] and "10.9.8.7" not in str(out.data)
+
+
+def test_add_escapes_free_text_and_lint_survives_scalar_tables(tmp_path):
+    assert H.harness_view(tmp_path, what="add", id="q1", title='a"b\\c', family="x\ny").ok
+    out = H.harness_view(tmp_path, what="lint", id="q1")
+    assert not any("TOML" in p or "Invalid" in p for p in out.data["problems"])
+    f = tmp_path / "s.toml"
+    f.write_text('id = "s"\nverified = "yes"\n')
+    assert H.harness_view(tmp_path, what="lint", id=str(f)).exit == O.FAIL

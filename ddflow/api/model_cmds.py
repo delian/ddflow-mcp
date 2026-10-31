@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.redact import redact_network
+from ..core.redact import network_leaves, redact_network
 from ..services import modelreg as MR
 
 LOCAL = Path(".ddflow") / "local"
@@ -65,6 +65,7 @@ def model_show(repo: Path, name: str) -> O.Outcome:
             f"  {r['table']}.{r['row']}.{r['key']} = {r['v']!r} {r['status']} "
             f"src={r['source']} d={r['date']}{mark}"
         )
+    rows = network_leaves(rows)  # the wire body is as clean as the message
     msg = redact_network("\n".join(lines))
     return O.ok(
         "model_show",

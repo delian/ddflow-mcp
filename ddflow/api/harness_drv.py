@@ -14,6 +14,7 @@ Output goes through the network redaction: no endpoint address leaves this modul
 from __future__ import annotations
 
 import importlib
+import json
 import re
 import tomllib
 from dataclasses import fields
@@ -59,14 +60,19 @@ def _clean(text: str) -> str:
     return redact_network(text)
 
 
+def _q(text: str) -> str:
+    """A TOML basic string literal, whatever the text holds (quotes, backslashes, newlines)."""
+    return json.dumps(text, ensure_ascii=False)
+
+
 def skeleton(hid: str, rank: int, family: str, title: str) -> str:
     left = ", ".join(f'"{s}"' for s in _FACT_SECTIONS)
     return (
         f"# {hid}: skeleton from `ddflow harness add`. Every fact is LEFT OUT (not verified).\n"
         "# Add a section only with a value or `none = true` you checked; cite it in [verified].\n"
         "# `ddflow harness lint` says what is missing; adding-a-harness.md has the worked example.\n"
-        f'id = "{hid}"\nrank = {rank}\nfamily = "{family}"\n'
-        f'delta = "{hid}.md"\ntitle = "{title}"\n\n'
+        f"id = {_q(hid)}\nrank = {rank}\nfamily = {_q(family)}\n"
+        f"delta = {_q(hid + '.md')}\ntitle = {_q(title)}\n\n"
         "# [mcp]  <- required: path and shape\n\n"
         f'[verified]\ndate = "{date.today().isoformat()}"\nsources = []\n'
         f"unverified = [{left}]\n"
@@ -119,7 +125,8 @@ def _unknown_keys(raw: dict[str, Any]) -> list[str]:
 def _three_valued(raw: dict[str, Any]) -> tuple[list[str], list[str]]:
     problems: list[str] = []
     warns: list[str] = []
-    listed = set((raw.get("verified") or {}).get("unverified") or [])
+    ver = raw.get("verified")
+    listed = set(ver.get("unverified") or []) if isinstance(ver, dict) else set()
     for s in _FACT_SECTIONS:
         node = raw.get(s)
         if isinstance(node, dict) and node.get("none") is True and s in listed:
