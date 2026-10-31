@@ -88,7 +88,7 @@ def _plain(text: str | None) -> str:
 
 
 def _arity(a: argparse.Action) -> str:
-    """How many values: ``0``, ``1``, ``?`` , ``*``, ``+``, ``...`` (argparse's REMAINDER and PARSER) or an integer as text."""
+    """How many values: ``0``, ``1``, ``?`` , ``*``, ``+``, ``...`` (REMAINDER) or ``A...`` (PARSER) or an integer as text."""
     if a.nargs == 0:
         return "0"
     return "1" if a.nargs is None else str(a.nargs)
