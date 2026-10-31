@@ -119,14 +119,14 @@ def test_a_second_sighting_whose_run_fails_overrides_the_earlier_no(proj):
 
 def test_an_open_bug_whose_repro_did_not_fail_is_unconfirmed_in_lists(proj):
     bid, _bug = _file(proj, repro_cmd=python("import sys; sys.exit(0)"))
-    _code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
+    code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
     assert code == 0
     rows = {r["id"]: r for r in json.loads(out)["rows"]}
     assert rows[bid]["state"] == "unconfirmed" and rows[bid]["reproduced"] == "no"
 
 
 def test_an_unconfirmed_bugs_fix_task_is_not_offered_before_confirmed_work(proj):
-    _ok_id, ok_bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
+    ok_id, ok_bug = _file(proj, repro_cmd=python("import sys; sys.exit(1)"))
     no_id, bad_bug = _file(proj, summary="quiet one", repro_cmd=python("import sys; sys.exit(0)"))
     ids = bug_items(state(proj), Config.load(proj))
     # Both fix tasks are bugfix branches in their own right: they stay bug items. The
@@ -226,7 +226,7 @@ def test_a_second_sighting_opens_the_bug_again_even_though_its_run_passed(proj):
         proj, summary="seen again", id=bid, agent="a1", repro_cmd=python("import sys; sys.exit(0)")
     )
     assert again.ok, again.reason
-    _code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
+    code, out, _err = run_cli(proj, "list", "bug", "--all", "--json")
     assert code == 0
     rows = {r["id"]: r for r in json.loads(out)["rows"]}
     assert rows[bid]["state"] == "open" and rows[bid]["reproduced"] == "no"
