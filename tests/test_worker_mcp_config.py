@@ -252,3 +252,64 @@ def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
     assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
     for number in ("10.7K", "11.9K", "17.8K", "25.9K"):
         assert number in WM.recipe(REL) and number in page, number
+
+
+# --- LS-worker-lane-override: a lane picks its own tier ---------------------------------------
+
+
+def test_the_lane_knob_defaults_to_no_override(repo):
+    assert Config.load(repo).mcp.lane_tools == ""
+
+
+def test_parse_lane_tiers_reads_lane_equals_tier_pairs():
+    assert WM.parse_lane_tiers("") == {}
+    assert WM.parse_lane_tiers("a=standard, b=all") == {"a": "standard", "b": "all"}
+
+
+@pytest.mark.parametrize("bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all"])
+def test_parse_lane_tiers_refuses_bad_entries(bad):
+    with pytest.raises(ValueError):
+        WM.parse_lane_tiers(bad)
+
+
+def test_the_lane_file_name_is_beside_the_default_one():
+    assert WM.lane_rel("impl") == ".ddflow/local/worker-mcp-impl.json"
+
+
+def test_adopt_writes_one_file_per_lane_with_its_tier(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=standard,rev=all")[0] == 0
+    code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0, err
+    for lane, tier in (("impl", "standard"), ("rev", "all")):
+        data = json.loads((repo / WM.lane_rel(lane)).read_text())
+        assert data["mcpServers"]["ddflow"]["env"]["DDFLOW_MCP_TOOLS"] == tier
+        assert WM.lane_rel(lane) in out
+    default = json.loads((repo / REL).read_text())
+    assert default["mcpServers"]["ddflow"]["env"]["DDFLOW_MCP_TOOLS"] == "core"
+
+
+def test_a_lane_file_that_is_current_is_not_rewritten_and_a_dropped_lane_is_reported(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=all")
+    run_cli(repo, "adopt", "--agents", "claude")
+    _c, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert f"{WM.lane_rel('impl')} is current" in out
+    run_cli(repo, "config", "--set", "mcp.lane_tools", "")
+    _c, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert WM.lane_rel("impl") in out and "no longer in" in out  # stale file named, not deleted
+    assert (repo / WM.lane_rel("impl")).is_file()
+
+
+def test_the_knob_rejects_a_bad_value(repo):
+    run_cli(repo, "init")
+    code, _o, _e = run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=bogus")
+    assert code != 0
+
+
+def test_the_knob_has_an_upgrade_fragment():
+    from ddflow.services import upgrade_manifest as UM
+
+    manifest = UM.load()
+    keys = {c.key for _v, _d, changes in manifest.releases for c in changes}
+    assert "mcp.lane_tools" in keys

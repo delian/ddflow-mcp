@@ -24,6 +24,17 @@ MCP_OUTPUT_SCHEMAS = ("off", "on")
 MCP_ON_UPGRADE = ("notify", "reexec", "off")
 
 
+def _lane_tools_problem(v: object) -> str:
+    """The `check` of `[mcp].lane_tools`: empty when it parses."""
+    from ..services.workermcp import parse_lane_tiers
+
+    try:
+        parse_lane_tiers(v)  # type: ignore[arg-type]
+    except ValueError as e:
+        return str(e)
+    return ""
+
+
 @declare("mcp")
 @dataclass
 class McpConfig:
@@ -44,6 +55,12 @@ class McpConfig:
             "core",
             "no safety dimension; fewer schemas advertised, every tool still callable",
         ),
+    )
+
+    lane_tools: str = knob(
+        "",
+        doc="Per-lane tool tier for the worker MCP config: comma-separated `lane=tier` pairs (tier `core`, `standard` or `all`), e.g. `impl=standard,review=all`. `ddflow adopt` writes `.ddflow/local/worker-mcp-<lane>.json` for each, the same server as `worker-mcp.json` with `DDFLOW_MCP_TOOLS` set to that lane's tier, so a lane that needs more than `[mcp].worker_tools` starts with `--mcp-config=` on its own file. Empty (default) writes none. A lane name is letters, digits, `.`, `_` or `-`. A file for a lane dropped from the list is named by adopt, not deleted. It hides schemas, never tools.",
+        check=_lane_tools_problem,
     )
 
     profile_lean_budget_tokens: int = knob(

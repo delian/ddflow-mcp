@@ -12,20 +12,62 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..config_sections.mcp import MCP_TOOL_TIERS
 from ..infra.fsio import replace_text
 
 #: Where `adopt` writes it: the git-ignored local layer, since the launcher is machine-specific.
 REL = ".ddflow/local/worker-mcp.json"
 #: The variable the server reads its tier from (`DDFLOW_<SECTION>_<KNOB>` of `[mcp].tools`).
+#: A lane name becomes part of a file name: no separators, no leading dot run.
+_LANE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 TIER_ENV = "DDFLOW_MCP_TOOLS"
 #: `ENABLE_TOOL_SEARCH=auto:N`: N is a PERCENT of the context window (not a tool count) above which the host
 #: defers MCP schemas. ddflow's schemas take a large share of a small window, so a high N (auto:90 measured:
 #: nothing deferred, 87.3K against 29.3K) sends them all; 50 is the line this note draws, a judgement.
 AUTO_NO_DEFER_PCT = 50
+
+
+def lane_rel(lane: str) -> str:
+    """The per-lane config beside the default one: `.ddflow/local/worker-mcp-<lane>.json`."""
+    return REL.replace(".json", f"-{lane}.json")
+
+
+def parse_lane_tiers(spec: str) -> dict[str, str]:
+    """`[mcp].lane_tools` (`lane=tier,lane=tier`) as a dict; ValueError names the bad entry."""
+    if not isinstance(spec, str):
+        raise ValueError("must be a string of lane=tier pairs")
+    out: dict[str, str] = {}
+    for part in (p.strip() for p in spec.split(",")):
+        if not part:
+            continue
+        lane, sep, tier = (x.strip() for x in part.partition("="))
+        if not sep or not _LANE_RE.match(lane) or ".." in lane:
+            raise ValueError(f"{part!r}: expected lane=tier with a plain lane name")
+        if tier not in MCP_TOOL_TIERS:
+            raise ValueError(f"{part!r}: tier must be one of {', '.join(MCP_TOOL_TIERS)}")
+        if lane in out:
+            raise ValueError(f"lane {lane!r} is given twice")
+        out[lane] = tier
+    return out
+
+
+def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
+    """Write one config per lane of ``spec``; the action lines, plus a note for a lane file the
+    spec no longer names (left in place)."""
+    lanes = parse_lane_tiers(spec)
+    out = [_write_file(Path(repo), lane_rel(lane), entry, tier) for lane, tier in lanes.items()]
+    local = Path(repo) / Path(REL).parent
+    stem = Path(REL).stem + "-"
+    for f in sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []:
+        lane = f.stem[len(stem) :]
+        if lane not in lanes:
+            out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
+    return out
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
@@ -73,13 +115,17 @@ def config_text(entry: Mapping[str, Any], tier: str) -> str:
 
 def write(repo: Path, entry: Mapping[str, Any], tier: str) -> str:
     """Write the worker config; the action line adopt prints."""
-    path = Path(repo) / REL
+    return _write_file(Path(repo), REL, entry, tier)
+
+
+def _write_file(repo: Path, rel: str, entry: Mapping[str, Any], tier: str) -> str:
+    path = repo / rel
     text = config_text(entry, tier)
     if path.is_file() and path.read_text("utf-8") == text:
-        return f"{REL} is current"
+        return f"{rel} is current"
     path.parent.mkdir(parents=True, exist_ok=True)
     replace_text(path, text)
-    return f"wrote {REL}"
+    return f"wrote {rel}"
 
 
 def recipe(rel: str = REL, tier: str = "core") -> str:
