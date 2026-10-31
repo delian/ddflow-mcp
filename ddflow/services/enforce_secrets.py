@@ -56,9 +56,10 @@ def line_hit(line: str) -> str:
     return ""
 
 
-def added_hits(diff: str) -> list[tuple[str, int, str]]:
-    """(path, line number, shape) for every added line of a zero-context diff that hits."""
-    out: list[tuple[str, int, str]] = []
+def added_hits(diff: str) -> list[tuple[str, int, str, str]]:
+    """(path, line number, shape, line) for every added line of a zero-context diff that
+    hits. The line is for comparison inside this module and is never printed."""
+    out: list[tuple[str, int, str, str]] = []
     path, lineno = "", 0
     for raw in diff.splitlines():
         if raw.startswith("+++ "):
@@ -69,9 +70,50 @@ def added_hits(diff: str) -> list[tuple[str, int, str]]:
         elif raw.startswith("+") and lineno:
             hit = line_hit(raw[1:])
             if hit:
-                out.append((path, lineno, hit))
+                out.append((path, lineno, hit, raw[1:]))
             lineno += 1
     return out
+
+
+def _diff(tree: Path, rel: Path, against: str) -> str | None:
+    """The zero-context diff of the index against ``against`` for the event directory."""
+    r = G.run(
+        tree,
+        "diff",
+        "--cached",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-renames",
+        "-U0",
+        "--diff-filter=ACMR",
+        against,
+        "--",
+        str(rel),
+        timeout=P.TIMEOUTS["git_listing"],
+    )
+    return r.out if r.ok else None
+
+
+def _new_hits(tree: Path, rel: Path) -> list[tuple[str, int, str]] | None:
+    """Hits on lines this commit adds; None when git cannot say.
+
+    In a merge a line the other parent already has is not this commit's to add (merging
+    `main` into a branch must not be refused for a leak `main` already committed), so only
+    a line new against BOTH parents counts."""
+    diff = _diff(tree, rel, "HEAD")
+    if diff is None:
+        return None
+    hits = added_hits(diff)
+    other = G.run(
+        tree, "rev-parse", "-q", "--verify", "MERGE_HEAD", timeout=P.TIMEOUTS["git_listing"]
+    )
+    if hits and other.ok and other.out.strip():
+        theirs = _diff(tree, rel, other.out.strip())
+        if theirs is None:
+            return None
+        known = {(p, text) for p, _n, _s, text in added_hits(theirs)}
+        hits = [h for h in hits if (h[0], h[3]) in known]
+    return [(p, n, shape) for p, n, shape, _t in hits]
 
 
 def check_event_secrets(repo: Path, cfg: Config | None = None) -> Verdict:
@@ -86,26 +128,11 @@ def check_event_secrets(repo: Path, cfg: Config | None = None) -> Verdict:
         rel = EventLog(repo, log_cfg=cfg.log).dir.resolve().relative_to(Path(repo).resolve())
     except ValueError:
         rel = Path(".ddflow/events")
-    r = G.run(
-        tree,
-        "diff",
-        "--cached",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-renames",
-        "-U0",
-        "--diff-filter=ACMR",
-        "--",
-        str(rel),
-        timeout=P.TIMEOUTS["git_listing"],
-    )
-    if not r.ok:
+    hits = _new_hits(tree, rel)
+    lines: list[str] = []
+    if hits is None:
         lines = ["ddflow: could not read the staged event shards to scan them for credentials."]
-        hits: list[tuple[str, int, str]] = []
-    else:
-        hits = added_hits(r.out)
-        lines = []
-    if hits:
+    elif hits:
         lines = [
             "ddflow: this commit adds event shard line(s) that look like a credential:",
             *(f"  {p}:{n}  ({shape})" for p, n, shape in hits[:20]),

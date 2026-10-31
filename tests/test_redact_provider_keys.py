@@ -243,3 +243,16 @@ def test_the_commit_hook_entry_point_runs_the_secret_check(staged):
     _git(repo, "add", "-A")
     code, msg = E.check_commit(repo, cfg)
     assert code != 0 and "a.jsonl:2" in msg and KEYS["github-pat"] not in msg
+
+
+def test_merging_in_a_line_the_other_parent_already_committed_is_not_refused(staged):
+    repo, shard = staged
+    _git(repo, "checkout", "-q", "-b", "other")
+    shard.write_text(shard.read_text() + '{"text": "' + KEYS["google"] + '"}\n')
+    _git(repo, "commit", "-qam", "old leak on other")
+    _git(repo, "checkout", "-q", "-")
+    (repo / "x.txt").write_text("x")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "diverge")
+    subprocess.run(["git", "-C", str(repo), "merge", "--no-commit", "other"], capture_output=True)
+    assert ES.check_event_secrets(repo, Config()).exit == 0
