@@ -217,6 +217,16 @@
     --approval APPROVAL  an agent: the id of the operator's approval of exactly this acceptance (a
                          refusal files the request and names it)
   
+  who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker
+  (CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.
+  what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red
+  (the failing tests also fail on the base branch). The approval is bound to the digest of
+  that record (outcome, time, reason): a re-run or re-record is a different outcome and
+  needs its own approval. The gate stays `partial`; completion only stops counting it.
+  agent route: re-run with `--approval request` to file the request, a person answers it,
+  then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person
+  answers with `ddflow approvals approve ID` (see `ddflow approvals --help`).
+  
   '''
 # ---
 # name: test_help[ddflow batch]
