@@ -1,0 +1,11 @@
+# ID consistency: recommended defaults accepted (enforce=warn, phase id_prefix, presets, default templates, --id only matching the template)
+
+Decision document for the task `ID-decide`. It restates the decision record below; the record in the event log is the source of truth (`ddflow decision show D-ID-answers`).
+
+## D-ID-answers: ID consistency: recommended defaults accepted (enforce=warn, phase id_prefix, presets, default templates, --id only matching the template)
+
+status **accepted** · decided by operator · recorded by Monster3-ddflow-7267fe
+
+**Decision.** Operator 2026-10-31 (AskUserQuestion), own words: "Accept all recommended defaults (Recommended)". Task ID-decide, questions (1)-(5) as written there: (1) [ids].enforce default warn; (2) a phase may declare id_prefix and task add under it mints PREFIX-<n>, optional per phase; (3) shipped presets software, support-desk, research-lab; (4) default templates requirement REQ-{seq}, story US-{seq}, criterion AC-{story}-{seq}, spec SPEC-{seq}; (5) --id for machine-minted kinds allowed only when it matches the kind template (warn by default, refuse under enforce=refuse); caller-named kinds (task, phase) unchanged unless a template is set.
+
+Governs: `ddflow/core/ids.py`, `ddflow/config_sections/ids.py`
