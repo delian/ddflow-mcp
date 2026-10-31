@@ -2464,6 +2464,19 @@
       swarm.seed_handoff_chars = 1200   [default]
           Characters of an earlier lane's handoff note kept in the seed pack. Zero
           drops the note.
+      swarm.launch_enabled = False   [default]
+          Whether the scheduler may start lanes itself from operator-approved
+          templates (D-swarm-answers Q2). Off by default: a lane then starts only when
+          a person or an explicit command asks. Even when on, every launch needs an
+          approved template, the caps, and the lane hooks' own consent.
+      swarm.launch_templates_file = '.ddflow/local/lane-templates.toml'   [default]
+          TOML file of `[template.<name>]` lane templates (harness, route, family,
+          trust, budget_usd, min_hooks), relative to the project. Keep it in the git-
+          ignored local layer: routes and model names are machine-local. A template is
+          approved by a person's event at its digest, never by this file.
+      swarm.launch_max_budget_usd = 5.0   [default]
+          Ceiling on any template's `budget_usd`: a launch from a template that asks
+          for more is refused, whatever its approval. Zero removes the ceiling.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can

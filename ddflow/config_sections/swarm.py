@@ -215,3 +215,18 @@ class SwarmConfig:
         doc="Characters of an earlier lane's handoff note kept in the seed pack. Zero drops the note.",
         check=_count,
     )
+    launch_enabled: bool = knob(
+        False,
+        doc="Whether the scheduler may start lanes itself from operator-approved templates (D-swarm-answers Q2). Off by default: a lane then starts only when a person or an explicit command asks. Even when on, every launch needs an approved template, the caps, and the lane hooks' own consent.",
+        check=lambda v: "" if isinstance(v, bool) else "must be true or false",
+    )
+    launch_templates_file: str = knob(
+        ".ddflow/local/lane-templates.toml",
+        doc="TOML file of `[template.<name>]` lane templates (harness, route, family, trust, budget_usd, min_hooks), relative to the project. Keep it in the git-ignored local layer: routes and model names are machine-local. A template is approved by a person's event at its digest, never by this file.",
+        check=lambda v: "" if isinstance(v, str) and v else "a path",
+    )
+    launch_max_budget_usd: float = knob(
+        5.0,
+        doc="Ceiling on any template's `budget_usd`: a launch from a template that asks for more is refused, whatever its approval. Zero removes the ceiling.",
+        check=_nonneg,
+    )
