@@ -4,7 +4,7 @@
 
 [sources]
 kilo-cli-7-8-18 = { path = "kilo --help; kilo config check; kilo debug config", note = "read offline on this machine, scratch HOME, no endpoint called, no key used" }
-opencode-cli-1-19-0 = { path = "opencode --version; opencode run --help; opencode acp --help; opencode debug config on a scratch HOME and XDG dirs", note = "read offline, no model called, no endpoint contacted, no key used" }
+opencode-cli-1-19-0 = { path = "opencode --version; opencode run --help; opencode acp --help; opencode debug config", note = "on a scratch HOME and XDG dirs; read offline, no model called, no endpoint contacted, no key used" }
 opencode-repo = { path = "https://github.com/anomalyco/opencode", note = "named by the opencode descriptor; the binary is not installed here" }
 
 [harness.kilo]
