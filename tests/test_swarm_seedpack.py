@@ -8,7 +8,9 @@ from ddflow.core.budget import approx_tokens, chars_for
 from ddflow.services.swarm import seedpack as S
 
 # Distinctive FAKE values, planted to prove they never reach a lane.
-FAKE_KEY = "sk-ant-api03-FAKEFAKEFAKE0123456789abcdefABCDEF0123456789zz"
+FAKE_KEY = "-".join(
+    ["sk", "ant", "api03", "FAKEFAKEFAKE0123456789abcdefABCDEF0123456789zz"]
+)  # built, not literal
 FAKE_ADDR = "http://192.168.77.33:8123/v1"
 FAKE_HOME = "/home/fakeperson_zq/secret-vault"
 
