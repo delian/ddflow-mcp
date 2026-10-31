@@ -200,3 +200,9 @@ def test_restreamed_content_counted_once_and_lead_rewrites_excluded(tmp_path):
     assert rep["carry"]["bash_command"]["added"] == len('{"command": "ls"}') // 4  # once, not twice
     assert rep["carry"]["bash_command"]["carry"] == rep["carry"]["bash_command"]["added"]
     assert sum(v["events"] for v in rep["rewrites"].values()) == 0
+
+
+def test_dot_root_still_splits_subagents(proj, monkeypatch):
+    monkeypatch.chdir(proj)
+    rep = TR.build_report(".")
+    assert rep["subagents"]["calls"] == 5 and rep["lead"]["calls"] == 2

@@ -281,7 +281,7 @@ def build_report(
     per_agent = []
     failed = {"lead": 0, "subagents": 0}
     for p in files:
-        sub = "subagents" in p.parts[len(root.parts) :]
+        sub = "subagents" in p.relative_to(root).parts
         try:
             res = analyse_file(p, since, until, classes)
         except Unavailable as exc:
