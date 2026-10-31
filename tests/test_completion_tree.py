@@ -91,6 +91,7 @@ def test_compat_flags_and_command_aliases_are_not_offered():
     got = T.command_tree(p)
     sub = p._actions[-1]
     assert "display" in sub.choices and "--comment" in sub.choices["show"]._option_string_actions
+    assert "display" not in dict(sub.choices.items())  # what _parsers walks: no alias
     assert list(got["commands"]) == ["show"]  # the command alias answers, is not offered
     flags = [f for o in got["commands"]["show"]["options"] for f in o["flags"]]
     assert "--note" in flags and "--comment" not in flags
@@ -138,7 +139,11 @@ def test_walker_is_generic():
     assert by["--mode"]["choices"] == ["a", "b"] and by["--many"]["repeat"] is True
     c = p._subparsers._group_actions[0].choices["alpha"]
     c.add_argument("-v", action="count")
-    assert T.at(T.command_tree(p), ("alpha",))["options"][-1]["repeat"] is True
+    c.add_argument("--tag", action="append_const", const="x")
+    c.add_argument("rest", nargs=argparse.REMAINDER)
+    again = T.at(T.command_tree(p), ("alpha",))
+    assert [o["repeat"] for o in again["options"][-2:]] == [True, True]
+    assert again["positionals"][-1]["arity"] == "..."
     assert node["positionals"][0]["arity"] == "?"
     assert T.at(got, ("nope",)) is None
 
