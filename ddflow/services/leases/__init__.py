@@ -20,7 +20,7 @@ The re-export is LAZY (``__getattr__``): the package imports no submodule until 
 name is asked for. That keeps two invariants a one-file module had and a package must
 keep — monkeypatch (``monkeypatch.setattr(L, name, ...)`` re-binds the name on THIS
 module exactly as before) and the layering ratchet (``test_no_mutually_importing_pair``
-would read an eager ``from .acquire import ...`` here as a latent parent<->child cycle).
+would read an eager ``from .claim import ...`` here as a latent parent<->child cycle).
 """
 
 from __future__ import annotations
@@ -47,16 +47,16 @@ _SUBMODULE_OF = {
     "_remote_take": "remote",
     "_remote_renew": "remote",
     "_remote_drop": "remote",
-    # acquire
-    "_record_claimed_globs": "acquire",
-    "_renew_in_place": "acquire",
-    "acquire": "acquire",
-    "_holds_live": "acquire",
-    "_acquire_locked": "acquire",
-    "_prejudge": "acquire",
-    "_break_idle": "acquire",
-    "_alts": "acquire",
-    "_alternatives": "acquire",
+    # claim
+    "_record_claimed_globs": "claim",
+    "_renew_in_place": "claim",
+    "acquire": "claim",
+    "_holds_live": "claim",
+    "_acquire_locked": "claim",
+    "_prejudge": "claim",
+    "_break_idle": "claim",
+    "_alts": "claim",
+    "_alternatives": "claim",
     # lifecycle
     "_transition": "lifecycle",
     "renew": "lifecycle",

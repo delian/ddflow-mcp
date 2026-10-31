@@ -19,8 +19,7 @@ from ...infra.log import EventLog
 from .. import waiting as WG
 from ..leaseclock import foreign
 from ..logcoalesce import quiet_renewal, renew_window
-from .acquire import _clone_field
-from .common import _clash_text, _fold, glob_clash
+from .common import _clash_text, _clone_field, _fold, glob_clash
 from .model import LeaseError
 from .remote import _remote_drop, _remote_renew, _remote_take
 
