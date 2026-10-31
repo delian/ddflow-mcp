@@ -13,6 +13,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -38,6 +40,12 @@ def _lapsed_then_taken(repo: Path) -> None:
     first.append("item.started", "T1", {})
     out = LC.claim(repo, "T2", agent="second", no_worktree=True)
     assert out.exit == 0, out.reason
+
+
+@pytest.fixture(autouse=True)
+def _a_person_forces(monkeypatch):
+    """`--force` is a person's (B49fa10bbb1); the names below are lease holders, not markers."""
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")
 
 
 def test_a_forced_reclaim_of_a_lapsed_lease_is_refused_on_a_live_overlap(repo):

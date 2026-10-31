@@ -28,6 +28,20 @@ from ._base import _load
 
 #: ``confirm(rel_path, unified_diff) -> bool``: the CLI asks on a terminal before --update.
 Confirm = Callable[[str, str], bool]
+#: ``force_gate(doc, rel_path) -> str``: "" when overriding hand-edit protection may go ahead,
+#: else why not (an agent needs a person's approval, ``export.force``).
+ForceGate = Callable[[str, str], str]
+
+
+def _force_gate(repo: Path, cfg: Config, agent: str, via_mcp: bool, approval: str) -> ForceGate:
+    def gate(doc: str, rel: str) -> str:
+        log, _cfg, _st = _load(repo, agent)
+        return S.gate_force(
+            repo, log, cfg, doc, rel,
+            requested_agent=agent, via_mcp=via_mcp, approval=approval,
+        )  # fmt: skip
+
+    return gate
 
 
 def export_list(repo: Path, agent: str = "") -> O.Outcome:
@@ -218,7 +232,7 @@ def _render_docs(
     tmpl: Any,
     cap: int,
     fenced: bool,
-    act: tuple[bool, bool, bool, str, bool, Confirm | None],
+    act: tuple[bool, bool, bool, str, ForceGate | None, Confirm | None],
 ) -> list[ops.Result]:
     """One result per selected document; a document that cannot be made does not stop the
     rest."""
@@ -267,6 +281,9 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
     out: str = "",
     force: bool = False,
     confirm: Confirm | None = None,
+    agent: str = "",
+    via_mcp: bool = False,
+    approval: str = "",
     base: Path | None = None,
     ceiling: int = 0,
     fenced: bool = False,
@@ -297,10 +314,12 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
                 "to do. Print one with `ddflow export <doc>`; list the kinds with `ddflow export`.",
             )
         q = ops.load(repo, cfg)
+        gate = _force_gate(repo, cfg, agent, via_mcp, approval) if force else None
         tmpl = ops.adhoc_template(doc, template, base or Path.cwd()) if template else None
         results = _render_docs(
-            repo, cfg, q, docs, flt, tmpl, cap, fenced, (diff, check, update, out, force, confirm)
-        )
+            repo, cfg, q, docs, flt, tmpl, cap, fenced,
+            (diff, check, update, out, gate, confirm),
+        )  # fmt: skip
     except ExportError as exc:
         return O.Outcome("export", {"results": []}, exc.code, str(exc))
     except ValueError as exc:  # a config that does not load
@@ -321,7 +340,7 @@ def _act(
     diff: bool,
     check: bool,
     out: str,
-    force: bool,
+    force: ForceGate | None,
     confirm: Confirm | None,
 ) -> ops.Result:
     """--diff, --check, or a write (``--update`` when ``out`` is empty, else ``--out``)."""
@@ -337,7 +356,13 @@ def _act(
                 spec.doc, peek.rel, spec.mode, "declined", O.NOTHING,
                 message=f"{peek.rel}: not written (declined)",
             )  # fmt: skip
-    w = ops.write_doc(repo, cfg, q, spec, target=out, force=force, template=tmpl)
+    if force and (why := force(spec.doc, out or spec.path)):
+        raise ExportError(
+            f"overriding hand-edit protection (--force) is the operator's, and this call is an "
+            f"agent's. {why}",
+            EXIT_REFUSED,
+        )
+    w = ops.write_doc(repo, cfg, q, spec, target=out, force=bool(force), template=tmpl)
     return ops.Result(spec.doc, w.rel, spec.mode, w.action, w.code, message=f"{w.rel}: {w.action}")
 
 

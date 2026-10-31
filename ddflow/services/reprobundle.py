@@ -11,6 +11,7 @@ prints it. `[bugs] repro_capture = off` stores nothing.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from ..core.redact import redact_leaves
 from ..infra.blobstore import BlobStore
 from . import logblobs
 from . import repro_facts as F
+from . import reprocheck as RC
 from .redact_report import redactor
 
 _MIN_LEAF = 64
@@ -42,6 +44,8 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     repro_cmd: str = "",
     mode: str = "",
     now: float = 0.0,
+    check: dict[str, Any] | None = None,
+    machine: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """The bundle for ``bug`` at ``mode`` (default `[bugs] repro_capture`), redacted and
     capped, or None when the mode is `off`."""
@@ -66,10 +70,14 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         },
     }
     if repro_cmd:
-        out["repro_cmd"] = {"command": repro_cmd, "executed": False}
+        # The filed command wins any key the check dict might carry: what the operator
+        # told ddflow to run is the record of what was filed (never silently replaced).
+        # `executed` defaults in either branch: a check without the key means the run
+        # happened, no check means it was recorded as given.
+        out["repro_cmd"] = _canonical_cmd(repro_cmd, check)
     if mode == "full":
         out["item"] = F.item_state(st, item, now or clock.now_utc().timestamp())
-        out["machine"] = F.machine(repo)
+        out["machine"] = machine if machine is not None else F.machine(repo)
         out["recent_events"] = F.recent_events(events, cfg.agent.id, b.repro_events)
         if test:
             out["test"] = F.test_run(repo, test, b.repro_tail_bytes, b.repro_test_timeout_s)
@@ -112,6 +120,44 @@ def _shrink(node: Any) -> bool:
             del node[last]
         return True
     return False
+
+
+def _tree_sha_safely(repo: Path) -> str:
+    """The tree sha the repro would run at, or "": a tree that cannot be read degrades
+    the evidence, never the run (check answers 'unavailable' to an empty sha)."""
+    try:
+        return (F.tree(repo) or {}).get("tree_sha") or ""
+    except Exception:
+        return ""
+
+
+def _canonical_cmd(repro_cmd: str, check: dict[str, Any] | None) -> dict[str, Any]:
+    """The recorded ``repro_cmd`` section: the filed command (last, wins any key), the
+    evidence keys a check carried, and the four measurement keys CANONICAL: executed True
+    only for a record with a real yes/no verdict and a whole runs count behind it, and a
+    non-real run records no verdict and no failure count -- a no-run check cannot ride
+    out carrying a 'yes'."""
+    check_dict = dict(check) if check is not None else {}
+    r = _countable(check_dict["runs"]) if "runs" in check_dict else 0
+    real = check_dict.get("reproduced") in ("yes", "no") and r is not None and r > 0
+    canonical = {
+        "executed": real,
+        "reproduced": check_dict.get("reproduced") if real else None,
+        "runs": r,
+        "failures": _countable(check_dict["failures"])
+        if real and "failures" in check_dict
+        else (0 if real and check_dict.get("reproduced") == "no" else None),
+    }
+    extra = {
+        k: v
+        for k, v in check_dict.items()
+        if k not in ("executed", "reproduced", "runs", "failures")
+    }
+    return {
+        **extra,
+        **canonical,
+        "command": repro_cmd,
+    }
 
 
 def _cap(bundle: dict[str, Any], limit: int) -> dict[str, Any]:
@@ -221,24 +267,121 @@ def mode_problem(capture: str) -> str:
     return "" if not capture or capture in MODES else f"repro_capture must be one of {MODES}"
 
 
-def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any) -> dict[str, Any]:
-    """The `bug.found` field linking the bundle: ``{"repro": link}``, or ``{}`` when capture
-    is off. Filing a bug must never fail for want of evidence: a bundle that cannot be built
-    or stored is linked as ``{"unavailable": why}``, which `show` prints. ``given``: item,
-    agent, test, repro_cmd, capture."""
+def _countable(value: Any) -> int | None:
+    """``value`` as a whole, finite count, or None when it cannot count anything.
+    Strings and integers stay exact (int() first on those types, where an exact answer
+    exists); anything else goes through float and must be a whole non-negative number
+    there -- a fractional count truncates to NOTHING, never to an integer."""
+    if isinstance(value, str):
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return None
+        return n if n >= 0 else None
+    if isinstance(value, int):
+        return value if value >= 0 else None
     try:
-        bundle = build(
-            repo,
-            cfg,
-            st,
-            log.read_all(),
-            bug=bid,
-            item=given.get("item", ""),
-            agent=given.get("agent", ""),
-            test=given.get("test", ""),
-            repro_cmd=given.get("repro_cmd", ""),
-            mode=given.get("capture", ""),
-        )
-        return {"repro": store(repo, bundle)} if bundle is not None else {}
-    except Exception as exc:  # evidence is a courtesy; the bug is the point
+        n = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(n) or n < 0 or not n.is_integer():
+        return None
+    return int(n)
+
+
+def sighting(run: Any) -> dict[str, Any]:
+    """The part of a run's record the bug's EVENT keeps beside the bundle link
+    (DX-bug-repro-verify): the verdict the fold folds, nothing the blob already has. A run
+    that reached no exit code (nothing to say) gives {}: a record with no RUNS behind it,
+    a verdict that is not yes/no, a 'yes' with no failing run behind it, or counts that
+    cannot count (fractional, negative, overflowing, failures beyond runs) is not a
+    sighting, wherever it came from."""
+    if not isinstance(run, dict) or "reproduced" not in run:
+        return {}
+    if run.get("reproduced") not in ("yes", "no"):
+        return {}
+    runs = _countable(run.get("runs", 0))
+    failures = _countable(run.get("failures", 0))
+    if runs is None or failures is None or runs <= 0 or failures > runs:
+        return {}
+    if run.get("reproduced") == "yes" and failures <= 0:
+        return {}
+    if run.get("reproduced") == "no" and failures > 0:
+        return {}  # 'no' says no run failed: a failing count contradicts the verdict
+    # Canonical: the PARSED counts go out, never the raw non-count the caller put in.
+    return {"reproduced": run.get("reproduced"), "runs": runs, "failures": failures}
+
+
+def attach(repo: Path, cfg: Config, st: State, log: Any, bid: str, **given: Any) -> dict[str, Any]:
+    """The `bug.found` fields linking the bundle and the sighting: ``{"repro": link,
+    "sighted": verdict}`` -- the sighting only when a run reached an exit code -- or
+    ``{}`` + the sighting when capture is off (the run still happened; dropping its
+    verdict would run the command and lose what it said). Filing a bug must never fail
+    for want of evidence: a bundle that cannot be built or stored is linked as
+    ``{"unavailable": why}``, which `show` prints, and the verdict still rides along.
+    ``given``: item, agent, test, repro_cmd, capture."""
+    events = None
+    machine = None
+    try:
+        # Evidence reads degrade per-step, BEFORE the run: a log or machine probe that
+        # cannot be read strips its own section, never the run -- the contract is that
+        # the repro command STILL RUNS and its sighting is still recorded.
+        run = given.get("check")
+        if run is None and given.get("repro_cmd", ""):
+            # Evidence reads degrade per-step, BEFORE the run, and a FAILED read degrades
+            # to its terminal value AT ONCE -- [] / an unavailable marker -- so nothing is
+            # retried after the run and post-run events can never masquerade as the
+            # pre-run snapshot.
+            if events is None:
+                try:
+                    events = log.read_all() if hasattr(log, "read_all") else log
+                except Exception:
+                    events = []
+            if machine is None:
+                try:
+                    machine = F.machine(repo)
+                except Exception:
+                    machine = {"unavailable": "machine facts could not be collected"}
+            run = RC.check(
+                repo,
+                _tree_sha_safely(repo),
+                given.get("repro_cmd", ""),
+                int(cfg.bugs.repro_runs),
+                float(cfg.bugs.repro_test_timeout_s),
+                int(cfg.bugs.repro_tail_bytes),
+            )
+        sig = sighting(run)
+        try:
+            # A caller-supplied check ran before attach, so no run of ours happened:
+            # reading here is still pre-run; failed reads degrade terminally and never
+            # surface over the verdict.
+            if events is None:
+                try:
+                    events = log.read_all() if hasattr(log, "read_all") else log
+                except Exception:
+                    events = []
+            if machine is None:
+                try:
+                    machine = F.machine(repo)
+                except Exception:
+                    machine = {"unavailable": "machine facts could not be collected"}
+            bundle = build(
+                repo,
+                cfg,
+                st,
+                events,
+                bug=bid,
+                item=given.get("item", ""),
+                agent=given.get("agent", ""),
+                test=given.get("test", ""),
+                repro_cmd=given.get("repro_cmd", ""),
+                check=run,
+                machine=machine,
+                mode=given.get("capture", ""),
+            )
+            linked = {"repro": store(repo, bundle)} if bundle is not None else {}
+        except Exception as exc:  # evidence is a courtesy; the bug is the point
+            linked = {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}
+        return {**linked, **({"sighted": sig} if sig else {})}
+    except Exception as exc:
         return {"repro": {"unavailable": f"{type(exc).__name__}: {exc}"[:300]}}
