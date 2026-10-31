@@ -35,7 +35,7 @@ def fleet_view(
         return O.failed(
             "lanes", "resume needs an agent name: `ddflow lanes resume <agent>`", **data
         )
-    res = FL.resume(entries, lane, st, now)
+    res = FL.resume(entries, lane, st, now, cfg.lease.grace_s)
     data["resume"] = res
     data["text"] = res["reason"] + (f"\nrun: {res['command']}" if res["command"] else "")
     if not res["eligible"]:

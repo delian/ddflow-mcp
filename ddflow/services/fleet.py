@@ -132,7 +132,9 @@ def registry(
     return sorted(rows, key=lambda e: (ORDER.index(e.cls), e.name))
 
 
-def resume(entries: Sequence[Entry], name: str, st: State, now: float) -> dict[str, Any]:
+def resume(
+    entries: Sequence[Entry], name: str, st: State, now: float, grace_s: float = 0.0
+) -> dict[str, Any]:
     """The one resume for ``name``: eligible only while its item is unfinished and unheld.
 
     Pure and idempotent: nothing is spawned or recorded, so asking again is the same answer;
@@ -146,7 +148,7 @@ def resume(entries: Sequence[Entry], name: str, st: State, now: float) -> dict[s
     base.update(lane=e.name, item=e.item, worktree=e.worktree, stop_reason=e.stop_reason)
     it = st.items.get(e.item)
     ls = it.lease if it and not it.terminal else None
-    if ls and ls.holder != e.name:
+    if ls and ls.holder and ls.holder != e.name and ls.live(now, grace_s):
         return {**base, "reason": f"already taken over: {e.item} is held by {ls.holder}"}
     if e.lane_state not in _STOPPED:
         return {**base, "reason": f"{e.name} is {e.cls} ({e.lane_state}); nothing to resume"}

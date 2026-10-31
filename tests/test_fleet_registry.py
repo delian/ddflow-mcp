@@ -104,7 +104,13 @@ def test_resume_already_taken_over_names_the_new_holder():
 
 def test_registry_is_ordered_by_urgency_then_name():
     entries, *_ = _entries(multi_lane())
-    assert entries[0].name != "lane-work"
+    assert [(e.cls, e.name) for e in entries] == [
+        (FL.STALLED, "lane-ended"),
+        (FL.STALLED, "lane-gone"),
+        (FL.STALLED, "lane-stale"),
+        (FL.IDLE, "lane-idle"),
+        (FL.WORKING, "lane-work"),
+    ]
 
 
 def test_stop_reason_is_cut_and_made_safe():
@@ -130,7 +136,16 @@ def test_fleet_and_resume_over_cli_and_mcp(repo):
     cli = json.loads(out)
     mcp = tool_json(rpc_call(Server(repo), "ddflow_lanes", view="fleet"))
     assert code == 0 and [(e["name"], e["cls"]) for e in cli["fleet"]] == [("holder", "working")]
-    assert cli["fleet"] == mcp["fleet"] or cli["fleet"][0]["name"] == mcp["fleet"][0]["name"]
+    strip = lambda rows: [{k: v for k, v in r.items() if k != "heartbeat_age_s"} for r in rows]  # noqa: E731
+    assert strip(cli["fleet"]) == strip(mcp["fleet"])
     code, out, _ = run_cli(repo, "lanes", "resume", "holder", "--json")
     assert code == 2 and json.loads(out)["resume"]["eligible"] is False
     assert run_cli(repo, "lanes", "resume", "--json")[0] == 1
+
+
+def test_resume_ignores_a_lapsed_lease_of_another_agent():
+    g = multi_lane()
+    g.claim("lane-other", "U", T0 - 250, "u.py")  # a lease that lapsed long before NOW
+    entries, _l, st, cfg = _entries(g, T0 + 5000)
+    r = FL.resume(entries, "lane-gone", st, T0 + 5000, cfg.lease.grace_s)
+    assert "taken over" not in r["reason"]
