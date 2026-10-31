@@ -71,7 +71,7 @@ def test_overrides_refuses_with_refuted(repo_with_overrides):
 
 
 def test_doctor_notes_count_overrides_never_secrets(repo_with_overrides):
-    code, out = run_cli(repo_with_overrides, "doctor", "--json")[:2]
+    out = run_cli(repo_with_overrides, "doctor", "--json")[1]
     notes = "\n".join(json.loads(out)["notes"])
     assert "approvals audit: 1 forced completion(s)" in notes
     assert "approvals audit: 1 approved gate skip(s)" in notes
