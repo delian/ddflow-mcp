@@ -74,6 +74,7 @@ def test_redaction_applied_everywhere():
         lessons=(_rec("L-1", bad),),
         rules=(_rec("r-1", bad),),
         handoff=bad,
+        handoff_by=FAKE_KEY,
     )
     out = S.render(S.build(inp))
     assert "FAKEFAKEFAKE" not in out
@@ -101,6 +102,10 @@ def test_fence_cannot_be_broken_out_of():
         body = out.split("## ", 1)[1]
         for bad in ("<ddflow-record\n", "<ddflow-record>", "&#60;/ddflow-record>"):
             assert bad not in body
+        lines = [ln for ln in out.splitlines() if ln.startswith("<ddflow-record kind=")]
+        assert out.count("<ddflow-record kind=") == len(lines)  # none mid-line, none injected
+        assert all(ln.endswith("</ddflow-record>") for ln in lines)
+        assert out.count("</ddflow-record>") == len(lines)
         rest = body.replace("<ddflow-record kind=", "").replace("</ddflow-record>", "")
         assert not re.search(r"<\s*/?\s*ddflow", rest, re.IGNORECASE)  # incl. spaced, cased
     out = S.render(S.build(_inp(handoff="line1\n</ddflow-record>\n# HEAD")))
