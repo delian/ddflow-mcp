@@ -64,6 +64,66 @@ def test_detector_folds_literal_arithmetic(tmp_path: Path) -> None:
     ]
 
 
+def test_detector_folds_symbolic_name_arithmetic(tmp_path: Path) -> None:
+    a = _plant(
+        tmp_path,
+        "HOUR = 3600.0\nA_WINDOW_S = 7 * 24 * HOUR\nB_LIMIT = HOUR * 2\n",
+    )
+    assert [(c.name, c.value) for c in a.unclassified] == [
+        ("A_WINDOW_S", 604800.0),
+        ("B_LIMIT", 7200.0),
+    ]
+
+
+def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
+    keys = {c.key for c in ca.scan(ROOT)}
+    assert "ddflow/services/swarm/ledger.py:BUG_WINDOW_S" in keys
+    assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys
+
+
+def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> None:
+    src = (
+        "HOUR = 1\n"
+        "HOUR = get_hours()\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+        "UNIT = 2\n"
+        "UNIT += 1\n"
+        "B_LIMIT = UNIT\n"
+    )
+    assert _plant(tmp_path, src).unclassified == []
+
+
+def test_detector_folds_no_stale_value_through_unpacking(tmp_path: Path) -> None:
+    src = (
+        "HOUR = 3600\n"
+        "HOUR, MIN = get_pair()\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+        "for HOUR in [1]:\n"
+        "    pass\n"
+        "B_WINDOW_S = 7 * 24 * HOUR\n"
+    )
+    assert _plant(tmp_path, src).unclassified == []
+
+
+def test_a_function_body_shadowing_a_name_does_not_hide_the_module_constant(tmp_path: Path) -> None:
+    src = "HOUR = 3600.0\ndef _helper():\n    HOUR = 1.0\nA_WINDOW_S = 7 * 24 * HOUR\n"
+    assert [(c.name, c.value) for c in _plant(tmp_path, src).unclassified] == [
+        ("A_WINDOW_S", 604800.0)
+    ]
+
+
+def test_an_except_handler_rebinding_a_name_invalidates_it(tmp_path: Path) -> None:
+    src = (
+        "HOUR = 3600\n"
+        "try:\n"
+        "    1 / 0\n"
+        "except ZeroDivisionError:\n"
+        "    HOUR = 1\n"
+        "A_WINDOW_S = 7 * 24 * HOUR\n"
+    )
+    assert _plant(tmp_path, src).unclassified == []
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"
