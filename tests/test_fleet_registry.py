@@ -118,7 +118,18 @@ def test_stop_reason_is_cut_and_made_safe():
     g.add("session.ended", "s2", "lane-gone", T0 - 150, summary="x`y" * 1000)
     entries, *_ = _entries(g, cfg_edit=lambda c: setattr(c.lanes, "fleet_reason_chars", 50))
     r = next(x for x in entries if x.name == "lane-gone").stop_reason
-    assert len(r) <= 50 and "`" not in r
+    assert 0 < len(r) <= 50 and "`" not in r and r.startswith("x y")
+
+
+def test_the_display_cut_never_changes_the_class():
+    g = multi_lane()
+    g.add("lease.expired", "U", "sweeper", T0 + 1000, holder="lane-gone", reason="HTTP 429")
+
+    def edit(cfg):
+        cfg.lanes.fleet_reason_chars = 0
+
+    e = next(x for x in _entries(g, cfg_edit=edit)[0] if x.name == "lane-gone")
+    assert e.cls == FL.FAILED and e.stop_reason == ""
 
 
 def test_fleet_and_resume_over_cli_and_mcp(repo):

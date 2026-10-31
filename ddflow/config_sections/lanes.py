@@ -47,7 +47,7 @@ class LanesConfig:
     )
     fleet_reason_chars: int = knob(
         200,
-        doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 keeps none, and then no stop reason can class an agent `failed`.",
+        doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 prints none. The cut is for display only: failure patterns match the whole recorded reason.",
         check=lambda v: (
             ""
             if isinstance(v, int) and not isinstance(v, bool) and v >= 0

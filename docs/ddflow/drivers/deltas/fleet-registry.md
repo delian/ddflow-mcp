@@ -5,7 +5,7 @@
 log records (session summary, lease-expiry reason, release note). Classes: failed, stalled,
 idle, working, done; `[lanes] fleet_failed_patterns` decides which reasons mean failed.
 
-`ddflow lanes resume <agent>` is the one resume: pure and idempotent, eligible only while the
+`ddflow lanes resume <lane>` (a lane is an agent identity) is the one resume: pure and idempotent, eligible only while the
 agent's item is unfinished and not held by someone else; it names the new holder otherwise,
 and offers `ddflow lanes brief <agent>`. It spawns nothing.
 

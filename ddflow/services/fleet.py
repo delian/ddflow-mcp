@@ -28,6 +28,8 @@ WORKING, STALLED, FAILED, IDLE, DONE = "working", "stalled", "failed", "idle", "
 ORDER = (FAILED, STALLED, IDLE, WORKING, DONE)
 #: Lane-ledger states that mean "stopped with its item unfinished".
 _STOPPED = S.UNFINISHED
+#: Characters of a reason that failure patterns are matched against (display is cut separately).
+RAW_CAP = 2000
 _RELEASE_OK = ("completed", "done", "merged")
 
 
@@ -52,7 +54,7 @@ class Entry:
         return d
 
 
-def _signals(events: Iterable[Event], cap: int) -> dict[str, tuple[str, str]]:
+def _signals(events: Iterable[Event]) -> dict[str, tuple[str, str]]:
     """Agent -> (ts, reason): the newest reason the log gives for that agent having stopped."""
     out: dict[str, tuple[str, str]] = {}
     sessions: dict[str, str] = {}  # session id -> agent
@@ -69,7 +71,7 @@ def _signals(events: Iterable[Event], cap: int) -> dict[str, tuple[str, str]]:
             if text.strip().lower() in _RELEASE_OK:
                 text = ""
         if who and text.strip() and e.ts >= out.get(who, ("", ""))[0]:
-            out[who] = (e.ts, LN.safe(text)[:cap] if cap > 0 else "")
+            out[who] = (e.ts, text[:RAW_CAP])
     return out
 
 
@@ -106,7 +108,7 @@ def registry(
     events: Sequence[Event], ledger: Sequence[LN.Lane], st: State, cfg: Config, now: float
 ) -> list[Entry]:
     """Every lane in ``ledger``, classed, with its newest stop reason, most urgent first."""
-    sig = _signals(events, cfg.lanes.fleet_reason_chars)
+    sig = _signals(events)
     pats = _patterns(cfg)
     rows = []
     for ln in ledger:
@@ -123,7 +125,7 @@ def registry(
                 lane_state=ln.state,
                 heartbeat=ln.heartbeat,
                 last_event=ln.last_event,
-                stop_reason=reason,
+                stop_reason=LN.safe(reason)[: max(0, cfg.lanes.fleet_reason_chars)],
                 stop_at=epoch(at) if at else 0.0,
                 worktree=ln.worktree,
                 session=ln.session,
