@@ -180,7 +180,7 @@ def _capability_tables(con, fts: bool, trig: bool) -> bool:
         }
     except sqlite3.DatabaseError:
         return False
-    needed = _CAP_FTS_TABLES if fts else set()
+    needed = set(_CAP_FTS_TABLES) if fts else set()
     if trig:
         needed |= _CAP_TRI_TABLES
     return needed <= tables

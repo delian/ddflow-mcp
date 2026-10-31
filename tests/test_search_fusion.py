@@ -247,6 +247,16 @@ def test_an_index_that_claims_trigram_without_tables_is_rebuilt_where_there_is_o
     assert {r["id"] for r in fresh.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
 
 
+def test_the_capability_name_sets_are_not_mutated_by_a_trig_build():
+    """`_capability_tables` copies the FTS name set before adding the trigram names; a
+    trig-enabled check must not leak ``_tri`` names into ``_CAP_FTS_TABLES``, or a plain
+    FTS-only index would be treated as missing its trigram tables forever after."""
+    with sqlite3.connect(":memory:") as con:
+        S._capability_tables(con, fts=True, trig=True)
+        S._capability_tables(con, fts=True, trig=False)
+    assert S._CAP_FTS_TABLES and all(name.endswith("_fts") for name in S._CAP_FTS_TABLES)
+
+
 @pytest.mark.parametrize("backend", ["fts5", "like"])
 def test_tags_and_verdicts_are_searched_where_the_index_holds_them(repo, log, backend):
     """The porter FTS tables index a lesson's and an item's tags and a research verdict, so
