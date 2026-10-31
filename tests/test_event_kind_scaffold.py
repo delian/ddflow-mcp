@@ -29,14 +29,14 @@ EK = _load("_event_kind_script", ROOT / "scripts" / "event_kind.py")
 def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for rel in (
         "tests/fixtures/event_kinds.json",
-        "ddflow/core/redact.py",
+        "ddflow/core/redact/log.py",
         "tests/test_coherence_coverage.py",
     ):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / rel, tmp_path / rel)
     (tmp_path / "frag").mkdir()
     monkeypatch.setattr(EK, "FIXTURE", tmp_path / "tests/fixtures/event_kinds.json")
-    monkeypatch.setattr(EK, "REDACT", tmp_path / "ddflow/core/redact.py")
+    monkeypatch.setattr(EK, "REDACT", tmp_path / "ddflow/core/redact/log.py")
     monkeypatch.setattr(EK, "COHERENCE", tmp_path / "tests/test_coherence_coverage.py")
     monkeypatch.setattr(EK, "FRAGMENTS", tmp_path / "frag")
     shutil.copytree(ROOT / "ddflow/templates/events", tmp_path / "events")
@@ -83,7 +83,7 @@ def test_add_writes_the_data_edits_and_leaves_the_handler(tree: Path, capsys) ->
     assert 'name = "x.new"' in (tree / "events/x.toml").read_text()
     snap = json.loads((tree / "tests/fixtures/event_kinds.json").read_text())
     assert snap["kinds"]["x.new"]["fields"] == {"n": ["int"], "note": ["str"], "ref": ["str"]}
-    assert '"x.new": ("note",),' in (tree / "ddflow/core/redact.py").read_text()
+    assert '"x.new": ("note",),' in (tree / "ddflow/core/redact/log.py").read_text()
     assert (tree / "frag/event_kind_added.x.new.toml").read_text().count("x.new") == 1
 
 
@@ -123,7 +123,7 @@ def test_a_refused_add_writes_nothing(tree: Path) -> None:
 
 def test_a_repeated_lookup_is_written_once(tree: Path) -> None:
     EK.main(["add", "x.new", "--why", "what it records", "--lookup", "f=one", "--lookup", "f=two"])
-    assert (tree / "ddflow/core/redact.py").read_text().count('("x.new", "f")') == 1
+    assert (tree / "ddflow/core/redact/log.py").read_text().count('("x.new", "f")') == 1
 
 
 def test_a_kind_with_a_text_entry_is_not_given_a_second(tree: Path) -> None:
