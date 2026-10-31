@@ -195,7 +195,7 @@ def from_state(
     text = set(
         re.findall(
             r"[a-z0-9]{4,}",
-            f"{item.title} {getattr(item, 'body', '')} {' '.join(item.globs)}".lower(),
+            f"{item.title} {getattr(item, 'body', '') or ''} {' '.join(item.globs)}".lower(),
         )
     )
 
