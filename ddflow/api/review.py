@@ -117,7 +117,7 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
 SHOWN_UNTRACKED = 10
 
 
-def _base_after_rewrite(repo: Path, it, base: str) -> tuple[str, str]:
+def _base_after_rewrite(repo: Path, it, base: str, tip: str) -> tuple[str, str]:
     """(base, warning): the base to diff against, and why it is not the live `base` ref.
 
     A history rewrite (a secret scrub) replaces the commit the item forked from, so
@@ -128,13 +128,18 @@ def _base_after_rewrite(repo: Path, it, base: str) -> tuple[str, str]:
     diff is exactly the item's own work. While `base` still contains the fork sha (main
     merely moved forward) it is returned unchanged: the merge-base still excludes main's
     commits as always.
+
+    The fork sha is trusted only while the reviewed `tip` still descends from it. A
+    branch rebased onto the rewritten base shares recent history with `base` again and
+    must NOT be diffed against the pre-rewrite fork, so those cases fall back to the live
+    `base` (whose merge-base with `tip` is then, once more, the right fork).
     """
     if it is None or not getattr(it, "base_sha", ""):
         return base, ""
     if W.git(repo, "merge-base", "--is-ancestor", it.base_sha, base).ok:
         return base, ""
-    if not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
-        return base, ""  # the ref itself is gone: the caller's missing-base handling applies
+    if not W.git(repo, "merge-base", "--is-ancestor", it.base_sha, tip).ok:
+        return base, ""
     return it.base_sha, (
         f"{base} was history-rewritten since the item forked from {it.base_sha[:12]}: "
         "the reviewer sees only the item's own commits on top of that recorded base"
@@ -173,9 +178,9 @@ def diff_for(
     if not item:
         return _captured(repo, f"working tree in {repo}")
     it = st.items.get(item)
-    base, warning = _base_after_rewrite(repo, it, base)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
+        base, warning = _base_after_rewrite(wt_path, it, base, "HEAD")
         diff, how = _tree_diff(wt_path, base)
         if warning:
             how += f" (WARNING: {warning})"
@@ -190,6 +195,7 @@ def diff_for(
             f"on a branch, pass --branch <branch> or run review from its worktree",
             exclude=SELF_MANAGED,
         )
+    base, warning = _base_after_rewrite(repo, it, base, branch)
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}", *_NOISE_PATHSPEC)
     how = f"{base}...{branch} ({chosen})"
     if warning:

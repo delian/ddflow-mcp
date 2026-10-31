@@ -240,12 +240,12 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     # destroyed on exit, taking uncommitted work with it. See container.py.
     wt_root = (root / default_worktree_root(cfg.worktree.root)).resolve()
     path = wt_root / name
-    wt = Worktree(item=item_id, path=path, branch=branch, base=base, base_sha=rev(root, base))
+    wt = Worktree(item=item_id, path=path, branch=branch, base=base)
 
     if path.exists() and (path / ".git").exists():
         _ignore_inside(root, wt_root)
         wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
-        return wt  # adopt
+        return wt  # adopt: the original fork sha is not this call's `rev(base)`
     wt_root.mkdir(parents=True, exist_ok=True)
     _ignore_inside(root, wt_root)
 
@@ -255,6 +255,11 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
         args += [str(path), branch]
     else:
         args += ["-b", branch, str(path), base]
+        # The branch is created AT base's tip: that commit IS the fork, and only this
+        # path can name it. Adoption and reusing an existing branch leave `base_sha`
+        # empty -- the branch forked earlier, and its fork is not `rev(base)` now
+        # (B05dce361fd review-rb).
+        wt.base_sha = rev(root, base)
     r = git(root, *args)
     if not r.ok:
         raise GitError(f"worktree add failed for {item_id}: {r.err or r.out}")
