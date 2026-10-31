@@ -46,7 +46,6 @@ class Knobs:
     item_chars: int = 1500  # the item body
     handoff_chars: int = 1200
 
-
     @classmethod
     def from_config(cls, cfg: Config) -> Knobs:
         """Read the ``[swarm] seed_*`` knobs; one per field, so a new field needs a knob."""
