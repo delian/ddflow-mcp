@@ -215,3 +215,13 @@ def test_ci_and_merge_are_never_extra_machine_gates():
 
     cfg = SimpleNamespace(lanes=SimpleNamespace(release_machine_gates=["ci", "standards", "merge"]))
     assert LR.machine_gates(cfg) == ("standards",)
+
+
+def test_a_running_entry_is_refused_as_running_even_when_the_slots_are_full(tmp_path):
+    MQ.add(tmp_path, "T0", agent="t0", keep_history=5, release={"author": "a"}, release_cap=1)
+    e, _ = MQ.add(tmp_path, "T1", agent="t1", keep_history=5)
+    e.state = MQ.RUNNING
+    MQ.save(tmp_path, e)
+    with pytest.raises(MQ.ReleaseRefused) as got:
+        MQ.add(tmp_path, "T1", agent="t1", keep_history=5, release={"author": "a"}, release_cap=1)
+    assert not isinstance(got.value, MQ.SlotsFull)

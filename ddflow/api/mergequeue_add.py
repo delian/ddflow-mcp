@@ -140,7 +140,12 @@ def queue_add(
     if isinstance(got, O.Outcome):
         return got
     entry, added, plan = got
-    freed = _hand_over(repo, cfg, log, it, entry, plan) if plan and entry.released else {}
+    freed = {}
+    if plan and entry.released:
+        try:
+            freed = _hand_over(repo, cfg, log, it, entry, plan)
+        except Exception as exc:  # the entry holds custody already: say so, never fail the add
+            freed = {"released": True, "lease_released": False, "inbox_note": f"hand-over: {exc!r}"}
     row = _row(repo, cfg, item)
     where = f"position {row.get('position', 0)}" if row.get("position") else entry.state
     return O.ok(
