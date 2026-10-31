@@ -26,7 +26,7 @@ from ..flakes import failure_evidence
 from ..gateenv import child_env
 from ..pins import pin_files
 from ..pins import regenerate as regenerate_pins
-from .precommit import DEFAULT_COMMAND, PRE_PUSH_RUN, resolve_command
+from .precommit import DEFAULT_COMMAND, PRE_COMMIT_CONFIG, PRE_PUSH_RUN, resolve_command
 from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
 from .types import CONFLICT, Check, Result
