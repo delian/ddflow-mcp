@@ -60,7 +60,8 @@ def test_prefix_by_kind_and_state(tmp_path):
 def test_new_kind_completes_without_a_list(tmp_path):
     p = str(_index(tmp_path))
     assert CI.complete_ids("W", "widgets", "live", index=p) == ["W1"]
-    assert {"widgets", "bugs", "items", "task", "phase"} <= set(CI.kinds(index=p))
+    assert {"widgets", "bugs", "task", "phase"} <= set(CI.kinds(index=p))
+    assert "items" not in CI.kinds(index=p)  # its rows are reached by their kind values
     assert "notes" not in CI.kinds(index=p) and "notes_fts" not in CI.kinds(index=p)
     assert {"live", "fixed", "open", "done"} <= set(CI.states(index=p))
 
@@ -105,7 +106,7 @@ def test_locked_database_gives_nothing_fast(tmp_path):
     con.execute("begin exclusive")
     t = time.monotonic()
     assert CI.complete_ids("", index=str(p)) == []
-    assert time.monotonic() - t < 2
+    assert time.monotonic() - t < 0.5  # default lock wait is 30 ms
     con.execute("rollback")
     con.close()
 
@@ -198,15 +199,18 @@ def test_lookup_latency_budget(tmp_path):
         capture_output=True,
         check=True,
     )
-    assert time.monotonic() - t < 1.0 and r.stdout  # generous: loaded CI box
+    assert time.monotonic() - t < 0.5 and r.stdout  # 100 ms target, 5x slack: loaded box
 
 
 def test_bad_arguments_print_nothing(tmp_path, monkeypatch):
     _index(tmp_path)
     monkeypatch.chdir(tmp_path)
     assert CF.complete(["ids", "COMP"]) == ["COMP-a", "COMP-b"]
-    assert CF.complete(["ids", "bug", "--kind"]) == []
-    assert CF.complete(["ids", "alpha", "beta"]) == []
+    assert CF.complete(["ids", "COMP", "--kind"]) == []
+    assert CF.complete(["ids", "COMP", "COMP-b"]) == []
+    assert CF.complete(["phases", "--kind", "bug"]) == []
+    assert CF.complete(["kinds", "--state", "x"]) == []
+    assert CF.complete(["ids", "--kind", "items"]) == []  # a multi-kind table is no kind
 
 
 def test_irregular_plurals_and_lock_knob(tmp_path, monkeypatch):
