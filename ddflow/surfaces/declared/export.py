@@ -158,7 +158,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "approval",
                 help="An agent: the id of the operator's approval of enabling a locked document (a refusal files the request and names it).",
-                cli_help="an agent: the id of the operator's approval for ack, disable --lock or enabling a locked document (a refusal files the request and names it)",
+                cli_help="an agent: the id of the operator's approval for ack, disable --lock, enabling a locked document, --force or --local (a refusal files the request and names it)",
                 default="",
             ),
             Param(
@@ -273,10 +273,10 @@ COMMANDS: tuple[Command, ...] = (
         flag_exempt={
             "--update": "MCP writes with write=true plus a repo-relative path",
             "--out": "MCP: write=true plus path (the same path-safety rules)",
-            "--force": "overriding hand-edit protection is the operator's, at a terminal",
+            "--force": "overriding hand-edit protection is the operator's; an agent runs the CLI with --force --approval ID (export.force, a person's approval; tools/list byte budget)",
             "--template": "an agent never feeds the renderer an arbitrary file",
             "--lock": "the operator's veto: a person at a terminal locks a document",
-            "--local": "a per-machine selection is the operator's, at a terminal",
+            "--local": "a per-machine selection is the operator's; an agent runs the CLI with --local --approval ID (export.machine, a person's approval)",
             "--yes": "answers the terminal confirmation, which MCP has none of",
         },
         call=lambda repo, a, agent: _api().export_tool(repo, a, agent),

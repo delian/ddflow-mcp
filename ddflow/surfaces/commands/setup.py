@@ -193,6 +193,7 @@ def _self_request(a) -> tuple[Any, str]:
                 ("--dry-run", getattr(a, "dry_run", False)),
                 ("--rollback", getattr(a, "rollback", False)),
                 ("--yes", getattr(a, "yes", False)),
+                ("--approval", getattr(a, "approval", "")),
             )
             if on
         ]
@@ -204,6 +205,7 @@ def _self_request(a) -> tuple[Any, str]:
         confirm=["self"] if a.yes else [],
         reason=getattr(a, "reason", "") or "",
         surface="cli",
+        approval=getattr(a, "approval", "") or "",
     )
     return req, ""
 
@@ -235,6 +237,8 @@ def cmd_upgrade(a, c: Ctx) -> int:
     if bad:
         print(bad, file=sys.stderr)
         return REFUSED
+    if selfup is not None:
+        selfup.agent = c.requested_agent
     out = A.upgrade(
         c.repo,
         plan=True if getattr(a, "plan", False) else None,

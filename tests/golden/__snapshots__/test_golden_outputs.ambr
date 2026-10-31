@@ -2830,8 +2830,8 @@
           `accept_baseline_red` (an agent may accept a partial that ddflow measured
           baseline-red). A rule approves only its own verb, at most `policy_max_uses`
           times per item and target, and every use is recorded as an approval answered
-          by `policy:<id>`, never by a person. An agent surface cannot write this
-          knob.
+          by `policy:<id>`, never by a person. An agent's edit of this knob is a
+          `config.set`, which needs a person's approval.
       approvals.policy_max_uses = 1   [default]
           How many times one standing rule may approve the same item and target
           (default 1). A rule past its cap falls back to asking a person.
@@ -2856,6 +2856,16 @@
           (default false). Tighten-only: true in any layer (a project or company file,
           the machine file, the environment) wins over the opt-in; nothing a chat
           answer says can undo it.
+      approvals.require_approval = []   [default]
+          Verbs whose RELAYED consent (an agent's `--yes --reason`, 'the operator said
+          so in chat') is no longer accepted (default none; D-RA-Q2). `upgrade.self`
+          and `plan.confirm` may be listed: an agent then needs `--approval ID`, a
+          person's recorded approval. Until a verb is listed, a relayed use still
+          works and every one is warned about by `ddflow approvals log` and `doctor`.
+          `skew.override` cannot be listed: the version guard refuses the approval
+          engine's own writes, so it has no approval route. A person at a terminal is
+          unaffected. An agent's edit of this knob is a `config.set`, which needs a
+          person's approval.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
