@@ -21,7 +21,7 @@ import json
 import os
 import shutil
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -50,6 +50,8 @@ TRANSPORT = "opencode-process"
 MESSAGE = "Do the task described in the attached file."
 #: Preference order; the first one on the search path wins (opencode is the reference, kilo its fork).
 BINARIES = ("opencode", "kilo")
+#: Machine-local override per binary: ``DDFLOW_<NAME>_BIN`` names the executable (never committed).
+ENV_PATTERN = "DDFLOW_{}_BIN"
 #: Directories searched after PATH (kilo installs under the user's local bin).
 EXTRA_DIRS = ("~/.local/bin",)
 LIVE_PROBE = unavailable(
@@ -59,8 +61,16 @@ LIVE_PROBE = unavailable(
 #: Facts about the run command and its stream: (value, status, where it was read).
 FACTS = {
     "run --format json --model --dir": ("kilo run --help, 7.8.18", "verified"),
-    "--auto (permissions)": ("kilo run --help, 7.8.18; opencode: not read", "kilo verified"),
-    "mcp+instructions in home config": ("kilo debug config on a scratch HOME", "verified for kilo"),
+    "--auto (permissions)": ("kilo 7.8.18 and opencode 1.19.0 run --help", "verified"),
+    "mcp+instructions+provider in home config": (
+        "`debug config` on a scratch HOME",
+        "verified: kilo 7.8.18, opencode 1.19.0",
+    ),
+    "plugin dirs (plugin, plugins) in home config": (
+        "opencode 1.19.0 debug config",
+        "verified; event names unverified",
+    ),
+    "acp subcommand": ("opencode 1.19.0 acp --help", "exists; not used (later transport)"),
     "json stream shape (step_start, tool_use, error)": (
         "opencode source, from memory",
         "unverified",
@@ -103,12 +113,21 @@ def select(
     extra_dirs: tuple[str, ...] = EXTRA_DIRS,
     which: Callable[..., str | None] = shutil.which,
     version: Callable[[str], str] = _version,
+    environ: Mapping[str, str] | None = None,
 ) -> Binary | Result:
-    """The first of ``binaries`` that is installed (PATH, then ``extra_dirs``), with its version."""
+    """The first of ``binaries`` that is installed, with its version: the ``DDFLOW_<NAME>_BIN``
+    variable (an executable path), then PATH, then ``extra_dirs``."""
+    environ = os.environ if environ is None else environ
     dirs = os.pathsep.join(str(Path(d).expanduser()) for d in extra_dirs)
     for name in binaries:
-        found = which(name) or (which(name, path=dirs) if dirs else None)  # '' would mean cwd
+        override = environ.get(ENV_PATTERN.format(name.upper()), "")
+        found = (
+            (which(override) if override else None)
+            or which(name)
+            or (which(name, path=dirs) if dirs else None)
+        )  # '' would mean cwd
         if found:
+            found = os.path.abspath(found)  # a relative PATH entry must survive the cwd change
             v = version(found)
             return Binary(name, found, v, bool(v))
     return unavailable(f"none of {list(binaries)} is installed (PATH, {list(extra_dirs)})")
@@ -145,11 +164,11 @@ def _merge_config(path: Path, mcp: dict[str, Any], instr: Path) -> None:
 
 
 def argv_for(b: Binary) -> tuple[str, ...]:
-    """The headless command; every value a whole-element placeholder (E4). ``--auto`` is kilo's
-    flag (read in its --help); opencode's is not read, so it is not guessed."""
-    auto = ("--auto",) if b.name == "kilo" else ()
+    """The headless command; every value a whole-element placeholder (E4). ``--auto`` is in the
+    ``run --help`` of both binaries (kilo 7.8.18, opencode 1.19.0)."""
+    auto = ("--auto",)
     # the task text is a private file (the closed placeholder list has no prompt); `--file` takes
-    # a list, so it comes last and the one-line message first (kilo run --help, 7.8.18)
+    # a list, so it comes last and the one-line message first (run --help of both)
     return (b.path, "run", MESSAGE, "--format", "json", "--model", "{model}", "--dir", "{dir}",
             *auto, "--file", "{prompt_file}")  # fmt: skip
 
