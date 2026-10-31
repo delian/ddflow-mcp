@@ -257,9 +257,15 @@ class Plan:
 
 def plan_for(harness: str) -> Plan | None:
     """The normalizer, emitter and injection events for ``harness``; None when ddflow has no
-    command-hook descriptor for it (unknown id, no hooks section, plugin or no hooks)."""
+    descriptor for it (an unknown id, no hooks section) or its hooks declare no payload
+    dialect (``none``). A plugin-style hook declares a normalizer and emitter too, so its
+    ``pre_tool`` door reaches the same entry point as a command-hook's."""
     h = harnessreg.get(harness)
-    if h is None or h.hooks is None or h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES:
+    if h is None or h.hooks is None:
+        return None
+    if h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES and h.hooks.style != "plugin":
+        return None
+    if not (h.hooks.normalizer and h.hooks.emitter):
         return None
     return Plan(harness, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject, dict(h.hooks.events))
 
