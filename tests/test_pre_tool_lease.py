@@ -62,9 +62,10 @@ def test_pre_tool_allows_a_write_inside_the_lease(repo, monkeypatch):
     assert out.data["stdout"] == ""
 
 
-def test_pre_tool_does_not_refuse_a_writer_without_a_lease(repo, monkeypatch):
-    """With no live lease the project door stays open (the commit hook governs that case): it
-    refuses only a write outside lease globs the agent actually holds."""
+def test_pre_tool_refuses_a_write_when_the_agent_holds_no_lease(repo, monkeypatch):
+    """An agent holding no live lease must not write any file: the same refusal the lane
+    check gives, now that the project door reuses it (a no-lease write is outside every
+    lease the agent holds)."""
     monkeypatch.setattr(CK, "_mine", lambda repo, agent: ([], []))
     out = AS.hooks(
         repo,
@@ -76,5 +77,5 @@ def test_pre_tool_does_not_refuse_a_writer_without_a_lease(repo, monkeypatch):
             {"tool_name": "Edit", "tool_input": {"file_path": "src/b.py"}, "cwd": str(repo)}
         ),
     )
-    assert out.data["result"] == "allowed"
-    assert out.data["stdout"] == ""
+    assert out.data["result"] == "denied"
+    assert "no live lease" in out.data["stdout"]

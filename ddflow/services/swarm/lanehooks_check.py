@@ -81,14 +81,9 @@ def _self_managed(rel: str) -> bool:
 
 
 def verdict(
-    repo: Path, agent: str, paths: list[str], cwd: Path, root: Path | None = None,
-    *, refuse_no_lease: bool = True,
+    repo: Path, agent: str, paths: list[str], cwd: Path, root: Path | None = None
 ) -> tuple[int, str]:
-    """(0, "") to allow; (REFUSE, reason) to refuse. Raises only on what fail-open covers.
-
-    ``refuse_no_lease``: with no live lease, refuse with "stop" (a lane always holds one)
-    or allow (the project's own ``pre_tool`` door also serves an unclaimed agent, whose
-    writes the commit hook governs instead)."""
+    """(0, "") to allow; (REFUSE, reason) to refuse. Raises only on what fail-open covers."""
     rels = [(p, _relative(p, cwd, root)) for p in paths]
     for raw, rel in rels:
         if rel is not None and (rel == PROBE_DIR or rel.startswith(PROBE_DIR + "/")):
@@ -97,9 +92,7 @@ def verdict(
         return 0, ""
     mine, shared = _mine(repo, agent)
     if not mine:
-        if refuse_no_lease:
-            return REFUSE, f"lane {agent} holds no live lease: stop; do not write any file"
-        return 0, ""
+        return REFUSE, f"lane {agent} holds no live lease: stop; do not write any file"
     bad = []
     for raw, rel in rels:
         if rel is None:
