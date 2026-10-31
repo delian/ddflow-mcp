@@ -78,7 +78,8 @@
    "renewed",
    "waiters",
    "globs_withheld",
-   "yield_requested"
+   "yield_requested",
+   "wake"
   ],
   "output_schema": {
    "type": "object",
@@ -90,6 +91,7 @@
     "waiters": {},
     "globs_withheld": {},
     "yield_requested": {},
+    "wake": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -248,6 +250,7 @@
    "coverage_gaps",
    "note",
    "woke",
+   "wake",
    "bugs_closed",
    "umbrellas_completed",
    "umbrella_refused",
@@ -272,6 +275,7 @@
     "coverage_gaps": {},
     "note": {},
     "woke": {},
+    "wake": {},
     "bugs_closed": {},
     "umbrellas_completed": {},
     "umbrella_refused": {},
@@ -1880,7 +1884,8 @@
   "shape": "object",
   "payload": [
    "released",
-   "woke"
+   "woke",
+   "wake"
   ],
   "output_schema": {
    "type": "object",
@@ -1890,6 +1895,7 @@
     },
     "released": {},
     "woke": {},
+    "wake": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -2745,6 +2751,37 @@
     "repointed": {},
     "dry_run": {},
     "released_parent_lease": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_message": {
+  "command": "session_message",
+  "schema": "session_message@1",
+  "shape": "object",
+  "payload": [
+   "to",
+   "sent",
+   "wake",
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_message@1"
+    },
+    "to": {},
+    "sent": {},
+    "wake": {},
+    "id": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
