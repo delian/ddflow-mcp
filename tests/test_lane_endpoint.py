@@ -92,7 +92,7 @@ def test_unknown_route_and_harness(tmp_path):
     ep = E.resolve(cat, "lan-vllm")
     assert isinstance(E.render(ep, "claude"), Result)
     assert E.layout("kilo")["custom_provider"]["s"] == "verified"
-    assert E.layout("opencode")["custom_provider"]["s"] == "unverified"
+    assert E.layout("opencode")["custom_provider"]["s"] == "verified"
 
 
 def test_probe_is_unavailable_not_passed(tmp_path):
@@ -162,7 +162,15 @@ def test_env_name_with_newline_is_refused(tmp_path):
     assert isinstance(r, Result) and "NAME" in r.detail
 
 
-def test_unverified_harness_is_refused_unless_allowed(tmp_path):
+def test_unverified_harness_is_refused_unless_allowed(tmp_path, monkeypatch):
+    real = E.layout
+
+    def unread(h):
+        lay = dict(real(h))
+        lay["custom_provider"] = {"v": True, "s": "unverified"}
+        return lay
+
+    monkeypatch.setattr(E, "layout", unread)
     cat = _verified(tmp_path)
     r = E.prepare(cat, "lan-vllm", "opencode", tmp_path / "o")
     assert isinstance(r, Result) and "unverified" in r.detail and not (tmp_path / "o").exists()
