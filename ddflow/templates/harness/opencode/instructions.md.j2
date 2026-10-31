@@ -8,4 +8,4 @@ Work only inside `{{ worktree }}`.{% if item %} Your item is `{{ item }}`: touch
 - A tool or reviewer that could not run is recorded `unavailable`, never `passed`.
 - A write outside the lease is refused by a hook; do not try to route around it (no `git commit --no-verify`).
 - Never print, copy or commit a key, token or endpoint address.
-- When your run ends, assess ddflow itself (a defect or missing feature you met) and file it as a bug, after checking it is not already filed.
+- At the end of the run, of each phase and before your context is compacted, assess ddflow itself: file any defect or missing feature you met as a bug, after checking it is neither already filed nor already corrected.
