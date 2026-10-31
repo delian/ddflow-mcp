@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...core.budget import chars_for
-from ...core.provenance import DATA_RULE, Origin, fence
+from ...core.provenance import DATA_RULE, Origin, decision_origin, fence, lesson_origin
 
 #: Section order is priority order.
 ORDER = ("decisions", "rules", "lessons", "handoff")
@@ -86,7 +86,9 @@ def default_redact() -> Callable[[str], str]:
 
 def _cut(s: str, n: int) -> str:
     s = re.sub(r"\s+", " ", s).strip()
-    return s if len(s) <= n else s[: max(0, n - 1)] + _MARK
+    if n <= 0:
+        return ""
+    return s if len(s) <= n else s[: n - 1] + _MARK
 
 
 def fence_line(
@@ -175,10 +177,18 @@ def render(seed: Seed) -> str:
     return "\n".join(out)
 
 
+def _rec(ident: str, title: str, body: str, origin: Origin) -> Rec:
+    """A `Rec` with the author and trust the shared provenance rules give the record."""
+    return Rec(ident, title, body, origin.trust, origin.by)
+
+
 def from_state(
     state, repo: Path, item_id: str, *, handoff: str = "", handoff_by: str = ""
 ) -> SeedInput:
-    """Fill a `SeedInput` from the folded ``state`` and the rule files of ``repo``."""
+    """Fill a `SeedInput` from the folded ``state`` and the rule files of ``repo``.
+
+    Decisions and lessons carry the trust `core.provenance` gives them; a rule file records
+    no author trust, so it is shown as an agent's (never promoted to operator)."""
     from ..guidance.kinds import governing
     from ..guidance.ruleview import project_rules
 
@@ -200,20 +210,13 @@ def from_state(
         globs=tuple(item.globs),
         needs=tuple(item.needs),
         decisions=tuple(
-            Rec(
-                d.id,
-                d.title,
-                d.decision,
-                "operator" if d.decided_by == "operator" else "agent",
-                d.by,
-            )
-            for d in [*scoped, *always]
+            _rec(d.id, d.title, d.decision, decision_origin(d)) for d in [*scoped, *always]
         ),
         rules=tuple(
             Rec(r.id, r.title, r.body, "agent", str(r.provenance.get("by", "")))
             for r in project_rules(repo)
         ),
-        lessons=tuple(Rec(les.id, les.title, les.rule, "agent", les.by) for les in lessons),
+        lessons=tuple(_rec(les.id, les.title, les.rule, lesson_origin(les)) for les in lessons),
         handoff=handoff,
         handoff_by=handoff_by,
     )
