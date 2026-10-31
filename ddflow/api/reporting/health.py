@@ -17,6 +17,8 @@ from ...infra import container as CT
 from ...infra import signals as SIG
 from ...infra import worktree as W
 from ...infra.store import Store
+from ...services.approvals import audit as AUD
+from ...services.approvals import overrides as OVR
 from ...services import adopt as AD
 from ...services import cleanup as CL
 from ...services import configcompat as CC
@@ -291,6 +293,8 @@ def doctor(
     notes.extend(_orphan_notes(events))
     notes += [*export_select.doctor_notes(repo, cfg, st), *_export_target_notes(repo, cfg)]
     notes.extend(RULEVIEW.notes(repo, cfg, st))
+    notes.extend(OVR.notes(events, st, cfg))  # forced completions, skips, typed-chat T3 uses ...
+    notes.extend(AUD.findings(st, cfg))  # an approved answer without proof, an expiring approval
     notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
