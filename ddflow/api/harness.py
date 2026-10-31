@@ -26,7 +26,7 @@ from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
 from ..services.hookio import DENY_EMITTERS, Plan, emit
-from . import harness_drv as D
+from .harness_drv import harness_add, harness_lint, harness_probe, harness_test
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -308,9 +308,9 @@ def _author(repo: Path, what: str, id: str, family: str, title: str, directory: 
     if not id:
         return O.failed("harness", f"{what} needs a harness id (or a descriptor file)")
     if what == "add":
-        return D.harness_add(repo, id, family, title, directory)
+        return harness_add(repo, id, family, title, directory)
     if what == "lint":
-        return D.harness_lint(repo, id)
+        return harness_lint(repo, id)
     if what == "test":
-        return D.harness_test(repo, id)
-    return D.harness_probe(repo, id, run)
+        return harness_test(repo, id)
+    return harness_probe(repo, id, run)
