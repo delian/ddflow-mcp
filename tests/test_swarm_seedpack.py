@@ -205,7 +205,12 @@ def test_budget_below_the_item_brief_is_refused_not_overrun():
 def test_zero_caps_emit_no_text():
     k = S.Knobs(entry_chars=0, handoff_chars=0, item_chars=0)
     out = S.render(S.build(_inp(), k))
-    assert "decided A" not in out and "previous lane" not in out and "…" not in out
+    assert (
+        "Implement it carefully" not in out
+        and "decided A" not in out
+        and "previous lane" not in out
+        and "…" not in out
+    )
 
 
 def test_from_state_imported_lesson_and_decision_keep_shared_trust(tmp_path):
