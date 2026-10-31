@@ -59,3 +59,21 @@ class LanesConfig:
         factory=lambda: ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"],
         doc="Environment variable NAMES a launched lane inherits from the launching process, besides its own private home and the key names its launch spec lists. Everything else is dropped, so the operator's credentials and settings do not reach the lane.",
     )
+    endpoint_slots: int = knob(
+        1,
+        doc="Lanes a local endpoint serves at once when its route declares no `concurrency` fact and `[schedule] resources` names no capacity for it (pool `ep-<route>`). The scheduler never plans more lanes than this on one endpoint, and a launched lane takes one flock slot of it.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 1
+            else "a whole number of one or more"
+        ),
+    )
+    slot_wait_s: int = knob(
+        600,
+        doc="Seconds a launched lane waits for a free endpoint or GPU slot before giving up with a report (it holds no lease while it waits and starts no daemon). 0 tries each slot once.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "a whole number of zero or more"
+        ),
+    )
