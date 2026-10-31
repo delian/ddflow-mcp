@@ -172,7 +172,8 @@ def test_a_crashed_integrator_leaves_the_released_item_for_recover(rp):
     entry = MQ.get(rp, "T1")
     entry.state, entry.started_at = MQ.RUNNING, time.time()
     MQ.save(rp, entry)  # an integrator died holding it
-    _code, out, err = run_cli(rp, "recover")
+    code, out, err = run_cli(rp, "recover")
+    assert code in (0, 1), out + err  # a plan, not a crash
     assert "T1" in out + err, out + err
     assert MQ.get(rp, "T1").released is True
 
