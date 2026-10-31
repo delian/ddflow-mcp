@@ -132,3 +132,12 @@ def test_add_escapes_free_text_and_lint_survives_scalar_tables(tmp_path):
     f = tmp_path / "s.toml"
     f.write_text('id = "s"\nverified = "yes"\n')
     assert H.harness_view(tmp_path, what="lint", id=str(f)).exit == O.FAIL
+
+
+def test_lint_survives_a_non_list_unverified_and_add_escapes_del(tmp_path):
+    f = tmp_path / "s.toml"
+    f.write_text('id = "s"\n[verified]\nunverified = 5\n')
+    assert H.harness_view(tmp_path, what="lint", id=str(f)).exit == O.FAIL
+    assert H.harness_view(tmp_path, what="add", id="q2", title="a\x7fb").ok
+    out = H.harness_view(tmp_path, what="lint", id="q2")
+    assert not any("TOML" in p or "Invalid" in p for p in out.data["problems"])
