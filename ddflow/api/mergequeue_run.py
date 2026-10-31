@@ -186,10 +186,14 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
         )
     sha = str(out.data.get("sha", ""))
     if e.released:
-        done = finish_item(repo, it.id, model=e.author, agent=agent, sha=sha,
-                           called_from=where[0], shell_cwd=where[1])  # fmt: skip
-        if done.exit != O.OK:  # merged, so not parked: the lane is told to finish it
-            return MQ.MERGED, f"merged, completion {O.EXIT_NAMES[done.exit]}: {done.reason}", sha
+        try:
+            done = finish_item(repo, it.id, model=e.author, agent=agent, sha=sha,
+                               called_from=where[0], shell_cwd=where[1])  # fmt: skip
+            gone = "" if done.exit == O.OK else f"{O.EXIT_NAMES[done.exit]}: {done.reason}"
+        except Exception as exc:  # merged already: never parked, the lane is told instead
+            gone = f"failed: {exc!r}"
+        if gone:
+            return MQ.MERGED, f"merged, completion {gone}", sha
     return MQ.MERGED, "", sha
 
 

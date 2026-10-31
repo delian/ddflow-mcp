@@ -197,3 +197,20 @@ def test_auto_mode_releases_an_eligible_plain_enqueue_and_only_queues_the_rest(r
     assert run_cli(rp, "queue", "add", "T2", agent="t2")[0] == 0
     assert MQ.get(rp, "T1").released and not _lease_of(rp, "T1")
     assert not MQ.get(rp, "T2").released and _lease_of(rp, "T2")
+
+
+def test_a_release_of_an_entry_already_being_integrated_is_refused(tmp_path):
+    e, _ = MQ.add(tmp_path, "T1", agent="t1", keep_history=5)
+    e.state = MQ.RUNNING
+    MQ.save(tmp_path, e)
+    with pytest.raises(MQ.ReleaseRefused):
+        MQ.add(tmp_path, "T1", agent="t1", keep_history=5, release={"author": "a"})
+
+
+def test_ci_and_merge_are_never_extra_machine_gates():
+    from types import SimpleNamespace
+
+    from ddflow.services import lanerelease as LR
+
+    cfg = SimpleNamespace(lanes=SimpleNamespace(release_machine_gates=["ci", "standards", "merge"]))
+    assert LR.machine_gates(cfg) == ("standards",)

@@ -26,7 +26,8 @@ EVENT = "lane.released_for_gate"
 
 
 def machine_gates(cfg) -> tuple[str, ...]:
-    return tuple(cfg.lanes.release_machine_gates)
+    """The extra gates the integrator runs for a released entry. ci and merge are its own."""
+    return tuple(g for g in cfg.lanes.release_machine_gates if g not in ("ci", "merge"))
 
 
 def tree_of(wt: Path) -> str:

@@ -75,8 +75,9 @@ def _release_plan(repo, cfg, st, it, log, wt_path, *, unit_tests, release: bool,
 
 def _enqueue(repo, cfg, st, it, log, wt_path, *, asked, release, ut, agent):
     """(entry, added, release plan), or the refusal Outcome of an explicit release that cannot
-    be granted. A release that merely falls short (auto mode, or a full slot count) queues
-    the item without handing it over."""
+    be granted (never queued unreleased: the agent asked to leave). A release that merely
+    falls short in auto mode queues the item without handing it over, and only if it is
+    ready to land without the machine gates a release leaves to the integrator."""
     item = it.id
     plan = None
     if asked:
@@ -85,14 +86,19 @@ def _enqueue(repo, cfg, st, it, log, wt_path, *, asked, release, ut, agent):
         if nope and release:
             return O.refused("queue.add", f"{item} cannot be released: {nope}", id=item,
                              queued=False, released=False)  # fmt: skip
+    plain = lambda: refusal(repo, cfg, st, it, unit_tests=ut)  # noqa: E731
+    if plan is None and asked and (why := plain()):
+        return O.refused("queue.add", f"{item} cannot be queued: {why}", id=item, queued=False)
     keep = cfg.merge_queue.keep_history
     try:
         entry, added = MQ.add(repo, item, agent=log.agent_id, release=plan, keep_history=keep,
                               release_cap=cfg.lanes.release_max)  # fmt: skip
-    except MQ.SlotsFull as exc:
+    except MQ.ReleaseRefused as exc:
         if release:
             return O.refused("queue.add", f"{item} cannot be released: {exc}", id=item,
                              queued=False, released=False)  # fmt: skip
+        if why := plain():
+            return O.refused("queue.add", f"{item} cannot be queued: {why}", id=item, queued=False)
         plan = None
         entry, added = MQ.add(repo, item, agent=log.agent_id, keep_history=keep)
     return entry, added, plan
