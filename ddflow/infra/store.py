@@ -161,6 +161,37 @@ _SEARCH_COLS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _capability_tables(con, fts: bool, trig: bool) -> bool:
+    """Are the derived tables the capability needs actually present AND in sync with their
+    base tables, whatever `meta` claims? The claim can say `trigram=1` while the `_tri`
+    tables never grew (the reconcile `_rebuild_locked` refuses stamped the claim over an
+    index built without them) or grew empty (a read's `init` created them, unfilled), so
+    the capability is verified from the tables: each derived table holds one row per base
+    row, the same count the reconcile itself treats as the honest "in sync"."""
+    if not (fts or trig):
+        return True
+    try:
+        names = {r[0] for r in con.execute("select name from sqlite_master where type = 'table'")}
+        for table in _SEARCH_COLS:  # nosec B608: fixed keys
+            # bandit B608: `table` is a key of the fixed `_SEARCH_COLS`.
+            base = con.execute(f"select count(*) from {table}").fetchone()[0]  # nosec B608
+            if fts:
+                name = f"{table}_fts"
+                if name not in names or (
+                    con.execute(f"select count(*) from {name}").fetchone()[0] != base  # nosec B608
+                ):
+                    return False
+            if trig:
+                name = f"{table}_tri"
+                if name not in names or (
+                    con.execute(f"select count(*) from {name}").fetchone()[0] != base  # nosec B608
+                ):
+                    return False
+    except sqlite3.DatabaseError:
+        return False
+    return True
+
+
 class Store:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:
         self.root = Path(root)
@@ -279,6 +310,7 @@ class Store:
         try:
             with closing(self.connect()) as con:
                 row = {r["k"]: r["v"] for r in con.execute("select k,v from meta")}
+                cap_ok = _capability_tables(con, self.fts, self.trigram)
         except sqlite3.DatabaseError:
             return True
         if row.get("schema") != str(SCHEMA):
@@ -287,8 +319,14 @@ class Store:
             return True
         # An index built where SQLite had no trigram tokenizer has no `_tri` tables filled;
         # read where it has one, it would rank on empty tables. A change of capability is
-        # a rebuild.
-        if row.get("trigram", "0") != ("1" if self.trigram else "0"):
+        # a rebuild -- and so is a meta that CLAIMS the capability while its tables are
+        # absent (the reconcile `_rebuild_locked` refuses stamped `trigram=1` over an index
+        # with no `_tri` tables at all).
+        if (
+            row.get("fts", "0") != ("1" if self.fts else "0")
+            or row.get("trigram", "0") != ("1" if self.trigram else "0")
+            or not cap_ok
+        ):
             return True
         # `EventLog.mark()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
@@ -406,6 +444,13 @@ class Store:
             # claim. Taken BEFORE the read, like the fingerprint: marked afterwards, a
             # byte the projection never folded could be claimed consumed the same way.
             marks = self._verified_shard_marks({}, log)
+        if reconciling and self._capability_changed():
+            # An index built on a different capability (FTS5 or the trigram tokenizer on
+            # or off) cannot be reconciled into this one: the tables the fresh index needs
+            # were never created, so a delta over the old one would leave them missing or
+            # empty, and the meta would then claim they exist. A capability change is a
+            # full rebuild, exactly as `stale()` already decides for the trigram flip.
+            reconciling = False
         events = log.read_all()
         state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
@@ -486,6 +531,29 @@ class Store:
         if sec is not None:
             return bool(getattr(sec, "incremental", True))
         return True
+
+    def _capability_changed(self) -> bool:
+        """Does the existing index not actually hold the capability this store needs?
+        FTS5 on/off or the trigram tokenizer on/off disagree with the index's `meta`, OR
+        the meta claims the capability while its tables are absent -- in either case the
+        reconcile delta would write a table the old index never created, leaving it empty
+        while the meta claims it is there. A capability change is a full rebuild, never a
+        delta over the gap; `stale()` reads the same two facts the same way."""
+        if not self.path.exists():
+            return False
+        try:
+            with closing(self.connect()) as con:
+                meta = {
+                    r["k"]: r["v"]
+                    for r in con.execute("select k, v from meta where k in ('fts', 'trigram')")
+                }
+                if not _capability_tables(con, self.fts, self.trigram):
+                    return True
+        except sqlite3.DatabaseError:
+            return True  # an unreadable meta is doubt, and doubt is a rebuild
+        return meta.get("fts", "0") != ("1" if self.fts else "0") or meta.get("trigram", "0") != (
+            "1" if self.trigram else "0"
+        )
 
     def _load_shard_digests(self) -> dict[str, tuple[int, str]] | None:
         """The per-shard `(consumed bytes, sha256)` of the projection the EXISTING index
