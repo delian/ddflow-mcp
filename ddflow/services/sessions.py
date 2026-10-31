@@ -42,6 +42,7 @@ from ..core import ids as IDS
 from ..core.digest import content_digest
 from ..core.events import OLDER_MARK, stamp_text
 from ..core.model import ADD_RELATIONS, State, link_targets
+from ..core.redact_errors import PatternError, fail_closed_text
 from ..core.slug import safe_filename
 from ..infra.fsio import replace_text
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
@@ -59,7 +60,12 @@ def redact(text: str, cfg: Config) -> tuple[str, int]:
     **An invalid pattern raises rather than being skipped.** This is a security control
     writing to a COMMITTED log, and its failure mode is silence: see `core.redact`.
     """
-    red = redactor("log", cfg).text(text)
+    try:
+        red = redactor("log", cfg).text(text)
+    except PatternError:
+        raise
+    except Exception:  # fail closed: the placeholder is written, never the raw text
+        return fail_closed_text()
     return red.text, red.total
 
 

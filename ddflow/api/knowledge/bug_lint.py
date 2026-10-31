@@ -1,4 +1,5 @@
-"""`bug fixed --lint-exempt`: closing a CI-filed LINT bug, which has no test to write (Bee3becc481).
+"""`bug fixed --lint-exempt`: closing a CI-filed lint or static-scan bug, which has no test
+to write (Bee3becc481).
 
 Split from `bug_close` so neither module grows past the area-size ratchet."""
 
@@ -19,8 +20,8 @@ _CI_LINT_TITLE = re.compile(r"^\S+ CI check failed: (?P<check>.+?)\s*$")
 
 
 def _lint_check(cfg, st, item: str) -> str:
-    """The check id of a CI-filed LINT bug (not a pytest node id; it names one of
-    `[bugs].lint_checks`), else ""."""
+    """The check id of a CI-filed lint or static-scan bug (not a pytest node id; it names
+    one of `[bugs].lint_checks`), else ""."""
     bug = st.bugs.get(item)
     m = _CI_LINT_TITLE.search(bug.title) if bug is not None else None
     if not m or _is_node_id(m["check"]):  # a pytest node id is a test: it needs its test
@@ -32,7 +33,8 @@ def _lint_check(cfg, st, item: str) -> str:
 def _close_lint_exempt(
     log, cfg, st, item, reason, tests, changelog_entry, *, takes_no, record, landing=None
 ) -> O.Outcome:
-    """`bug fixed --lint-exempt REASON`: the close of a CI lint bug that has no test to write.
+    """`bug fixed --lint-exempt REASON`: the close of a CI lint or static-scan bug that has no
+    test to write.
 
     `landing` (the resolved ``--landed`` ``(sha, parent)`` pair, or None) is allowed here:
     the exemption waives the regression TEST, not the commit reference, so the record can
@@ -43,8 +45,8 @@ def _close_lint_exempt(
     if not check:
         return O.refused(
             "bug.fixed",
-            f"--lint-exempt is for a CI-filed lint bug (a check that is not a test); {item} is "
-            "not one. Name the regression test that guards it.",
+            f"--lint-exempt is for a CI-filed lint or static-scan bug (a check that is not a "
+            f"test); {item} is not one. Name the regression test that guards it.",
             id=item,
         )
     if not reason.strip():

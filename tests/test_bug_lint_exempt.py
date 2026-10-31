@@ -47,7 +47,7 @@ def test_a_ci_lint_bug_closes_with_a_recorded_reason_and_no_test(repo):
 def test_a_bug_that_is_not_a_ci_lint_check_still_needs_its_test(repo):
     _file(repo, "B1", "an ordinary bug")
     out = api.bug_fixed(repo, "B1", lint_exempt="no test, honest")
-    assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason
+    assert out.exit == REFUSED and "CI-filed lint or static-scan bug" in out.reason, out.reason
     _file2 = run_cli(repo, "bug", "found", "--id", "Bci-t", "--summary", "r", "--title",
                      "pre-push CI check failed: tests/test_a.py::test_x")  # fmt: skip
     assert _file2[0] == 0
@@ -76,10 +76,20 @@ def test_the_cli_takes_lint_exempt(repo):
     assert fixed.data["regression_verify"]["reason"] == "ruff format applied"
 
 
-def test_a_security_or_other_non_lint_ci_check_still_needs_its_test(repo):
+def test_a_bandit_static_security_scan_ci_bug_closes_via_lint_exempt(repo):
     _file(repo, "Bci-bandit-1", "merge CI check failed: bandit (CI: Static security scan)")
-    out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="no test")
-    assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason
+    out = api.bug_fixed(repo, "Bci-bandit-1", lint_exempt="nosec added; static scan green")
+    assert out.exit == OK, out.reason
+    assert out.data["regression_verified"] == "exempt-lint"
+    assert fold(EventLog(repo).read_all()).bugs["Bci-bandit-1"].fixed_at
+    (fixed,) = [e for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
+    assert fixed.data["regression_verify"]["lint_check"] == "bandit (CI: Static security scan)"
+
+
+def test_a_non_lint_non_static_scan_ci_check_still_needs_its_test(repo):
+    _file(repo, "Bci-build-1", "merge CI check failed: the wheel builds (CI: Build)")
+    out = api.bug_fixed(repo, "Bci-build-1", lint_exempt="no test")
+    assert out.exit == REFUSED and "CI-filed lint or static-scan bug" in out.reason, out.reason
 
 
 def test_a_non_pytest_check_id_containing_colons_is_not_taken_for_a_test(repo):
@@ -116,4 +126,4 @@ def test_lint_exempt_names_the_landed_fix_commit(repo):
 def test_only_a_title_that_starts_as_the_ci_filing_does_is_a_ci_bug(repo):
     _file(repo, "B-fake", "Not a CI check failed: ruff format --check (CI: Lint)")
     out = api.bug_fixed(repo, "B-fake", lint_exempt="no test, honest")
-    assert out.exit == REFUSED and "CI-filed lint bug" in out.reason, out.reason
+    assert out.exit == REFUSED and "CI-filed lint or static-scan bug" in out.reason, out.reason

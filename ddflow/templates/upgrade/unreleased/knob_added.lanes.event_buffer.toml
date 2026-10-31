@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.event_buffer"
+new = "1000"
+why = "How many canonical events a lane driver keeps unread per lane; when a reader falls behind, the oldest are dropped and counted in the lane status (`dropped`), never silently."
+impact = "additive"

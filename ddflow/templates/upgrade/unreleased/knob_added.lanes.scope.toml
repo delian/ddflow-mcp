@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.scope"
+new = '"none"'
+why = "Extra containment for a launched lane beyond its process group: 'none' (the group alone) or 'systemd' (`systemd-run --user --scope`, so a cgroup holds everything the lane started); a lane driver waits stop_grace_s after SIGTERM to that group before SIGKILL."
+impact = "additive"

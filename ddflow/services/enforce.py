@@ -1374,6 +1374,11 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
         msg = "\n\n".join(m for m in (env_msg + "\n\n(warning only)", msg) if m)
     if code == 0:  # a refusal says its own thing; the advisory rides on an allowed commit
         msg = "\n\n".join(m for m in (msg, _complexity_note(repo, cfg)) if m)
+    if code == 0:
+        from .enforce_secrets import check_event_secrets  # imports this module: lazily
+
+        scode, smsg = check_event_secrets(repo, cfg)
+        code, msg = scode, "\n\n".join(m for m in (msg, smsg) if m)
     return Verdict(code, msg)
 
 
