@@ -541,8 +541,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=3985e3f80b25 -->
-<details><summary>All 91 commands</summary>
+<!-- ddflow:begin README/commands sha=772c5f40d16d -->
+<details><summary>All 92 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -628,6 +628,7 @@ needs a line written by hand here.
 | `ddflow import` | propose the existing project's work, lessons and decisions (exit 2 = nothing) |
 | `ddflow companions` | companion MCP servers that serve the gates (exit 2 = a default one is missing) |
 | `ddflow harness` | what each agent gets, at which fallback level, and what is broken |
+| `ddflow model` | the model catalog: a row with its provenance |
 | `ddflow prompts` | inspect and override the prompt templates |
 | `ddflow hooks` | install/inspect the enforcement git hook and the Claude Code session hook |
 | `ddflow mcp` | run the MCP stdio server over this repository |

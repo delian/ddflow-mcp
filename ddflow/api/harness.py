@@ -26,6 +26,7 @@ from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
 from ..services.hookio import DENY_EMITTERS, Plan, emit
+from .harness_drv import harness_add, harness_lint, harness_probe, harness_test
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -276,9 +277,19 @@ def harness_facts(agent: str = "", unverified: bool = False) -> O.Outcome:
 
 
 def harness_view(
-    repo: Path, *, what: str = "list", id: str = "", unverified: bool = False
+    repo: Path,
+    *,
+    what: str = "list",
+    id: str = "",
+    unverified: bool = False,
+    family: str = "",
+    title: str = "",
+    directory: str = "",
+    run: bool = False,
 ) -> O.Outcome:
     """The views behind one entry point (the CLI verb and the MCP action)."""
+    if what in ("add", "lint", "test", "probe"):
+        return _author(repo, what, id, family, title, directory, run)
     if what == "facts":
         return harness_facts(id, unverified)
     if what == "list":
@@ -287,4 +298,19 @@ def harness_view(
         return harness_show(repo, id) if id else O.failed("harness", "show needs a harness id")
     if what == "doctor":
         return harness_doctor(repo, id)
-    return O.failed("harness", f"unknown view {what!r}: list, show, doctor or facts")
+    return O.failed(
+        "harness", f"unknown view {what!r}: list, show, doctor, facts, add, lint, test or probe"
+    )
+
+
+def _author(repo: Path, what: str, id: str, family: str, title: str, directory: str, run: bool):
+    """add | lint | test | probe (`harness_drv`): authoring, one descriptor at a time."""
+    if not id:
+        return O.failed("harness", f"{what} needs a harness id (or a descriptor file)")
+    if what == "add":
+        return harness_add(repo, id, family, title, directory)
+    if what == "lint":
+        return harness_lint(repo, id)
+    if what == "test":
+        return harness_test(repo, id)
+    return harness_probe(repo, id, run)
