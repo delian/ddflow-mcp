@@ -152,6 +152,7 @@ from .handlers.sessions import (  # noqa: F401
     _h_upgrade_applied,
     _session,
 )
+from .handlers.lanerelease import LANERELEASE_HANDLERS
 from .handlers.waiting import WAITING_HANDLERS
 
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
@@ -286,6 +287,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **APPROVAL_HANDLERS,
     # first writer: services/waiting.py register (a refused claim or `update --globs`)
     **WAITING_HANDLERS,
+    # first writer: api/mergequeue_add.py (`queue add --release`)
+    **LANERELEASE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

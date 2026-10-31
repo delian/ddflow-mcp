@@ -527,6 +527,10 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
+    ("lane.released_for_gate", "author"): "a family or model id compared at completion",
+    ("lane.released_for_gate", "judgement"): "gate ids",
+    ("lane.released_for_gate", "gates"): "gate ids",
     (
         "memory.redacted",
         "event",

@@ -463,6 +463,16 @@
    },
    "v": 1
   },
+  "lane.released_for_gate": {
+   "fields": {
+    "author": ["str"],
+    "gates": ["list"],
+    "holder": ["str"],
+    "judgement": ["list"],
+    "tree": ["str"]
+   },
+   "v": 1
+  },
   "lease.acquired": {
    "fields": {
     "agent": ["str"],
