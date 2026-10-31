@@ -80,7 +80,7 @@ def read_entries(path: Path):
                     out.append(obj)
     except OSError as exc:
         raise Unavailable(f"{path.stem}: {type(exc).__name__}") from exc
-    if bad and not good:
+    if not good:
         raise Unavailable(f"{path.stem}: no parseable entries")
     return out
 
@@ -207,9 +207,12 @@ def _fold_calls(calls, agg, rewrites, w, gap_s, min_write) -> float:
             wr = u["write_5m"] + u["write_1h"]
             if gap >= gap_s and wr >= min_write:
                 cls = prev["tools"][-1] if prev["tools"] else OTHER
-                r = rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
+                r = rewrites.setdefault(
+                    cls, {"events": 0, "tokens": 0, "units": 0.0, "wait_s": 0.0}
+                )
                 r["events"] += 1
                 r["tokens"] += wr
+                r["units"] += u["write_5m"] * w["write_5m"] + u["write_1h"] * w["write_1h"]
                 r["wait_s"] += gap
         prev = c
     return units
@@ -217,12 +220,11 @@ def _fold_calls(calls, agg, rewrites, w, gap_s, min_write) -> float:
 
 def _finish_rewrites(rewrites, rep, w, classes):
     for cls in {c for c, _ in classes or TOOL_CLASSES} | {OTHER}:
-        rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
+        rewrites.setdefault(cls, {"events": 0, "tokens": 0, "units": 0.0, "wait_s": 0.0})
     su = rep["subagents"]["units"]
     for r in rewrites.values():
         wait_s = r.pop("wait_s")
         r["avg_wait_min"] = round(wait_s / r["events"] / 60, 2) if r["events"] else 0.0
-        r["units"] = r["tokens"] * w["write_5m"]
         r["share_of_subagent_units"] = r["units"] / su if su else 0.0
 
 

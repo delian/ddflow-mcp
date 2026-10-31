@@ -123,7 +123,13 @@ def test_window_filters_entries(proj):
 
 def test_no_transcript_text_in_output(proj):
     out = json.dumps(TR.build_report(proj)) + TR.render_text(TR.build_report(proj))
-    assert SECRET not in out and "sleep 20" not in out and "hi" not in out.replace("units", "")
+    assert (
+        SECRET not in out
+        and "sleep 20" not in out
+        and "ddflow review x" not in out
+        and "xxxx" not in out
+        and "hi" not in out.replace("units", "")
+    )
 
 
 def test_unreadable_file_is_unavailable_not_zero(proj):
@@ -153,3 +159,21 @@ def test_cli_json(proj):
     )
     assert r.returncode == 0
     assert json.loads(r.stdout)["schema"] == "token_report@1"
+
+
+def test_one_hour_rewrite_units_use_1h_weight(tmp_path):
+    sub = tmp_path / "s" / "subagents"
+    sub.mkdir(parents=True)
+    _write(
+        sub / "agent-b.jsonl",
+        [_asst("b1", 0, tool="Bash", cmd="sleep 9"), _asst("b2", 20, w1=100000)],
+    )
+    r = TR.build_report(tmp_path)["rewrites"]["poll"]
+    assert r["tokens"] == 100000 and r["units"] == 200000
+
+
+def test_empty_file_is_unavailable(tmp_path):
+    (tmp_path / "e.jsonl").write_text("\n\n")
+    rep = TR.build_report(tmp_path)
+    assert rep["unavailable"] and rep["lead"]["status"] == "UNAVAILABLE"
+    assert TR.main([str(tmp_path)]) == 2
