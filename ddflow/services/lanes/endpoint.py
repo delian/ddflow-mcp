@@ -23,7 +23,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from ...infra import paths
-from .. import facts, modelreg
+from .. import facts, modelreg, review_keys
 from ..lane_driver import Result, unavailable
 
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -47,6 +47,7 @@ class Endpoint:
     streaming: bool | None = None
     concurrency: int | None = None  #: parallel requests the endpoint takes (scheduler cap)
     free: bool = False  #: class local: price zero
+    api_key_file: str = ""  #: key file PATH (machine-local routes); the value never enters a config
 
     @property
     def provider(self) -> str:
@@ -100,6 +101,14 @@ def _route_basics(
     return url, key, served
 
 
+def _key_file(row: dict[str, Any] | None) -> str:
+    """The route's ``api_key_file`` PATH (a string, or ``""``)."""
+    node = (row or {}).get("endpoint")
+    v = node.get("v") if isinstance(node, dict) else None
+    path = v.get("api_key_file", "") if isinstance(v, dict) else ""
+    return path if isinstance(path, str) else ""
+
+
 def _int(x: Any) -> int | None:
     return x if isinstance(x, int) and not isinstance(x, bool) else None
 
@@ -131,6 +140,7 @@ def resolve(
         f["streaming"] if isinstance(f["streaming"], bool) else None,
         _int(f["concurrency"]),
         _val(cat, served, "price_in", route) == 0,
+        _key_file(cat.route[route]),
     )
 
 
@@ -179,6 +189,13 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
 def launch_env(ep: Endpoint) -> dict[str, str]:
     """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read at launch)."""
     return {ep.api_key_env: ep.api_key_env} if ep.api_key_env else {}
+
+
+def resolve_key(ep: Endpoint) -> review_keys.KeyResult:
+    """The lane's key at launch: its variable first, then its key file (the same resolver the
+    reviewers use). The value goes to the child's environment only, never into the rendered
+    provider block, which names the variable alone."""
+    return review_keys.resolve_key(ep.api_key_env, ep.api_key_file)
 
 
 def model_arg(ep: Endpoint) -> str:
