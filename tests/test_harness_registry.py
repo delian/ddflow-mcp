@@ -101,7 +101,10 @@ def test_agent_commands_match_the_table_they_replaced():
 
 
 def test_every_descriptor_loads_and_has_its_delta_doc():
-    deltas = Path(adopt.__file__).resolve().parent.parent / "templates" / "drivers" / "deltas"
+    # adopt is a package now (ddflow/services/adopt/), so counting levels above its
+    # __file__ would land in services/; harnessreg is still a module beside it, so its
+    # __file__.parent.parent is ddflow/ as adopt.py's used to be.
+    deltas = Path(harnessreg.__file__).resolve().parent.parent / "templates" / "drivers" / "deltas"
     for h in harnessreg.load():
         assert (deltas / h.delta).is_file(), f"{h.id}: delta {h.delta} is missing"
         assert h.verified.sources, h.id
