@@ -57,4 +57,3 @@ def unknown_arg_hint(known: Iterable[str], unknown: Iterable[str]) -> str:
     pairs = [(u, closest(u, known)) for u in unknown]
     said = [f"'{near}' (for '{u}')" for u, near in pairs if near]
     return f" Did you mean {', '.join(said)}?" if said else ""
-

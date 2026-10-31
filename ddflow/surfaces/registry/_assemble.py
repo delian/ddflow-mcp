@@ -100,4 +100,3 @@ def by_tool(commands: Iterable[Command]) -> dict[str, Command]:
     """The commands that have an MCP tool, by tool name (a tool module takes its entries
     from here: ``by_tool(COMMANDS)["ddflow_x"].tool_entry()``)."""
     return {c.tool: c for c in commands if c.tool}
-

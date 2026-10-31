@@ -58,4 +58,3 @@ def command_for_path(
     if len(path) == 1 and path[0] in covering:
         return command_name(covering[path[0]][0])
     return "_".join(path).replace("-", "_")
-

@@ -50,4 +50,3 @@ def flag_exemptions(commands: tuple[Command, ...]) -> dict[tuple[str, str], str]
 def prose_reasons(commands: tuple[Command, ...]) -> dict[str, str]:
     """``tool -> reason`` for every tool whose body is text."""
     return {c.tool: c.prose_reason for c in commands if c.tool and c.prose}
-

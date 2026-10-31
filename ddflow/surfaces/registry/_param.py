@@ -266,4 +266,3 @@ def properties_schema(
         tuple(Param(n, type=t, help=d, required=req) for n, (t, d, req) in props.items()),
         deprecated=deprecated,
     )
-

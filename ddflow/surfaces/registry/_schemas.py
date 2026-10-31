@@ -154,4 +154,3 @@ def tag_body(body: Any, command: str) -> Any:
         rest = {k: v for k, v in body.items() if k != REFUSAL_KEY}
         return {REFUSAL_KEY: body[REFUSAL_KEY], **tag, **rest}
     return {**tag, **body}
-

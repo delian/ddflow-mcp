@@ -243,6 +243,7 @@ def used_aliases(
             out.append(hit)
     return out
 
+
 class _WordsRecorder(argparse._SubParsersAction):
     """A subparsers action that also records which command word was taken, on the namespace
     under `WORDS`: ``("gate", "record")``. Read from argparse's own decision, not rebuilt from
@@ -266,4 +267,3 @@ def parsed_path(args: argparse.Namespace) -> tuple[str, ...]:
     """The command words a parsed command line went through, aliases resolved to the
     command they name: ``("gate", "record")``; empty when no subcommand was taken."""
     return tuple(getattr(args, WORDS, ()))
-
