@@ -99,14 +99,16 @@ def test_corrupt_database_gives_nothing(tmp_path):
     assert CI.kinds(index=str(p)) == []
 
 
-def test_locked_database_gives_nothing_fast(tmp_path):
+def test_locked_database_gives_nothing_fast(tmp_path, monkeypatch):
+    monkeypatch.setenv(CI.LOCK_MS_ENV, "10")
     p = _index(tmp_path)
     con = sqlite3.connect(p, isolation_level=None)
     con.execute("pragma journal_mode=delete")
     con.execute("begin exclusive")
     t = time.monotonic()
     assert CI.complete_ids("", index=str(p)) == []
-    assert time.monotonic() - t < 0.5  # default lock wait is 30 ms
+    # a 200 ms wait (the old, ignored-knob behaviour) would fail this; a 10 ms one does not
+    assert time.monotonic() - t < 0.15
     con.execute("rollback")
     con.close()
 
@@ -229,3 +231,17 @@ def test_irregular_plurals_and_lock_knob(tmp_path, monkeypatch):
     assert CI._lock_ms() == 7
     monkeypatch.setenv(CI.LOCK_MS_ENV, "junk")
     assert CI._lock_ms() == CI.LOCK_MS_DEFAULT
+
+
+def test_in_process_lookup_meets_the_100ms_budget(tmp_path):
+    p = str(_index(tmp_path))
+    CI.complete_ids("COMP", index=p)  # warm the page cache
+    t = time.perf_counter()
+    assert CI.complete_ids("COMP", index=p) == ["COMP-a", "COMP-b"]
+    assert time.perf_counter() - t < 0.1
+
+
+def test_directory_named_like_an_index_is_not_chosen(tmp_path):
+    good = _index(tmp_path, "index.db-aaaaaaaa", 1_000_000)
+    (tmp_path / ".ddflow" / "index.db-ffffffff").mkdir()
+    assert CI.newest_index(str(tmp_path / ".ddflow")) == str(good)

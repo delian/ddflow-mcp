@@ -73,6 +73,8 @@ def newest_index(ddflow_dir: str) -> str | None:
                 if not INDEX_NAME.match(e.name):
                     continue
                 try:
+                    if not e.is_file():
+                        continue
                     t = e.stat().st_mtime
                 except OSError:
                     continue
