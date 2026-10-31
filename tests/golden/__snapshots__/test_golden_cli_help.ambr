@@ -218,7 +218,7 @@
                          refusal files the request and names it)
   
   who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker
-  (CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.
+  and MCP; there is no MCP tool for it. An agent files a request instead.
   what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red
   (the failing tests also fail on the base branch). The approval is bound to the digest of
   that record (outcome, time, reason): a re-run or re-record is a different outcome and
