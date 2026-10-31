@@ -106,7 +106,17 @@ def _new_hits(tree: Path, rel: Path) -> list[tuple[str, int, str]] | None:
     In a merge a line the other parent already has is not this commit's to add (merging
     `main` into a branch must not be refused for a leak `main` already committed), so only
     a line new against BOTH parents counts."""
-    diff = _diff(tree, rel, "HEAD")
+    head = G.run(tree, "rev-parse", "-q", "--verify", "HEAD", timeout=P.TIMEOUTS["git_listing"])
+    if head.ok:
+        base = "HEAD"
+    else:  # an unborn branch (the first commit): everything staged is new
+        empty = G.run(
+            tree, "hash-object", "-t", "tree", "/dev/null", timeout=P.TIMEOUTS["git_listing"]
+        )
+        if not (empty.ok and empty.out.strip()):
+            return None
+        base = empty.out.strip()
+    diff = _diff(tree, rel, base)
     if diff is None:
         return None
     hits = added_hits(diff)

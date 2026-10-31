@@ -37,9 +37,11 @@ _PLAIN_KEY = re.compile(r"[a-z][a-z0-9_]{0,31}")
 def _key(index: int, key: object) -> object:
     """A mapping key kept when it is a plain snake_case field name; any other string may be
     text (a credential used as a key) and is replaced, numbered so two never collide."""
-    if isinstance(key, str) and not _PLAIN_KEY.fullmatch(key):
-        return f"{FAILED_MARKER[:-1]}:key-{index}]"
-    return key
+    if key is None or isinstance(key, (bool, int, float)):
+        return key
+    if isinstance(key, str) and _PLAIN_KEY.fullmatch(key):
+        return key
+    return f"{FAILED_MARKER[:-1]}:key-{index}]"  # any other key (str, tuple, bytes...) may be text
 
 
 def fail_closed_data(value: object) -> object:

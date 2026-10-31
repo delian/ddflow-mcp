@@ -38,8 +38,8 @@ KEYS = {
     "aws-akia": "AKIA" + "FAKEFAKEFAKEFAKE",
     "aws-asia": "ASIA" + "FAKEFAKEFAKEFAKE",
     "slack": _fake("xox" + "b-", 30),
-    "stripe-sk": _fake("sk" + "_live_", 30),
-    "stripe-rk": _fake("rk" + "_live_", 30),
+    "stripe-sk": "sk" + "_live_" + "FAKE1234" * 4,
+    "stripe-rk": "rk" + "_live_" + "FAKE1234" * 4,
     "hf": _fake("hf" + "_", 34),
 }
 
@@ -310,3 +310,25 @@ def test_a_bare_key_assignment_with_a_long_mixed_value_is_redacted(cfg):
     assert value not in S.redact(f"key = {value}", cfg)[0]
     assert value not in S.redact(f"ssh_key: {value}", cfg)[0]
     assert S.redact("monkey = 1234567890Abcdefghij", cfg)[1] == 0
+
+
+def test_non_string_mapping_keys_do_not_carry_text_through_a_failed_redaction():
+    out = RE.fail_closed_data({("Authorization", "sk-" + "1" * 20): "x", 7: "y", b"AIza": "z"})
+    assert 7 in out and len(out) == 3
+    assert not any(isinstance(k, (tuple, bytes)) for k in out)
+
+
+def test_aws_ids_glued_to_lowercase_text_are_caught_and_identifiers_are_not():
+    assert shape_hit("user" + KEYS["aws-akia"]) == "aws-access-key-id"
+    assert shape_hit("task-proj-ABCDEFGHIJKLMNOPQRST") == ""
+    assert shape_hit("task_live_ABCDEFGHIJKLMNOPQRST") == ""
+    assert shape_hit(KEYS["stripe-sk"]) == "stripe"
+
+
+def test_the_first_commit_on_an_unborn_branch_is_scanned(tmp_path):
+    _git(tmp_path, "init", "-q")
+    shard = tmp_path / ".ddflow" / "events"
+    shard.mkdir(parents=True)
+    (shard / "a.jsonl").write_text('{"text": "' + KEYS["google"] + '"}\n')
+    _git(tmp_path, "add", "-A")
+    assert ES.check_event_secrets(tmp_path, Config()).exit != 0
