@@ -17,7 +17,7 @@ submodule holds them.
 
 from __future__ import annotations
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 from .. import upgrade_plan as UP  # noqa: F401 -- the ``UA.UP`` alias the old module bound
 from ..backups import (  # noqa: F401 -- the backups' home
@@ -93,4 +93,4 @@ _SUBMODULE_OF = {
     "apply": "_apply",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)

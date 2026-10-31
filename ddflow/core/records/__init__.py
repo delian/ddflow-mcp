@@ -16,7 +16,7 @@ here as a latent parent<->child cycle).
 
 from __future__ import annotations
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 #: Public (and patch-covered private) name -> the submodule that defines it.
 _SUBMODULE_OF = {
@@ -68,4 +68,4 @@ _SUBMODULE_OF = {
     "record_pools": "state",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)

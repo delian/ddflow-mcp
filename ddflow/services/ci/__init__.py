@@ -21,7 +21,7 @@ as before) and the layering ratchet (``test_no_mutually_importing_pair`` would r
 
 from __future__ import annotations
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 #: Public (and patch-covered private) name -> the submodule that defines it.
 _SUBMODULE_OF = {
@@ -118,4 +118,4 @@ _SUBMODULE_OF = {
     "refile_id": "main",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)

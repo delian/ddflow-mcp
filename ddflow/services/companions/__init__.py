@@ -33,7 +33,7 @@ from __future__ import annotations
 import shutil  # noqa: F401 -- re-exported; tests patch companions.shutil
 import time  # noqa: F401 -- re-exported; tests patch companions.time
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 from ...infra import proc as P  # noqa: F401 -- re-exported; tests patch companions.P
 from ..mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -104,4 +104,4 @@ _SUBMODULE_OF = {
     "scan": "registry",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)

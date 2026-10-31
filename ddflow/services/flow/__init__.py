@@ -27,7 +27,7 @@ an eager ``from ._sync import ...`` here as a latent parent<->child cycle).
 
 from __future__ import annotations
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 #: every name the old module exported -> the submodule that defines it.
 _SUBMODULE_OF = {
@@ -100,4 +100,4 @@ _SUBMODULE_OF = {
     "sync": "_sync",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)

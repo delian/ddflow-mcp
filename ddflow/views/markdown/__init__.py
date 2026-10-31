@@ -15,7 +15,7 @@ would read an eager ``from .views import ...`` here as a latent parent<->child c
 
 from __future__ import annotations
 
-from ddflow.core._reexport import reexport
+from ddflow.core import _reexport
 
 from ...core.schedule import critical_path as critical_path
 
@@ -98,4 +98,4 @@ _SUBMODULE_OF = {
     "cap_held": "briefing",
 }
 
-reexport(globals(), _SUBMODULE_OF, __name__)
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)
