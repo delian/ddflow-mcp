@@ -25,11 +25,11 @@ from ._query import sweep_dead_runs as sweep_dead_runs
 from ._query import verify as verify
 from ._run import OUTCOME_EXIT as OUTCOME_EXIT
 from ._run import _note_logged as _note_logged
+from ._run import record as record
 from ._run import run as run
 from ._timeout import _with_run_timeout as _with_run_timeout
 from ._tree import item_tree as item_tree
 from ._vet import Evidence as Evidence
-from .record import record as record
 
 __all__ = [
     "OUTCOME_EXIT",
