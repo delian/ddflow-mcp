@@ -136,10 +136,3 @@ def _groups(parser: argparse.ArgumentParser) -> list[list[str]]:
         if len(flags) > 1:
             out.append(flags)
     return out
-
-
-def build_tree() -> dict[str, Any]:
-    """The tree of ddflow's own parser (imports the CLI, so not for the TAB hot path)."""
-    from ...surfaces.cli import build_parser
-
-    return command_tree(build_parser())
