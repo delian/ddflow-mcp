@@ -21,7 +21,6 @@ from ...infra.log import EventLog
 from .. import ci as CI
 from ..leaseclock import localize
 from ..pins import pin_files
-from .dispose import dispose_tree
 from .model import Disposal, Plan, TreeState, _Protected
 from .stranded import _protected
 from .survey import _owner_alive
@@ -74,6 +73,9 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
 
     A tree with commits ahead is only here as a landed item's merge/pin leftovers
     (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
+    from . import (
+        dispose_tree as _dispose_tree,
+    )  # late-bound: honour monkeypatch of the package attr
     from . import proved_leftover_tip as _proved_leftover_tip  # late-bound: honour monkeypatch
 
     root = W.repo_root(repo)
@@ -97,7 +99,7 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
             t.done = f"kept: {t.name} changed since it was proved to be only leftovers"
             return [f"kept {t.name}: the tree changed since it was proved to be leftovers"]
         proof = f"{t.item} landed; only merge-main/pin commits left"
-    d = dispose_tree(repo, cfg, log, wt, landed_tip=tip)
+    d = _dispose_tree(repo, cfg, log, wt, landed_tip=tip)
     if proof and tip and d.removed and d.branch_left:
         # The branch only lacks the merge-main/pin commits just proved to be leftovers. Dropped
         # under the log's lock, still held by nobody, and only if it is still at the proved tip.

@@ -85,7 +85,12 @@ def __getattr__(name: str) -> Any:
     if mod is None:
         mod = importlib.import_module(f"{__name__}.{sub}")
         _MODULES[sub] = mod
-    return getattr(mod, name)
+    value = getattr(mod, name)
+    # Importing a child submodule binds its module object on THIS package under the
+    # submodule's own name; when a public name shares that submodule's name (`survey`,
+    # `apply`), re-bind the callable so the name keeps resolving to it, not the module.
+    globals()[name] = value
+    return value
 
 
 def __dir__() -> list[str]:
