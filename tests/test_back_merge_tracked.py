@@ -16,7 +16,9 @@ from test_flow import AUTHOR, _commit, _git, _state, _work, gitflow_pr, pr_repo 
 
 
 def _file_hotfix(repo: Path) -> None:
-    run_cli(repo, "task", "add", "H1", "--globs", "fix.py", "--tags", "hotfix")
+    run_cli(
+        repo, "task", "add", "H1", "--title", "H1 fixture", "--globs", "fix.py", "--tags", "hotfix"
+    )
     code, out, err = run_cli(repo, "--json", "claim", "H1")
     assert code == 0, err
     tree = Path(json.loads(out)["worktree"])

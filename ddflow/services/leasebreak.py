@@ -21,13 +21,16 @@ logged event, never silent.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from shlex import quote
 from typing import Any
 
 from ..core import clock
-from ..core.model import Lease, State
+from ..core.model import ABANDONED, DONE, Lease, State
+from ..core.schedule import stale_package_globs
 from ..infra import treeactivity as TA
 from ..infra import worktree as W
 from . import waiting as WG
@@ -190,6 +193,37 @@ def yield_text(v: Verdict) -> str:
         f"progress for {clock.fmt_age(v.idle_s)}: commit, narrow its globs, or `ddflow "
         f"release {v.item}`. " + ("It can now be broken (its work is kept)." if v.breakable else "")
     )
+
+
+def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
+    """The operator's lines for every standing yield-requested or breakable lease, each
+    with its idle time (DX-lease-yield-doctor-status): `ddflow doctor` lists what the
+    holder's brief and heartbeat only tell the holder."""
+    return [yield_text(v) for v in verdicts(st, cfg, events, time.time(), tree_activity(root))]
+
+
+def stale_glob_notes(repo: Path, st: State) -> list[str]:
+    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
+    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
+    Each is named with the corrected glob and the command that applies it."""
+    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
+    if not any(g.endswith(".py") for i in live for g in i.globs):
+        return []
+    tracked = W.git_paths(repo, "ls-files")
+    if tracked is None:  # "could not tell" is said, never read as "nothing stale"
+        return ["stale task globs not checked: git could not list the tracked files"]
+    notes = []
+    for it in live:
+        stale = stale_package_globs(it.globs, tracked)
+        if not stale:
+            continue
+        fixed = dict(stale)
+        globs = ",".join(fixed.get(g, g) for g in it.globs)
+        notes.append(
+            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
+            f"its lease covers none of those files. `ddflow update {it.id} --globs {quote(globs)}`"
+        )
+    return notes
 
 
 def break_hint(cfg) -> str:

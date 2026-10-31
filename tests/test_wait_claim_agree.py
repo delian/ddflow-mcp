@@ -18,7 +18,7 @@ HOLDER, WAITER, QUEUER = "agent-holder", "agent-waiter", "agent-queuer"
 def _proj(repo, *tasks):
     run_cli(repo, "init")
     for name, globs in tasks:
-        args = ["task", "add", name] + (["--globs", globs] if globs else [])
+        args = ["task", "add", name, "--title", "task item"] + (["--globs", globs] if globs else [])
         run_cli(repo, *args)
 
 

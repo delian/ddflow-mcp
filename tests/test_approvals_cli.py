@@ -175,7 +175,12 @@ def test_no_mcp_tool_carries_the_approvals_verbs():
             assert "approvals_answer" not in text and "ddflow_approvals" not in text, p
     from ddflow.surfaces.declared import approvals as D
 
-    assert D.COMMANDS and all(c.tool == "" for c in D.COMMANDS)  # CLI-only, every one
+    # CLI-only but for the three ddflow_session actions RA-mcp adds (ask, asks, withdraw):
+    # no tool answers, and every answer verb stays tool-less
+    assert D.COMMANDS
+    carried = {c.tool for c in D.COMMANDS if c.tool}
+    assert carried == {"ddflow_session_ask", "ddflow_session_asks", "ddflow_session_withdraw"}
+    assert all(c.tool == "" for c in D.COMMANDS if c.path[:1] == ("approvals",))
     tools = {c.tool for mod in _declared_modules() for c in mod.COMMANDS if c.tool}
     assert not [t for t in tools if "approvals" in t]
 

@@ -78,7 +78,7 @@ def _land(repo: Path, item: str, *, edit: tuple[str, str] | None = None) -> dict
 
 def test_work_reaches_production_only_through_pre_production(envs):
     repo = envs
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _land(repo, "T1", edit=("a.py", "a\n"))
 
     code, _out, _err = run_cli(repo, "promote", "add", "production")
@@ -114,7 +114,7 @@ def test_work_reaches_production_only_through_pre_production(envs):
 
 def test_one_open_promotion_per_environment(envs):
     repo = envs
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _land(repo, "T1", edit=("a.py", "a\n"))
     assert run_cli(repo, "promote", "add", "pre-production")[0] == 0
     code, _out, err = run_cli(repo, "promote", "add", "pre-production")
@@ -134,7 +134,7 @@ def test_auto_promote_files_the_promotion_when_upstream_moves(envs):
     repo = envs
     cfgp = repo / ".ddflow" / "config.toml"
     cfgp.write_text(cfgp.read_text() + 'auto_promote = ["pre-production"]\n')
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _code, out, _ = run_cli(repo, "--json", "next")
     assert json.loads(out)["promoted"] == [], "nothing upstream yet"
     _land(repo, "T1", edit=("a.py", "a\n"))
@@ -162,7 +162,7 @@ def test_a_conflicting_promotion_is_work_for_the_agent(envs):
     _git(tmp, "add", "a.py")
     _git(tmp, "commit", "-qm", "direct edit")
     _git(repo, "worktree", "remove", str(tmp))
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _land(repo, "T1", edit=("a.py", "a\n"))
     _code, out, _ = run_cli(repo, "--json", "promote", "add", "pre-production")
     code, out, err = run_cli(repo, "--json", "claim", json.loads(out)["id"])
@@ -175,7 +175,7 @@ def test_promotions_are_not_release_notes(envs):
     """An invariant, not a filter: a promotion's merge lives on the environment branch,
     which never flows back into the branch versions are cut from."""
     repo = envs
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _land(repo, "T1", edit=("a.py", "a\n"))
     _code, out, _ = run_cli(repo, "--json", "promote", "add", "pre-production")
     _land(repo, json.loads(out)["id"])
@@ -200,7 +200,7 @@ def test_a_deploy_hook_records_the_sha_and_status_says_what_is_live(envs):
     assert rows["pre-production"]["deployed"] == "", "no hook has reported for it"
 
     # production's branch moves on (a promotion lands); what is LIVE has not.
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     _land(repo, "T1", edit=("a.py", "a\n"))
     for env in ENVS:
         code, out, err = run_cli(repo, "--json", "promote", "add", env)

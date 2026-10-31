@@ -33,6 +33,14 @@ def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_auto_wave_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``[waves].auto_stamp`` (default on) tags every open task with ``wave:N`` after a command
+    that changed the graph; the many tests that read an item's ``tags`` back would each see
+    one more. tests/test_waves_stamp.py clears the variable to run the default."""
+    monkeypatch.setenv("DDFLOW_WAVES_AUTO_STAMP", "false")
+
+
+@pytest.fixture(autouse=True)
 def _no_first_call_start(monkeypatch: pytest.MonkeyPatch) -> None:
     """``[session].first_call`` (default on) appends a session start to the first MCP tool
     call of a connection; the suite's many tests that read a call's content blocks would each

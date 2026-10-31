@@ -73,6 +73,14 @@ def _health_lines(r) -> list[str]:
     return ["", "Health:", *(f"  [!] {h}" for h in r["health"])] if r.get("health") else []
 
 
+def _yield_lines(r) -> list[str]:
+    """Contended leases sitting idle: the operator's view the brief tells only the holder
+    (DX-lease-yield-doctor-status)."""
+    if not r.get("yields"):
+        return []
+    return ["", "Yield requested:", *(f"  [y] {t}" for t in r["yields"])]
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
@@ -89,6 +97,7 @@ def _queue_lines(r) -> list[str]:
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
     out += _contested_lines(r)
     out += _waiting_lines(r)
+    out += _yield_lines(r)
     out += _health_lines(r)
     out += _stranded_lines(r)
     if r["ready"]:
@@ -178,6 +187,27 @@ def _warning_lines(r) -> list[str]:
     return out
 
 
+def _status_body(d: dict, r: dict, by_tag_lines: tuple = ()) -> list[str]:
+    """The prose `status` body the plain `status` and the declared `--by-tag` handler
+    share: the `# repo` head, the progress head line and the section lines. The `--by-tag`
+    mode passes its per-value lines (folded from the one `status` call, B-gap-log-scale)
+    through, placed before the release line."""
+    return [
+        f"# {r['repo']}",
+        "",
+        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
+        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
+        "",
+        status_tasks_note(),
+        "",
+        *_queue_lines(r),
+        *_recorded_line(r),
+        *_warning_lines(r),
+        *by_tag_lines,
+        *(["", r["release"]] if r.get("release") else []),
+    ]
+
+
 def cmd_status(a, c: Ctx) -> int:
     """One answer to "what is the state of this project?".
 
@@ -196,19 +226,7 @@ def cmd_status(a, c: Ctx) -> int:
         return out.exit
     d = out.data
     r = d["_render"]
-    lines = [
-        f"# {r['repo']}",
-        "",
-        f"{len(r['done'])}/{r['tasks']} tasks complete across {r['phases']} phase(s); "
-        f"{r['hours']:.1f} agent-hours, {d['commits']} commit(s).",
-        "",
-        status_tasks_note(),
-        "",
-        *_queue_lines(r),
-        *_recorded_line(r),
-        *_warning_lines(r),
-        *(["", r["release"]] if r.get("release") else []),
-    ]
+    lines = _status_body(d, r)
     print("\n".join(lines))
     return out.exit
 

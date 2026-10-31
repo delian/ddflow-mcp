@@ -42,10 +42,30 @@ def snapshot_differing(
     return sorted(p for p in recorded.keys() | now.keys() if recorded.get(p) != now.get(p))
 
 
-def ignorable(path: str, recorded: dict[str, str] | None, ignore: Iterable[str]) -> bool:
-    """Is ``path``'s change since the round not new work? One the round did not review
-    (it is not in its ``recorded`` snapshot) that matches ``ignore``
-    (`[review].triage_ignore_globs`: tests answering a finding). A path the round reviewed
-    is never ignored: its content was judged, whatever it is called. The one predicate for
-    triage, `sync` and `complete`, so the three cannot drift."""
+def ignorable(
+    path: str,
+    recorded: dict[str, str] | None,
+    ignore: Iterable[str],
+    docs: Iterable[str] = (),
+    gone: Iterable[str] = (),
+) -> bool:
+    """Is ``path``'s change since the round not new work?
+
+    Two classes, and the difference is that documentation is word, not code:
+
+    * a path the round reviewed that matches ``docs`` (`[review].doc_globs`) and still
+      exists is never new work (bug Bb89ff23f21): a one-line doc edit after a triage
+      invalidated refuted gates and a wording-only edit after the final pass still warned
+      "different tree" at complete, because the reviewed doc moved. A review judges the
+      CODE; clarified wording is not a defect to re-review. A reviewed doc that was
+      DELETED (``gone``) is a change like any other, not wording: removing reviewed
+      content is new work. A doc the round did not review is not exempt by name alone.
+    * any other path is one the round did not review (it is not in its ``recorded``
+      snapshot) that matches ``ignore`` (`[review].triage_ignore_globs`: tests answering a
+      finding). A reviewed code path is never ignored: its content was judged, whatever it
+      is called.
+
+    The one predicate for triage, `sync` and `complete`, so the three cannot drift."""
+    if path in (recorded or {}) and path not in gone and any(globs.match(path, g) for g in docs):
+        return True
     return path not in (recorded or {}) and any(globs.match(path, g) for g in ignore)

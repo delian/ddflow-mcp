@@ -1,4 +1,4 @@
 # Ratchet `complexity_d_or_worse` for ddflow.services.gates.outcomes (tests/test_architecture_guards.py).
-# Lower it in the same change that removes sites; delete the file at zero.
-# Never raise it.
-baseline = 2
+# `stale_evidence_detail` (CC 25) is the shipped stale-evidence report (B-stale-evidence);
+# `record` (CC 26) moved to hand_approve.py (B92f2fe5750), so the baseline is 1 again.
+baseline = 1

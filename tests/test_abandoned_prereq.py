@@ -14,8 +14,8 @@ from conftest import run_cli
 
 def _seed(repo, needs="D1,D2"):
     for t in ("D1", "D2"):
-        run_cli(repo, "task", "add", t, "--globs", f"{t}.py")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py", "--needs", needs)
+        run_cli(repo, "task", "add", t, "--title", "task item", "--globs", f"{t}.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py", "--needs", needs)
 
 
 def test_doctor_reports_a_need_on_an_abandoned_item(repo):

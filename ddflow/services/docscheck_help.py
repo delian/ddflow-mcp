@@ -6,11 +6,21 @@ against the help of the deepest verb it names. The walk descends while ``<chain>
 --help`` exits 0: an invalid verb exits non-zero (argparse: 2), so the first word that is
 not a verb ends the chain and the rest are positionals. Each chain is run once. A tool that
 cannot run (missing, timing out) is a note and its mentions are unchecked, never passed.
+
+ddflow's own help comes from `in_process`: the argparse registry this process already
+built (Bc621160a82), so the check never spawns `ddflow <verb> --help` once per verb —
+only a non-ddflow tool keeps spawning.
 """
 
 from __future__ import annotations
 
+import contextlib
+import importlib
+import io
 import re
+import sys
+import threading
+from argparse import ArgumentParser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,10 +33,82 @@ FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
+#: This process's own argparse root, built once, on first use: the CLI import drags in
+#: the whole surface, and one parser answers every chain of one walk. A one-element cell
+#: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
+#: cell is reassignment-free where a module global would need one.
+_parser: list[ArgumentParser | None] = [None]
+
+#: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
+#: runs could capture each other's output: every run takes the lock, and that overlap
+#: serializes. It is a plain non-reentrant lock: a same-thread reentry from inside the
+#: parse would self-deadlock, and no path reenters today; other threads writing to the
+#: real stdout/stderr are untouched, and the docs check is single-threaded.
+_capture_lock = threading.Lock()
+
+
+def in_process(verbs: list[str]) -> P.Captured:
+    """Run `ddflow <verbs> --help` without a spawn: this process's parser, replayed.
+
+    The very ``parse_args`` the spawned CLI makes, so the answer is its ``--help`` and its
+    flags are exactly the spawned text's (Bc621160a82; the equivalence is pinned by
+    tests/test_docscheck_help_in_process.py). Every chain answers from one parser."""
+    with _capture_lock:  # serializes redirect+parse: a run answers from its own buffers
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            parser = _parser[0]
+            if parser is None:
+                # Dynamic, not `from ..surfaces.cli import build_parser`: that STATIC import
+                # breaks the layers contract (services reaching up into surfaces) on this
+                # module's read path, exactly the cycle recovery.py breaks the same way
+                # (`importlib.import_module("ddflow.api.gates")`).
+                parser = _parser[0] = importlib.import_module("ddflow.surfaces.cli").build_parser()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                parser.parse_args([*verbs, "--help"])
+        except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
+            #: a non-int code (argparse never raises one, so this branch is a guard, not
+            #: a path): folded into neither a success-0 nor an inconsistent "ran with no
+            #: returncode"; the walk reads it as a tool that could not run (jobs 3705-3707).
+            if isinstance(exc.code, int):
+                return P.Captured(exc.code, out.getvalue(), err.getvalue())
+            return P.Captured(error=exc)
+        except Exception as exc:  # the import or the parse raised: "could not run", exactly
+            return P.Captured(error=exc)  # as the spawn path reads its own failures (job 3708)
+        return P.Captured(0, out.getvalue(), err.getvalue())
+
+
+def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
+    """The verbs to replay when ``argv`` spells `ddflow [<verb>...] --help` naming THIS
+    ddflow; None when it names another tool (then the spawn is the walk). This process IS
+    ddflow, so the registry it built is the authority when the command is spelled by name
+    (`ddflow`) or run as this very interpreter's module ``sys.executable -m ddflow``; any
+    other spelling -- a different interpreter or a path to some binary -- names a
+    specific executable and is run as before."""
+    if not argv[1:] or argv[-1] != "--help":
+        return None
+    if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
+        return argv[1:-1]
+    if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
+        #: the walk itself never spells this (its argv start at a bare verb name): the
+        #: branch is for a programmatic runner that spells it; pinned by the test below.
+        return argv[3:-1]
+    return None
+
 
 def command_runner(root, timeout_s: int) -> Runner:
-    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell."""
-    return lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))
+    """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
+
+    A `ddflow [<verb>...] --help` naming this process goes to `in_process` instead of a
+    spawn (Bc621160a82): it is this ddflow's own help, and nothing runs, so no
+    ``timeout_s`` applies; any argv naming another tool still runs in ``root``."""
+
+    def run(argv: list[str]) -> P.Captured:
+        verbs = _ddflow_help_verbs(argv)
+        if verbs is not None:
+            return in_process(verbs)
+        return P.capture(argv, timeout=timeout_s, cwd=Path(root))
+
+    return run
 
 
 def help_flags(text: str) -> set[str]:

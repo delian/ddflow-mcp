@@ -1,64 +1,54 @@
-"""`ddflow waves` -- the scheduled wave surface, reporting its real self: not built yet.
+"""`ddflow waves`: dependency waves, `--stamp` (write the derived `wave:N` tags), `--check`.
 
-`ddflow waves` (compute dependency waves) and `--stamp` (write derived wave:N labels the
-way D-wave-semantics fixes them) arrive with LB-waves. This command exists in the
-declarative registry so the missing `--stamp` is reported WITH the followable interim
-mechanism (the roadmap-restamp script behind `ddflow update --add-tags`/`--remove-tags`)
-instead of argparse's bare `invalid choice: 'waves'` (bug B47acb25115). It implements
-neither compute nor stamping: both are LB-waves' job.
+The derivation is `services/waves.py` and the writes ride `api/batch.apply`, the engine
+behind `ddflow update --add-tags/--remove-tags` (D-wave-semantics). Stamping also happens
+by default after a command that changed the graph (knob `[waves].auto_stamp`).
 """
 
 from __future__ import annotations
 
-from ...core.outcome import nothing
+import importlib
+
+from ...core import outcome as O
 from ..registry import CliPolicy, Command, Param
-
-_SHOWN = CliPolicy(shown=None)
-
-#: The report the command exists to print, on every exit: what is missing, what ships it,
-#: and what to follow meanwhile (docs/ddflow/decisions/token-spend.md, bug B47acb25115).
-_MISSING = (
-    "`ddflow waves --stamp` is missing: wave computation and stamping are scheduled as "
-    "LB-waves and not implemented yet (bug B47acb25115)."
-)
-_GUIDANCE = (
-    "Until LB-waves ships `ddflow waves --stamp`, the followable mechanism is the "
-    "roadmap-review restamp script `docs/ddflow/research/scripts/wave_stamp_accurate.py` "
-    "(via `ddflow update --add-tags`/`--remove-tags`)."
-)
 
 
 def _call(repo, args, agent):
-    return nothing(
-        "waves.missing",
-        f"{_MISSING} {_GUIDANCE}",
-        stamp=bool(args.get("stamp")),
-        scheduled="LB-waves",
-    )
+    return importlib.import_module("ddflow.api.waves").report(repo, args, agent)
 
 
 def _text(out, a) -> str:
-    return out.reason
+    return importlib.import_module("ddflow.api.waves").text(out, a)
 
 
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("waves",),
-        summary="report that `--stamp` is not implemented and name the interim wave-stamping mechanism (LB-waves ships it)",
-        tool="",
-        reason=(
-            "CLI-only until LB-waves implements it: the command reports the missing "
-            "`--stamp` with its guidance and runs nothing an agent would call mid-task."
-        ),
+        summary="print the dependency waves; --stamp writes the derived wave:N tags, --check exits 1 when they are stale",
+        tool="ddflow_waves",
+        family="ddflow_view",
+        action="waves",
+        tier="all",
+        help_group="Reading the queue",
+        description="Dependency waves of the open queue: wave 0 = no open prerequisite "
+        "(task-level or inherited from a phase), wave N = 1 + the highest wave among open "
+        "prerequisites; an item on a cycle has none. `stamp` writes the derived wave:N tags "
+        "in ONE transaction, only for items whose wave changed (a hand edit of wave:* is "
+        "overwritten; idempotent). `check` returns exit 1 when stamps are stale. Stamping "
+        "also runs by default after a graph change: knob [waves].auto_stamp.",
+        wire_shape=((["waves"], {})),
         call=_call,
-        payload=("stamp", "scheduled"),
+        payload=("waves", "cyclic", "stale", "stamped"),
         render=_text,
-        cli=_SHOWN,
+        cli=CliPolicy(shown=(O.OK, O.FAIL)),
         params=(
+            Param("stamp", type="boolean", help="Write the derived wave:N tags."),
+            Param("check", type="boolean", help="Exit 1 when any wave:N stamp is stale."),
             Param(
-                "stamp",
-                type="boolean",
-                help="write derived wave:N labels (not implemented yet; LB-waves ships it).",
+                "limit",
+                type="integer",
+                help="Items listed per wave in the text view (default 10; 0 = all).",
+                default=10,
             ),
         ),
     ),

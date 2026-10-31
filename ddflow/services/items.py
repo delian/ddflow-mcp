@@ -56,6 +56,23 @@ def bad_id(item: str) -> str:
     return ""
 
 
+def bad_title(title: str | None) -> str:
+    """Why ``title`` cannot be an item's title, or "".
+
+    An empty (or blank) title leaves board, brief and gate rows showing only the id,
+    which says nothing about the work (bug Bbd67278144). Refusing it at creation keeps
+    the queue legible; `ddflow update <id> --title` is the remedy for an item already
+    filed without one (``doctor`` names those).
+    """
+    if not title or not title.strip():
+        return (
+            "the item needs a title: without one every board, brief and gate row shows "
+            "only the id. Give one now (`--title ...`), or `ddflow update <id> "
+            "--title ...` for an item already in the queue."
+        )
+    return ""
+
+
 def taken(st: State, item: str, *, readd: bool) -> str:
     """Why ``item`` cannot be ADDED because the id is already in the queue, or "".
 
@@ -136,6 +153,16 @@ def problem_of(draft: TaskDraft) -> str:
         or SCH.problem(draft.resources or [])
         or _bad_kind(draft.kind)
     )
+
+
+def problem_of_add(draft: TaskDraft, title: str) -> str:
+    """`problem_of` plus the title an item made with `task add`/`phase add` must name.
+
+    The title is validated only here, NOT in `problem_of`: `add_task` still files a
+    title-less draft on import and other routes, and their fold defaults, not a refused
+    title, are their contract (bug Bbd67278144 makes the USER-FACING add require one).
+    """
+    return problem_of(draft) or bad_title(title)
 
 
 def _bad_kind(kind: str | None) -> str:

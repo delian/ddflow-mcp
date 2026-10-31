@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: built from the field list on https://docs.x.ai/build/features/hooks (hookEventName, sessionId, cwd, workspaceRoot, toolName, toolInput); replace with a live recording",
+    "version": "unversioned"
+  },
+  "stdin": {
+    "hookEventName": "PreToolUse",
+    "sessionId": "s-1",
+    "cwd": "/w",
+    "workspaceRoot": "/w",
+    "toolName": "Bash",
+    "toolInput": {
+      "command": "ls"
+    }
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}

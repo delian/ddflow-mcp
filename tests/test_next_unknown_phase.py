@@ -16,7 +16,18 @@ def _proj(repo):
     run_cli(repo, "init")
     for ph in ("159.A", "159.B"):
         run_cli(repo, "phase", "add", ph, "--title", ph)
-        run_cli(repo, "task", "add", f"{ph}.T1", "--phase", ph, "--globs", f"{ph}.py")
+        run_cli(
+            repo,
+            "task",
+            "add",
+            f"{ph}.T1",
+            "--title",
+            "task item",
+            "--phase",
+            ph,
+            "--globs",
+            f"{ph}.py",
+        )
 
 
 def test_an_unknown_phase_is_an_error_naming_the_phases_under_it(repo):

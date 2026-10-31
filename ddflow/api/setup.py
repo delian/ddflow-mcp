@@ -65,6 +65,7 @@ from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
+from ..services.swarm import lanehooks_check as CK
 from ..views import human
 from ..views import human as _human
 from ._base import _load
@@ -374,6 +375,37 @@ def _said(added: list[str]) -> str:
     )
 
 
+def _extra_keys(cfg) -> set[str]:
+    """The keys `[enforce].machine_local_keys` adds to the machine-local classification.
+
+    Read through the attribute directly, not `getattr(..., None)`: the dead-knob ratchet
+    (tests/test_ratchet_no_dead_knobs.py) is a NAME-based scan and cannot see a read that
+    spells the knob as a `getattr` string literal, so it would report a knob that this very
+    function consumes as dead (bug B21ec47765c). ``config.enforce`` is an `EnforceConfig`
+    dataclass with `machine_local_keys` defaulting to ``[]``, so the attribute is always present.
+    """
+    return set(cfg.enforce.machine_local_keys)
+
+
+def _default_layer(cfg, edit: ConfigEdit) -> str:
+    """The layer ``edit`` writes to: the one it names, except that a machine-local key or
+    a reviewer/companion-only TOML document without one defaults to the local layer
+    (DX-machine-local-keys: how many workers THIS machine runs, and which reviewers and
+    endpoints serve it, are not the next machine's answers). `[enforce].machine_local_keys`
+    extends the shipped classification held in `services.configwrite`."""
+    if edit.local:
+        return "local"
+    if edit.set:
+        return CW.machine_local_layer(_extra_keys(cfg), edit.set) or "file"
+    if not edit.append_toml:
+        return "file"
+    try:
+        tables = set(tomllib.loads(edit.append_toml))
+    except tomllib.TOMLDecodeError:
+        tables = set()
+    return "local" if CW.machine_local_tables(_extra_keys(cfg), tables) else "file"
+
+
 def configure(
     repo: Path, edit: ConfigEdit | None = None, *, agent: str = "", approval: str = ""
 ) -> O.Outcome:
@@ -388,8 +420,11 @@ def configure(
 
     edit = edit or ConfigEdit()
     log, cfg, _st = _load(repo, agent)
-    target = str(CW.config_file(repo, local=edit.local))
-    layer = "local" if edit.local else "file"
+    layer = _default_layer(cfg, edit)
+    # Machine-local keys (parallelism, reviewers, companions) default to the local layer:
+    # this machine's own answer must not reach the committed file silently (DX-machine-local-keys).
+    defaulted = not edit.local and layer == "local"
+    target = str(CW.config_file(repo, local=layer == "local"))
 
     stamp: dict[str, Any] = {}
     if edit.set and approval:
@@ -438,10 +473,16 @@ def configure(
             value=edit.value,
             literal=literal,
             path=target,
-            local=edit.local,
+            local=layer == "local",
             rows=[],
             gitattributes_added=res.attributes_added,
             text=f"{edit.set} = {literal}  ({target})"
+            + (
+                f"\n  machine-local key {edit.set}: this machine's own answer, defaulted "
+                f"to the local layer; [enforce].machine_local_keys extends which keys do"
+                if defaulted
+                else ""
+            )
             + shadow["shadow_note"]
             + _said(res.attributes_added),
             **shadow,
@@ -460,10 +501,18 @@ def configure(
             "config",
             path=str(res.path),
             appended=True,
-            local=edit.local,
+            local=layer == "local",
             rows=[],
             gitattributes_added=res.attributes_added,
-            text=f"appended to {res.path}" + _said(res.attributes_added),
+            text=f"appended to {res.path}"
+            + (
+                "\n  machine-local document (reviewer/companion blocks): this machine's own "
+                "reviewers and endpoints, defaulted to the local layer; [enforce]."
+                "machine_local_keys extends which keys do"
+                if defaulted
+                else ""
+            )
+            + _said(res.attributes_added),
         )
 
     rows = [
@@ -518,10 +567,11 @@ def report_budget_change(
         return out
 
     default = ReviewConfig()
-    layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
+    local = bool(out.data.get("local", edit.local))
+    layer = "machine-local (.ddflow/local)" if local else "shared (.ddflow/config.toml)"
     revert = "; ".join(
         f"`ddflow config --set {k} {str(getattr(default, k.split('.')[1])).lower()}"
-        f"{' --local' if edit.local else ''}`"
+        f"{' --local' if local else ''}`"
         for k in touched
     )
     note = (
@@ -1061,9 +1111,19 @@ def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -
 
 
 def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
-    """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
-    else (another tool, no command, any problem) is allowed: a guard that fails closed on its
-    own bug would stop every command the agent runs."""
+    """Refuse a file write outside the agent's lease globs, or a Bash command that breaks
+    `[hooks].forbidden_commands`, before it runs. Anything else (another tool, no path, no
+    command, any problem) is allowed: a guard that fails closed on its own bug would stop
+    every command the agent runs."""
+    # The lease-glob check for a tool call that names a file path (reuses the lane check,
+    # SW-lane-hooks): a write outside the globs is refused before it happens, and an agent
+    # holding no live lease is stopped. Paths are judged against the repo root, where `_mine`
+    # roots the lease globs.
+    paths = CK.paths_of(p.raw)
+    if paths:
+        code, denial = CK.verdict(repo, agent, paths, Path(p.cwd or Path.cwd()), root=repo)
+        if code == CK.REFUSE:
+            return _HookResult(result="denied", deny=denial, note=denial)
     tool_input = p.raw.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):

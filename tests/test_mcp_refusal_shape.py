@@ -19,8 +19,8 @@ from ddflow.surfaces.mcp import TOOLS, Server, _outcome_result
 def test_a_refused_claim_leads_with_the_refusal_and_its_payload(repo):
     """The reported case, end to end through the server."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "a.py")
     code, _out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="alpha")
     assert code == 0, err
 

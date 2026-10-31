@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: built from the field list on https://docs.x.ai/build/features/hooks (hookEventName, sessionId, cwd, workspaceRoot, toolName, toolInput); replace with a live recording; the docs name no prompt field for UserPromptSubmit, so none is asserted",
+    "version": "unversioned"
+  },
+  "stdin": {
+    "hookEventName": "UserPromptSubmit",
+    "sessionId": "s-1",
+    "cwd": "/w",
+    "workspaceRoot": "/w"
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}

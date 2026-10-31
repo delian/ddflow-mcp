@@ -53,8 +53,19 @@ def _holder(repo: Path) -> str:
 @pytest.fixture
 def connection(repo):
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
     srv = Server(repo)
     _call(srv, "ddflow_identify", agent="kilo-onboard")
     yield repo, srv

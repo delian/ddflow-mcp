@@ -26,7 +26,7 @@ from ddflow.services import leases as L
 
 def _second_item(repo: Path, cfg, holder: str, glob: str, *, tree: bool) -> Path | None:
     """T2, held by ``holder`` on ``glob``; in a tree of its own when ``tree``."""
-    assert run_cli(repo, "task", "add", "T2", "--globs", glob)[0] == 0
+    assert run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", glob)[0] == 0
     wt = W.create(repo, cfg, "T2") if tree else None
     L.acquire(
         EventLog(repo, holder),

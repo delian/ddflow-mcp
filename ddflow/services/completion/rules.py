@@ -1,0 +1,613 @@
+"""Whether an item may be completed — the rule-set, callable without argv.
+
+These rules were the body of `cli.cmd_complete`: required gates, open descendants,
+silence under `require_outcome`, inert requirements, unavailable gates, reviewer
+independence. Real domain policy, reachable only through `main(argv)` — so the only way
+to ask "would this complete, and why not" was to run the CLI and read its stderr, and
+the only way to test a rule was to drive a subprocess.
+
+Policy belongs where it can be called. `verdict()` answers the question and writes
+nothing; the surfaces decide what to print, which exit code to use, and whether
+`--force` overrides. That split is also what lets `--force` be honest: the blockers are
+computed either way and recorded on the completion event, so a forced completion says
+in the log exactly what it overrode.
+
+The one thing deliberately NOT a blocker is stale evidence. A gate that passed on a
+different tree still passed; what is no longer true is that it passed on *this* tree.
+Refusing on a change that might be a comment is how a check gets switched off, so it
+comes back as a `warning` and the surfaces show it before the verdict.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+
+from ...config import Config
+from ...core import ids as IDS
+from ...core.admission import is_shared
+from ...core.globs import inside
+from ...core.model import Item, State
+from ...infra import worktree as W
+from .. import changes as CH
+from .. import chore as CO
+from .. import gate_accept as GA
+from .. import gates as G
+from .. import landed as LD
+from .. import review_exclude as RX
+from .. import testselect as TS
+from ..cadence import phase_overdue
+from ..docsonly import diff_is_docs_only
+from ..gates import reviewers as GR
+from ..gates.evidence import commit_tree_entries, worktree_entries
+from ..gates.evidence import tree_being_completed as _tree_being_completed
+from ..gates.reviewed_paths import ignorable
+
+
+@dataclass
+class Verdict:
+    """Everything the decision depends on, computed once.
+
+    `blockers` is the complete list, never the first one found: reporting one at a time
+    turns a single refusal into a round-trip per problem, and an agent that cannot see
+    how many more are coming reaches for `--force`. A refusal is only actionable if it
+    is complete.
+    """
+
+    item: str
+    blockers: list[str] = field(default_factory=list)
+    #: Pre-decision WARNINGS, addressed to whoever is about to complete: a gate whose
+    #: evidence describes a tree that has since moved. Shown before the verdict, and on
+    #: stderr, because they are about the decision rather than part of its result.
+    warnings: list[str] = field(default_factory=list)
+    #: Part of the RESULT, not a warning about it: the coverage gap, which is recorded
+    #: on the completion event and must reach both surfaces. Kept separate from
+    #: `warnings` because merging them put it on stderr, where the one surface that
+    #: needed it -- an agent reading JSON -- could not see it. That is the exact bug
+    #: this field's comment in `cmd_complete` was written about.
+    coverage_note: str = ""
+    #: Gates in the pipeline that could not run. Recorded on the event as a coverage
+    #: gap, so a completion never silently implies they passed.
+    coverage_gaps: list[str] = field(default_factory=list)
+    independence: str = ""
+    kind: str = "task"
+    #: "gate: why" for each gate the ACTUAL diff excused (`applies_when`), with the paths
+    #: and patterns it was judged on. Recorded on the completion event, so a gate that did
+    #: not run is accounted for rather than silently absent (B-na-required-gate).
+    na_evidence: list[str] = field(default_factory=list)
+    #: Set when the item is a chore (`services.chore`): why it needs no reviewer. Recorded
+    #: on the completion event with the approval it rests on.
+    chore: str = ""
+
+    @property
+    def may_complete(self) -> bool:
+        return not self.blockers
+
+
+#: How the open-bug blocker begins; `api.complete` lifts exactly this one when
+#: `--regression-test` is about to close those bugs.
+OPEN_BUG_BLOCKER = "fixes open bug(s) "
+
+
+def fixes_of(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
+    """The bugs ``item_id`` was filed to fix: its `fixes` list, plus the bug a hand-filed
+    fix task names (`fix-<bug>`, read back through the `[ids].fix_task` template by the
+    id service, never by a prefix written here). NOT every bug whose `fix_task` points
+    here: `bug found --item <open fix task>` links a mere report to the task it was filed
+    against, and completing fix-B297ede2447 closed four such reports nobody had fixed
+    (B7bdcc6b212)."""
+
+    it = state.items.get(item_id)
+    named = set(it.fixes) if it is not None else set()
+    named.update(IDS.bugs_named_by_fix_task(cfg, item_id))
+    return {b for b in named if b in state.bugs}
+
+
+def fix_task_for(state: State, bug_id: str, cfg: Config | None = None) -> Item | None:
+    """The queued item filed to fix ``bug_id``: the one the bug's `fix_task` names, else one
+    whose `fixes_of` includes it (a hand-filed task named by the `[ids].fix_task` template
+    carries no link on the bug), else None."""
+    rec = state.bugs.get(bug_id)
+    named = state.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    if named is not None and not named.removed:
+        return named
+    fixers = [i for i in state.live_items() if bug_id in fixes_of(state, i.id, cfg)]
+    # Several may name the bug: the one working in a worktree, then the one the configured
+    # id template names, then the first filed.
+    fixers.sort(key=lambda i: (not i.worktree, bug_id not in IDS.bugs_named_by_fix_task(cfg, i.id)))
+    return fixers[0] if fixers else None
+
+
+def open_bugs_of(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
+    """The open bugs ``item_id`` was filed to fix (`fixes_of`), sorted: what its completion
+    must close, and what `--regression-test` closes."""
+    return sorted(b for b in fixes_of(state, item_id, cfg) if state.bugs[b].open)
+
+
+def reported_against(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
+    """Open bugs linked to ``item_id`` (`fix_task`) that it was NOT filed to fix: its
+    completion leaves them open, and says so."""
+    mine = fixes_of(state, item_id, cfg)
+    return sorted(
+        b.id for b in state.bugs.values() if b.open and b.fix_task == item_id and b.id not in mine
+    )
+
+
+def _open_bug_blockers(state: State, item_id: str, cfg: Config | None = None) -> list[str]:
+    """The bugs ``item_id`` is the fix task of that are still open, as one blocker."""
+    fixing = open_bugs_of(state, item_id, cfg)
+    if not fixing:
+        return []
+    return [
+        f"{OPEN_BUG_BLOCKER}{', '.join(fixing)}: close each with `ddflow bug fixed <bug> "
+        f"--regression-test <test>` (a test that FAILS on the unfixed code), or pass "
+        f"`--regression-test <test>` to complete, which closes them; a false finding is "
+        f"`ddflow bug invalid <bug> --reason ...`."
+    ]
+
+
+def _reported_bug_warnings(state: State, cfg: Config, item_id: str) -> list[str]:
+    """The bugs reported against ``item_id`` that its completion leaves open, as one
+    warning (`reported_against`)."""
+    left = reported_against(state, item_id, cfg)
+    if not left:
+        return []
+    then = (
+        "files each a fix task of its own"
+        if cfg.bugs.file_task
+        else "files no fix task for them (`[bugs] file_task = false`): each needs one"
+    )
+    return [
+        f"open bug(s) {', '.join(left)} were reported against {item_id} but are not what "
+        f"it was filed to fix: completing it leaves them open and {then}."
+    ]
+
+
+def _unsettled(
+    cfg: Config, it: Item, excused, s, required, state: State | None = None
+) -> list[str]:
+    """The required gates of the pipeline that carry no settled outcome (a chore's recorded
+    skip settles one; so does a person's acceptance of a recorded partial, Bb999d5e20f) and
+    that the actual diff does not excuse."""
+    return [
+        g
+        for g in s.pipeline
+        if g in required
+        and g not in s.not_applicable
+        and not (
+            CO.skipped_ok(cfg, it, excused, g)
+            or it.gate_satisfied(g, True)
+            or (state is not None and GA.accepted(state, it, g).ok)
+        )
+    ]
+
+
+def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) -> list[str]:
+    """One warning for each required gate that is PARTIAL and settles only because a person
+    accepted that outcome (Bb999d5e20f): it is audited here, and it was not passed."""
+    out = []
+    for g in s.pipeline:
+        if (
+            g in required
+            and g not in missing
+            and g not in s.not_applicable
+            and it.gate_outcome(g) == GA.ACCEPTABLE
+        ):
+            got = GA.accepted(state, it, g)
+            if got.ok:
+                out.append(
+                    f"gate {g} is PARTIAL ({it.gates[g].reason[:160]}) and settles only because "
+                    f"a person accepted that outcome: {got.reason}. It was not passed."
+                )
+    return out
+
+
+def needs_independent_reviewer(
+    it: Item,
+    cfg: Config,
+    paths: list[str] | None = None,
+    repo: Path | None = None,
+    reviewed: bool = False,
+) -> bool:
+    """Is a reviewer from another family required of ``it``? Only of a task that writes code:
+    not a promotion, not a task whose ACTUAL change is documents only (`paths`), which
+    runs the doc pipeline -- and not a task whose ACTUAL change is entirely the generated
+    class (`paths` matches the shipped generated excludes, a canonical lockfile or a pin
+    file), which the review gates record UNAVAILABLE: a reviewer could only be sent
+    content the project generated, and none ran (`reviewed` is False). Once ANY reviewer
+    gate really reviewed (``reviewed``), the ordinary family rule governs it again --
+    content was sent and judged (B-lockfile-only-item-cannot-complete)."""
+    return (
+        cfg.agent.reviewer_family_must_differ
+        and it.kind == "task"
+        and not it.promote_to
+        and not diff_is_docs_only(it, cfg, paths)
+        and not (
+            not reviewed
+            and repo is not None
+            and paths is not None
+            and RX.excluded_outright(cfg, repo, paths)
+        )
+    )
+
+
+def _independence(
+    state: State, cfg: Config, it: Item, model: str, gdefs, excused, paths=None, repo=None
+):
+    """(why, blockers): whether a reviewer from another family ran. The project's own
+    reviewer gates count, as their definitions declare (B0e1330bf74).
+
+    Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
+    very check, as the tasks that produced it; demanding an independent reviewer of a merge
+    between environment branches blocked every promotion, since its pipeline (rightly) has no
+    review gate to satisfy it with. Not for a chore either (D-chore-class): a person
+    approved its file list instead. Not for a change made entirely of the GENERATED
+    exclusion class either (B-lockfile-only-item-cannot-complete): no reviewer can be
+    sent generated content, the review gates record that UNAVAILABLE, and -- while none
+    actually reviewed -- no cross-family reviewer is demanded."""
+    ok, why = G.reviewer_independence(state, cfg, it.id, model, gdefs)
+    needed = needs_independent_reviewer(it, cfg, paths, repo, GR.reviewer_ran(state, it.id, gdefs))
+    if needed and not ok and excused is None:
+        return why, [f"reviewer independence not satisfied: {why}"]
+    return why, []
+
+
+def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
+    """Why this item may or may not complete. Reads only; writes nothing."""
+    it = state.items.get(item_id)
+    if it is None or it.removed:
+        return Verdict(item=item_id, blockers=[f"no such item {item_id!r}"])
+
+    gdefs = G.load_gates(repo, cfg)
+    # The actual diff, not the declared globs, decides whether a gate is out of scope.
+    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it))
+    v = Verdict(
+        item=item_id,
+        coverage_gaps=list(s.unavailable),
+        kind=it.kind,
+        na_evidence=[f"{g}: {why}" for g, why in s.not_applicable.items()],
+    )
+    required = G.required_gates(cfg)
+
+    # A chore (D-chore-class) is judged on the paths it ACTUALLY changed and a person's
+    # approval of the chore list -- never on its tag. It is excused the gates it skipped
+    # on the record, even a required one, and the reviewer.
+    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
+    v.warnings += why_not
+
+    missing = _unsettled(cfg, it, excused, s, required, state)
+    v.warnings += _accepted_warnings(state, it, s, required, missing)
+    if missing:
+        v.blockers.append(
+            f"required gate(s) not passed: {', '.join(missing)} (current outcome: "
+            + ", ".join(f"{g}={it.gate_outcome(g) or 'not run'}" for g in missing)
+            + ")"
+            + "".join(
+                f"; {g} is partial: re-run it, or a person runs `ddflow approve {item_id} {g}` "
+                f"to accept that baseline-red outcome (it stays partial on the record)"
+                for g in missing
+                if it.gate_outcome(g) == GA.ACCEPTABLE and not GA.refusal(it, g)
+            )
+        )
+
+    # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
+    # an umbrella too, and completing it while its children are open marks work
+    # finished that nobody has done. `abandoned` counts as settled alongside `done`, or
+    # an item you decided against holds its parent open forever.
+    open_children = state.open_descendants(item_id)
+    if open_children:
+        noun = "task(s) in this phase" if it.kind == "phase" else "sub-task(s)"
+        v.blockers.append(
+            f"{len(open_children)} {noun} unfinished: {', '.join(k.id for k in open_children[:8])}"
+        )
+
+    # Silence is not a pass. Without this an agent could complete having recorded
+    # implement/unit_tests/merge and never touched research, the rubber-duck, the
+    # critic, the standards pass, the bug hunt or the dedupe check — six of ten steps
+    # omitted with no trace. An explicit `gate skip --reason` is still an outcome, so
+    # the escape hatch is the auditable one rather than the invisible one.
+    if cfg.gates.require_outcome and s.silent:
+        human = [g for g in s.silent if g in gdefs and gdefs[g].is_human_gate]
+        other = [g for g in s.silent if g not in human]
+        if other:
+            v.blockers.append(
+                f"gate(s) never run and never skipped: {', '.join(other)}. "
+                f"Record an outcome (`ddflow gate run|record`) or skip it on the record "
+                f"(`ddflow gate skip <id> <gate> --reason ...`); "
+                f"set [gates].require_outcome = false to make the pipeline advisory."
+            )
+        if human:
+            # Named separately, because all three commands the sentence above suggests
+            # REFUSE a human gate. Telling an agent to run them is telling it to
+            # collect an exit 3 and conclude something is broken.
+            v.blockers.append(
+                f"awaiting a person: {', '.join(human)}. Ask the operator to run "
+                f"`ddflow approve {item_id} {human[0]}` (or `--reject --reason ...`). "
+                f"You cannot record this one — `gate record` and `gate skip` both "
+                f"refuse it, and there is no MCP tool for it."
+            )
+
+    # A fix task closes its bug or does not complete (B-bugs-as-items): the bug record is
+    # what carries the regression test, and `bug fixed` is what refuses to close without
+    # one. Asked of the task's `fixes` (B7bdcc6b212), not of every bug whose `fix_task`
+    # names it: a report filed against the task is not what the task fixes, so it neither
+    # blocks the completion nor is closed by it -- it is named as left open.
+    v.blockers += _open_bug_blockers(state, item_id, cfg)
+    v.warnings += _reported_bug_warnings(state, cfg, item_id)
+    v.warnings += [f"gate not applicable on the actual change -- {n}" for n in v.na_evidence]
+    v.warnings += [f"gate {g} {note}" for g, note in s.local_command.items()]
+
+    if it.kind == "phase":
+        v.blockers += _unmerged_branches(state, cfg, it, repo)
+        # Periodic passes counted in phases (architecture review, mutation tests, lessons)
+        # are the ones a phase close exists to run; task-counted ones stay advisory. Here,
+        # not in `api.complete`, so the PR-merge settle path enforces it too.
+
+        v.blockers += phase_overdue(state, cfg)
+
+    inert = G.inert_requirements(cfg)
+    if inert:
+        v.blockers.append(
+            f"[gates].required names {', '.join(inert)}, which no pipeline runs — "
+            f"so that requirement enforces nothing. Add it to a pipeline (task_pipeline, "
+            f"phase_pipeline, or promotion_pipeline with flow.environments set), or drop "
+            f"it from required."
+        )
+
+    if cfg.gates.unavailable_is_failure and s.unavailable:
+        v.blockers.append(
+            f"gate(s) could not run: {', '.join(s.unavailable)} "
+            f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
+        )
+
+    v.independence, no_reviewer = _independence(
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
+    )
+    v.blockers += no_reviewer
+
+    if s.unavailable:
+        v.coverage_note = _coverage_note(it, s.unavailable)
+
+    readme = readme_report(state, cfg, item_id, repo=repo)
+    if readme:
+        # "Could not run" is never a blocker: only a README that is known to be missing is.
+        blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
+        (v.blockers if blocks else v.warnings).append(readme)
+
+    cwd, landed = _tree_being_completed(repo, it)
+    own = changed_paths(repo, it)
+    stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
+    for note in refine_stale_notes(
+        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
+    ):
+        if note.unverified:
+            v.warnings.append(
+                f"{note.gate} passed, but whether on the tree you are completing could "
+                f"not be checked — {note.why}. Re-run it if that matters."
+            )
+            continue
+        v.warnings.append(
+            f"{note.gate} passed on a different tree than the one you are completing — "
+            f"{note.why}. Re-run it if the change was not cosmetic."
+        )
+    return v
+
+
+def refine_stale_notes(
+    notes: list,
+    it: Item,
+    cwd: Path,
+    landed: str,
+    changed: list[str] | None,
+    ignore: Sequence[str] = (),
+    docs: Sequence[str] = (),
+):
+    """Narrow the "passed on a different tree" notes of review gates to the item's own paths
+    (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
+    the files the item changed -- so a merge of main, an event-log commit or an edit to a file
+    the item never touched is not a different tree FOR THE REVIEW: its note is dropped, and one
+    that stays names the paths that moved. Anything not comparable (no snapshot, the changed
+    set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
+    did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) and a file
+    matching ``docs`` (`[review].doc_globs`: wording, bug Bb89ff23f21) are not a difference, as
+    they are not at triage."""
+    entries = None
+    out = []
+    for note in notes:
+        rec = it.gates.get(note.gate)
+        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        if note.unverified or not isinstance(recorded, dict) or changed is None:
+            out.append(note)
+            continue
+        if entries is None:
+            entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
+        if entries is None:
+            out.append(note)
+            continue
+        candidates = recorded.keys() | set(changed)
+        gone = {p for p in candidates if p not in entries}
+        moved = sorted(
+            p
+            for p in candidates
+            if recorded.get(p) != (" ".join(entries[p]) if p in entries else "")
+            and not ignorable(p, recorded, ignore, docs, gone)
+        )
+        if moved:
+            shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
+            out.append(
+                replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
+            )
+    return out
+
+
+def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> list[str]:
+    """A phase has no branch of its own, so its merge gate does not apply (`needs_branch`);
+    what stands in for it is this fact: no finished task below it still has a branch whose
+    commits the base lacks. Git unable to answer is not a blocker."""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+
+    def _ref(t: Item) -> str:
+        # The task's recorded base may be a branch since deleted: judge against the
+        # phase's base then, or the unmerged work would be called merged.
+        return (
+            t.base
+            if t.base and W.git(repo, "rev-parse", "--verify", "--quiet", t.base).ok
+            else base
+        )
+
+    left = [
+        t.id
+        for k in sorted(state.descendants(phase.id))
+        if (t := state.items[k]).branch
+        and t.state == "done"
+        and W.branch_exists(repo, t.branch)
+        and not W.is_merged(repo, t.branch, _ref(t))
+    ]
+    if not left:
+        return []
+    return [f"task branch(es) not merged into {base}: {', '.join(left)} (`ddflow merge <id>`)"]
+
+
+README_UNKNOWN = (
+    "README check could not run: git could not report this task's diff (no worktree, "
+    "branch or landed commit to read, or its base is unreadable), so whether the README "
+    "moved is unknown."
+)
+README_REMEDY = (
+    "README not updated: record the section you changed, or "
+    "`ddflow gate skip <id> docs --reason ...`"
+)
+
+
+def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str:
+    """The "README not updated" report when a task's diff changed code and not the README;
+    `README_UNKNOWN` when git cannot say what changed; else "".
+
+    Decision D-readme-current: a change a user or agent can see updates README.md in the
+    same task. A completion CHECK rather than a pipeline gate: a gate in `task_pipeline`
+    would be demanded of every task (test-only, docs-only, housekeeping) and its only
+    evidence would be an assertion, while whether the README moved is a fact about the
+    diff. The recorded reason is the existing `docs` gate outcome -- `gate skip <id> docs
+    --reason` or `gate record <id> docs --outcome passed --evidence <section>`.
+
+    Silent when the mode is `off`, the item is not a task, or a `docs` outcome with a
+    reason is on record. When git cannot say what changed it returns `README_UNKNOWN`
+    (the caller makes that a warning, never a blocker): "nobody looked" is not "no".
+    """
+    mode = cfg.enforce.readme_with_code
+    it = state.items.get(item_id)
+    if mode == "off" or it is None or it.removed or it.kind != "task" or it.promote_to:
+        return ""
+    docs = it.gates.get("docs")
+    if docs and (
+        (docs.outcome == "skipped" and docs.reason)
+        or (docs.outcome == "passed" and (docs.evidence or {}).get("note"))
+    ):
+        return ""
+    changed = changed_paths(repo, it)
+    if changed is None:
+        return README_UNKNOWN
+    code = [
+        p
+        for p in changed
+        if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_or_doc_path(p)
+    ]
+    readmes = _root_anchored(cfg.enforce.readme_files)
+    if not code or any(is_shared(p, readmes) for p in changed):
+        return ""
+    more = f" (+{len(code) - 3} more)" if len(code) > 3 else ""  # noqa: PLR2004
+    return f"{README_REMEDY}. Changed: {', '.join(code[:3])}{more}."
+
+
+def _root_anchored(files: list[str]) -> list[str]:
+    """``files`` as root-anchored patterns: git's slashless pattern matches at any depth,
+    which made `docs/README.md` count as the project's README."""
+    return [f if f.startswith("/") else f"/{f}" for f in files]
+
+
+_DOC_SUFFIXES = (".md", ".rst", ".adoc", ".txt")
+_TEST_DOC_DIRS = ("tests", "test", "__tests__", "spec", "specs", "docs", "doc")
+
+
+def _is_test_or_doc_path(path: str) -> bool:
+    """Never user-visible code, even inside a code glob: a test file (`pkg/tests/x.py`,
+    `__tests__/`, `foo.test.ts`, `foo_spec.rb`, conftest.py) or documentation (a docs/ or
+    doc/ directory, or a .md/.rst/.adoc/.txt file)."""
+    parts = path.split("/")
+    name = parts[-1]
+    stem = name.rsplit(".", 1)[0]
+    return (
+        any(d.lower() in _TEST_DOC_DIRS or d.endswith("_tests") for d in parts[:-1])
+        or name.startswith("test_")
+        or stem.endswith(("_test", "_spec", "_tests"))
+        or re.search(r"[a-z0-9](Test|Tests|Spec)$", stem) is not None  # FooTest.java, widgetSpec.js
+        or ".test." in name
+        or ".spec." in name
+        or name == "conftest.py"
+        or name.lower().endswith(_DOC_SUFFIXES)
+    )
+
+
+def changed_paths(repo: Path, it) -> list[str] | None:
+    """The paths the item changed: what landed (`landed_before..landed_after`), or before
+    it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\". A landing restricted to the item's own
+    paths (`update --landed-paths`, B738d7bbeab) reports only the range's changed files
+    inside those, never the whole commit's; a restriction the range no longer answers
+    to is None (fail closed), never empty and never the whole commit."""
+
+    if it.landed_before and it.landed_after:
+        paths = CH.changed_paths(
+            repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
+        )
+        if it.landed_paths and paths is not None:
+            # Never the whole commit's; when the range stopped holding the item's work,
+            # None -- like every other "cannot say" here: full pipeline, never a guess
+            # (verified at record time, so this needs the recorded range tampered with).
+            matched = sorted(p for p in paths if any(inside(p, g) for g in it.landed_paths))
+            return matched if matched else None
+        return paths
+    base = it.base or W.default_branch(repo)
+    found, may_cite = _unlanded_paths(repo, it, base)
+    if found or not may_cite:
+        return found
+    # Landed by a plain git merge or a mixed commit, so the branch (if any) differs from the
+    # base by nothing: the commits that cite the item, checked.
+    return LD.cited_paths(repo, it, base) or found
+
+
+def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:
+    """The item's worktree (or, with none, its branch) against its base, and whether
+    the item's cited commits may stand in for it. They may when nothing is left to read: a
+    worktree that differs from the base by nothing, a branch already merged into its base, or
+    no worktree and no branch at all. They may not when the item claims a worktree or branch
+    that git cannot read (None): its real work is unseen, so never guess."""
+    path = W.load_path(repo, it.worktree) if it.worktree else None
+    if path and path.is_dir():
+        seen = TS.changed_files(path, base)
+        return seen, seen == []
+    # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
+    if it.branch and W.rev(repo, it.branch):
+        out = CH.changed_paths(repo, base, tip=it.branch, include=("committed",))
+        # Empty is not "nothing changed" here: a branch already merged into its base, or
+        # the base itself, diffs to nothing whatever the task did.
+        return (sorted(out) if out else None), True
+    return None, not (it.worktree or it.branch)
+
+
+def _coverage_note(it, gaps: list[str]) -> str:
+    """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
+    one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
+    ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
+    its `coverage`; a `partial_exits` gate has none, and says "coverage unknown"."""
+    never = [g for g in gaps if it.gate_outcome(g) != "partial"]
+    parts = [f"{', '.join(never)} never ran"] if never else []
+    for g in gaps:
+        if it.gate_outcome(g) == "partial":
+            # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the
+            # most important one to show.
+            coverage = it.gates[g].evidence.get("coverage")
+            figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
+            parts.append(f"{g} ran only partially (coverage{figure})")
+    return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."

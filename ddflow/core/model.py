@@ -105,13 +105,16 @@ from .handlers.knowledge import (
     _h_bug_invalid,
     _h_bug_reopened,
     _h_bug_reported_upstream,
+    _h_bug_tagged,
     _h_decision,
     _h_decision_superseded,
     _h_lesson,
     _h_memory,
     _h_memory_forgotten,
+    _h_memory_redacted,
     _h_research,
 )
+from .handlers.lanerelease import LANERELEASE_HANDLERS
 from .handlers.leases import (  # noqa: F401
     _displace,
     _h_lease_acquired,
@@ -251,6 +254,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "bug.fixed": _h_bug_fixed,
     "bug.invalid": _h_bug_invalid,
     "bug.reopened": _h_bug_reopened,  # first writer: api/bug_reopen.py
+    "bug.tagged": _h_bug_tagged,
     "bug.reported_upstream": _h_bug_reported_upstream,
     "lesson.recorded": _linking(_h_lesson),
     "research.recorded": _linking(_h_research),
@@ -261,6 +265,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "external.observed": _h_external,
     "job.ended": _h_job_ended,
     "memory.forgotten": _h_memory_forgotten,
+    "memory.redacted": _h_memory_redacted,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
     "ci.result": _h_ci_result,
@@ -282,6 +287,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **APPROVAL_HANDLERS,
     # first writer: services/waiting.py register (a refused claim or `update --globs`)
     **WAITING_HANDLERS,
+    # first writer: api/mergequeue_add.py (`queue add --release`)
+    **LANERELEASE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

@@ -128,7 +128,7 @@ def _setup(repo: Path, extra: str = "") -> None:
     )
     if extra:
         (repo / ".ddflow" / "config.toml").write_text(extra)
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
 
 def test_three_real_identical_failures_reach_loops_and_doctor(repo):

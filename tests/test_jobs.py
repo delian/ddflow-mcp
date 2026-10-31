@@ -40,7 +40,7 @@ def _jobs(repo: Path, *extra: str) -> list[dict]:
 
 def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    run_cli(repo, "task", "add", "TRAIN", "--title", "TRAIN fixture", "--globs", "a.py")
     run_cli(repo, "claim", "TRAIN", "--no-worktree")
     # Held open on a file, not on a clock: a 1.5 s sleep raced the two CLI calls below,
     # and under a loaded suite the job had exited before `job end` asked (Bba19573760).
@@ -70,7 +70,7 @@ def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
 
 def test_a_killed_job_is_GONE_not_running_and_not_exited(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "GEN", "--globs", "a.py")
+    run_cli(repo, "task", "add", "GEN", "--title", "GEN fixture", "--globs", "a.py")
     run_cli(repo, "claim", "GEN", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "GEN", "sleep 30")
     pid = json.loads(out)["pid"]
@@ -83,7 +83,7 @@ def test_the_job_survives_the_process_that_launched_it(repo):
     """Launched from a CLI process that has since exited -- the shape of a remote-control
     session being restarted mid-run."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "T", "sleep 3")
     pid = json.loads(out)["pid"]
@@ -117,7 +117,7 @@ def test_a_job_on_another_host_is_not_guessed_at():
 
 def test_registering_a_process_requires_it_to_be_running(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T", "--no-worktree")
     p = subprocess.Popen(["sleep", "300"])
     try:
@@ -134,7 +134,7 @@ def test_registering_a_process_requires_it_to_be_running(repo):
 
 def test_the_brief_tells_the_next_session_to_wait(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    run_cli(repo, "task", "add", "TRAIN", "--title", "TRAIN fixture", "--globs", "a.py")
     run_cli(repo, "claim", "TRAIN", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "TRAIN", "sleep 20")
     pid = json.loads(out)["pid"]
@@ -151,7 +151,7 @@ def test_a_job_can_only_be_started_under_the_callers_own_claim(repo):
     GPUs nobody granted. Found driving the MCP surface: `claim` refused for want of
     GPUs, and `job run` started the training anyway."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    run_cli(repo, "task", "add", "TRAIN", "--title", "TRAIN fixture", "--globs", "a.py")
     code, _o, err = run_cli(repo, "job", "run", "TRAIN", "sleep 5")
     assert code == REFUSED and "claim TRAIN" in err + _o
     run_cli(repo, "claim", "TRAIN", "--no-worktree", agent="alice")
@@ -164,7 +164,7 @@ def test_a_job_can_only_be_started_under_the_callers_own_claim(repo):
 
 def test_job_add_refuses_without_the_callers_claim_too(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     p = subprocess.Popen(["sleep", "5"])
     try:
         code, _o, _e = run_cli(repo, "job", "add", "T", "--pid", str(p.pid))
@@ -176,7 +176,7 @@ def test_job_add_refuses_without_the_callers_claim_too(repo):
 
 def test_the_refusal_says_WAIT_when_someone_else_holds_the_item(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T", "--no-worktree", agent="alice")
     code, out, err = run_cli(repo, "job", "run", "T", "sleep 1", agent="bob")
     assert code == REFUSED
@@ -187,7 +187,7 @@ def test_a_job_on_another_host_is_not_ended_without_force(repo):
     from ddflow.infra.log import EventLog
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     EventLog(repo, "x").append(
         "job.started", "J-remote", {"item": "T", "pid": 4242, "host": "other-box", "log": ""}
     )
@@ -202,7 +202,7 @@ def test_two_launches_in_one_second_do_not_share_a_log(repo):
     from ddflow.api import jobs as AJ
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T", "--no-worktree", agent="w")
     # In-process and back to back: two CLI calls never land in the same second.
     logs = {AJ.job_run(repo, "T", "true", agent="w").data["log"] for _ in range(2)}

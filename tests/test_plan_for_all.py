@@ -41,7 +41,7 @@ def proj(repo: Path) -> Path:
         ("TC", "src/mcp.py"),
         ("TD", "src/other.py"),
     ):
-        run_cli(repo, "task", "add", item, "--globs", globs)
+        run_cli(repo, "task", "add", item, "--title", "task item", "--globs", globs)
     assert A.claim(repo, "HOT", no_worktree=True, agent=HOLDER).ok
     WT.register(
         repo,
@@ -143,11 +143,22 @@ def test_the_alternatives_keep_nexts_order_and_stop_at_five(repo):
     from ddflow.api.lifecycle import alternatives_offer, plan_for
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "R", "--globs", "r/*")
+    run_cli(repo, "task", "add", "R", "--title", "R fixture", "--globs", "r/*")
     for i, (name, prio) in enumerate(
         (("a1", 1), ("m5", 5), ("m4", 4), ("m3", 3), ("m2", 2), ("m1", 6))
     ):
-        run_cli(repo, "task", "add", name, "--globs", f"g{i}/*", "--priority", str(prio))
+        run_cli(
+            repo,
+            "task",
+            "add",
+            name,
+            "--title",
+            "task item",
+            "--globs",
+            f"g{i}/*",
+            "--priority",
+            str(prio),
+        )
     log, cfg = EventLog(repo, C), Config.load(repo)
     cfg.schedule.max_parallel_tasks = 99
     st = fold(log.read_all(), strict=False)

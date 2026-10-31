@@ -10,7 +10,19 @@ from helpers import items_of as _items
 
 def _doc(repo, rid="D1", *extra):
     run_cli(repo, "init")
-    return run_cli(repo, "task", "add", rid, "--globs", "docs/x.md", "--kind", "doc", *extra)
+    return run_cli(
+        repo,
+        "task",
+        "add",
+        rid,
+        "--title",
+        "task item",
+        "--globs",
+        "docs/x.md",
+        "--kind",
+        "doc",
+        *extra,
+    )
 
 
 def test_task_add_kind_doc_makes_a_doc_item(repo):
@@ -21,14 +33,16 @@ def test_task_add_kind_doc_makes_a_doc_item(repo):
 
 def test_a_plain_task_stays_a_task(repo):
     run_cli(repo, "init")
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == 0
     assert _items(repo)["T1"].kind == "task"
 
 
 def test_phase_and_unknown_kinds_are_refused(repo):
     run_cli(repo, "init")
     for bad in ("phase", "nonsense", "bug"):
-        code, _o, err = run_cli(repo, "task", "add", f"X{bad}", "--kind", bad)
+        code, _o, err = run_cli(
+            repo, "task", "add", f"X{bad}", "--title", "task item", "--kind", bad
+        )
         assert code != 0 and "kind" in err, (bad, err)
     assert "Xphase" not in _items(repo)
 

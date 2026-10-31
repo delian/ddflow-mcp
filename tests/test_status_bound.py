@@ -91,6 +91,6 @@ def test_interrupted_notes_are_cut_too(repo):
 
 def test_a_small_project_is_not_marked_truncated(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     body = json.loads(_mcp_status(repo))
     assert "truncated" not in body and [t["id"] for t in body["ready_now"]] == ["T1"]

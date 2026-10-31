@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.conformance_tools"
+new = '["brief", "next", "claim", "heartbeat", "show", "help", "identify", "merge", "complete", "task", "memory", "gate", "bug", "session", "rule", "view"]'
+why = "Lane conformance levels (SW-conformance): the pass thresholds and waits of a conformance run are knobs."
+impact = "additive"

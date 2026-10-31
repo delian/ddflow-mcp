@@ -78,7 +78,8 @@
    "renewed",
    "waiters",
    "globs_withheld",
-   "yield_requested"
+   "yield_requested",
+   "wake"
   ],
   "output_schema": {
    "type": "object",
@@ -90,6 +91,7 @@
     "waiters": {},
     "globs_withheld": {},
     "yield_requested": {},
+    "wake": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -241,18 +243,21 @@
    "id",
    "sha",
    "author_model",
+   "author_family",
    "model_source",
    "independence",
    "forced",
    "coverage_gaps",
    "note",
    "woke",
+   "wake",
    "bugs_closed",
    "umbrellas_completed",
    "umbrella_refused",
    "refuted_passes",
    "worktree_removed",
-   "kept_reason"
+   "kept_reason",
+   "chore"
   ],
   "output_schema": {
    "type": "object",
@@ -263,18 +268,21 @@
     "id": {},
     "sha": {},
     "author_model": {},
+    "author_family": {},
     "model_source": {},
     "independence": {},
     "forced": {},
     "coverage_gaps": {},
     "note": {},
     "woke": {},
+    "wake": {},
     "bugs_closed": {},
     "umbrellas_completed": {},
     "umbrella_refused": {},
     "refuted_passes": {},
     "worktree_removed": {},
     "kept_reason": {},
+    "chore": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -682,7 +690,10 @@
    "regression_verified",
    "regression_verify",
    "lesson_captured",
-   "lesson_capture"
+   "lesson_capture",
+   "tags",
+   "was",
+   "changed"
   ],
   "output_schema": {
    "type": "object",
@@ -696,6 +707,9 @@
     "regression_verify": {},
     "lesson_captured": {},
     "lesson_capture": {},
+    "tags": {},
+    "was": {},
+    "changed": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -1870,7 +1884,8 @@
   "shape": "object",
   "payload": [
    "released",
-   "woke"
+   "woke",
+   "wake"
   ],
   "output_schema": {
    "type": "object",
@@ -1880,6 +1895,7 @@
     },
     "released": {},
     "woke": {},
+    "wake": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -2746,6 +2762,37 @@
   },
   "array_schema": null
  },
+ "ddflow_session_message": {
+  "command": "session_message",
+  "schema": "session_message@1",
+  "shape": "object",
+  "payload": [
+   "to",
+   "sent",
+   "wake",
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_message@1"
+    },
+    "to": {},
+    "sent": {},
+    "wake": {},
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_sync": {
   "command": "sync",
   "schema": "sync@1",
@@ -2792,6 +2839,53 @@
     "gates_unverified": {},
     "gates_not_passing": {},
     "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_watch": {
+  "command": "watch",
+  "schema": "watch@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "watch@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_waves": {
+  "command": "waves",
+  "schema": "waves@1",
+  "shape": "object",
+  "payload": [
+   "waves",
+   "cyclic",
+   "stale",
+   "stamped"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "waves@1"
+    },
+    "waves": {},
+    "cyclic": {},
+    "stale": {},
+    "stamped": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

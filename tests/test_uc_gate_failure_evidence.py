@@ -112,7 +112,7 @@ def _project(repo: Path, tmp_path: Path, fails: int) -> Path:
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "./bin/pytest -q tests/"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     return state
 
@@ -270,7 +270,7 @@ def _partial_project(repo: Path, tmp_path: Path, options: str = "") -> None:
     (repo / ".ddflow" / "gates.toml").write_text(
         f'[gate.unit_tests]\ncommand = "./bin/pytest -q {options} tests/"\ncwd = "repo"\n'
     )
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
 
 

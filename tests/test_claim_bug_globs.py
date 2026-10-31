@@ -55,4 +55,4 @@ def test_a_claim_with_no_globs_says_the_command_that_adds_them(repo):
     log.append("task.added", "T1", {"parent": "P1", "title": "t", "globs": []})
     code, out, err = run_cli(repo, "claim", "T1", agent="w")
     assert code == 0, out + err
-    assert "ddflow --agent w update T1 --globs" in out, out
+    assert "ddflow --agent w update T1 --add-globs" in out, out

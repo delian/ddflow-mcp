@@ -117,7 +117,7 @@ def test_the_declared_shape_is_the_shape_a_call_returns(repo):
     for argv in (
         ("init",),
         ("phase", "add", "P1", "--title", "P"),
-        ("task", "add", "T1", "--phase", "P1", "--globs", "a.py"),
+        ("task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "a.py"),
         (
             "decision",
             "add",

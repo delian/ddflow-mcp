@@ -21,7 +21,7 @@ OK, REFUSED = 0, 3
 
 def _broken_tree(repo: Path) -> Path:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, _out, err = run_cli(repo, "claim", "T1", agent="w")
     assert code == OK, err
     code, out, _ = run_cli(repo, "--json", "show", "T1")

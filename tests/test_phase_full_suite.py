@@ -19,7 +19,7 @@ def _phase_with_merged_task(repo):
     for step in (
         ("init",),
         ("phase", "add", "P0", "--title", "P0"),
-        ("task", "add", "P0.T1", "--phase", "P0", "--globs", "p0/*"),
+        ("task", "add", "P0.T1", "--title", "P0.T1 fixture", "--phase", "P0", "--globs", "p0/*"),
         ("claim", "P0.T1", "--no-worktree"),
     ):
         assert run_cli(repo, *step)[0] == OK

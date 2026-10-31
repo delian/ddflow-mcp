@@ -46,7 +46,7 @@ def _setup(repo: Path, old: str) -> Path:
     """`repo` with `unit_tests = old` committed and T1 claimed into its own worktree."""
     run_cli(repo, "init")
     _commit_gates(repo, old, "gate config")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == 0, out + err
     return _item_tree(repo, "T1")
@@ -194,7 +194,7 @@ def test_drift_is_found_in_config_toml_too(repo):
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "gate config")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert run_cli(repo, "claim", "T1", agent="worker")[0] == 0
     (repo / "xdist.marker").write_text("")
     cfg.write_text(cfg.read_text().replace('command = "true"', 'command = "test -f xdist.marker"'))

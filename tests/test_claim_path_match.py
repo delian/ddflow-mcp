@@ -61,7 +61,18 @@ def test_the_commit_hook_refuses_a_path_only_a_prefix_claim_covers(repo):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "scaffold", "--no-verify")
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "a.md.bak")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "a.md.bak",
+    )
     code, _out, err = run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
     assert code == 0, err  # the lease exists: the refusal below is about the path
     (repo / "a.md.bak").write_text("bak\n")

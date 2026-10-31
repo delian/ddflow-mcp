@@ -19,6 +19,7 @@ from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
 from .bug_list import BUG_SEVERITIES, SEVERITY_RANK, finish_bug_list, severity_rank  # noqa: F401
+from .bug_tags import found_tags
 
 BUG_SCOPES = ("project", "ddflow")
 #: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
@@ -54,6 +55,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     test: str = "",
     repro_cmd: str = "",
     repro_capture: str = "",
+    tags: str | list[str] = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
     says what it is; a bug a task will fix is filed against it (``item``), which answers
@@ -74,6 +76,9 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
+    tag_list, bad_tags = found_tags(tags)
+    if bad_tags:
+        return O.failed("bug.found", bad_tags)
     log, cfg, st = _load(repo, agent)
     minted = IDS.mint(cfg, st, "bug", events=log.read_all, given=id, hash_parts=(summary, item))
     bid = minted.id
@@ -91,7 +96,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         return chk.refusal
     # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
     # id) does not turn it back to `project`; `--scope project` says it and does.
-    extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
+    said = (("title", title), ("severity", severity), ("scope", scope), ("tags", tag_list))
+    extra = {k: v for k, v in said if v}
     if globs:
         extra["globs"] = GS.parse(globs)
     if chk.extension:

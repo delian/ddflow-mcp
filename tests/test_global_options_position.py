@@ -56,7 +56,9 @@ def test_no_global_options_keeps_the_defaults():
 def test_end_to_end_the_event_carries_the_trailing_agent(repo):
     """Through the real CLI: the identity given after the subcommand writes the event."""
     assert run_cli(repo, "init")[0] == 0
-    code, out, err = run_cli(repo, "task", "add", "T1", "--globs", "a.py", "--agent", "impl-1")
+    code, out, err = run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py", "--agent", "impl-1"
+    )
     assert code == 0, out + err
     code, out, err = run_cli(repo, "show", "T1", "--json")
     assert code == 0, out + err

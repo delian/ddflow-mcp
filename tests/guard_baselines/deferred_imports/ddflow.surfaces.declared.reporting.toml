@@ -1,0 +1,5 @@
+# Ratchet `deferred_imports` for ddflow.surfaces.declared.reporting (tests/test_architecture_guards.py).
+# `from ..commands.reporting import ...` is deferred: `declared.reporting` and
+# `commands.reporting` register each other's halves, so the import must not run at module
+# top. Lower it in the same change that removes sites; delete the file at zero.
+baseline = 1
