@@ -1,9 +1,28 @@
-# Swarm orchestration: decision proposal (state: PROPOSED, nothing here is decided)
+# Swarm orchestration: decision (state: DECIDED 2026-10-24 by D-swarm-answers; proposal text kept below)
 
 Research: docs/ddflow/research/swarm-orchestration.md (landscape, algorithms, sharing, remote trust, hooks).
 Phase: P-swarm. Task that produced this: DX-swarm-research (folds DX-mixed-fleet-research).
 Operator request 2026-10-24 (verbatim in the session log): research how ddflow could manage and orchestrate a swarm of
 agents, local or remote, various families, distribute tasks and make the best of it, then make a proposal.
+
+## Operator's answers (D-swarm-answers, 2026-10-24)
+
+Decision `D-swarm-answers`, status accepted, decided by operator. SW-Q2 and SW-Q9 depart from the defaults; the rest are as default or accepted. The proposal text below is kept as written; where it says "default" the answers here govern.
+
+| Id | Answer | The decision's words |
+|---|---|---|
+| SW-Q1 | default | "Q1 option B (deterministic scheduler with pull lanes; option C LLM orchestration only for read-only research items)" |
+| SW-Q2 | **changed** | "the scheduler MAY launch lanes itself from approved templates (not only answer pulls; the recommended 'pull only in v1' is overruled), launching still bound by D-agent-parity consent and operator-approved templates" |
+| SW-Q3 | default | "pilot families Claude, opencode or kilo with DeepSeek, Qwen or Kimi" |
+| SW-Q4 | default | "target at least 1.8x merged items per hour at no more than 1.3x cost per merged item, rework within baseline plus 5 points" |
+| SW-Q5 | default | "hedging only for stragglers and items tagged hard, capped at 10% of fleet spend, first branch to pass the gates merges" |
+| SW-Q6 | accepted | "hooks for lane workers are lane-private (ATF-Q2); plugin-style hooks (Kilo, OpenCode) need operator consent and a diff once per template" |
+| SW-Q7 | accepted | "an agent without a blocking pre-tool hook may work narrow-glob items with the lease-checking git pre-commit hook (detection at commit, not prevention)" |
+| SW-Q8 | accepted | "one remote lane in the final pilot step (ACP over SSH stdio or ddflow serve through SSH or Tailscale; no relay built)" |
+| SW-Q9 | accepted, **amended** | "a remote lane never approves, skips a gate or writes the event log directly; it MAY PROPOSE approval requests which only the operator answers (amended from the recommendation); the host records events and runs the gates on the returned branch; token per item and lane, revocable" |
+| SW-Q10 | default | "quality ledger from gate outcomes per family, model and kind, 10% exploration for pairs with fewer than 5 samples; unavailable never counts as passed" |
+
+Consequences recorded with the decision: SW-Q2 widens the trust surface: the scheduler's launch step needs the approved-template registry, lane-private homes, budget and limit checks (TE-limit-aware-routing), and an audit event per launch. Task bodies amended with this decision: SW-pull (also launches) and SW-remote-trust (proposals allowed).
 
 ## Proposal in one paragraph
 
