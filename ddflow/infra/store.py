@@ -171,9 +171,7 @@ def _capability_tables(con, fts: bool, trig: bool) -> bool:
     if not (fts or trig):
         return True
     try:
-        names = {
-            r[0] for r in con.execute("select name from sqlite_master where type = 'table'")
-        }
+        names = {r[0] for r in con.execute("select name from sqlite_master where type = 'table'")}
         for table in _SEARCH_COLS:  # nosec B608: fixed keys
             # bandit B608: `table` is a key of the fixed `_SEARCH_COLS`.
             base = con.execute(f"select count(*) from {table}").fetchone()[0]  # nosec B608
@@ -553,9 +551,9 @@ class Store:
                     return True
         except sqlite3.DatabaseError:
             return True  # an unreadable meta is doubt, and doubt is a rebuild
-        return meta.get("fts", "0") != ("1" if self.fts else "0") or meta.get(
-            "trigram", "0"
-        ) != ("1" if self.trigram else "0")
+        return meta.get("fts", "0") != ("1" if self.fts else "0") or meta.get("trigram", "0") != (
+            "1" if self.trigram else "0"
+        )
 
     def _load_shard_digests(self) -> dict[str, tuple[int, str]] | None:
         """The per-shard `(consumed bytes, sha256)` of the projection the EXISTING index
