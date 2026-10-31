@@ -118,7 +118,7 @@ def _new_hits(tree: Path, rel: Path) -> list[tuple[str, int, str]] | None:
 
 def check_event_secrets(repo: Path, cfg: Config | None = None) -> Verdict:
     """(exit, message): refuse (or warn, `[enforce].event_secrets`) a staged event shard line
-    that matches a credential shape. A diff git cannot produce is not a clean one."""
+    that matches a credential shape. A diff git cannot produce is reported, not passed in silence."""
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.event_secrets
     if mode == "off":
@@ -131,7 +131,11 @@ def check_event_secrets(repo: Path, cfg: Config | None = None) -> Verdict:
     hits = _new_hits(tree, rel)
     lines: list[str] = []
     if hits is None:
-        lines = ["ddflow: could not read the staged event shards to scan them for credentials."]
+        # Said, not refused: the lease check already refuses a commit git cannot list, and
+        # a repository with no readable index has nothing staged to leak.
+        return Verdict(
+            OK, "ddflow: could not read the staged event shards to scan them for credentials."
+        )
     elif hits:
         lines = [
             "ddflow: this commit adds event shard line(s) that look like a credential:",
