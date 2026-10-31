@@ -157,11 +157,11 @@ def add(
     with _entries_locked(repo, lock_wait_s):
         every = entries(repo)
         waiting = next((e for e in every if e.item == item and e.state in (QUEUED, RUNNING)), None)
-        if release is not None:
-            _claim_slot(every, item, release_cap)
         if waiting is not None:
             if release is not None and not waiting.released and waiting.state == RUNNING:
                 raise ReleaseRefused(f"{item} is being integrated right now")
+            if release is not None and not waiting.released:
+                _claim_slot(every, item, release_cap)
             if release is not None and not waiting.released and waiting.state == QUEUED:
                 waiting.released = True
                 waiting.author, waiting.lane, waiting.tree = (
@@ -171,6 +171,8 @@ def add(
                 )
                 _write(repo, waiting)
             return waiting, False
+        if release is not None and waiting is None:
+            _claim_slot(every, item, release_cap)
         for old in (e for e in every if e.item == item):
             _path(repo, old.seq).unlink(missing_ok=True)
             log_path(repo, old).unlink(missing_ok=True)
