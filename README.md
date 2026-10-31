@@ -1431,6 +1431,14 @@ forever is indistinguishable from one that is down except that it also holds a p
 **Keys are never written to the config.** Only `api_key_env`, the *name* of an
 environment variable — the config file is committed, and a key in git is a leaked key.
 
+To not export the variable in every shell, a reviewer in the git-ignored
+`.ddflow/local/reviewers.toml` may also name `api_key_file = "~/.config/me/gemini.key"`.
+The variable wins; the file is the fallback. The file must be a regular file you own with
+no group or other access (`chmod 600`, as ssh insists), is read at each call and never
+cached, and a missing, empty or too-open file makes the reviewer UNAVAILABLE with the
+reason. The path is data and the key never is: it appears in no log, event, error,
+review record or listing. `api_key_file` is refused in the committed `.ddflow/config.toml`.
+
 Every way of not reviewing is reported distinctly, with its remedy: no key names the
 variable, a missing CLI names the binary, a dead server names the launch block you could
 add, a non-zero exit shows stderr, **and empty output on exit 0 is UNAVAILABLE rather
