@@ -48,7 +48,9 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/grants.py:_agent_approval": 1,
     "ddflow/api/chore.py:chore_approve": 1,
     "ddflow/api/lifecycle/claim.py:_claim_by_approval": 1,
+    "ddflow/api/lifecycle/claim.py:_agent_marker_of": 1,
     "ddflow/api/lifecycle/complete.py:_approved_force": 1,
+    "ddflow/api/lifecycle/complete.py:_person_force": 1,
     "ddflow/api/lifecycle/complete.py:_ask_hint": 1,
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
@@ -249,7 +251,10 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the item and who holds its lease (or that it is in review)",
-        ("ddflow/api/lifecycle/claim.py:_claim_by_approval",),
+        (
+            "ddflow/api/lifecycle/claim.py:_claim_by_approval",
+            "ddflow/api/lifecycle/claim.py:_agent_marker_of",
+        ),
         "ddflow claim <id> --approval request|ID",
     ),
     Site(
@@ -260,6 +265,7 @@ SITES: tuple[Site, ...] = (
         "the item and its unmet completion conditions (never a failed review gate)",
         (
             "ddflow/api/lifecycle/complete.py:_approved_force",
+            "ddflow/api/lifecycle/complete.py:_person_force",
             "ddflow/api/lifecycle/complete.py:_ask_hint",
         ),
         "ddflow complete <id> --approval request|ID",

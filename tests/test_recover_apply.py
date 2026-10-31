@@ -43,7 +43,7 @@ def _crashed_with_work(repo: Path, *, work: bool = True) -> Path:
     return wt
 
 
-def test_apply_leaves_a_tree_holding_work_alone_and_claim_force_adopts_it(repo):
+def test_apply_leaves_a_tree_holding_work_alone_and_claim_force_adopts_it(repo, monkeypatch):
     wt = _crashed_with_work(repo)
     rec = RP.recover(repo, apply=True, agent="op")
     assert [(r.item, r.salvageable) for r in rec.data["_render"]["found"]] == [("T1", True)]
@@ -52,6 +52,7 @@ def test_apply_leaves_a_tree_holding_work_alone_and_claim_force_adopts_it(repo):
     # Not stolen by a plain claim...
     assert LC.claim(repo, "T1", agent="next").exit == 3
     # ...adopted by a forced one: the same tree, with the work in it.
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
     assert Path(out.data["worktree"]).resolve() == wt.resolve()
@@ -72,13 +73,14 @@ def test_the_recovery_help_says_what_apply_and_claim_do(repo):
     assert "Either way the item is taken back with `ddflow claim <item> --force`" in flat
 
 
-def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo):
+def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo, monkeypatch):
     """roborev job 1463 #1: the other half of what the help promises."""
     _crashed_with_work(repo, work=False)
     rec = RP.recover(repo, apply=True, agent="op")
     assert [(r.item, r.salvageable) for r in rec.data["_render"]["found"]] == [("T1", False)]
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and lease.expired_at, "the expiry is RECORDED, not dropped"
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
 

@@ -51,7 +51,8 @@ def _finish(repo: Path, item: str) -> None:
     EventLog(repo, "worker").append("item.completed", item, {"sha": "abc"})
 
 
-def test_complete_from_outside_the_tree_disposes_it(repo):
+def test_complete_from_outside_the_tree_disposes_it(repo, monkeypatch):
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
     tree = _seed(repo, "T1")
     out = LC.complete(repo, "T1", force=True, agent="worker")
     assert out.exit == 0, out.reason
@@ -59,7 +60,8 @@ def test_complete_from_outside_the_tree_disposes_it(repo):
     assert not tree.exists() and "ddflow/T1" not in _branches(repo)
 
 
-def test_complete_from_inside_the_tree_keeps_it_and_says_how_it_goes_later(repo):
+def test_complete_from_inside_the_tree_keeps_it_and_says_how_it_goes_later(repo, monkeypatch):
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
     tree = _seed(repo, "T2")
     out = LC.complete(repo, "T2", force=True, agent="worker", shell_cwd=tree)
     assert "standing in it" in out.data["kept_reason"] and "brief" in out.data["kept_reason"]
