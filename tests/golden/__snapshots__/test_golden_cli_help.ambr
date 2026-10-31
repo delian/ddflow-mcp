@@ -217,6 +217,16 @@
     --approval APPROVAL  an agent: the id of the operator's approval of exactly this acceptance (a
                          refusal files the request and names it)
   
+  who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker
+  (CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.
+  what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red
+  (the failing tests also fail on the base branch). The approval is bound to the digest of
+  that record (outcome, time, reason): a re-run or re-record is a different outcome and
+  needs its own approval. The gate stays `partial`; completion only stops counting it.
+  agent route: re-run with `--approval request` to file the request, a person answers it,
+  then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person
+  answers with `ddflow approvals approve ID` (see `ddflow approvals --help`).
+  
   '''
 # ---
 # name: test_help[ddflow batch]
@@ -962,11 +972,13 @@
 # ---
 # name: test_help[ddflow gate list]
   '''
-  usage: ddflow gate list [-h] [--refuted] [--since SINCE]
+  usage: ddflow gate list [-h] [--refuted] [--overrides] [--since SINCE]
   
   options:
     -h, --help     show this help message and exit
     --refuted      list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+    --overrides    list every override on the record (forced completion, gate skip, claim force,
+                   typed-chat T3 use, relayed consent) with who approved it at which level
     --since SINCE  with --refuted: only passes recorded at or after this ISO date or timestamp
   
   '''
@@ -1085,7 +1097,8 @@
   
   positional arguments:
     {status,list,run,verify,record,skip}
-      list                the gates this project defines; --refuted: the gates passed on refutation
+      list                the gates this project defines; --refuted: passed on refutation;
+                          --overrides: set aside
       verify              break what this gate guards and require it to notice (exit 1 = it cannot)
   
   options:
@@ -2142,7 +2155,7 @@
 # ---
 # name: test_help[ddflow queue]
   '''
-  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
+  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--release] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
   
   positional arguments:
     {add,run,status,remove}
@@ -2156,6 +2169,9 @@
                           run: integrate at most this many entries (default [merge_queue].max_batch)
     --unit-tests          run/add: also run each entry's unit_tests gate on the merged result
     --no-unit-tests       run/add: do not run unit_tests (overrides [merge_queue].run_unit_tests)
+    --release             add: release the item at enqueue: the integrator finishes it, you may
+                          claim the next one (every judgement gate must already be passed on this
+                          tree)
     --timeout TIMEOUT     run: seconds one entry's ci may run (default [merge_queue].timeout_s)
   
   '''

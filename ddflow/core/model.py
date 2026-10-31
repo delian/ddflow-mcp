@@ -114,6 +114,7 @@ from .handlers.knowledge import (
     _h_memory_redacted,
     _h_research,
 )
+from .handlers.lanerelease import LANERELEASE_HANDLERS
 from .handlers.leases import (  # noqa: F401
     _displace,
     _h_lease_acquired,
@@ -286,6 +287,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **APPROVAL_HANDLERS,
     # first writer: services/waiting.py register (a refused claim or `update --globs`)
     **WAITING_HANDLERS,
+    # first writer: api/mergequeue_add.py (`queue add --release`)
+    **LANERELEASE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,
