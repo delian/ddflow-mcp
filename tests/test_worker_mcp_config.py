@@ -325,3 +325,10 @@ def test_a_lane_file_that_is_another_name_for_a_current_one_is_not_reported_stal
     assert [x for x in WM.write_lanes(tmp_path, entry, "impl=all") if "no longer" in x] == []
     (tmp_path / WM.lane_rel("old")).write_text("{}")
     assert any("old" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "impl=all"))
+
+
+def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
+    entry = {"command": "c"}
+    WM.write_lanes(tmp_path, entry, "foo=core")
+    (tmp_path / WM.lane_rel("legacy")).symlink_to(tmp_path / "missing.json")
+    assert any("legacy" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "foo=core"))
