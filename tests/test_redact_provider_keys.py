@@ -166,16 +166,23 @@ def test_fail_closed_data_lets_no_unknown_type_through():
     }
 
 
-def test_no_shape_is_slow_on_hostile_input():
+def test_no_shape_is_quadratic_on_hostile_input():
+    """Time doubling: a linear pattern costs about twice as much on twice the input."""
+    import re
     import time
 
-    hostile = ("token=" * 3000) + ("a" * 100000) + ("AI" + "za" + "-" * 50000)
-    t0 = time.perf_counter()
-    for _name, rx in SHAPES:
-        import re
+    def worst(n):
+        pieces = ["token=" * n, "a" * (20 * n), "AI" + "za" + "-" * (10 * n)]
+        for prefix in ("sk-", "sk-proj-", "sk_live_", "AKIA", "ghp_", "xox" + "b-", "hf_", "xai-"):
+            pieces.append(prefix + "a" * (10 * n))
+        text = " ".join(pieces)
+        t0 = time.perf_counter()
+        for _name, rx in SHAPES:
+            re.compile(rx).findall(text)
+        return time.perf_counter() - t0
 
-        re.compile(rx).findall(hostile)
-    assert time.perf_counter() - t0 < 3
+    small, big = worst(2000), worst(8000)  # 4x the input
+    assert big < max(small * 12, 0.5)  # quadratic would be ~16x
 
 
 # -- the commit check -------------------------------------------------------------
@@ -342,3 +349,8 @@ def test_a_short_lowercase_stripe_key_used_as_a_key_does_not_survive():
 def test_openai_legacy_keys_glued_to_text_are_caught_and_numeric_ids_are_not():
     assert shape_hit("x" + KEYS["openai"]) == "openai"
     assert shape_hit("sk-202401150000000000001234567890123456") == ""
+
+
+def test_an_aws_id_with_trailing_or_numeric_neighbours_is_caught():
+    assert shape_hit("123" + KEYS["aws-akia"]) == "aws-access-key-id"
+    assert shape_hit(KEYS["aws-akia"] + "A") == "aws-access-key-id"

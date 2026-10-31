@@ -34,7 +34,7 @@ SHAPES: tuple[tuple[str, str], ...] = (
     ("groq", _L + r"gsk_[0-9A-Za-z]{20,}"),
     ("github", r"gh[pousr]_[0-9A-Za-z]{20,}"),
     ("github-fine-grained", r"github_pat_[0-9A-Za-z_]{22,}"),
-    ("aws-access-key-id", r"(?<![A-Z0-9])(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}(?![0-9A-Z])"),
+    ("aws-access-key-id", r"(?<![A-Z])(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}"),
     ("slack", r"xox[abposr]-[0-9A-Za-z-]{10,}"),
     ("slack-app", r"xapp-[0-9]-[0-9A-Za-z-]{10,}"),
     ("stripe", r"[sr]k_live_(?=[A-Za-z]{0,60}[0-9])[0-9A-Za-z]{24,}"),
