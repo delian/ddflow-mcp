@@ -189,5 +189,8 @@ def launch(req: Request) -> Launched | Refused:
         },
         sort_keys=True,
     )
-    _audit(req, f"lane.launched {note}")
+    try:
+        _audit(req, f"lane.launched {note}")
+    except Exception as e:  # the lane runs: report it, never lose the handle
+        note += f" (audit note NOT written: {type(e).__name__})"
     return Launched(t, h, prep, drv, note, seed.dropped)

@@ -111,7 +111,7 @@ def approve(
 
 def _bad_type(raw: dict[str, Any]) -> str:
     """The first field of ``raw`` that has the wrong type or a non-finite number, or ""."""
-    for k in _TEXT + ("min_hooks",):
+    for k in (*_TEXT, "min_hooks"):
         if k in raw and not isinstance(raw[k], str):
             return f"{k} must be text"
     for k in _NUM:
@@ -154,11 +154,14 @@ def load(path: Path) -> tuple[dict[str, Template], list[str]]:
         return {}, []
     try:
         doc = tomllib.loads(path.read_text("utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as e:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         return {}, [f"{path.name}: cannot be read: {e}"]
     out: dict[str, Template] = {}
     notes: list[str] = []
-    for name, raw in doc.get("template", {}).items():
+    tables = doc.get("template", {})
+    if not isinstance(tables, dict):
+        return {}, [f"{path.name}: `template` must hold [template.<name>] tables"]
+    for name, raw in tables.items():
         t, n = _row(name, raw if isinstance(raw, dict) else {})
         notes += n
         if t is not None:

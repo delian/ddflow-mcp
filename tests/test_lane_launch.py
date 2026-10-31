@@ -43,6 +43,7 @@ def _env(monkeypatch, tmp_path):
     for v in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.setenv("LAN_ENDPOINT_KEY", SECRET)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
 
 
 def sh(cwd, *a):
@@ -315,3 +316,22 @@ def test_hostile_template_values_are_notes_not_crashes_or_loopholes(tmp_path):
     )
     got, notes = T.load(f)
     assert got == {} and len(notes) == 6
+
+
+def test_a_failing_audit_still_returns_the_running_lane(tmp_path, tree):
+    class Broken:
+        def append(self, *a, **k):
+            raise PermissionError("read-only")
+
+    r = LN.launch(request(tmp_path, tree, log=Broken()))
+    assert isinstance(r, LN.Launched) and "NOT written" in r.decision_note
+    r.driver.stop(r.handle)
+
+
+def test_malformed_template_files_are_notes(tmp_path):
+    for body in ('template = "x"\n', "[[template]]\nname = 1\n"):
+        (tmp_path / "t.toml").write_text(body)
+        got, notes = T.load(tmp_path / "t.toml")
+        assert got == {} and notes
+    (tmp_path / "t.toml").write_bytes(b"\xff")
+    assert T.load(tmp_path / "t.toml")[0] == {}
