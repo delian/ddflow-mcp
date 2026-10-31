@@ -107,9 +107,9 @@ def _value(a: argparse.Action) -> dict[str, Any]:
 
 
 def _repeats(a: argparse.Action) -> bool:
-    """May the flag be given again? An append action does; so does an action argparse does
+    """May the flag be given again? An append, extend or count action does; so does an action argparse does
     not ship that takes a value (`--globs` keeps every value in its own class)."""
-    if isinstance(a, (argparse._AppendAction, argparse._ExtendAction)):
+    if isinstance(a, (argparse._AppendAction, argparse._ExtendAction, argparse._CountAction)):
         return True
     return type(a).__module__ != "argparse" and a.nargs != 0
 
