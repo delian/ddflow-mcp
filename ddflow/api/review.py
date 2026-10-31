@@ -1774,7 +1774,7 @@ _DELTA_CAVEAT = (
 )
 
 
-def _with_previous_findings(
+def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the floor
     context: str,
     log,
     it,
