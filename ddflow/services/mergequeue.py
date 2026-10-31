@@ -59,6 +59,13 @@ class Entry:
     failed: list[str] = field(default_factory=list)
     tail: str = ""
     log: str = ""
+    #: Released at enqueue (LC-release): the agent left, the queue holds the item's custody.
+    #: ``author`` is the family/model it completes under, ``lane`` the agent to wake.
+    released: bool = False
+    author: str = ""
+    lane: str = ""
+    #: the tree identity the judgement gates were recorded on, re-checked before landing
+    tree: str = ""
 
     @property
     def duration_s(self) -> float:
@@ -118,22 +125,62 @@ def _entries_locked(repo: Path, wait_s: float = 10.0):
     return fsio.file_lock(d / "add.lock", wait_s)
 
 
+class ReleaseRefused(RuntimeError):
+    """The queue cannot take custody of this item now."""
+
+
+class SlotsFull(ReleaseRefused):
+    """Every released-entry slot of the integrator is taken (`[lanes].release_max`)."""
+
+
+def _claim_slot(every: list[Entry], item: str, cap: int) -> None:
+    held = sum(1 for e in every if e.released and e.state in (QUEUED, RUNNING) and e.item != item)
+    if cap > 0 and held >= cap:
+        raise SlotsFull(f"{held} released item(s) already wait for the integrator (cap {cap})")
+
+
+def _mark_released(e: Entry, release: dict[str, Any]) -> None:
+    e.released = True
+    e.author, e.lane, e.tree = (release.get(k, "") for k in ("author", "lane", "tree"))
+
+
 def add(
-    repo: Path, item: str, *, agent: str, keep_history: int, lock_wait_s: float = 10.0
+    repo: Path,
+    item: str,
+    *,
+    agent: str,
+    keep_history: int,
+    lock_wait_s: float = 10.0,
+    release: dict[str, Any] | None = None,
+    release_cap: int = 0,
 ) -> tuple[Entry, bool]:
     """(the entry, whether it was added). An item already waiting keeps its place; a parked
     or merged one is replaced by a new entry at the back. ``lock_wait_s`` bounds the wait on the
-    numbering lock, held only while a directory is read, so only a stuck process reaches it."""
+    numbering lock, held only while a directory is read, so only a stuck process reaches it.
+    ``release`` (author, lane, tree) marks the entry released (`take` holds the same lock, so
+    an entry is never marked while the integrator moves it to running); the slot count and the marking
+    happen under the same lock, so two releases never both take the last slot (`SlotsFull`)."""
     with _entries_locked(repo, lock_wait_s):
         every = entries(repo)
         waiting = next((e for e in every if e.item == item and e.state in (QUEUED, RUNNING)), None)
         if waiting is not None:
+            if release is not None and not waiting.released and waiting.state == RUNNING:
+                raise ReleaseRefused(f"{item} is being integrated right now")
+            if release is not None and not waiting.released:
+                _claim_slot(every, item, release_cap)
+            if release is not None and not waiting.released and waiting.state == QUEUED:
+                _mark_released(waiting, release)
+                _write(repo, waiting)
             return waiting, False
+        if release is not None and waiting is None:
+            _claim_slot(every, item, release_cap)
         for old in (e for e in every if e.item == item):
             _path(repo, old.seq).unlink(missing_ok=True)
             log_path(repo, old).unlink(missing_ok=True)
         seq = max((e.seq for e in every), default=0) + 1
         e = Entry(item=item, seq=seq, agent=agent, queued_at=time.time())
+        if release is not None:
+            _mark_released(e, release)
         _write(repo, e)
         _prune(repo, keep_history)
     return e, True
@@ -296,6 +343,7 @@ def board(repo: Path, *, window: int, default_s: int, now: float | None = None) 
             "failed": e.failed,
             "tail": e.tail,
             "log": e.log,
+            "released": e.released,
             "waited_s": round(max(0.0, (e.started_at or e.finished_at or now) - e.queued_at), 1),
             "position": 0,
             "eta_s": 0,
@@ -316,14 +364,17 @@ def board(repo: Path, *, window: int, default_s: int, now: float | None = None) 
 # -- what an entry needs before the integrator may take it ---------------------------------
 
 
-def owed_gates(repo: Path, cfg, st, it, *, unit_tests: bool) -> list[str]:
+def owed_gates(
+    repo: Path, cfg, st, it, *, unit_tests: bool, also: tuple[str, ...] = ()
+) -> list[str]:
     """The gates of ``it``'s pipeline that must carry a settled outcome before the integrator
     runs it, each with what it carries now: every gate but the ones the integrator itself
     produces (ci on the merged result, the merge, and unit_tests when it runs them).
-    Silence and a failure both leave a gate owed -- a queued merge never skips one."""
+    Silence and a failure both leave a gate owed -- a queued merge never skips one. ``also``
+    names more gates the integrator runs itself (a released entry's machine gates)."""
     defs = G.load_gates(repo, cfg)
     s = G.status(st, cfg, it.id, defs, diff=lambda: changed_paths(repo, it))
-    mine = {"ci", "merge"} | ({"unit_tests"} if unit_tests else set())
+    mine = {"ci", "merge", *also} | ({"unit_tests"} if unit_tests else set())
     return [
         f"{g} ({it.gate_outcome(g) or 'no outcome'})"
         for g in s.pipeline

@@ -1,0 +1,10 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: the rendering of the descriptor's [headless] template for fixed inputs; a snapshot of what ddflow would launch, not a capture of grok",
+    "version": "unversioned"
+  },
+  "inputs": {"model": "m1", "session": "s1", "cwd": "/w"},
+  "expect": ["grok", "-p", "-m", "m1", "--resume", "s1", "--always-approve", "--output-format", "streaming-json"]
+}

@@ -55,6 +55,10 @@ def approved(harness):
 # --- strength from descriptors -------------------------------------------------------------
 
 
+def test_opencode_door_is_verified_for_1_19_0():
+    assert LH.strength("opencode").level == LH.PREVENT
+
+
 def test_strength_table_from_descriptors():
     assert LH.strength("claude").level == LH.PREVENT
     assert LH.strength("claude").door == "settings-arg"
@@ -65,7 +69,8 @@ def test_strength_table_from_descriptors():
         assert (s.level, s.door) == (LH.DETECT, "git-pre-commit") and s.reason
 
 
-def test_unverified_door_is_detect_unless_allowed():
+def test_unverified_door_is_detect_unless_allowed(monkeypatch):
+    monkeypatch.setitem(LH.DOORS, "opencode", ("plugin-home", "unverified"))
     s = LH.strength("opencode")
     assert s.level == LH.DETECT and "unverified" in s.reason
     assert LH.strength("opencode", allow_unverified=True).level == LH.PREVENT
