@@ -62,6 +62,26 @@ def test_pre_tool_allows_a_write_inside_the_lease(repo, monkeypatch):
     assert out.data["stdout"] == ""
 
 
+def test_pre_tool_roots_the_lease_at_the_repo_not_the_tool_cwd(repo, monkeypatch):
+    """A write inside the lease, made from a SUBDIRECTORY cwd, must be judged against the
+    repo root (where `_mine` roots the lease globs). With `root=None` it is misresolved
+    against the subdir and wrongly refused."""
+    sub = repo / "sub"
+    monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["sub/**"], []))
+    out = AS.hooks(
+        repo,
+        action="run",
+        event="pre_tool",
+        harness="claude",
+        agent="lane-1",
+        stdin=json.dumps(
+            {"tool_name": "Write", "tool_input": {"file_path": str(sub / "file.py")}, "cwd": str(sub)}
+        ),
+    )
+    assert out.data["result"] == "allowed"
+    assert out.data["stdout"] == ""
+
+
 def test_pre_tool_refuses_a_write_when_the_agent_holds_no_lease(repo, monkeypatch):
     """An agent holding no live lease must not write any file: the same refusal the lane
     check gives, now that the project door reuses it (a no-lease write is outside every
