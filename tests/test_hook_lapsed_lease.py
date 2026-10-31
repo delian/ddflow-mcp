@@ -27,6 +27,7 @@ from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
 from ddflow.services import enforce as E
 from ddflow.services import leases as L
+from ddflow.services.enforce import leasecheck as LC
 
 
 def _setup(repo: Path, cfg, holder: str = "owner", *, lease: bool = True) -> Path:
@@ -53,7 +54,7 @@ def _setup(repo: Path, cfg, holder: str = "owner", *, lease: bool = True) -> Pat
 def _later(monkeypatch, seconds: float) -> None:
     """Move the hook's clock forward, past the lease's TTL and grace."""
     now = time.time() + seconds
-    monkeypatch.setattr(E, "time", types.SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr(LC, "time", types.SimpleNamespace(time=lambda: now))
 
 
 def test_a_lapsed_lease_bound_to_this_tree_is_named_with_the_heartbeat_remedy(
