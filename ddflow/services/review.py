@@ -349,7 +349,8 @@ def blocking_findings(findings: list[Finding], *, converged: bool, floor: str) -
     if not converged:
         return list(findings)
     limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
-    return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), 0) >= limit]
+    # An unknown severity ranks as blocking (fail closed): only a known one below the floor yields.
+    return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit]
 
 
 #: How much of a finding's detail the gate evidence keeps for a later merge.

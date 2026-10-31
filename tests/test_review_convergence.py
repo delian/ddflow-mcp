@@ -120,3 +120,19 @@ def test_the_first_round_blocks_on_a_medium_finding(repo, tmp_path):
     out = _review(repo)
     assert out.data["outcome"] == "failed", out.data
     assert "converged" not in _ev(repo), _ev(repo)
+
+
+def test_an_unknown_severity_blocks_a_converged_round():
+    """Fail closed: a severity the floor cannot rank is never a free pass."""
+    from ddflow.services.review import Finding, blocking_findings
+
+    odd = Finding(severity="CRITICAL", location="x.py:1", title="t", detail="d")
+    low = Finding(severity="LOW", location="x.py:1", title="t", detail="d")
+    assert blocking_findings([odd, low], converged=True, floor="HIGH") == [odd]
+
+
+def test_the_floor_paragraph_is_only_sent_where_the_floor_applies():
+    """A delta or fix round blocks at any severity, so its prompt must not tell the
+    reviewer to hold back below-floor findings."""
+    assert api._floor_lines("") == []
+    assert "below HIGH severity" in "".join(api._floor_lines("HIGH"))

@@ -1774,6 +1774,21 @@ _DELTA_CAVEAT = (
 )
 
 
+def _floor_lines(floor: str) -> list[str]:
+    """The prompt's convergence-floor paragraph; empty when no floor applies (a delta or
+    fix round, where every finding blocks, bug Bf797745b5a)."""
+    if not floor:
+        return []
+    return [
+        f"Do not report a NEW finding below {floor} severity against a file that is unchanged "
+        "since the last review, or against a line outside the hunks this change adds or edits: "
+        "where the code stands exactly as the earlier round saw it, a new objection to it is a "
+        "re-read of the same code, not a new defect of this change. Reserve new findings at "
+        f"or above {floor} severity for the newly changed lines.",
+        "",
+    ]
+
+
 def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the floor
     context: str,
     log,
@@ -1786,7 +1801,7 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
     rerun: dict,
     supers: set[str] = frozenset(),
     fix: bool = False,
-    floor: str = "HIGH",
+    floor: str = "",
 ) -> str:
     """``context`` plus the gate's previous findings and the author's triage of each, for a
     full re-review (decision D-gate-economy 3) and for a delta (B64ed3cae18: shown only the
@@ -1818,12 +1833,7 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
         "the whole diff -- these are not the only places to look.",
         "",
-        f"Do not report a NEW finding below {floor} severity against a file that is unchanged "
-        "since the last review, or against a line outside the hunks this change adds or edits: "
-        "where the code stands exactly as the earlier round saw it, a new objection to it is a "
-        "re-read of the same code, not a new defect of this change. Reserve new findings at "
-        f"or above {floor} severity for the newly changed lines.",
-        "",
+        *_floor_lines(floor),
     ]
     for n, f in enumerate(found, 1):
         lines.extend(_finding_lines(n, f, mine, supers))
@@ -2423,7 +2433,7 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _gate_outcome(best, it, item: str, gate: str, kind: str, cfg, extra_evidence, say) -> tuple[str, dict | None]:
+def _gate_outcome(best, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
     evidence; a converged full re-review passes with a `converged` flag on the evidence.
 
@@ -2443,7 +2453,7 @@ def _gate_outcome(best, it, item: str, gate: str, kind: str, cfg, extra_evidence
         return "passed", extra_evidence
     blocking = RV.blocking_findings(
         best.findings,
-        converged=kind == "full" and it is not None and item and _rounds_used(it, gate) > 0,
+        converged=converging and it is not None and bool(item) and _rounds_used(it, gate) > 0,
         floor=cfg.review.converge_floor,
     )
     if blocking:
@@ -2745,7 +2755,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         [
             lambda c: _with_previous_findings(
                 c, log, it, item, gate, say,
-                kind=kind, rerun=prior, supers=supers, fix=fix, floor=cfg.review.converge_floor,
+                kind=kind, rerun=prior, supers=supers, fix=fix, floor=cfg.review.converge_floor if kind == "full" and not fix else "",
             ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
@@ -2793,7 +2803,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         _say_result(say, res)
 
     best = min(results, key=lambda r: r.status)
-    outcome, extra_evidence = _gate_outcome(best, it, item, gate, kind, cfg, extra_evidence, say)
+    outcome, extra_evidence = _gate_outcome(
+        best, it, item, gate, kind == "full" and not fix, cfg, extra_evidence, say
+    )
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
