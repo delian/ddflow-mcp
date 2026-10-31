@@ -375,9 +375,10 @@ def plan_confirm(
         )
     consented = bool(yes and reason.strip())
     ask = f"{len(waiting)} task(s) wait for the operator's word: {', '.join(waiting)}."
+    held = content_digest(",".join(sorted(waiting)))
     verdict = RL.gate(
         log, cfg, "plan.confirm", requested_agent=agent, approval=approval, consented=consented,
-        reason=reason, item=plan_id, state=content_digest(",".join(sorted(waiting))),
+        reason=reason, item=plan_id, state=held,
     )  # fmt: skip
     if not verdict.ok:
         how = verdict.message or 'Confirm with --yes --reason "<why>"'
@@ -385,6 +386,14 @@ def plan_confirm(
     with log.transaction():
         st = L._fold(log)  # decided under the lock: a second confirm finds nothing
         waiting = PA.proposed_by(st, plan_id)
+        if waiting and content_digest(",".join(sorted(waiting))) != held:
+            # the set changed after the consent (or approval) was taken: it did not cover this
+            return O.refused(
+                "plan.confirm",
+                f"the tasks plan {plan_id} holds back changed while confirming: re-run it",
+                plan=plan_id,
+                waiting=waiting,
+            )
         for iid in waiting:
             log.append(
                 "item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {verdict.reason}"}

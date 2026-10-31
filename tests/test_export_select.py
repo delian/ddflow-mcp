@@ -131,6 +131,7 @@ def test_enable_refuses_an_unknown_kind_a_bad_mode_and_a_path_outside_the_repo(p
 def test_enable_local_writes_the_local_layer_only(proj):
     # an agent's --local needs a person's approval (tests/test_approvals_sites4.py)
     assert run_cli(proj, "export", "enable", "bugs", "--local", agent="bot")[0] == 3
+    assert "bugs" not in _cfg(proj, local=True)  # the refused call wrote nothing
     assert run_cli(proj, "export", "enable", "bugs", "--local")[0] == 0
     assert 'documents = ["bugs"]' in _cfg(proj, local=True)
     assert "[export]" not in _cfg(proj)

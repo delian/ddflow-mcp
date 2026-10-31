@@ -110,6 +110,17 @@ def test_an_agent_forces_an_export_only_with_a_persons_approval(proj):
     assert run_cli(proj, *FORCE, "--approval", ask_id, agent="bot")[0] == 3  # spent
 
 
+def test_a_force_approval_binds_the_exact_bytes_not_a_lossy_decode(proj):
+    target = _hand_edited(proj)
+    target.write_bytes(b"\x80 first binary edit")
+    ask_id = _ask_id(run_cli(proj, *FORCE, agent="bot")[2])
+    _approve(proj, ask_id)
+    target.write_bytes(b"\x81 first binary edit")  # decodes to the same text with replacements
+    code, _o, err = run_cli(proj, *FORCE, "--approval", ask_id, agent="bot")
+    assert code == 3 and "other state" in err, err
+    assert target.read_bytes().startswith(b"\x81")
+
+
 def test_a_person_forces_an_export_as_before(proj):
     target = _hand_edited(proj)
     code, out, err = run_cli(proj, *FORCE)
@@ -180,6 +191,16 @@ def test_an_agent_selects_a_document_per_machine_only_with_approval(proj):
     code, out, err = run_cli(proj, *LOCAL, "--approval", ask_id, agent="bot")
     assert code == 0, (out, err)
     assert "changelog" in (proj / ".ddflow" / "local" / "config.toml").read_text()
+
+
+def test_a_locked_document_enabled_per_machine_needs_two_approvals_one_flag_cannot_carry(proj):
+    run_cli(proj, "export", "disable", "changelog", "--lock")
+    code, _o, err = run_cli(proj, *LOCAL, agent="bot")
+    ask_id = _ask_id(err)
+    _approve(proj, ask_id)
+    code, _o, err = run_cli(proj, *LOCAL, "--approval", ask_id, agent="bot")
+    # the machine approval is spent; the lock lift is another verb and wants its own
+    assert (code == 3 and "export.unlock" in err) or "operator" in err, err
 
 
 def test_a_shared_enable_by_an_agent_still_needs_no_approval(proj):
