@@ -42,6 +42,7 @@ def parse_lane_tiers(spec: str) -> dict[str, str]:
     if not isinstance(spec, str):
         raise ValueError("must be a string of lane=tier pairs")
     out: dict[str, str] = {}
+    seen: set[str] = set()
     for part in (p.strip() for p in spec.split(",")):
         if not part:
             continue
@@ -50,8 +51,9 @@ def parse_lane_tiers(spec: str) -> dict[str, str]:
             raise ValueError(f"{part!r}: expected lane=tier with a plain lane name")
         if tier not in MCP_TOOL_TIERS:
             raise ValueError(f"{part!r}: tier must be one of {', '.join(MCP_TOOL_TIERS)}")
-        if lane in out:
-            raise ValueError(f"lane {lane!r} is given twice")
+        if lane.casefold() in seen:  # two names one file on a case-insensitive filesystem
+            raise ValueError(f"lane {lane!r} is given twice (names compare without case)")
+        seen.add(lane.casefold())
         out[lane] = tier
     return out
 

@@ -266,7 +266,7 @@ def test_parse_lane_tiers_reads_lane_equals_tier_pairs():
     assert WM.parse_lane_tiers("a=standard, b=all") == {"a": "standard", "b": "all"}
 
 
-@pytest.mark.parametrize("bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all"])
+@pytest.mark.parametrize("bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all", "a=core,A=all"])
 def test_parse_lane_tiers_refuses_bad_entries(bad):
     with pytest.raises(ValueError):
         WM.parse_lane_tiers(bad)
