@@ -40,6 +40,8 @@ def complete(argv: list[str]) -> list[str]:
                 i += 1
         if len(words) > 1:
             return []
+        if verb != "ids" and (kind is not None or state is not None):
+            return []
         prefix = words[0] if words else ""
         if verb == "ids":
             return CI.complete_ids(prefix, kind, state)

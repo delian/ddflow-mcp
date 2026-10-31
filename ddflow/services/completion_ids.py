@@ -189,14 +189,15 @@ def _query_ids(con, prefix, kind, state, limit) -> list[str]:
     ids: list[str] = []
     like = _like(prefix)
     for name, cols in sorted(_tables(con).items()):
-        sub = "kind" in cols
-        table_ok = kind is None or _kind_matches(kind, name)
-        if not table_ok and not sub:
-            continue
+        # A table whose rows carry a `kind` column (items, records) is reached by those
+        # values only: its own name is not a kind, so it never answers for all of them.
         where, args = ["id like ? escape '\\'"], [like]
-        if not table_ok:  # a table whose rows carry a kind column: items, records
-            where.append("kind = ?")
-            args.append(kind)
+        if "kind" in cols:
+            if kind is not None:
+                where.append("kind = ?")
+                args.append(kind)
+        elif kind is not None and not _kind_matches(kind, name):
+            continue
         if state is not None:
             expr = _state_expr(cols)
             if expr is None:
@@ -234,8 +235,9 @@ def kinds(*, index=None) -> list[str]:
     def run(con):
         names: set[str] = set()
         for name, cols in _tables(con).items():
-            names.add(name)
-            if "kind" in cols:
+            if "kind" not in cols:
+                names.add(name)
+            else:
                 names.update(
                     str(r[0]) for r in con.execute(f'select distinct kind from "{name}"') if r[0]
                 )
