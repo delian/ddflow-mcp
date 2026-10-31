@@ -49,7 +49,7 @@ from .records import (
 )
 from .reviewers import _ReplyFile
 from .scope import _budget, _cite_grant, _justification, _mark_partial_retry, _scope
-from .triage import _reviewed_snapshot, _why_outcome
+from .triaging import _reviewed_snapshot, _why_outcome
 
 
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands

@@ -15,6 +15,7 @@ reviewer has actually answered.
 from __future__ import annotations
 
 from ...infra import worktree as W  # noqa: F401
+from ...services.gates import evidence as GE  # noqa: F401
 from ...services.gates import reviewed_paths as RP  # noqa: F401
 from ...services.gates.rounds import delta_rounds as _delta_rounds  # noqa: F401
 from ...services.gates.rounds import full_rounds as _full_rounds  # noqa: F401
@@ -141,7 +142,7 @@ from .scope import (
     _untriaged_numbers,
     _wants_delta,
 )
-from .triage import (
+from .triaging import (
     _BARE_TEST,
     _NODE,
     _PY_PATH,

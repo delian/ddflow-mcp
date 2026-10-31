@@ -19,7 +19,7 @@ from ..review_supersede import superseded_digests
 from .delta import _NOTHING_CHANGED, _delta_diff, _head_of, _kind, _last_head, _pick_diff
 from .findings import _SETTLED
 from .records import _last_review, _review_runs
-from .triage import _moved_paths, _name_paths, _rerun_scope
+from .triaging import _moved_paths, _name_paths, _rerun_scope
 
 
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
