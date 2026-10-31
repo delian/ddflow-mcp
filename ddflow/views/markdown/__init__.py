@@ -18,6 +18,8 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from ...core.schedule import critical_path as critical_path
+
 #: Public (and patch-covered private) name -> the submodule that defines it.
 _SUBMODULE_OF = {
     # head
@@ -69,32 +71,32 @@ _SUBMODULE_OF = {
     "new_reports_line": "report",
     "recovery_band": "report",
     # brief
-    "BRIEF_DECISION_CHARS": "brief",
-    "BRIEF_OTHER_JOBS": "brief",
-    "SECTION_TRIMMED": "brief",
-    "_CAPPED_SHOWN": "brief",
-    "_SECTION_FLOOR": "brief",
-    "_SECTION_MORE": "brief",
-    "_SECTION_NAMED": "brief",
-    "_SECTION_SHARE": "brief",
-    "_allowances": "brief",
-    "_assemble": "brief",
-    "_brief_current": "brief",
-    "_brief_decisions": "brief",
-    "_brief_jobs": "brief",
-    "_brief_lessons": "brief",
-    "_brief_memories": "brief",
-    "_brief_ready": "brief",
-    "_brief_recovery": "brief",
-    "_brief_skills": "brief",
-    "_fit_sections": "brief",
-    "_gate_facts": "brief",
-    "_last_prompt_of": "brief",
-    "_record_id": "brief",
-    "_resume_line": "brief",
-    "_trim_section": "brief",
-    "brief": "brief",
-    "cap_held": "brief",
+    "BRIEF_DECISION_CHARS": "briefing",
+    "BRIEF_OTHER_JOBS": "briefing",
+    "SECTION_TRIMMED": "briefing",
+    "_CAPPED_SHOWN": "briefing",
+    "_SECTION_FLOOR": "briefing",
+    "_SECTION_MORE": "briefing",
+    "_SECTION_NAMED": "briefing",
+    "_SECTION_SHARE": "briefing",
+    "_allowances": "briefing",
+    "_assemble": "briefing",
+    "_brief_current": "briefing",
+    "_brief_decisions": "briefing",
+    "_brief_jobs": "briefing",
+    "_brief_lessons": "briefing",
+    "_brief_memories": "briefing",
+    "_brief_ready": "briefing",
+    "_brief_recovery": "briefing",
+    "_brief_skills": "briefing",
+    "_fit_sections": "briefing",
+    "_gate_facts": "briefing",
+    "_last_prompt_of": "briefing",
+    "_record_id": "briefing",
+    "_resume_line": "briefing",
+    "_trim_section": "briefing",
+    "brief": "briefing",
+    "cap_held": "briefing",
 }
 
 _MODULES: dict[str, Any] = {}

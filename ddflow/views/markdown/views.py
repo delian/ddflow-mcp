@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -11,7 +12,6 @@ from ...config import Config
 from ...core import clock
 from ...core import progress as PR
 from ...core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
-from ...core.schedule import critical_path
 from ...infra.fsio import FORMAT_LEVEL, replace_text
 from ...services.gates import pipeline_for
 from ...services.redact_report import redactor
@@ -108,7 +108,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             out.append("")
         if sec.rows:
             table(sec.rows)
-    cp = critical_path(state, phase, cfg)
+    cp = sys.modules[__package__].critical_path(state, phase, cfg)
     if len(cp) > 1:
         out.append(
             f"**Critical path** ({len(cp)} deep — this, not the task count, "
