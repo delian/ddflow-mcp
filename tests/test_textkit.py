@@ -13,6 +13,7 @@ caller still yields it, byte for byte.
 
 from __future__ import annotations
 
+import glob
 import inspect
 import re
 
@@ -177,7 +178,7 @@ def test_no_second_word_splitter_is_left_behind() -> None:
     spelling = re.compile(
         r"re\.(split|findall|sub|finditer|compile)\(\s*r?[\"'][^\"']*(\\[wW]|\[\^?\\w)"
     )
-    for path in ("ddflow/infra/store.py", "ddflow/services/guidance/similarity.py"):
+    for path in [*glob.glob("ddflow/infra/store/*.py"), "ddflow/services/guidance/similarity.py"]:
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
         hits = [n for n, line in enumerate(lines, 1) if spelling.search(line)]
