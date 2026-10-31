@@ -120,7 +120,10 @@ def select(
     environ = os.environ if environ is None else environ
     dirs = os.pathsep.join(str(Path(d).expanduser()) for d in extra_dirs)
     for name in binaries:
-        override = os.path.expanduser(environ.get(ENV_PATTERN.format(name.upper()), ""))  # a path
+        override = environ.get(ENV_PATTERN.format(name.upper()), "")
+        if override.startswith("~/") and environ.get("HOME"):
+            override = environ["HOME"] + override[1:]  # the HOME of the mapping given, not ours
+        override = os.path.expanduser(override)
         found = (
             (which(override) if override else None)
             or which(name)

@@ -284,3 +284,11 @@ def test_override_expands_tilde(tmp_path, monkeypatch):
     seen = lambda n, path=None: n if n == str(d / "opencode") else None  # noqa: E731
     b = OC.select(which=seen, environ={"DDFLOW_OPENCODE_BIN": "~/bin/opencode"})
     assert b.path == str(d / "opencode")
+
+
+def test_override_tilde_uses_the_given_environment_home(tmp_path):
+    seen = lambda n, path=None: n if n.startswith("/lane/home/") else None  # noqa: E731
+    env = {"DDFLOW_OPENCODE_BIN": "~/bin/opencode", "HOME": "/lane/home"}
+    assert (
+        OC.select(which=seen, version=lambda p: "1", environ=env).path == "/lane/home/bin/opencode"
+    )
