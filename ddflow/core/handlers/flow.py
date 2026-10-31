@@ -15,6 +15,7 @@ def _h_worktree_created(st: State, ev: Event) -> None:
     it.worktree = ev.data.get("path", "")
     it.branch = ev.data.get("branch", "")
     it.base = ev.data.get("base", "")
+    it.base_sha = ev.data.get("base_sha", "")
 
 
 def _h_worktree_adopted(st: State, ev: Event) -> None:

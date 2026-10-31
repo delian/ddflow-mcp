@@ -316,6 +316,10 @@ class Item:
     #: is no longer "the base branch" -- a hotfix forks from production, a stacked task
     #: from its dependency's branch -- and the merge target is derived from it.
     base: str = ""
+    #: The commit `base` named when the worktree was created (the true fork). A review
+    #: diffs against it when the live base ref has been history-rewritten since the claim,
+    #: so the reviewer sees the item's own work, not the scrub's reverse changes (B05dce361fd).
+    base_sha: str = ""
     pr: PullRequest | None = None
     #: The release line this item lands on ("" = inherit from its parent, else the
     #: current line). See `core.flow.effective_line`.

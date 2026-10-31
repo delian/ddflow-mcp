@@ -210,6 +210,11 @@ class Worktree:
     path: Path
     branch: str
     base: str
+    #: The commit ``base`` named when the tree was created, i.e. what the branch
+    #: actually forked from. A history rewrite (a secret scrub) later replaces that
+    #: commit, so a review diffing against the live ``base`` ref must fall back to this
+    #: SHA to see only the item's own work (B05dce361fd).
+    base_sha: str = ""
     created: bool = False
     #: git-ignored files copied in from the primary (`[worktree].local_files`)
     local_files: list[str] = field(default_factory=list)
@@ -235,7 +240,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     # destroyed on exit, taking uncommitted work with it. See container.py.
     wt_root = (root / default_worktree_root(cfg.worktree.root)).resolve()
     path = wt_root / name
-    wt = Worktree(item=item_id, path=path, branch=branch, base=base)
+    wt = Worktree(item=item_id, path=path, branch=branch, base=base, base_sha=rev(root, base))
 
     if path.exists() and (path / ".git").exists():
         _ignore_inside(root, wt_root)
