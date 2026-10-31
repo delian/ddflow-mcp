@@ -8,6 +8,8 @@ purpose: a human checkpoint an agent can clear is not a checkpoint.
 
 from __future__ import annotations
 
+import argparse
+
 from ...core.defaults import DEFAULT_NEXT_KIND, DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import GATE_OUTCOMES
 from ...core.outcome import NOTHING, OK
@@ -26,6 +28,18 @@ DEFAULT_CHECK_RECOVERY = True
 #: terminal, not a flag an agent reaches for on reflex (and each flag costs tools/list bytes).
 _OVERRIDE = "an operator's override of another clone's live lease, recorded; CLI only (B90b43dd2d8)"
 OVERRIDE_EXEMPT = {"--force": _OVERRIDE, "--reason": _OVERRIDE}
+
+_APPROVE_EPILOG = (
+    "who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker\n"
+    "(CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.\n"
+    "what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red\n"
+    "(the failing tests also fail on the base branch). The approval is bound to the digest of\n"
+    "that record (outcome, time, reason): a re-run or re-record is a different outcome and\n"
+    "needs its own approval. The gate stays `partial`; completion only stops counting it.\n"
+    "agent route: re-run with `--approval request` to file the request, a person answers it,\n"
+    "then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person\n"
+    "answers with `ddflow approvals approve ID` (see `ddflow approvals --help`)."
+)
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -383,6 +397,8 @@ COMMANDS: tuple[Command, ...] = (
             "asserts it holds end to end rather than resting on this line."
         ),
         summary="a PERSON clears (or rejects) a human-approval gate — no MCP equivalent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_APPROVE_EPILOG,
         params=(
             Param("id", positional=True),
             Param("gate", positional=True),
