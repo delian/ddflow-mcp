@@ -25,25 +25,25 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from ..config import Config
-from ..core import ids as IDS
-from ..core.admission import is_shared
-from ..core.globs import inside
-from ..core.model import Item, State
-from ..infra import worktree as W
-from . import changes as CH
-from . import chore as CO
-from . import gate_accept as GA
-from . import gates as G
-from . import landed as LD
-from . import review_exclude as RX
-from . import testselect as TS
-from .cadence import phase_overdue
-from .docsonly import diff_is_docs_only
-from .gates import reviewers as GR
-from .gates.evidence import commit_tree_entries, worktree_entries
-from .gates.evidence import tree_being_completed as _tree_being_completed
-from .gates.reviewed_paths import ignorable
+from ...config import Config
+from ...core import ids as IDS
+from ...core.admission import is_shared
+from ...core.globs import inside
+from ...core.model import Item, State
+from ...infra import worktree as W
+from .. import changes as CH
+from .. import chore as CO
+from .. import gate_accept as GA
+from .. import gates as G
+from .. import landed as LD
+from .. import review_exclude as RX
+from .. import testselect as TS
+from ..cadence import phase_overdue
+from ..docsonly import diff_is_docs_only
+from ..gates import reviewers as GR
+from ..gates.evidence import commit_tree_entries, worktree_entries
+from ..gates.evidence import tree_being_completed as _tree_being_completed
+from ..gates.reviewed_paths import ignorable
 
 
 @dataclass
