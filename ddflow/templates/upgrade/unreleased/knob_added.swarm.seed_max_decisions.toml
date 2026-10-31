@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.seed_max_decisions"
+new = "8"
+why = "The Tier-0 seed pack (SW-seed-pack-config): every number of the pack is a knob."
+impact = "additive"

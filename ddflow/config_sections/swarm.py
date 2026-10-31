@@ -180,3 +180,38 @@ class SwarmConfig:
         doc="A lane's conformance level older than this many seconds (default 30 days) no longer admits it to items; it must be run again. Zero never expires.",
         check=_count,
     )
+    seed_max_tokens: int = knob(
+        1500,
+        doc="Token budget of the whole Tier-0 seed pack a lane receives at start (four characters per token). The item brief and the data notice must fit, or the build refuses.",
+        check=_positive,
+    )
+    seed_max_decisions: int = knob(
+        8,
+        doc="Most decisions (those governing the item's globs) listed in the seed pack. Zero lists none.",
+        check=_count,
+    )
+    seed_max_rules: int = knob(
+        7,
+        doc="Most project rules listed in the seed pack. Zero lists none.",
+        check=_count,
+    )
+    seed_max_lessons: int = knob(
+        6,
+        doc="Most ranked lessons listed in the seed pack. Zero lists none.",
+        check=_count,
+    )
+    seed_entry_chars: int = knob(
+        600,
+        doc="Characters one decision, rule or lesson may take in the seed pack before it is cut. Zero cuts entries to nothing.",
+        check=_count,
+    )
+    seed_item_chars: int = knob(
+        1500,
+        doc="Characters of the item body kept in the seed pack. Zero keeps only the heading.",
+        check=_count,
+    )
+    seed_handoff_chars: int = knob(
+        1200,
+        doc="Characters of an earlier lane's handoff note kept in the seed pack. Zero drops the note.",
+        check=_count,
+    )

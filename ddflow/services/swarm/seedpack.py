@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
+from ...config import Config
 from ...core.budget import chars_for
 from ...core.provenance import DATA_RULE, Origin, decision_origin, fence, lesson_origin
 from ..guidance.kinds import governing
@@ -44,6 +45,12 @@ class Knobs:
     entry_chars: int = 600  # one decision/rule/lesson, before the fence
     item_chars: int = 1500  # the item body
     handoff_chars: int = 1200
+
+    @classmethod
+    def from_config(cls, cfg: Config) -> Knobs:
+        """Read the ``[swarm] seed_*`` knobs; one per field, so a new field needs a knob."""
+        sw = cfg.swarm
+        return cls(**{f.name: getattr(sw, "seed_" + f.name) for f in fields(cls)})
 
 
 DEFAULT = Knobs()

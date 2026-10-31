@@ -2223,6 +2223,30 @@
           refused); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      review.converge_floor = 'HIGH'   [default]
+          The severity floor that makes reviews converge (bug Bf797745b5a): the FIRST
+          full round blocks on every finding, but a LATER full re-review -- which re-
+          sends the whole diff the author has already seen -- blocks only on findings
+          at or above this floor, so once a diff's HIGH findings are fixed a reviewer
+          that keeps raising a new MEDIUM or LOW nit (often against a file unchanged
+          since the last review or a stale head) does not re-open the gate. A delta or
+          fix round shows only NEW code, so its finding is a real defect of the change
+          and still blocks at any severity. Combines with the re-review prompt, which
+          tells the reviewer to report a new below-floor finding only against the
+          newly changed lines. `HIGH` (default) = the strongest convergence (later
+          full re-reviews only re-open on new HIGH findings); `MEDIUM` blocks later
+          full re-reviews on HIGH and MEDIUM; `LOW` keeps a later full re-review
+          blocking on every new finding, as it did before convergence existed (a nit
+          still re-opens). The below-floor findings are still recorded on the gate and
+          triageable -- they just do not hold the pass on their own. Change it for the
+          project (`ddflow config --set review.converge_floor MEDIUM`), for this
+          machine (add --local), per run (DDFLOW_REVIEW_CONVERGE_FLOOR), or over MCP
+          with `ddflow_configure` (the operator is told when an agent does). An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'LOW', the strictest (a later full re-review blocks on
+          every new finding, as before convergence existed); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       review.delta_default = False   [default]
           Whether `ddflow review <id> --gate G` on a gate that already has a recorded
           review rechecks ONLY the commits since the head that review covered, instead
@@ -2420,6 +2444,26 @@
       swarm.conformance_max_age_s = 2592000   [default]
           A lane's conformance level older than this many seconds (default 30 days) no
           longer admits it to items; it must be run again. Zero never expires.
+      swarm.seed_max_tokens = 1500   [default]
+          Token budget of the whole Tier-0 seed pack a lane receives at start (four
+          characters per token). The item brief and the data notice must fit, or the
+          build refuses.
+      swarm.seed_max_decisions = 8   [default]
+          Most decisions (those governing the item's globs) listed in the seed pack.
+          Zero lists none.
+      swarm.seed_max_rules = 7   [default]
+          Most project rules listed in the seed pack. Zero lists none.
+      swarm.seed_max_lessons = 6   [default]
+          Most ranked lessons listed in the seed pack. Zero lists none.
+      swarm.seed_entry_chars = 600   [default]
+          Characters one decision, rule or lesson may take in the seed pack before it
+          is cut. Zero cuts entries to nothing.
+      swarm.seed_item_chars = 1500   [default]
+          Characters of the item body kept in the seed pack. Zero keeps only the
+          heading.
+      swarm.seed_handoff_chars = 1200   [default]
+          Characters of an earlier lane's handoff note kept in the seed pack. Zero
+          drops the note.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
