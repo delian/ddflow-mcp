@@ -11,8 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from ddflow import completion_fast as CF
-from ddflow.services import completion_ids as CI
+from ddflow import completion_fast as CF  # noqa: E402
+from ddflow.services import completion_ids as CI  # noqa: E402
 
 
 def _index(d: Path, name="index.db-aaaaaaaa", mtime=None) -> Path:
@@ -26,10 +26,17 @@ def _index(d: Path, name="index.db-aaaaaaaa", mtime=None) -> Path:
     create table notes(note text);
     create virtual table notes_fts using fts5(note);
     """)
-    con.executemany("insert into items values(?,?,?,?)", [
-        ("COMP-a", "task", "t", "open"), ("COMP-b", "task", "t", "done"),
-        ("P-comp", "phase", "p", "open"), ("X_y", "task", "t", "open"),
-        ("X%z", "task", "t", "open"), ("Xqq", "task", "t", "open")])
+    con.executemany(
+        "insert into items values(?,?,?,?)",
+        [
+            ("COMP-a", "task", "t", "open"),
+            ("COMP-b", "task", "t", "done"),
+            ("P-comp", "phase", "p", "open"),
+            ("X_y", "task", "t", "open"),
+            ("X%z", "task", "t", "open"),
+            ("Xqq", "task", "t", "open"),
+        ],
+    )
     con.execute("insert into bugs values('B1',null,null)")
     con.execute("insert into bugs values('B2','t',null)")
     con.execute("insert into widgets values('W1','live')")
@@ -130,27 +137,46 @@ def test_entry_prints_lines_and_exits_zero(tmp_path):
     _index(tmp_path)
     r = subprocess.run(
         [sys.executable, "-m", "ddflow.completion_fast", "ids", "--kind", "task", "COMP"],
-        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(ROOT)},
-        capture_output=True, text=True, check=False)
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert r.returncode == 0 and r.stdout.split() == ["COMP-a", "COMP-b"], r.stderr
 
 
 def _imports(code: str, tmp: Path) -> str:
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                       cwd=tmp, env={**os.environ, "PYTHONPATH": str(ROOT)}, check=True)
+    r = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=tmp,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        check=True,
+    )
     return r.stdout
 
 
-_PROBE = ("import sys, ddflow.completion_fast as m; "
-          "print(' '.join(sorted(k for k in sys.modules if k.startswith('ddflow'))))")
+_PROBE = (
+    "import sys, ddflow.completion_fast as m; "
+    "print(' '.join(sorted(k for k in sys.modules if k.startswith('ddflow'))))"
+)
 
 
 def test_import_budget_no_heavy_modules(tmp_path):
     mods = set(_imports(_PROBE, tmp_path).split())
-    assert not [m for m in mods if m.startswith(("ddflow.api", "ddflow.surfaces",
-                                                 "ddflow.infra", "ddflow.config"))]
-    assert mods <= {"ddflow", "ddflow.completion_fast", "ddflow.services",
-                    "ddflow.services.completion_ids"}
+    assert not [
+        m
+        for m in mods
+        if m.startswith(("ddflow.api", "ddflow.surfaces", "ddflow.infra", "ddflow.config"))
+    ]
+    assert mods <= {
+        "ddflow",
+        "ddflow.completion_fast",
+        "ddflow.services",
+        "ddflow.services.completion_ids",
+    }
 
 
 def test_planted_slow_import_fails_the_budget(tmp_path):
@@ -164,7 +190,11 @@ def test_planted_slow_import_fails_the_budget(tmp_path):
 def test_lookup_latency_budget(tmp_path):
     _index(tmp_path)
     t = time.monotonic()
-    r = subprocess.run([sys.executable, "-m", "ddflow.completion_fast", "ids", "COMP"],
-                       cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(ROOT)},
-                       capture_output=True, check=True)
+    r = subprocess.run(
+        [sys.executable, "-m", "ddflow.completion_fast", "ids", "COMP"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        capture_output=True,
+        check=True,
+    )
     assert time.monotonic() - t < 1.0 and r.stdout  # generous: loaded CI box
