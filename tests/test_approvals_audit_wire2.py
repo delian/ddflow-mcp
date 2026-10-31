@@ -84,7 +84,9 @@ def test_a_typed_chat_t3_use_and_a_claim_force_are_listed(repo):
     log = EventLog(repo, "bot")
     for ask, verb, grade in (("Q1", "complete.force", "L2-typed"), ("Q2", "claim.force", "")):
         log.append("ask.requested", ask, {"id": ask, "verb": verb, "uses": 1, "subject": "T1"})
-        log.append("ask.answered", ask, {"id": ask, "outcome": "approved", "by": "me", "via": "harness"})
+        log.append(
+            "ask.answered", ask, {"id": ask, "outcome": "approved", "by": "me", "via": "harness"}
+        )
         log.append("ask.consumed", ask, {"id": ask, "by": "bot", "verb": verb, "grade": grade})  # fmt: skip
     kinds = sorted(r["kind"] for r in _rows(repo))
     assert kinds == sorted([OV.TYPED, OV.CLAIM_FORCE])
