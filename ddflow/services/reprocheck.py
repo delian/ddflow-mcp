@@ -30,11 +30,11 @@ from __future__ import annotations
 import os
 import secrets
 import shlex
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from ..infra import fsio as F
+from ..infra import git as G
 from ..infra import proc as P
 from ..infra import worktree as W
 
@@ -73,8 +73,7 @@ def _run_at(
     single ``output``."""
     load_start = _first_load()
     keep = max(0, int(tail_bytes))
-    tails = Path(tempfile.mkdtemp(prefix="ddflow-repro-"))
-    try:
+    with F.scratch_dir(prefix="ddflow-repro-", ignore_cleanup_errors=True) as tails:
         with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
             if s.path is None:
                 return {
@@ -102,8 +101,6 @@ def _run_at(
                 if tailed:
                     out.append(tailed)
                 bigger = bigger or size > keep
-    finally:
-        shutil.rmtree(tails, ignore_errors=True)
     if not codes:
         why = "every run was cut off before an exit code" if unreached else "no run"
         record: dict[str, Any] = {
@@ -158,12 +155,12 @@ def _prime_scratch(scratch: Path, sha: str, pristine: bytes) -> bool:
         if gitfile.is_symlink():
             return False
         _write_gitfile(gitfile, pristine)
-        cleaned = P.capture(["git", "clean", "-xdfq", "-f"], cwd=scratch, timeout=60.0)
-        reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
-        if reset.returncode != 0:
-            cleaned = P.capture(["git", "clean", "-xdfq", "-f"], cwd=scratch, timeout=60.0)
-            reset = P.capture(["git", "reset", "--hard", sha], cwd=scratch, timeout=60.0)
-        return reset.returncode == 0 and cleaned.returncode == 0
+        cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
+        reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
+        if reset.code != 0:
+            cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
+            reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
+        return reset.code == 0 and cleaned.code == 0
     except OSError:
         return False
 
@@ -183,21 +180,11 @@ def _gitfile_bytes(scratch: Path) -> bytes | None:
 
 
 def _write_gitfile(gitfile: Path, pristine: bytes) -> None:
-    """Write ``pristine`` back onto the ``.git`` gitdir pointer atomically: staged at an
-    unpredictable name and ``os.replace``d, so a symlink planted where the pointer goes
-    is swapped whole (its target is never written) and a poisoned pointer cannot
-    survive to the reset that follows."""
-    for _ in range(4):
-        staged = gitfile.parent / f".pristine-{secrets.token_hex(6)}"
-        try:
-            fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            continue
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(pristine)
-        os.replace(staged, gitfile)
-        return
-    raise OSError("could not stage the pristine gitfile")
+    """Write ``pristine`` back onto the ``.git`` gitdir pointer atomically: ``fsio.atomic_write``
+    stages the bytes at an unpredictable name beside the pointer and ``os.replace``s them into
+    place, so a symlink planted where the pointer goes is swapped whole (its target is never
+    written) and a poisoned pointer cannot survive to the reset that follows."""
+    F.atomic_write(gitfile, pristine, mode=0o644)
 
 
 def _one_run(
