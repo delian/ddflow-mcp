@@ -1,6 +1,6 @@
 """The combination rule: `effective(harness, model, route)` (DRV-combine).
 
-Pure and deterministic: no I/O, no clock unless `today` is passed, nothing read from disk.
+Pure and deterministic: no I/O, the clock is read only when `Policy.today` is left unset, nothing read from disk.
 Callers hand over the three layers as `key -> fact record` tables (`facts`) and get each
 requested key back with the layer that decided it and why (research/driver-architecture.md
 section 4.1).
@@ -47,6 +47,9 @@ class Policy:
     #: a safety fact (cap, prohibition) that is unverified or drifted still tightens
     safety_trusts_unverified: bool = True
     grace_days: int = 0
+    #: installed tool version and today, for judging drift; None leaves ranges unknown
+    installed: str | None = None
+    today: date | None = None
 
 
 @dataclass(frozen=True)
@@ -107,11 +110,11 @@ def match_pair(pairs: list[Mapping[str, Any]], harness: str, model: str, family:
     return {}
 
 
-def _believable(node: Any, installed: str | None, today: date | None, grace: int):
+def _believable(node: Any, pol: Policy):
     """(fact or None, note): the fact if readable and undrifted, else why it is skipped."""
     if not facts.is_fact(node):
         return None, "not a fact record"
-    a = factdrift.assess(node, installed, today, grace)
+    a = factdrift.assess(node, pol.installed, pol.today, pol.grace_days)
     if a.state != "ok":
         return None, f"{a.state} ({a.reason})"
     if node["s"] == "unverified":
@@ -123,15 +126,13 @@ def _ordinary(
     key: str,
     tables: Mapping[str, Mapping[str, Any]],
     pol: Policy,
-    installed: str | None,
-    today: date | None,
     skips: list[str],
 ) -> Field | None:
     for layer in LAYERS:
         node = tables[layer].get(key)
         if node is None:
             continue
-        fact, note = _believable(node, installed, today, pol.grace_days)
+        fact, note = _believable(node, pol)
         if fact is None:
             skips.append(f"{layer} {note}")
             continue
@@ -147,15 +148,13 @@ def _safety(
     key: str,
     tables: Mapping[str, Mapping[str, Any]],
     pol: Policy,
-    installed: str | None,
-    today: date | None,
 ) -> list[tuple[str, Any, dict[str, Any]]]:
     out = []
     for layer in LAYERS:
         node = tables[layer].get(prefix + key)
         if not facts.is_fact(node) or node["s"] == "none":
             continue
-        fact, _ = _believable(node, installed, today, pol.grace_days)
+        fact, _ = _believable(node, pol)
         if fact is None and not pol.safety_trusts_unverified:
             continue
         out.append((layer, node.get("v"), node))
@@ -167,20 +166,16 @@ def _resolve_key(
     tables: Mapping[str, Mapping[str, Any]],
     pol: Policy,
     unknown_model: str,
-    installed: str | None,
-    today: date | None,
 ) -> Field:
     skips: list[str] = []
     prohibitions = [
-        (layer, node)
-        for layer, v, node in _safety(pol.prohibit_prefix, key, tables, pol, installed, today)
-        if v
+        (layer, node) for layer, v, node in _safety(pol.prohibit_prefix, key, tables, pol) if v
     ]
     if prohibitions:
         layer, node = prohibitions[0]
         names = ", ".join(layer_ for layer_, _ in prohibitions)
         return Field(key, False, "prohibit", False, f"prohibited by {names}", node)
-    got = _ordinary(key, tables, pol, installed, today, skips)
+    got = _ordinary(key, tables, pol, skips)
     if got is None:
         who = f" for unknown model {unknown_model!r}" if unknown_model else ""
         why = f"; skipped: {'; '.join(skips)}" if skips else ""
@@ -188,7 +183,7 @@ def _resolve_key(
         return Field(key, pol.lcd.get(key), LCD, True, reason)
     caps = [
         (layer, v, n)
-        for layer, v, n in _safety(pol.cap_prefix, key, tables, pol, installed, today)
+        for layer, v, n in _safety(pol.cap_prefix, key, tables, pol)
         if isinstance(v, (int, float)) and not isinstance(v, bool)
     ]
     if caps and isinstance(got.value, (int, float)) and not isinstance(got.value, bool):
@@ -209,8 +204,6 @@ def effective(
     pair: Mapping[str, Any] | None = None,
     operator: Mapping[str, Any] | None = None,
     observed: Mapping[str, Any] | None = None,
-    installed: str | None = None,
-    today: date | None = None,
     policy: Policy | None = None,
 ) -> Effective:
     """Each of `keys` (default: every key any layer states, caps and prohibitions folded
@@ -229,9 +222,7 @@ def effective(
     family = str(model.get("family") or UNKNOWN_FAMILY)
     unknown = str(model.get("id", "")) if family == UNKNOWN_FAMILY else ""
     wanted = list(keys) or _all_keys(tables, pol)
-    fields = {
-        k: _resolve_key(k, tables, pol, unknown, installed, today) for k in sorted(set(wanted))
-    }
+    fields = {k: _resolve_key(k, tables, pol, unknown) for k in sorted(set(wanted))}
     return Effective(
         str(harness.get("id", "")),
         str(model.get("id", "")),

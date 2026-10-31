@@ -64,7 +64,7 @@ def test_drifted_fact_does_not_beat_verified():
         H(),
         m,
         {"id": "r", "facts": {"cache.explicit": stale}},
-        today=date(2026, 10, 31),
+        policy=combine.Policy(today=date(2026, 10, 31)),
         keys=["cache.explicit"],
     )
     assert r["cache.explicit"] is False and r.fields["cache.explicit"].source == "model"
