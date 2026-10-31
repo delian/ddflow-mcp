@@ -485,6 +485,16 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_session_prompt",
     "ddflow_session_note",
     "ddflow_session_end",
+    # ask/message/withdraw write (file a request, send a lane message, take an ask back), so
+    # a second call differs by construction. message still has its CLI twin (`session
+    # message`); ask/asks/withdraw declare `path=()` (folded into `ddflow_session` by D-RA-6;
+    # the CLI face is `approvals list`, a different shape), so no CLI argv exists there for a
+    # `MIGRATED_WIRE_SHAPES` row — the no-CLI-argv ground alone exempts the read `asks`. Shapes
+    # pinned by tests/test_approvals_mcp.py and tests/test_wake_reasons.py.
+    "ddflow_session_ask",
+    "ddflow_session_asks",
+    "ddflow_session_message",
+    "ddflow_session_withdraw",
     "ddflow_review",
     "ddflow_review_triage",
     "ddflow_reviewers_detect",
