@@ -1148,6 +1148,21 @@
   
   '''
 # ---
+# name: test_help[ddflow harness add]
+  '''
+  usage: ddflow harness add [-h] [--family FAMILY] [--title TITLE] [--dir DIR] id
+  
+  positional arguments:
+    id               the new agent's id
+  
+  options:
+    -h, --help       show this help message and exit
+    --family FAMILY  the lineage whose conventions it shares
+    --title TITLE    the product's display name
+    --dir DIR        where to write it (default .ddflow/local/harnesses)
+  
+  '''
+# ---
 # name: test_help[ddflow harness doctor]
   '''
   usage: ddflow harness doctor [-h] [id]
@@ -1171,12 +1186,37 @@
   
   '''
 # ---
+# name: test_help[ddflow harness lint]
+  '''
+  usage: ddflow harness lint [-h] id
+  
+  positional arguments:
+    id          a descriptor id, or the path of a .toml file
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow harness list]
   '''
   usage: ddflow harness list [-h]
   
   options:
     -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow harness probe]
+  '''
+  usage: ddflow harness probe [-h] [--run] id
+  
+  positional arguments:
+    id          a descriptor id, or the path of a .toml file
+  
+  options:
+    -h, --help  show this help message and exit
+    --run       the operator consents: run `<binary> --version`
   
   '''
 # ---
@@ -1192,16 +1232,33 @@
   
   '''
 # ---
-# name: test_help[ddflow harness]
+# name: test_help[ddflow harness test]
   '''
-  usage: ddflow harness [-h] {list,show,doctor,facts} ...
+  usage: ddflow harness test [-h] id
   
   positional arguments:
-    {list,show,doctor,facts}
+    id          a descriptor id, or the path of a .toml file
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow harness]
+  '''
+  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe} ...
+  
+  positional arguments:
+    {list,show,doctor,facts,add,lint,test,probe}
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
       facts               every descriptor value with its status, source, tool version and date
+      add                 scaffold a descriptor skeleton with every fact left out (not verified)
+      lint                a descriptor against the schema and the three-valued rule (exit 1 =
+                          problems)
+      test                the offline conformance of one descriptor
+      probe               what the agent's binary would be asked; runs nothing without --run
   
   options:
     -h, --help            show this help message and exit
@@ -1762,6 +1819,31 @@
     --phase PHASE         limit to one phase
     --since SINCE         only since a duration back (7d, 12h) or a date YYYY-MM-DD
     --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase
+  
+  '''
+# ---
+# name: test_help[ddflow model show]
+  '''
+  usage: ddflow model show [-h] name
+  
+  positional arguments:
+    name        a model name or id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow model]
+  '''
+  usage: ddflow model [-h] {show} ...
+  
+  positional arguments:
+    {show}
+      show      a model's facts with source and date, and what unknown gets
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -3291,13 +3373,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,prompts,hooks,mcp,search,identify,list,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -3398,6 +3480,7 @@
       companions          companion MCP servers that serve the gates (exit 2 = a default one is
                           missing)
       harness             what each agent gets, at which fallback level, and what is broken
+      model               the model catalog: a row with its provenance
       prompts             inspect and override the prompt templates
       hooks               install/inspect the enforcement git hook and the Claude Code session hook
       mcp                 run the MCP stdio server over this repository
@@ -3502,10 +3585,14 @@
     'ddflow grant add',
     'ddflow grant list',
     'ddflow harness',
+    'ddflow harness add',
     'ddflow harness doctor',
     'ddflow harness facts',
+    'ddflow harness lint',
     'ddflow harness list',
+    'ddflow harness probe',
     'ddflow harness show',
+    'ddflow harness test',
     'ddflow health',
     'ddflow heartbeat',
     'ddflow help',
@@ -3544,6 +3631,8 @@
     'ddflow memory list',
     'ddflow merge',
     'ddflow metrics',
+    'ddflow model',
+    'ddflow model show',
     'ddflow next',
     'ddflow onboard',
     'ddflow phase',
