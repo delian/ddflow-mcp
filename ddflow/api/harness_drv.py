@@ -62,7 +62,7 @@ def _clean(text: str) -> str:
 
 def _q(text: str) -> str:
     """A TOML basic string literal, whatever the text holds (quotes, backslashes, newlines)."""
-    return json.dumps(text, ensure_ascii=False)
+    return json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def skeleton(hid: str, rank: int, family: str, title: str) -> str:
@@ -126,7 +126,8 @@ def _three_valued(raw: dict[str, Any]) -> tuple[list[str], list[str]]:
     problems: list[str] = []
     warns: list[str] = []
     ver = raw.get("verified")
-    listed = set(ver.get("unverified") or []) if isinstance(ver, dict) else set()
+    got = ver.get("unverified") if isinstance(ver, dict) else None
+    listed = {x for x in got if isinstance(x, str)} if isinstance(got, list) else set()
     for s in _FACT_SECTIONS:
         node = raw.get(s)
         if isinstance(node, dict) and node.get("none") is True and s in listed:
