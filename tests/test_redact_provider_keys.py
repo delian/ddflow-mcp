@@ -415,3 +415,10 @@ def test_reviewers_list_never_prints_a_key_value(monkeypatch, tmp_path):
         text=True,
     )
     assert sentinel not in r.stdout + r.stderr
+
+
+def test_a_legacy_key_glued_before_a_new_one_does_not_hide_its_body(cfg):
+    new = KEYS["google-new"]
+    text = KEYS["google"] + new + " and " + new + KEYS["google"]
+    clean, _n = S.redact(text, cfg)
+    assert new[3:] not in clean and KEYS["google"][4:] not in clean
