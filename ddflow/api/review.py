@@ -2459,7 +2459,11 @@ def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg
             ],
             extra_evidence,
         )
-    converged_round = converging and it is not None and bool(item) and _rounds_used(it, gate) > 0
+    # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
+    # earlier round (which still spends a round) is not a previous review.
+    converged_round = (
+        converging and it is not None and bool(item) and bool(_last_review(it, gate).get("chunk_findings"))
+    )
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status == RV.REVIEWED for f in r.findings]

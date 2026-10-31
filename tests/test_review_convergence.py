@@ -146,7 +146,9 @@ def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
     from ddflow.config import Config
     from ddflow.services import review as RV
 
-    monkeypatch.setattr(api, "_rounds_used", lambda it, gate: 1)
+    monkeypatch.setattr(
+        api, "_last_review", lambda it, gate: {"chunk_findings": [{"severity": "HIGH"}]}
+    )
     low = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="nit")])
     high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad")])
     cfg = Config.load(None, env={})
@@ -181,4 +183,19 @@ def test_a_non_converged_round_weighs_every_reviewers_findings():
     outcome, _ = api._gate_outcome(
         clean, [clean, high], None, "T1", "critic", False, cfg, None, print
     )
+    assert outcome == "failed"
+
+
+def test_a_round_with_no_earlier_findings_does_not_converge(monkeypatch):
+    """An earlier unavailable round spends a round but leaves nothing to converge from:
+    the first substantive review blocks on a MEDIUM finding."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    monkeypatch.setattr(api, "_last_review", lambda it, gate: {})
+    med = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", title="m")])
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(med, [med], object(), "T1", "critic", True, cfg, None, print)
     assert outcome == "failed"
