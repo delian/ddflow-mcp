@@ -145,7 +145,11 @@ def queue_add(
         try:
             freed = _hand_over(repo, cfg, log, it, entry, plan)
         except Exception as exc:  # the entry holds custody already: say so, never fail the add
-            freed = {"released": True, "lease_released": False, "inbox_note": f"hand-over: {exc!r}"}
+            freed = {
+                "released": True,
+                "lease_released": None,
+                "inbox_note": f"hand-over failed part-way ({exc!r}); `ddflow show {item}` says whether the lease is gone",
+            }
     row = _row(repo, cfg, item)
     where = f"position {row.get('position', 0)}" if row.get("position") else entry.state
     return O.ok(
