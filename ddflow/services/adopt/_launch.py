@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 from ...infra.paths import launch_parent, launch_python
@@ -11,6 +12,19 @@ from ..mcpconfig import SHAPE_NONE
 from ..mcpconfig import register as _register_server
 from ._refused import Refused
 from ._targets import AGENT_TARGETS
+
+
+def _ns():
+    """The `ddflow.services.adopt` package namespace, for this module's own calls.
+
+    The launcher used to be one module with the rest of `adopt`, and tests patch names on
+    `ddflow.services.adopt` (`_running_from_source`, `_launch_entry`) expecting the launcher's
+    own calls to see them. It lives in its own module now, so those calls resolve through the
+    package namespace rather than this module's globals -- `monkeypatch.setattr(adopt, ...)`
+    patches the package binding, not this file's.
+    """
+    return sys.modules[__package__]
+
 
 #: Where an operator reads the manual step for an agent with no project config.
 _DOCS_HINT = "docs/ddflow/drivers/deltas/"
@@ -60,12 +74,12 @@ def _launch_entry(
       already; on Linux it does not exist without this flag.
     """
 
-    if launch == "auto" and not _running_from_source() and not _installed_from_index():
+    if launch == "auto" and not _ns()._running_from_source() and not _ns()._installed_from_index():
         # Installed, but not from an index: from git, a local path or an archive URL
         # (bug B8ff258154d). `uvx ddflow-mcp` resolves the name against PyPI, which is
         # a different version at best and a 404 before the first release, so the entry
         # must name THIS installation.
-        return _installed_entry()
+        return _ns()._installed_entry()
     if launch == "docker" or (
         launch == "auto"
         and not shutil.which("uvx")
@@ -85,22 +99,22 @@ def _launch_entry(
             ],
         }
     if launch == "python":
-        pkg_parent = _package_parent()
+        pkg_parent = _ns()._package_parent()
         return {
-            "command": _python(),
-            "args": ["-m", MCP_MODULE],
+            "command": _ns()._python(),
+            "args": ["-m", _ns().MCP_MODULE],
             "env": {"PYTHONPATH": pkg_parent},
         }
-    if shutil.which("uvx") and not _running_from_source():
+    if shutil.which("uvx") and not _ns()._running_from_source():
         return {"command": "uvx", "args": ["ddflow-mcp"]}
-    if shutil.which("ddflow-mcp") and not _running_from_source():
+    if shutil.which("ddflow-mcp") and not _ns()._running_from_source():
         return {"command": "ddflow-mcp", "args": []}
     # Source checkout: point at THIS tree, so a developer's project uses the code they
     # are editing.
-    pkg_parent = _package_parent()
+    pkg_parent = _ns()._package_parent()
     return {
-        "command": _python(),
-        "args": ["-m", MCP_MODULE],
+        "command": _ns()._python(),
+        "args": ["-m", _ns().MCP_MODULE],
         "env": {"PYTHONPATH": pkg_parent},
     }
 
@@ -125,15 +139,15 @@ def _installed_entry() -> dict[str, object]:
     interpreter when there is one (what `uv tool install` / `pipx install` put in the
     tool's environment), else that interpreter with the package's directory on
     PYTHONPATH. Absolute paths both: an agent's environment need not share this PATH."""
-    exe = Path(_python())
-    for name in (DIST_NAME, DIST_NAME + ".exe"):
+    exe = Path(_ns()._python())
+    for name in (_ns().DIST_NAME, _ns().DIST_NAME + ".exe"):
         script = exe.parent / name
         if script.is_file():
             return {"command": str(script), "args": []}
     return {
         "command": str(exe),
-        "args": ["-m", MCP_MODULE],
-        "env": {"PYTHONPATH": _package_parent()},
+        "args": ["-m", _ns().MCP_MODULE],
+        "env": {"PYTHONPATH": _ns()._package_parent()},
     }
 
 
@@ -158,7 +172,7 @@ def _register_mcp(
     # checkout rather than an installed distribution, fall back to that checkout --
     # otherwise developing ddflow would silently configure the project against the
     # PUBLISHED version instead of the one under test.
-    entry = _launch_entry(launch, image)
+    entry = _ns()._launch_entry(launch, image)
     # The writer `companions add` uses too: parsed, a stale entry refreshed, a file it
     # cannot read refused (Ba4cc85bdbc: TOML was a substring test).
     status, msg = _register_server(
