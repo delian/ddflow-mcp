@@ -2145,7 +2145,7 @@
 # ---
 # name: test_help[ddflow queue]
   '''
-  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
+  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--release] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
   
   positional arguments:
     {add,run,status,remove}
@@ -2159,6 +2159,9 @@
                           run: integrate at most this many entries (default [merge_queue].max_batch)
     --unit-tests          run/add: also run each entry's unit_tests gate on the merged result
     --no-unit-tests       run/add: do not run unit_tests (overrides [merge_queue].run_unit_tests)
+    --release             add: release the item at enqueue: the integrator finishes it, you may
+                          claim the next one (every judgement gate must already be passed on this
+                          tree)
     --timeout TIMEOUT     run: seconds one entry's ci may run (default [merge_queue].timeout_s)
   
   '''
