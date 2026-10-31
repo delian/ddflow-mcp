@@ -15,8 +15,9 @@ from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services.lanes.redraw import watch as _watch
 from ._base import _load
+from .fleet import fleet_view
 
-VIEWS = ("state", "brief", "advise")
+VIEWS = ("state", "brief", "advise", "fleet", "resume")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
 NOBODY = "\0lanes"
 
@@ -44,7 +45,14 @@ def lanes(
         "moves": [],
         "limit": {},
         "text": "",
+        "fleet": [],
+        "resume": {},
     }
+    if view in ("fleet", "resume"):
+        pl = plan(st, cfg, now=at, agent=NOBODY, parallel=limit)
+        return fleet_view(
+            data, view=view, lane=lane, events=events, st=st, cfg=cfg, now=at, plan=pl
+        )
     if view == "brief":
         found = LN.find(ledger, lane) if lane else None
         if found is None:

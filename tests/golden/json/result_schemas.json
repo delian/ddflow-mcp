@@ -2470,7 +2470,9 @@
    "brief",
    "moves",
    "limit",
-   "text"
+   "text",
+   "fleet",
+   "resume"
   ],
   "output_schema": {
    "type": "object",
@@ -2486,6 +2488,8 @@
     "moves": {},
     "limit": {},
     "text": {},
+    "fleet": {},
+    "resume": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -2653,6 +2657,87 @@
     "schema": {
      "const": "record@1"
     },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_ask": {
+  "command": "session_ask",
+  "schema": "session_ask@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "new",
+   "digest"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_ask@1"
+    },
+    "id": {},
+    "new": {},
+    "digest": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_asks": {
+  "command": "session_asks",
+  "schema": "session_asks@1",
+  "shape": "object",
+  "payload": [
+   "agent",
+   "asks"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_asks@1"
+    },
+    "agent": {},
+    "asks": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_withdraw": {
+  "command": "session_withdraw",
+  "schema": "session_withdraw@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_withdraw@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true

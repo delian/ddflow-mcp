@@ -1275,11 +1275,11 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips or lanes."
+          "description": "state (default), brief, advise, fleet (every agent ever seen, classed, with its stop reason) or resume (the one idempotent resume for lane)."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief."
+          "description": "Lane name (or a unique part); with view=brief or resume."
          },
          "group_by": {
           "type": "string",

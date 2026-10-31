@@ -22,6 +22,38 @@ class LanesConfig:
         0,
         doc="Seconds without a heartbeat after which a lane that still holds its lease is reported `stale` instead of `working`. 0 (the default) uses lease.ttl_s, the moment the lease itself is due to lapse.",
     )
+    fleet_window_s: int = knob(
+        0,
+        doc="How far back an agent's last event may be for `ddflow lanes fleet` to list it. 0 (the default) lists every agent the log has ever seen: the fleet registry is durable history, unlike the lane ledger's window_s.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "a whole number of zero or more"
+        ),
+    )
+    fleet_failed_patterns: list[str] = knob(
+        factory=lambda: [
+            r"\b429\b",
+            r"rate.?limit",
+            r"spend.?limit",
+            r"quota",
+            r"overloaded",
+            r"context (window|length|exhaust)",
+            r"max.?tokens",
+            r"crash",
+            r"\bOOM\b",
+        ],
+        doc="Case-insensitive regular expressions: an agent that stopped with its item unfinished and whose recorded stop reason (session summary, lease expiry reason or release note) matches one is classed `failed` in `ddflow lanes fleet`; any other stop is `stalled`. A pattern that does not compile is skipped.",
+    )
+    fleet_reason_chars: int = knob(
+        200,
+        doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 keeps none, and then no stop reason can class an agent `failed`.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "a whole number of zero or more"
+        ),
+    )
     watch_interval_s: int = knob(
         5,
         doc="Seconds between redraws of `ddflow lanes --watch` when the log has not changed; a change in the log redraws at once. The watch only reads the log: it starts no daemon and spawns nothing.",
