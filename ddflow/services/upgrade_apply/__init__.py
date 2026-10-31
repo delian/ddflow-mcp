@@ -17,8 +17,7 @@ submodule holds them.
 
 from __future__ import annotations
 
-import importlib
-from typing import Any
+from ddflow.core import _reexport
 
 from .. import upgrade_plan as UP  # noqa: F401 -- the ``UA.UP`` alias the old module bound
 from ..backups import (  # noqa: F401 -- the backups' home
@@ -94,19 +93,5 @@ _SUBMODULE_OF = {
     "apply": "_apply",
 }
 
-_MODULES: dict[str, Any] = {}
-
-
-def __getattr__(name: str) -> Any:
-    sub = _SUBMODULE_OF.get(name)
-    if sub is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    mod = _MODULES.get(sub)
-    if mod is None:
-        mod = importlib.import_module(f"{__name__}.{sub}")
-        _MODULES[sub] = mod
-    return getattr(mod, name)
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(_SUBMODULE_OF))
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)
+del _reexport
