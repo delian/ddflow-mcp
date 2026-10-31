@@ -533,7 +533,7 @@ def _create_tree(
         log.append(
             "worktree.created",
             item,
-            {"path": stored, "branch": wt.branch, "base": wt.base},
+            {"path": stored, "branch": wt.branch, "base": wt.base, "base_sha": wt.base_sha},
         )
         L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
         return _Bound(wt, ours=True)

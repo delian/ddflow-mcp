@@ -210,6 +210,11 @@ class Worktree:
     path: Path
     branch: str
     base: str
+    #: The commit ``base`` named when the tree was created, i.e. what the branch
+    #: actually forked from. A history rewrite (a secret scrub) later replaces that
+    #: commit, so a review diffing against the live ``base`` ref must fall back to this
+    #: SHA to see only the item's own work (B05dce361fd).
+    base_sha: str = ""
     created: bool = False
     #: git-ignored files copied in from the primary (`[worktree].local_files`)
     local_files: list[str] = field(default_factory=list)
@@ -240,7 +245,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     if path.exists() and (path / ".git").exists():
         _ignore_inside(root, wt_root)
         wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
-        return wt  # adopt
+        return wt  # adopt: the original fork sha is not this call's `rev(base)`
     wt_root.mkdir(parents=True, exist_ok=True)
     _ignore_inside(root, wt_root)
 
@@ -253,6 +258,11 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     r = git(root, *args)
     if not r.ok:
         raise GitError(f"worktree add failed for {item_id}: {r.err or r.out}")
+    if not have_branch:
+        # A NEW branch was created at base's tip: read the fork from the branch itself,
+        # AFTER the add ran, so a concurrent base rewrite between resolving base and the
+        # add cannot leave a stale sha that predates the branch (B05dce361fd critic #2).
+        wt.base_sha = rev(root, branch)
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
         sync(wt, cfg)

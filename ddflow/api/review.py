@@ -117,6 +117,41 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
 SHOWN_UNTRACKED = 10
 
 
+def _base_after_rewrite(repo: Path, it, base: str, tip: str) -> tuple[str, str]:
+    """(base, warning): the base to diff against, and why it is not the live `base` ref.
+
+    A history rewrite (a secret scrub) replaces the commit the item forked from, so
+    `git merge-base base HEAD` drops to a pre-scrub ancestor and a plain diff sends the
+    scrub's reverse changes as the item's (B05dce361fd: a 21 MB reversed diff to the
+    reviewer). The item recorded the fork sha (`it.base_sha`); once `base` no longer
+    contains it, review against that sha instead -- the branch forked from it, so the
+    diff is exactly the item's own work. While `base` still contains the fork sha (main
+    merely moved forward) it is returned unchanged: the merge-base still excludes main's
+    commits as always.
+
+    The fork sha is trusted only while the reviewed `tip` still descends from it. A
+    branch rebased onto the rewritten base shares recent history with `base` again and
+    must NOT be diffed against the pre-rewrite fork, so those cases fall back to the live
+    `base` (whose merge-base with `tip` is then, once more, the right fork).
+    """
+    if it is None or not getattr(it, "base_sha", ""):
+        return base, ""
+    if W.git(repo, "merge-base", "--is-ancestor", it.base_sha, base).ok:
+        return base, ""
+    # base was rewritten. Trust the fork only while the tip still descends from it AND has
+    # not brought the rewritten base into itself: a rebased tip shares recent base history
+    # again, and a merged tip contains base's new commits -- in both, `base...tip` is right
+    # once more, exactly as before the rewrite.
+    if not W.git(repo, "merge-base", "--is-ancestor", it.base_sha, tip).ok:
+        return base, ""
+    if W.git(repo, "merge-base", "--is-ancestor", base, tip).ok:
+        return base, ""
+    return it.base_sha, (
+        f"{base} was history-rewritten since the item forked from {it.base_sha[:12]}: "
+        "the reviewer sees only the item's own commits on top of that recorded base"
+    )
+
+
 def diff_for(
     repo: Path,
     cfg,
@@ -151,7 +186,11 @@ def diff_for(
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
-        return _tree_diff(wt_path, base)
+        base, warning = _base_after_rewrite(wt_path, it, base, "HEAD")
+        diff, how = _tree_diff(wt_path, base)
+        if warning:
+            how += f" (WARNING: {warning})"
+        return diff, how
     branch, chosen, early = _review_branch(repo, cfg, st, it, item, branch, called_from)
     if early is not None:
         return early
@@ -162,8 +201,11 @@ def diff_for(
             f"on a branch, pass --branch <branch> or run review from its worktree",
             exclude=SELF_MANAGED,
         )
+    base, warning = _base_after_rewrite(repo, it, base, branch)
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}", *_NOISE_PATHSPEC)
     how = f"{base}...{branch} ({chosen})"
+    if warning:
+        how += f" (WARNING: {warning})"
     if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
         return "", f"{how} could not be read: {d.err or d.out}"
     out = without_stray_gitlinks(d.out, registered_submodules(repo, base, branch))
@@ -2443,7 +2485,9 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say) -> tuple[str, dict | None]:
+def _gate_outcome(
+    best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
+) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
     evidence; a converged full re-review passes with a `converged` flag on the evidence.
 
@@ -2462,7 +2506,10 @@ def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg
     # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
     # earlier round (which still spends a round) is not a previous review.
     converged_round = (
-        converging and it is not None and bool(item) and bool(_last_review(it, gate).get("chunk_findings"))
+        converging
+        and it is not None
+        and bool(item)
+        and bool(_last_review(it, gate).get("chunk_findings"))
     )
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
@@ -2772,8 +2819,17 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         context,
         [
             lambda c: _with_previous_findings(
-                c, log, it, item, gate, say,
-                kind=kind, rerun=prior, supers=supers, fix=fix, floor=_floor_for(cfg, kind, fix),
+                c,
+                log,
+                it,
+                item,
+                gate,
+                say,
+                kind=kind,
+                rerun=prior,
+                supers=supers,
+                fix=fix,
+                floor=_floor_for(cfg, kind, fix),
             ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
