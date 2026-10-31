@@ -113,7 +113,7 @@ def registry(
     rows = []
     for ln in ledger:
         at, reason = sig.get(ln.name, ("", ""))
-        if ln.state not in _STOPPED and ln.state != S.STOPPED_DONE:
+        if ln.state not in _STOPPED:
             reason, at = "", ""
         rows.append(
             Entry(
@@ -150,6 +150,8 @@ def resume(
     base.update(lane=e.name, item=e.item, worktree=e.worktree, stop_reason=e.stop_reason)
     it = st.items.get(e.item)
     ls = it.lease if it and not it.terminal else None
+    if ls and ls.holder == e.name and ls.live(now, grace_s):
+        return {**base, "reason": f"{e.name} still holds {e.item} on a live lease"}
     if ls and ls.holder and ls.holder != e.name and ls.live(now, grace_s):
         return {**base, "reason": f"already taken over: {e.item} is held by {ls.holder}"}
     if e.lane_state not in _STOPPED:
@@ -159,7 +161,8 @@ def resume(
     return {
         **base,
         "eligible": True,
-        "reason": f"{e.name} stopped with {e.item} unfinished",
+        "reason": f"{e.name} stopped with {e.item} unfinished; start a session with its brief "
+        "(no harness spawn line exists yet, so ddflow does not start one)",
         "command": f"ddflow lanes brief {LN.safe(e.name)}",
     }
 

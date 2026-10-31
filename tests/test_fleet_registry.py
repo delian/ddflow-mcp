@@ -160,3 +160,14 @@ def test_resume_ignores_a_lapsed_lease_of_another_agent():
     entries, _l, st, cfg = _entries(g, T0 + 5000)
     r = FL.resume(entries, "lane-gone", st, T0 + 5000, cfg.lease.grace_s)
     assert "taken over" not in r["reason"]
+
+
+def test_a_finished_lane_keeps_no_old_failure_reason():
+    g = Log()
+    g.task("X", "f.py")
+    g.session("a", "s1", T0, ended=T0 + 4)
+    g.claim("a", "X", T0, "f.py")
+    g.add("session.ended", "s0", "a", T0 - 5, summary="HTTP 429")
+    g.complete("a", "X", T0 + 3)
+    e = _entries(g, T0 + 10)[0][0]
+    assert e.cls == FL.DONE and e.stop_reason == ""
