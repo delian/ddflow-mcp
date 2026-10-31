@@ -42,6 +42,7 @@ def test_the_ddflow_help_walk_is_in_process_and_under_ten_seconds(monkeypatch):
     chains = _all_chains()
     assert len(chains) > 100
     _no_spawn(monkeypatch)
+    monkeypatch.setattr(H, "_parser", [None])  # cold: the registry is built inside the timing
     start = time.monotonic()  # construction is timed too: a walk may be eager in it
     idx = H.HelpIndex(H.command_runner(ROOT, 60), ["ddflow"])
     for chain in chains:
