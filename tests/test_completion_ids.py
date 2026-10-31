@@ -88,6 +88,7 @@ def test_missing_index_gives_nothing(tmp_path, monkeypatch):
     (tmp_path / ".ddflow").mkdir()
     assert CI.find_index(str(tmp_path)) is None
     assert CI.complete_ids("x", index=str(tmp_path / "nope")) == []
+    assert not (tmp_path / "nope").exists()  # read-only open never creates a database
     assert CF.complete(["ids", "x"]) == []
     assert CF.complete([]) == [] and CF.complete(["bogus"]) == []
 
@@ -168,27 +169,27 @@ _PROBE = (
 )
 
 
-def test_import_budget_no_heavy_modules(tmp_path):
-    mods = set(_imports(_PROBE, tmp_path).split())
-    assert not [
-        m
-        for m in mods
-        if m.startswith(("ddflow.api", "ddflow.surfaces", "ddflow.infra", "ddflow.config"))
-    ]
-    assert mods <= {
+def _heavy(mods: set[str]) -> list[str]:
+    """The modules that break the import budget: anything of ddflow beyond the two light ones."""
+    light = {
         "ddflow",
         "ddflow.completion_fast",
         "ddflow.services",
         "ddflow.services.completion_ids",
     }
+    return sorted(m for m in mods if m.startswith("ddflow") and m not in light)
+
+
+def test_import_budget_no_heavy_modules(tmp_path):
+    assert _heavy(set(_imports(_PROBE, tmp_path).split())) == []
 
 
 def test_planted_slow_import_fails_the_budget(tmp_path):
-    """The budget test is real: a heavy import planted in the path is caught."""
+    """The same check the budget test applies reports a heavy import planted in the path."""
     (tmp_path / "ddflow_slow.py").write_text("import ddflow.api\n")
     code = _PROBE.replace("import sys,", "import sys, ddflow_slow,")
-    mods = set(_imports(code, tmp_path).split())
-    assert any(m.startswith("ddflow.api") for m in mods)
+    heavy = _heavy(set(_imports(code, tmp_path).split()))
+    assert "ddflow.api" in heavy  # the budget test would fail on this
 
 
 def test_lookup_latency_budget(tmp_path):
