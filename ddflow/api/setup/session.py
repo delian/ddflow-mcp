@@ -15,12 +15,12 @@ from typing import Any
 from ...config import Config
 from ...core import outcome as O
 from ...core.model import fold
-from ...services import enforce as E
 from ...infra import git as G
 from ...infra import worktree as W
 from ...infra.log import EventLog
-from ...services import companions as CO
 from ...services import compaction as CP
+from ...services import companions as CO
+from ...services import enforce as E
 from ...services import identity as ID
 from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN

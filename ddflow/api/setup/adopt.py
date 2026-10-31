@@ -15,11 +15,18 @@ from ...core.events import SkewRefused
 from ...infra import worktree as W
 from ...services import help as H
 from ...services import pins_merge as PM
-from ...services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
+from ...services.adopt import (
+    AGENT_TARGETS,
+    Refused,
+    adopt,
+    adopted_agents,
+    init_files,
+    refresh_docs,
+)
 from ...services.prompts import TemplateError
-from .._base import _load
 from ...views import human
 from ...views import human as _human
+from .._base import _load
 from .companions import _scan
 
 

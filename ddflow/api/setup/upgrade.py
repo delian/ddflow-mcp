@@ -22,7 +22,6 @@ from ...services import upgrade_status as UST
 from .._base import _load
 from .session import _START_REPORTS
 
-
 #: The wire fields of the plan: the body of `ddflow upgrade --json` and of `ddflow_upgrade`.
 UPGRADE_PAYLOAD = ("running", "project_version", "up_to_date", "total", "categories")
 #: ... and of an apply, which adds what it did (`applied`) to the plan that is left.

@@ -24,6 +24,13 @@ load-bearing as anything in the pipeline:
 
 from __future__ import annotations
 
+from .adopt import (
+    Adoption,
+    files_tree,
+    help_topic,
+    init_project,
+    setup,
+)
 from .companions import (  # noqa: F401
     Registration,
     _add_install_state,
@@ -37,8 +44,8 @@ from .companions import (  # noqa: F401
     companions_verify,
 )
 from .config import (  # noqa: F401
-    ConfigEdit,
     _BUDGET_KNOBS,
+    ConfigEdit,
     _budget_keys,
     _default_layer,
     _extra_keys,
@@ -46,33 +53,15 @@ from .config import (  # noqa: F401
     configure,
     report_budget_change,
 )
-from .session import (  # noqa: F401
-    SESSION_START_FOOTER,
-    SESSION_START_HEADER,
-    _START_LOCK,
-    _START_REPORTS,
-    _after_compaction,
-    _check_msg,
-    _companion_lines,
-    _record_compaction,
-    _session_start,
-    _sync_sections,
-    _worktree_drift,
-    release_proposal,
-    stale_server_facts,
-    stale_server_note,
-    upgrade_notice,
-    upgrade_start,
-)
 from .hooks import (  # noqa: F401
     _HOOK_HANDLERS,
-    _HookResult,
     _agent_hooks,
     _agent_hooks_outcome,
     _capture_prompt,
     _harness_hooks,
     _hook_line,
     _hook_remedy,
+    _HookResult,
     _hooks_status,
     _installed_hooks,
     _on_nothing,
@@ -89,7 +78,27 @@ from .hooks import (  # noqa: F401
     _synth_stdin,
     hooks,
 )
+from .prompts import _prompts_get, prompts  # noqa: F401
+from .session import (  # noqa: F401
+    _START_LOCK,
+    _START_REPORTS,
+    SESSION_START_FOOTER,
+    SESSION_START_HEADER,
+    _after_compaction,
+    _check_msg,
+    _companion_lines,
+    _record_compaction,
+    _session_start,
+    _sync_sections,
+    _worktree_drift,
+    release_proposal,
+    stale_server_facts,
+    stale_server_note,
+    upgrade_notice,
+    upgrade_start,
+)
 from .upgrade import (  # noqa: F401
+    _APPLIED_FIELDS,
     UPGRADE_APPLY_PAYLOAD,
     UPGRADE_CHECK_PAYLOAD,
     UPGRADE_HISTORY_PAYLOAD,
@@ -98,7 +107,6 @@ from .upgrade import (  # noqa: F401
     UPGRADE_SELF_PAYLOAD,
     UPGRADE_STATUS_PAYLOAD,
     SelfUpgrade,
-    _APPLIED_FIELDS,
     _apply_reason,
     _other_modes,
     _snapshot_conflict,
@@ -114,23 +122,11 @@ from .upgrade import (  # noqa: F401
     _upgrade_status,
     upgrade,
 )
-from .prompts import _prompts_get, prompts  # noqa: F401
-from .adopt import (  # noqa: F401
-    Adoption,
-    files_tree,
-    help_topic,
-    init_project,
-    setup,
-)
 
 #: The public API, exactly what the single module exposed before it was split.
 __all__ = [
-    "Adoption",
-    "ConfigEdit",
-    "Registration",
     "SESSION_START_FOOTER",
     "SESSION_START_HEADER",
-    "SelfUpgrade",
     "UPGRADE_APPLY_PAYLOAD",
     "UPGRADE_CHECK_PAYLOAD",
     "UPGRADE_HISTORY_PAYLOAD",
@@ -138,6 +134,10 @@ __all__ = [
     "UPGRADE_RESTORE_PAYLOAD",
     "UPGRADE_SELF_PAYLOAD",
     "UPGRADE_STATUS_PAYLOAD",
+    "Adoption",
+    "ConfigEdit",
+    "Registration",
+    "SelfUpgrade",
     "companions",
     "companions_add",
     "companions_verify",

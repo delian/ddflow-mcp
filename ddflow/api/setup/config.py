@@ -20,9 +20,9 @@ from ...services.approvals import class_states as APCS
 from ...services.approvals import consume as CN
 from ...services.approvals.canon import Canon
 from ...services.config_shadow import shadow_report
+from ...views import human
 from .._base import _load
 from ..knowledge import session_note
-from ...views import human
 
 
 @dataclass

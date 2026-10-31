@@ -23,6 +23,7 @@ from ...services import identity as ID
 from ...services import launchers as LA
 from ...services import sessions as S
 from ...services.swarm import lanehooks_check as CK
+from .._base import _load
 from .session import _check_msg, _record_compaction, _session_start
 
 
