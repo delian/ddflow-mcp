@@ -206,7 +206,9 @@ def _query_ids(con, prefix, kind, state, limit) -> list[str]:
                 continue
             where.append(f"{expr} = ?")
             args.append(state)
-        sql = f'select id from "{name}" where {" and ".join(where)} order by id limit ?'
+        # bandit B608: `name` is a schema table name from sqlite_master and the `where`
+        # fragments bind through `?`; the user values travel only in `args`/`limit`.
+        sql = f'select id from "{name}" where {" and ".join(where)} order by id limit ?'  # nosec B608
         ids.extend(str(r[0]) for r in con.execute(sql, [*args, limit]) if r[0] is not None)
     return sorted(set(ids))[:limit]
 
@@ -240,9 +242,12 @@ def kinds(*, index=None) -> list[str]:
             if "kind" not in cols:
                 names.add(name)
             else:
-                names.update(
-                    str(r[0]) for r in con.execute(f'select distinct kind from "{name}"') if r[0]
+                rows = con.execute(
+                    # bandit B608: `name` is a schema table name from sqlite_master, not
+                    # user input; the query interpolates only an identifier, binding nothing.
+                    f'select distinct kind from "{name}"',  # nosec B608
                 )
+                names.update(str(r[0]) for r in rows if r[0])
         return sorted(names)
 
     return _guard(run, index)
@@ -256,9 +261,12 @@ def states(*, index=None) -> list[str]:
         for name, cols in _tables(con).items():
             expr = _state_expr(cols)
             if expr:
-                out.update(
-                    str(r[0]) for r in con.execute(f'select distinct {expr} from "{name}"') if r[0]
+                rows = con.execute(
+                    # bandit B608: `expr` is a quoted column from STATE_COLUMNS or a
+                    # hardcoded _DERIVED CASE, `name` a schema table name — no user input.
+                    f'select distinct {expr} from "{name}"',  # nosec B608
                 )
+                out.update(str(r[0]) for r in rows if r[0])
         return sorted(out)
 
     return _guard(run, index)
