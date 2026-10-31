@@ -69,5 +69,16 @@ home)` renders `templates/harness/opencode/provider.json.j2` to `<home>/.config/
 (or opencode's) at 0600; pass that `home` as `LaunchSpec.home` and `launch_env(ep)` as
 `LaunchSpec.env`, `model_arg(ep)` as the model. Kilo refuses `{env:NAME}` in project config, so
 the block lives only in the lane home. Facts about each harness: `models/routes/harness-provider.toml`
-(kilo 7.8.18 verified offline; opencode unverified; live tool-call probe unavailable until the
+(kilo 7.8.18 and opencode 1.19.0 verified offline with `debug config`; live tool-call probe unavailable until the
 operator consents). `ep.concurrency` is the cap the scheduler applies to lanes on that endpoint.
+
+## opencode / kilo lane (SW-lane-opencode)
+
+`ddflow/services/lanes/opencode.py`: `select()` resolves the binary (`DDFLOW_OPENCODE_BIN` / `DDFLOW_KILO_BIN`
+from the machine-local environment, then PATH, then `~/.local/bin`; opencode first, kilo fallback) and says
+which binary and version it used. `prepare()` writes the lane-private config under the lane home (provider,
+ddflow MCP entry with the lane identity, instruction file, pre-tool plugin) and returns a `LaunchSpec`;
+`conformance()` grades it. No `steer` or `usage` (unread); live smoke run is unavailable until the operator
+consents. Read offline: opencode 1.19.0 and kilo 7.8.18 accept the provider, mcp and instructions entries and
+list plugin files in `<home>/.config/<binary>/plugin(s)`; plugin event names are not read; `opencode acp`
+exists (later transport).

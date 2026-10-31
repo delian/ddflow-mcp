@@ -1,6 +1,7 @@
 {
   "_meta": {
     "recorded": false,
+    "synthetic": true,
     "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)",
     "version": "unversioned"
   },
