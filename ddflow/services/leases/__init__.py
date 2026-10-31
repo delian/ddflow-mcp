@@ -58,6 +58,7 @@ _SUBMODULE_OF = {
     "_alts": "claim",
     "_alternatives": "claim",
     # lifecycle
+    "foreign": "lifecycle",
     "_transition": "lifecycle",
     "renew": "lifecycle",
     "plan_retarget": "lifecycle",
