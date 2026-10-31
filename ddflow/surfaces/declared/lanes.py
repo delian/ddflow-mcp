@@ -31,7 +31,18 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().lanes(
             repo, view=a.get("view") or "state", lane=a.get("lane") or "", agent=agent
         ),
-        payload=("view", "now", "lanes", "lane", "brief", "moves", "limit", "text", "fleet", "resume"),
+        payload=(
+            "view",
+            "now",
+            "lanes",
+            "lane",
+            "brief",
+            "moves",
+            "limit",
+            "text",
+            "fleet",
+            "resume",
+        ),
         render=_text,
         params=(
             Param(
