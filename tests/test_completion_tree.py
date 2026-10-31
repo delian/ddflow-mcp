@@ -52,13 +52,13 @@ def test_every_path_matches_argparse(parser, tree):
         assert flags <= set(p._option_string_actions), path
         pos = [a for a in p._actions if not a.option_strings and a.nargs != argparse.PARSER]
         assert [x["dest"] for x in node["positionals"]] == [a.dest for a in pos], path
-        for opt, act in zip(
-            node["options"],
-            [a for a in p._actions if a.option_strings and set(a.option_strings) & flags],
-            strict=True,
-        ):
-            assert opt["choices"] == (None if act.choices is None else list(map(str, act.choices)))
-            assert opt["arity"] == ("0" if act.nargs == 0 else str(act.nargs or 1))
+        acts = [a for a in p._actions if a.option_strings and set(a.option_strings) & flags]
+        assert [o["choices"] for o in node["options"]] == [
+            None if a.choices is None else list(map(str, a.choices)) for a in acts
+        ], path
+        assert [o["arity"] for o in node["options"]] == [
+            "0" if a.nargs == 0 else str(a.nargs or 1) for a in acts
+        ], path
 
 
 def _mirrors(action, root):
@@ -136,6 +136,9 @@ def test_walker_is_generic():
     by = {o["flags"][0]: o for o in node["options"]}
     assert "--hidden" not in by
     assert by["--mode"]["choices"] == ["a", "b"] and by["--many"]["repeat"] is True
+    c = p._subparsers._group_actions[0].choices["alpha"]
+    c.add_argument("-v", action="count")
+    assert T.at(T.command_tree(p), ("alpha",))["options"][-1]["repeat"] is True
     assert node["positionals"][0]["arity"] == "?"
     assert T.at(got, ("nope",)) is None
 
