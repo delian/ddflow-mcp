@@ -39,6 +39,7 @@ from .hooks import (  # noqa: F401
     install,
     installed,
     redirect_note,
+    running_from_source,
     uninstall,
 )
 from .leasecheck import (  # noqa: F401
