@@ -1,0 +1,5 @@
+# Event kinds owned by lanerelease. One [[kind]] per kind.
+
+[[kind]]
+name = "lane.released_for_gate"
+doc = "An agent handed an item to the merge queue and gave up its lease."

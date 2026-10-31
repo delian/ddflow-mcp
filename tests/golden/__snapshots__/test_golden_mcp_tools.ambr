@@ -1137,6 +1137,10 @@
           "type": "boolean",
           "description": "Also run unit_tests."
          },
+         "release": {
+          "type": "boolean",
+          "description": "add: hand the item over (its lease ends) once only machine gates remain."
+         },
          "timeout": {
           "type": "integer",
           "description": "run: ci seconds."
