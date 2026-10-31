@@ -139,6 +139,11 @@ def _claim_slot(every: list[Entry], item: str, cap: int) -> None:
         raise SlotsFull(f"{held} released item(s) already wait for the integrator (cap {cap})")
 
 
+def _mark_released(e: Entry, release: dict[str, Any]) -> None:
+    e.released = True
+    e.author, e.lane, e.tree = (release.get(k, "") for k in ("author", "lane", "tree"))
+
+
 def add(
     repo: Path,
     item: str,
@@ -163,12 +168,7 @@ def add(
             if release is not None and not waiting.released:
                 _claim_slot(every, item, release_cap)
             if release is not None and not waiting.released and waiting.state == QUEUED:
-                waiting.released = True
-                waiting.author, waiting.lane, waiting.tree = (
-                    release.get("author", ""),
-                    release.get("lane", ""),
-                    release.get("tree", ""),
-                )
+                _mark_released(waiting, release)
                 _write(repo, waiting)
             return waiting, False
         if release is not None and waiting is None:
@@ -179,12 +179,7 @@ def add(
         seq = max((e.seq for e in every), default=0) + 1
         e = Entry(item=item, seq=seq, agent=agent, queued_at=time.time())
         if release is not None:
-            e.released = True
-            e.author, e.lane, e.tree = (
-                release.get("author", ""),
-                release.get("lane", ""),
-                release.get("tree", ""),
-            )
+            _mark_released(e, release)
         _write(repo, e)
         _prune(repo, keep_history)
     return e, True
