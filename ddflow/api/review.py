@@ -2485,7 +2485,9 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say) -> tuple[str, dict | None]:
+def _gate_outcome(
+    best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
+) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
     evidence; a converged full re-review passes with a `converged` flag on the evidence.
 
@@ -2504,7 +2506,10 @@ def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg
     # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
     # earlier round (which still spends a round) is not a previous review.
     converged_round = (
-        converging and it is not None and bool(item) and bool(_last_review(it, gate).get("chunk_findings"))
+        converging
+        and it is not None
+        and bool(item)
+        and bool(_last_review(it, gate).get("chunk_findings"))
     )
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
@@ -2814,8 +2819,17 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         context,
         [
             lambda c: _with_previous_findings(
-                c, log, it, item, gate, say,
-                kind=kind, rerun=prior, supers=supers, fix=fix, floor=_floor_for(cfg, kind, fix),
+                c,
+                log,
+                it,
+                item,
+                gate,
+                say,
+                kind=kind,
+                rerun=prior,
+                supers=supers,
+                fix=fix,
+                floor=_floor_for(cfg, kind, fix),
             ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
