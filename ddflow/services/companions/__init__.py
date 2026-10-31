@@ -30,10 +30,10 @@ late) and the layering ratchet (``test_no_mutually_importing_pair`` would read a
 
 from __future__ import annotations
 
-import importlib
 import shutil  # noqa: F401 -- re-exported; tests patch companions.shutil
 import time  # noqa: F401 -- re-exported; tests patch companions.time
-from typing import Any
+
+from ddflow.core._reexport import reexport
 
 from ...infra import proc as P  # noqa: F401 -- re-exported; tests patch companions.P
 from ..mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -104,19 +104,4 @@ _SUBMODULE_OF = {
     "scan": "registry",
 }
 
-_MODULES: dict[str, Any] = {}
-
-
-def __getattr__(name: str) -> Any:
-    sub = _SUBMODULE_OF.get(name)
-    if sub is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    mod = _MODULES.get(sub)
-    if mod is None:
-        mod = importlib.import_module(f"{__name__}.{sub}")
-        _MODULES[sub] = mod
-    return getattr(mod, name)
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(_SUBMODULE_OF))
+reexport(globals(), _SUBMODULE_OF, __name__)
