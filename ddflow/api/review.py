@@ -1774,6 +1774,16 @@ _DELTA_CAVEAT = (
 )
 
 
+def _converges(kind: str, fix: bool) -> bool:
+    """Whether the convergence floor applies: a full, non-fix re-review only."""
+    return kind == "full" and not fix
+
+
+def _floor_for(cfg, kind: str, fix: bool) -> str:
+    """The floor the re-review prompt names, "" where it does not apply."""
+    return cfg.review.converge_floor if _converges(kind, fix) else ""
+
+
 def _floor_lines(floor: str) -> list[str]:
     """The prompt's convergence-floor paragraph; empty when no floor applies (a delta or
     fix round, where every finding blocks, bug Bf797745b5a)."""
@@ -2755,7 +2765,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         [
             lambda c: _with_previous_findings(
                 c, log, it, item, gate, say,
-                kind=kind, rerun=prior, supers=supers, fix=fix, floor=cfg.review.converge_floor if kind == "full" and not fix else "",
+                kind=kind, rerun=prior, supers=supers, fix=fix, floor=_floor_for(cfg, kind, fix),
             ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
@@ -2804,7 +2814,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     best = min(results, key=lambda r: r.status)
     outcome, extra_evidence = _gate_outcome(
-        best, it, item, gate, kind == "full" and not fix, cfg, extra_evidence, say
+        best, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
     if item:
         outcome = _record_review(
