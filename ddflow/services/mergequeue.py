@@ -125,7 +125,11 @@ def _entries_locked(repo: Path, wait_s: float = 10.0):
     return fsio.file_lock(d / "add.lock", wait_s)
 
 
-class SlotsFull(RuntimeError):
+class ReleaseRefused(RuntimeError):
+    """The queue cannot take custody of this item now."""
+
+
+class SlotsFull(ReleaseRefused):
     """Every released-entry slot of the integrator is taken (`[lanes].release_max`)."""
 
 
@@ -156,6 +160,8 @@ def add(
         if release is not None:
             _claim_slot(every, item, release_cap)
         if waiting is not None:
+            if release is not None and not waiting.released and waiting.state == RUNNING:
+                raise ReleaseRefused(f"{item} is being integrated right now")
             if release is not None and not waiting.released and waiting.state == QUEUED:
                 waiting.released = True
                 waiting.author, waiting.lane, waiting.tree = (
