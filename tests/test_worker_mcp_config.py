@@ -311,5 +311,5 @@ def test_the_knob_has_an_upgrade_fragment():
     from ddflow.services import upgrade_manifest as UM
 
     manifest = UM.load()
-    keys = {c.key for _v, _d, changes in manifest.releases for c in changes}
-    assert "mcp.lane_tools" in keys
+    got = [c for _v, _d, changes in manifest.releases for c in changes if c.key == "mcp.lane_tools"]
+    assert got and got[0].new == ""  # JSON-encoded in the fragment: '""' is the empty string
