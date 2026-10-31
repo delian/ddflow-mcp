@@ -400,3 +400,17 @@ def test_every_skew_override_is_warned_about():
 
     (w,) = RL.uses([], St())
     assert "skew.override by bot" in w and "relayed consent" in w and "chat said so" in w
+
+
+def test_a_locked_document_is_reachable_per_machine_in_two_single_approval_steps(proj):
+    run_cli(proj, "export", "disable", "changelog", "--lock")
+    unlock = _ask_id(run_cli(proj, "export", "enable", "changelog", agent="bot")[2])
+    _approve(proj, unlock)
+    assert run_cli(proj, "export", "enable", "changelog", "--approval", unlock, agent="bot")[0] == 0
+    # the lock is lifted: the per-machine selection now needs only its own approval
+    machine = _ask_id(run_cli(proj, "export", "disable", "changelog", "--local", agent="bot")[2])
+    _approve(proj, machine)
+    code, out, err = run_cli(
+        proj, "export", "disable", "changelog", "--local", "--approval", machine, agent="bot"
+    )
+    assert code == 0, (out, err)
