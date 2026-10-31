@@ -20,10 +20,10 @@ ROOT = Path(ddflow.__file__).parent
 #: (file under ddflow/, enclosing function): a signal sent to a process that code started.
 OWN_CHILD_SITES = {
     ("infra/proc.py", "kill_group"),  # a Popen group the caller launched
-    ("services/review.py", "ensure_running"),  # the reviewer subprocess it spawned
+    ("services/review/engine.py", "ensure_running"),  # the reviewer subprocess it spawned
     ("infra/proc.py", "stop_group"),
     ("infra/proc.py", "_shell_group"),
-    ("services/review.py", "_abort"),
+    ("services/review/transport.py", "_abort"),
     ("services/companions.py", "_stop"),  # the install subprocess it spawned
     ("services/ci.py", "free_then_die"),  # SIG_DFL, then the handled signal re-raised on itself
 }
