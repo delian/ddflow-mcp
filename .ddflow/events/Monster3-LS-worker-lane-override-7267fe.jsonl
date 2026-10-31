@@ -1,0 +1,2 @@
+{"agent":"Monster3-LS-worker-lane-override-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"efea6d315e6916a50512c14e2","kind":"ddflow.seen","lamport":118831,"schema":1,"subject":"ddflow","ts":"2026-10-31T13:29:34.165579Z"}
+{"agent":"Monster3-LS-worker-lane-override-7267fe","data":{"gate":"rubber_duck"},"id":"eaf8301539b0a81bf70ae54a7","kind":"gate.started","lamport":118832,"schema":1,"subject":"LS-worker-lane-override","ts":"2026-10-31T13:29:34.190638Z"}

@@ -1,0 +1,2 @@
+{"agent":"Monster3-DX-fleet-registry-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ed48851a3e195d9e781558b52","kind":"ddflow.seen","lamport":118848,"schema":1,"subject":"ddflow","ts":"2026-10-31T13:30:56.929502Z"}
+{"agent":"Monster3-DX-fleet-registry-7267fe","data":{"gate":"rubber_duck"},"id":"e8ea07612c9540cbad37963a3","kind":"gate.started","lamport":118849,"schema":1,"subject":"DX-fleet-registry","ts":"2026-10-31T13:30:56.955995Z"}
