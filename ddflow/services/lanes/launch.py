@@ -192,5 +192,5 @@ def launch(req: Request) -> Launched | Refused:
     try:
         _audit(req, f"lane.launched {note}")
     except Exception as e:  # the lane runs: report it, never lose the handle
-        note += f" (audit note NOT written: {type(e).__name__})"
+        note = json.dumps({**json.loads(note), "audit_error": type(e).__name__}, sort_keys=True)
     return Launched(t, h, prep, drv, note, seed.dropped)

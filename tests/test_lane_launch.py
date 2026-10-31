@@ -332,7 +332,10 @@ def test_a_failing_audit_still_returns_the_running_lane(tmp_path, tree):
             raise PermissionError("read-only")
 
     r = LN.launch(request(tmp_path, tree, log=Broken()))
-    assert isinstance(r, LN.Launched) and "NOT written" in r.decision_note
+    assert (
+        isinstance(r, LN.Launched)
+        and json.loads(r.decision_note)["audit_error"] == "PermissionError"
+    )
     r.driver.stop(r.handle)
 
 
@@ -342,7 +345,8 @@ def test_malformed_template_files_are_notes(tmp_path):
         got, notes = T.load(tmp_path / "t.toml")
         assert got == {} and notes
     (tmp_path / "t.toml").write_bytes(b"\xff")
-    assert T.load(tmp_path / "t.toml")[0] == {}
+    got, notes = T.load(tmp_path / "t.toml")
+    assert got == {} and notes
 
 
 def test_unpriced_template_and_negative_prices_and_bare_tables(tmp_path):
