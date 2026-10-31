@@ -160,30 +160,38 @@ _SEARCH_COLS: dict[str, tuple[str, ...]] = {
     "records": ("title", "body"),
 }
 
-#: The FTS/trigram tables a capability is built out of: `{table}_fts` (porter) and
-#: `{table}_tri` (trigram). A capability is only real when its tables exist, whatever the
-#: `meta` rows claim -- the reconcile `_capability_changed` guards stamped `trigram=1` over
-#: an index that never grew the `_tri` tables, so the claim cannot be trusted.
-_CAP_FTS_TABLES = {f"{t}_fts" for t in _SEARCH_COLS}
-_CAP_TRI_TABLES = {f"{t}_tri" for t in _SEARCH_COLS}
-
 
 def _capability_tables(con, fts: bool, trig: bool) -> bool:
-    """Do the tables the capability needs all exist? False when a claimed-present
-    capability has none: the `meta` can lie, so the capability is reconstructed from the
-    tables, not the claim."""
+    """Are the derived tables the capability needs actually present AND in sync with their
+    base tables, whatever `meta` claims? The claim can say `trigram=1` while the `_tri`
+    tables never grew (the reconcile `_rebuild_locked` refuses stamped the claim over an
+    index built without them) or grew empty (a read's `init` created them, unfilled), so
+    the capability is verified from the tables: each derived table holds one row per base
+    row, the same count the reconcile itself treats as the honest "in sync"."""
     if not (fts or trig):
         return True
     try:
-        tables = {
+        names = {
             r[0] for r in con.execute("select name from sqlite_master where type = 'table'")
         }
+        for table in _SEARCH_COLS:  # nosec B608: fixed keys
+            # bandit B608: `table` is a key of the fixed `_SEARCH_COLS`.
+            base = con.execute(f"select count(*) from {table}").fetchone()[0]  # nosec B608
+            if fts:
+                name = f"{table}_fts"
+                if name not in names or (
+                    con.execute(f"select count(*) from {name}").fetchone()[0] != base  # nosec B608
+                ):
+                    return False
+            if trig:
+                name = f"{table}_tri"
+                if name not in names or (
+                    con.execute(f"select count(*) from {name}").fetchone()[0] != base  # nosec B608
+                ):
+                    return False
     except sqlite3.DatabaseError:
         return False
-    needed = set(_CAP_FTS_TABLES) if fts else set()
-    if trig:
-        needed |= _CAP_TRI_TABLES
-    return needed <= tables
+    return True
 
 
 class Store:

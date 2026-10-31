@@ -247,14 +247,22 @@ def test_an_index_that_claims_trigram_without_tables_is_rebuilt_where_there_is_o
     assert {r["id"] for r in fresh.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
 
 
-def test_the_capability_name_sets_are_not_mutated_by_a_trig_build():
-    """`_capability_tables` copies the FTS name set before adding the trigram names; a
-    trig-enabled check must not leak ``_tri`` names into ``_CAP_FTS_TABLES``, or a plain
-    FTS-only index would be treated as missing its trigram tables forever after."""
-    with sqlite3.connect(":memory:") as con:
-        S._capability_tables(con, fts=True, trig=True)
-        S._capability_tables(con, fts=True, trig=False)
-    assert S._CAP_FTS_TABLES and all(name.endswith("_fts") for name in S._CAP_FTS_TABLES)
+def test_an_index_whose_trigram_tables_are_empty_is_rebuilt_where_there_is_one(repo, log):
+    """A read on a corrupt index creates the `_tri` tables via `init` without filling
+    them, so meta says `trigram=1` and the tables EXIST but hold no rows. An empty
+    derived table disagrees with its base count, so it is a rebuild, not a reconcile."""
+    if not (_has_fts5() and S._has_trigram()):
+        pytest.skip("this SQLite has no FTS5 trigram")
+    _lessons(log)
+    built = _store(repo, "fts5")
+    built.rebuild(log)
+    with sqlite3.connect(built.path) as con:
+        con.execute("delete from lessons_tri")  # corrupt: present, but empty
+    fresh = _store(repo, "fts5")
+    assert fresh.trigram and fresh.stale(log)
+    fresh.rebuild(log)
+    assert not fresh.stale(log)
+    assert {r["id"] for r in fresh.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
 
 
 @pytest.mark.parametrize("backend", ["fts5", "like"])
