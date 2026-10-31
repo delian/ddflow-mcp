@@ -138,7 +138,13 @@ def _base_after_rewrite(repo: Path, it, base: str, tip: str) -> tuple[str, str]:
         return base, ""
     if W.git(repo, "merge-base", "--is-ancestor", it.base_sha, base).ok:
         return base, ""
+    # base was rewritten. Trust the fork only while the tip still descends from it AND has
+    # not brought the rewritten base into itself: a rebased tip shares recent base history
+    # again, and a merged tip contains base's new commits -- in both, `base...tip` is right
+    # once more, exactly as before the rewrite.
     if not W.git(repo, "merge-base", "--is-ancestor", it.base_sha, tip).ok:
+        return base, ""
+    if W.git(repo, "merge-base", "--is-ancestor", base, tip).ok:
         return base, ""
     return it.base_sha, (
         f"{base} was history-rewritten since the item forked from {it.base_sha[:12]}: "

@@ -255,14 +255,14 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
         args += [str(path), branch]
     else:
         args += ["-b", branch, str(path), base]
-        # The branch is created AT base's tip: that commit IS the fork, and only this
-        # path can name it. Adoption and reusing an existing branch leave `base_sha`
-        # empty -- the branch forked earlier, and its fork is not `rev(base)` now
-        # (B05dce361fd review-rb).
-        wt.base_sha = rev(root, base)
     r = git(root, *args)
     if not r.ok:
         raise GitError(f"worktree add failed for {item_id}: {r.err or r.out}")
+    if not have_branch:
+        # A NEW branch was created at base's tip: read the fork from the branch itself,
+        # AFTER the add ran, so a concurrent base rewrite between resolving base and the
+        # add cannot leave a stale sha that predates the branch (B05dce361fd critic #2).
+        wt.base_sha = rev(root, branch)
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
         sync(wt, cfg)

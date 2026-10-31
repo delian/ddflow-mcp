@@ -128,3 +128,41 @@ def test_a_branch_rebased_onto_the_rewritten_base_is_not_diffed_against_the_stal
     assert "work.py" in diff
     assert "base.py" not in diff, "the stale fork leaked the base's content into the diff"
     assert "rewritten" not in how
+
+
+def test_a_branch_that_merged_the_rewritten_base_is_diffed_against_the_live_base(
+    repo: Path,
+) -> None:
+    # A real rewrite (fork A orphaned off main) followed by a merge of the rewritten main:
+    # the tip now CONTAINS the live base, so the stale fork must NOT be substituted --
+    # `base...tip` is once more the right fork where the merge brought the base in.
+    _configured(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    (repo / "base.py").write_text("base = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    fork = _git(repo, "rev-parse", "main")
+    run_cli(repo, "task", "add", "T1", "--title", "add work", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "work.py").write_text("work = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+    EventLog(repo, "test").append(
+        "worktree.created", "T1", {"path": "", "branch": "feat", "base": "main", "base_sha": fork}
+    )
+    # Move main to a sibling commit off its own parent (fork is orphaned), then merge it.
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "reset", "-q", "--hard", "HEAD~1")
+    (repo / "scrub.py").write_text("scrubbed\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "scrub")
+    _git(repo, "checkout", "-q", "feat")
+    _git(repo, "merge", "-q", "main", "-m", "merge scrubbed main")
+
+    st = fold(EventLog(repo).read_all(), strict=False)
+    it = st.items["T1"]
+    base, warning = api._base_after_rewrite(repo, it, "main", "feat")
+    assert base == "main", "a tip that merged the rewritten base must fall back to the live base"
+    assert warning == ""
