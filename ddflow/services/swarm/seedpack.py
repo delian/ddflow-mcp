@@ -92,7 +92,7 @@ def _cut(s: str, n: int) -> str:
 def fence_line(
     kind: str, rec: Rec, redact: Callable[[str], str], cap: int, room: int
 ) -> str | None:
-    """One fenced, single-line record of at most ``room`` chars (newline included), or None.
+    """One fenced, single-line record of at most ``room`` chars (no newline), or None.
 
     Redacts first, then cuts (a key is never cut into a prefix the patterns miss), then
     shrinks the body until the escaped, fenced line fits."""
@@ -102,11 +102,16 @@ def fence_line(
     n = cap
     while True:
         line = fence(kind, redact(rec.id), _cut(text, n), origin)
-        if len(line) + 1 <= room:
+        if len(line) <= room:
             return line
         if n == 0:
             return None
-        n = max(0, n - max(1, len(line) + 1 - room))
+        n = max(0, n - max(1, len(line) - room))
+
+
+def _head(name: str) -> int:
+    """Chars a section header costs in `render`: newline, ``## name``, newline."""
+    return len(name) + 5
 
 
 def build(
@@ -116,7 +121,7 @@ def build(
     redact: Callable[[str], str] | None = None,
 ) -> Seed:
     red = redact or default_redact()
-    room = chars_for(knobs.max_tokens) - len(DATA_RULE) - 1
+    room = chars_for(knobs.max_tokens) - len(DATA_RULE)
     dropped: list[str] = []
     sections: list[tuple[str, str]] = []
 
@@ -127,11 +132,11 @@ def build(
     if inp.needs:
         meta += " needs: " + ", ".join(inp.needs) + "."
     brief = Rec(brief.id, brief.title, f"{brief.body}{meta}", trust="unknown")
-    line = fence_line("item", brief, red, knobs.item_chars, room - 8) or fence(
+    line = fence_line("item", brief, red, knobs.item_chars, room - _head("item")) or fence(
         "item", _cut(red(inp.item_id), 80), "", Origin("unknown")
     )
     sections.append(("item", line))
-    room -= len(line) + 1 + 8
+    room -= _head("item") + len(line)
 
     pools = {
         "decisions": (inp.decisions[: knobs.max_decisions], knobs.entry_chars),
@@ -146,7 +151,7 @@ def build(
     for name in ORDER:
         recs, cap = pools.get(name, ((), 0))
         lines: list[str] = []
-        cost = len(name) + 4  # the "## name" header and its newline
+        cost = _head(name)
         for r in recs:
             got = fence_line(
                 _KIND[name], r, red, cap, room - cost - sum(map(len, lines)) - len(lines)
@@ -157,7 +162,7 @@ def build(
             lines.append(got)
         if lines:
             sections.append((name, "\n".join(lines)))
-            room -= cost + sum(map(len, lines)) + len(lines)
+            room -= cost + sum(map(len, lines)) + len(lines) - 1
     return Seed(DATA_RULE, tuple(sections), tuple(dropped))
 
 
