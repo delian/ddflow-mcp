@@ -157,7 +157,8 @@ def add(
     """(the entry, whether it was added). An item already waiting keeps its place; a parked
     or merged one is replaced by a new entry at the back. ``lock_wait_s`` bounds the wait on the
     numbering lock, held only while a directory is read, so only a stuck process reaches it.
-    ``release`` (author, lane, tree) marks the entry released; the slot count and the marking
+    ``release`` (author, lane, tree) marks the entry released (`take` holds the same lock, so
+    an entry is never marked while the integrator moves it to running); the slot count and the marking
     happen under the same lock, so two releases never both take the last slot (`SlotsFull`)."""
     with _entries_locked(repo, lock_wait_s):
         every = entries(repo)
