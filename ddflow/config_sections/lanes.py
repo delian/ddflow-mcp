@@ -81,7 +81,10 @@ class LanesConfig:
         "flag",
         doc="Release at enqueue (`ddflow queue add ITEM --release`): the agent hands the item to the merge queue, gives up its lease and may claim the next item; the integrator runs the remaining machine gates and merges. 'off' refuses every release, 'flag' releases only when `--release` is given, 'auto' releases every item that is eligible when it is enqueued. An item is eligible only when each judgement gate of `release_gates` is recorded passed on the current tree (or skipped with its reason).",
         choices=("off", "flag", "auto"),
-        strictest=("off", "no item is released: the agent keeps its lease until the item is merged"),
+        strictest=(
+            "off",
+            "no item is released: the agent keeps its lease until the item is merged",
+        ),
     )
     release_max: int = knob(
         4,
