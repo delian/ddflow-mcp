@@ -1,0 +1,2 @@
+{"agent":"Monster3-SW-lane-opencode-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e1fd46073ef8edaa5d09073d5","kind":"ddflow.seen","lamport":116669,"schema":1,"subject":"ddflow","ts":"2026-10-31T06:17:13.739885Z"}
+{"agent":"Monster3-SW-lane-opencode-7267fe","data":{"gate":"rubber_duck"},"id":"e12daa987a38844c82bfe4dfc","kind":"gate.started","lamport":116670,"schema":1,"subject":"SW-lane-opencode","ts":"2026-10-31T06:17:13.770853Z"}
