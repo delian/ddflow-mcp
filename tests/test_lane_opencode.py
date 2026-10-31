@@ -191,7 +191,11 @@ def test_binary_override_by_env_var_beats_path_and_stays_absolute(tmp_path):
     b = OC.select(which=seen, environ=env)
     assert (b.name, b.path, b.version) == ("opencode", str(d / "opencode"), "1.19.0")
     assert isinstance(OC.select(which=off, environ=env), ld.Result)
-    rel = OC.select(which=lambda n, path=None: str(d / n) if n == "kilo" else None, environ={})
+    rel = OC.select(
+        which=lambda n, path=None: f"bin/{n}" if n == "kilo" else None,
+        version=lambda p: "1",
+        environ={},
+    )
     assert rel.name == "kilo" and rel.path.startswith("/")
 
 
