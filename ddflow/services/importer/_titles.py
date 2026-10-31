@@ -1,7 +1,12 @@
 """Title and prose parsing primitives (ids, done-words, dispositions, globs)."""
+
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._tables import Found
 
 TODO_GLOBS = (
     "docs/todo/open/*.md",
@@ -486,4 +491,78 @@ def _split_nonbold(body: str) -> tuple[str, str]:
     first, _sep, rest = head.partition(". ")
     return first, f"{rest} {tail}".strip()
 
-__all__ = ["TODO_GLOBS", "LESSON_GLOBS", "LESSON_SUMMARY_GLOBS", "_DONE_WORD", "_WORD_END", "_CLAUSE_END", "_NOT_AFTER_OF", "_DONE_CAPS", "_DONE_CAPS_ENDING", "_DONE_CHECK", "_DONE_CLAUSE", "_NEGATION", "_NEGATED_BEFORE", "_DECISION_INDEX_STEMS", "DECISION_GLOBS", "RESEARCH_GLOBS", "OPTMEM_GLOBS", "_OPTMEM", "JOURNAL_GLOBS", "SOURCE_GLOBS", "_CHECK", "_ID", "_ITEM_ID", "_is_id", "_titled", "_split_id", "_BOLD", "_clean_title", "_TITLE_CHARS", "_OLD_PHASE_SLUG", "_OLD_TASK_SLUG", "_SENTENCE_END", "_BODY_CHARS", "_title_of", "_cut_title", "_BACKTICKED", "_LINE_SUFFIX", "_PATH_SUFFIX", "_PROSE_DEP", "_PROSE_NEGATED", "_PROSE_NEGATING", "_ID_TOKEN", "_prose_globs", "_prose_needs", "_add_prose_needs", "_continuation", "_GLOBS", "_NEEDS", "_RESOURCES", "_HEADING", "_CLOSED_MARKERS", "_HOLD_MARKERS", "_ASIDE_NOT_DISPOSITIONS", "_ANNOTATION_CHARS", "_SECTION_HOLD", "_FUTURE_WORK", "_SECTION_LIVE", "_SECTION_CLOSED", "_STATUS_LINE", "_STATUS_CLOSED", "_STATUS_HOLD", "_STATUS_LIVE", "_TITLE_ASIDE", "_ASIDE_CLAUSE", "_VERDICT_FILLER", "_leads_with", "_verdict_asides", "_marker_in", "_OPEN_ASIDE", "_NONBOLD_SPLIT", "_LEAD_WORD_CHARS", "_split_nonbold"]
+
+__all__ = [
+    "DECISION_GLOBS",
+    "JOURNAL_GLOBS",
+    "LESSON_GLOBS",
+    "LESSON_SUMMARY_GLOBS",
+    "OPTMEM_GLOBS",
+    "RESEARCH_GLOBS",
+    "SOURCE_GLOBS",
+    "TODO_GLOBS",
+    "_ANNOTATION_CHARS",
+    "_ASIDE_CLAUSE",
+    "_ASIDE_NOT_DISPOSITIONS",
+    "_BACKTICKED",
+    "_BODY_CHARS",
+    "_BOLD",
+    "_CHECK",
+    "_CLAUSE_END",
+    "_CLOSED_MARKERS",
+    "_DECISION_INDEX_STEMS",
+    "_DONE_CAPS",
+    "_DONE_CAPS_ENDING",
+    "_DONE_CHECK",
+    "_DONE_CLAUSE",
+    "_DONE_WORD",
+    "_FUTURE_WORK",
+    "_GLOBS",
+    "_HEADING",
+    "_HOLD_MARKERS",
+    "_ID",
+    "_ID_TOKEN",
+    "_ITEM_ID",
+    "_LEAD_WORD_CHARS",
+    "_LINE_SUFFIX",
+    "_NEEDS",
+    "_NEGATED_BEFORE",
+    "_NEGATION",
+    "_NONBOLD_SPLIT",
+    "_NOT_AFTER_OF",
+    "_OLD_PHASE_SLUG",
+    "_OLD_TASK_SLUG",
+    "_OPEN_ASIDE",
+    "_OPTMEM",
+    "_PATH_SUFFIX",
+    "_PROSE_DEP",
+    "_PROSE_NEGATED",
+    "_PROSE_NEGATING",
+    "_RESOURCES",
+    "_SECTION_CLOSED",
+    "_SECTION_HOLD",
+    "_SECTION_LIVE",
+    "_SENTENCE_END",
+    "_STATUS_CLOSED",
+    "_STATUS_HOLD",
+    "_STATUS_LINE",
+    "_STATUS_LIVE",
+    "_TITLE_ASIDE",
+    "_TITLE_CHARS",
+    "_VERDICT_FILLER",
+    "_WORD_END",
+    "_add_prose_needs",
+    "_clean_title",
+    "_continuation",
+    "_cut_title",
+    "_is_id",
+    "_leads_with",
+    "_marker_in",
+    "_prose_globs",
+    "_prose_needs",
+    "_split_id",
+    "_split_nonbold",
+    "_title_of",
+    "_titled",
+    "_verdict_asides",
+]

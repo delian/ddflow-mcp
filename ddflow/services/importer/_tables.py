@@ -1,9 +1,37 @@
 """`Found`/`Duplicate`/`ImportPlan` and the Markdown-table task scan (`scan_todos`)."""
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
 from ...core.ids import free
+from ._titles import (
+    _ANNOTATION_CHARS,
+    _ASIDE_NOT_DISPOSITIONS,
+    _CLOSED_MARKERS,
+    _FUTURE_WORK,
+    _HOLD_MARKERS,
+    _LEAD_WORD_CHARS,
+    _OPEN_ASIDE,
+    _SECTION_CLOSED,
+    _SECTION_HOLD,
+    _SECTION_LIVE,
+    _STATUS_CLOSED,
+    _STATUS_HOLD,
+    _STATUS_LINE,
+    _STATUS_LIVE,
+    _TITLE_ASIDE,
+    _clean_title,
+    _is_id,
+    _marker_in,
+    _split_id,
+    _split_nonbold,
+    _verdict_asides,
+)
+
 
 def _disposition(raw: str) -> tuple[str, str]:
     """`("closed" | "hold" | "", marker)` for one checkbox's text (after `[ ]`).
@@ -548,4 +576,40 @@ def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
     taken.add(got)
     return got
 
-__all__ = ["_disposition", "_heading_disposition", "_HEADING_LEAD", "_heading_title", "_BY_HEADING", "_push_heading", "_NEGATED", "_status_disposition", "_SECTION", "_ANY_HEADING", "_FENCE", "_fenced", "_sections", "NOTE_SESSIONS", "LEGACY_MEMORY_SESSION", "KINDS", "Found", "Duplicate", "ImportPlan", "_files", "_NEEDS_SPLIT", "_ID_DECOR", "_GLOB_DECOR", "_parse_globs", "_parse_needs", "_table_cells", "_TABLE_FIELDS", "_TABLE_HEAD", "_table_columns", "_table_delim", "_col", "_table_task", "_scan_task_tables", "_unique"]
+
+__all__ = [
+    "KINDS",
+    "LEGACY_MEMORY_SESSION",
+    "NOTE_SESSIONS",
+    "_ANY_HEADING",
+    "_BY_HEADING",
+    "_FENCE",
+    "_GLOB_DECOR",
+    "_HEADING_LEAD",
+    "_ID_DECOR",
+    "_NEEDS_SPLIT",
+    "_NEGATED",
+    "_SECTION",
+    "_TABLE_FIELDS",
+    "_TABLE_HEAD",
+    "Duplicate",
+    "Found",
+    "ImportPlan",
+    "_col",
+    "_disposition",
+    "_fenced",
+    "_files",
+    "_heading_disposition",
+    "_heading_title",
+    "_parse_globs",
+    "_parse_needs",
+    "_push_heading",
+    "_scan_task_tables",
+    "_sections",
+    "_status_disposition",
+    "_table_cells",
+    "_table_columns",
+    "_table_delim",
+    "_table_task",
+    "_unique",
+]

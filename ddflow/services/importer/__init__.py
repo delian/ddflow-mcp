@@ -15,7 +15,7 @@ to their source line, and offered.
 
 **The agent does what needs JUDGEMENT**, guided by the `import-existing-project`
 workflow prompt: which headings are phases and which are tasks, what depends on what,
-which globs each touches, whether a five-year-old lesson still applies. That half is not
+which globs each touches, whether a five-year-old story still applies. That half is not
 automatable and pretending otherwise produces a confident, wrong queue — and a wrong
 queue is worse than no queue, because the scheduler will hand it out.
 
@@ -30,21 +30,54 @@ Three rules hold this together:
    import you have to get right first time.
 """
 
-from ._titles import *
-from ._tables import *
-from ._todo import *
-from ._scan import *
-from ._phases import *
-from ._plan import *
-from ._apply import *
-from . import _titles, _tables, _todo, _scan, _phases, _plan, _apply
+from . import _apply, _phases, _plan, _scan, _tables, _titles, _todo
 
-# `services.importer` was one module split into submodules; a function in one submodule
-# calls a helper defined in another by bare name, resolved from the defining module's
-# globals at call time. Publish the merged namespace into each submodule so those
-# cross-references keep resolving without top-level circular imports.
-for _m in (_titles, _tables, _todo, _scan, _phases, _plan, _apply):
-    _m.__dict__.update({k: v for k, v in globals().items() if not k.startswith('__')})
-del _m
+# `services.importer` was one module split into submodules. Re-export its flat namespace
+# as attributes of this package so every existing `from ddflow.services.importer import X`
+# keeps resolving, and publish that namespace into each submodule so a function in one
+# submodule can call a helper defined in another by bare name (resolved from the defining
+# module's globals at call time) without top-level circular imports.
+_EXPORTS = {
+    _name: getattr(_mod, _name)
+    for _mod in (_apply, _phases, _plan, _scan, _tables, _titles, _todo)
+    for _name in _mod.__all__
+}
+globals().update(_EXPORTS)
+for _mod in (_apply, _phases, _plan, _scan, _tables, _titles, _todo):
+    _mod.__dict__.update(_EXPORTS)
+del _EXPORTS
 
-__all__ = ["TODO_GLOBS", "LESSON_GLOBS", "LESSON_SUMMARY_GLOBS", "DECISION_GLOBS", "RESEARCH_GLOBS", "OPTMEM_GLOBS", "JOURNAL_GLOBS", "SOURCE_GLOBS", "NOTE_SESSIONS", "LEGACY_MEMORY_SESSION", "KINDS", "Found", "Duplicate", "ImportPlan", "scan_todos", "scan_lessons", "scan_lesson_summaries", "scan_decisions", "scan_research", "scan_journal", "scan_optmem", "scan_branches", "Touched", "touched_since_import", "Scanner", "sources_from", "all_source_globs", "plan_import", "VerifyReport", "verify_import", "task_body", "apply_import"]
+__all__ = [
+    "DECISION_GLOBS",
+    "JOURNAL_GLOBS",
+    "KINDS",
+    "LEGACY_MEMORY_SESSION",
+    "LESSON_GLOBS",
+    "LESSON_SUMMARY_GLOBS",
+    "NOTE_SESSIONS",
+    "OPTMEM_GLOBS",
+    "RESEARCH_GLOBS",
+    "SOURCE_GLOBS",
+    "TODO_GLOBS",
+    "Duplicate",
+    "Found",
+    "ImportPlan",
+    "Scanner",
+    "Touched",
+    "VerifyReport",
+    "all_source_globs",
+    "apply_import",
+    "plan_import",
+    "scan_branches",
+    "scan_decisions",
+    "scan_journal",
+    "scan_lesson_summaries",
+    "scan_lessons",
+    "scan_optmem",
+    "scan_research",
+    "scan_todos",
+    "sources_from",
+    "task_body",
+    "touched_since_import",
+    "verify_import",
+]

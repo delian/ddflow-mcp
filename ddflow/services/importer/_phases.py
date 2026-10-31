@@ -1,12 +1,41 @@
 """Phase settle/disposition, touch detection and scanner plumbing."""
+
 from __future__ import annotations
 
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from ...core.model import DONE, OPEN
-from ._tables import Found
-from ._titles import _NEGATION
+from ._scan import (
+    _NOTE_EXAMPLES,
+    _attach_summaries,
+    scan_decisions,
+    scan_journal,
+    scan_lesson_summaries,
+    scan_lessons,
+    scan_optmem,
+    scan_research,
+)
+from ._tables import Found, ImportPlan, _unique
+from ._titles import (
+    _DONE_CAPS,
+    _DONE_CAPS_ENDING,
+    _DONE_CHECK,
+    _DONE_CLAUSE,
+    _NEGATED_BEFORE,
+    _NEGATION,
+    DECISION_GLOBS,
+    JOURNAL_GLOBS,
+    LESSON_GLOBS,
+    LESSON_SUMMARY_GLOBS,
+    OPTMEM_GLOBS,
+    RESEARCH_GLOBS,
+    TODO_GLOBS,
+)
+from ._todo import scan_todos
+
 
 def _note_withheld(
     plan: ImportPlan, ticked: list[Found], closed: list[str], held: list[str]
@@ -535,4 +564,32 @@ def _triage_found(
         plan.found.append(f)
     return closed, held, deferred_done, existing_phases
 
-__all__ = ["_note_withheld", "_IMPORT_ADDS", "_IMPORT_STATES", "_STATE_EVENTS", "Touched", "_by_import", "touched_since_import", "_HEADING_LIVE", "_HEADING_STALLED", "_NEGATED_DONE", "_claims_done", "_says_unfinished", "_phase_verdict", "_Settled", "_is_imported_phase", "_settle_existing", "_settle_phases", "_settle_needed_phases", "_note_settled", "Scanner", "_scanners", "sources_from", "all_source_globs", "_scan_sources", "_keep_imported_ids", "_triage_found"]
+
+__all__ = [
+    "_HEADING_LIVE",
+    "_HEADING_STALLED",
+    "_IMPORT_ADDS",
+    "_IMPORT_STATES",
+    "_NEGATED_DONE",
+    "_STATE_EVENTS",
+    "Scanner",
+    "Touched",
+    "_Settled",
+    "_by_import",
+    "_claims_done",
+    "_is_imported_phase",
+    "_keep_imported_ids",
+    "_note_settled",
+    "_note_withheld",
+    "_phase_verdict",
+    "_says_unfinished",
+    "_scan_sources",
+    "_scanners",
+    "_settle_existing",
+    "_settle_needed_phases",
+    "_settle_phases",
+    "_triage_found",
+    "all_source_globs",
+    "sources_from",
+    "touched_since_import",
+]

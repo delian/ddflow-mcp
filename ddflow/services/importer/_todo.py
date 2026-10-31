@@ -1,13 +1,51 @@
 """Todo/box/heading scanning and section parsing helpers."""
+
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
 from ...config import Config
 from ...core import ids as IDS
 from ...core.globs import match as glob_match
 from ...core.slug import slug as _slug
 from ...core.slug import slug_words as _slug_words
-from ._titles import TODO_GLOBS
+from ._tables import (
+    _ANY_HEADING,
+    _SECTION,
+    Found,
+    _disposition,
+    _fenced,
+    _files,
+    _parse_globs,
+    _parse_needs,
+    _push_heading,
+    _scan_task_tables,
+    _sections,
+    _status_disposition,
+    _unique,
+)
+from ._titles import (
+    _CHECK,
+    _GLOBS,
+    _HEADING,
+    _NEEDS,
+    _OLD_PHASE_SLUG,
+    _OLD_TASK_SLUG,
+    _RESOURCES,
+    TODO_GLOBS,
+    _add_prose_needs,
+    _clean_title,
+    _continuation,
+    _cut_title,
+    _prose_globs,
+    _split_id,
+    _title_of,
+    _titled,
+)
+
 
 def _box_disposition(
     body: str, stack: list[tuple[int, tuple[str, str] | None]], archived: bool
@@ -533,4 +571,29 @@ def _id_entries(text: str) -> list[tuple[str, str, int]]:
 def _one_paragraph(m: re.Match | None) -> str:
     return " ".join(m.group(1).split()) if m else ""
 
-__all__ = ["_box_disposition", "_ids_config", "scan_todos", "_set_legacy_ids", "_PREFIX_QUORUM", "_DATE", "_date_hint", "_HEADING_NUMBER", "_heading_number", "_agrees", "_adopt_child_prefix", "_common_dotted_prefix", "_scan_sections", "_INDEX_TITLES", "_is_index_section", "_LESSON_ID", "_LESSON_HEAD", "_COMPRESSED", "_SEEN_IN", "_LESSON_BODY_CHARS", "_lesson_level", "_id_entries", "_one_paragraph"]
+
+__all__ = [
+    "_COMPRESSED",
+    "_DATE",
+    "_HEADING_NUMBER",
+    "_INDEX_TITLES",
+    "_LESSON_BODY_CHARS",
+    "_LESSON_HEAD",
+    "_LESSON_ID",
+    "_PREFIX_QUORUM",
+    "_SEEN_IN",
+    "_adopt_child_prefix",
+    "_agrees",
+    "_box_disposition",
+    "_common_dotted_prefix",
+    "_date_hint",
+    "_heading_number",
+    "_id_entries",
+    "_ids_config",
+    "_is_index_section",
+    "_lesson_level",
+    "_one_paragraph",
+    "_scan_sections",
+    "_set_legacy_ids",
+    "scan_todos",
+]

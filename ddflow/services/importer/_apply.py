@@ -1,10 +1,20 @@
 """`apply_import`: write the planned import to the queue."""
+
 from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 from ...config import Config
 from ...core.model import Item, fold
+from ...infra.log import EventLog
 from .. import similar
 from ..items import TaskDraft, add_task
+from ._scan import _NOTE_EXAMPLES
+from ._tables import NOTE_SESSIONS, Duplicate, Found, ImportPlan
+from ._titles import _BODY_CHARS
+
 
 def _apply_state(log: EventLog, f: Found, bump: Callable[[str], None]) -> None:
     """The state an imported task lands in, beyond `task.added`: done, closed or held.
@@ -385,4 +395,19 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         counts["ticked task(s) left out, see --include-done"] = plan.ticked_left_out
     return counts
 
-__all__ = ["_apply_state", "_resolve_chains", "_SHOWN_IDENTICAL", "_dedupe_found", "_memories_within", "_leave_out_long_memories", "_count_long_memories", "_imported_research", "task_body", "_add_imported_tasks", "_SCREENED", "_REFUSED_KEY", "apply_import"]
+
+__all__ = [
+    "_REFUSED_KEY",
+    "_SCREENED",
+    "_SHOWN_IDENTICAL",
+    "_add_imported_tasks",
+    "_apply_state",
+    "_count_long_memories",
+    "_dedupe_found",
+    "_imported_research",
+    "_leave_out_long_memories",
+    "_memories_within",
+    "_resolve_chains",
+    "apply_import",
+    "task_body",
+]

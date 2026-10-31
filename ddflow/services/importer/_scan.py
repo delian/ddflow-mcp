@@ -1,13 +1,40 @@
 """Lessons, decisions, research, journal, optmem and branch scans."""
+
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
 from ...core.schedule import is_external
 from ...core.slug import slug as _slug
 from ...infra import git as G
 from ...infra import worktree as W
-from ._titles import DECISION_GLOBS, JOURNAL_GLOBS, LESSON_GLOBS, LESSON_SUMMARY_GLOBS, OPTMEM_GLOBS, RESEARCH_GLOBS
-from ._todo import _LESSON_ID
+from ._tables import _SECTION, Found, ImportPlan, _fenced, _files, _sections
+from ._titles import (
+    _DECISION_INDEX_STEMS,
+    _OPTMEM,
+    DECISION_GLOBS,
+    JOURNAL_GLOBS,
+    LESSON_GLOBS,
+    LESSON_SUMMARY_GLOBS,
+    OPTMEM_GLOBS,
+    RESEARCH_GLOBS,
+    _cut_title,
+)
+from ._todo import (
+    _COMPRESSED,
+    _LESSON_BODY_CHARS,
+    _LESSON_HEAD,
+    _LESSON_ID,
+    _SEEN_IN,
+    _date_hint,
+    _id_entries,
+    _is_index_section,
+    _lesson_level,
+    _one_paragraph,
+    _scan_sections,
+)
+
 
 def scan_lessons(
     repo: Path, globs: tuple[str, ...] = LESSON_GLOBS
@@ -428,9 +455,11 @@ def _flag_shipped_phases_with_open_tasks(plan: ImportPlan) -> None:
     Real drift, measured on a real repository, and the reason it matters is one-sided:
     if the heading is right the queue is about to hand out work that is already done,
     and the agent that picks it up will redo it. Reported, never acted on -- which of
-    the two is stale is exactly the judgement the operator has to make, and guessing it
-    would either resurrect finished work or silently close live work.
+     the two is stale is exactly the judgement the operator has to make, and guessing it
+     would either resurrect finished work or silently close live work.
     """
+    from ._phases import _claims_done  # deferred: defined below, in _phases
+
     open_by_phase: dict[str, int] = {}
     for f in plan.found:
         if (
@@ -557,4 +586,32 @@ def _pull_in_needed(
         )
     return done, closed
 
-__all__ = ["scan_lessons", "_BULLET", "_CITES", "_TRAILING_CITE", "_GENERATED_MARK", "_summary_bullet", "scan_lesson_summaries", "_LEAD", "_summary_text", "_norm", "_id_key", "_attach_summaries", "scan_decisions", "scan_research", "_RESEARCH_HEAD", "_research_ident", "_research_legacy", "_verdict", "scan_journal", "scan_optmem", "scan_branches", "_NOTE_EXAMPLES", "_flag_shipped_phases_with_open_tasks", "_flag_unresolvable_needs", "_known_ids", "_pull_in_needed"]
+
+__all__ = [
+    "_BULLET",
+    "_CITES",
+    "_GENERATED_MARK",
+    "_LEAD",
+    "_NOTE_EXAMPLES",
+    "_RESEARCH_HEAD",
+    "_TRAILING_CITE",
+    "_attach_summaries",
+    "_flag_shipped_phases_with_open_tasks",
+    "_flag_unresolvable_needs",
+    "_id_key",
+    "_known_ids",
+    "_norm",
+    "_pull_in_needed",
+    "_research_ident",
+    "_research_legacy",
+    "_summary_bullet",
+    "_summary_text",
+    "_verdict",
+    "scan_branches",
+    "scan_decisions",
+    "scan_journal",
+    "scan_lesson_summaries",
+    "scan_lessons",
+    "scan_optmem",
+    "scan_research",
+]

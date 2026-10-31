@@ -1,12 +1,34 @@
 """`plan_import` and `verify_import`."""
+
 from __future__ import annotations
 
 import os
 import re
 import stat
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from ...config import Config
 from ...infra.log import EventLog
+from ._phases import (
+    _claims_done,
+    _note_withheld,
+    _scan_sources,
+    _settle_needed_phases,
+    _settle_phases,
+    _triage_found,
+    touched_since_import,
+)
+from ._scan import (
+    _NOTE_EXAMPLES,
+    _flag_shipped_phases_with_open_tasks,
+    _flag_unresolvable_needs,
+    _known_ids,
+    _pull_in_needed,
+    scan_branches,
+)
+from ._tables import LEGACY_MEMORY_SESSION, NOTE_SESSIONS, Found, ImportPlan, _unique
+
 
 def _cap_or_settle(
     repo: Path,
@@ -104,8 +126,10 @@ def plan_import(
     With ``include_done`` a phase whose every task is done or closed is proposed DONE --
     and an imported phase already in the queue gets a `completion` once the re-run has
     filled it in (`_settle_phases`). ``events`` is the log ``state`` was folded from, which
-    says whether somebody touched such a phase since; read from ``repo`` when omitted.
+     says whether somebody touched such a phase since; read from ``repo`` when omitted.
     """
+    from ._apply import _dedupe_found, _leave_out_long_memories  # deferred: defined in _apply
+
     plan = ImportPlan()
     known = _known_ids(state)
     sources = sources or {}
@@ -490,4 +514,19 @@ def verify_import(
     )
     return r
 
-__all__ = ["_cap_or_settle", "plan_import", "VerifyReport", "_scan_queue", "_note_sources", "_memory_sources", "_MAX_SOURCE_PATH", "_MARKUP_AROUND_PATH", "_MD_LINK", "_MARKUP_INSIDE", "_path_shaped", "_has_open_child", "verify_import"]
+
+__all__ = [
+    "_MARKUP_AROUND_PATH",
+    "_MARKUP_INSIDE",
+    "_MAX_SOURCE_PATH",
+    "_MD_LINK",
+    "VerifyReport",
+    "_cap_or_settle",
+    "_has_open_child",
+    "_memory_sources",
+    "_note_sources",
+    "_path_shaped",
+    "_scan_queue",
+    "plan_import",
+    "verify_import",
+]
