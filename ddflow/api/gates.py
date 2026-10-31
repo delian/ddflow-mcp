@@ -202,6 +202,18 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
+def _list_overrides(log, cfg, st, narrowed: bool) -> O.Outcome:
+    if narrowed:
+        return O.failed("gate.list", "--overrides is its own listing; give no --refuted/--since")
+    found = OVR.rows(log.read_all(), st, cfg)
+    return O.ok(
+        "gate.list",
+        overrides=found,
+        count=len(found),
+        text="\n".join(OVR.line(r) for r in found) or "no gate was passed by an override",
+    )
+
+
 def list_gates(
     repo: Path, *, refuted: bool = False, since: str = "", agent: str = "", overrides: bool = False
 ) -> O.Outcome:
@@ -210,16 +222,8 @@ def list_gates(
     whose last finding was settled by a triage rather than a clean re-review. ``since``
     (an ISO date or timestamp) keeps those recorded at or after it."""
     _log, cfg, st = _load(repo, agent)
-    if overrides and (refuted or since):
-        return O.failed("gate.list", "--overrides is its own listing; give no --refuted/--since")
     if overrides:
-        found = OVR.rows(_log.read_all(), st, cfg)
-        return O.ok(
-            "gate.list",
-            overrides=found,
-            count=len(found),
-            text="\n".join(OVR.line(r) for r in found) or "no gate was passed by an override",
-        )
+        return _list_overrides(_log, cfg, st, refuted or bool(since))
     if since and not refuted:
         return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
