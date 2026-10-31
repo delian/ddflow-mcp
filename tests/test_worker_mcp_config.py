@@ -313,3 +313,15 @@ def test_the_knob_has_an_upgrade_fragment():
     manifest = UM.load()
     got = [c for _v, _d, changes in manifest.releases for c in changes if c.key == "mcp.lane_tools"]
     assert got and got[0].new == ""  # JSON-encoded in the fragment: '""' is the empty string
+
+
+def test_a_lane_file_that_is_another_name_for_a_current_one_is_not_reported_stale(tmp_path):
+    """A case-insensitive filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: same file."""
+    import os
+
+    entry = {"command": "c"}
+    WM.write_lanes(tmp_path, entry, "impl=all")
+    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("IMPL"))
+    assert [x for x in WM.write_lanes(tmp_path, entry, "impl=all") if "no longer" in x] == []
+    (tmp_path / WM.lane_rel("old")).write_text("{}")
+    assert any("old" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "impl=all"))

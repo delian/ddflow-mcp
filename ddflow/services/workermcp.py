@@ -67,9 +67,17 @@ def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
     stem = Path(REL).stem + "-"
     for f in sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []:
         lane = f.stem[len(stem) :]
-        if lane not in lanes:
+        if lane not in lanes and not _is_a_lane_file(Path(repo), f, lanes):
             out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
     return out
+
+
+def _is_a_lane_file(repo: Path, f: Path, lanes: Mapping[str, str]) -> bool:
+    """``f`` is the same file as one of ``lanes``' (a case-insensitive filesystem lists it under
+    the other spelling)."""
+    return any(
+        (repo / lane_rel(lane)).is_file() and f.samefile(repo / lane_rel(lane)) for lane in lanes
+    )
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
