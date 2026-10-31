@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
 from ...config import family_for
 from ...core import clock
 from ...core import outcome as O

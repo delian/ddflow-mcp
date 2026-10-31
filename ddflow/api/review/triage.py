@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+
 from ...core import blobref as B
 from ...core import outcome as O
 from ...infra import worktree as W
@@ -17,11 +18,10 @@ from ...services.gates import reviewed_paths as RP
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
 from ..gates import item_tree
+from ..knowledge.regression import _unresolved_tests
 from ..review_finding_ref import resolve as resolve_finding
-
-from .findings import _finding_listing, _chunk_numbers
+from .findings import _chunk_numbers, _finding_listing
 from .records import _prior_evidence
-
 
 _NODE = re.compile(r"[\w./-]+\.py::\S+")
 

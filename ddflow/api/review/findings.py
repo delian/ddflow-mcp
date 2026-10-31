@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any
+
 from ...core import blobref as B
 from ...services import gates as GD
 from ...services import logblobs as LB
 from ...services import review as RV
-from ..review_supersede import carry, round_evidence, superseded_digests
-
+from ..review_supersede import carry
 from .delta import _last_head
 from .records import _prior_evidence
 

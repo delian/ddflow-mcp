@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from ...core.bookkeeping import EVENTS_EXCLUDE
 from ...infra import worktree as W
 from ...services.enforce import SELF_MANAGED
 from ...services.review_noise import registered_submodules, without_stray_gitlinks
 from ..lifecycle import callers_tree
-
 
 _NOISE_PATHSPEC = ("--", ".", *EVENTS_EXCLUDE)
 

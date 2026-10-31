@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
 from ...infra import worktree as W
 from ...services.enforce import SELF_MANAGED
 from ...services.review_noise import registered_submodules, without_stray_gitlinks
-
 from .diff import _NOISE_PATHSPEC, _NOISE_PREFIXES, commit_diff, diff_for
-from .records import _prior_evidence, _last_review
-
+from .records import _last_review, _prior_evidence
 
 _DELTA_CUT_HOW = "the delta since "  # `diff_source` of a --chunk re-run cut from a delta
 

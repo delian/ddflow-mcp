@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
+
 from ...core import blobref as B
 from ...services.guidance import inject as GI
-
 from .records import _last_review
-
 
 _BACKGROUND_HINT = (
     "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "

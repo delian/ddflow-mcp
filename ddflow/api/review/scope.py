@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
 from ...core import blobref as B
 from ...core import outcome as O
 from ...infra import worktree as W
@@ -14,10 +15,10 @@ from ...services.gates.rounds import kept_copy as _kept_copy
 from ...services.gates.rounds import rounds_used as _rounds_used
 from ..gates import item_tree
 from ..review_findings import _rows as _numbered_findings
-
-from .delta import _NOTHING_CHANGED, _pick_diff, _last_head, _kind, _head_of, _delta_diff
-from .records import _review_runs, _last_review
+from ..review_supersede import superseded_digests
+from .delta import _NOTHING_CHANGED, _delta_diff, _head_of, _kind, _last_head, _pick_diff
 from .findings import _SETTLED
+from .records import _last_review, _review_runs
 from .triage import _moved_paths, _name_paths, _rerun_scope
 
 

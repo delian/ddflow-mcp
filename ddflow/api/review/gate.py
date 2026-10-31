@@ -7,6 +7,7 @@ import inspect
 import time
 from pathlib import Path
 from typing import Any
+
 from ...core import clock
 from ...core import outcome as O
 from ...services import gates as GD
@@ -17,10 +18,16 @@ from ...services.gates import running as RUN
 from ...services.gates.rounds import delta_rounds as _delta_rounds
 from .._base import _load
 from ..gate_guard import closed_item_refusal, wrong_tree_refusal
-
-from .records import _prior_evidence, _record, _round_evidence, _reason_of
-from .findings import _link_refuted, _merge_delta, _track_rerun_raised, _DELTA_KEYS, _hold, _say_triage_scope
 from .delta import _DELTA_CUT_HOW
+from .findings import (
+    _DELTA_KEYS,
+    _hold,
+    _link_refuted,
+    _merge_delta,
+    _say_triage_scope,
+    _track_rerun_raised,
+)
+from .records import _prior_evidence, _reason_of, _record, _round_evidence
 
 
 def _order_refusal(

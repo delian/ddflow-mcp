@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any
+
 from ...services import gates as GD
 from ...services import leasekeep as LK
 from ...services import logblobs as LB
 from ...services import review as RV
 from ...services.gates import measured as GR
 from ..gates import item_tree
-
 
 PROGRESS_EVERY_S = 60
 

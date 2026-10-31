@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import secrets
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
 from ...core import outcome as O
 from ...services import gates as GD
 from ...services import prompts as P
@@ -16,16 +17,39 @@ from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
-
-from .gate import _log_started, _unknown_item, _misplaced, _ends_on_signal, _record_review, _name_the_item, _say_selection, _early_refusal, _intent_missing
-from .scope import _justification, _mark_partial_retry, _scope, _cite_grant, _budget
-from .diff import diff_for
-from .records import PROGRESS_EVERY_S, _lease_ticker, _say_result, _record, _finding_rows, _item_intent, _gate_outcome
-from .findings import _announce_rerun, _link_refuted
-from .context import _BACKGROUND_HINT, _converges, _floor_for, _with_previous_findings, _with_guidance
-from .triage import _reviewed_snapshot, _why_outcome
+from ..review_supersede import round_evidence
+from .context import (
+    _BACKGROUND_HINT,
+    _converges,
+    _floor_for,
+    _with_guidance,
+    _with_previous_findings,
+)
 from .delta import _head_of
+from .diff import diff_for
+from .findings import _announce_rerun, _link_refuted
+from .gate import (
+    _early_refusal,
+    _intent_missing,
+    _log_started,
+    _misplaced,
+    _name_the_item,
+    _record_review,
+    _say_selection,
+    _unknown_item,
+)
+from .records import (
+    PROGRESS_EVERY_S,
+    _finding_rows,
+    _gate_outcome,
+    _item_intent,
+    _lease_ticker,
+    _record,
+    _say_result,
+)
 from .reviewers import _ReplyFile
+from .scope import _budget, _cite_grant, _justification, _mark_partial_retry, _scope
+from .triage import _reviewed_snapshot, _why_outcome
 
 
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
