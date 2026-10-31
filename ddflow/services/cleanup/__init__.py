@@ -50,29 +50,32 @@ _SUBMODULE_OF = {
     "record_removed": "dispose",
     "stands_in": "dispose",
     "sweep_finished": "dispose",
-    # survey
-    "Path": "survey",
-    "_classify": "survey",
-    "_claimed_by": "survey",
-    "_measure": "survey",
-    "_ours": "survey",
-    "_owner_alive": "survey",
-    "_scratch_row": "survey",
-    "_stale_branch": "survey",
-    "_under_sys_tmp": "survey",
-    "landed_leftovers_only": "survey",
-    "our_prefixes": "survey",
-    "our_trees": "survey",
-    "proved_leftover_tip": "survey",
-    "scratch_leftovers": "survey",
-    "survey": "survey",
-    "unclaimed_trees": "survey",
-    # apply
-    "_pruned_scratch": "apply",
-    "_registered": "apply",
-    "_remove_planned": "apply",
-    "apply": "apply",
+    # plan (survey/classification)
+    "Path": "plan",
+    "_classify": "plan",
+    "_claimed_by": "plan",
+    "_measure": "plan",
+    "_ours": "plan",
+    "_owner_alive": "plan",
+    "_scratch_row": "plan",
+    "_stale_branch": "plan",
+    "_under_sys_tmp": "plan",
+    "landed_leftovers_only": "plan",
+    "our_prefixes": "plan",
+    "our_trees": "plan",
+    "proved_leftover_tip": "plan",
+    "scratch_leftovers": "plan",
+    "survey": "plan",
+    "unclaimed_trees": "plan",
+    # actions (apply)
+    "_pruned_scratch": "actions",
+    "_registered": "actions",
+    "_remove_planned": "actions",
+    "apply": "actions",
 }
+
+__all__: list[str] = list(_SUBMODULE_OF)  # star-import re-exports exactly the public API
+
 
 _MODULES: dict[str, Any] = {}
 
@@ -86,9 +89,8 @@ def __getattr__(name: str) -> Any:
         mod = importlib.import_module(f"{__name__}.{sub}")
         _MODULES[sub] = mod
     value = getattr(mod, name)
-    # Importing a child submodule binds its module object on THIS package under the
-    # submodule's own name; when a public name shares that submodule's name (`survey`,
-    # `apply`), re-bind the callable so the name keeps resolving to it, not the module.
+    # Cache the resolved callable back onto this package so the next lookup short-circuits
+    # __getattr__; also keeps monkeypatch (setattr on the package attr) working unchanged.
     globals()[name] = value
     return value
 

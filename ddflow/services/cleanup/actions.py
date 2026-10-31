@@ -22,8 +22,8 @@ from .. import ci as CI
 from ..leaseclock import localize
 from ..pins import pin_files
 from .model import Disposal, Plan, TreeState, _Protected
+from .plan import _owner_alive
 from .stranded import _protected
-from .survey import _owner_alive
 
 
 def _registered(root: Path, tree: Path) -> bool:

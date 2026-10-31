@@ -223,7 +223,7 @@ def _owner_alive(tree: Path) -> bool | None:
     except FileNotFoundError:
         # No /proc/<pid> while /proc itself serves: the pid is gone -- DEFINITELY exited.
         # (The ci run and this sweep share a uid, so a live owner's pid is never ENOENT.)
-        return False if Path("/proc").exists() else None
+        return False if _Path("/proc").exists() else None
     except (OSError, IndexError):
         return None
 
