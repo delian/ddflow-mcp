@@ -67,12 +67,44 @@ def _write_selection(
     return pairs
 
 
-def _approval_route(log, cfg: Config, verb: str, doc: str, state: str, approval: str) -> str:
+def _approval_route(
+    log, cfg: Config, verb: str, doc: str, state: str, approval: str, *, target: str = "", **args
+) -> str:
     """ "" when an operator's approval of ``verb`` on ``doc`` (as it is now, ``state``) is spent;
     else the text that names the route (the request filed, how it is answered in chat)."""
-    canon = Canon(verb=verb, agent=log.agent_id, item=doc, state=content_digest(state))
+    canon = Canon(
+        verb=verb, agent=log.agent_id, item=doc, target=target, args=args,
+        state=content_digest(state),
+    )  # fmt: skip
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
     return "" if decision.ok else decision.message
+
+
+def gate_force(
+    repo: Path, log, cfg: Config, doc: str, rel: str, *,
+    requested_agent: str = "", via_mcp: bool = False, approval: str = "",
+) -> str:  # fmt: skip
+    """ "" when this write may override hand-edit protection: a person at a terminal, or an agent
+    whose approval of THIS document at THIS target as it is now (its bytes) is spent. Else the
+    text that names the route (D-RA-1: ``export.force``, T2)."""
+    if not _is_agent(requested_agent, via_mcp):
+        return ""
+    path, norm = W.safe_target(repo, rel)
+    now = path.read_bytes().decode("utf-8", "replace") if path.is_file() else ""
+    return _approval_route(log, cfg, "export.force", doc, now, approval, target=norm)
+
+
+def _local_by_approval(log, cfg: Config, doc: str, action: str, approval: str) -> None:
+    """An agent's per-machine (``--local``) selection of ``doc``: refused unless it spends the
+    operator's approval of exactly this action on this document (``export.machine``)."""
+    route = _approval_route(log, cfg, "export.machine", doc, f"local:{action}:{doc}", approval,
+                            action=action)  # fmt: skip
+    if route:
+        raise ExportError(
+            f"a per-machine selection (--local) is the operator's, and this call is an agent's. "
+            f"{route}",
+            EXIT_REFUSED,
+        )
 
 
 def _unlock_by_approval(log, cfg: Config, doc: str, lock, why_agent: str, approval: str) -> str:
@@ -114,6 +146,7 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
 
     R.get(doc)  # unknown kind: refused, listing the kinds
     why_agent = _is_agent(requested_agent, via_mcp)
+    by_agent = bool(why_agent)  # the unlock below may turn why_agent off; --local still asks
     lock = _locked(st, doc)
     spec = ops.spec_for(cfg, doc, path=path, mode=mode, writing=True)  # mode/kind checks
     try:
@@ -121,6 +154,8 @@ def enable(  # noqa: PLR0913 -- one keyword per facet of an enable; all keyword-
     except ExportError as exc:
         raise ExportError(str(exc), EXIT_REFUSED) from exc
     # after the checks above: an approval must not be spent on a command that was never valid
+    if local and by_agent:
+        _local_by_approval(log, cfg, doc, "enable", approval)
     why_agent = _unlock_by_approval(log, cfg, doc, lock, why_agent, approval)
     current = ops.spec_for(cfg, doc, writing=True)
     selected = list(ops.selection(cfg))
@@ -198,6 +233,9 @@ def disable(
 
     R.get(doc)
     why_agent = _is_agent(requested_agent, via_mcp)
+    by_agent = bool(why_agent)
+    if local and by_agent:
+        _local_by_approval(log, cfg, doc, "disable", approval)
     if lock and why_agent:
         route = _approval_route(log, cfg, "export.lock", doc, doc, approval)
         if route:

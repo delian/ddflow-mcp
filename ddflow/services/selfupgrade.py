@@ -33,17 +33,19 @@ import os
 import shlex
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.digest import content_digest
 from ..core.events import UPGRADE_APPLIED_KIND, version_key
 from ..infra import proc as P
 from ..infra.localstore import LocalStore
 from ..infra.log import running_version
 from . import install_info as II
 from . import upgrade_notice as UN
+from .approvals import relayed as RL
 
 #: Seconds the installer may take before it is stopped (a hung index must not hang a session).
 INSTALL_TIMEOUT_S = 600.0
@@ -211,6 +213,10 @@ class Request:
     method: str = ""
     running: str = ""
     newest: str = ""
+    #: Who asked (`--agent`, as the surface got it) and the id of a person's approval an agent
+    #: spends instead of relaying the consent (`services.approvals.relayed`).
+    agent: str = ""
+    approval: str = ""
 
 
 def _failure(out: dict[str, Any], done: P.Captured, running: str) -> dict[str, Any]:
@@ -253,6 +259,25 @@ def _success(
     return {**out, "status": "upgraded", "exit": 0, "to": to, "text": "\n".join(lines)}
 
 
+def _consent(cfg: Config, log: Any, req: Request, out: dict[str, Any]) -> str:
+    """Why the installer may not run, "" when it may. An agent spends a person's approval of
+    THIS command (the version it would install and how) or, until `[approvals].require_approval`
+    lists `upgrade.self`, relays the consent, recorded and warned about (D-RA-Q2). ``out`` gets
+    the reason the event records."""
+    why = consent_problem(cfg, req.confirm, req.reason, req.surface)
+    if cfg.upgrade.self == "auto" or (cfg.upgrade.self == "operator" and req.surface == "mcp"):
+        return why  # the operator's own setting: no consent, or an agent refused outright
+    state = content_digest(f"{out['running']}->{out['target'] or 'newest'}|{out['command']}")
+    v = RL.gate(
+        log, cfg, "upgrade.self", requested_agent=req.agent, via_mcp=req.surface == "mcp",
+        approval=req.approval, consented=not why, reason=req.reason, item="ddflow",
+        target="rollback" if req.rollback else "upgrade", state=state,
+    )  # fmt: skip
+    if v.ok:
+        out["reason"] = v.reason
+    return "" if v.ok else v.message or why
+
+
 def run(
     repo: Path, cfg: Config, log: Any, req: Request, *, runner: Runner | None = None
 ) -> dict[str, Any]:
@@ -278,8 +303,9 @@ def run(
         return {**out, "status": "manual", "exit": 2, "text": text}
     if req.dry_run:
         return {**out, "status": "dry-run", "exit": 0, "text": f"would run: {out['command']}"}
-    if why := consent_problem(cfg, req.confirm, req.reason, req.surface):
+    if why := _consent(cfg, log, req, out):
         return {**out, "status": "refused", "exit": 3, "text": f"{why}. Proposal: {out['command']}"}
+    req = replace(req, reason=out.pop("reason", req.reason))
     run_ = runner or _default_runner
     done = run_(argv, INSTALL_TIMEOUT_S)
     if not done.ran or done.returncode != 0:
