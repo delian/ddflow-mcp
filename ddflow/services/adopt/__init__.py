@@ -17,11 +17,12 @@ after an upgrade updates the block and leaves your own prose alone.
 
 This module was one file (`services/adopt.py`) and became a package so its parts could
 sit beside each other instead of in one 75 kB module. Its public names are still reached
-here, unchanged.
+here, unchanged, alongside every name the old module surfaced.
 """
 
 from __future__ import annotations
 
+# ruff: noqa: F401 -- this module is a re-export shim: every import below is public API.
 from ..mcpconfig import (
     SHAPE_COPILOT,
     SHAPE_MCP_DOT_SERVERS,
@@ -37,25 +38,57 @@ from ..mcpconfig import (
     server_entry_for,
 )
 from ._adopt import adopt
-from ._aider import AIDER_READS
-from ._commands import AGENT_COMMANDS, MANAGED_MARK
+from ._aider import (
+    _AIDER_LISTED,
+    AIDER_READS,
+    _add_aider_read,
+    _aider_lists_agents_md,
+    _aider_read_values,
+)
+from ._commands import (
+    AGENT_COMMANDS,
+    MANAGED_MARK,
+    _command_region,
+    _head_stamp,
+    _install_prompt_hooks,
+    _refresh_head,
+    _region_body,
+    _split_front_matter,
+    _update_managed,
+    _write_command,
+)
 from ._docs import (
     DOC_CURRENT,
     DOC_EDITED,
     DOC_LEGACY,
     DOC_NEWER,
     DOC_STALE,
+    _backup_docs,
+    _driver_pairs,
+    _driver_region,
+    _write_driver,
     doc_state,
     driver_drift,
     driver_states,
     refresh_docs,
 )
-from ._launch import (  # noqa: F401
+from ._launch import (
+    _DOCS_HINT,
     DIST_NAME,
     MCP_MODULE,
+    _installed_entry,
+    _installed_from_index,
+    _launch_entry,
     _package_parent,
+    _python,
+    _register_mcp,
+    _running_from_source,
 )
-from ._native import adopt_notes
+from ._native import (
+    _claude_extras,
+    _write_native_rule,
+    adopt_notes,
+)
 from ._refused import Refused
 from ._rules import (
     BLOCK,
@@ -69,6 +102,8 @@ from ._rules import (
     RULES_FILES,
     STALE,
     RulesState,
+    _block_state,
+    _stamped,
     adopted_agents,
     block_body,
     block_count,
@@ -85,9 +120,11 @@ from ._rules import (
     rules_status,
 )
 from ._scaffold import (
+    _WORKTREES_IGNORED,
     DDFLOW_GITIGNORE,
     GITIGNORE_REGION,
     UNION_MERGE_LINE,
+    _append_once,
     init_files,
     starter_config,
     write_ddflow_gitignore,
@@ -101,7 +138,13 @@ from ._targets import (
     AgentTarget,
     NativeRule,
 )
-from ._upsert import local_edits_path
+from ._upsert import (
+    _begin_lines,
+    _collapse_blocks,
+    _section_body,
+    _upsert_block,
+    local_edits_path,
+)
 
 __all__ = [
     "AGENT_COMMANDS",
