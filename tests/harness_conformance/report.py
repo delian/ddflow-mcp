@@ -17,8 +17,8 @@ from pathlib import Path
 for _up in (1, 2):  # tests/ (harness_conformance) and the repo root (ddflow)
     sys.path.insert(0, str(Path(__file__).resolve().parents[_up]))
 
-from ddflow.services import harnessreg as HR
-from harness_conformance import declared as D
+from ddflow.services import harnessreg as HR  # noqa: E402
+from harness_conformance import declared as D  # noqa: E402
 
 BASELINE = Path(__file__).with_name("gaps.json")
 #: A hook normalizer or emitter named by fewer descriptors than this is bespoke Python.
