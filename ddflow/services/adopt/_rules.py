@@ -77,7 +77,7 @@ when they decline, record that gate `unavailable` rather than passing it unaided
 **Exit codes:** `0` fine · `1` failure · `2` could not run / nothing to do · `3`
 refused. Never treat `2` as `0`.
 
-Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`
+{driver_line}
 """
 
 _DRIVER_LINE = "Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`"
