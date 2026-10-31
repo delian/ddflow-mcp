@@ -12,6 +12,7 @@ from ...core import outcome as O
 from ...core.model import fold
 from ...services import eventcommit as EC
 from ...services import healthwatch as HW
+from ...services import inbox as IB
 from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import waits as WT
@@ -91,6 +92,7 @@ def heartbeat(
             globs_withheld=withheld,
             new_reports=_new_report_count(st, item),
             yield_requested=_yield_request(log, cfg, item),
+            **_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=True),
         )
     return O.nothing(
         "lease.renewed",
@@ -202,6 +204,16 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
         return []  # advisory: a waiter's bad file must never stop a holder releasing
 
 
+def _inbox(repo: Path, cfg, agent: str, *, consume: bool) -> dict[str, Any]:
+    """The caller's lane inbox as `{"wake": {...}}` ({} when empty): delivered at a heartbeat, only shown
+    at a release or completion. Advisory, like `_waiters`."""
+    try:
+        got = IB.wake(repo, agent, ttl_s=cfg.lease.inbox_ttl_s, consume=consume)
+        return {"wake": got} if got else {}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
 def _commit_events(log, cfg, reason: str, door: str = "complete") -> dict[str, str]:
     """`[log].commit_events` at a door (Bcd3512c891): see `eventcommit.commit_at`."""
     return EC.commit_at(log, cfg, door, reason)
@@ -231,5 +243,12 @@ def release(
     released = L.release(log, item, note=note, forced=bool(forced))
     if released:
         committed = _commit_events(log, cfg, f"release {item}", "release")
-        return O.ok("lease.released", id=item, released=True, woke=waiting, **committed)
+        return O.ok(
+            "lease.released",
+            id=item,
+            released=True,
+            woke=waiting,
+            **_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=False),
+            **committed,
+        )
     return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])

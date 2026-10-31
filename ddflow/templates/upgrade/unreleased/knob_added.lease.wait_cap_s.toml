@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.wait_cap_s"
+new = "1800"
+why = "LC-wake: longest one wait or watch call sleeps unless --max-s is named."
+impact = "additive"

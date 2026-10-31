@@ -10,13 +10,21 @@ from __future__ import annotations
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ..registry import Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
+from .lifecycle_cli import wake_text
 
 
 def _text(out, a) -> str:
     d = out.data
+    msgs = (
+        wake_text({"reason": d["wake"]["reason"], "messages": d["wake"]["messages"]})
+        if (d.get("wake") or {}).get("messages")
+        else ""
+    )
     if out.exit:
-        return f"{out.reason}\ntoken {d['token']}" if "token" in d else out.reason
-    return f"{_api().watch_summary(d)}\ntoken {d['token']}"
+        return (f"{out.reason}\ntoken {d['token']}" if "token" in d else out.reason) + msgs
+    if d.get("matched") is False:  # woken by the inbox before the target happened
+        return f"woken by {d['wake']['reason']}; still watching {d['target']}\ntoken {d['token']}{msgs}"
+    return f"{_api().watch_summary(d)}\ntoken {d['token']}{msgs}"
 
 
 COMMANDS: tuple[Command, ...] = (

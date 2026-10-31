@@ -8,6 +8,7 @@ from typing import Any
 from ...config import csv_list
 from ...core import outcome as O
 from ...services import eventcommit as EC
+from ...services import inbox as IB
 from ...services import sessions as S
 from .._base import _load
 
@@ -67,6 +68,28 @@ def session_note(
     sid, how = S.resolve(log, session)
     S.note(log, cfg, sid, text, item=item)
     return O.ok("session.note", session=sid, how=how)
+
+
+def session_message(
+    repo: Path, to: str, text: str, *, reason: str = "message", item: str = "", agent: str = ""
+) -> O.Outcome:
+    """Put a message in lane ``to``'s inbox; its next `wait`, `watch` or `heartbeat` delivers
+    it, fenced as untrusted data. Local to this machine: the inbox is not in the log."""
+    log, cfg, _st = _load(repo, agent)
+    msg, why = IB.send(
+        repo,
+        to,
+        text,
+        reason=reason or "message",
+        sender=cfg.agent.id or log.agent_id,
+        item=item,
+        max_chars=cfg.lease.inbox_max_chars,
+        max_pending=cfg.lease.inbox_max_pending,
+        ttl_s=cfg.lease.inbox_ttl_s,
+    )
+    if msg is None:
+        return O.failed("session.message", why, to=to, sent=False)
+    return O.ok("session.message", to=to, sent=True, wake=msg.reason, id=msg.id)
 
 
 def session_adopt_orphans(repo: Path, *, agent: str = "") -> O.Outcome:
