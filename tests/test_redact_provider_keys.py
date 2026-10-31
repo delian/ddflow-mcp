@@ -291,3 +291,22 @@ def test_a_textconv_driver_cannot_hide_a_key_from_the_check(staged):
     shard.write_text(shard.read_text() + '{"text": "' + KEYS["google"] + '"}\n')
     _git(repo, "add", "-A")
     assert ES.check_event_secrets(repo, Config()).exit != 0
+
+
+def test_a_key_used_as_a_mapping_key_does_not_survive_a_failed_redaction():
+    out = RE.fail_closed_data({KEYS["google"]: "x", "text": "y", "AKIA" + "FAKEFAKEFAKEFAKE": "z"})
+    assert "text" in out and all(KEYS["google"] not in k and "AKIA" not in k for k in out)
+    assert len(out) == 3
+
+
+def test_openai_project_keys_are_caught_glued_to_text_and_hyphenated_names_are_not():
+    assert shape_hit("my" + KEYS["openai-proj"]) == "openai-project"
+    assert shape_hit("sk-learn-pipeline-v2-tests-for-all") == ""
+    assert shape_hit(KEYS["openai"]) == "openai"
+
+
+def test_a_bare_key_assignment_with_a_long_mixed_value_is_redacted(cfg):
+    value = "1234567890Abcdefghij"
+    assert value not in S.redact(f"key = {value}", cfg)[0]
+    assert value not in S.redact(f"ssh_key: {value}", cfg)[0]
+    assert S.redact("monkey = 1234567890Abcdefghij", cfg)[1] == 0

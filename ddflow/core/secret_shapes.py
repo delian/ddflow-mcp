@@ -28,7 +28,8 @@ SHAPES: tuple[tuple[str, str], ...] = (
     ("google-api-key", r"AIza[0-9A-Za-z_-]{35,}"),
     ("google-oauth", r"ya29\.[0-9A-Za-z_-]{30,}"),
     ("anthropic", r"sk-ant-[0-9A-Za-z_-]{20,}"),
-    ("openai", _L + r"sk-(?:proj-|svcacct-|admin-)?(?=[A-Za-z_-]{0,60}[0-9])[0-9A-Za-z_-]{20,}"),
+    ("openai-project", r"sk-(?:proj|svcacct|admin)-[0-9A-Za-z_-]{20,}"),
+    ("openai", _L + r"sk-(?=[A-Za-z]{0,60}[0-9])[0-9A-Za-z]{20,}"),
     ("xai", _L + r"xai-[0-9A-Za-z]{20,}"),
     ("groq", _L + r"gsk_[0-9A-Za-z]{20,}"),
     ("github", r"gh[pousr]_[0-9A-Za-z]{20,}"),
@@ -41,7 +42,7 @@ SHAPES: tuple[tuple[str, str], ...] = (
     ("npm", _L + r"npm_[0-9A-Za-z]{36}(?![0-9A-Za-z])"),
     (
         "assigned-secret",
-        r"(?i)(?:api[-_]?key|(?:access|auth|private)[-_]?key|secret|token|passw(?:or)?d)[\w-]{0,40}[\"']?\s*[:=]\s*[\"']?"
+        r"(?i)(?:api[-_]?key|(?:access|auth|private)[-_]?key|(?<![A-Za-z0-9])key|secret|token|passw(?:or)?d)[\w-]{0,40}[\"']?\s*[:=]\s*[\"']?"
         r"(?=[0-9A-Za-z_/+.=-]{20})(?=[A-Za-z_/+.=-]{0,19}[0-9])(?=[0-9_/+.=-]{0,19}[A-Za-z])"
         r"[0-9A-Za-z_/+.=-]{20,512}",
     ),

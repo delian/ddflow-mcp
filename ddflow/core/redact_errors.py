@@ -7,6 +7,7 @@ writers replace the text with `FAILED_MARKER` (and count that as one redaction).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 __all__ = [
@@ -30,12 +31,23 @@ def fail_closed_text() -> tuple[str, int]:
     return FAILED_MARKER, 1
 
 
+_PLAIN_KEY = re.compile(r"[a-z][a-z0-9_]{0,31}")
+
+
+def _key(index: int, key: object) -> object:
+    """A mapping key kept when it is a plain snake_case field name; any other string may be
+    text (a credential used as a key) and is replaced, numbered so two never collide."""
+    if isinstance(key, str) and not _PLAIN_KEY.fullmatch(key):
+        return f"{FAILED_MARKER[:-1]}:key-{index}]"
+    return key
+
+
 def fail_closed_data(value: object) -> object:
-    """``value`` with every string leaf replaced by `FAILED_MARKER`; keys, numbers, booleans and None kept."""
+    """``value`` with every string leaf replaced by `FAILED_MARKER`; plain field names, numbers, booleans and None kept."""
     if isinstance(value, str):
         return FAILED_MARKER
     if isinstance(value, Mapping):
-        return {k: fail_closed_data(v) for k, v in value.items()}
+        return {_key(i, k): fail_closed_data(v) for i, (k, v) in enumerate(value.items())}
     if isinstance(value, (list, tuple, set, frozenset)):
         return [fail_closed_data(v) for v in value]
     if value is None or isinstance(value, (bool, int, float)):
