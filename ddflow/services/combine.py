@@ -180,17 +180,18 @@ def _resolve_key(
         who = f" for unknown model {unknown_model!r}" if unknown_model else ""
         why = f"; skipped: {'; '.join(skips)}" if skips else ""
         reason = f"not verified{who}, using lowest common denominator{why}"
-        return Field(key, pol.lcd.get(key), LCD, True, reason)
+        got = Field(key, pol.lcd.get(key), LCD, True, reason)
     caps = [
         (layer, v, n)
         for layer, v, n in _safety(pol.cap_prefix, key, tables, pol)
         if isinstance(v, (int, float)) and not isinstance(v, bool)
     ]
-    if caps and isinstance(got.value, (int, float)) and not isinstance(got.value, bool):
+    num = isinstance(got.value, (int, float)) and not isinstance(got.value, bool)
+    if caps and (num or got.value is None):  # a cap bounds an unknown number too
         layer, low, node = min(caps, key=lambda c: c[1])
-        if low < got.value:
+        if got.value is None or low < got.value:
             reason = f"capped to {low} by {layer}; {got.source} said {got.value}"
-            return Field(key, low, "cap", False, reason, node)
+            return Field(key, low, "cap", got.unknown, reason, node)
     return got
 
 

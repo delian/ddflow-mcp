@@ -113,3 +113,10 @@ def test_mixed_name_and_mapping():
     assert b.route == "nowhere" and b.unknown_models == ("m",)
     with pytest.raises(ValueError):
         combine.effective(H(), "m", keys=["window"])
+
+
+def test_cap_applies_to_lcd_value():
+    pol = combine.Policy(lcd={"max_tokens": 4000})
+    h = H(**{"cap.max_tokens": F(1000, "verified")})
+    r = combine.effective(h, M(), keys=["max_tokens"], policy=pol)
+    assert r["max_tokens"] == 1000 and r.fields["max_tokens"].unknown
