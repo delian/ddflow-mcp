@@ -17,8 +17,6 @@ from ...infra import container as CT
 from ...infra import signals as SIG
 from ...infra import worktree as W
 from ...infra.store import Store
-from ...services.approvals import audit as AUD
-from ...services.approvals import overrides as OVR
 from ...services import adopt as AD
 from ...services import cleanup as CL
 from ...services import configcompat as CC
@@ -44,6 +42,8 @@ from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
 from ...services import workflow as WF
 from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
+from ...services.approvals import audit as AUD
+from ...services.approvals import overrides as OVR
 from ...services.completion import verdict
 from ...services.export import ops as X
 from ...services.export import select as export_select
