@@ -81,7 +81,7 @@ def test_drifted_fact_does_not_beat_verified():
 def test_observation_beats_operator_and_deterministic():
     kw = {
         "operator": {"window": F(1)},
-        "observed": {"window": F(2, "verified")},
+        "observed": {"window": F(2)},
         "keys": ["window"],
     }
     a = combine.effective(H(), M(window=F(9)), **kw)
