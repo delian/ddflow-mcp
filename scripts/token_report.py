@@ -157,12 +157,24 @@ def _note_call(calls, order, mid, msg, ts, tool_names, classes):
             c["tools"].append(classify_tool(b.get("name", ""), str(cmd), classes))
 
 
+def _first_seen(seen: set, mid, block: dict) -> bool:
+    """True once per (message id, block): a re-streamed entry must not add its content twice."""
+    if not mid:
+        return True
+    key = (mid, json.dumps(block, sort_keys=True, ensure_ascii=False))
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
+
+
 def analyse_file(path: Path, since=None, until=None, classes=None) -> dict:
     """Per-file calls (one per message id, last streamed usage) and content adds."""
     calls: dict[str, dict] = {}
     order: list[str] = []
     adds: list[tuple[str, int, int]] = []  # class, bytes, calls seen when added
     tool_names: dict[str, str] = {}
+    seen: set = set()
     for e in read_entries(path):
         day = str(e.get("timestamp", ""))[:10]
         if (since and day < since) or (until and day > until):
@@ -171,7 +183,8 @@ def analyse_file(path: Path, since=None, until=None, classes=None) -> dict:
         if e.get("type") == "assistant" and msg.get("id") and isinstance(msg.get("usage"), dict):
             _note_call(calls, order, msg["id"], msg, _time(e), tool_names, classes)
         if e.get("type") in ("assistant", "user"):
-            for cls, size in _content_class(e, _blocks(msg), tool_names):
+            fresh = [b for b in _blocks(msg) if _first_seen(seen, msg.get("id"), b)]
+            for cls, size in _content_class(e, fresh, tool_names):
                 adds.append((cls, size, len(order)))
     return {"calls": [calls[m] for m in order], "adds": adds}
 
@@ -277,7 +290,7 @@ def build_report(
             continue
         agg = rep["subagents" if sub else "lead"]
         agg["agents" if sub else "files"] += 1
-        file_units = _fold_calls(res["calls"], agg, rewrites, w, gap_s, min_write)
+        file_units = _fold_calls(res["calls"], agg, rewrites if sub else {}, w, gap_s, min_write)
         agg["units"] += file_units
         if sub:
             per_agent.append({"agent": p.stem, "calls": len(res["calls"]), "units": file_units})

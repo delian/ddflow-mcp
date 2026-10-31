@@ -173,8 +173,9 @@ def test_one_hour_rewrite_units_use_1h_weight(tmp_path):
 
 
 def test_empty_file_is_unavailable(tmp_path):
-    (tmp_path / "e.jsonl").write_text("\n\n")
+    (tmp_path / "lead.jsonl").write_text("\n\n")
     rep = TR.build_report(tmp_path)
+    assert rep["unavailable"][0].startswith("lead")
     assert rep["unavailable"] and rep["lead"]["status"] == "UNAVAILABLE"
     assert TR.main([str(tmp_path)]) == 2
 
@@ -185,3 +186,17 @@ def test_unreadable_subagent_marks_subagents(proj):
     assert rep["subagents"]["status"] == "PARTIAL" and rep["lead"]["status"] == "OK"
     (proj / "lead" / "subagents" / "agent-a.jsonl").unlink()
     assert TR.build_report(proj)["subagents"]["status"] == "UNAVAILABLE"
+
+
+def test_restreamed_content_counted_once_and_lead_rewrites_excluded(tmp_path):
+    big = [
+        _asst("m1", 0, tool="Bash", cmd="ls", w1=60000),
+        _asst("m1", 0, tool="Bash", cmd="ls", w1=60000),
+        _result("m1", 1, "x" * 400),
+        _asst("m2", 30, w1=60000),
+    ]
+    _write(tmp_path / "lead.jsonl", big)
+    rep = TR.build_report(tmp_path)
+    assert rep["carry"]["bash_command"]["added"] == len('{"command": "ls"}') // 4  # once, not twice
+    assert rep["carry"]["bash_command"]["carry"] == rep["carry"]["bash_command"]["added"]
+    assert sum(v["events"] for v in rep["rewrites"].values()) == 0
