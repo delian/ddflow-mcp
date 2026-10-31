@@ -135,43 +135,43 @@ def _content_class(entry, blocks, tool_names):
             yield cls, _size(text)
 
 
+def _blocks(msg: dict) -> list:
+    raw = msg.get("content")
+    if isinstance(raw, str):
+        return [{"type": "text", "text": raw}]
+    return [b for b in raw or [] if isinstance(b, dict)]
+
+
+def _note_call(calls, order, mid, msg, ts, tool_names, classes):
+    c = calls.get(mid)
+    if c is None:
+        c = calls[mid] = {"first": ts, "last": ts, "tools": []}
+        order.append(mid)
+    c["last"] = ts or c["last"]
+    c["usage"] = _usage(msg["usage"])
+    for b in _blocks(msg):
+        if b.get("type") == "tool_use":
+            tool_names[b.get("id")] = b.get("name", "")
+            inp = b.get("input")
+            cmd = inp.get("command", "") if isinstance(inp, dict) else ""
+            c["tools"].append(classify_tool(b.get("name", ""), str(cmd), classes))
+
+
 def analyse_file(path: Path, since=None, until=None, classes=None) -> dict:
-    """Per-file calls (one per message id, last streamed usage), rewrite candidates, content adds."""
+    """Per-file calls (one per message id, last streamed usage) and content adds."""
     calls: dict[str, dict] = {}
     order: list[str] = []
     adds: list[tuple[str, int, int]] = []  # class, bytes, calls seen when added
     tool_names: dict[str, str] = {}
     for e in read_entries(path):
-        ts = _time(e)
         day = str(e.get("timestamp", ""))[:10]
         if (since and day < since) or (until and day > until):
             continue
         msg = e.get("message") if isinstance(e.get("message"), dict) else {}
-        raw = msg.get("content")
-        blocks = (
-            [{"type": "text", "text": raw}]
-            if isinstance(raw, str)
-            else [b for b in raw or [] if isinstance(b, dict)]
-        )
         if e.get("type") == "assistant" and msg.get("id") and isinstance(msg.get("usage"), dict):
-            mid = msg["id"]
-            c = calls.get(mid)
-            if c is None:
-                c = calls[mid] = {"first": ts, "last": ts, "tools": []}
-                order.append(mid)
-            c["last"] = ts or c["last"]
-            c["usage"] = _usage(msg["usage"])
-            for b in blocks:
-                if b.get("type") == "tool_use":
-                    tool_names[b.get("id")] = b.get("name", "")
-                    cmd = (
-                        b.get("input", {}).get("command", "")
-                        if isinstance(b.get("input"), dict)
-                        else ""
-                    )
-                    c["tools"].append(classify_tool(b.get("name", ""), str(cmd), classes))
+            _note_call(calls, order, msg["id"], msg, _time(e), tool_names, classes)
         if e.get("type") in ("assistant", "user"):
-            for cls, size in _content_class(e, blocks, tool_names):
+            for cls, size in _content_class(e, _blocks(msg), tool_names):
                 adds.append((cls, size, len(order)))
     return {"calls": [calls[m] for m in order], "adds": adds}
 
@@ -190,6 +190,48 @@ def _empty():
 
 def _units(u: dict, w: dict) -> float:
     return sum(u[k] * w[k] for k in w)
+
+
+def _fold_calls(calls, agg, rewrites, w, gap_s, min_write) -> float:
+    """Add a file's calls into agg; record cache rewrites (long gap, big write) by preceding tool."""
+    units = 0.0
+    prev = None
+    for c in calls:
+        u = c["usage"]
+        agg["calls"] += 1
+        for k in ("input", "read", "write_5m", "write_1h", "output"):
+            agg[k] += u[k]
+        units += _units(u, w)
+        if prev is not None and c["first"] and prev["last"]:
+            gap = (c["first"] - prev["last"]).total_seconds()
+            wr = u["write_5m"] + u["write_1h"]
+            if gap >= gap_s and wr >= min_write:
+                cls = prev["tools"][-1] if prev["tools"] else OTHER
+                r = rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
+                r["events"] += 1
+                r["tokens"] += wr
+                r["wait_s"] += gap
+        prev = c
+    return units
+
+
+def _finish_rewrites(rewrites, rep, w, classes):
+    for cls in {c for c, _ in classes or TOOL_CLASSES} | {OTHER}:
+        rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
+    su = rep["subagents"]["units"]
+    for r in rewrites.values():
+        wait_s = r.pop("wait_s")
+        r["avg_wait_min"] = round(wait_s / r["events"] / 60, 2) if r["events"] else 0.0
+        r["units"] = r["tokens"] * w["write_5m"]
+        r["share_of_subagent_units"] = r["units"] / su if su else 0.0
+
+
+def _finish_carry(carry):
+    tot_added = sum(d["added"] for d in carry.values())
+    tot_carry = sum(d["carry"] for d in carry.values())
+    for d in carry.values():
+        d["share_added"] = d["added"] / tot_added if tot_added else 0.0
+        d["share_carry"] = d["carry"] / tot_carry if tot_carry else 0.0
 
 
 def build_report(
@@ -233,24 +275,7 @@ def build_report(
         agg = rep["subagents" if sub else "lead"]
         agg["agents" if sub else "files"] += 1
         lead_ok |= not sub
-        file_units = 0.0
-        prev = None
-        for c in res["calls"]:
-            u = c["usage"]
-            agg["calls"] += 1
-            for k in ("input", "read", "write_5m", "write_1h", "output"):
-                agg[k] += u[k]
-            file_units += _units(u, w)
-            if prev is not None and c["first"] and prev["last"]:
-                gap = (c["first"] - prev["last"]).total_seconds()
-                wr = u["write_5m"] + u["write_1h"]
-                if gap >= gap_s and wr >= min_write:
-                    cls = prev["tools"][-1] if prev["tools"] else OTHER
-                    r = rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
-                    r["events"] += 1
-                    r["tokens"] += wr
-                    r["wait_s"] += gap
-            prev = c
+        file_units = _fold_calls(res["calls"], agg, rewrites, w, gap_s, min_write)
         agg["units"] += file_units
         if sub:
             per_agent.append({"agent": p.stem, "calls": len(res["calls"]), "units": file_units})
@@ -266,23 +291,10 @@ def build_report(
     total = rep["lead"]["units"] + rep["subagents"]["units"]
     rep["total_units"] = total
     rep["share"] = {k: (rep[k]["units"] / total if total else 0.0) for k in ("lead", "subagents")}
-    wr_total = sum(r["tokens"] for r in rewrites.values())
-    for cls in {c for c, _ in classes or TOOL_CLASSES} | {OTHER}:
-        rewrites.setdefault(cls, {"events": 0, "tokens": 0, "wait_s": 0.0})
-    for r in rewrites.values():
-        wait_s = r.pop("wait_s")
-        r["avg_wait_min"] = round(wait_s / r["events"] / 60, 2) if r["events"] else 0.0
-        r["units"] = r["tokens"] * w["write_5m"]
-        r["share_of_subagent_units"] = (
-            r["units"] / rep["subagents"]["units"] if rep["subagents"]["units"] else 0.0
-        )
+    rep["rewrite_tokens"] = sum(r["tokens"] for r in rewrites.values())
+    _finish_rewrites(rewrites, rep, w, classes)
     rep["rewrites"] = rewrites
-    rep["rewrite_tokens"] = wr_total
-    tot_added = sum(d["added"] for d in carry.values())
-    tot_carry = sum(d["carry"] for d in carry.values())
-    for d in carry.values():
-        d["share_added"] = d["added"] / tot_added if tot_added else 0.0
-        d["share_carry"] = d["carry"] / tot_carry if tot_carry else 0.0
+    _finish_carry(carry)
     rep["carry"] = carry
     rep["top_agents"] = sorted(per_agent, key=lambda a: -a["units"])[:top]
     return rep
