@@ -32,7 +32,7 @@ _LEGACY: dict[str, str] = {
         "link similar dupes"
     ),
     "rule": "rule_add rule_edit rule_list rule_remove rule_search rule_show rule_sync",
-    "session": "session_end session_note session_prompt session_start",
+    "session": "session_end session_message session_note session_prompt session_start",
     "job": "job_add job_end job_list job_run",
     "ship": "promote_add promote_deployed promote_status version_cut version_show",
     "workflow": "workflow workflow_drop workflow_gate workflow_pipeline workflow_state flow_choose flow_show",

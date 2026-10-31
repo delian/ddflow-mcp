@@ -125,6 +125,35 @@ def job_run(
     return O.ok("job.started", id=jid, pid=pid, log=str(out), cwd=str(where))
 
 
+def job_detach(
+    repo: Path, item: str, command: str, *, cwd: str = "", log_file: str = "", agent: str = ""
+) -> O.Outcome:
+    """`ddflow review --detach` (and other long commands whose own guards already ran): launch
+    `command` detached into its own session, streamed to a job log, and record it.
+
+    Unlike `job_run` it does NOT require the caller's lease: a review runs over whichever
+    tree holds the diff, and the review's own guards checked the item before this was called.
+    The lease check is `job run`'s, because a job is where the resources are actually used; a
+    detached review uses none the claim metre would."
+    """
+    log, cfg, st = _load(repo, agent)
+    if not command.strip():
+        return O.failed("job.started", "a job needs a command", id="")
+    where = Path(cwd) if cwd else repo
+    out = (
+        Path(log_file)
+        if log_file
+        else repo / JOB_LOG_DIR / f"{item or 'review'}-{clock.run_stamp()}.log"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pid = J.launch(command, where, out)
+    except RuntimeError as exc:
+        return O.failed("job.started", str(exc), id="")
+    jid = _record(log, cfg, st, item, command, pid, str(out), str(where))
+    return O.ok("job.started", id=jid, pid=pid, log=str(out), cwd=str(where))
+
+
 def job_add(
     repo: Path, item: str, pid: int, *, command: str = "", log_file: str = "", agent: str = ""
 ) -> O.Outcome:
