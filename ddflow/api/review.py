@@ -2443,7 +2443,7 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _gate_outcome(best, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say) -> tuple[str, dict | None]:
+def _gate_outcome(best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
     evidence; a converged full re-review passes with a `converged` flag on the evidence.
 
@@ -2459,17 +2459,25 @@ def _gate_outcome(best, it, item: str, gate: str, converging: bool, cfg, extra_e
             ],
             extra_evidence,
         )
-    if not best.findings:
+    converged_round = converging and it is not None and bool(item) and _rounds_used(it, gate) > 0
+    # A converged round weighs EVERY reviewed reviewer's findings: a below-floor nit from the
+    # first must not hide a HIGH one from the second. Otherwise `best` decides, as before.
+    found = (
+        [f for r in results if r.status == RV.REVIEWED for f in r.findings]
+        if converged_round
+        else best.findings
+    )
+    if not found:
         return "passed", extra_evidence
     blocking = RV.blocking_findings(
-        best.findings,
-        converged=converging and it is not None and bool(item) and _rounds_used(it, gate) > 0,
+        found,
+        converged=converged_round,
         floor=cfg.review.converge_floor,
     )
     if blocking:
         return "failed", extra_evidence
     converged = {
-        "findings_below_floor": len(best.findings),
+        "findings_below_floor": len(found),
         "floor": cfg.review.converge_floor,
     }
     say(
@@ -2814,7 +2822,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     best = min(results, key=lambda r: r.status)
     outcome, extra_evidence = _gate_outcome(
-        best, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
     if item:
         outcome = _record_review(

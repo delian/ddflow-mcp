@@ -110,7 +110,7 @@ def test_a_later_rounds_new_high_finding_still_blocks(repo, tmp_path):
     assert _review(repo).data["outcome"] == "failed"
     _settle_first_as_fixed(repo)
     _fix(repo)
-    assert _review(repo).data["outcome"] == "failed"
+    assert _review(repo, full=True).data["outcome"] == "failed"
 
 
 def test_the_first_round_blocks_on_a_medium_finding(repo, tmp_path):
@@ -136,3 +136,25 @@ def test_the_floor_paragraph_is_only_sent_where_the_floor_applies():
     reviewer to hold back below-floor findings."""
     assert api._floor_lines("") == []
     assert "below HIGH severity" in "".join(api._floor_lines("HIGH"))
+
+
+def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
+    """Two reviewers: the first (status-minimal) has only a LOW nit, the second a HIGH one.
+    The HIGH must still block -- the floor never hides another reviewer's finding."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    monkeypatch.setattr(api, "_rounds_used", lambda it, gate: 1)
+    low = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="nit")])
+    high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad")])
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        low, [low, high], object(), "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "failed"
+    outcome, ev = api._gate_outcome(
+        low, [low, low], object(), "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 2
