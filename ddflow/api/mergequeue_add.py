@@ -73,6 +73,31 @@ def _release_plan(repo, cfg, st, it, log, wt_path, *, unit_tests, release: bool,
     return {"author": author, "lane": lane, "tree": LR.tree_of(wt_path)}, ""
 
 
+def _enqueue(repo, cfg, st, it, log, wt_path, *, asked, release, ut, agent):
+    """(entry, added, release plan), or the refusal Outcome of an explicit release that cannot
+    be granted. A release that merely falls short (auto mode, or a full slot count) queues
+    the item without handing it over."""
+    item = it.id
+    plan = None
+    if asked:
+        plan, nope = _release_plan(repo, cfg, st, it, log, wt_path, unit_tests=ut,
+                                   release=release, agent=agent)  # fmt: skip
+        if nope and release:
+            return O.refused("queue.add", f"{item} cannot be released: {nope}", id=item,
+                             queued=False, released=False)  # fmt: skip
+    keep = cfg.merge_queue.keep_history
+    try:
+        entry, added = MQ.add(repo, item, agent=log.agent_id, release=plan, keep_history=keep,
+                              release_cap=cfg.lanes.release_max)  # fmt: skip
+    except MQ.SlotsFull as exc:
+        if release:
+            return O.refused("queue.add", f"{item} cannot be released: {exc}", id=item,
+                             queued=False, released=False)  # fmt: skip
+        plan = None
+        entry, added = MQ.add(repo, item, agent=log.agent_id, keep_history=keep)
+    return entry, added, plan
+
+
 def queue_add(
     repo: Path,
     item: str,
@@ -103,24 +128,12 @@ def queue_add(
             dirty=list(dirty),
             path=str(wt.path),
         )
-    plan, nope = None, ""
-    if asked:
-        plan, nope = _release_plan(repo, cfg, st, it, log, wt.path, unit_tests=ut,
-                                   release=release, agent=agent)  # fmt: skip
-        if nope and release:
-            return O.refused("queue.add", f"{item} cannot be released: {nope}", id=item,
-                             queued=False, released=False)  # fmt: skip
-    try:
-        entry, added = MQ.add(repo, item, agent=log.agent_id, release=plan,
-                              keep_history=cfg.merge_queue.keep_history,
-                              release_cap=cfg.lanes.release_max)  # fmt: skip
-    except MQ.SlotsFull as exc:
-        if release:
-            return O.refused("queue.add", f"{item} cannot be released: {exc}", id=item,
-                             queued=False, released=False)  # fmt: skip
-        plan = None
-        entry, added = MQ.add(repo, item, agent=log.agent_id,
-                              keep_history=cfg.merge_queue.keep_history)  # fmt: skip
+    got = _enqueue(
+        repo, cfg, st, it, log, wt.path, asked=asked, release=release, ut=ut, agent=agent
+    )
+    if isinstance(got, O.Outcome):
+        return got
+    entry, added, plan = got
     freed = _hand_over(repo, cfg, log, it, entry, plan) if plan and entry.released else {}
     row = _row(repo, cfg, item)
     where = f"position {row.get('position', 0)}" if row.get("position") else entry.state
