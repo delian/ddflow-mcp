@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 
-from ..commands.harness import cmd_harness
+from ..commands.harness import cmd_harness, cmd_model
 from ..commands.knowledge import cmd_history
 from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
@@ -117,6 +117,40 @@ def register(s: argparse._SubParsersAction) -> None:
     hxf.add_argument("--agent", default="", help="one agent (default: all)")
     hxf.add_argument("--unverified", action="store_true", help="only leads, and sections left out")
     hxf.set_defaults(fn=cmd_harness)
+    hxa = hx_s.add_parser(
+        "add", help="scaffold a descriptor skeleton with every fact left out (not verified)"
+    )
+    hxa.add_argument("id", help="the new agent's id")
+    hxa.add_argument("--family", default="", help="the lineage whose conventions it shares")
+    hxa.add_argument("--title", default="", help="the product's display name")
+    hxa.add_argument(
+        "--dir", default="", help="where to write it (default .ddflow/local/harnesses)"
+    )
+    hxa.set_defaults(fn=cmd_harness)
+    hxl = hx_s.add_parser(
+        "lint", help="a descriptor against the schema and the three-valued rule (exit 1 = problems)"
+    )
+    hxl.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxl.set_defaults(fn=cmd_harness)
+    hxt = hx_s.add_parser("test", help="the offline conformance of one descriptor")
+    hxt.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxt.set_defaults(fn=cmd_harness)
+    hxp = hx_s.add_parser(
+        "probe", help="what the agent's binary would be asked; runs nothing without --run"
+    )
+    hxp.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxp.add_argument(
+        "--run", action="store_true", help="the operator consents: run `<binary> --version`"
+    )
+    hxp.set_defaults(fn=cmd_harness)
+
+    mo = s.add_parser("model", help="the model catalog: a row with its provenance")
+    mo_s = mo.add_subparsers(dest="model_cmd", required=True)
+    mos = mo_s.add_parser(
+        "show", help="a model's facts with source and date, and what unknown gets"
+    )
+    mos.add_argument("name", help="a model name or id")
+    mos.set_defaults(fn=cmd_model)
 
     pr = s.add_parser("prompts", help="inspect and override the prompt templates")
     pr_s = pr.add_subparsers(dest="prompts_cmd", required=True)
