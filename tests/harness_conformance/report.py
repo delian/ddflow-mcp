@@ -14,7 +14,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+for _up in (1, 2):  # tests/ (harness_conformance) and the repo root (ddflow)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[_up]))
 
 from ddflow.services import harnessreg as HR
 from harness_conformance import declared as D

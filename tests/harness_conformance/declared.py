@@ -53,7 +53,7 @@ def load(hid: str, kind: str, name: str = "") -> dict | None:
 def status(fx: dict | None) -> str:
     if fx is None:
         return UNVERIFIED
-    return VERIFIED if fx["_meta"].get("recorded") is True else SYNTHETIC
+    return VERIFIED if fx.get("_meta", {}).get("recorded") is True else SYNTHETIC
 
 
 def all_checks() -> list[tuple[str, str, str]]:
