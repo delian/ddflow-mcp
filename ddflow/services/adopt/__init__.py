@@ -22,7 +22,7 @@ here, unchanged.
 
 from __future__ import annotations
 
-from ..mcpconfig import (  # noqa: F401 -- re-exported: their home was here
+from ..mcpconfig import (
     SHAPE_COPILOT,
     SHAPE_MCP_DOT_SERVERS,
     SHAPE_MCP_SERVERS,
@@ -36,10 +36,10 @@ from ..mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     place_server,
     server_entry_for,
 )
-from ._adopt import adopt  # noqa: F401
-from ._aider import AIDER_READS  # noqa: F401
-from ._commands import AGENT_COMMANDS, MANAGED_MARK  # noqa: F401
-from ._docs import (  # noqa: F401
+from ._adopt import adopt
+from ._aider import AIDER_READS
+from ._commands import AGENT_COMMANDS, MANAGED_MARK
+from ._docs import (
     DOC_CURRENT,
     DOC_EDITED,
     DOC_LEGACY,
@@ -55,9 +55,9 @@ from ._launch import (  # noqa: F401
     MCP_MODULE,
     _package_parent,
 )
-from ._native import adopt_notes  # noqa: F401
-from ._refused import Refused  # noqa: F401
-from ._rules import (  # noqa: F401
+from ._native import adopt_notes
+from ._refused import Refused
+from ._rules import (
     BLOCK,
     CURRENT,
     DUPLICATE,
@@ -84,7 +84,7 @@ from ._rules import (  # noqa: F401
     project_section,
     rules_status,
 )
-from ._scaffold import (  # noqa: F401
+from ._scaffold import (
     DDFLOW_GITIGNORE,
     GITIGNORE_REGION,
     UNION_MERGE_LINE,
@@ -92,19 +92,44 @@ from ._scaffold import (  # noqa: F401
     starter_config,
     write_ddflow_gitignore,
 )
-from ._targets import (  # noqa: F401
+from ._targets import (
     AGENT_TARGETS,
     FORM_AIDER,
     FORM_BLOCK,
     FORM_WHOLE,
     NATIVE_RULES,
-    NativeRule,
     AgentTarget,
+    NativeRule,
 )
-from ._upsert import local_edits_path  # noqa: F401
+from ._upsert import local_edits_path
 
 __all__ = [
-    # mcpconfig re-exports
+    "AGENT_COMMANDS",
+    "AGENT_TARGETS",
+    "AIDER_READS",
+    "BLOCK",
+    "CURRENT",
+    "DDFLOW_GITIGNORE",
+    "DIST_NAME",
+    "DOC_CURRENT",
+    "DOC_EDITED",
+    "DOC_LEGACY",
+    "DOC_NEWER",
+    "DOC_STALE",
+    "DUPLICATE",
+    "FORM_AIDER",
+    "FORM_BLOCK",
+    "FORM_WHOLE",
+    "GITIGNORE_REGION",
+    "LEGACY_BEGIN",
+    "LEGACY_END",
+    "MANAGED_MARK",
+    "MCP_MODULE",
+    "MISSING",
+    "NATIVE_RULES",
+    "NOT_BINDING",
+    "NO_BLOCK",
+    "RULES_FILES",
     "SHAPE_COPILOT",
     "SHAPE_MCP_DOT_SERVERS",
     "SHAPE_MCP_SERVERS",
@@ -112,72 +137,39 @@ __all__ = [
     "SHAPE_OPENCODE",
     "SHAPE_SERVERS",
     "SHAPE_TOML",
+    "STALE",
+    "UNION_MERGE_LINE",
+    "AgentTarget",
+    "NativeRule",
+    "Refused",
+    "RulesState",
     "UnplaceableConfig",
+    "adopt",
+    "adopt_notes",
+    "adopted_agents",
+    "block_body",
+    "block_count",
+    "block_edited",
+    "block_marker",
+    "block_newer",
+    "block_spans",
+    "block_version",
+    "doc_state",
+    "driver_drift",
+    "driver_states",
     "get_server",
     "get_servers",
-    "place_server",
-    "server_entry_for",
-    # targets
-    "AgentTarget",
-    "AGENT_TARGETS",
-    "FORM_WHOLE",
-    "FORM_BLOCK",
-    "FORM_AIDER",
-    "NativeRule",
-    "NATIVE_RULES",
-    # rules block + status
-    "BLOCK",
-    "LEGACY_BEGIN",
-    "LEGACY_END",
-    "RULES_FILES",
-    "MISSING",
-    "NO_BLOCK",
-    "STALE",
-    "CURRENT",
-    "DUPLICATE",
-    "NOT_BINDING",
-    "RulesState",
-    "native_rule_text",
-    "adopted_agents",
     "has_been_adopted",
-    "block_body",
     "has_legacy_block",
-    "block_marker",
-    "block_spans",
-    "block_count",
+    "init_files",
+    "local_edits_path",
+    "native_rule_text",
+    "place_server",
     "project_body",
     "project_section",
-    "block_newer",
-    "block_version",
-    "block_edited",
-    "rules_status",
-    # scaffolding
-    "starter_config",
-    "DDFLOW_GITIGNORE",
-    "UNION_MERGE_LINE",
-    "GITIGNORE_REGION",
-    "write_ddflow_gitignore",
-    "init_files",
-    # docs
-    "DOC_CURRENT",
-    "DOC_STALE",
-    "DOC_LEGACY",
-    "DOC_EDITED",
-    "DOC_NEWER",
-    "doc_state",
-    "driver_states",
-    "driver_drift",
-    "local_edits_path",
     "refresh_docs",
-    "adopt",
-    # commands
-    "AGENT_COMMANDS",
-    "MANAGED_MARK",
-    # claude extras / native
-    "adopt_notes",
-    "AIDER_READS",
-    # launch
-    "MCP_MODULE",
-    "DIST_NAME",
-    "Refused",
+    "rules_status",
+    "server_entry_for",
+    "starter_config",
+    "write_ddflow_gitignore",
 ]

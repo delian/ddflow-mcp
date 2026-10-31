@@ -7,7 +7,8 @@ from pathlib import Path
 
 from ...infra.paths import launch_parent, launch_python
 from .. import install_info as _INSTALL
-from ..mcpconfig import SHAPE_NONE, register as _register_server
+from ..mcpconfig import SHAPE_NONE
+from ..mcpconfig import register as _register_server
 from ._refused import Refused
 from ._targets import AGENT_TARGETS
 

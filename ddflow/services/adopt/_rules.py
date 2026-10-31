@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ...infra.fsio import Managed, RegionError
 from ._aider import AIDER_READS, _aider_lists_agents_md
-from ._targets import AGENT_TARGETS, FORM_AIDER, NATIVE_RULES
+from ._targets import AGENT_TARGETS, FORM_AIDER, FORM_BLOCK, NATIVE_RULES
 
 #: The managed rules block in `AGENTS.md`, `CLAUDE.md` and the block-form native rules: the
 #: D-doc-regions grammar with the writer's version, format level and body digest
