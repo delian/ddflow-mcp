@@ -205,7 +205,11 @@ def test_lane_runs_headless_in_the_worktree_with_private_home(tmp_path, tree):
     drv.stop(h)
     seen = json.loads(rec.read_text())
     assert seen["home"] == str(home) and seen["agent"] == "lane-7" and seen["key"] == SECRET
-    assert seen["cwd"] == str(wt) and seen["argv"][0] == "run" and "do the item" not in seen["argv"]
+    assert (
+        seen["cwd"] == str(wt.resolve())
+        and seen["argv"][0] == "run"
+        and "do the item" not in seen["argv"]
+    )
     assert SECRET not in json.dumps([e.fields for e in evs])
     assert drv.status(h).session == "ses_1"
 
@@ -243,3 +247,15 @@ def test_cleanup_removes_hook_files(tmp_path, tree):
     assert (lp.home / ".config/kilo/plugin" / PL.FILE_NAME).exists()
     OC.cleanup(lp.home)
     assert not (lp.home / ".config/kilo/plugin" / PL.FILE_NAME).exists()
+
+
+def test_select_with_no_extra_dirs_never_searches_cwd(tmp_path, monkeypatch):
+    d, _ = fake_bin(tmp_path)
+    monkeypatch.chdir(d)
+    monkeypatch.setenv("PATH", "/nonexistent")
+    assert isinstance(OC.select(extra_dirs=()), ld.Result)
+
+
+def test_instructions_without_an_item_do_not_cite_a_lease(tmp_path):
+    text = OC.instructions("lane-7", "", tmp_path)
+    assert "lease allows" not in text and "claim one" in text and "assess ddflow" in text

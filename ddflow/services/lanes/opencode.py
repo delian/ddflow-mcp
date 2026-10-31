@@ -107,7 +107,7 @@ def select(
     """The first of ``binaries`` that is installed (PATH, then ``extra_dirs``), with its version."""
     dirs = os.pathsep.join(str(Path(d).expanduser()) for d in extra_dirs)
     for name in binaries:
-        found = which(name) or which(name, path=dirs)
+        found = which(name) or (which(name, path=dirs) if dirs else None)  # '' would mean cwd
         if found:
             v = version(found)
             return Binary(name, found, v, bool(v))
