@@ -31,7 +31,7 @@ OVERRIDE_EXEMPT = {"--force": _OVERRIDE, "--reason": _OVERRIDE}
 
 _APPROVE_EPILOG = (
     "who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker\n"
-    "(CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.\n"
+    "and MCP; there is no MCP tool for it. An agent files a request instead.\n"
     "what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red\n"
     "(the failing tests also fail on the base branch). The approval is bound to the digest of\n"
     "that record (outcome, time, reason): a re-run or re-record is a different outcome and\n"
