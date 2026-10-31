@@ -1684,6 +1684,7 @@ def _with_previous_findings(
     rerun: dict,
     supers: set[str] = frozenset(),
     fix: bool = False,
+    floor: str = "HIGH",
 ) -> str:
     """``context`` plus the gate's previous findings and the author's triage of each, for a
     full re-review (decision D-gate-economy 3) and for a delta (B64ed3cae18: shown only the
@@ -1714,6 +1715,12 @@ def _with_previous_findings(
         "when the code it cites is gone or the change answers it; if the same defect "
         "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
         "the whole diff -- these are not the only places to look.",
+        "",
+        f"Do not report a NEW finding below {floor} severity against a file that is unchanged "
+        "since the last review, or against a line outside the hunks this change adds or edits: "
+        "where the code stands exactly as the earlier round saw it, a new objection to it is a "
+        "re-read of the same code, not a new defect of this change. Reserve new findings at "
+        f"or above {floor} severity for the newly changed lines.",
         "",
     ]
     for n, f in enumerate(found, 1):
@@ -2349,6 +2356,11 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
+    if outcome == "passed" and (converged := (extra_evidence or {}).get("converged")):
+        reason = (
+            f"{converged['findings_below_floor']} finding(s) below [review].converge_floor "
+            f"({converged['floor']}) recorded, not blocking"
+        )
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
         reason=reason, evidence=evidence, by=best.model,
@@ -2599,7 +2611,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         context,
         [
             lambda c: _with_previous_findings(
-                c, log, it, item, gate, say, kind=kind, rerun=prior, supers=supers, fix=fix
+                c, log, it, item, gate, say,
+                kind=kind, rerun=prior, supers=supers, fix=fix, floor=cfg.review.converge_floor,
             ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
@@ -2647,8 +2660,33 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         _say_result(say, res)
 
     best = min(results, key=lambda r: r.status)
+    blocking = list(best.findings)
+    if best.status == RV.REVIEWED and best.findings and kind == "full":
+        # The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a
+        # delta or fix round shows only NEW code, so its own finding is a real defect of
+        # the change and blocks at any severity -- while a full re-review re-sends the
+        # whole diff the author has already seen, so a new below-floor nit does not
+        # re-open the gate.
+        blocking = RV.blocking_findings(
+            best.findings,
+            converged=it is not None and item and _rounds_used(it, gate) > 0,
+            floor=cfg.review.converge_floor,
+        )
+        if not blocking:
+            extra_evidence = {
+                **(extra_evidence or {}),
+                "converged": {
+                    "findings_below_floor": len(best.findings),
+                    "floor": cfg.review.converge_floor,
+                },
+            }
+            say(
+                f"→ {len(best.findings)} finding(s) below [review].converge_floor "
+                f"({cfg.review.converge_floor}) recorded but not blocking: the full "
+                "re-review passes (converged)"
+            )
     outcome = {
-        RV.REVIEWED: ("failed" if best.findings else "passed"),
+        RV.REVIEWED: ("failed" if blocking else "passed"),
         RV.PARTIAL: "partial",
         RV.UNAVAILABLE: "unavailable",
         RV.ERROR: "unavailable",
