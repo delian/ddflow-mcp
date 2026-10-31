@@ -9,14 +9,13 @@ config, core and infra layers it pulls in.
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 
 def __getattr__(name: str) -> Any:
     if name.startswith("__"):
         raise AttributeError(name)
-    from importlib import import_module
-
     _rules = import_module(f"{__name__}.rules")
 
     try:
