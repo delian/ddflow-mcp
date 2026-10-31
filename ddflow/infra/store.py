@@ -821,7 +821,7 @@ class Store:
             for ident in ids:
                 sess, _, tail = ident.partition("#")
                 role, digits = (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
-                seq = _role_seq(role, int(digits or 0))
+                seq = _role_seq({"n": "note", "s": "summary"}.get(role, "prompt"), int(digits or 0))
                 r = con.execute("select * from prompts where session=? and seq=?", (sess, seq))
                 row = r.fetchone()
                 if row:

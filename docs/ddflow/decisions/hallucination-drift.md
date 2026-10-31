@@ -1,6 +1,6 @@
 # Hallucination and context-drift detection and recovery (proposal)
 
-Status: **proposed**. Not a recorded decision until the operator answers HAL-decide. Research: `docs/ddflow/research/hallucination-drift.md`. Operator requests (2026-10-26, recorded verbatim as session prompts): detect model hallucination and language leaks (seen with DeepSeek 3.x Pro after about 350K tokens), and on detection log the context, compress it into a summary, close the lane and continue in a fresh one from a smaller context; follow-up: learn the healthy threshold per model automatically.
+Status: **DECIDED 2026-10-26** (operator, decision `D-drift-answers`; answers table at the end). Originally a proposal pending HAL-decide. Research: `docs/ddflow/research/hallucination-drift.md`. Operator requests (2026-10-26, recorded verbatim as session prompts): detect model hallucination and language leaks (seen with DeepSeek 3.x Pro after about 350K tokens), and on detection log the context, compress it into a summary, close the lane and continue in a fresh one from a smaller context; follow-up: learn the healthy threshold per model automatically.
 
 ## Proposal D-drift
 
@@ -13,7 +13,7 @@ Status: **proposed**. Not a recorded decision until the operator answers HAL-dec
 
 Alternatives rejected: prompt-only instructions (the drifted agent is the reader); a language-ID model as the first detector (unreliable on short text, a dependency, unnecessary when script analysis answers); trusting the agent's own summary when rotating (compresses hallucinations in); a single global threshold (models differ: Claude shows no drift signal to the 950K bucket on this host, the operator reports DeepSeek at about 350K); automatic raising of thresholds without opt-in.
 
-## Open questions for the lead (defaults in bold)
+## Questions for the lead (defaults in bold; all accepted, see Operator's answers)
 
 | Id | Question | Default |
 |---|---|---|
@@ -28,6 +28,26 @@ Alternatives rejected: prompt-only instructions (the drifted agent is the reader
 | Q9 | Share learned facts across projects/hosts? | **Off by default; when on, aggregates only (value, confidence, samples, window), at least 3 lanes per exported bucket** |
 | Q10 | Language-ID model (lingua, fastText) as optional second stage? | **No in release 1; reconsider if same-script leaks (German in Latin script) appear in the ledger** |
 | Q11 | Bug or finding kind for detector hits? | **Finding with evidence for review-style hits; bug (with regression test rule) only for a defect that reached committed code** |
+
+## Operator's answers (D-drift-answers, 2026-10-26)
+
+Decision `D-drift-answers`, status accepted, decided by operator: "Operator 2026-10-26 accepted all HAL defaults". Every question below was answered with its default in bold above; nothing was changed.
+
+| Id | Answer | The decision's words |
+|---|---|---|
+| Q1 | default | "priority HIGH, wave 1 now (HAL-baseline-scan, HAL-detect-script, HAL-model-facts first)" |
+| Q2 | default | "allowed scripts Latin only plus a per-project allowlist" |
+| Q3 | default | "refuse invisible, bidirectional and replacement characters, warn on foreign letters" |
+| Q4 | default | "the context canary (about 1K tokens, scored against ddflow records) is on for models of unknown family and models with a recorded drift onset" |
+| Q5 | default | "DeepSeek rotation mark 300K (observation was about 350K)" |
+| Q6 | default | "learning only LOWERS a per-model threshold automatically, raising needs opt-in and bounded steps" |
+| Q7 | default | "exploration off in release 1 (sandbox canary probes first)" |
+| Q8 | default | "for the lead ddflow only advises, never clears the session itself" |
+| Q9 | default | "learned facts are not shared across projects" |
+| Q10 | default | "language-ID models (lingua, fastText) are not in release 1" |
+| Q11 | default | "detector hits are review-style findings, bugs only when committed code is defective" |
+
+Consequences recorded with the decision: P-drift wave 1 is claimable now; refuse-rules need allowlist support and a baseline so existing legitimate text does not block; the DeepSeek 300K mark is a model fact with source operator-set.
 
 ## Queue
 

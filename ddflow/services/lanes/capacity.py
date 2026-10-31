@@ -24,7 +24,6 @@ route name.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import os
 import re
 import time
@@ -33,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...config import Config
+from ...core.digest import content_digest
 from ...core.schedule import parse_resources
 from .. import slots as SLOTS
 from .endpoint import Endpoint
@@ -86,7 +86,7 @@ def endpoint_pool(route: str) -> str:
     if (
         len(stem) > _STEM_MAX
     ):  # a file-name component is 255 bytes at most: keep the head, add a digest
-        stem = f"{stem[: _STEM_MAX - 17]}_{hashlib.sha256(route.encode()).hexdigest()[:16]}"
+        stem = f"{stem[: _STEM_MAX - 17]}_{content_digest(route, length=16)}"
     return "ep-" + stem
 
 
