@@ -485,10 +485,12 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_session_prompt",
     "ddflow_session_note",
     "ddflow_session_end",
-    # The RA-mcp / LC-wake session actions: each call records (files a request, sends a
-    # lane message, takes its own ask back), so a second call differs by construction,
-    # and ask/asks/withdraw are MCP-only (`path=()`), with no CLI argv to compare against.
-    # Behaviour is pinned by tests/test_approvals_mcp.py and tests/test_wake_reasons.py.
+    # ask/message/withdraw write (file a request, send a lane message, take an ask back),
+    # so a second call differs by construction. asks is a READ view, not a write, but all
+    # four are MCP-only session actions: ask/asks/withdraw declare `path=()` (folded into
+    # `ddflow_session` by D-RA-6; the CLI face is `approvals list`, a different shape), so
+    # they carry no CLI argv and a `MIGRATED_WIRE_SHAPES` row cannot name one. Their
+    # response shapes are pinned by tests/test_approvals_mcp.py and tests/test_wake_reasons.py.
     "ddflow_session_ask",
     "ddflow_session_asks",
     "ddflow_session_message",
