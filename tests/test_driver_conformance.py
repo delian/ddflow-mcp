@@ -92,4 +92,4 @@ def test_the_report_names_every_agent_and_the_zero_python_rate(capsys):
     assert z["agents"] == len(C.ALL) and 0 <= z["zero_python"] <= z["agents"]
     assert set(z["bespoke"]) <= set(C.ALL)
     for hid, _k, _n in D.all_checks():
-        assert hid in text
+        assert f"| {hid} |" in text, hid  # a row of its own, not a stray mention
