@@ -89,3 +89,8 @@ def test_catalog_adapter_unknown_resolves_to_unknown_family():
     assert got["model"]["family"] == "unknown" and got["model"]["facts"] == {}
     r = combine.effective(H(), got["model"], got["route"], keys=["window"])
     assert r.unknown_models == ("who-knows",)
+
+
+def test_names_with_catalog():
+    r = combine.effective(H(), "who-knows", "nowhere", catalog=modelreg.Catalog(), keys=["window"])
+    assert r.family == "unknown" and r.unknown_models == ("who-knows",)
