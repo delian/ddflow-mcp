@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.release_machine_gates"
+new = '["standards"]'
+why = "Release at enqueue (LC-release): the agent leaves the item at the merge queue."
+impact = "additive"
