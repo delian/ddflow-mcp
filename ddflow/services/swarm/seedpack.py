@@ -192,7 +192,12 @@ def from_state(
     no author trust, so it is shown as an agent's (never promoted to operator)."""
     item = state.items[item_id]
     scoped, always = governing(state, list(item.globs))
-    text = set(re.findall(r"[a-z0-9]{4,}", f"{item.title} {' '.join(item.globs)}".lower()))
+    text = set(
+        re.findall(
+            r"[a-z0-9]{4,}",
+            f"{item.title} {getattr(item, 'body', '')} {' '.join(item.globs)}".lower(),
+        )
+    )
 
     def hits(les) -> tuple[int, str]:
         words = set(
