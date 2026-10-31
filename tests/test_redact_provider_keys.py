@@ -332,3 +332,13 @@ def test_the_first_commit_on_an_unborn_branch_is_scanned(tmp_path):
     (shard / "a.jsonl").write_text('{"text": "' + KEYS["google"] + '"}\n')
     _git(tmp_path, "add", "-A")
     assert ES.check_event_secrets(tmp_path, Config()).exit != 0
+
+
+def test_a_short_lowercase_stripe_key_used_as_a_key_does_not_survive():
+    stripe = "sk_live_" + "abcd1234" * 3
+    assert stripe not in RE.fail_closed_data({stripe: "x"})
+
+
+def test_openai_legacy_keys_glued_to_text_are_caught_and_numeric_ids_are_not():
+    assert shape_hit("x" + KEYS["openai"]) == "openai"
+    assert shape_hit("sk-202401150000000000001234567890123456") == ""

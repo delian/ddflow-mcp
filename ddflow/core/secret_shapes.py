@@ -29,7 +29,7 @@ SHAPES: tuple[tuple[str, str], ...] = (
     ("google-oauth", r"ya29\.[0-9A-Za-z_-]{30,}"),
     ("anthropic", r"sk-ant-[0-9A-Za-z_-]{20,}"),
     ("openai-project", r"sk-(?:proj|svcacct|admin)-(?=[A-Za-z_-]{0,60}[0-9])[0-9A-Za-z_-]{40,}"),
-    ("openai", _L + r"sk-(?=[A-Za-z]{0,60}[0-9])[0-9A-Za-z]{20,}"),
+    ("openai", r"sk-(?=[A-Za-z]{0,60}[0-9])(?=[0-9]{0,60}[A-Za-z])[0-9A-Za-z]{32,}"),
     ("xai", _L + r"xai-[0-9A-Za-z]{20,}"),
     ("groq", _L + r"gsk_[0-9A-Za-z]{20,}"),
     ("github", r"gh[pousr]_[0-9A-Za-z]{20,}"),

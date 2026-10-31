@@ -31,7 +31,7 @@ def fail_closed_text() -> tuple[str, int]:
     return FAILED_MARKER, 1
 
 
-_PLAIN_KEY = re.compile(r"[a-z][a-z0-9_]{0,31}")
+_PLAIN_KEY = re.compile(r"[a-z][a-z0-9_]{0,23}")  # shorter than any credential shape
 
 
 def _key(index: int, key: object) -> object:
