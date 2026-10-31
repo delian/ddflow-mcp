@@ -314,6 +314,10 @@
           "type": "boolean",
           "description": "List the gates passed on refutation instead."
          },
+         "overrides": {
+          "type": "boolean",
+          "description": "List the overrides instead: forced completions, skips, claim forces."
+         },
          "since": {
           "type": "string",
           "description": "With refuted: since this ISO date."
