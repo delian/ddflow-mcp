@@ -43,7 +43,7 @@ def complete(argv: list[str]) -> list[str]:
         if verb in ("kinds", "states"):
             vals = CI.kinds() if verb == "kinds" else CI.states()
             return [v for v in vals if v.startswith(prefix)]
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return []
 

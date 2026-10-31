@@ -29,12 +29,16 @@ DEFAULT_LIMIT = 200
 STATE_COLUMNS = ("state", "status")
 #: State derived from timestamp columns, where a table has no state column at all.
 _DERIVED = (
-    (("fixed_at", "invalid_at"),
-     "case when invalid_at is not null then 'invalid' "
-     "when fixed_at is not null then 'fixed' else 'open' end"),
-    (("superseded_by",),
-     "case when superseded_by is not null and superseded_by != '' "
-     "then 'superseded' else 'active' end"),
+    (
+        ("fixed_at", "invalid_at"),
+        "case when invalid_at is not null then 'invalid' "
+        "when fixed_at is not null then 'fixed' else 'open' end",
+    ),
+    (
+        ("superseded_by",),
+        "case when superseded_by is not null and superseded_by != '' "
+        "then 'superseded' else 'active' end",
+    ),
 )
 
 
@@ -182,7 +186,7 @@ def _guard(fn, index, *args):
             return fn(con, *args)
         finally:
             con.close()
-    except Exception:  # noqa: BLE001 - completion must never print a traceback
+    except Exception:
         return []
 
 
@@ -193,27 +197,33 @@ def complete_ids(prefix="", kind=None, state=None, *, index=None, limit=DEFAULT_
 
 def kinds(*, index=None) -> list[str]:
     """Completable kind words: id tables, plus the kind values of items and records."""
+
     def run(con):
         names: set[str] = set()
         for name, cols in _tables(con).items():
             names.add(name)
             if "kind" in cols:
-                names.update(str(r[0]) for r in
-                             con.execute(f'select distinct kind from "{name}"') if r[0])
+                names.update(
+                    str(r[0]) for r in con.execute(f'select distinct kind from "{name}"') if r[0]
+                )
         return sorted(names)
+
     return _guard(run, index)
 
 
 def states(*, index=None) -> list[str]:
     """Every state value any record table holds."""
+
     def run(con):
         out: set[str] = set()
         for name, cols in _tables(con).items():
             expr = _state_expr(cols)
             if expr:
-                out.update(str(r[0]) for r in
-                           con.execute(f'select distinct {expr} from "{name}"') if r[0])
+                out.update(
+                    str(r[0]) for r in con.execute(f'select distinct {expr} from "{name}"') if r[0]
+                )
         return sorted(out)
+
     return _guard(run, index)
 
 
