@@ -10,9 +10,6 @@ all. The project door now reuses the lane's lease check (`lanehooks_check.verdic
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from ddflow.api import setup as AS
 from ddflow.services import hookio
@@ -75,7 +72,11 @@ def test_pre_tool_roots_the_lease_at_the_repo_not_the_tool_cwd(repo, monkeypatch
         harness="claude",
         agent="lane-1",
         stdin=json.dumps(
-            {"tool_name": "Write", "tool_input": {"file_path": str(sub / "file.py")}, "cwd": str(sub)}
+            {
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(sub / "file.py")},
+                "cwd": str(sub),
+            }
         ),
     )
     assert out.data["result"] == "allowed"

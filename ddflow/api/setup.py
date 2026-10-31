@@ -45,7 +45,6 @@ from ..services import harnessreg as HR
 from ..services import help as H
 from ..services import hookio as HI
 from ..services import hookwriters as HW
-from ..services.swarm import lanehooks_check as CK
 from ..services import identity as ID
 from ..services import launchers as LA
 from ..services import pins_merge as PM
@@ -66,6 +65,7 @@ from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
+from ..services.swarm import lanehooks_check as CK
 from ..views import human
 from ..views import human as _human
 from ._base import _load
