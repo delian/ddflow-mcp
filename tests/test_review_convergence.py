@@ -158,3 +158,27 @@ def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
         low, [low, low], object(), "T1", "critic", True, cfg, None, print
     )
     assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 2
+
+
+def test_the_floor_is_named_only_for_a_full_non_fix_round():
+    from ddflow.config import Config
+
+    cfg = Config.load(None, env={})
+    assert api._floor_for(cfg, "full", False) == "HIGH"
+    assert api._floor_for(cfg, "delta", False) == ""
+    assert api._floor_for(cfg, "full", True) == ""
+
+
+def test_a_non_converged_round_weighs_every_reviewers_findings():
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    clean = NS(status=RV.REVIEWED, findings=[])
+    high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad")])
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        clean, [clean, high], None, "T1", "critic", False, cfg, None, print
+    )
+    assert outcome == "failed"
