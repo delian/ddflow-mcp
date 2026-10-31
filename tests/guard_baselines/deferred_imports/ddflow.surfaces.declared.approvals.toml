@@ -1,0 +1,7 @@
+# Ratchet `deferred_imports` for ddflow.surfaces.declared.approvals (tests/test_architecture_guards.py).
+# `from ...api._base import _load` is deferred: `declared.approvals` builds the tool table,
+# which must stay api-free (an api import at module top would run the api package while the
+# registry is still loading). `core.outcome` was hoisted to the top; `_load` is the one
+# import that stays lazy for that reason. Lower it in the same change that removes sites;
+# delete the file at zero.
+baseline = 1
