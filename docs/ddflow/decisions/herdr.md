@@ -39,7 +39,7 @@ Decision `D-herdr-answers`, status accepted, decided by operator. Q4 departs fro
 | Q5 | accepted | "approvals for agents running inside Herdr follow the P-remote-approvals policy and are never auto-answered; a blocked agent reaches the operator queue" |
 | Q6 | accepted | "remote Herdr machines saved over SSH are untrusted lanes until the swarm conformance run passes" |
 
-Consequences recorded with the decision: a plugin widens the coupling to Herdr's 0.x API: it must live behind the lane driver (DRV-herdr-lane, DRV-plugin-sdk), be optional, pinned to a tested Herdr version range with a drift check in doctor, and installed only with operator consent and a diff (as for Kilo/OpenCode plugins). The task `HD-plugin` exists for it (the HD-host-recipe docs recipe stays in the queue).
+Consequences recorded with the decision: a plugin widens the coupling to Herdr's 0.x API: it must live behind the lane driver (DRV-herdr-lane, DRV-plugin-sdk), be optional, pinned to a tested Herdr version range with a drift check in doctor, and installed only with operator consent and a diff (as for Kilo/OpenCode plugins). The task `HD-plugin` exists for it.
 
 ## Queue
 
