@@ -5945,8 +5945,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=db5ab3b8cdc4 -->
-<details><summary>All 457 knobs across 46 sections</summary>
+<!-- ddflow:begin README/knobs sha=bb70bc2aad77 -->
+<details><summary>All 471 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5962,6 +5962,10 @@ long default is left to `ddflow config --explain`.
 | `lease.idle_max_s` | `900` |  |
 | `lease.hold_max_s` | `3600` |  |
 | `lease.break_on_timeout` | `false` |  |
+| `lease.inbox_max_chars` | `2000` |  |
+| `lease.inbox_max_pending` | `50` |  |
+| `lease.inbox_ttl_s` | `86400` |  |
+| `lease.wait_cap_s` | `1800` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
 | `lease.resume_own` | `true` |  |
 | `lease.shared_globs` | `[]` |  |
@@ -6107,6 +6111,7 @@ long default is left to `ddflow config --explain`.
 | `bugs.repro_tail_bytes` | `4096` |  |
 | `bugs.repro_events` | `10` |  |
 | `bugs.repro_test_timeout_s` | `300` |  |
+| `bugs.repro_runs` | `1` |  |
 | `bugs.repro_env` | (long: see `ddflow config --explain`) |  |
 | `bugs.repro_redact_extra` | `[]` |  |
 | `importer.max_tasks` | `200` |  |
@@ -6187,6 +6192,12 @@ long default is left to `ddflow config --explain`.
 | `lanes.event_buffer` | `1000` |  |
 | `lanes.scope` | `"none"` | `none` \| `systemd` |
 | `lanes.pass_env` | (long: see `ddflow config --explain`) |  |
+| `lanes.endpoint_slots` | `1` |  |
+| `lanes.slot_wait_s` | `600` |  |
+| `lanes.release_mode` | `"flag"` | `off` \| `flag` \| `auto` |
+| `lanes.release_max` | `4` |  |
+| `lanes.release_gates` | (long: see `ddflow config --explain`) |  |
+| `lanes.release_machine_gates` | `["standards"]` |  |
 | `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
 | `health.stall_s` | `3600` |  |
 | `health.runaway_s` | `14400` |  |
@@ -6322,6 +6333,9 @@ long default is left to `ddflow config --explain`.
 | `approvals.policy` | `[]` |  |
 | `approvals.policy_max_uses` | `1` |  |
 | `approvals.policy_unavailable_runs` | `3` |  |
+| `approvals.accept_chat_for_t3` | `false` |  |
+| `approvals.forbid_chat_for_t3` | `false` |  |
+| `approvals.require_approval` | `[]` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |

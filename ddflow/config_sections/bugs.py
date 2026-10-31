@@ -35,7 +35,7 @@ class BugsConfig:
 
     lint_checks: list[str] = knob(
         factory=lambda: ["ruff", "(CI: Lint)", "format", "bandit", "(CI: Static security scan)"],
-        doc="Substrings (case-insensitive) that make a CI-filed bug one with no test to write (a lint or static-scan check: `ddflow bug fixed <Bci-...> --lint-exempt REASON` closes such a bug with the reason recorded (regression_verified=exempt-lint) instead of a `--regression-test`. A bug whose check id contains a pytest node (`::`), or matches none of these, still needs its regression test. Default: ruff, (CI: Lint), format, bandit, (CI: Static security scan).",
+        doc="Substrings (case-insensitive) that make a CI-filed bug one with no test to write (a lint or static-scan check): `ddflow bug fixed <Bci-...> --lint-exempt REASON` closes such a bug with the reason recorded (regression_verified=exempt-lint) instead of a `--regression-test`. A bug whose check id contains a pytest node (`::`), or matches none of these, still needs its regression test. Default: ruff, (CI: Lint), format, bandit, (CI: Static security scan).",
     )
 
     named_scope_at: int = knob(
