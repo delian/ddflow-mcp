@@ -35,32 +35,36 @@ def _row(kind: str, item: str, gate: str, by: str, at: str, stamp: dict[str, Any
             **_who(stamp)}  # fmt: skip
 
 
-def rows(events, state, cfg) -> list[dict[str, Any]]:
-    """Every override, oldest first."""
-    out: list[dict[str, Any]] = []
-    for ev in events:
-        d = ev.data or {}
-        if ev.kind == "item.completed" and d.get("forced"):
-            named = "; ".join(str(x) for x in d.get("overridden") or []) or "(nothing named)"
-            out.append(_row(FORCED, ev.subject, "", ev.agent, ev.ts, d, f"overrode: {named}"))
-        elif ev.kind == "gate.skipped":
-            stamp = (d.get("evidence") or {}).get("approval") or {}
-            kind = APPROVED_SKIP if stamp else SKIP
-            out.append(_row(kind, ev.subject, str(d.get("gate", "")), str(d.get("by") or ev.agent),
-                            ev.ts, stamp, str(d.get("reason", ""))))  # fmt: skip
-        elif ev.kind == "skew.overridden":
-            out.append(_row(RELAYED, ev.subject, "", ev.agent, ev.ts, {}, "skew.overridden"))
+def _of_event(ev) -> dict[str, Any] | None:
+    d = ev.data or {}
+    if ev.kind == "item.completed" and d.get("forced"):
+        named = "; ".join(str(x) for x in d.get("overridden") or []) or "(nothing named)"
+        return _row(FORCED, ev.subject, "", ev.agent, ev.ts, d, f"overrode: {named}")
+    if ev.kind == "gate.skipped":
+        stamp = (d.get("evidence") or {}).get("approval") or {}
+        return _row(APPROVED_SKIP if stamp else SKIP, ev.subject, str(d.get("gate", "")),
+                    str(d.get("by") or ev.agent), ev.ts, stamp, str(d.get("reason", "")))  # fmt: skip
+    if ev.kind == "skew.overridden":
+        return _row(RELAYED, ev.subject, "", ev.agent, ev.ts, {}, "skew.overridden")
+    return None
+
+
+def _of_asks(state, cfg) -> list[dict[str, Any]]:
+    out = []
     for ask in asks_of(state).values():
         for c in ask["consumed"]:
             stamp = {"approved_by": ask["answered_by"], "via": ask["via"], "ask": ask["id"],
                      "level": E.verified_level(ask, cfg), "grade": c["grade"]}  # fmt: skip
-            if c["verb"] == "claim.force":
-                out.append(_row(CLAIM_FORCE, ask["subject"], "", c["by"], c["at"], stamp,
-                                c["verb"]))  # fmt: skip
-            if c["grade"] == H.GRADE_T3_CHAT:
-                out.append(_row(TYPED, ask["subject"], "", c["by"], c["at"], stamp,
-                                c["verb"]))  # fmt: skip
-    return sorted(out, key=lambda r: r["at"])
+            kinds = [CLAIM_FORCE] * (c["verb"] == "claim.force")
+            kinds += [TYPED] * (c["grade"] == H.GRADE_T3_CHAT)
+            out += [_row(k, ask["subject"], "", c["by"], c["at"], stamp, c["verb"]) for k in kinds]
+    return out
+
+
+def rows(events, state, cfg) -> list[dict[str, Any]]:
+    """Every override, oldest first."""
+    out = [r for r in map(_of_event, events) if r]
+    return sorted(out + _of_asks(state, cfg), key=lambda r: r["at"])
 
 
 def line(r: dict[str, Any]) -> str:
