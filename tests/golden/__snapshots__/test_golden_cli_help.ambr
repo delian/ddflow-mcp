@@ -962,11 +962,13 @@
 # ---
 # name: test_help[ddflow gate list]
   '''
-  usage: ddflow gate list [-h] [--refuted] [--since SINCE]
+  usage: ddflow gate list [-h] [--refuted] [--overrides] [--since SINCE]
   
   options:
     -h, --help     show this help message and exit
     --refuted      list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+    --overrides    list every override on the record (forced completion, gate skip, claim force,
+                   typed-chat T3 use, relayed consent) with who approved it at which level
     --since SINCE  with --refuted: only passes recorded at or after this ISO date or timestamp
   
   '''
@@ -1085,7 +1087,8 @@
   
   positional arguments:
     {status,list,run,verify,record,skip}
-      list                the gates this project defines; --refuted: the gates passed on refutation
+      list                the gates this project defines; --refuted: passed on refutation;
+                          --overrides: set aside
       verify              break what this gate guards and require it to notice (exit 1 = it cannot)
   
   options:
