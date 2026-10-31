@@ -45,6 +45,7 @@
     "by": ["str"],
     "digest": ["str"],
     "effect": ["str"],
+    "grade": ["str"],
     "id": ["str"],
     "verb": ["str"]
    },
@@ -460,6 +461,16 @@
     "log": ["str"],
     "pid": ["int"],
     "proc_start": ["str"]
+   },
+   "v": 1
+  },
+  "lane.released_for_gate": {
+   "fields": {
+    "author": ["str"],
+    "gates": ["list"],
+    "holder": ["str"],
+    "judgement": ["list"],
+    "tree": ["str"]
    },
    "v": 1
   },

@@ -42,6 +42,7 @@ from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services import review_exclude as REX
+from ..services import review_keys
 from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
@@ -1113,6 +1114,7 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
             "enabled": r.enabled,
             "base_url": r.base_url,
             "model": r.model,
+            "key": review_keys.status(r.api_key_env, r.api_key_file),
         }
         for r in revs
     ]
@@ -1121,7 +1123,11 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     # rather than about a missing `family = "..."` line.
     unclassified = [r["name"] for r in rows if not r["family"] and r["enabled"]]
 
-    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified}
+    # Names only: which enabled reviewer has neither its variable nor a readable key file.
+    no_key = [
+        r["name"] for r in rows if r["enabled"] and r["key"].startswith(("missing", "UNAVAILABLE"))
+    ]
+    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified, "no_key": no_key}
     if not rows:
         empty = "No reviewers configured. Run `ddflow reviewers detect --write`."
         return O.nothing("reviewers.list", empty, text=empty, **data)
@@ -1753,7 +1759,9 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 #: whole essay a reviewer may have written.
 _BACKGROUND_HINT = (
     "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "
-    "kills it -- run `ddflow review` in the background and read its output when it ends."
+    "kills it -- run `ddflow review --detach`, which reviews in its own session and streams "
+    "to a log it names, so a cut reaches only the launcher and the review outlives it "
+    "(a plain run in the background dies with the cut)."
 )
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300

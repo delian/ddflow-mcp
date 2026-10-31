@@ -317,7 +317,7 @@
    "T3"
   ],
   2,
-  "{\n  \"schema\": \"release@1\",\n  \"released\": false,\n  \"woke\": []\n}\n",
+  "{\n  \"schema\": \"release@1\",\n  \"released\": false,\n  \"woke\": [],\n  \"wake\": null\n}\n",
   ""
  ],
  [
@@ -378,7 +378,7 @@
    "1"
   ],
   0,
-  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T3\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T3\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"advice\": \"`ddflow claim T3` now: anyone else waiting on the same release woke too.\"\n}\n",
+  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T3\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T3\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"wake\": {\n    \"reason\": \"ready\",\n    \"token\": \"eyJ3YWl0Ijp7Iml0ZW0iOiJUMyIsImtpbmQiOiJ0YXNrIn19\",\n    \"messages\": []\n  },\n  \"advice\": \"`ddflow claim T3` now: anyone else waiting on the same release woke too.\"\n}\n",
   ""
  ],
  [
@@ -393,7 +393,7 @@
    "1"
   ],
   0,
-  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T1\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T1\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"advice\": \"`ddflow claim T1` now: anyone else waiting on the same release woke too.\"\n}\n",
+  "{\n  \"schema\": \"wait@1\",\n  \"item\": \"T1\",\n  \"phase\": \"\",\n  \"woke\": true,\n  \"waitable\": true,\n  \"ready\": [\n    \"T1\"\n  ],\n  \"waiting_on\": [],\n  \"freed_by\": [],\n  \"blocked\": [],\n  \"waited_s\": <n>,\n  \"holders\": [],\n  \"wake\": {\n    \"reason\": \"ready\",\n    \"token\": \"eyJ3YWl0Ijp7Iml0ZW0iOiJUMSIsImtpbmQiOiJ0YXNrIn19\",\n    \"messages\": []\n  },\n  \"advice\": \"`ddflow claim T1` now: anyone else waiting on the same release woke too.\"\n}\n",
   ""
  ],
  [

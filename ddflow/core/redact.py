@@ -527,6 +527,10 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
+    ("lane.released_for_gate", "author"): "a family or model id compared at completion",
+    ("lane.released_for_gate", "judgement"): "gate ids",
+    ("lane.released_for_gate", "gates"): "gate ids",
     (
         "memory.redacted",
         "event",
@@ -547,6 +551,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.requested", "use_ttl_s"): "a number",
     ("ask.requested", "canon"): "the canonical command record, compared by its digest",
     ("ask.consumed", "by"): "an agent id, the audit trail's who",
+    ("ask.consumed", "grade"): "an approval grade word such as L2-typed",
     ("ask.consumed", "verb"): "a gated-command verb word",
     ("ask.consumed", "effect"): "an event id compared with the effect it stamped",
     ("ask.answered", "outcome"): "the word or choice an answer is compared with",

@@ -134,3 +134,49 @@ class SwarmConfig:
         doc="A bug filed this many seconds after an item completed still counts against the author in the quality ledger (default a week).",
         check=_count,
     )
+    conformance_min_accuracy: float = knob(
+        0.9,
+        doc="Share of a lane's tool calls in a conformance run that must be well formed (a lean-core tool, no error) for the tool-call accuracy level to pass.",
+        check=_share,
+    )
+    conformance_min_calls: int = knob(
+        5,
+        doc="Fewest tool calls a conformance run must see before accuracy is judged; fewer is `unavailable`, never passed.",
+        check=_count,
+    )
+    conformance_idle_s: float = knob(
+        5.0,
+        doc="Seconds of silence after which a conformance run stops collecting a lane's events.",
+        check=_positive,
+    )
+    conformance_lease_wait_s: float = knob(
+        10.0,
+        doc="Seconds a lane is given to stop after its lease is revoked in a conformance run; a lane still working after that fails the lease level.",
+        check=_positive,
+    )
+    conformance_tools: list[str] = knob(
+        factory=lambda: [
+            "brief",
+            "next",
+            "claim",
+            "heartbeat",
+            "show",
+            "help",
+            "identify",
+            "merge",
+            "complete",
+            "task",
+            "memory",
+            "gate",
+            "bug",
+            "session",
+            "rule",
+            "view",
+        ],
+        doc="The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes are ignored) a lane's tool calls are judged against in a conformance run.",
+    )
+    conformance_max_age_s: int = knob(
+        2592000,
+        doc="A lane's conformance level older than this many seconds (default 30 days) no longer admits it to items; it must be run again. Zero never expires.",
+        check=_count,
+    )

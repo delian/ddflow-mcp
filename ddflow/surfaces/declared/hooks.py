@@ -255,12 +255,15 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "action",
-                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value with status, source, tool version and date (read-only).",
+                help="status (default), install, uninstall, run; or harness_list, harness_show, harness_doctor: what each agent gets, at which fallback level, and what is broken; harness_facts: every descriptor value with status, source, tool version and date (read-only); harness_add (skeleton into .ddflow/local/harnesses), harness_lint, harness_test (offline conformance), harness_probe (reports what it would run, never runs it); model_show: a catalog row with provenance.",
             ),
             Param(
                 "harness",
-                help="harness_show / harness_doctor / harness_facts / run: the agent's descriptor id.",
+                help="harness_show / harness_doctor / harness_facts / harness_add / harness_lint / harness_test / harness_probe / run: the agent's descriptor id.",
             ),
+            Param("family", help="harness_add: the lineage whose conventions it shares."),
+            Param("title", help="harness_add: the product's display name."),
+            Param("model", help="model_show: the model name or id."),
             Param(
                 "event",
                 help="run: the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact, stop, session_end.",
@@ -286,11 +289,15 @@ COMMANDS: tuple[Command, ...] = (
             ),
         ),
         call=lambda repo, a, agent: (
-            _api().harness_view(
+            _api().model_show(repo, a.get("model", "") or "")
+            if a.get("action") == "model_show"
+            else _api().harness_view(
                 repo,
                 what=a["action"].removeprefix("harness_"),
                 id=a.get("harness", "") or "",
                 unverified=bool(a.get("unverified")),
+                family=a.get("family", "") or "",
+                title=a.get("title", "") or "",
             )
             if str(a.get("action", "")).startswith("harness_")
             else _api().hooks(
@@ -375,6 +382,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("harness", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "doctor"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "facts"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "add"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "lint"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "test"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("harness", "probe"), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("model",), reason=_COVERED.format("ddflow_hooks")),
+    Command(path=("model", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),
     Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
     Command(

@@ -11,6 +11,7 @@ import contextvars
 from pathlib import Path
 
 from ..config import Config
+from ..infra import paths as PATHS
 from ..services import identity as ID
 from . import waves
 
@@ -25,7 +26,13 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     """Around a command: when it appended events and the knob is on, restamp the items
     whose wave changed (only those: an unchanged graph writes no event). Never raises."""
     try:
-        on = not _STAMPING.get() and bool(cfg.waves.auto_stamp)
+        on = (
+            not _STAMPING.get()
+            and bool(cfg.waves.auto_stamp)
+            # Running the worktree's ddflow (code under test) against ITS OWN primary
+            # would write the feature's own events into the live shared log (Bf4eaec64a6).
+            and not PATHS.running_from_linked_worktree_against(repo)
+        )
         before = log.mark() if on else None
     except Exception:  # stamping must never break the command it follows
         on, before = False, None
