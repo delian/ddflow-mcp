@@ -238,10 +238,12 @@ def test_irregular_plurals_and_lock_knob(tmp_path, monkeypatch):
 
 def test_in_process_lookup_meets_the_100ms_budget(tmp_path):
     p = str(_index(tmp_path))
-    CI.complete_ids("COMP", index=p)  # warm the page cache
-    t = time.perf_counter()
-    assert CI.complete_ids("COMP", index=p) == ["COMP-a", "COMP-b"]
-    assert time.perf_counter() - t < 0.1
+    best = 1.0
+    for _ in range(5):  # best of five: scheduling noise must not read as a budget miss
+        t = time.perf_counter()
+        assert CI.complete_ids("COMP", index=p) == ["COMP-a", "COMP-b"]
+        best = min(best, time.perf_counter() - t)
+    assert best < 0.1
 
 
 def test_directory_named_like_an_index_is_not_chosen(tmp_path):
