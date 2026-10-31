@@ -141,3 +141,7 @@ def test_lint_survives_a_non_list_unverified_and_add_escapes_del(tmp_path):
     assert H.harness_view(tmp_path, what="add", id="q2", title="a\x7fb").ok
     out = H.harness_view(tmp_path, what="lint", id="q2")
     assert not any("TOML" in p or "Invalid" in p for p in out.data["problems"])
+
+
+def test_add_refuses_text_that_is_not_utf8(tmp_path):
+    assert H.harness_view(tmp_path, what="add", id="q3", title="a\udc80b").exit == O.FAIL

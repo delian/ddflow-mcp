@@ -96,6 +96,11 @@ def _find(repo: Path, target: str) -> Path | None:
 def harness_add(
     repo: Path, hid: str, family: str = "", title: str = "", directory: str = ""
 ) -> O.Outcome:
+    for text in (family, title):
+        try:
+            text.encode("utf-8")
+        except UnicodeEncodeError:
+            return O.failed("harness_add", "family and title must be valid UTF-8 text")
     if not ID_RE.match(hid or ""):
         return O.failed("harness_add", f"id {hid!r}: lowercase letters, digits, - and _ only")
     if HR.get(hid) is not None:
