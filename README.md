@@ -1103,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 459 knobs.
+cadences, and the rest of the 463 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5298,7 +5298,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 459): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 463): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5580,7 +5580,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=4f5f647a39d0 -->
+<!-- ddflow:begin README/tools sha=07f94ba0be33 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5601,12 +5601,12 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
-- `ddflow_session` (4 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`)
+- `ddflow_session` (5 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`), `message` (was `ddflow_session_message`)
 - `ddflow_lease` (6 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `watch` (was `ddflow_watch`)
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 125 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 44 more in `all`</summary>
+<details><summary>All 126 MCP tools by their own name (the flat list): 34 in the `core` tier, 47 more in `standard`, 45 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5707,6 +5707,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_record` | all | Records of a data kind (risk, vendor ...). |
 | What the project remembers | `ddflow_research_add` | standard | Record a research finding. |
 | What the project remembers | `ddflow_session_end` | core | Close a session with a summary of what it achieved. |
+| What the project remembers | `ddflow_session_message` | all | Put a message in a lane's inbox: the receiver sees it, fenced as untrusted data, at its next wait, watch or… |
 | What the project remembers | `ddflow_session_note` | core | Record something that happened during a session which is neither an operator prompt nor a decision — a… |
 | What the project remembers | `ddflow_session_prompt` | core | Record the operator's prompt verbatim. |
 | What the project remembers | `ddflow_session_start` | core | Open a session for provenance logging. |
@@ -5870,7 +5871,7 @@ declared once and persists — see
 
 ## Configuration
 
-459 knobs across 46 sections, every one documented in place and listed, with its default
+463 knobs across 46 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5937,8 +5938,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=911e4ae3878d -->
-<details><summary>All 459 knobs across 46 sections</summary>
+<!-- ddflow:begin README/knobs sha=4255864b29f2 -->
+<details><summary>All 463 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5954,6 +5955,10 @@ long default is left to `ddflow config --explain`.
 | `lease.idle_max_s` | `900` |  |
 | `lease.hold_max_s` | `3600` |  |
 | `lease.break_on_timeout` | `false` |  |
+| `lease.inbox_max_chars` | `2000` |  |
+| `lease.inbox_max_pending` | `50` |  |
+| `lease.inbox_ttl_s` | `86400` |  |
+| `lease.wait_cap_s` | `1800` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
 | `lease.resume_own` | `true` |  |
 | `lease.shared_globs` | `[]` |  |
