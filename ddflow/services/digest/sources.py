@@ -150,7 +150,7 @@ SOURCES: tuple[Source, ...] = (
         "ddflow reviewers approve <name>",
         APPROVAL_ASK,
         "the gate that wanted it",
-        ("reviewers.approve",),
+        ("reviewers.approve", "reviewers.approve_command"),
     ),
     _s(
         "export_ack",

@@ -449,6 +449,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_session_message": [
+  "ddflow_session action=message",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_session_note": [
   "ddflow_session action=note",
   "0.2.8",
