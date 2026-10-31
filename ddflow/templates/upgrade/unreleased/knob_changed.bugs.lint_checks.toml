@@ -1,0 +1,7 @@
+[[change]]
+kind = "knob_changed"
+key = "bugs.lint_checks"
+old = "[\"ruff\", \"(CI: Lint)\", \"format\"]"
+new = "[\"ruff\", \"(CI: Lint)\", \"format\", \"bandit\", \"(CI: Static security scan)\"]"
+why = "The bandit static-security-scan CI check has no regression test to write, so `bug fixed --lint-exempt` should close its bug like a lint bug."
+effect = "A CI-filed bandit bug (a `(CI: Static security scan)` check) now closes with `bug fixed --lint-exempt REASON` instead of demanding a regression test."

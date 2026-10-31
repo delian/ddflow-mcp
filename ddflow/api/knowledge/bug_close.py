@@ -83,10 +83,10 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 
-    `lint_exempt` (Bee3becc481): the reason a CI-filed LINT bug (a `ruff format --check`
-    failure: its check id is not a pytest node id) has no regression test to name. It closes
-    without one, as `regression_verified = "exempt-lint"` with the reason; any other bug is
-    refused, and an empty reason is not a reason.
+    `lint_exempt` (Bee3becc481): the reason a CI-filed lint or static-scan bug (a `ruff
+    format --check` failure: its check id is not a pytest node id) has no regression test to
+    name. It closes without one, as `regression_verified = "exempt-lint"` with the reason; any
+    other bug is refused, and an empty reason is not a reason.
 
     `landed` (B256be593f0): a commit already on the base that holds the fix, for a fix task
     claimed AFTER its fix reached the base by some other commit -- it has no branch of its

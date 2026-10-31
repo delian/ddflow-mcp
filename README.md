@@ -5950,7 +5950,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=8450c3e4e4a4 -->
+<!-- ddflow:begin README/knobs sha=88aa9e7ca68f -->
 <details><summary>All 473 knobs across 46 sections</summary>
 
 | Knob | Default | Values |
@@ -6109,7 +6109,7 @@ long default is left to `ddflow config --explain`.
 | `schedule.repos` | `[]` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
-| `bugs.lint_checks` | `["ruff", "(CI: Lint)", "format"]` |  |
+| `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
 | `bugs.named_scope_at` | `20` |  |
 | `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
 | `bugs.repro_max_bytes` | `65536` |  |
