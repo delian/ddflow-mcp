@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.require_approval"
+new = '[]'
+why = "Verbs whose relayed consent (an agent's --yes --reason) is no longer accepted."

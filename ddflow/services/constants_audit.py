@@ -58,12 +58,16 @@ _FOLD = {
 }
 
 
-def _number(node: ast.expr | None) -> float | None:
+def _number(node: ast.expr | None, scope: dict[str, float] | None = None) -> float | None:
+    """Fold ``node`` to a number; a module-level name resolves against ``scope`` so that
+    symbolic arithmetic such as `7 * 24 * HOUR` (a Name operand, not a literal) is seen."""
+    if isinstance(node, ast.Name):
+        return scope.get(node.id) if scope is not None else None
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-        inner = _number(node.operand)
+        inner = _number(node.operand, scope)
         return None if inner is None else -inner
     if isinstance(node, ast.BinOp) and type(node.op) in _FOLD:
-        left, right = _number(node.left), _number(node.right)
+        left, right = _number(node.left, scope), _number(node.right, scope)
         if left is None or right is None:
             return None
         try:
@@ -77,20 +81,120 @@ def _number(node: ast.expr | None) -> float | None:
     return None
 
 
+def _target_names(target: ast.expr) -> list[str]:
+    """The plain names a target binds, unpacking nested tuples/lists/starred targets."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [n for elt in target.elts for n in _target_names(elt)]
+    if isinstance(target, ast.Starred):
+        return _target_names(target.value)
+    return []
+
+
+_NAME_GETTERS = {
+    ast.AnnAssign: lambda n: _target_names(n.target),
+    ast.AugAssign: lambda n: _target_names(n.target),
+    ast.NamedExpr: lambda n: _target_names(n.target),
+    ast.For: lambda n: _target_names(n.target),
+    ast.AsyncFor: lambda n: _target_names(n.target),
+    ast.FunctionDef: lambda n: [n.name],
+    ast.AsyncFunctionDef: lambda n: [n.name],
+    ast.ClassDef: lambda n: [n.name],
+    ast.MatchAs: lambda n: [n.name] if n.name else [],
+    ast.MatchStar: lambda n: [n.name] if n.name else [],
+}
+
+
+def _bound_by(node: ast.AST) -> list[str]:
+    """Names one AST node binds directly, with no recursion into its body. ``"*"`` marks a
+    wildcard import, which can rebind any name."""
+    getter = _NAME_GETTERS.get(type(node))
+    if getter is not None:
+        return getter(node)
+    if isinstance(node, ast.Assign):
+        return [n for t in node.targets for n in _target_names(t)]
+    if isinstance(node, (ast.With, ast.AsyncWith)):
+        return [n for item in node.items for n in _target_names(item.optional_vars)]
+    if isinstance(node, ast.Delete):
+        return [n for t in node.targets for n in _target_names(t)]
+    if isinstance(node, ast.Import):
+        return [a.asname or a.name.split(".")[0] for a in node.names]
+    if isinstance(node, ast.ImportFrom):
+        return (
+            ["*"]
+            if any(a.name == "*" for a in node.names)
+            else [a.asname or a.name for a in node.names]
+        )
+    return []
+
+
+def _count_bindings(node: ast.stmt, counts: dict[str, int]) -> None:
+    """Count every module-scope binding, recursing into module-scope bodies (if/for/while/
+    with/try/try*, except handlers, match cases) but not into a function or class body
+    (a separate scope)."""
+    for name in _bound_by(node):
+        counts[name] = counts.get(name, 0) + 1
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return
+    stmts: list[ast.stmt] = []
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.stmt):
+            stmts.append(child)
+        elif isinstance(child, ast.NamedExpr):
+            counts[child.target.id] = counts.get(child.target.id, 0) + 1
+    if isinstance(node, (ast.Try, ast.TryStar)):
+        stmts += [s for h in node.handlers for s in h.body]
+    if isinstance(node, ast.Match):
+        for case in node.cases:
+            stmts += list(case.body)
+            for name in _match_captures(case.pattern):
+                counts[name] = counts.get(name, 0) + 1
+    for child in stmts:
+        _count_bindings(child, counts)
+
+
+def _match_captures(pattern: ast.pattern | None) -> list[str]:
+    """Names a match capture pattern binds (a ``case X:`` at module scope rebinds X)."""
+    if pattern is None:
+        return []
+    if isinstance(pattern, (ast.MatchAs, ast.MatchStar)):
+        return [pattern.name] if pattern.name else []
+    for field in ("patterns", "elements", "items"):
+        for sub in getattr(pattern, field, ()):
+            names = _match_captures(sub)
+            if names:
+                return names
+    return []
+
+
 def candidates_in(source: str, path: str) -> list[Candidate]:
-    """The candidates among ``source``'s module-level statements (not nested ones)."""
+    """The candidates among ``source``'s module-level statements (not nested ones).
+
+    A Name operand folds to a module-level constant only when that name is bound exactly
+    once in the module scope (a clean constant), so no later rebinding can leave a stale
+    value in the fold.
+    """
+    module = ast.parse(source)
+    counts: dict[str, int] = {}
+    for node in module.body:
+        _count_bindings(node, counts)
+    wildcard = "*" in counts  # a wildcard import can rebind any name: resolve nothing
     out: list[Candidate] = []
-    for node in ast.parse(source).body:
+    scope: dict[str, float] = {}
+    for node in module.body:
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             targets, value = [node.target], node.value
         else:
             continue
-        number = _number(value)
+        number = _number(value, scope)
         if number is None:
             continue
         for t in targets:
+            if not wildcard and isinstance(t, ast.Name) and counts.get(t.id) == 1:
+                scope[t.id] = number  # a clean module-level constant
             name = t.id if isinstance(t, ast.Name) else ""
             bare = name.lstrip("_")
             if bare and bare.isupper() and TUNABLE.search(bare):

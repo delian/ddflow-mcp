@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "recorded": false,
+    "synthetic": true,
+    "source": "synthetic: invented JSON lines in the streaming-json style the docs describe (newline-delimited events); the rules are the fixture's own until descriptors carry a stream section; replace with a live recording",
+    "version": "unversioned"
+  },
+  "rules": [
+    {"when": {"path": "type", "equals": "init"}, "emit": "started", "fields": {"session": "session_id"}},
+    {"when": {"path": "type", "equals": "tool_use"}, "emit": "tool", "fields": {"name": "name"}},
+    {"when": {"path": "type", "equals": "result"}, "emit": "settled", "fields": {}}
+  ],
+  "lines": [
+    {"type": "init", "session_id": "s-1"},
+    {"type": "tool_use", "name": "read_file"},
+    {"type": "noise", "x": 1},
+    {"type": "result"}
+  ],
+  "exit_code": 0,
+  "expect": {
+    "events": [
+      ["started", {"session": "s-1"}],
+      ["tool", {"name": "read_file"}],
+      ["settled", {}]
+    ],
+    "skipped": 1,
+    "state": "exited"
+  }
+}

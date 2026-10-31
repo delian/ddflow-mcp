@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 
-from ..commands.harness import cmd_harness
+from ..commands.harness import cmd_harness, cmd_model
 from ..commands.knowledge import cmd_history
 from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
@@ -17,6 +17,67 @@ from ..declared.hooks import BY_TOOL as HOOKS_BY_TOOL
 from ..declared.reporting import BY_TOOL as REPORTING_BY_TOOL
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
+
+
+def _harness_parsers(s: argparse._SubParsersAction) -> None:
+    """`harness` and `model`: what each agent gets, authoring a descriptor, the model catalog."""
+    hx = s.add_parser(
+        "harness", help="what each agent gets, at which fallback level, and what is broken"
+    )
+    hx_s = hx.add_subparsers(dest="harness_cmd", required=True)
+    hx_s.add_parser(
+        "list", help="every agent and whether this project is adopted for it"
+    ).set_defaults(fn=cmd_harness)
+    hxs = hx_s.add_parser(
+        "show", help="per event the ladder level in effect, and per feature the support"
+    )
+    hxs.add_argument("id", help="the agent's descriptor id")
+    hxs.set_defaults(fn=cmd_harness)
+    hxd = hx_s.add_parser(
+        "doctor", help="drift, missing hooks and dangling commands (exit 1 = findings)"
+    )
+    hxd.add_argument("id", nargs="?", default="", help="one agent (default: every adopted one)")
+    hxd.set_defaults(fn=cmd_harness)
+    hxf = hx_s.add_parser(
+        "facts", help="every descriptor value with its status, source, tool version and date"
+    )
+    hxf.add_argument("--agent", default="", help="one agent (default: all)")
+    hxf.add_argument("--unverified", action="store_true", help="only leads, and sections left out")
+    hxf.set_defaults(fn=cmd_harness)
+    hxa = hx_s.add_parser(
+        "add", help="scaffold a descriptor skeleton with every fact left out (not verified)"
+    )
+    hxa.add_argument("id", help="the new agent's id")
+    hxa.add_argument("--family", default="", help="the lineage whose conventions it shares")
+    hxa.add_argument("--title", default="", help="the product's display name")
+    hxa.add_argument(
+        "--dir", default="", help="where to write it (default .ddflow/local/harnesses)"
+    )
+    hxa.set_defaults(fn=cmd_harness)
+    hxl = hx_s.add_parser(
+        "lint", help="a descriptor against the schema and the three-valued rule (exit 1 = problems)"
+    )
+    hxl.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxl.set_defaults(fn=cmd_harness)
+    hxt = hx_s.add_parser("test", help="the offline conformance of one descriptor")
+    hxt.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxt.set_defaults(fn=cmd_harness)
+    hxp = hx_s.add_parser(
+        "probe", help="what the agent's binary would be asked; runs nothing without --run"
+    )
+    hxp.add_argument("id", help="a descriptor id, or the path of a .toml file")
+    hxp.add_argument(
+        "--run", action="store_true", help="the operator consents: run `<binary> --version`"
+    )
+    hxp.set_defaults(fn=cmd_harness)
+
+    mo = s.add_parser("model", help="the model catalog: a row with its provenance")
+    mo_s = mo.add_subparsers(dest="model_cmd", required=True)
+    mos = mo_s.add_parser(
+        "show", help="a model's facts with source and date, and what unknown gets"
+    )
+    mos.add_argument("name", help="a model name or id")
+    mos.set_defaults(fn=cmd_model)
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -94,29 +155,7 @@ def register(s: argparse._SubParsersAction) -> None:
     co_list.set_defaults(fn=cmd_companions)
     co_add.set_defaults(fn=cmd_companions)
 
-    hx = s.add_parser(
-        "harness", help="what each agent gets, at which fallback level, and what is broken"
-    )
-    hx_s = hx.add_subparsers(dest="harness_cmd", required=True)
-    hx_s.add_parser(
-        "list", help="every agent and whether this project is adopted for it"
-    ).set_defaults(fn=cmd_harness)
-    hxs = hx_s.add_parser(
-        "show", help="per event the ladder level in effect, and per feature the support"
-    )
-    hxs.add_argument("id", help="the agent's descriptor id")
-    hxs.set_defaults(fn=cmd_harness)
-    hxd = hx_s.add_parser(
-        "doctor", help="drift, missing hooks and dangling commands (exit 1 = findings)"
-    )
-    hxd.add_argument("id", nargs="?", default="", help="one agent (default: every adopted one)")
-    hxd.set_defaults(fn=cmd_harness)
-    hxf = hx_s.add_parser(
-        "facts", help="every descriptor value with its status, source, tool version and date"
-    )
-    hxf.add_argument("--agent", default="", help="one agent (default: all)")
-    hxf.add_argument("--unverified", action="store_true", help="only leads, and sections left out")
-    hxf.set_defaults(fn=cmd_harness)
+    _harness_parsers(s)
 
     pr = s.add_parser("prompts", help="inspect and override the prompt templates")
     pr_s = pr.add_subparsers(dest="prompts_cmd", required=True)
