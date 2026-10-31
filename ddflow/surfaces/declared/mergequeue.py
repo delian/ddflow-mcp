@@ -24,7 +24,9 @@ def _call(repo, a, agent, called_from=None):
     if unit_tests is None and a.get("no_unit_tests"):
         unit_tests = False
     if action == "add":
-        return api.queue_add(repo, a["id"], unit_tests=unit_tests, agent=agent)
+        return api.queue_add(
+            repo, a["id"], unit_tests=unit_tests, agent=agent, release=bool(a.get("release"))
+        )
     if action == "remove":
         return api.queue_remove(repo, a["id"], agent=agent)
     if action == "run":
@@ -47,7 +49,8 @@ COMMANDS: tuple[Command, ...] = (
         description=(
             "Merge queue. add: line up an item (gates done but ci/merge). run: the "
             "integrator (any agent, one at a time, else exit 2): per entry merges base, "
-            "regenerates pins, runs ci once, lands it; failures park. status. remove."
+            "regenerates pins, runs ci once, lands it; failures park. status. remove. "
+            "add with release=true: the agent leaves, the integrator finishes the item."
         ),
         call=_call,
         payload="",
@@ -93,13 +96,20 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="run/add: do not run unit_tests (overrides [merge_queue].run_unit_tests)",
             ),
             Param(
+                "release",
+                type="boolean",
+                help="add: hand the item over (its lease ends) once only machine gates remain.",
+                cli_help="add: release the item at enqueue: the integrator finishes it, you may "
+                "claim the next one (every judgement gate must already be passed on this tree)",
+            ),
+            Param(
                 "timeout",
                 type="integer",
                 help="run: ci seconds.",
                 cli_help="run: seconds one entry's ci may run (default [merge_queue].timeout_s)",
             ),
         ),
-        tool_order=("action", "id", "max_batch", "unit_tests", "timeout"),
+        tool_order=("action", "id", "max_batch", "unit_tests", "release", "timeout"),
         flag_exempt={"--no-unit-tests": "the tool takes unit_tests=false"},
     ),
 )

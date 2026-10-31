@@ -77,3 +77,26 @@ class LanesConfig:
             else "a whole number of zero or more"
         ),
     )
+    release_mode: str = knob(
+        "flag",
+        doc="Release at enqueue (`ddflow queue add ITEM --release`): the agent hands the item to the merge queue, gives up its lease and may claim the next item; the integrator runs the remaining machine gates and merges. 'off' refuses every release, 'flag' releases only when `--release` is given, 'auto' releases every item that is eligible when it is enqueued. An item is eligible only when each judgement gate of `release_gates` is recorded passed on the current tree (or skipped with its reason).",
+        choices=("off", "flag", "auto"),
+        strictest=("off", "no item is released: the agent keeps its lease until the item is merged"),
+    )
+    release_max: int = knob(
+        4,
+        doc="How many released items may wait for the integrator at once. The count and the new place are taken under one lock, so two releases never both take the last slot; a release over the cap is refused with the count (the agent keeps its lease and may enqueue without `--release`).",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 1
+            else "a whole number of one or more"
+        ),
+    )
+    release_gates: list[str] = knob(
+        factory=lambda: ["rubber_duck", "critic", "bug_hunt", "dedupe"],
+        doc="The judgement gates that must already be recorded passed (on the tree as it is now) or skipped before an item may be released at enqueue. A gate not in the item's pipeline is not asked.",
+    )
+    release_machine_gates: list[str] = knob(
+        factory=lambda: ["standards"],
+        doc="Gates, besides ci and (by `[merge_queue].run_unit_tests`) unit_tests, that the integrator runs itself for a released item when they carry no passed outcome. Every other gate must carry an outcome before release.",
+    )

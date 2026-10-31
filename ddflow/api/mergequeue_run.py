@@ -13,6 +13,7 @@ without being run; the gates the integrator produces itself are recorded like an
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from ..core import outcome as O
@@ -21,6 +22,7 @@ from ..infra import git as G
 from ..infra import worktree as W
 from ..services import flakes as FL
 from ..services import flow as FS
+from ..services import lanerelease as LR
 from ..services import mergequeue as MQ
 from ..services import pins as PN
 from ..services import pins_text as PT
@@ -29,6 +31,7 @@ from ._base import _load
 from .cirun import run as ci_run
 from .gates import run as run_gate
 from .lifecycle import merge as land
+from .lifecycle.complete import complete as finish_item
 from .mergequeue_add import _unit_tests, refusal
 
 
@@ -126,6 +129,11 @@ def _run_checks(
     """The checks the integrator runs once on the merged result: ci, and unit_tests when
     asked. "" when they pass, else why the entry is parked (``detail`` then holds what failed)."""
     pipe = effective_pipeline(repo, cfg, it)
+    for g in LR.machine_gates(cfg) if e.released else ():  # a released entry's own gates
+        if g in pipe and it.gate_outcome(g) != "passed":
+            out = run_gate(repo, it.id, g, agent=agent)
+            if out.exit != O.OK or out.data.get("outcome") not in ("", "passed", None):
+                return f"{g} {out.data.get('outcome', 'did not pass')}: {out.reason}"
     if "ci" in pipe:
         log = MQ.log_path(repo, e)
         out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log, full=True)
@@ -145,7 +153,8 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
     what failed (see `_ci_detail`) when it is parked by a check."""
     _log, cfg, st = _load(repo, agent)
     it = st.items.get(e.item)
-    if why := refusal(repo, cfg, st, it, unit_tests=unit_tests):
+    also = LR.machine_gates(cfg) if e.released else ()
+    if why := refusal(repo, cfg, st, it, unit_tests=unit_tests, also=also):
         return MQ.PARKED, why, ""
     wt = W.Worktree(
         item=it.id, path=W.load_path(repo, it.worktree), branch=it.branch,
@@ -153,9 +162,14 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
     )  # fmt: skip
     if dirty := W.dirty(wt):
         return MQ.PARKED, f"{len(dirty)} uncommitted file(s) in {wt.path}: {dirty[0]}", ""
+    if why := LR.tree_changed(e, wt.path):
+        return MQ.PARKED, why, ""
     for step in (_bring_in_base, _regenerate_pins):
         if why := step(repo, cfg, wt):
             return MQ.PARKED, why, ""
+    if e.released:  # our own merge commits are not an edit by someone else
+        e.tree = LR.tree_of(wt.path)
+        MQ.save(repo, e)
     if why := _run_checks(
         repo, cfg, it, e, detail, unit_tests=unit_tests, timeout_s=timeout_s, agent=agent
     ):
@@ -170,7 +184,13 @@ def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s:
             f"merge {out.data.get('id', it.id)} {O.EXIT_NAMES[out.exit]}: {out.reason}",
             "",
         )
-    return MQ.MERGED, "", str(out.data.get("sha", ""))
+    sha = str(out.data.get("sha", ""))
+    if e.released:
+        done = finish_item(repo, it.id, model=e.author, agent=agent, sha=sha,
+                           called_from=where[0], shell_cwd=where[1])  # fmt: skip
+        if done.exit != O.OK:  # merged, so not parked: the lane is told to finish it
+            return MQ.MERGED, f"merged, completion {O.EXIT_NAMES[done.exit]}: {done.reason}", sha
+    return MQ.MERGED, "", sha
 
 
 def _one(repo: Path, e: MQ.Entry, **kw) -> dict | None:
@@ -183,6 +203,10 @@ def _one(repo: Path, e: MQ.Entry, **kw) -> dict | None:
     except Exception as exc:  # one entry's crash parks it; the line goes on
         state, reason, sha = MQ.PARKED, f"the integrator failed on it: {exc!r}", ""
     MQ.finish(repo, e, state, reason=reason, sha=sha, detail=detail)
+    if e.released:
+        with contextlib.suppress(Exception):  # advisory: telling the lane never stops the line
+            _l, cfg, st = _load(repo, kw.get("agent", ""))
+            LR.after_run(repo, cfg, st.items.get(e.item), e)
     return {
         "item": e.item,
         "state": state,
