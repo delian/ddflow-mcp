@@ -48,7 +48,9 @@ def test_a_fixture_is_labelled_honestly(check):
     fx = D.load(hid, kind, name)
     if fx is None:
         pytest.skip(f"{hid}: {kind} {name} unverified")
-    assert "_meta" in fx, f"{hid}: a fixture carries _meta (recorded, synthetic, source, version)"
+    assert isinstance(fx.get("_meta"), dict), (
+        f"{hid}: a fixture carries _meta (recorded, synthetic, source, version)"
+    )
     meta = fx["_meta"]
     assert isinstance(meta["recorded"], bool)
     assert meta.get("synthetic", False) is (not meta["recorded"]), "recorded=false means synthetic"

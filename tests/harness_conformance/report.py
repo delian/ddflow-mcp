@@ -29,7 +29,8 @@ def rows() -> list[dict]:
     out = []
     for hid, kind, name in D.all_checks():
         fx = D.load(hid, kind, name)
-        meta = (fx or {}).get("_meta", {})
+        meta = (fx or {}).get("_meta")
+        meta = meta if isinstance(meta, dict) else {}
         out.append(
             {
                 "agent": hid,
