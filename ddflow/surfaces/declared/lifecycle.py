@@ -415,7 +415,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("gate", "list"),
-        summary="the gates this project defines; --refuted: the gates passed on refutation",
+        summary="the gates this project defines; --refuted: passed on refutation; --overrides: set aside",
         tool="ddflow_gate_list",
         description="The gates this project defines; with refuted=true, every gate passed ON "
         "REFUTATION, to spot-check.",
@@ -423,13 +423,17 @@ COMMANDS: tuple[Command, ...] = (
         prose=True,
         prose_reason="one row per gate (or per gate passed on refutation), meant to be read as lines",
         call=lambda repo, a, agent: _api().gate_list(
-            repo, refuted=bool(a.get("refuted")), since=str(a.get("since") or ""), agent=agent
+            repo,
+            refuted=bool(a.get("refuted")),
+            since=str(a.get("since") or ""),
+            agent=agent,
+            overrides=bool(a.get("overrides")),
         ),
         payload="text",
         render=L.gate_text,
         cli=CliPolicy(
             shown=L.gate_listed,
-            body=lambda out, a: out.body(("refuted", "count", "passes", "gates")),
+            body=lambda out, a: out.body(("refuted", "count", "passes", "gates", "overrides")),
         ),
         params=(
             Param(
@@ -437,6 +441,13 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="List the gates passed on refutation instead.",
                 cli_help="list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check",
+            ),
+            Param(
+                "overrides",
+                type="boolean",
+                help="List the overrides instead: forced completions, skips, claim forces.",
+                cli_help="list every override on the record (forced completion, gate skip, claim "
+                "force, typed-chat T3 use, relayed consent) with who approved it at which level",
             ),
             Param(
                 "since",
