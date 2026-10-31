@@ -21,8 +21,13 @@ The path is data; the value never is.
 from __future__ import annotations
 
 import os
+import re
 import stat
 from pathlib import Path
+from urllib.parse import quote
+
+from ..config_sections._layers import LOCAL_DIR, read_toml
+from ..infra import git
 
 #: A safety bound on what is read from a key file (a real key is under a kilobyte); not a
 #: tunable: a file larger than this is not a key file.
@@ -137,9 +142,6 @@ def scrub(text: str, key: str) -> str:
     """``text`` with ``key`` replaced, plain or URL-quoted (any hex case); a server may echo it."""
     if not key:
         return text
-    import re
-    from urllib.parse import quote
-
     for form in {key, quote(key), quote(key, safe="")}:
         text = re.sub(
             re.escape(form), "[REDACTED:key]", text, flags=re.IGNORECASE if "%" in form else 0
@@ -165,18 +167,7 @@ def status(env_name: str, key_file: str = "") -> str:
 
 def _tracked(root: Path, path: Path) -> bool:
     """Whether git tracks ``path`` (a force-added "local" file is shared, not local)."""
-    import subprocess  # nosec B404 - fixed argv, no shell
-
-    try:
-        done = subprocess.run(  # nosec B603 B607
-            ["git", "-C", str(root), "ls-files", "--error-unmatch", "--", str(path)],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return done.returncode == 0
+    return git.run(root, "ls-files", "--error-unmatch", "--", str(path), timeout=10).code == 0
 
 
 def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
@@ -185,8 +176,6 @@ def refuse_shared_key_files(root: Path, paths: tuple[Path, ...]) -> None:
     A committed or shared config reaches every clone; a key path there points at another
     person's home and invites committing the secret's location. Only the git-ignored
     `.ddflow/local/` files may name one. Names the file and the reviewer, never a value."""
-    from ..config_sections._layers import LOCAL_DIR, read_toml
-
     local = (Path(root) / LOCAL_DIR).resolve()
     for path in paths:
         p = Path(path)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 
+from ...core import outcome as O
 from ..registry import Command, Param
 
 
@@ -30,8 +31,6 @@ def _own(repo, agent):
 
 
 def _asks(repo, a, agent):
-    from ...core import outcome as O
-
     who, rows = _own(repo, agent)
     if not a.get("all"):
         rows = [r for r in rows if r["status"].split(",")[0] in ("pending", "approved")]
@@ -40,8 +39,6 @@ def _asks(repo, a, agent):
 
 
 def _withdraw(repo, a, agent):
-    from ...core import outcome as O
-
     ask_id = a.get("id", "") or ""
     who, rows = _own(repo, agent)
     if ask_id not in {r["id"] for r in rows}:  # asker only, whatever the engine would allow

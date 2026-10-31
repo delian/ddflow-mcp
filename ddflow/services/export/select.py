@@ -19,7 +19,6 @@ protection of D-export. Nothing here prints; ``api.export`` wraps these into Out
 from __future__ import annotations
 
 import getpass
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -93,7 +92,7 @@ def gate_force(
     path, norm = W.safe_target(repo, rel)
     # the raw bytes (a lossy decode would map different binary edits to one digest); an absent
     # file is not an empty one
-    now = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "absent"
+    now = content_digest(path.read_bytes()) if path.is_file() else "absent"
     return _approval_route(log, cfg, "export.force", doc, now, approval, target=norm)
 
 
