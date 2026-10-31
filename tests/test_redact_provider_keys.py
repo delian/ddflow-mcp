@@ -27,8 +27,8 @@ def _fake(prefix: str, n: int) -> str:
 KEYS = {
     "google": _fake("AI" + "za", 35),
     "anthropic": _fake("sk-" + "ant-api03-", 40),
-    "openai": _fake("sk-" + "", 40),
-    "openai-proj": _fake("sk-" + "proj-", 40),
+    "openai": "sk-" + "FAKEFAKE1234" * 4,
+    "openai-proj": "sk-" + "proj-FAKE1234" * 4,
     "xai": _fake("xai" + "-", 40),
     "groq": _fake("gsk" + "_", 40),
     "ghp": _fake("ghp" + "_", 36),
@@ -142,9 +142,28 @@ def test_ordinary_text_is_not_redacted(text, cfg):
     assert clean == text and n == 0
 
 
-def test_a_shape_inside_a_longer_word_is_left_alone(cfg):
-    blob = "Zm9v" + KEYS["google"] + "bar"
-    assert S.redact(blob, cfg)[1] == 0
+def test_a_long_distinctive_key_is_redacted_even_glued_to_other_text(cfg):
+    glued = "key" + KEYS["google"] + "bar"
+    assert KEYS["google"][:30] not in S.redact(glued, cfg)[0]
+
+
+def test_a_short_prefix_inside_a_longer_word_is_left_alone(cfg):
+    for text in ("a-risk-assessment-framework-document-v2", "task-based-deployment-pipeline-v10"):
+        assert S.redact(text, cfg) == (text, 0)
+
+
+def test_a_hyphenated_name_is_not_an_openai_key():
+    assert shape_hit("sk-learn-pipeline-v-tests-for-all") == ""
+
+
+def test_fail_closed_data_lets_no_unknown_type_through():
+    out = RE.fail_closed_data({"a": {"x", "y"}, "b": object(), "n": 3, "c": ("s",)})
+    assert out == {
+        "a": [RE.FAILED_MARKER] * 2,
+        "b": RE.FAILED_MARKER,
+        "n": 3,
+        "c": [RE.FAILED_MARKER],
+    }
 
 
 def test_no_shape_is_slow_on_hostile_input():
@@ -256,3 +275,19 @@ def test_merging_in_a_line_the_other_parent_already_committed_is_not_refused(sta
     _git(repo, "commit", "-qm", "diverge")
     subprocess.run(["git", "-C", str(repo), "merge", "--no-commit", "other"], capture_output=True)
     assert ES.check_event_secrets(repo, Config()).exit == 0
+
+
+def test_an_added_line_that_looks_like_a_diff_header_is_still_scanned(staged):
+    repo, shard = staged
+    shard.write_text(shard.read_text() + "++ " + KEYS["google"] + "\n")
+    _git(repo, "add", "-A")
+    assert ES.check_event_secrets(repo, Config()).exit != 0
+
+
+def test_a_textconv_driver_cannot_hide_a_key_from_the_check(staged):
+    repo, shard = staged
+    (repo / ".gitattributes").write_text("*.jsonl diff=mask\n")
+    _git(repo, "config", "diff.mask.textconv", "echo masked #")
+    shard.write_text(shard.read_text() + '{"text": "' + KEYS["google"] + '"}\n')
+    _git(repo, "add", "-A")
+    assert ES.check_event_secrets(repo, Config()).exit != 0

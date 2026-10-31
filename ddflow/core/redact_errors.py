@@ -31,11 +31,13 @@ def fail_closed_text() -> tuple[str, int]:
 
 
 def fail_closed_data(value: object) -> object:
-    """``value`` with every string leaf replaced by `FAILED_MARKER`; keys and numbers kept."""
+    """``value`` with every string leaf replaced by `FAILED_MARKER`; keys, numbers, booleans and None kept."""
     if isinstance(value, str):
         return FAILED_MARKER
     if isinstance(value, Mapping):
         return {k: fail_closed_data(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [fail_closed_data(v) for v in value]
-    return value
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return FAILED_MARKER  # an unknown type may hold text: never let it through

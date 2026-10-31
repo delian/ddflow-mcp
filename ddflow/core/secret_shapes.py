@@ -8,8 +8,10 @@ writer, the hooks and the report path all call.
 The table agrees with the gitleaks default rules that matter here (`.gitleaks.toml` extends
 them): a prefix that names the provider, then a run of the provider's key alphabet. Every
 pattern is a literal prefix followed by one bounded character class, so a match is linear
-(no nested quantifier, nothing to backtrack into). A left guard keeps a shape from firing
-inside a longer alphanumeric word (a base64 blob that happens to contain `AIza`).
+(no nested quantifier, nothing to backtrack into). The short, common prefixes (`sk-`, `hf_`,
+`xai-`, `AKIA`...) carry a left guard so they do not fire inside a longer alphanumeric word;
+the long distinctive ones (`AIza`, `sk-ant-`, `ghp_`, `github_pat_`...) do not, since a key
+pasted against other text (`keyAIza...`) must still go.
 
 The generic `key = value` shape needs a letter AND a digit within the first 20 characters of a value of 20 or
 more, so `token = 5` and prose about tokens are left alone, and a JSON-quoted key is caught.
@@ -23,23 +25,23 @@ _L = r"(?<![0-9A-Za-z])"  # not inside a longer alphanumeric word
 
 #: (name, regex). The name is for tests and `ddflow doctor`; the text never carries it.
 SHAPES: tuple[tuple[str, str], ...] = (
-    ("google-api-key", _L + r"AIza[0-9A-Za-z_-]{35,}"),
-    ("google-oauth", _L + r"ya29\.[0-9A-Za-z_-]{30,}"),
-    ("anthropic", _L + r"sk-ant-[0-9A-Za-z_-]{20,}"),
-    ("openai", _L + r"sk-(?:proj-|svcacct-|admin-)?[0-9A-Za-z_-]{20,}"),
+    ("google-api-key", r"AIza[0-9A-Za-z_-]{35,}"),
+    ("google-oauth", r"ya29\.[0-9A-Za-z_-]{30,}"),
+    ("anthropic", r"sk-ant-[0-9A-Za-z_-]{20,}"),
+    ("openai", _L + r"sk-(?:proj-|svcacct-|admin-)?(?=[A-Za-z_-]{0,60}[0-9])[0-9A-Za-z_-]{20,}"),
     ("xai", _L + r"xai-[0-9A-Za-z]{20,}"),
     ("groq", _L + r"gsk_[0-9A-Za-z]{20,}"),
-    ("github", _L + r"gh[pousr]_[0-9A-Za-z]{20,}"),
-    ("github-fine-grained", _L + r"github_pat_[0-9A-Za-z_]{22,}"),
+    ("github", r"gh[pousr]_[0-9A-Za-z]{20,}"),
+    ("github-fine-grained", r"github_pat_[0-9A-Za-z_]{22,}"),
     ("aws-access-key-id", _L + r"(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}(?![0-9A-Z])"),
-    ("slack", _L + r"xox[abposr]-[0-9A-Za-z-]{10,}"),
-    ("slack-app", _L + r"xapp-[0-9]-[0-9A-Za-z-]{10,}"),
-    ("stripe", _L + r"[sr]k_live_[0-9A-Za-z]{16,}"),
+    ("slack", r"xox[abposr]-[0-9A-Za-z-]{10,}"),
+    ("slack-app", r"xapp-[0-9]-[0-9A-Za-z-]{10,}"),
+    ("stripe", r"[sr]k_live_[0-9A-Za-z]{16,}"),
     ("huggingface", _L + r"hf_[0-9A-Za-z]{30,}"),
     ("npm", _L + r"npm_[0-9A-Za-z]{36}(?![0-9A-Za-z])"),
     (
         "assigned-secret",
-        r"(?i)(?:api[-_]?key|secret|token|passw(?:or)?d)[\w-]{0,40}[\"']?\s*[:=]\s*[\"']?"
+        r"(?i)(?:api[-_]?key|(?:access|auth|private)[-_]?key|secret|token|passw(?:or)?d)[\w-]{0,40}[\"']?\s*[:=]\s*[\"']?"
         r"(?=[0-9A-Za-z_/+.=-]{20})(?=[A-Za-z_/+.=-]{0,19}[0-9])(?=[0-9_/+.=-]{0,19}[A-Za-z])"
         r"[0-9A-Za-z_/+.=-]{20,512}",
     ),

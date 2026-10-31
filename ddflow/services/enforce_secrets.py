@@ -60,11 +60,16 @@ def added_hits(diff: str) -> list[tuple[str, int, str, str]]:
     """(path, line number, shape, line) for every added line of a zero-context diff that
     hits. The line is for comparison inside this module and is never printed."""
     out: list[tuple[str, int, str, str]] = []
-    path, lineno = "", 0
+    path, lineno, header = "", 0, False
     for raw in diff.splitlines():
-        if raw.startswith("+++ "):
+        # `+++ ` is a file header only between `diff --git` and the first hunk: after that
+        # it is an ADDED line whose own text starts with `++ ` (and is scanned).
+        if raw.startswith("diff --git "):
+            header, lineno = True, 0
+        elif header and raw.startswith("+++ "):
             path = raw[4:].removeprefix("b/")
         elif raw.startswith("@@"):
+            header = False
             m = _HUNK.match(raw)
             lineno = int(m.group(1)) if m else 0
         elif raw.startswith("+") and lineno:
@@ -83,9 +88,10 @@ def _diff(tree: Path, rel: Path, against: str) -> str | None:
         "--cached",
         "--no-color",
         "--no-ext-diff",
+        "--no-textconv",
         "--no-renames",
         "-U0",
-        "--diff-filter=ACMR",
+        "--diff-filter=ACMRT",
         against,
         "--",
         str(rel),
