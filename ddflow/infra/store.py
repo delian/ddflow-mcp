@@ -406,6 +406,13 @@ class Store:
             # claim. Taken BEFORE the read, like the fingerprint: marked afterwards, a
             # byte the projection never folded could be claimed consumed the same way.
             marks = self._verified_shard_marks({}, log)
+        if reconciling and self._capability_changed():
+            # An index built on a different capability (FTS5 or the trigram tokenizer on
+            # or off) cannot be reconciled into this one: the tables the fresh index needs
+            # were never created, so a delta over the old one would leave them missing or
+            # empty, and the meta would then claim they exist. A capability change is a
+            # full rebuild, exactly as `stale()` already decides for the trigram flip.
+            reconciling = False
         events = log.read_all()
         state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
@@ -486,6 +493,27 @@ class Store:
         if sec is not None:
             return bool(getattr(sec, "incremental", True))
         return True
+
+    def _capability_changed(self) -> bool:
+        """Does the existing index claim a different capability than this store has now?
+        FTS5 on/off or the trigram tokenizer on/off are both renames of which tables exist:
+        the rewrite a delta would apply to a table the old index never created, leaving it
+        missing (or absent) while the meta claims it is there. `stale()` already reads the
+        trigram flip as stale; this catches the FTS flip too, so a reconcile is never keyed
+        on a capability the old index cannot honest-claim."""
+        if not self.path.exists():
+            return False
+        try:
+            with closing(self.connect()) as con:
+                meta = {
+                    r["k"]: r["v"]
+                    for r in con.execute("select k, v from meta where k in ('fts', 'trigram')")
+                }
+        except sqlite3.DatabaseError:
+            return True  # an unreadable meta is doubt, and doubt is a rebuild
+        return meta.get("fts", "0") != ("1" if self.fts else "0") or meta.get(
+            "trigram", "0"
+        ) != ("1" if self.trigram else "0")
 
     def _load_shard_digests(self) -> dict[str, tuple[int, str]] | None:
         """The per-shard `(consumed bytes, sha256)` of the projection the EXISTING index
