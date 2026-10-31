@@ -36,6 +36,7 @@ from .flowparams import params
 from .globs import inside as path_in_glob
 from .globs import overlap as globs_overlap  # used by `waves`; re-exported for callers
 from .graph import closure, find_cycles, longest_chains
+from .records import SIGHTINGS_THAT_CONFIRM
 
 #: An item of a PLAN, as `waves` sees it: whatever type the caller's `edges`/`globs_of` read.
 T = TypeVar("T")
@@ -717,12 +718,22 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     tag, the same test gitflow names its branches by -- or an item an OPEN bug record
     names, or the fix task `bug found` filed for it (`fix_task`). A closed record stops
     counting -- fixed, or invalid (a false finding was never a bug): its item is ordinary
-    work again.
+    work again. An UNCONFIRMED one (its repro command ran and did not fail,
+    DX-bug-repro-verify) counts for nothing either: such a bug is not offered ahead of
+    confirmed ones -- until a second sighting or a run that failed makes it confirmed.
     """
     ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
     for b in state.bugs.values():
-        if b.open:
-            ids.update(x for x in (b.item, b.fix_task) if x)
+        if not b.open or (b.reproduced == "no" and b.sightings < SIGHTINGS_THAT_CONFIRM):
+            # An UNCONFIRMED bug counts for NOTHING -- no promotion of the item or fix
+            # task it names: its repro command RAN and did not fail ('no'). Only a
+            # 'no' demotes: a '' (no repro command ran) or a missing record is no
+            # evidence either way and is NOT demoted -- such a bug is still offered,
+            # it has simply never been shown reproducible. It counts for nothing
+            # NEGATIVE either: an item that is a bug branch on its own rank never gets
+            # subtracted because an unconfirmed record happens to name it.
+            continue
+        ids.update(x for x in (b.item, b.fix_task) if x)
     return ids
 
 

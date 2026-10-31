@@ -75,7 +75,14 @@ def test_bug_carries_a_bundle_with_the_facts(proj, monkeypatch):
     assert got["item"]["id"] == "T1" and "gates" in got["item"]
     assert "load_avg" in got["machine"] and "disk_free_mb" in got["machine"]
     assert "unavailable" in got["commands"]  # no command log exists; the bundle says so
-    assert got["repro_cmd"] == {"command": "uv run pytest tests/test_x.py", "executed": False}
+    run = got["repro_cmd"]
+    assert run["command"] == "uv run pytest tests/test_x.py"
+    # DX-bug-repro-verify: the command is run AT FILING, in a scratch checkout of the
+    # recorded sha; what the runs answered is recorded with it (never "given, not executed").
+    # tests/test_x.py does not exist in the recorded sha: pytest exits non-zero, so the
+    # verdict is deterministic -- an always-"no" runner would fail this once the field
+    # could only answer the run.
+    assert run["executed"] is True and run["at"] == head and run["reproduced"] == "yes"
     assert logblobs.problems(proj, EventLog(proj, "r").read_all()) == []
 
 
@@ -142,11 +149,13 @@ def test_test_id_runs_pytest_and_keeps_the_tail(proj):
     assert got["exit_code"] == 1 and "probe-marker" in got["tail"]
 
 
-def test_repro_cmd_is_recorded_never_run(proj):
-    flag = proj / "ran.txt"
-    _, bug = _file(proj, repro_cmd=f"touch {flag}")
-    assert not flag.exists()
-    assert _bundle(proj, bug)["repro_cmd"]["executed"] is False
+def test_repro_cmd_is_run_at_the_recorded_sha_in_a_scratch_checkout(proj):
+    _, bug = _file(proj, repro_cmd="touch ran.txt")
+    # Relative path: the run's cwd is the SCRATCH CHECKOUT of the recorded sha, so the
+    # filing tree stays clean -- the command was executed there, not "given, never run".
+    assert not (proj / "ran.txt").exists()
+    run = _bundle(proj, bug)["repro_cmd"]
+    assert run["executed"] is True and run["at"] and run["reproduced"] == "no"
 
 
 def test_cli_flags_and_claiming_the_fix_task_prints_the_bundle(proj):
@@ -173,6 +182,22 @@ def test_an_unknown_mode_is_refused_not_degraded_to_basic(proj):
         RB.build(proj, Config.load(proj), state(proj), log.read_all(), bug="B1", mode="ful")
     out = RB.attach(proj, Config.load(proj), state(proj), log, "B1", capture="ful")
     assert "unavailable" in out["repro"] and "ref" not in out["repro"]
+
+
+def test_a_check_that_raises_degrades_the_evidence_not_the_filing(proj, monkeypatch):
+    # Filing must never fail for want of evidence: the repro RUN is inside the same
+    # guard as the bundle, so a check that raises returns an unavailable link instead
+    # of propagating (the round's finding: RC.check lived outside the try).
+    from ddflow.config import Config
+
+    def boom(*_a, **_k):
+        raise ValueError("no checkout: probe")
+
+    monkeypatch.setattr(RB.RC, "check", boom)
+    out = RB.attach(
+        proj, Config.load(proj), state(proj), EventLog(proj, "a1"), "B1", repro_cmd="true"
+    )
+    assert "unavailable" in out["repro"] and "no checkout" in out["repro"]["unavailable"]
 
 
 def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
