@@ -23,6 +23,9 @@ from pathlib import Path
 
 from ...core.budget import chars_for
 from ...core.provenance import DATA_RULE, Origin, decision_origin, fence, lesson_origin
+from ..guidance.kinds import governing
+from ..guidance.ruleview import project_rules
+from ..redact_report import redactor
 
 #: Section order is priority order.
 ORDER = ("decisions", "rules", "lessons", "handoff")
@@ -78,8 +81,6 @@ class Seed:
 
 def default_redact() -> Callable[[str], str]:
     """The shared ``upstream`` profile: secrets, private addresses, hostnames, home paths."""
-    from ..redact_report import redactor
-
     r = redactor("upstream")
     return lambda s: r.text(s).text
 
@@ -189,9 +190,6 @@ def from_state(
 
     Decisions and lessons carry the trust `core.provenance` gives them; a rule file records
     no author trust, so it is shown as an agent's (never promoted to operator)."""
-    from ..guidance.kinds import governing
-    from ..guidance.ruleview import project_rules
-
     item = state.items[item_id]
     scoped, always = governing(state, list(item.globs))
     text = set(re.findall(r"[a-z0-9]{4,}", f"{item.title} {' '.join(item.globs)}".lower()))
