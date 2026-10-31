@@ -75,7 +75,6 @@ def test_every_command_hook_descriptor_resolves_to_a_normalizer_and_an_emitter()
 
 def test_no_plan_for_an_agent_without_command_hooks():
     assert hookio.plan_for("aider") is None  # none
-    assert hookio.plan_for("opencode") is None  # a plugin, not a command hook
     assert hookio.plan_for("glm") is None  # not verified
     assert hookio.plan_for("no-such-agent") is None
 
@@ -279,10 +278,11 @@ def test_an_unknown_harness_exits_zero_and_says_why_on_stderr(repo):
     assert "no command-hook descriptor for harness 'nonesuch'" in err
 
 
-def test_a_plugin_style_agent_has_no_command_hook(repo):
+def test_a_plugin_style_agent_has_a_hook_entry_point(repo):
     run_cli(repo, "init")
-    code, out, err = _run(repo, "hooks", "run", "prompt", "--harness", "opencode", stdin="{}")
-    assert code == 0 and out == "" and "no command-hook descriptor" in err
+    code, out, err = _run(repo, "hooks", "run", "pre_tool", "--harness", "opencode", stdin="{}")
+    assert code == 0 and out == ""
+    assert "no command-hook descriptor" not in err
 
 
 def test_an_unknown_or_missing_event_exits_zero_and_says_so_on_stderr(repo):

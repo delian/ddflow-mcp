@@ -143,6 +143,7 @@ from .lifecycle import wait as wait_item
 from .mergequeue_add import queue_add, queue_remove, queue_status
 from .mergequeue_run import queue_run
 from .metrics import run_metrics
+from .model_cmds import model_show
 from .onboard import onboard as onboard_run
 from .operations import (
     cadence,
@@ -312,6 +313,7 @@ __all__ = [
     "memory_forget",
     "memory_list",
     "merge_item",
+    "model_show",
     "next_item",
     "onboard_run",
     "phase_add",
