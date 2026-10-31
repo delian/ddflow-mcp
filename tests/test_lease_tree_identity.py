@@ -216,9 +216,12 @@ def test_heartbeat_from_the_tree_does_not_resurrect_an_expired_lease(repo):
     # resurrected lease answered with.
     code, out, err = run_cli(repo, "claim", "T1", agent="rescuer")
     assert "EXPIRED" in out + err, out + err
+    # `--force` is a person's (B49fa10bbb1): an agent's is refused, a person's takes it
     code, out, err = run_cli(repo, "claim", "T1", "--force", agent="rescuer")
+    assert code != OK and _item(repo).lease.holder == "lead", out + err
+    code, out, err = run_cli(repo, "claim", "T1", "--force")
     assert code == OK, out + err
-    assert _item(repo).lease.holder == "rescuer"
+    assert _item(repo).lease.holder != "lead"
 
 
 def test_a_reclaim_ignores_a_recorded_path_now_holding_another_branch(repo):

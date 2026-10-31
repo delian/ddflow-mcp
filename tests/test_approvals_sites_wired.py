@@ -140,3 +140,49 @@ def test_claim_force_by_approval_for_an_agent(proj, monkeypatch):
     assert out.exit == 3
     assert out.reason == "T1 is in review; --force to take it back anyway."  # plain, no route
     assert len([r for r in asks_of(_state(proj)).values() if r["verb"] == "claim.force"]) == 1
+
+
+def test_an_agents_force_flag_never_completes_even_with_approval_request(proj):
+    """B49fa10bbb1: `force` plus `--approval request` skipped the approval check, so an agent
+    (every MCP call is one) force-completed. The flag is a person's; an agent's is ignored."""
+    for extra in (("--force",), ("--force", "--approval", "request")):
+        code, _o, err = _complete(proj, *extra)
+        assert code == 3, err
+        assert _state(proj).items["T1"].state != "done"
+    ask_id = _ask_id(err)  # the combined call filed the request, as `--approval request` does
+    assert asks_of(_state(proj))[ask_id]["verb"] == "complete.force"
+    code, _o, err = _complete(proj, "--force", "--approval", ask_id)
+    assert code == 3 and "not answered" in err
+
+
+def test_over_mcp_force_with_approval_request_files_a_request_and_refuses(proj):
+    from ddflow.api import lifecycle as LC
+    from ddflow.services import identity as ID
+
+    with ID.via_mcp():
+        out = LC.complete(proj, "T1", model="claude-opus-4", force=True, approval="request")
+    assert out.exit == 3, out.reason
+    assert _state(proj).items["T1"].state != "done"
+    assert [r["verb"] for r in asks_of(_state(proj)).values()] == ["complete.force"]
+
+
+def test_an_agents_claim_force_is_not_a_bypass(proj, monkeypatch):
+    import importlib
+
+    from ddflow.core import outcome as O
+
+    C = importlib.import_module("ddflow.api.lifecycle.claim")
+    calls = []
+
+    def once(repo, item, *, force=False, **kw):
+        calls.append(force)
+        if not force:
+            return O.refused(
+                "item.claimed", f"{item} is in review; --force.", id=item, alternatives=[]
+            )
+        return O.ok("item.claimed", id=item)
+
+    monkeypatch.setattr(C, "_claim_once", once)
+    out = C.claim(proj, "T1", no_worktree=True, agent="bot", force=True, approval="request")
+    assert out.exit == 3 and "approval Q" in out.reason
+    assert calls and not any(calls)

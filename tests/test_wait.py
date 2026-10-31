@@ -158,11 +158,17 @@ def test_the_holder_is_told_even_when_the_waiter_registers_late(proj, monkeypatc
     _assert_the_holder_was_told(proj)
 
 
-def test_a_dependency_waiter_wakes_when_the_dependency_completes(proj):
+def test_a_dependency_waiter_wakes_when_the_dependency_completes(proj, monkeypatch):
+    monkeypatch.setattr(
+        "ddflow.services.approval.agent_marker", lambda _a="": ""
+    )  # a person forcing
     _assert_a_completion_wakes_the_waiter(proj)
 
 
 def test_a_late_registering_waiter_still_wakes_on_the_completion(proj, monkeypatch):
+    monkeypatch.setattr(
+        "ddflow.services.approval.agent_marker", lambda _a="": ""
+    )  # a person forcing
     """Be76ca62819, for a dependency: the completion beat the registration."""
     _slow_registration(monkeypatch)
     _assert_a_completion_wakes_the_waiter(proj)
@@ -256,7 +262,10 @@ def test_waiting_on_a_dependency_you_hold_yourself_is_refused(proj):
     assert "YOU hold" in out.reason
 
 
-def test_a_done_item_is_not_waited_on(proj):
+def test_a_done_item_is_not_waited_on(proj, monkeypatch):
+    monkeypatch.setattr(
+        "ddflow.services.approval.agent_marker", lambda _a="": ""
+    )  # a person forcing
     A.complete(proj, "T1", force=True, agent=HOLDER)
     out = A.wait(proj, item="T1", timeout_s=30, agent=WAITER)
     assert out.exit == O.NOTHING and not out.data["waitable"]
