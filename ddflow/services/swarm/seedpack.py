@@ -132,9 +132,11 @@ def build(
     if inp.needs:
         meta += " needs: " + ", ".join(inp.needs) + "."
     brief = Rec(brief.id, brief.title, f"{brief.body}{meta}", trust="unknown")
-    line = fence_line("item", brief, red, knobs.item_chars, room - _head("item")) or fence(
-        "item", _cut(red(inp.item_id), 80), "", Origin("unknown")
-    )
+    line = fence_line("item", brief, red, knobs.item_chars, room - _head("item"))
+    if line is None:
+        raise ValueError(
+            f"max_tokens={knobs.max_tokens} cannot hold the data notice and the item brief"
+        )
     sections.append(("item", line))
     room -= _head("item") + len(line)
 
@@ -207,7 +209,10 @@ def from_state(
             )
             for d in [*scoped, *always]
         ),
-        rules=tuple(Rec(r.id, r.title, r.body, "agent") for r in project_rules(repo)),
+        rules=tuple(
+            Rec(r.id, r.title, r.body, "agent", str(r.provenance.get("by", "")))
+            for r in project_rules(repo)
+        ),
         lessons=tuple(Rec(les.id, les.title, les.rule, "agent", les.by) for les in lessons),
         handoff=handoff,
         handoff_by=handoff_by,

@@ -176,3 +176,10 @@ def test_exact_boundary_keeps_full_item():
     k = S.Knobs(max_tokens=(len(full) + 3) // 4)  # the whole text fits to the character
     assert len(full) <= chars_for(k.max_tokens)
     assert S.render(S.build(inp, k)) == full
+
+
+def test_budget_below_the_item_brief_is_refused_not_overrun():
+    import pytest
+
+    with pytest.raises(ValueError):
+        S.build(_inp(), S.Knobs(max_tokens=1))
