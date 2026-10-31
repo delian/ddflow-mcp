@@ -114,6 +114,7 @@ from .handlers.knowledge import (
     _h_memory_redacted,
     _h_research,
 )
+from .handlers.lanerelease import LANERELEASE_HANDLERS
 from .handlers.leases import (  # noqa: F401
     _displace,
     _h_lease_acquired,
@@ -152,7 +153,6 @@ from .handlers.sessions import (  # noqa: F401
     _h_upgrade_applied,
     _session,
 )
-from .handlers.lanerelease import LANERELEASE_HANDLERS
 from .handlers.waiting import WAITING_HANDLERS
 
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
