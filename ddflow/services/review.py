@@ -326,6 +326,33 @@ def finding_digest(severity: str, location: str, title: str, detail: str) -> str
     return content_digest(text, errors="replace", length=16)
 
 
+#: A finding's severity as a number for the convergence floor (`[review].converge_floor`):
+#: a later round blocks only on findings at or above the floor, so once the material
+#: findings are fixed a reviewer raising new nits does not re-open the gate forever.
+_SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
+
+
+def blocking_findings(findings: list[Finding], *, converged: bool, floor: str) -> list[Finding]:
+    """The findings of a review round that keep the gate open (the convergence floor).
+
+    The FIRST full round blocks on every finding: the author has seen none of them yet, so a
+    MEDIUM or LOW one is still new information that must be looked at. A LATER FULL re-review
+    (``converged`` True, set by the caller only for a full re-review, bug Bf797745b5a) blocks
+    only on findings at or above ``floor`` (`[review].converge_floor`): once the diff's
+    material findings are fixed, a reviewer that keeps raising a new MEDIUM or LOW nit --
+    often against a file unchanged since the last review, or a stale head -- does not
+    re-open the gate. The below-floor findings are still recorded on the gate and triageable;
+    they just do not hold the pass on their own. A delta or fix round does not cite this
+    (it shows only NEW code, where any finding is a real defect), so it keeps blocking on
+    every finding.
+    """
+    if not converged:
+        return list(findings)
+    limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
+    # An unknown severity ranks as blocking (fail closed): only a known one below the floor yields.
+    return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit]
+
+
 #: How much of a finding's detail the gate evidence keeps for a later merge.
 FINDING_DETAIL_KEPT = 2000
 
