@@ -144,6 +144,7 @@ def test_walker_is_generic():
     again = T.at(T.command_tree(p), ("alpha",))
     assert [o["repeat"] for o in again["options"][-2:]] == [True, True]
     assert again["positionals"][-1]["arity"] == "..."
+    assert T._arity(argparse.Action([], "d", nargs=argparse.PARSER)) == "A..."
     assert node["positionals"][0]["arity"] == "?"
     assert T.at(got, ("nope",)) is None
 
