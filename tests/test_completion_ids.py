@@ -108,7 +108,7 @@ def test_locked_database_gives_nothing_fast(tmp_path, monkeypatch):
     t = time.monotonic()
     assert CI.complete_ids("", index=str(p)) == []
     # a 200 ms wait (the old, ignored-knob behaviour) would fail this; a 10 ms one does not
-    assert time.monotonic() - t < 0.15
+    assert time.monotonic() - t < 0.1
     con.execute("rollback")
     con.close()
 
@@ -192,16 +192,14 @@ def test_planted_slow_import_fails_the_budget(tmp_path):
 
 
 def test_lookup_latency_budget(tmp_path):
+    """Import + lookup inside a fresh interpreter fit the 100 ms budget (startup excluded)."""
     _index(tmp_path)
-    t = time.monotonic()
-    r = subprocess.run(
-        [sys.executable, "-m", "ddflow.completion_fast", "ids", "COMP"],
-        cwd=tmp_path,
-        env={**os.environ, "PYTHONPATH": str(ROOT)},
-        capture_output=True,
-        check=True,
+    code = (
+        "import time; t = time.perf_counter(); import ddflow.completion_fast as m; "
+        "out = m.complete(['ids', 'COMP']); print(len(out), time.perf_counter() - t)"
     )
-    assert time.monotonic() - t < 0.5 and r.stdout  # 100 ms target, 5x slack: loaded box
+    n, took = _imports(code, tmp_path).split()
+    assert n == "2" and float(took) < 0.1
 
 
 def test_bad_arguments_print_nothing(tmp_path, monkeypatch):
