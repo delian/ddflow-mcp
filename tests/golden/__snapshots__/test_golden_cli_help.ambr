@@ -962,11 +962,13 @@
 # ---
 # name: test_help[ddflow gate list]
   '''
-  usage: ddflow gate list [-h] [--refuted] [--since SINCE]
+  usage: ddflow gate list [-h] [--refuted] [--overrides] [--since SINCE]
   
   options:
     -h, --help     show this help message and exit
     --refuted      list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+    --overrides    list every override on the record (forced completion, gate skip, claim force,
+                   typed-chat T3 use, relayed consent) with who approved it at which level
     --since SINCE  with --refuted: only passes recorded at or after this ISO date or timestamp
   
   '''
@@ -1085,7 +1087,8 @@
   
   positional arguments:
     {status,list,run,verify,record,skip}
-      list                the gates this project defines; --refuted: the gates passed on refutation
+      list                the gates this project defines; --refuted: passed on refutation;
+                          --overrides: set aside
       verify              break what this gate guards and require it to notice (exit 1 = it cannot)
   
   options:
@@ -2367,7 +2370,7 @@
 # ---
 # name: test_help[ddflow review]
   '''
-  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
+  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--detach] [--exclude EXCLUDE] [--include-pinned] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
   
   positional arguments:
     id                 the item; or `triage <item>`
@@ -2391,6 +2394,9 @@
                        findings; [review].delta_default = true makes it a delta instead
     --full             review the item's WHOLE diff even when [review].delta_default would make it a
                        delta: a full round, counted against [review].max_rounds
+    --detach           review in its own session and stream to a durable log instead of this
+                       command: a harness that cuts the foreground command at its time limit kills
+                       only the launcher, and the review outlives it
     --exclude EXCLUDE  globs left out of this review instead of [review].exclude_globs and the
                        item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
                        out)
