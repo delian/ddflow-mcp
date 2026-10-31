@@ -14,6 +14,7 @@ from ...config import Config
 from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ..ask import engine as E
+from . import harness as H
 
 
 def _commands(state) -> list[dict[str, Any]]:
@@ -69,6 +70,17 @@ def line(r: dict[str, Any]) -> str:
     )
 
 
+def _typed_t3_uses(r: dict[str, Any]) -> list[str]:
+    """One warning per spend of a tier-3 act on a typed chat answer (D-RA-T3-chat), every time."""
+    return [
+        f"{r['id']} ({r['verb']}): a tier-3 act spent by {c['by']} on a TYPED chat "
+        f"answer from {r['answered_by']} -- grade {H.GRADE_T3_CHAT}, no stronger than L2: "
+        "the transcript is writable by the agent's own user"
+        for c in r["consumed"]
+        if c["grade"] == H.GRADE_T3_CHAT
+    ]
+
+
 def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
     """What an operator should be told, one line each."""
     now = time.time() if now is None else now
@@ -83,7 +95,8 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
                 "(written by hand?); it cannot be spent"
             )
         level = E.verified_level(r, cfg)
-        if r["used"] and level < r["min_level"]:
+        out.extend(_typed_t3_uses(r))
+        if r["used"] and level < r["min_level"] and not H.typed_t3(r, cfg, level):
             out.append(
                 f"{r['id']} ({r['verb']}) was spent at level L{level}, below the L{r['min_level']} "
                 "its tier needs"
@@ -107,13 +120,30 @@ def findings(state, cfg: Config, *, now: float | None = None) -> list[str]:
 def standing_notes(cfg: Config, state) -> list[str]:
     """The honest limits of the channels in use (D-RA-Q5, D-RA-Q6), once each."""
     notes = []
+    if H.chat_t3(cfg):
+        notes.append(
+            "approvals: tier-3 acts may be approved by a TYPED chat answer ([approvals]."
+            "accept_chat_for_t3, set on this machine): rated L2-typed, no stronger than L2 -- "
+            "suitable for a solo operator only"
+        )
+    elif cfg.approvals.accept_chat_for_t3:
+        notes.append(
+            "approvals: accept_chat_for_t3 is set but not in effect (it counts only in "
+            ".ddflow/local/config.toml and not when forbid_chat_for_t3 is set)"
+        )
     if cfg.approvals.accept_harness:
         notes.append(
             "approvals: chat answers (AskUserQuestion, typed) are read from the session transcript, "
             "which the agent's own user can edit; they show a person answered, they do not prove it"
         )
-    notes.append(
-        "approvals: no approval signer pinned -- T3 acts (command reviewers, the approval "
-        "configuration) are rated no stronger than L1 on a single-user host and stay terminal-only"
-    )
+    if not H.chat_t3(cfg):
+        notes.append(
+            "approvals: no approval signer pinned -- T3 acts (command reviewers, the approval "
+            "configuration) are rated no stronger than L1 on a single-user host and stay terminal-only"
+        )
+    else:
+        notes.append(
+            "approvals: no approval signer pinned -- the approval configuration stays terminal-only; "
+            "a command reviewer is the one T3 act a typed chat answer may approve (L2-typed)"
+        )
     return notes
