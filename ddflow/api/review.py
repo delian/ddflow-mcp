@@ -1651,7 +1651,9 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 #: whole essay a reviewer may have written.
 _BACKGROUND_HINT = (
     "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "
-    "kills it -- run `ddflow review` in the background and read its output when it ends."
+    "kills it -- run `ddflow review --detach`, which reviews in its own session and streams "
+    "to a log it names, so a cut reaches only the launcher and the review outlives it "
+    "(a plain run in the background dies with the cut)."
 )
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300

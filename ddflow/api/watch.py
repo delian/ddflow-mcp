@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.clock import WAIT_MAX_S
 from ..core.defaults import DEFAULT_WAIT_TIMEOUT_S
+from ..services import inbox as IB
 from ..services import jobs as J
 from ..services import leasekeep as LK
 from ..services import waits as WT
@@ -146,38 +146,49 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
         return O.failed(
             "watch", "timeout must be a finite number >= 0 and poll a finite number > 0 seconds"
         )
-    if timeout > WAIT_MAX_S:
-        (on_progress or (lambda _m: None))(
-            f"watching at most {WAIT_MAX_S}s at a time; resume with the token"
-        )
     log, cfg, st = _load(repo, agent)
+    cap = float(cfg.lease.wait_cap_s)
+    if timeout > cap:
+        (on_progress or (lambda _m: None))(
+            f"watching at most {cap:g}s at a time; resume with the token"
+        )
+    me = cfg.agent.id or log.agent_id
     elsewhere = _refuse_elsewhere(st, t)
     if elsewhere is not None:
         return elsewhere
     renew, missed = _pacer(log, cfg, st, t.heartbeat)
     started = time.monotonic()
-    deadline = started + min(timeout, float(WAIT_MAX_S))
+    deadline = started + min(timeout, cap)
 
-    def done(extra: dict[str, Any]) -> dict[str, Any]:
-        return _report(t, started, missed, extra)
+    def done(extra: dict[str, Any], reason: str = "") -> dict[str, Any]:
+        """The wire body, with the wake: why this returned, the resume token, and whatever
+        the lane's inbox held (delivered here, fenced)."""
+        got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s) or {}
+        why = reason if reason == "ready" else (got.get("reason") or reason)
+        body = _report(t, started, missed, extra)
+        body["wake"] = {"reason": why, "token": body["token"], "messages": got.get("messages", [])}
+        return body
 
     seen_mark, checked = None, started
     renew()  # a lease close to expiry is renewed before the first sleep, not after it
     while True:
         found = _probe(t, st)
         if found is not None:
-            return O.ok("watch", **done({"matched": True, **found}))
+            return O.ok("watch", **done({"matched": True, **found}, "ready"))
         left = deadline - time.monotonic()
         if left <= 0:
             return O.nothing(
                 "watch",
                 f"Not yet after {round(time.monotonic() - started)}s; `watch` with the token "
                 f"goes on from here.",
-                **done({"matched": False, "timed_out": True}),
+                **done({"matched": False, "timed_out": True}, "timeout"),
             )
         # Never sleep past a renewal: a long poll would let the lease lapse mid-wait.
         time.sleep(min(poll, left, max(1.0, cfg.lease.heartbeat_s / 2)))
         renew()
+        if IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s):
+            # A message, offer or yield ends the wait early, with the token to go on.
+            return O.ok("watch", **done({"matched": False, "timed_out": False}, "message"))
         # Only a gate (or a job whose record may change) is judged on the folded log.
         if t.gate or t.job:
             mark = log.mark(clock=False)
