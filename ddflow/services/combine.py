@@ -194,6 +194,23 @@ def _resolve_key(
     return got
 
 
+def _layers(
+    model: Mapping[str, Any] | str,
+    route: Mapping[str, Any] | str | None,
+    catalog: modelreg.Catalog | None,
+) -> tuple[Mapping[str, Any], Mapping[str, Any] | None]:
+    """Names become catalog layers; a mapping the caller gave is kept as it is."""
+    if not isinstance(model, str) and not isinstance(route, str):
+        return model, route
+    if catalog is None:
+        raise ValueError("a model or route given by name needs catalog=")
+    name = model if isinstance(model, str) else str(model.get("id", ""))
+    got = model_layer(catalog, name, route if isinstance(route, str) else None)
+    return (got["model"] if isinstance(model, str) else model), (
+        got["route"] if isinstance(route, str) else route
+    )
+
+
 def effective(
     harness: Mapping[str, Any],
     model: Mapping[str, Any] | str,
@@ -201,7 +218,7 @@ def effective(
     *,
     catalog: modelreg.Catalog | None = None,
     keys: list[str] | tuple[str, ...] = (),
-    pair: Mapping[str, Any] | None = None,
+    pair: Mapping[str, Any] | list[Mapping[str, Any]] | None = None,
     operator: Mapping[str, Any] | None = None,
     observed: Mapping[str, Any] | None = None,
     policy: Policy | None = None,
@@ -211,15 +228,15 @@ def effective(
 
     `harness`, `model`, `route` are `{id, facts: {key: fact}}`; a model also carries
     `family` (a catalog family or `unknown`) and `family_facts`. A model (and route) may be
-    a name with `catalog=`. `pair`, `operator` and `observed` are plain `key -> fact` tables (see `match_pair`)."""
-    if isinstance(model, str):  # names, read from the catalog (`model_layer`)
-        got = model_layer(
-            catalog or modelreg.Catalog(), model, route if isinstance(route, str) else None
-        )
-        model, route = got["model"], got["route"]
+    a name with `catalog=`. `pair` is a `key -> fact` table or the
+    list of `[[pair]]` rows (see `match_pair`); `operator` and `observed` are `key -> fact`
+    tables."""
+    model, route = _layers(model, route, catalog)
     pol = policy or Policy()
-    tables = _layer_tables(harness, model, route, pair, operator, observed)
     family = str(model.get("family") or UNKNOWN_FAMILY)
+    if isinstance(pair, (list, tuple)):  # the sparse `[[pair]]` rows: pick this combination's
+        pair = match_pair(list(pair), str(harness.get("id", "")), str(model.get("id", "")), family)
+    tables = _layer_tables(harness, model, route, pair, operator, observed)
     unknown = str(model.get("id", "")) if family == UNKNOWN_FAMILY else ""
     wanted = list(keys) or _all_keys(tables, pol)
     fields = {k: _resolve_key(k, tables, pol, unknown) for k in sorted(set(wanted))}
